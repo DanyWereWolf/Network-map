@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Карта локальной сети</title>
+    <script src="https://api-maps.yandex.ru/2.1/?apikey=83f18c79-2970-42ba-af02-0e75c05f8829&lang=ru_RU" type="text/javascript"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="header-content">
+                    <svg class="header-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                    <h2>Карта сети</h2>
+                </div>
+            </div>
+            
+            <div class="sidebar-content">
+                <!-- Переключатель режимов -->
+                <div class="control-section">
+                    <div class="mode-switcher">
+                        <button id="viewMode" class="mode-btn">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                            <span>Просмотр</span>
+                        </button>
+                        <button id="editMode" class="mode-btn">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                            </svg>
+                            <span>Редактирование</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Аккордеон для объектов -->
+                <div class="accordion-section">
+                    <div class="accordion-header" data-accordion="objects">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="16"></line>
+                            <line x1="8" y1="12" x2="16" y2="12"></line>
+                        </svg>
+                        <span>Объекты</span>
+                        <svg class="accordion-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </div>
+                    <div class="accordion-content" id="objects-content">
+                        <div class="form-group">
+                            <label for="objectType">Тип объекта</label>
+                            <select id="objectType" class="form-select">
+                                <option value="support">📡 Опоры связи</option>
+                                <option value="sleeve">🔌 Кабельные муфты</option>
+                                <option value="node">🖥️ Узлы сети</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="objectNameGroup" style="display: none;">
+                            <label for="objectName">Имя узла</label>
+                            <input type="text" id="objectName" class="form-input" placeholder="Введите имя">
+                        </div>
+                        <div class="form-group" id="sleeveSettingsGroup" style="display: none;">
+                            <label for="sleeveType">Тип муфты</label>
+                            <select id="sleeveType" class="form-select">
+                                <option value="SNR-FOSC-04">SNR-FOSC-04 (4 волокна)</option>
+                                <option value="SNR-FOSC-X">SNR-FOSC-X (компактная)</option>
+                                <option value="SNR-FOSC-12">SNR-FOSC-12 (12 волокон)</option>
+                                <option value="SNR-FOSC-D">SNR-FOSC-D (до 24 волокон)</option>
+                                <option value="SNR-FOSC-M">SNR-FOSC-M (до 48 волокон)</option>
+                                <option value="SNR-FOSC-G">SNR-FOSC-G (до 72 волокон)</option>
+                                <option value="SNR-FOSC-L">SNR-FOSC-L (до 96 волокон)</option>
+                                <option value="SNR-FOSC-B">SNR-FOSC-B (до 144 волокон)</option>
+                                <option value="SNR-FOSC-UF2">SNR-FOSC-UF2 (универсальная)</option>
+                                <option value="SNR-FOSC-CV018">SNR-FOSC-CV018 (купольная)</option>
+                                <option value="SNR-FOSC-CV019">SNR-FOSC-CV019 (тупиковая)</option>
+                                <option value="SNR-FOSC-CV021">SNR-FOSC-CV021 (96 волокон)</option>
+                                <option value="SNR-FOSC-CV028A">SNR-FOSC-CV028A</option>
+                                <option value="SNR-FOSC-CV037">SNR-FOSC-CV037</option>
+                                <option value="SNR-FOSC-Q-T">SNR-FOSC-Q-T</option>
+                                <option value="SNR-FOSC-D-T">SNR-FOSC-D-T</option>
+                                <option value="SNR-FOSC-CH009">SNR-FOSC-CH009 (проходная)</option>
+                                <option value="SNR-FOSC-CH018">SNR-FOSC-CH018 (проходная)</option>
+                                <option value="SNR-FOSC-CH019">SNR-FOSC-CH019 (проходная)</option>
+                                <option value="SNR-FOSC-CH025">SNR-FOSC-CH025 (проходная)</option>
+                                <option value="SNR-FT-E">SNR-FT-E</option>
+                                <option value="МВОТ-108-3-Т-1-36">МВОТ-108-3-Т-1-36 (108 волокон)</option>
+                                <option value="МВОТ-216-4-Т-1-36">МВОТ-216-4-Т-1-36 (216 волокон)</option>
+                                <option value="МВОТ-3611-22-32-2К16">МВОТ-3611-22-32-2К16</option>
+                                <option value="МОГ-У-33-1К4845">МОГ-У-33-1К4845 ССД</option>
+                                <option value="МКО-Ц8/С09-5SC">МКО-Ц8/С09-5SC (кросс-муфта)</option>
+                                <option value="МТОК-Ф3/216-1КТ3645-К">МТОК-Ф3/216-1КТ3645-К</option>
+                                <option value="KSC-MURR">KSC LIGHT PON МУРР (до 12 волокон)</option>
+                                <option value="101-01-18">101-01-18 (кросс-муфта FTTH, до 18SC)</option>
+                                <option value="custom">Пользовательская</option>
+                            </select>
+                            <label for="sleeveMaxFibers" style="margin-top: 8px;">Макс. количество волокон</label>
+                            <input type="number" id="sleeveMaxFibers" class="form-input" placeholder="0" min="0" max="288" value="0">
+                            <small style="display: block; margin-top: 5px; color: #666; font-size: 11px;">0 = неограничено</small>
+                        </div>
+                        <button id="addObject" class="btn-primary">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                            Добавить на карту
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Аккордеон для кабелей -->
+                <div class="accordion-section">
+                    <div class="accordion-header" data-accordion="cables">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                            <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                        </svg>
+                        <span>Кабели</span>
+                        <svg class="accordion-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </div>
+                    <div class="accordion-content" id="cables-content">
+                        <div class="form-group">
+                            <label for="cableType">Тип кабеля</label>
+                            <select id="cableType" class="form-select">
+                                <option value="fiber4">ВОЛС 4 жилы</option>
+                                <option value="fiber8">ВОЛС 8 жил</option>
+                                <option value="fiber16">ВОЛС 16 жил</option>
+                                <option value="fiber24">ВОЛС 24 жилы</option>
+                                <option value="copper">Медный кабель</option>
+                            </select>
+                        </div>
+                        <button id="addCable" class="btn-primary">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                <line x1="12" y1="2" x2="12" y2="22"></line>
+                                <line x1="2" y1="12" x2="22" y2="12"></line>
+                            </svg>
+                            Проложить кабель
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Аккордеон для NetBox -->
+                <div class="accordion-section">
+                    <div class="accordion-header" data-accordion="netbox">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                            <line x1="8" y1="21" x2="16" y2="21"></line>
+                            <line x1="12" y1="17" x2="12" y2="21"></line>
+                        </svg>
+                        <span>NetBox</span>
+                        <svg class="accordion-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </div>
+                    <div class="accordion-content" id="netbox-content">
+                        <button id="netboxConfigBtn" class="btn-secondary">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="3"></circle>
+                                <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24"></path>
+                            </svg>
+                            Настроить подключение
+                        </button>
+                        <button id="netboxImportBtn" class="btn-secondary">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            Импорт устройств
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Аккордеон для файлов -->
+                <div class="accordion-section">
+                    <div class="accordion-header" data-accordion="files">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                            <polyline points="13 2 13 9 20 9"></polyline>
+                        </svg>
+                        <span>Файлы</span>
+                        <svg class="accordion-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </div>
+                    <div class="accordion-content" id="files-content">
+                        <input type="file" id="importFile" accept=".json" style="display: none;">
+                        <button id="importBtn" class="btn-secondary">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            Импорт карты
+                        </button>
+                        <button id="exportData" class="btn-secondary">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            Экспорт карты
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Легенда -->
+                <div class="accordion-section">
+                    <div class="accordion-header" data-accordion="legend">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                        </svg>
+                        <span>Легенда</span>
+                        <svg class="accordion-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </div>
+                    <div class="accordion-content" id="legend-content">
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #00FF00; height: 3px;"></div>
+                            <span class="legend-text">ВОЛС 4 жилы</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #00AA00; height: 4px;"></div>
+                            <span class="legend-text">ВОЛС 8 жил</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #008800; height: 5px;"></div>
+                            <span class="legend-text">ВОЛС 16 жил</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #006600; height: 6px;"></div>
+                            <span class="legend-text">ВОЛС 24 жилы</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #FF7700; height: 5px;"></div>
+                            <span class="legend-text">Медный кабель</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Статистика -->
+                <div class="stats-section">
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-icon" style="background: #22c55e20; color: #22c55e;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <polyline points="12 6 12 12 16 14"></polyline>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="nodeCount">0</div>
+                                <div class="stat-label">Узлы</div>
+                            </div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-icon" style="background: #3b82f620; color: #3b82f6;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="supportCount">0</div>
+                                <div class="stat-label">Опоры</div>
+                            </div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-icon" style="background: #ef444420; color: #ef4444;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="sleeveCount">0</div>
+                                <div class="stat-label">Муфты</div>
+                            </div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-icon" style="background: #f59e0b20; color: #f59e0b;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="cableCount">0</div>
+                                <div class="stat-label">Кабели</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Действия -->
+                <div class="actions-section">
+                    <button id="deleteSelected" class="btn-danger">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                        Удалить выбранное
+                    </button>
+                    <button id="clearAll" class="btn-danger">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            <line x1="10" y1="11" x2="10" y2="17"></line>
+                            <line x1="14" y1="11" x2="14" y2="17"></line>
+                        </svg>
+                        Очистить всё
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="map" class="map"></div>
+    </div>
+
+    <!-- Модальное окно для информации об узле/муфте -->
+    <div id="infoModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Информация об объекте</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="modalInfo"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для настройки NetBox -->
+    <div id="netboxConfigModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Настройка подключения к NetBox</h2>
+                <span class="close-netbox">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="netboxUrl">URL сервера NetBox:</label>
+                    <input type="text" id="netboxUrl" placeholder="https://netbox.example.com" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label for="netboxToken">API Token:</label>
+                    <input type="password" id="netboxToken" placeholder="Ваш токен API" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="checkbox" id="netboxIgnoreSSL" style="margin-right: 8px; width: auto;">
+                        <span>Игнорировать ошибки SSL сертификата</span>
+                    </label>
+                    <small style="display: block; margin-top: 5px; color: #666; font-size: 12px;">
+                        Внимание: Отключение проверки SSL снижает безопасность. Используйте только для тестирования или с самоподписанными сертификатами.
+                    </small>
+                </div>
+                <div class="form-group">
+                    <button id="testNetboxConnection" class="btn-test">Тест подключения</button>
+                    <button id="saveNetboxConfig" class="btn-save">Сохранить</button>
+                </div>
+                <div id="netboxStatus" class="status-message"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для выбора устройств из NetBox -->
+    <div id="netboxImportModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2>Импорт устройств из NetBox</h2>
+                <span class="close-import">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="netboxDevicesList"></div>
+                <div class="import-actions">
+                    <button id="selectAllDevices">Выбрать все</button>
+                    <button id="deselectAllDevices">Снять выбор</button>
+                    <button id="importSelectedDevices" class="btn-primary">Импортировать выбранные</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>
