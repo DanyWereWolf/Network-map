@@ -877,6 +877,193 @@ button {
     font-size: 1rem;
 }
 
+/* ==================== Модальное окно выбора узла ==================== */
+.close-node-selection {
+    color: white;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 20px;
+    background: rgba(255, 255, 255, 0.2);
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.close-node-selection:hover,
+.close-node-selection:focus {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.1);
+}
+
+.node-selection-info {
+    background: #e0f2fe;
+    border-left: 4px solid #3b82f6;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.node-selection-info p {
+    margin: 0;
+    color: #1e40af;
+    font-size: 0.875rem;
+}
+
+.node-search-wrapper {
+    position: relative;
+}
+
+.node-search-wrapper .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #6c757d;
+    pointer-events: none;
+}
+
+.node-search-input {
+    padding-left: 40px !important;
+}
+
+.node-list-container {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    background: #f8f9fa;
+}
+
+.node-list-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    cursor: pointer;
+    border-bottom: 1px solid #e5e7eb;
+    transition: all 0.2s;
+    background: white;
+}
+
+.node-list-item:last-child {
+    border-bottom: none;
+}
+
+.node-list-item:hover {
+    background: #e0f2fe;
+}
+
+.node-list-item.selected {
+    background: #3b82f6;
+    color: white;
+}
+
+.node-list-item-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: #22c55e20;
+    color: #22c55e;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 12px;
+    flex-shrink: 0;
+}
+
+.node-list-item:hover .node-list-item-icon {
+    background: #3b82f620;
+    color: #3b82f6;
+}
+
+.node-list-item.selected .node-list-item-icon {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.node-list-item-info {
+    flex: 1;
+}
+
+.node-list-item-name {
+    font-weight: 600;
+    font-size: 0.9375rem;
+    color: #2c3e50;
+}
+
+.node-list-item:hover .node-list-item-name {
+    color: #1e40af;
+}
+
+.node-list-item.selected .node-list-item-name {
+    color: white;
+}
+
+.node-list-item-coords {
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-top: 2px;
+}
+
+.node-list-item.selected .node-list-item-coords {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.node-list-empty {
+    padding: 30px 20px;
+    text-align: center;
+    color: #6c757d;
+}
+
+.node-list-empty svg {
+    width: 48px;
+    height: 48px;
+    color: #dee2e6;
+    margin-bottom: 12px;
+}
+
+.node-list-empty p {
+    margin: 0;
+    font-size: 0.875rem;
+}
+
+.node-list-no-results {
+    padding: 20px;
+    text-align: center;
+    color: #6c757d;
+    font-size: 0.875rem;
+}
+
+.node-selection-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #e5e7eb;
+}
+
+.node-selection-actions .btn-secondary {
+    width: auto;
+    margin-bottom: 0;
+}
+
+/* Подсветка поиска */
+.node-list-item-name mark {
+    background: #fef08a;
+    color: inherit;
+    padding: 0 2px;
+    border-radius: 2px;
+}
+
+.node-list-item.selected .node-list-item-name mark {
+    background: rgba(255, 255, 255, 0.3);
+}
+
 /* ==================== Адаптивность ==================== */
 @media (max-width: 768px) {
     .sidebar {
