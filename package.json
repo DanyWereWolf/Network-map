@@ -1,0 +1,17 @@
+{
+  "name": "network-map",
+  "version": "1.0.0",
+  "description": "Карта локальной сети - визуализация сетевой инфраструктуры",
+  "private": true,
+  "scripts": {
+    "build": "npm run obfuscate:main && npm run obfuscate:auth",
+    "obfuscate:main": "javascript-obfuscator main.js --output dist/main.js --compact true --control-flow-flattening true --dead-code-injection true --string-array true --string-array-encoding base64",
+    "obfuscate:auth": "javascript-obfuscator auth.js --output dist/auth.js --compact true --control-flow-flattening true --dead-code-injection true --string-array true --string-array-encoding base64",
+    "copy-assets": "xcopy /Y *.html dist\\ && xcopy /Y *.css dist\\"
+  },
+  "devDependencies": {
+    "javascript-obfuscator": "^4.1.1"
+  },
+  "author": "Network-map",
+  "license": "SEE LICENSE FILE"
+}

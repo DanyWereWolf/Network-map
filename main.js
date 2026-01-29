@@ -1204,6 +1204,247 @@ function setupEventListeners() {
     // NetBox интеграция
     setupNetBoxEventListeners();
     loadNetBoxConfig();
+    
+    // Инициализация поиска по карте
+    setupMapSearch();
+}
+
+// ==================== Поиск по карте ====================
+function setupMapSearch() {
+    const searchInput = document.getElementById('mapSearch');
+    const searchResults = document.getElementById('searchResults');
+    const clearBtn = document.getElementById('clearSearch');
+    
+    if (!searchInput || !searchResults) return;
+    
+    let searchTimeout = null;
+    
+    // Поиск при вводе
+    searchInput.addEventListener('input', function() {
+        const query = this.value.trim();
+        
+        // Показываем/скрываем кнопку очистки
+        clearBtn.style.display = query ? 'flex' : 'none';
+        
+        // Отменяем предыдущий таймаут
+        if (searchTimeout) clearTimeout(searchTimeout);
+        
+        if (query.length < 2) {
+            searchResults.style.display = 'none';
+            return;
+        }
+        
+        // Задержка для уменьшения нагрузки
+        searchTimeout = setTimeout(() => {
+            const results = searchObjects(query);
+            renderSearchResults(results, query);
+        }, 200);
+    });
+    
+    // Очистка поиска
+    clearBtn.addEventListener('click', function() {
+        searchInput.value = '';
+        searchResults.style.display = 'none';
+        clearBtn.style.display = 'none';
+        searchInput.focus();
+    });
+    
+    // Закрытие при клике вне
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.header-search')) {
+            searchResults.style.display = 'none';
+        }
+    });
+    
+    // Открытие при фокусе если есть текст
+    searchInput.addEventListener('focus', function() {
+        if (this.value.trim().length >= 2) {
+            const results = searchObjects(this.value.trim());
+            renderSearchResults(results, this.value.trim());
+        }
+    });
+    
+    // Навигация клавиатурой
+    searchInput.addEventListener('keydown', function(e) {
+        const items = searchResults.querySelectorAll('.search-result-item');
+        const activeItem = searchResults.querySelector('.search-result-item.active');
+        let activeIndex = Array.from(items).indexOf(activeItem);
+        
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (activeIndex < items.length - 1) {
+                items[activeIndex]?.classList.remove('active');
+                items[activeIndex + 1]?.classList.add('active');
+                items[activeIndex + 1]?.scrollIntoView({ block: 'nearest' });
+            } else if (activeIndex === -1 && items.length > 0) {
+                items[0].classList.add('active');
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (activeIndex > 0) {
+                items[activeIndex]?.classList.remove('active');
+                items[activeIndex - 1]?.classList.add('active');
+                items[activeIndex - 1]?.scrollIntoView({ block: 'nearest' });
+            }
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (activeItem) {
+                activeItem.click();
+            } else if (items.length > 0) {
+                items[0].click();
+            }
+        } else if (e.key === 'Escape') {
+            searchResults.style.display = 'none';
+            searchInput.blur();
+        }
+    });
+}
+
+// Поиск объектов по запросу
+function searchObjects(query) {
+    const lowerQuery = query.toLowerCase();
+    const results = [];
+    
+    objects.forEach(obj => {
+        if (!obj.properties) return;
+        
+        const type = obj.properties.get('type');
+        const name = obj.properties.get('name') || '';
+        const cableName = obj.properties.get('cableName') || '';
+        
+        // Ищем по имени
+        const searchName = type === 'cable' ? cableName : name;
+        if (searchName && searchName.toLowerCase().includes(lowerQuery)) {
+            results.push({
+                object: obj,
+                type: type,
+                name: searchName,
+                matchType: 'name'
+            });
+            return;
+        }
+        
+        // Ищем по типу объекта
+        const typeName = getObjectTypeName(type);
+        if (typeName.toLowerCase().includes(lowerQuery)) {
+            results.push({
+                object: obj,
+                type: type,
+                name: searchName || typeName,
+                matchType: 'type'
+            });
+        }
+    });
+    
+    // Сортируем: сначала по совпадению имени, потом по алфавиту
+    results.sort((a, b) => {
+        if (a.matchType === 'name' && b.matchType !== 'name') return -1;
+        if (a.matchType !== 'name' && b.matchType === 'name') return 1;
+        return a.name.localeCompare(b.name);
+    });
+    
+    return results.slice(0, 20); // Максимум 20 результатов
+}
+
+// Отрисовка результатов поиска
+function renderSearchResults(results, query) {
+    const searchResults = document.getElementById('searchResults');
+    
+    if (results.length === 0) {
+        searchResults.innerHTML = `
+            <div class="search-no-results">
+                <div style="font-size: 24px; margin-bottom: 8px;">🔍</div>
+                Ничего не найдено по запросу "${escapeHtml(query)}"
+            </div>
+        `;
+        searchResults.style.display = 'block';
+        return;
+    }
+    
+    const getIcon = (type) => {
+        switch(type) {
+            case 'node': return '🖥️';
+            case 'cross': return '📦';
+            case 'sleeve': return '🔴';
+            case 'support': return '📍';
+            case 'cable': return '🔌';
+            default: return '📍';
+        }
+    };
+    
+    let html = `<div class="search-results-header">Найдено: ${results.length}</div>`;
+    
+    results.forEach((result, index) => {
+        const typeName = getObjectTypeName(result.type);
+        const icon = getIcon(result.type);
+        const uniqueId = result.object.properties.get('uniqueId') || index;
+        
+        html += `
+            <div class="search-result-item" data-index="${index}" data-id="${uniqueId}">
+                <div class="search-result-icon ${result.type}">${icon}</div>
+                <div class="search-result-info">
+                    <div class="search-result-name">${escapeHtml(result.name)}</div>
+                    <div class="search-result-type">${typeName}</div>
+                </div>
+            </div>
+        `;
+    });
+    
+    searchResults.innerHTML = html;
+    searchResults.style.display = 'block';
+    
+    // Обработчики кликов по результатам
+    searchResults.querySelectorAll('.search-result-item').forEach((item, index) => {
+        item.addEventListener('click', () => {
+            goToSearchResult(results[index]);
+        });
+        
+        item.addEventListener('mouseenter', () => {
+            searchResults.querySelector('.search-result-item.active')?.classList.remove('active');
+            item.classList.add('active');
+        });
+    });
+}
+
+// Переход к найденному объекту
+function goToSearchResult(result) {
+    const obj = result.object;
+    const searchResults = document.getElementById('searchResults');
+    const searchInput = document.getElementById('mapSearch');
+    
+    // Скрываем результаты
+    searchResults.style.display = 'none';
+    
+    // Получаем координаты
+    let coords;
+    if (result.type === 'cable') {
+        // Для кабеля берём середину
+        const geometry = obj.geometry.getCoordinates();
+        if (geometry && geometry.length >= 2) {
+            const midIndex = Math.floor(geometry.length / 2);
+            coords = geometry[midIndex];
+        }
+    } else {
+        coords = obj.geometry.getCoordinates();
+    }
+    
+    if (!coords) return;
+    
+    // Перемещаем карту к объекту
+    myMap.setCenter(coords, 17, { duration: 500 });
+    
+    // Показываем информацию об объекте
+    setTimeout(() => {
+        if (result.type === 'cable') {
+            showCableInfo(obj);
+        } else if (result.type === 'node' || result.type === 'cross' || result.type === 'sleeve') {
+            showObjectInfo(obj);
+        }
+    }, 600);
+    
+    // Очищаем поиск
+    searchInput.value = '';
+    document.getElementById('clearSearch').style.display = 'none';
 }
 
 let objectPlacementMode = false;
@@ -1859,7 +2100,7 @@ function updatePhantomPlacemark(type, coords) {
             </svg>`;
     }
     
-    const clickableSize = 36;
+    const clickableSize = 44;
     const iconSize = type === 'node' ? 32 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
     
@@ -1902,6 +2143,11 @@ function removePhantomPlacemark() {
 // Подсвечивает объект при наведении мыши в режиме прокладки кабеля
 function highlightObjectOnHover(obj, e) {
     if (!obj || !obj.properties) {
+        return;
+    }
+    
+    // В режиме редактирования не подсвечиваем объекты
+    if (isEditMode) {
         return;
     }
     
@@ -1954,7 +2200,7 @@ function highlightObjectOnHover(obj, e) {
     }
     
     // Создаем увеличенную область клика для подсвеченного объекта
-    const clickableSize = 36;
+    const clickableSize = 44;
     const iconSize = type === 'node' ? 32 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
     
@@ -2301,7 +2547,7 @@ function createObject(type, name, coords, options = {}) {
 
     // Создаем SVG с увеличенной невидимой областью для удобства клика
     // Добавляем прозрачную область вокруг иконки
-    const clickableSize = 36; // Область клика 36x36 пикселей
+    const clickableSize = 44; // Увеличенная область клика 44x44 пикселей
     const iconSize = (type === 'node' || type === 'cross') ? 32 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
     
@@ -2401,9 +2647,14 @@ function createObject(type, name, coords, options = {}) {
             return;
         }
         
-        // Для опор показываем информацию о проходящих кабелях
+        // Для опор - только выделение в режиме редактирования
         if (type === 'support') {
-            showSupportInfo(placemark);
+            if (!isEditMode) return;
+            if (selectedObjects.includes(placemark)) {
+                deselectObject(placemark);
+            } else {
+                selectObject(placemark);
+            }
             return;
         }
         
@@ -2429,6 +2680,14 @@ function createObject(type, name, coords, options = {}) {
         }
         // Обновляем линии соединений кросс-узел
         updateAllNodeConnectionLines();
+        // Обновляем позицию пульсирующего круга
+        updateSelectionPulsePosition(placemark);
+    });
+    
+    // Обновляем позицию круга и кабелей при перетаскивании
+    placemark.events.add('drag', function() {
+        updateSelectionPulsePosition(placemark);
+        updateConnectedCables(placemark);
     });
 
     objects.push(placemark);
@@ -2486,44 +2745,53 @@ function deleteObject(obj) {
 function selectObject(obj) {
     if (!selectedObjects.includes(obj)) {
         selectedObjects.push(obj);
-        // Для выделения создаем версию иконки с желтой обводкой
-        const type = obj.properties.get('type');
-        let iconSvg;
         
+        // В режиме редактирования не меняем визуальное отображение
+        if (isEditMode) {
+            return;
+        }
+        
+        // В режиме просмотра - увеличиваем иконку
+        const type = obj.properties.get('type');
+        const clickableSize = 50;
+        const iconSize = (type === 'node' || type === 'cross') ? 38 : 34;
+        const iconOffset = (clickableSize - iconSize) / 2;
+        
+        let iconSvg;
         switch(type) {
             case 'support':
-                iconSvg = `<svg width="32" height="32" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="2" y="2" width="24" height="24" rx="4" fill="#3b82f6" stroke="#fbbf24" stroke-width="3"/>
-                    <rect x="10" y="6" width="8" height="16" rx="1" fill="white" opacity="0.9"/>
+                iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 34 34" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="2" y="2" width="30" height="30" rx="5" fill="#3b82f6" stroke="white" stroke-width="2"/>
+                    <rect x="11" y="6" width="12" height="22" rx="2" fill="white" opacity="0.95"/>
                 </svg>`;
                 break;
             case 'sleeve':
-                iconSvg = `<svg width="32" height="32" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                    <polygon points="14,2 24,7 24,17 14,22 4,17 4,7" fill="#ef4444" stroke="#fbbf24" stroke-width="3"/>
-                    <circle cx="14" cy="12" r="3" fill="white" opacity="0.9"/>
+                iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 34 34" xmlns="http://www.w3.org/2000/svg">
+                    <polygon points="17,2 31,9 31,25 17,32 3,25 3,9" fill="#ef4444" stroke="white" stroke-width="2"/>
+                    <circle cx="17" cy="17" r="5" fill="white" opacity="0.95"/>
                 </svg>`;
                 break;
             case 'node':
-                iconSvg = `<svg width="36" height="36" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="16" cy="16" r="14" fill="#22c55e" stroke="#fbbf24" stroke-width="3"/>
-                    <circle cx="16" cy="16" r="6" fill="white" opacity="0.95"/>
-                    <circle cx="16" cy="16" r="3" fill="#22c55e"/>
+                iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 38 38" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="19" cy="19" r="17" fill="#22c55e" stroke="white" stroke-width="2.5"/>
+                    <circle cx="19" cy="19" r="7" fill="white" opacity="0.95"/>
+                    <circle cx="19" cy="19" r="4" fill="#22c55e"/>
+                </svg>`;
+                break;
+            case 'cross':
+                iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 38 38" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="2" y="2" width="34" height="34" rx="5" fill="#f59e0b" stroke="white" stroke-width="2"/>
+                    <rect x="8" y="15" width="22" height="5" rx="1" fill="white" opacity="0.95"/>
+                    <rect x="15" y="7" width="8" height="24" rx="1" fill="white" opacity="0.95"/>
                 </svg>`;
                 break;
             default:
-                iconSvg = `<svg width="28" height="28" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="12" cy="12" r="10" fill="#94a3b8" stroke="#fbbf24" stroke-width="3"/>
+                iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="15" cy="15" r="13" fill="#94a3b8" stroke="white" stroke-width="2"/>
                 </svg>`;
         }
         
-        // Создаем увеличенную область клика для выделенного объекта
-        const clickableSize = 36;
-        const iconSize = type === 'node' ? 32 : 28;
-        const iconOffset = (clickableSize - iconSize) / 2;
-        
-        // Извлекаем содержимое SVG без тегов svg
         const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
-        
         const clickableSvg = `<svg width="${clickableSize}" height="${clickableSize}" viewBox="0 0 ${clickableSize} ${clickableSize}" xmlns="http://www.w3.org/2000/svg">
             <rect x="0" y="0" width="${clickableSize}" height="${clickableSize}" fill="transparent"/>
             <g transform="translate(${iconOffset}, ${iconOffset})">
@@ -2541,8 +2809,40 @@ function selectObject(obj) {
     }
 }
 
+// Добавляет пульсирующий круг вокруг выделенного объекта (отключено)
+function addSelectionPulse(obj) {
+    // Отключено - выделение только увеличением иконки
+    return;
+}
+
+// Обновляет позицию пульсирующего круга
+function updateSelectionPulsePosition(obj) {
+    const pulse = obj.properties.get('selectionPulse');
+    if (pulse && obj.geometry) {
+        const coords = obj.geometry.getCoordinates();
+        pulse.geometry.setCoordinates(coords);
+    }
+}
+
+// Удаляет пульсирующий круг
+function removeSelectionPulse(obj) {
+    const pulse = obj.properties.get('selectionPulse');
+    if (pulse) {
+        myMap.geoObjects.remove(pulse);
+        obj.properties.set('selectionPulse', null);
+    }
+}
+
 function deselectObject(obj) {
     selectedObjects = selectedObjects.filter(o => o !== obj);
+    
+    // Удаляем пульсирующий круг
+    removeSelectionPulse(obj);
+    
+    // В режиме редактирования не меняем иконку
+    if (isEditMode) {
+        return;
+    }
     
     // Восстанавливаем оригинальную иконку
     const type = obj.properties.get('type');
@@ -2568,6 +2868,13 @@ function deselectObject(obj) {
                 <circle cx="16" cy="16" r="3" fill="#22c55e"/>
             </svg>`;
             break;
+        case 'cross':
+            iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="2" width="28" height="28" rx="4" fill="#f59e0b" stroke="white" stroke-width="2"/>
+                <rect x="7" y="12" width="18" height="4" rx="1" fill="white" opacity="0.95"/>
+                <rect x="13" y="6" width="6" height="20" rx="1" fill="white" opacity="0.95"/>
+            </svg>`;
+            break;
         default:
             iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="12" cy="12" r="10" fill="#94a3b8" stroke="white" stroke-width="2"/>
@@ -2575,8 +2882,8 @@ function deselectObject(obj) {
     }
     
     // Создаем увеличенную область клика для обычного объекта
-    const clickableSize = 36;
-    const iconSize = type === 'node' ? 32 : 28;
+    const clickableSize = 44;
+    const iconSize = (type === 'node' || type === 'cross') ? 32 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
     
     // Извлекаем содержимое SVG без тегов svg
@@ -2857,41 +3164,49 @@ function showCableInfo(cable) {
     const cableType = cable.properties.get('cableType');
     const fromObj = cable.properties.get('from');
     const toObj = cable.properties.get('to');
-    const distance = cable.properties.get('distance');
     const uniqueId = cable.properties.get('uniqueId');
     const cableName = cable.properties.get('cableName') || '';
+    const fiberCount = getFiberCount(cableType);
+    const fibers = getFiberColors(cableType);
     
     const cableDescription = getCableDescription(cableType);
     
-    // Определяем типы объектов
-    let fromType = 'Объект';
-    let toType = 'Объект';
-    if (fromObj && fromObj.properties) {
-        const type = fromObj.properties.get('type');
-        if (type === 'support') fromType = 'Опора связи';
-        else if (type === 'sleeve') fromType = 'Кабельная муфта';
-        else if (type === 'cross') fromType = 'Оптический кросс';
-        else if (type === 'node') fromType = 'Узел сети';
-    }
-    if (toObj && toObj.properties) {
-        const type = toObj.properties.get('type');
-        if (type === 'support') toType = 'Опора связи';
-        else if (type === 'sleeve') toType = 'Кабельная муфта';
-        else if (type === 'cross') toType = 'Оптический кросс';
-        else if (type === 'node') toType = 'Узел сети';
-    }
+    // Находим параллельные кабели на этом же участке
+    const fromUniqueId = fromObj ? fromObj.properties.get('uniqueId') : null;
+    const toUniqueId = toObj ? toObj.properties.get('uniqueId') : null;
     
-    // Получаем имена объектов
-    let fromName = '';
-    let toName = '';
-    if (fromObj && fromObj.properties) {
-        const name = fromObj.properties.get('name');
-        if (name) fromName = ` "${name}"`;
-    }
-    if (toObj && toObj.properties) {
-        const name = toObj.properties.get('name');
-        if (name) toName = ` "${name}"`;
-    }
+    const parallelCables = objects.filter(obj => {
+        if (!obj.properties || obj.properties.get('type') !== 'cable') return false;
+        if (obj.properties.get('uniqueId') === uniqueId) return false; // Исключаем текущий кабель
+        
+        const objFrom = obj.properties.get('from');
+        const objTo = obj.properties.get('to');
+        if (!objFrom || !objTo) return false;
+        
+        const objFromId = objFrom.properties.get('uniqueId');
+        const objToId = objTo.properties.get('uniqueId');
+        
+        // Проверяем совпадение концов (в любом направлении)
+        return (objFromId === fromUniqueId && objToId === toUniqueId) ||
+               (objFromId === toUniqueId && objToId === fromUniqueId);
+    });
+    
+    // Определяем типы и имена объектов
+    const getObjInfo = (obj) => {
+        if (!obj || !obj.properties) return { type: 'Объект', name: '', icon: '📍' };
+        const type = obj.properties.get('type');
+        const name = obj.properties.get('name') || '';
+        let typeName = 'Объект';
+        let icon = '📍';
+        if (type === 'support') { typeName = 'Опора связи'; icon = '📍'; }
+        else if (type === 'sleeve') { typeName = 'Кабельная муфта'; icon = '🔴'; }
+        else if (type === 'cross') { typeName = 'Оптический кросс'; icon = '📦'; }
+        else if (type === 'node') { typeName = 'Узел сети'; icon = '🖥️'; }
+        return { type: typeName, name, icon };
+    };
+    
+    const fromInfo = getObjInfo(fromObj);
+    const toInfo = getObjInfo(toObj);
     
     const modal = document.getElementById('infoModal');
     const modalTitle = document.getElementById('modalTitle');
@@ -2903,50 +3218,138 @@ function showCableInfo(cable) {
     }
     
     // Обновляем заголовок
-    modalTitle.textContent = 'Информация о кабеле';
+    modalTitle.textContent = '🔌 Информация о кабеле';
+    
+    // Определяем цвет кабеля
+    let cableColor = '#00AA00';
+    if (cableType === 'copper') cableColor = '#888888';
+    else if (cableType === 'fiber4') cableColor = '#e74c3c';
+    else if (cableType === 'fiber8') cableColor = '#e67e22';
+    else if (cableType === 'fiber16') cableColor = '#9b59b6';
+    else if (cableType === 'fiber24') cableColor = '#1abc9c';
     
     let html = '<div class="info-section">';
-    html += `<h3 style="margin: 0 0 15px 0; color: #1e40af; font-size: 18px;">${cableDescription}</h3>`;
+    
+    // Заголовок с типом кабеля
+    html += `<div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 12px; background: linear-gradient(135deg, ${cableColor}15, ${cableColor}05); border-radius: 8px; border-left: 4px solid ${cableColor};">`;
+    html += `<div style="width: 40px; height: 40px; background: ${cableColor}; border-radius: 8px; display: flex; align-items: center; justify-content: center;">`;
+    html += `<span style="color: white; font-size: 18px;">🔌</span></div>`;
+    html += `<div><h3 style="margin: 0; color: #1e293b; font-size: 1rem;">${cableDescription}</h3>`;
+    html += `<span style="font-size: 0.8rem; color: #64748b;">${fiberCount} жил</span></div></div>`;
     
     // Поле для названия кабеля
-    html += '<div style="margin-bottom: 15px;">';
-    html += '<div class="form-group" style="margin-bottom: 12px;">';
-    html += '<label style="display: block; margin-bottom: 4px; font-weight: 600; color: #495057; font-size: 0.8125rem;">Название кабеля:</label>';
+    html += '<div class="form-group" style="margin-bottom: 16px;">';
+    html += '<label style="display: block; margin-bottom: 6px; font-weight: 600; color: #374151; font-size: 0.8125rem;">Название кабеля</label>';
     if (isEditMode) {
-        html += `<input type="text" id="cableNameInput" value="${cableName}" placeholder="Введите название кабеля" 
-            style="width: 100%; padding: 8px 12px; border: 1px solid #ced4da; border-radius: 4px; font-size: 0.875rem;" 
+        html += `<input type="text" id="cableNameInput" value="${escapeHtml(cableName)}" placeholder="Введите название кабеля" 
+            style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem;" 
             onchange="updateCableName('${uniqueId}', this.value)">`;
     } else {
-        html += `<div style="padding: 8px 12px; background: #f8f9fa; border-radius: 4px; font-size: 0.875rem;">${cableName || '<span style="color: #6c757d; font-style: italic;">Не задано</span>'}</div>`;
+        html += `<div style="padding: 10px 12px; background: #f8fafc; border-radius: 6px; font-size: 0.875rem; border: 1px solid #e2e8f0;">${cableName ? escapeHtml(cableName) : '<span style="color: #94a3b8; font-style: italic;">Не задано</span>'}</div>`;
     }
     html += '</div>';
     
-    html += `<div style="margin-bottom: 8px;"><strong>От:</strong> ${fromType}${fromName}</div>`;
-    html += `<div style="margin-bottom: 8px;"><strong>До:</strong> ${toType}${toName}</div>`;
+    // Маршрут кабеля
+    html += '<div style="margin-bottom: 16px; padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">';
+    html += '<h4 style="margin: 0 0 12px 0; color: #374151; font-size: 0.875rem; font-weight: 600;">📍 Маршрут</h4>';
     
-    // Всегда пересчитываем расстояние при открытии модального окна
+    html += `<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">`;
+    html += `<span style="font-size: 1.1rem;">${fromInfo.icon}</span>`;
+    html += `<div><strong style="color: #374151;">${fromInfo.type}</strong>`;
+    if (fromInfo.name) html += `<br><span style="font-size: 0.8rem; color: #64748b;">${escapeHtml(fromInfo.name)}</span>`;
+    html += `</div></div>`;
+    
+    html += `<div style="margin-left: 14px; padding-left: 14px; border-left: 2px dashed ${cableColor}; margin-bottom: 8px;">`;
+    html += `<span style="font-size: 0.75rem; color: #94a3b8;">↓ кабель</span></div>`;
+    
+    html += `<div style="display: flex; align-items: center; gap: 8px;">`;
+    html += `<span style="font-size: 1.1rem;">${toInfo.icon}</span>`;
+    html += `<div><strong style="color: #374151;">${toInfo.type}</strong>`;
+    if (toInfo.name) html += `<br><span style="font-size: 0.8rem; color: #64748b;">${escapeHtml(toInfo.name)}</span>`;
+    html += `</div></div>`;
+    html += '</div>';
+    
+    // Расстояние
     let displayDistance = 'неизвестно';
     if (fromObj && toObj && fromObj.geometry && toObj.geometry) {
         const fromCoords = fromObj.geometry.getCoordinates();
         const toCoords = toObj.geometry.getCoordinates();
         displayDistance = calculateDistance(fromCoords, toCoords);
-        // Обновляем сохраненное расстояние
         cable.properties.set('distance', displayDistance);
-        // Сохраняем данные
         saveData();
     }
     
+    // Статистика
+    const totalCablesOnSegment = parallelCables.length + 1; // +1 для текущего кабеля
+    
+    html += '<div style="display: flex; gap: 10px; margin-bottom: 16px;">';
+    html += `<div style="flex: 1; padding: 10px; background: #f0f9ff; border-radius: 8px; text-align: center;">`;
+    html += `<div style="font-size: 0.7rem; color: #0369a1; margin-bottom: 2px;">Расстояние</div>`;
     if (typeof displayDistance === 'number') {
-        html += `<div style="margin-bottom: 8px;"><strong>Расстояние:</strong> ${displayDistance} м (${(displayDistance / 1000).toFixed(2)} км)</div>`;
+        html += `<div style="font-size: 1rem; font-weight: 600; color: #0c4a6e;">${displayDistance} м</div>`;
     } else {
-        html += `<div style="margin-bottom: 8px;"><strong>Расстояние:</strong> ${displayDistance}</div>`;
+        html += `<div style="font-size: 0.9rem; color: #64748b;">${displayDistance}</div>`;
     }
-    html += '</div>';
+    html += `</div>`;
+    html += `<div style="flex: 1; padding: 10px; background: #f0fdf4; border-radius: 8px; text-align: center;">`;
+    html += `<div style="font-size: 0.7rem; color: #15803d; margin-bottom: 2px;">Жил</div>`;
+    html += `<div style="font-size: 1rem; font-weight: 600; color: #14532d;">${fiberCount}</div>`;
+    html += `</div>`;
+    html += `<div style="flex: 1; padding: 10px; background: ${totalCablesOnSegment > 1 ? '#fef3c7' : '#f1f5f9'}; border-radius: 8px; text-align: center;">`;
+    html += `<div style="font-size: 0.7rem; color: ${totalCablesOnSegment > 1 ? '#92400e' : '#64748b'}; margin-bottom: 2px;">На участке</div>`;
+    html += `<div style="font-size: 1rem; font-weight: 600; color: ${totalCablesOnSegment > 1 ? '#78350f' : '#334155'};">${totalCablesOnSegment} каб.</div>`;
+    html += `</div></div>`;
+    
+    // Параллельные кабели на этом участке
+    if (parallelCables.length > 0) {
+        html += '<div style="margin-bottom: 16px; padding: 12px; background: #fffbeb; border-radius: 8px; border: 1px solid #fcd34d;">';
+        html += `<h4 style="margin: 0 0 10px 0; color: #92400e; font-size: 0.8rem; font-weight: 600;">📦 Другие кабели на этом участке (${parallelCables.length})</h4>`;
+        html += '<div style="display: flex; flex-direction: column; gap: 6px;">';
+        
+        parallelCables.forEach((pCable, idx) => {
+            const pType = pCable.properties.get('cableType');
+            const pName = pCable.properties.get('cableName') || '';
+            const pDesc = getCableDescription(pType);
+            const pFibers = getFiberCount(pType);
+            const pId = pCable.properties.get('uniqueId');
+            
+            let pColor = '#00AA00';
+            if (pType === 'copper') pColor = '#888888';
+            else if (pType === 'fiber4') pColor = '#e74c3c';
+            else if (pType === 'fiber8') pColor = '#e67e22';
+            else if (pType === 'fiber16') pColor = '#9b59b6';
+            else if (pType === 'fiber24') pColor = '#1abc9c';
+            
+            html += `<div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: white; border-radius: 6px; border-left: 3px solid ${pColor}; cursor: pointer;" onclick="showCableInfoById('${pId}')">`;
+            html += `<div style="width: 8px; height: 8px; border-radius: 50%; background: ${pColor};"></div>`;
+            html += `<div style="flex: 1; min-width: 0;">`;
+            html += `<div style="font-size: 0.8rem; font-weight: 500; color: #374151;">${pName ? escapeHtml(pName) : pDesc}</div>`;
+            if (pName) html += `<div style="font-size: 0.7rem; color: #94a3b8;">${pDesc}</div>`;
+            html += `</div>`;
+            html += `<div style="font-size: 0.7rem; color: #64748b; white-space: nowrap;">${pFibers} жил</div>`;
+            html += `</div>`;
+        });
+        
+        html += '</div></div>';
+    }
+    
+    // Жилы кабеля
+    html += '<div style="margin-bottom: 16px;">';
+    html += '<h4 style="margin: 0 0 10px 0; color: #374151; font-size: 0.875rem; font-weight: 600;">🌈 Жилы кабеля</h4>';
+    html += '<div style="display: flex; flex-wrap: wrap; gap: 6px;">';
+    fibers.forEach(fiber => {
+        html += `<div style="display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: white; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 0.8rem;">`;
+        html += `<div style="width: 14px; height: 14px; border-radius: 50%; background: ${fiber.color}; border: 1px solid rgba(0,0,0,0.2);"></div>`;
+        html += `<span style="color: #374151; font-weight: 500;">${fiber.number}</span>`;
+        html += `<span style="color: #94a3b8; font-size: 0.7rem;">${fiber.name}</span>`;
+        html += `</div>`;
+    });
+    html += '</div></div>';
     
     // Кнопки действий (только в режиме редактирования)
     if (isEditMode) {
-        html += '<div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e5e7eb;">';
-        html += `<button class="btn-danger" onclick="deleteCableByUniqueId('${uniqueId}')" style="width: 100%; margin-top: 10px;">`;
+        html += '<div style="padding-top: 16px; border-top: 1px solid #e2e8f0;">';
+        html += `<button class="btn-danger" onclick="deleteCableByUniqueId('${uniqueId}')" style="width: 100%;">`;
         html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">';
         html += '<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>';
         html += '</svg>Удалить кабель</button>';
@@ -2958,6 +3361,19 @@ function showCableInfo(cable) {
     modalContent.innerHTML = html;
     modal.style.display = 'block';
     currentModalObject = cable;
+}
+
+// Показать информацию о кабеле по ID
+function showCableInfoById(cableUniqueId) {
+    const cable = objects.find(obj => 
+        obj.properties && 
+        obj.properties.get('type') === 'cable' &&
+        obj.properties.get('uniqueId') === cableUniqueId
+    );
+    
+    if (cable) {
+        showCableInfo(cable);
+    }
 }
 
 // Обновление названия кабеля
@@ -3319,7 +3735,7 @@ function createObjectFromData(data) {
 
     // Создаем SVG с увеличенной невидимой областью для удобства клика
     // Добавляем прозрачную область вокруг иконки
-    const clickableSize = 36; // Область клика 36x36 пикселей
+    const clickableSize = 44; // Увеличенная область клика 44x44 пикселей
     const iconSize = (type === 'node' || type === 'cross') ? 32 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
     
@@ -3476,9 +3892,14 @@ function createObjectFromData(data) {
             return;
         }
         
-        // Для опор показываем информацию о проходящих кабелях
+        // Для опор - только выделение в режиме редактирования
         if (type === 'support') {
-            showSupportInfo(placemark);
+            if (!isEditMode) return;
+            if (selectedObjects.includes(placemark)) {
+                deselectObject(placemark);
+            } else {
+                selectObject(placemark);
+            }
             return;
         }
         
@@ -3504,6 +3925,14 @@ function createObjectFromData(data) {
         }
         // Обновляем линии соединений кросс-узел
         updateAllNodeConnectionLines();
+        // Обновляем позицию пульсирующего круга
+        updateSelectionPulsePosition(placemark);
+    });
+    
+    // Обновляем позицию круга и кабелей при перетаскивании
+    placemark.events.add('drag', function() {
+        updateSelectionPulsePosition(placemark);
+        updateConnectedCables(placemark);
     });
 
     objects.push(placemark);

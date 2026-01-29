@@ -55,6 +55,153 @@ body {
     flex-shrink: 0;
 }
 
+/* ==================== Поиск по карте ==================== */
+.header-search {
+    flex: 1;
+    max-width: 400px;
+    margin: 0 20px;
+    position: relative;
+}
+
+.search-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.search-icon {
+    position: absolute;
+    left: 12px;
+    stroke: rgba(255, 255, 255, 0.6);
+    pointer-events: none;
+    z-index: 1;
+}
+
+.search-input {
+    width: 100%;
+    padding: 8px 36px 8px 40px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    font-size: 0.875rem;
+    outline: none;
+    transition: all 0.2s;
+}
+
+.search-input::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.search-input:focus {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+.search-clear {
+    position: absolute;
+    right: 8px;
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.search-clear:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.search-results {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 4px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    max-height: 350px;
+    overflow-y: auto;
+    z-index: 1002;
+}
+
+.search-results-header {
+    padding: 10px 14px;
+    font-size: 0.75rem;
+    color: #64748b;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+    border-radius: 8px 8px 0 0;
+}
+
+.search-result-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.search-result-item:last-child {
+    border-bottom: none;
+}
+
+.search-result-item:hover {
+    background: #f8fafc;
+}
+
+.search-result-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.search-result-icon.node { background: #dcfce7; }
+.search-result-icon.cross { background: #fef3c7; }
+.search-result-icon.sleeve { background: #fee2e2; }
+.search-result-icon.support { background: #dbeafe; }
+.search-result-icon.cable { background: #f3e8ff; }
+
+.search-result-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.search-result-name {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #1e293b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.search-result-type {
+    font-size: 0.75rem;
+    color: #64748b;
+}
+
+.search-no-results {
+    padding: 20px;
+    text-align: center;
+    color: #64748b;
+    font-size: 0.875rem;
+}
+
 .container {
     display: flex;
     flex: 1;
@@ -1713,6 +1860,11 @@ button {
         font-size: 1rem;
     }
     
+    .header-search {
+        max-width: 280px;
+        margin: 0 12px;
+    }
+    
     .sidebar {
         width: 300px;
     }
@@ -1749,12 +1901,29 @@ button {
     }
     
     .header-brand h1 {
-        font-size: 0.95rem;
+        display: none;
     }
     
     .header-icon {
         width: 22px;
         height: 22px;
+    }
+    
+    .header-search {
+        max-width: none;
+        flex: 1;
+        margin: 0 10px;
+    }
+    
+    .search-input {
+        padding: 6px 32px 6px 36px;
+        font-size: 0.8125rem;
+    }
+    
+    .search-icon {
+        width: 16px;
+        height: 16px;
+        left: 10px;
     }
     
     .user-panel {

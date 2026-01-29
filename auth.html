@@ -3,8 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="author" content="Network-map">
+    <meta name="copyright" content="Copyright (c) 2024-2026 Network-map. All Rights Reserved.">
     <title>Вход - Карта локальной сети</title>
     <link rel="stylesheet" href="auth.css">
+    <!-- Защита от копирования -->
+    <script>
+        document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j')) || (e.ctrlKey && (e.key === 'U' || e.key === 'u'))) {
+                e.preventDefault(); return false;
+            }
+        });
+        document.addEventListener('dragstart', function(e) { e.preventDefault(); return false; });
+    </script>
+    <style>
+        body { -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; }
+        input, textarea { -webkit-user-select: text; -moz-user-select: text; -ms-user-select: text; user-select: text; }
+    </style>
 </head>
 <body>
     <div class="auth-container">

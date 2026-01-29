@@ -92,3 +92,22 @@ Network-map/
 - **Vanilla JavaScript** — без фреймворков
 - **CSS3** — адаптивный дизайн
 - **LocalStorage** — локальное хранение данных
+
+## Сборка защищённой версии
+
+Для деплоя с обфускацией кода:
+
+```bash
+npm install
+npm run build
+```
+
+Подробнее см. [BUILD.md](BUILD.md)
+
+## Лицензия
+
+**Proprietary Software License**
+
+Copyright (c) 2024-2026 Network-map. All Rights Reserved.
+
+Несанкционированное копирование, распространение или модификация данного ПО запрещены. Подробнее см. [LICENSE](LICENSE).
