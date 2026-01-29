@@ -669,7 +669,7 @@ function renderUsersList() {
     
     // Отображаем активных пользователей
     if (activeUsers.length === 0 && rejectedUsers.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: #6c757d; padding: 20px;">Нет пользователей</div>';
+        container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">Нет пользователей</div>';
         return;
     }
     
@@ -1030,7 +1030,7 @@ function setupEventListeners() {
         const cableBtn = this;
         
         if (currentCableTool) {
-            cableBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span>Отменить прокладку</span>';
+            cableBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span>Завершить прокладку</span>';
             cableBtn.style.background = '#e74c3c';
             clearSelection();
             removeCablePreview();
@@ -1207,6 +1207,56 @@ function setupEventListeners() {
     
     // Инициализация поиска по карте
     setupMapSearch();
+    
+    // Инициализация переключателя темы
+    initTheme();
+}
+
+// ==================== Тема (светлая/тёмная) ====================
+function initTheme() {
+    const themeToggle = document.getElementById('themeToggle');
+    
+    // Загружаем сохранённую тему или системную
+    const savedTheme = localStorage.getItem('networkMapTheme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const theme = savedTheme || (prefersDark ? 'dark' : 'light');
+    
+    setTheme(theme);
+    
+    // Обработчик переключения
+    if (themeToggle) {
+        themeToggle.addEventListener('click', toggleTheme);
+    }
+    
+    // Слушаем изменение системной темы
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+        if (!localStorage.getItem('networkMapTheme')) {
+            setTheme(e.matches ? 'dark' : 'light');
+        }
+    });
+}
+
+function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('networkMapTheme', theme);
+    
+    // Обновляем иконки
+    const lightIcon = document.querySelector('.theme-icon-light');
+    const darkIcon = document.querySelector('.theme-icon-dark');
+    
+    if (theme === 'dark') {
+        if (lightIcon) lightIcon.style.display = 'none';
+        if (darkIcon) darkIcon.style.display = 'block';
+    } else {
+        if (lightIcon) lightIcon.style.display = 'block';
+        if (darkIcon) darkIcon.style.display = 'none';
+    }
+}
+
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
 }
 
 // ==================== Поиск по карте ====================
@@ -1494,7 +1544,7 @@ function handleAddObject() {
         
         // Обновляем UI
         const addBtn = document.getElementById('addObject');
-        addBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span>Отменить размещение</span>';
+        addBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span>Завершить размещение</span>';
         addBtn.style.background = '#e74c3c';
         addBtn.onclick = cancelObjectPlacement;
     } else {
@@ -1505,7 +1555,7 @@ function handleAddObject() {
         
         // Обновляем UI
         const addBtn = document.getElementById('addObject');
-        addBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span>Отменить размещение</span>';
+        addBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span>Завершить размещение</span>';
         addBtn.style.background = '#e74c3c';
         addBtn.onclick = cancelObjectPlacement;
     }
@@ -3234,38 +3284,37 @@ function showCableInfo(cable) {
     html += `<div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 12px; background: linear-gradient(135deg, ${cableColor}15, ${cableColor}05); border-radius: 8px; border-left: 4px solid ${cableColor};">`;
     html += `<div style="width: 40px; height: 40px; background: ${cableColor}; border-radius: 8px; display: flex; align-items: center; justify-content: center;">`;
     html += `<span style="color: white; font-size: 18px;">🔌</span></div>`;
-    html += `<div><h3 style="margin: 0; color: #1e293b; font-size: 1rem;">${cableDescription}</h3>`;
-    html += `<span style="font-size: 0.8rem; color: #64748b;">${fiberCount} жил</span></div></div>`;
+    html += `<div><h3 style="margin: 0; color: var(--text-primary); font-size: 1rem;">${cableDescription}</h3>`;
+    html += `<span style="font-size: 0.8rem; color: var(--text-muted);">${fiberCount} жил</span></div></div>`;
     
     // Поле для названия кабеля
     html += '<div class="form-group" style="margin-bottom: 16px;">';
-    html += '<label style="display: block; margin-bottom: 6px; font-weight: 600; color: #374151; font-size: 0.8125rem;">Название кабеля</label>';
+    html += '<label style="display: block; margin-bottom: 6px; font-weight: 600; color: var(--text-primary); font-size: 0.8125rem;">Название кабеля</label>';
     if (isEditMode) {
-        html += `<input type="text" id="cableNameInput" value="${escapeHtml(cableName)}" placeholder="Введите название кабеля" 
-            style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem;" 
+        html += `<input type="text" id="cableNameInput" class="form-input" value="${escapeHtml(cableName)}" placeholder="Введите название кабеля" 
             onchange="updateCableName('${uniqueId}', this.value)">`;
     } else {
-        html += `<div style="padding: 10px 12px; background: #f8fafc; border-radius: 6px; font-size: 0.875rem; border: 1px solid #e2e8f0;">${cableName ? escapeHtml(cableName) : '<span style="color: #94a3b8; font-style: italic;">Не задано</span>'}</div>`;
+        html += `<div style="padding: 10px 12px; background: var(--bg-tertiary); border-radius: 6px; font-size: 0.875rem; border: 1px solid var(--border-color); color: var(--text-primary);">${cableName ? escapeHtml(cableName) : '<span style="color: var(--text-muted); font-style: italic;">Не задано</span>'}</div>`;
     }
     html += '</div>';
     
     // Маршрут кабеля
-    html += '<div style="margin-bottom: 16px; padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">';
-    html += '<h4 style="margin: 0 0 12px 0; color: #374151; font-size: 0.875rem; font-weight: 600;">📍 Маршрут</h4>';
+    html += '<div style="margin-bottom: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 8px; border: 1px solid var(--border-color);">';
+    html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.875rem; font-weight: 600;">📍 Маршрут</h4>';
     
     html += `<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">`;
     html += `<span style="font-size: 1.1rem;">${fromInfo.icon}</span>`;
-    html += `<div><strong style="color: #374151;">${fromInfo.type}</strong>`;
-    if (fromInfo.name) html += `<br><span style="font-size: 0.8rem; color: #64748b;">${escapeHtml(fromInfo.name)}</span>`;
+    html += `<div><strong style="color: var(--text-primary);">${fromInfo.type}</strong>`;
+    if (fromInfo.name) html += `<br><span style="font-size: 0.8rem; color: var(--text-secondary);">${escapeHtml(fromInfo.name)}</span>`;
     html += `</div></div>`;
     
     html += `<div style="margin-left: 14px; padding-left: 14px; border-left: 2px dashed ${cableColor}; margin-bottom: 8px;">`;
-    html += `<span style="font-size: 0.75rem; color: #94a3b8;">↓ кабель</span></div>`;
+    html += `<span style="font-size: 0.75rem; color: var(--text-muted);">↓ кабель</span></div>`;
     
     html += `<div style="display: flex; align-items: center; gap: 8px;">`;
     html += `<span style="font-size: 1.1rem;">${toInfo.icon}</span>`;
-    html += `<div><strong style="color: #374151;">${toInfo.type}</strong>`;
-    if (toInfo.name) html += `<br><span style="font-size: 0.8rem; color: #64748b;">${escapeHtml(toInfo.name)}</span>`;
+    html += `<div><strong style="color: var(--text-primary);">${toInfo.type}</strong>`;
+    if (toInfo.name) html += `<br><span style="font-size: 0.8rem; color: var(--text-secondary);">${escapeHtml(toInfo.name)}</span>`;
     html += `</div></div>`;
     html += '</div>';
     
@@ -3283,21 +3332,21 @@ function showCableInfo(cable) {
     const totalCablesOnSegment = parallelCables.length + 1; // +1 для текущего кабеля
     
     html += '<div style="display: flex; gap: 10px; margin-bottom: 16px;">';
-    html += `<div style="flex: 1; padding: 10px; background: #f0f9ff; border-radius: 8px; text-align: center;">`;
-    html += `<div style="font-size: 0.7rem; color: #0369a1; margin-bottom: 2px;">Расстояние</div>`;
+    html += `<div style="flex: 1; padding: 10px; background: var(--bg-tertiary); border-radius: 8px; text-align: center; border: 1px solid var(--border-color);">`;
+    html += `<div style="font-size: 0.7rem; color: var(--accent-primary); margin-bottom: 2px;">Расстояние</div>`;
     if (typeof displayDistance === 'number') {
-        html += `<div style="font-size: 1rem; font-weight: 600; color: #0c4a6e;">${displayDistance} м</div>`;
+        html += `<div style="font-size: 1rem; font-weight: 600; color: var(--text-primary);">${displayDistance} м</div>`;
     } else {
-        html += `<div style="font-size: 0.9rem; color: #64748b;">${displayDistance}</div>`;
+        html += `<div style="font-size: 0.9rem; color: var(--text-muted);">${displayDistance}</div>`;
     }
     html += `</div>`;
-    html += `<div style="flex: 1; padding: 10px; background: #f0fdf4; border-radius: 8px; text-align: center;">`;
-    html += `<div style="font-size: 0.7rem; color: #15803d; margin-bottom: 2px;">Жил</div>`;
-    html += `<div style="font-size: 1rem; font-weight: 600; color: #14532d;">${fiberCount}</div>`;
+    html += `<div style="flex: 1; padding: 10px; background: var(--bg-tertiary); border-radius: 8px; text-align: center; border: 1px solid var(--border-color);">`;
+    html += `<div style="font-size: 0.7rem; color: var(--accent-success); margin-bottom: 2px;">Жил</div>`;
+    html += `<div style="font-size: 1rem; font-weight: 600; color: var(--text-primary);">${fiberCount}</div>`;
     html += `</div>`;
-    html += `<div style="flex: 1; padding: 10px; background: ${totalCablesOnSegment > 1 ? '#fef3c7' : '#f1f5f9'}; border-radius: 8px; text-align: center;">`;
-    html += `<div style="font-size: 0.7rem; color: ${totalCablesOnSegment > 1 ? '#92400e' : '#64748b'}; margin-bottom: 2px;">На участке</div>`;
-    html += `<div style="font-size: 1rem; font-weight: 600; color: ${totalCablesOnSegment > 1 ? '#78350f' : '#334155'};">${totalCablesOnSegment} каб.</div>`;
+    html += `<div style="flex: 1; padding: 10px; background: ${totalCablesOnSegment > 1 ? '#fef3c7' : 'var(--bg-tertiary)'}; border-radius: 8px; text-align: center; border: 1px solid ${totalCablesOnSegment > 1 ? '#fcd34d' : 'var(--border-color)'};">`;
+    html += `<div style="font-size: 0.7rem; color: ${totalCablesOnSegment > 1 ? '#92400e' : 'var(--text-muted)'}; margin-bottom: 2px;">На участке</div>`;
+    html += `<div style="font-size: 1rem; font-weight: 600; color: ${totalCablesOnSegment > 1 ? '#78350f' : 'var(--text-primary)'};">${totalCablesOnSegment} каб.</div>`;
     html += `</div></div>`;
     
     // Параллельные кабели на этом участке
@@ -3320,13 +3369,13 @@ function showCableInfo(cable) {
             else if (pType === 'fiber16') pColor = '#9b59b6';
             else if (pType === 'fiber24') pColor = '#1abc9c';
             
-            html += `<div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: white; border-radius: 6px; border-left: 3px solid ${pColor}; cursor: pointer;" onclick="showCableInfoById('${pId}')">`;
+            html += `<div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--bg-card); border-radius: 6px; border-left: 3px solid ${pColor}; cursor: pointer;" onclick="showCableInfoById('${pId}')">`;
             html += `<div style="width: 8px; height: 8px; border-radius: 50%; background: ${pColor};"></div>`;
             html += `<div style="flex: 1; min-width: 0;">`;
-            html += `<div style="font-size: 0.8rem; font-weight: 500; color: #374151;">${pName ? escapeHtml(pName) : pDesc}</div>`;
-            if (pName) html += `<div style="font-size: 0.7rem; color: #94a3b8;">${pDesc}</div>`;
+            html += `<div style="font-size: 0.8rem; font-weight: 500; color: var(--text-primary);">${pName ? escapeHtml(pName) : pDesc}</div>`;
+            if (pName) html += `<div style="font-size: 0.7rem; color: var(--text-muted);">${pDesc}</div>`;
             html += `</div>`;
-            html += `<div style="font-size: 0.7rem; color: #64748b; white-space: nowrap;">${pFibers} жил</div>`;
+            html += `<div style="font-size: 0.7rem; color: var(--text-muted); white-space: nowrap;">${pFibers} жил</div>`;
             html += `</div>`;
         });
         
@@ -3335,20 +3384,20 @@ function showCableInfo(cable) {
     
     // Жилы кабеля
     html += '<div style="margin-bottom: 16px;">';
-    html += '<h4 style="margin: 0 0 10px 0; color: #374151; font-size: 0.875rem; font-weight: 600;">🌈 Жилы кабеля</h4>';
+    html += '<h4 style="margin: 0 0 10px 0; color: var(--text-primary); font-size: 0.875rem; font-weight: 600;">🌈 Жилы кабеля</h4>';
     html += '<div style="display: flex; flex-wrap: wrap; gap: 6px;">';
     fibers.forEach(fiber => {
-        html += `<div style="display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: white; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 0.8rem;">`;
+        html += `<div style="display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: var(--bg-card); border-radius: 6px; border: 1px solid var(--border-color); font-size: 0.8rem;">`;
         html += `<div style="width: 14px; height: 14px; border-radius: 50%; background: ${fiber.color}; border: 1px solid rgba(0,0,0,0.2);"></div>`;
-        html += `<span style="color: #374151; font-weight: 500;">${fiber.number}</span>`;
-        html += `<span style="color: #94a3b8; font-size: 0.7rem;">${fiber.name}</span>`;
+        html += `<span style="color: var(--text-primary); font-weight: 500;">${fiber.number}</span>`;
+        html += `<span style="color: var(--text-muted); font-size: 0.7rem;">${fiber.name}</span>`;
         html += `</div>`;
     });
     html += '</div></div>';
     
     // Кнопки действий (только в режиме редактирования)
     if (isEditMode) {
-        html += '<div style="padding-top: 16px; border-top: 1px solid #e2e8f0;">';
+        html += '<div style="padding-top: 16px; border-top: 1px solid var(--border-color);">';
         html += `<button class="btn-danger" onclick="deleteCableByUniqueId('${uniqueId}')" style="width: 100%;">`;
         html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">';
         html += '<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>';
@@ -4097,34 +4146,34 @@ function showObjectInfo(obj) {
         const maxFibers = obj.properties.get('maxFibers');
         const usedFibers = getTotalUsedFibersInSleeve(obj);
         
-        html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6;">';
-        html += '<h4 style="margin: 0 0 12px 0; color: #2c3e50; font-size: 0.9375rem; font-weight: 600;">Информация о муфте</h4>';
-        html += `<div style="color: #495057; font-size: 0.875rem; margin-bottom: 8px;"><strong>Тип муфты:</strong> ${escapeHtml(sleeveType)}</div>`;
+        html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
+        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Информация о муфте</h4>';
+        html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Тип муфты:</strong> ${escapeHtml(sleeveType)}</div>`;
         
         if (maxFibers !== undefined && maxFibers !== null && maxFibers > 0) {
             const usagePercent = Math.round((usedFibers / maxFibers) * 100);
             const isOverloaded = usedFibers > maxFibers;
             const statusColor = isOverloaded ? '#dc2626' : (usagePercent >= 80 ? '#f59e0b' : '#22c55e');
             
-            html += `<div style="color: #495057; font-size: 0.875rem; margin-bottom: 8px;">`;
+            html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;">`;
             html += `<strong>Вместимость:</strong> <span style="color: ${statusColor}; font-weight: 600;">${usedFibers}/${maxFibers} волокон</span> (${usagePercent}%)`;
             if (isOverloaded) {
                 html += ` <span style="color: #dc2626; font-weight: 600;">⚠ Превышена вместимость!</span>`;
             }
             html += `</div>`;
         } else {
-            html += `<div style="color: #495057; font-size: 0.875rem; margin-bottom: 8px;"><strong>Использовано волокон:</strong> ${usedFibers}</div>`;
+            html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Использовано волокон:</strong> ${usedFibers}</div>`;
         }
         
         html += '</div>';
         
         // Добавляем кнопку объединения кабелей для муфт (только в режиме редактирования)
         if (isEditMode && connectedCables.length > 1) {
-            html += '<div style="margin-bottom: 15px; padding: 12px; background: #f0f9ff; border-radius: 6px; border: 1px solid #bae6fd;">';
+            html += '<div style="margin-bottom: 15px; padding: 12px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--accent-primary);">';
             html += '<button id="mergeCablesBtn" class="btn-secondary" style="width: 100%;">';
             html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;"><path d="M8 17l4 4 4-4M12 2v19"></path></svg>';
             html += 'Объединить кабели</button>';
-            html += '<small style="display: block; margin-top: 8px; color: #666; font-size: 11px;">Объединить несколько кабелей в один (например, 4×4 жилы = 16 жил)</small>';
+            html += '<small style="display: block; margin-top: 8px; color: var(--text-muted); font-size: 11px;">Объединить несколько кабелей в один (например, 4×4 жилы = 16 жил)</small>';
             html += '</div>';
         }
     }
@@ -4138,11 +4187,11 @@ function showObjectInfo(obj) {
         
         // Секция редактирования для узлов (только в режиме редактирования)
         if (isEditMode) {
-            html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6;">';
-            html += '<h4 style="margin: 0 0 12px 0; color: #2c3e50; font-size: 0.9375rem; font-weight: 600;">Редактирование узла</h4>';
+            html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
+            html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Редактирование узла</h4>';
             html += '<div class="form-group" style="margin-bottom: 12px;">';
-            html += '<label for="editNodeName" style="display: block; margin-bottom: 6px; color: #495057; font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название узла</label>';
-            html += `<input type="text" id="editNodeName" class="form-input" value="${escapeHtml(name)}" placeholder="Введите название узла" style="width: 100%; padding: 9px 12px; border: 1px solid #ced4da; border-radius: 4px; font-size: 0.875rem;">`;
+            html += '<label for="editNodeName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название узла</label>';
+            html += `<input type="text" id="editNodeName" class="form-input" value="${escapeHtml(name)}" placeholder="Введите название узла">`;
             html += '</div>';
             html += '<button id="saveNodeEdit" class="btn-primary" style="width: 100%; padding: 10px 14px; margin-top: 8px;">';
             html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline; margin-right: 8px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>';
@@ -4150,9 +4199,9 @@ function showObjectInfo(obj) {
             html += '</div>';
         } else {
             // Если режим просмотра, показываем только информацию о названии узла
-            html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6;">';
-            html += '<h4 style="margin: 0 0 8px 0; color: #2c3e50; font-size: 0.9375rem; font-weight: 600;">Информация</h4>';
-            html += `<div style="color: #495057; font-size: 0.875rem;"><strong>Название узла:</strong> ${escapeHtml(name || 'Не указано')}</div>`;
+            html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
+            html += '<h4 style="margin: 0 0 8px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Информация</h4>';
+            html += `<div style="color: var(--text-secondary); font-size: 0.875rem;"><strong>Название узла:</strong> ${escapeHtml(name || 'Не указано')}</div>`;
             html += '</div>';
         }
         
@@ -4184,10 +4233,10 @@ function showObjectInfo(obj) {
             html += '<div style="display: flex; flex-direction: column; gap: 8px;">';
             
             connectedFibers.forEach((conn, index) => {
-                html += `<div class="fiber-connection-item" style="display: flex; align-items: center; justify-content: space-between; padding: 10px; background: white; border-radius: 4px; border: 1px solid #dcfce7;">`;
+                html += `<div class="fiber-connection-item" style="display: flex; align-items: center; justify-content: space-between; padding: 10px; background: var(--bg-card); border-radius: 4px; border: 1px solid #dcfce7;">`;
                 html += `<div style="flex: 1;">`;
                 html += `<div style="font-weight: 600; color: #166534;">Жила ${conn.fiberNumber}</div>`;
-                html += `<div style="font-size: 0.8rem; color: #6b7280;">От кросса: ${escapeHtml(conn.crossName)}</div>`;
+                html += `<div style="font-size: 0.8rem; color: var(--text-secondary);">От кросса: ${escapeHtml(conn.crossName)}</div>`;
                 if (conn.fiberLabel) {
                     html += `<div style="font-size: 0.75rem; color: #8b5cf6;">📝 ${escapeHtml(conn.fiberLabel)}</div>`;
                 }
@@ -4209,25 +4258,25 @@ function showObjectInfo(obj) {
     if (type === 'cross') {
         const crossPorts = obj.properties.get('crossPorts') || 24;
         
-        html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6;">';
-        html += '<h4 style="margin: 0 0 12px 0; color: #2c3e50; font-size: 0.9375rem; font-weight: 600;">Информация о кроссе</h4>';
-        html += `<div style="color: #495057; font-size: 0.875rem; margin-bottom: 8px;"><strong>Количество портов:</strong> ${crossPorts}</div>`;
+        html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
+        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Информация о кроссе</h4>';
+        html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Количество портов:</strong> ${crossPorts}</div>`;
         
         // Подсчитываем использованные порты
         const usedPorts = getTotalUsedFibersInSleeve(obj);
         const usagePercent = Math.round((usedPorts / crossPorts) * 100);
         const statusColor = usedPorts > crossPorts ? '#dc2626' : (usagePercent >= 80 ? '#f59e0b' : '#22c55e');
         
-        html += `<div style="color: #495057; font-size: 0.875rem;"><strong>Использовано:</strong> <span style="color: ${statusColor}; font-weight: 600;">${usedPorts}/${crossPorts} портов</span> (${usagePercent}%)</div>`;
+        html += `<div style="color: var(--text-secondary); font-size: 0.875rem;"><strong>Использовано:</strong> <span style="color: ${statusColor}; font-weight: 600;">${usedPorts}/${crossPorts} портов</span> (${usagePercent}%)</div>`;
         html += '</div>';
         
         // Секция редактирования для кроссов (только в режиме редактирования)
         if (isEditMode) {
-            html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6;">';
-            html += '<h4 style="margin: 0 0 12px 0; color: #2c3e50; font-size: 0.9375rem; font-weight: 600;">Редактирование кросса</h4>';
+            html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
+            html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Редактирование кросса</h4>';
             html += '<div class="form-group" style="margin-bottom: 12px;">';
-            html += '<label for="editCrossName" style="display: block; margin-bottom: 6px; color: #495057; font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название кросса</label>';
-            html += `<input type="text" id="editCrossName" class="form-input" value="${escapeHtml(name)}" placeholder="Введите название кросса" style="width: 100%; padding: 9px 12px; border: 1px solid #ced4da; border-radius: 4px; font-size: 0.875rem;">`;
+            html += '<label for="editCrossName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название кросса</label>';
+            html += `<input type="text" id="editCrossName" class="form-input" value="${escapeHtml(name)}" placeholder="Введите название кросса">`;
             html += '</div>';
             html += '<button id="saveCrossEdit" class="btn-primary" style="width: 100%; padding: 10px 14px; margin-top: 8px;">';
             html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline; margin-right: 8px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>';
@@ -4250,7 +4299,7 @@ function showObjectInfo(obj) {
     
     // Для всех объектов (включая муфты и кроссы) показываем информацию о подключенных кабелях
     if (connectedCables.length === 0) {
-        html += '<div class="no-cables" style="padding: 15px; text-align: center; color: #6c757d; font-size: 0.875rem;">К этому объекту не подключено кабелей</div>';
+        html += '<div class="no-cables" style="padding: 15px; text-align: center; color: var(--text-muted); font-size: 0.875rem;">К этому объекту не подключено кабелей</div>';
     } else {
         // Для муфт и кроссов показываем визуальное объединение жил
         if ((type === 'sleeve' || type === 'cross') && connectedCables.length > 1) {
@@ -4282,7 +4331,7 @@ function showObjectInfo(obj) {
                                     <option value="fiber16" ${cableType === 'fiber16' ? 'selected' : ''}>ВОЛС 16 жил</option>
                                     <option value="fiber24" ${cableType === 'fiber24' ? 'selected' : ''}>ВОЛС 24 жилы</option>
                                     <option value="copper" ${cableType === 'copper' ? 'selected' : ''}>Медный кабель</option>
-                                </select>` : `<span style="font-size: 0.875rem; color: #495057;">${cableDescription}</span>`}
+                                </select>` : `<span style="font-size: 0.875rem; color: var(--text-secondary);">${cableDescription}</span>`}
                                 ${isEditMode ? `<button class="btn-delete-cable" data-cable-id="${cableUniqueId}" title="Удалить кабель">✕</button>` : ''}
                             </div>
                         </div>
@@ -4340,12 +4389,12 @@ function showSupportInfo(supportObj) {
     let html = '';
     
     // Информация об опоре
-    html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6;">';
-    html += '<h4 style="margin: 0 0 12px 0; color: #2c3e50; font-size: 0.9375rem; font-weight: 600;">Информация об опоре</h4>';
+    html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
+    html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Информация об опоре</h4>';
     
     const coords = supportObj.geometry.getCoordinates();
-    html += `<div style="color: #495057; font-size: 0.875rem; margin-bottom: 8px;"><strong>Координаты:</strong> ${coords[0].toFixed(6)}, ${coords[1].toFixed(6)}</div>`;
-    html += `<div style="color: #495057; font-size: 0.875rem;"><strong>Кабелей проходит:</strong> ${connectedCables.length}</div>`;
+    html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Координаты:</strong> ${coords[0].toFixed(6)}, ${coords[1].toFixed(6)}</div>`;
+    html += `<div style="color: var(--text-secondary); font-size: 0.875rem;"><strong>Кабелей проходит:</strong> ${connectedCables.length}</div>`;
     html += '</div>';
     
     // Кнопки управления (в режиме редактирования)
@@ -4362,10 +4411,10 @@ function showSupportInfo(supportObj) {
     
     // Список кабелей
     if (connectedCables.length === 0) {
-        html += '<div class="no-cables" style="padding: 15px; text-align: center; color: #6c757d; font-size: 0.875rem;">Через эту опору не проходит ни один кабель</div>';
+        html += '<div class="no-cables" style="padding: 15px; text-align: center; color: var(--text-muted); font-size: 0.875rem;">Через эту опору не проходит ни один кабель</div>';
     } else {
         html += '<div class="cables-section">';
-        html += '<h4 style="margin: 0 0 12px 0; color: #2c3e50; font-size: 0.9375rem; font-weight: 600;">📦 Проходящие кабели</h4>';
+        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">📦 Проходящие кабели</h4>';
         
         connectedCables.forEach((cable, index) => {
             const cableType = cable.properties.get('cableType');
@@ -4390,16 +4439,16 @@ function showSupportInfo(supportObj) {
             else if (cableType === 'fiber16') cableColor = '#008800';
             else if (cableType === 'fiber24') cableColor = '#006600';
             
-            html += `<div class="cable-info" style="margin-bottom: 12px; padding: 16px; background: #f9fafb; border-radius: 8px; border-left: 4px solid ${cableColor};">`;
+            html += `<div class="cable-info" style="margin-bottom: 12px; padding: 16px; background: var(--bg-tertiary); border-radius: 8px; border-left: 4px solid ${cableColor};">`;
             html += `<div class="cable-header" style="margin-bottom: 10px;">`;
-            html += `<h4 style="margin: 0; color: #374151; font-size: 0.9375rem;">${cableName ? escapeHtml(cableName) : `Кабель ${index + 1}`}: ${cableDescription}</h4>`;
+            html += `<h4 style="margin: 0; color: var(--text-primary); font-size: 0.9375rem;">${cableName ? escapeHtml(cableName) : `Кабель ${index + 1}`}: ${cableDescription}</h4>`;
             html += `</div>`;
             
             // Маршрут кабеля
-            html += `<div style="font-size: 0.8rem; color: #6b7280; margin-bottom: 8px;">`;
+            html += `<div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 8px;">`;
             html += `<strong>Маршрут:</strong> ${escapeHtml(fromName)} → ${escapeHtml(toName)}`;
             if (distance) {
-                html += ` <span style="color: #9ca3af;">(${distance} м)</span>`;
+                html += ` <span style="color: var(--text-muted);">(${distance} м)</span>`;
             }
             html += `</div>`;
             
@@ -4407,9 +4456,9 @@ function showSupportInfo(supportObj) {
             html += `<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;">`;
             fibers.forEach(fiber => {
                 const textColor = (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00') ? '#000' : '#fff';
-                html += `<div style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: white; border-radius: 4px; border: 1px solid #e5e7eb;">`;
+                html += `<div style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: var(--bg-card); border-radius: 4px; border: 1px solid var(--border-color);">`;
                 html += `<div style="width: 12px; height: 12px; border-radius: 50%; background: ${fiber.color}; border: 1px solid #333;"></div>`;
-                html += `<span style="font-size: 0.75rem; color: #495057;">${fiber.number}</span>`;
+                html += `<span style="font-size: 0.75rem; color: var(--text-primary);">${fiber.number}</span>`;
                 html += `</div>`;
             });
             html += `</div>`;
@@ -5863,7 +5912,7 @@ function showFiberTrace(cableId, fiberNumber) {
             const fiberColor = fiber ? fiber.color : '#888';
             const fiberName = fiber ? fiber.name : `Жила ${item.fiberNumber}`;
             
-            html += `<div style="display: flex; align-items: center; gap: 8px; margin: 4px 0 4px 12px; padding: 8px 12px; background: #f8f9fa; border-radius: 6px; border-left: 4px solid ${fiberColor};">`;
+            html += `<div style="display: flex; align-items: center; gap: 8px; margin: 4px 0 4px 12px; padding: 8px 12px; background: var(--bg-tertiary); border-radius: 6px; border-left: 4px solid ${fiberColor};">`;
             html += `<span style="font-size: 0.875rem;">📦 <strong>${item.cableName}</strong></span>`;
             html += `<span style="background: ${fiberColor}; color: ${fiberColor === '#FFFFFF' || fiberColor === '#FFFACD' ? '#000' : '#fff'}; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">Жила ${item.fiberNumber}: ${fiberName}</span>`;
             html += `</div>`;
@@ -5900,7 +5949,7 @@ function showFiberTrace(cableId, fiberNumber) {
     html += '</div>';
     
     // Кнопка для подсветки на карте
-    html += '<div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #e5e7eb;">';
+    html += '<div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--border-color);">';
     html += `<button onclick="highlightTracePath()" class="btn-primary" style="width: 100%;">`;
     html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">';
     html += '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
@@ -6552,9 +6601,9 @@ function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeO
     const cablesCount = result.path.filter(p => p.type === 'cable').length;
     const connectionsCount = result.path.filter(p => p.type === 'connection').length;
     
-    html += `<div style="margin-top: 16px; padding: 12px; background: #f1f5f9; border-radius: 6px; border: 1px solid #e2e8f0;">
-        <div style="font-weight: 600; color: #334155; margin-bottom: 8px;">📊 Статистика трассы:</div>
-        <div style="display: flex; flex-wrap: wrap; gap: 12px; font-size: 0.875rem; color: #64748b;">
+    html += `<div style="margin-top: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">
+        <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">📊 Статистика трассы:</div>
+        <div style="display: flex; flex-wrap: wrap; gap: 12px; font-size: 0.875rem; color: var(--text-secondary);">
             <span>📡 Кабелей: ${cablesCount}</span>
             <span>🔴 Муфт: ${sleevesCount}</span>
             <span>📦 Кроссов: ${crossesCount}</span>
@@ -6875,7 +6924,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     const isCross = objType === 'cross';
     
     let html = '<div class="fiber-connections-container" style="margin-top: 20px;">';
-    html += `<h4 style="margin: 0 0 15px 0; color: #2c3e50; font-size: 1rem; font-weight: 600;">${isCross ? 'Управление жилами в кроссе' : 'Объединение жил в муфте'}</h4>`;
+    html += `<h4 style="margin: 0 0 15px 0; color: var(--text-primary); font-size: 1rem; font-weight: 600;">${isCross ? 'Управление жилами в кроссе' : 'Объединение жил в муфте'}</h4>`;
     
     // Получаем сохраненные соединения жил
     let fiberConnections = sleeveObj.properties.get('fiberConnections');
@@ -6954,7 +7003,14 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     }
     
     html += `<div style="overflow-x: auto; margin-bottom: 15px;">`;
-    html += `<svg id="fiber-connections-svg" width="${svgWidth}" height="${svgHeight}" style="border: 1px solid #dee2e6; border-radius: 6px; background: #ffffff; display: block;">`;
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const svgBgColor = isDark ? '#1e293b' : '#ffffff';
+    const svgBorderColor = isDark ? '#334155' : '#dee2e6';
+    const svgTextColor = isDark ? '#f1f5f9' : '#2c3e50';
+    const svgTextMuted = isDark ? '#94a3b8' : '#6c757d';
+    const svgLabelColor = isDark ? '#cbd5e1' : '#495057';
+    
+    html += `<svg id="fiber-connections-svg" width="${svgWidth}" height="${svgHeight}" style="border: 1px solid ${svgBorderColor}; border-radius: 6px; background: ${svgBgColor}; display: block;">`;
     
     // Создаем карту позиций жил для отрисовки соединений
     const fiberPositions = new Map();
@@ -6974,8 +7030,8 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         
         // Заголовок кабеля
         const svgCableTitle = cableData.cableName || `Кабель ${cableData.index}`;
-        html += `<text x="${x}" y="25" text-anchor="middle" style="font-size: 11px; font-weight: 600; fill: #2c3e50;">${svgCableTitle}</text>`;
-        html += `<text x="${x}" y="38" text-anchor="middle" style="font-size: 9px; fill: #6c757d;">${cableData.cableDescription}</text>`;
+        html += `<text x="${x}" y="25" text-anchor="middle" style="font-size: 11px; font-weight: 600; fill: ${svgTextColor};">${svgCableTitle}</text>`;
+        html += `<text x="${x}" y="38" text-anchor="middle" style="font-size: 9px; fill: ${svgTextMuted};">${cableData.cableDescription}</text>`;
         
         // Рисуем жилы
         cableData.fibers.forEach((fiber, fiberIndex) => {
@@ -7024,7 +7080,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             if (displayLabel) {
                 labelText = isInherited ? ` [← ${displayLabel}]` : ` [${displayLabel}]`;
             }
-            const labelColor = isInherited ? '#8b5cf6' : (isConnected ? '#3b82f6' : '#495057');
+            const labelColor = isInherited ? '#8b5cf6' : (isConnected ? '#3b82f6' : svgLabelColor);
             html += `<text x="${x + 20}" y="${y + 4}" style="font-size: 10px; fill: ${labelColor};">${fiber.name}${labelText}${statusText}</text>`;
         });
     });
@@ -7063,16 +7119,16 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">';
     
     cablesData.forEach((cableData, index) => {
-        html += `<div class="cable-info" data-cable-id="${cableData.cableUniqueId}" style="border: 1px solid #dee2e6; border-radius: 6px; padding: 12px; background: #f8f9fa;">`;
+        html += `<div class="cable-info" data-cable-id="${cableData.cableUniqueId}" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; background: var(--bg-tertiary);">`;
         html += `<div class="cable-header" style="margin-bottom: 10px;">`;
         const cableTitle = cableData.cableName ? `${cableData.cableName} (${cableData.cableDescription})` : `Кабель ${cableData.index}: ${cableData.cableDescription}`;
-        html += `<h5 style="margin: 0 0 5px 0; color: #2c3e50; font-size: 0.875rem;">${cableTitle}</h5>`;
-        html += `<div style="font-size: 0.75rem; color: #6c757d; margin-bottom: 8px;">${cableData.isFromSleeve ? '← От муфты' : '→ К муфте'}</div>`;
+        html += `<h5 style="margin: 0 0 5px 0; color: var(--text-primary); font-size: 0.875rem;">${cableTitle}</h5>`;
+        html += `<div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px;">${cableData.isFromSleeve ? '← От муфты' : '→ К муфте'}</div>`;
         
         // Добавляем элементы управления кабелем (только в режиме редактирования)
         if (isEditMode) {
             html += `<div class="cable-actions" style="display: flex; gap: 8px; margin-bottom: 10px;">`;
-            html += `<select class="cable-type-select" data-cable-id="${cableData.cableUniqueId}" style="flex: 1; padding: 6px; border: 1px solid #ced4da; border-radius: 4px; font-size: 0.8125rem;">`;
+            html += `<select class="cable-type-select form-input" data-cable-id="${cableData.cableUniqueId}" style="flex: 1; padding: 6px; font-size: 0.8125rem;">`;
             html += `<option value="fiber4" ${cableData.cableType === 'fiber4' ? 'selected' : ''}>ВОЛС 4 жилы</option>`;
             html += `<option value="fiber8" ${cableData.cableType === 'fiber8' ? 'selected' : ''}>ВОЛС 8 жил</option>`;
             html += `<option value="fiber16" ${cableData.cableType === 'fiber16' ? 'selected' : ''}>ВОЛС 16 жил</option>`;
@@ -7113,12 +7169,12 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
                 <div class="fiber-item ${isUsed ? 'fiber-used' : 'fiber-free'}" 
                      data-cable-id="${cableData.cableUniqueId}" 
                      data-fiber-number="${fiber.number}"
-                     style="display: flex; flex-direction: column; gap: 4px; padding: 8px; background: ${isUsed ? '#fee2e2' : (hasNodeConnection ? '#dcfce7' : '#ffffff')}; border-radius: 4px; border: 1px solid ${isUsed ? '#dc2626' : (hasNodeConnection ? '#22c55e' : '#e5e7eb')};">
+                     style="display: flex; flex-direction: column; gap: 4px; padding: 8px; background: ${isUsed ? '#fee2e2' : (hasNodeConnection ? '#dcfce7' : 'var(--bg-card)')}; border-radius: 4px; border: 1px solid ${isUsed ? '#dc2626' : (hasNodeConnection ? '#22c55e' : 'var(--border-color)')};">
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <div class="fiber-color" style="width: 24px; height: 24px; border-radius: 50%; background-color: ${fiber.color}; border: 2px solid #333; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
                             <span style="font-size: 10px; font-weight: 700; color: ${fiberTextColor};">${fiber.number}</span>
                         </div>
-                        <span style="font-size: 0.8125rem; color: #495057; flex: 1;"><strong>${fiber.name}</strong></span>
+                        <span style="font-size: 0.8125rem; color: var(--text-primary); flex: 1;"><strong>${fiber.name}</strong></span>
                         ${isUsed ? '<span style="font-size: 0.7rem; color: #dc2626; font-weight: 600;">(исп.)</span>' : (hasNodeConnection ? '<span style="font-size: 0.7rem; color: #22c55e; font-weight: 600;">(на узел)</span>' : '<span style="font-size: 0.7rem; color: #22c55e; font-weight: 600;">(своб.)</span>')}
                         ${!isUsed && isEditMode ? `<button class="btn-continue-cable" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Продолжить кабель с этой жилой" style="padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">→</button>` : ''}
                     </div>
@@ -7573,11 +7629,11 @@ function showNetBoxDevices() {
 
     let html = '<div style="max-height: 400px; overflow-y: auto; margin-bottom: 15px;">';
     html += '<table style="width: 100%; border-collapse: collapse;">';
-    html += '<thead><tr style="background: #f8f9fa; position: sticky; top: 0;">';
-    html += '<th style="padding: 10px; text-align: left; border-bottom: 2px solid #dee2e6; width: 40px;"><input type="checkbox" id="selectAllCheckbox"></th>';
-    html += '<th style="padding: 10px; text-align: left; border-bottom: 2px solid #dee2e6;">Имя</th>';
-    html += '<th style="padding: 10px; text-align: left; border-bottom: 2px solid #dee2e6;">Тип</th>';
-    html += '<th style="padding: 10px; text-align: left; border-bottom: 2px solid #dee2e6;">Местоположение</th>';
+    html += '<thead><tr style="background: var(--bg-tertiary); position: sticky; top: 0;">';
+    html += '<th style="padding: 10px; text-align: left; border-bottom: 2px solid var(--border-color); width: 40px; color: var(--text-primary);"><input type="checkbox" id="selectAllCheckbox"></th>';
+    html += '<th style="padding: 10px; text-align: left; border-bottom: 2px solid var(--border-color); color: var(--text-primary);">Имя</th>';
+    html += '<th style="padding: 10px; text-align: left; border-bottom: 2px solid var(--border-color); color: var(--text-primary);">Тип</th>';
+    html += '<th style="padding: 10px; text-align: left; border-bottom: 2px solid var(--border-color); color: var(--text-primary);">Местоположение</th>';
     html += '</tr></thead><tbody>';
 
     netboxDevices.forEach((device, index) => {
