@@ -18,10 +18,962 @@ let netboxConfig = {
     ignoreSSL: false
 };
 let netboxDevices = []; // Загруженные устройства из NetBox
+let currentUser = null; // Текущий авторизованный пользователь
+
+// ==================== Проверка авторизации ====================
+function checkAuth() {
+    if (typeof AuthSystem === 'undefined') {
+        console.warn('AuthSystem не загружен');
+        return true; // Разрешаем работу без авторизации в режиме разработки
+    }
+    
+    const session = AuthSystem.getCurrentSession();
+    if (!session) {
+        window.location.href = 'auth.html';
+        return false;
+    }
+    
+    currentUser = session;
+    return true;
+}
+
+// Проверка прав администратора
+function requireAdmin() {
+    if (!currentUser || currentUser.role !== 'admin') {
+        showWarning('Это действие доступно только администраторам', 'Нет доступа');
+        return false;
+    }
+    return true;
+}
+
+// Может ли пользователь редактировать
+function canEdit() {
+    return currentUser && currentUser.role === 'admin';
+}
 
 document.addEventListener('DOMContentLoaded', function() {
+    // Проверяем авторизацию
+    if (!checkAuth()) return;
+    
+    // Инициализируем UI пользователя
+    initUserUI();
+    
     ymaps.ready(init);
 });
+
+// ==================== Система уведомлений ====================
+function showToast(message, type = 'info', title = null, duration = 4000) {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+    
+    const icons = {
+        success: '✓',
+        error: '✕',
+        warning: '⚠',
+        info: 'ℹ'
+    };
+    
+    const titles = {
+        success: 'Успешно',
+        error: 'Ошибка',
+        warning: 'Внимание',
+        info: 'Информация'
+    };
+    
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `
+        <div class="toast-icon">${icons[type] || icons.info}</div>
+        <div class="toast-content">
+            <div class="toast-title">${title || titles[type] || titles.info}</div>
+            <div class="toast-message">${message}</div>
+        </div>
+        <button class="toast-close" onclick="this.parentElement.remove()">✕</button>
+    `;
+    
+    container.appendChild(toast);
+    
+    // Автоматическое скрытие
+    setTimeout(() => {
+        toast.classList.add('toast-hiding');
+        setTimeout(() => toast.remove(), 300);
+    }, duration);
+}
+
+// Удобные функции для разных типов уведомлений
+function showSuccess(message, title = null) { showToast(message, 'success', title); }
+function showError(message, title = null) { showToast(message, 'error', title, 6000); }
+function showWarning(message, title = null) { showToast(message, 'warning', title, 5000); }
+function showInfo(message, title = null) { showToast(message, 'info', title); }
+
+// ==================== Система истории изменений ====================
+const MAX_HISTORY_ENTRIES = 500; // Максимальное количество записей в истории
+
+// Типы действий
+const ActionTypes = {
+    // Объекты
+    CREATE_OBJECT: 'create_object',
+    DELETE_OBJECT: 'delete_object',
+    EDIT_OBJECT: 'edit_object',
+    MOVE_OBJECT: 'move_object',
+    
+    // Кабели
+    CREATE_CABLE: 'create_cable',
+    DELETE_CABLE: 'delete_cable',
+    EDIT_CABLE: 'edit_cable',
+    MERGE_CABLES: 'merge_cables',
+    
+    // Соединения жил
+    CONNECT_FIBERS: 'connect_fibers',
+    DISCONNECT_FIBERS: 'disconnect_fibers',
+    
+    // Соединение с узлом
+    CONNECT_TO_NODE: 'connect_to_node',
+    DISCONNECT_FROM_NODE: 'disconnect_from_node',
+    
+    // Импорт/Экспорт
+    IMPORT_DATA: 'import_data',
+    EXPORT_DATA: 'export_data',
+    CLEAR_MAP: 'clear_map',
+    
+    // Пользователи
+    USER_LOGIN: 'user_login',
+    USER_CREATED: 'user_created',
+    USER_APPROVED: 'user_approved',
+    USER_REJECTED: 'user_rejected',
+    USER_DELETED: 'user_deleted'
+};
+
+// Названия действий на русском
+const ActionNames = {
+    [ActionTypes.CREATE_OBJECT]: 'Создание объекта',
+    [ActionTypes.DELETE_OBJECT]: 'Удаление объекта',
+    [ActionTypes.EDIT_OBJECT]: 'Редактирование объекта',
+    [ActionTypes.MOVE_OBJECT]: 'Перемещение объекта',
+    [ActionTypes.CREATE_CABLE]: 'Прокладка кабеля',
+    [ActionTypes.DELETE_CABLE]: 'Удаление кабеля',
+    [ActionTypes.EDIT_CABLE]: 'Редактирование кабеля',
+    [ActionTypes.MERGE_CABLES]: 'Объединение кабелей',
+    [ActionTypes.CONNECT_FIBERS]: 'Соединение жил',
+    [ActionTypes.DISCONNECT_FIBERS]: 'Разъединение жил',
+    [ActionTypes.CONNECT_TO_NODE]: 'Подключение к узлу',
+    [ActionTypes.DISCONNECT_FROM_NODE]: 'Отключение от узла',
+    [ActionTypes.IMPORT_DATA]: 'Импорт данных',
+    [ActionTypes.EXPORT_DATA]: 'Экспорт данных',
+    [ActionTypes.CLEAR_MAP]: 'Очистка карты',
+    [ActionTypes.USER_LOGIN]: 'Вход в систему',
+    [ActionTypes.USER_CREATED]: 'Создание пользователя',
+    [ActionTypes.USER_APPROVED]: 'Одобрение заявки',
+    [ActionTypes.USER_REJECTED]: 'Отклонение заявки',
+    [ActionTypes.USER_DELETED]: 'Удаление пользователя'
+};
+
+// Иконки для типов действий
+const ActionIcons = {
+    [ActionTypes.CREATE_OBJECT]: '➕',
+    [ActionTypes.DELETE_OBJECT]: '🗑️',
+    [ActionTypes.EDIT_OBJECT]: '✏️',
+    [ActionTypes.MOVE_OBJECT]: '📍',
+    [ActionTypes.CREATE_CABLE]: '🔗',
+    [ActionTypes.DELETE_CABLE]: '✂️',
+    [ActionTypes.EDIT_CABLE]: '✏️',
+    [ActionTypes.MERGE_CABLES]: '🔀',
+    [ActionTypes.CONNECT_FIBERS]: '🔌',
+    [ActionTypes.DISCONNECT_FIBERS]: '⚡',
+    [ActionTypes.CONNECT_TO_NODE]: '🖥️',
+    [ActionTypes.DISCONNECT_FROM_NODE]: '🔓',
+    [ActionTypes.IMPORT_DATA]: '📥',
+    [ActionTypes.EXPORT_DATA]: '📤',
+    [ActionTypes.CLEAR_MAP]: '🧹',
+    [ActionTypes.USER_LOGIN]: '🔑',
+    [ActionTypes.USER_CREATED]: '👤',
+    [ActionTypes.USER_APPROVED]: '✅',
+    [ActionTypes.USER_REJECTED]: '❌',
+    [ActionTypes.USER_DELETED]: '🚫'
+};
+
+// Получить историю из localStorage
+function getHistory() {
+    const historyJson = localStorage.getItem('networkMap_history');
+    return historyJson ? JSON.parse(historyJson) : [];
+}
+
+// Сохранить историю в localStorage
+function saveHistory(history) {
+    // Ограничиваем количество записей
+    if (history.length > MAX_HISTORY_ENTRIES) {
+        history = history.slice(-MAX_HISTORY_ENTRIES);
+    }
+    localStorage.setItem('networkMap_history', JSON.stringify(history));
+}
+
+// Добавить запись в историю
+function logAction(actionType, details = {}) {
+    const history = getHistory();
+    
+    const entry = {
+        id: 'log_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        timestamp: new Date().toISOString(),
+        actionType: actionType,
+        actionName: ActionNames[actionType] || actionType,
+        icon: ActionIcons[actionType] || '📝',
+        user: currentUser ? {
+            id: currentUser.userId,
+            username: currentUser.username,
+            fullName: currentUser.fullName
+        } : null,
+        details: details
+    };
+    
+    history.push(entry);
+    saveHistory(history);
+    
+    // Обновляем счётчик в UI, если есть
+    updateHistoryBadge();
+    
+    return entry;
+}
+
+// Очистить историю
+function clearHistory() {
+    localStorage.removeItem('networkMap_history');
+    updateHistoryBadge();
+}
+
+// Обновить счётчик истории в UI
+function updateHistoryBadge() {
+    const badge = document.getElementById('historyBadge');
+    if (badge) {
+        const history = getHistory();
+        const todayCount = history.filter(h => {
+            const date = new Date(h.timestamp);
+            const today = new Date();
+            return date.toDateString() === today.toDateString();
+        }).length;
+        
+        badge.textContent = todayCount;
+        badge.style.display = todayCount > 0 ? 'flex' : 'none';
+    }
+}
+
+// Форматирование времени
+function formatHistoryTime(isoString) {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diff = now - date;
+    
+    // Меньше минуты
+    if (diff < 60000) {
+        return 'только что';
+    }
+    
+    // Меньше часа
+    if (diff < 3600000) {
+        const mins = Math.floor(diff / 60000);
+        return `${mins} мин. назад`;
+    }
+    
+    // Сегодня
+    if (date.toDateString() === now.toDateString()) {
+        return 'сегодня в ' + date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    }
+    
+    // Вчера
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (date.toDateString() === yesterday.toDateString()) {
+        return 'вчера в ' + date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    }
+    
+    // Другая дата
+    return date.toLocaleDateString('ru-RU', { 
+        day: 'numeric', 
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+// Открыть модальное окно истории
+function openHistoryModal() {
+    const modal = document.getElementById('historyModal');
+    if (modal) {
+        modal.style.display = 'block';
+        renderHistoryList();
+    }
+}
+
+// Закрыть модальное окно истории
+function closeHistoryModal() {
+    const modal = document.getElementById('historyModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Отрисовать список истории
+function renderHistoryList(filter = 'all') {
+    const container = document.getElementById('historyList');
+    if (!container) return;
+    
+    let history = getHistory();
+    
+    // Фильтрация
+    if (filter !== 'all') {
+        const today = new Date();
+        if (filter === 'today') {
+            history = history.filter(h => new Date(h.timestamp).toDateString() === today.toDateString());
+        } else if (filter === 'week') {
+            const weekAgo = new Date(today);
+            weekAgo.setDate(weekAgo.getDate() - 7);
+            history = history.filter(h => new Date(h.timestamp) >= weekAgo);
+        }
+    }
+    
+    // Сортируем по дате (новые сверху)
+    history = history.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    if (history.length === 0) {
+        container.innerHTML = `
+            <div class="history-empty">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                <p>История пуста</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    let currentDate = '';
+    
+    history.forEach(entry => {
+        const entryDate = new Date(entry.timestamp).toLocaleDateString('ru-RU', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long'
+        });
+        
+        // Добавляем разделитель по дате
+        if (entryDate !== currentDate) {
+            currentDate = entryDate;
+            html += `<div class="history-date-divider">${entryDate}</div>`;
+        }
+        
+        const userName = entry.user ? (entry.user.fullName || entry.user.username) : 'Система';
+        const detailsText = formatHistoryDetails(entry);
+        
+        html += `
+            <div class="history-item">
+                <div class="history-item-icon">${entry.icon}</div>
+                <div class="history-item-content">
+                    <div class="history-item-action">${entry.actionName}</div>
+                    <div class="history-item-details">${detailsText}</div>
+                    <div class="history-item-meta">
+                        <span class="history-item-user">${escapeHtml(userName)}</span>
+                        <span class="history-item-time">${formatHistoryTime(entry.timestamp)}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+// Форматирование деталей действия
+function formatHistoryDetails(entry) {
+    const d = entry.details;
+    
+    switch (entry.actionType) {
+        case ActionTypes.CREATE_OBJECT:
+            return `${getObjectTypeName(d.objectType) || d.objectType}: "${d.name || 'без имени'}"`;
+        
+        case ActionTypes.DELETE_OBJECT:
+            return `${getObjectTypeName(d.objectType) || d.objectType}: "${d.name || 'без имени'}"`;
+        
+        case ActionTypes.EDIT_OBJECT:
+            return `${getObjectTypeName(d.objectType) || d.objectType}: "${d.name || 'без имени'}"`;
+        
+        case ActionTypes.CREATE_CABLE:
+            return `${d.cableType || 'Кабель'}: ${d.from || '?'} → ${d.to || '?'}`;
+        
+        case ActionTypes.DELETE_CABLE:
+            return `${d.cableType || 'Кабель'}: ${d.from || '?'} → ${d.to || '?'}`;
+        
+        case ActionTypes.CONNECT_FIBERS:
+            return `Жила ${d.fromFiber} → Жила ${d.toFiber}`;
+        
+        case ActionTypes.DISCONNECT_FIBERS:
+            return `Жила ${d.fromFiber} ↔ Жила ${d.toFiber}`;
+        
+        case ActionTypes.CONNECT_TO_NODE:
+            return `Жила ${d.fiberNumber} → ${d.nodeName || 'узел'}`;
+        
+        case ActionTypes.DISCONNECT_FROM_NODE:
+            return `Жила ${d.fiberNumber} от ${d.nodeName || 'узла'}`;
+        
+        case ActionTypes.IMPORT_DATA:
+            return `${d.count || 0} объектов`;
+        
+        case ActionTypes.EXPORT_DATA:
+            return `${d.count || 0} объектов`;
+        
+        case ActionTypes.CLEAR_MAP:
+            return `Удалено ${d.count || 0} объектов`;
+        
+        case ActionTypes.USER_CREATED:
+        case ActionTypes.USER_APPROVED:
+        case ActionTypes.USER_REJECTED:
+        case ActionTypes.USER_DELETED:
+            return d.username || '';
+        
+        case ActionTypes.USER_LOGIN:
+            return '';
+        
+        default:
+            return d.description || '';
+    }
+}
+
+// ==================== UI пользователя ====================
+function initUserUI() {
+    if (!currentUser) return;
+    
+    // Обновляем информацию о пользователе в панели
+    const userAvatar = document.getElementById('userAvatar');
+    const userName = document.getElementById('userName');
+    const userRole = document.getElementById('userRole');
+    
+    if (userAvatar) {
+        userAvatar.textContent = (currentUser.fullName || currentUser.username).charAt(0).toUpperCase();
+    }
+    if (userName) {
+        userName.textContent = currentUser.fullName || currentUser.username;
+    }
+    if (userRole) {
+        userRole.textContent = currentUser.role === 'admin' ? 'Администратор' : 'Пользователь';
+        userRole.className = 'user-role ' + currentUser.role;
+    }
+    
+    // Показываем кнопку управления пользователями только для админов
+    const usersManageBtn = document.getElementById('usersManageBtn');
+    if (usersManageBtn) {
+        usersManageBtn.style.display = currentUser.role === 'admin' ? 'flex' : 'none';
+    }
+    
+    // Скрываем режим редактирования для обычных пользователей
+    const editModeBtn = document.getElementById('editMode');
+    if (editModeBtn && currentUser.role !== 'admin') {
+        editModeBtn.style.display = 'none';
+    }
+    
+    // Скрываем секции редактирования для обычных пользователей
+    if (currentUser.role !== 'admin') {
+        hideAdminOnlyElements();
+    }
+    
+    // Обработчики кнопок
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', function() {
+            if (typeof AuthSystem !== 'undefined') {
+                AuthSystem.logout();
+            }
+        });
+    }
+    
+    if (usersManageBtn) {
+        usersManageBtn.addEventListener('click', openUsersModal);
+    }
+    
+    // Кнопка истории
+    const historyBtn = document.getElementById('historyBtn');
+    if (historyBtn) {
+        historyBtn.addEventListener('click', openHistoryModal);
+    }
+    
+    // Обработчики модального окна пользователей
+    setupUsersModalHandlers();
+    
+    // Обработчики модального окна истории
+    setupHistoryModalHandlers();
+    
+    // Обновляем счётчик истории
+    updateHistoryBadge();
+    
+    // Логируем вход в систему (только если это новый вход)
+    const lastLoginLog = localStorage.getItem('networkMap_lastLoginLog');
+    const now = Date.now();
+    if (!lastLoginLog || now - parseInt(lastLoginLog) > 3600000) { // 1 час
+        logAction(ActionTypes.USER_LOGIN);
+        localStorage.setItem('networkMap_lastLoginLog', now.toString());
+    }
+}
+
+// Настройка обработчиков модального окна истории
+function setupHistoryModalHandlers() {
+    // Закрытие модального окна
+    const closeBtn = document.querySelector('.close-history');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closeHistoryModal);
+    }
+    
+    const modal = document.getElementById('historyModal');
+    if (modal) {
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) closeHistoryModal();
+        });
+    }
+    
+    // Фильтры
+    const filterBtns = document.querySelectorAll('.history-filter-btn');
+    filterBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            filterBtns.forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            renderHistoryList(this.dataset.filter);
+        });
+    });
+    
+    // Кнопка очистки истории
+    const clearBtn = document.getElementById('clearHistoryBtn');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function() {
+            if (confirm('Очистить всю историю изменений?')) {
+                clearHistory();
+                renderHistoryList();
+                showInfo('История очищена');
+            }
+        });
+    }
+}
+
+// Скрываем элементы только для админов
+function hideAdminOnlyElements() {
+    // Скрываем аккордеон объектов
+    const objectsAccordion = document.querySelector('[data-accordion="objects"]');
+    if (objectsAccordion) {
+        objectsAccordion.parentElement.style.display = 'none';
+    }
+    
+    // Скрываем аккордеон кабелей
+    const cablesAccordion = document.querySelector('[data-accordion="cables"]');
+    if (cablesAccordion) {
+        cablesAccordion.parentElement.style.display = 'none';
+    }
+    
+    // Скрываем секцию NetBox
+    const netboxAccordion = document.querySelector('[data-accordion="netbox"]');
+    if (netboxAccordion) {
+        netboxAccordion.parentElement.style.display = 'none';
+    }
+    
+    // Скрываем кнопки действий (удаление)
+    const actionsSection = document.querySelector('.actions-section');
+    if (actionsSection) {
+        actionsSection.style.display = 'none';
+    }
+    
+    // Показываем предупреждение
+    const sidebarContent = document.querySelector('.sidebar-content');
+    if (sidebarContent) {
+        const warning = document.createElement('div');
+        warning.className = 'readonly-warning';
+        warning.innerHTML = `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <span>Режим просмотра. Редактирование доступно только администраторам.</span>
+        `;
+        sidebarContent.insertBefore(warning, sidebarContent.firstChild);
+    }
+}
+
+// ==================== Управление пользователями ====================
+function openUsersModal() {
+    if (!requireAdmin()) return;
+    
+    const modal = document.getElementById('usersModal');
+    modal.style.display = 'block';
+    renderUsersList();
+}
+
+function closeUsersModal() {
+    const modal = document.getElementById('usersModal');
+    modal.style.display = 'none';
+}
+
+function renderUsersList() {
+    const container = document.getElementById('usersList');
+    const pendingContainer = document.getElementById('pendingUsersList');
+    const pendingSection = document.getElementById('pendingUsersSection');
+    const pendingCountBadge = document.getElementById('pendingCount');
+    
+    if (!container || typeof AuthSystem === 'undefined') return;
+    
+    const users = AuthSystem.getUsers();
+    
+    // Разделяем пользователей на активных и ожидающих
+    const pendingUsers = users.filter(u => u.status === 'pending');
+    const activeUsers = users.filter(u => u.status !== 'pending' && u.status !== 'rejected');
+    const rejectedUsers = users.filter(u => u.status === 'rejected');
+    
+    // Отображаем заявки
+    if (pendingSection && pendingContainer) {
+        if (pendingUsers.length > 0) {
+            pendingSection.style.display = 'block';
+            pendingCountBadge.textContent = pendingUsers.length;
+            
+            let pendingHtml = '';
+            pendingUsers.forEach(user => {
+                const initial = (user.fullName || user.username).charAt(0).toUpperCase();
+                const createdDate = user.createdAt ? new Date(user.createdAt).toLocaleDateString('ru-RU') : '';
+                
+                pendingHtml += `
+                    <div class="pending-user-item">
+                        <div class="user-item-avatar">${initial}</div>
+                        <div class="user-item-info">
+                            <div class="user-item-name">${escapeHtml(user.fullName || user.username)}</div>
+                            <div class="user-item-username">@${escapeHtml(user.username)}</div>
+                            <div class="user-item-date">Заявка: ${createdDate}</div>
+                        </div>
+                        <div class="pending-user-actions">
+                            <button class="btn-approve" onclick="approveUserRequest('${user.id}')">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                                Одобрить
+                            </button>
+                            <button class="btn-reject" onclick="rejectUserRequest('${user.id}')">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                                Отклонить
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            pendingContainer.innerHTML = pendingHtml;
+        } else {
+            pendingSection.style.display = 'none';
+        }
+    }
+    
+    // Отображаем активных пользователей
+    if (activeUsers.length === 0 && rejectedUsers.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #6c757d; padding: 20px;">Нет пользователей</div>';
+        return;
+    }
+    
+    let html = '';
+    
+    // Активные пользователи
+    activeUsers.forEach(user => {
+        const initial = (user.fullName || user.username).charAt(0).toUpperCase();
+        const roleClass = user.role === 'admin' ? 'admin' : 'user';
+        const roleText = user.role === 'admin' ? 'Администратор' : 'Пользователь';
+        const createdDate = user.createdAt ? new Date(user.createdAt).toLocaleDateString('ru-RU') : '';
+        const isCurrentUser = user.id === currentUser.userId;
+        
+        html += `
+            <div class="user-item">
+                <div class="user-item-avatar ${roleClass}">${initial}</div>
+                <div class="user-item-info">
+                    <div class="user-item-name">${escapeHtml(user.fullName || user.username)}${isCurrentUser ? ' (вы)' : ''}</div>
+                    <div class="user-item-username">@${escapeHtml(user.username)}</div>
+                    <div class="user-item-date">Создан: ${createdDate}</div>
+                </div>
+                <span class="user-item-role ${roleClass}">${roleText}</span>
+                <div class="user-item-actions">
+                    <button class="user-item-btn" title="Редактировать" onclick="editUser('${user.id}')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        </svg>
+                    </button>
+                    ${!isCurrentUser ? `
+                    <button class="user-item-btn delete" title="Удалить" onclick="deleteUser('${user.id}')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                    </button>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    });
+    
+    // Отклонённые пользователи
+    rejectedUsers.forEach(user => {
+        const initial = (user.fullName || user.username).charAt(0).toUpperCase();
+        const createdDate = user.createdAt ? new Date(user.createdAt).toLocaleDateString('ru-RU') : '';
+        
+        html += `
+            <div class="user-item" style="opacity: 0.6;">
+                <div class="user-item-avatar" style="background: #9ca3af;">${initial}</div>
+                <div class="user-item-info">
+                    <div class="user-item-name">${escapeHtml(user.fullName || user.username)}</div>
+                    <div class="user-item-username">@${escapeHtml(user.username)}</div>
+                    <div class="user-item-date">Отклонён: ${createdDate}</div>
+                </div>
+                <span class="user-item-role rejected">Отклонён</span>
+                <div class="user-item-actions">
+                    <button class="user-item-btn" title="Одобрить" onclick="approveUserRequest('${user.id}')" style="color: #22c55e;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                    </button>
+                    <button class="user-item-btn delete" title="Удалить" onclick="deleteUser('${user.id}')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+// Одобрить заявку пользователя
+function approveUserRequest(userId) {
+    if (typeof AuthSystem === 'undefined') return;
+    
+    // Получаем данные пользователя до одобрения
+    const users = AuthSystem.getUsers();
+    const user = users.find(u => u.id === userId);
+    const username = user ? user.username : '';
+    
+    const result = AuthSystem.approveUser(userId);
+    if (result.success) {
+        showSuccess('Заявка одобрена. Пользователь получил доступ.', 'Заявка');
+        renderUsersList();
+        logAction(ActionTypes.USER_APPROVED, { username: username });
+    } else {
+        showError(result.error, 'Ошибка');
+    }
+}
+
+// Отклонить заявку пользователя
+function rejectUserRequest(userId) {
+    if (!confirm('Вы уверены, что хотите отклонить эту заявку?')) return;
+    
+    if (typeof AuthSystem === 'undefined') return;
+    
+    // Получаем данные пользователя до отклонения
+    const users = AuthSystem.getUsers();
+    const user = users.find(u => u.id === userId);
+    const username = user ? user.username : '';
+    
+    const result = AuthSystem.rejectUser(userId);
+    if (result.success) {
+        showWarning('Заявка отклонена.', 'Заявка');
+        renderUsersList();
+        logAction(ActionTypes.USER_REJECTED, { username: username });
+    } else {
+        showError(result.error, 'Ошибка');
+    }
+}
+
+function openUserEditModal(userId = null) {
+    const modal = document.getElementById('userEditModal');
+    const title = document.getElementById('userEditTitle');
+    const userIdInput = document.getElementById('editUserId');
+    const usernameInput = document.getElementById('editUsername');
+    const fullNameInput = document.getElementById('editFullName');
+    const passwordInput = document.getElementById('editPassword');
+    const roleSelect = document.getElementById('editRole');
+    
+    if (userId) {
+        // Редактирование
+        const users = AuthSystem.getUsers();
+        const user = users.find(u => u.id === userId);
+        if (!user) return;
+        
+        title.textContent = 'Редактировать пользователя';
+        userIdInput.value = user.id;
+        usernameInput.value = user.username;
+        usernameInput.disabled = true;
+        fullNameInput.value = user.fullName || '';
+        passwordInput.value = '';
+        roleSelect.value = user.role;
+    } else {
+        // Добавление
+        title.textContent = 'Добавить пользователя';
+        userIdInput.value = '';
+        usernameInput.value = '';
+        usernameInput.disabled = false;
+        fullNameInput.value = '';
+        passwordInput.value = '';
+        roleSelect.value = 'user';
+    }
+    
+    modal.style.display = 'block';
+}
+
+function closeUserEditModal() {
+    const modal = document.getElementById('userEditModal');
+    modal.style.display = 'none';
+}
+
+function saveUser() {
+    const userIdInput = document.getElementById('editUserId');
+    const usernameInput = document.getElementById('editUsername');
+    const fullNameInput = document.getElementById('editFullName');
+    const passwordInput = document.getElementById('editPassword');
+    const roleSelect = document.getElementById('editRole');
+    
+    const userId = userIdInput.value;
+    const username = usernameInput.value.trim();
+    const fullName = fullNameInput.value.trim();
+    const password = passwordInput.value;
+    const role = roleSelect.value;
+    
+    const users = AuthSystem.getUsers();
+    
+    if (userId) {
+        // Редактирование существующего
+        const userIndex = users.findIndex(u => u.id === userId);
+        if (userIndex === -1) {
+            showError('Пользователь не найден');
+            return;
+        }
+        
+        users[userIndex].fullName = fullName || users[userIndex].username;
+        users[userIndex].role = role;
+        
+        if (password) {
+            users[userIndex].password = AuthSystem.hashPassword(password);
+        }
+        
+        AuthSystem.saveUsers(users);
+        showSuccess('Пользователь обновлён');
+    } else {
+        // Создание нового
+        if (!username) {
+            showError('Введите имя пользователя');
+            return;
+        }
+        if (!password) {
+            showError('Введите пароль');
+            return;
+        }
+        if (password.length < 6) {
+            showError('Пароль должен быть не менее 6 символов');
+            return;
+        }
+        if (AuthSystem.findUserByUsername(username)) {
+            showError('Пользователь с таким именем уже существует');
+            return;
+        }
+        
+        const newUser = {
+            id: 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+            username: username,
+            password: AuthSystem.hashPassword(password),
+            fullName: fullName || username,
+            role: role,
+            status: 'approved', // Созданные админом сразу одобрены
+            createdAt: new Date().toISOString()
+        };
+        
+        users.push(newUser);
+        AuthSystem.saveUsers(users);
+        showSuccess('Пользователь создан');
+        logAction(ActionTypes.USER_CREATED, { username: username });
+    }
+    
+    closeUserEditModal();
+    renderUsersList();
+}
+
+function editUser(userId) {
+    openUserEditModal(userId);
+}
+
+function deleteUser(userId) {
+    if (!confirm('Вы уверены, что хотите удалить этого пользователя?')) return;
+    
+    const users = AuthSystem.getUsers();
+    const userIndex = users.findIndex(u => u.id === userId);
+    
+    if (userIndex === -1) {
+        showError('Пользователь не найден');
+        return;
+    }
+    
+    // Нельзя удалить себя
+    if (userId === currentUser.userId) {
+        showError('Нельзя удалить свой аккаунт');
+        return;
+    }
+    
+    const username = users[userIndex].username;
+    users.splice(userIndex, 1);
+    AuthSystem.saveUsers(users);
+    
+    showSuccess('Пользователь удалён');
+    renderUsersList();
+    logAction(ActionTypes.USER_DELETED, { username: username });
+}
+
+function setupUsersModalHandlers() {
+    // Закрытие модального окна пользователей
+    const closeUsersBtn = document.querySelector('.close-users');
+    if (closeUsersBtn) {
+        closeUsersBtn.addEventListener('click', closeUsersModal);
+    }
+    
+    const usersModal = document.getElementById('usersModal');
+    if (usersModal) {
+        usersModal.addEventListener('click', function(e) {
+            if (e.target === usersModal) closeUsersModal();
+        });
+    }
+    
+    // Кнопка добавления пользователя
+    const addUserBtn = document.getElementById('addUserBtn');
+    if (addUserBtn) {
+        addUserBtn.addEventListener('click', function() {
+            openUserEditModal(null);
+        });
+    }
+    
+    // Закрытие модального окна редактирования
+    const closeUserEditBtn = document.querySelector('.close-user-edit');
+    if (closeUserEditBtn) {
+        closeUserEditBtn.addEventListener('click', closeUserEditModal);
+    }
+    
+    const userEditModal = document.getElementById('userEditModal');
+    if (userEditModal) {
+        userEditModal.addEventListener('click', function(e) {
+            if (e.target === userEditModal) closeUserEditModal();
+        });
+    }
+    
+    // Кнопки сохранения/отмены
+    const saveUserBtn = document.getElementById('saveUserBtn');
+    if (saveUserBtn) {
+        saveUserBtn.addEventListener('click', saveUser);
+    }
+    
+    const cancelUserEditBtn = document.getElementById('cancelUserEditBtn');
+    if (cancelUserEditBtn) {
+        cancelUserEditBtn.addEventListener('click', closeUserEditModal);
+    }
+}
 
 function init() {
     myMap = new ymaps.Map('map', {
@@ -290,7 +1242,7 @@ function handleAddObject() {
             if (objectPlacementMode) {
                 cancelObjectPlacement();
             }
-            alert(type === 'cross' ? 'Введите имя кросса' : 'Введите имя узла');
+            showWarning(type === 'cross' ? 'Введите имя кросса' : 'Введите имя узла', 'Требуется имя');
             return;
         }
         
@@ -1200,8 +2152,11 @@ function handleFileImport(e) {
                 const data = JSON.parse(e.target.result);
                 clearMap();
                 importData(data);
+                showSuccess(`Карта импортирована (${data.length} объектов)`, 'Импорт');
+                logAction(ActionTypes.IMPORT_DATA, { count: data.length });
             } catch (error) {
                 console.error('Ошибка при импорте файла:', error);
+                showError('Ошибка при чтении файла. Проверьте формат JSON.', 'Импорт');
             }
         };
         reader.readAsText(file);
@@ -1209,6 +2164,7 @@ function handleFileImport(e) {
 }
 
 function switchToViewMode() {
+    const wasEditMode = isEditMode;
     isEditMode = false;
     currentCableTool = false;
     cableSource = null;
@@ -1216,6 +2172,10 @@ function switchToViewMode() {
     // Отменяем режим размещения объектов
     if (objectPlacementMode) {
         cancelObjectPlacement();
+    }
+    
+    if (wasEditMode) {
+        showInfo('Переключено в режим просмотра', 'Режим');
     }
     
     removeCablePreview();
@@ -1236,10 +2196,17 @@ function switchToViewMode() {
 }
 
 function switchToEditMode() {
+    // Проверяем права доступа
+    if (!canEdit()) {
+        showWarning('Редактирование доступно только администраторам', 'Нет доступа');
+        return;
+    }
+    
     isEditMode = true;
     updateUIForMode();
     updateEditControls();
     makeObjectsDraggable();
+    showInfo('Переключено в режим редактирования', 'Режим');
 }
 
 function updateUIForMode() {
@@ -1404,7 +2371,7 @@ function createObject(type, name, coords, options = {}) {
         if (currentCableTool && isEditMode) {
             // Узлы сети нельзя использовать для прокладки кабеля
             if (type === 'node') {
-                alert('Узел сети нельзя использовать для прокладки кабеля!\n\nУзлы подключаются только через жилы оптического кросса.');
+                showError('Узел сети нельзя использовать для прокладки кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
                 return;
             }
             
@@ -1468,9 +2435,19 @@ function createObject(type, name, coords, options = {}) {
     myMap.geoObjects.add(placemark);
     saveData();
     updateStats();
+    
+    // Логируем создание объекта
+    logAction(ActionTypes.CREATE_OBJECT, {
+        objectType: type,
+        name: name || ''
+    });
 }
 
 function deleteObject(obj) {
+    // Сохраняем данные для логирования до удаления
+    const objType = obj.properties.get('type');
+    const objName = obj.properties.get('name') || '';
+    
     // Удаляем подпись, если она есть
     const label = obj.properties.get('label');
     if (label) {
@@ -1498,6 +2475,12 @@ function deleteObject(obj) {
     
     saveData();
     updateStats();
+    
+    // Логируем удаление объекта
+    logAction(ActionTypes.DELETE_OBJECT, {
+        objectType: objType,
+        name: objName
+    });
 }
 
 function selectObject(obj) {
@@ -1645,7 +2628,7 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     // Узлы сети соединяются только через жилы с кросса
     for (const obj of points) {
         if (obj && obj.properties && obj.properties.get('type') === 'node') {
-            alert('Ошибка: Нельзя прокладывать кабель напрямую к узлу сети!\n\nУзлы сети подключаются только через жилы оптического кросса.\nПуть: Кросс → Опора → Муфта → Опора → Кросс → Узел');
+            showError('Нельзя прокладывать кабель напрямую к узлу сети. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
             return false;
         }
     }
@@ -1662,7 +2645,7 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
                 // Учитываем, что муфта будет использоваться для двух сегментов (кроме первой и последней)
                 const segmentsCount = (i === 0 || i === points.length - 1) ? 1 : 2;
                 if (usedFibersCount + (fiberCount * segmentsCount) > maxFibers) {
-                    alert(`Ошибка: Превышена максимальная вместимость муфты!\nИспользовано: ${usedFibersCount}/${maxFibers} волокон\nПопытка добавить: ${fiberCount * segmentsCount} волокон`);
+                    showError(`Превышена максимальная вместимость муфты! Использовано: ${usedFibersCount}/${maxFibers} волокон. Попытка добавить: ${fiberCount * segmentsCount} волокон`, 'Переполнение муфты');
                     return false;
                 }
             }
@@ -1686,9 +2669,7 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     const cableUniqueId = existingCableId || `cable-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
     // Создаем полилинию кабеля
-    const polyline = new ymaps.Polyline(coords, {
-        balloonContent: `${cableDescription}<br>Расстояние: ${totalDistance.toFixed(2)} м`
-    }, {
+    const polyline = new ymaps.Polyline(coords, {}, {
         strokeColor: cableColor,
         strokeWidth: cableWidth,
         strokeOpacity: 0.8
@@ -1734,6 +2715,15 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     
     saveData();
     updateStats();
+    
+    // Логируем создание кабеля
+    const fromName = points[0].properties.get('name') || getObjectTypeName(points[0].properties.get('type'));
+    const toName = points[points.length - 1].properties.get('name') || getObjectTypeName(points[points.length - 1].properties.get('type'));
+    logAction(ActionTypes.CREATE_CABLE, {
+        cableType: cableDescription,
+        from: fromName,
+        to: toName
+    });
     
     return true;
 }
@@ -1942,9 +2932,6 @@ function showCableInfo(cable) {
         displayDistance = calculateDistance(fromCoords, toCoords);
         // Обновляем сохраненное расстояние
         cable.properties.set('distance', displayDistance);
-        // Обновляем balloonContent
-        const namePrefix = cableName ? `${cableName} - ` : '';
-        cable.properties.set('balloonContent', `${namePrefix}${cableDescription}<br>Расстояние: ${displayDistance} м`);
         // Сохраняем данные
         saveData();
     }
@@ -1983,11 +2970,6 @@ function updateCableName(cableUniqueId, newName) {
     
     if (cable) {
         cable.properties.set('cableName', newName);
-        const cableType = cable.properties.get('cableType');
-        const cableDescription = getCableDescription(cableType);
-        const distance = cable.properties.get('distance') || 0;
-        const namePrefix = newName ? `${newName} - ` : '';
-        cable.properties.set('balloonContent', `${namePrefix}${cableDescription}<br>Расстояние: ${distance} м`);
         saveData();
     }
 }
@@ -2009,41 +2991,28 @@ function updateCablePreview(sourceObj, targetCoords) {
     
     // Получаем цвет и ширину кабеля из формы
     const cableType = document.getElementById('cableType').value;
-    const cableDescription = getCableDescription(cableType);
     const cableWidth = getCableWidth(cableType);
-    
-    // Вычисляем расстояние для отображения
-    const distance = calculateDistance(sourceCoords, targetCoords);
-    const distanceKm = (distance / 1000).toFixed(2);
     
     // Если предпросмотр уже существует, обновляем его
     if (cablePreviewLine) {
         cablePreviewLine.geometry.setCoordinates([sourceCoords, targetCoords]);
-        // Обновляем параметры предпросмотра (яркий синий, как в vols.expert)
+        // Обновляем параметры предпросмотра (яркий синий)
         cablePreviewLine.options.set({
-            strokeColor: '#3b82f6', // Яркий синий цвет для лучшей видимости предпросмотра
-            strokeWidth: Math.max(cableWidth, 5), // Минимум 5px для видимости
-            strokeOpacity: 0.9 // Немного прозрачный для красоты
+            strokeColor: '#3b82f6',
+            strokeWidth: Math.max(cableWidth, 5),
+            strokeOpacity: 0.9
         });
-        // Обновляем balloon и hint с расстоянием
-        const hintText = `${cableDescription}<br>Расстояние: ${distance} м (${distanceKm} км)`;
-        cablePreviewLine.properties.set('balloonContent', hintText);
-        cablePreviewLine.options.set('hintContent', hintText);
     } else {
-        // Создаем новую временную линию предпросмотра (как в vols.expert)
+        // Создаем новую временную линию предпросмотра
         cablePreviewLine = new ymaps.Polyline([
             sourceCoords, targetCoords
-        ], {
-            balloonContent: `${cableDescription}<br>Расстояние: ${distance} м (${distanceKm} км)`
-        }, {
-            strokeColor: '#3b82f6', // Яркий синий цвет для лучшей видимости предпросмотра
-            strokeWidth: Math.max(cableWidth, 5), // Минимум 5px для видимости
-            strokeOpacity: 0.9, // Немного прозрачный для красоты
-            strokeStyle: '12 6', // Более заметная пунктирная линия для предпросмотра
+        ], {}, {
+            strokeColor: '#3b82f6',
+            strokeWidth: Math.max(cableWidth, 5),
+            strokeOpacity: 0.9,
+            strokeStyle: '12 6',
             zIndex: 1000,
-            hasHint: true,
-            hintContent: `${cableDescription}<br>Расстояние: ${distance} м (${distanceKm} км)`,
-            interactive: false // Не интерактивный, чтобы не мешать кликам
+            interactive: false
         });
         
         myMap.geoObjects.add(cablePreviewLine);
@@ -2268,7 +3237,6 @@ function importData(data) {
                         const toCoords = toObj.geometry.getCoordinates();
                         const distance = calculateDistance(fromCoords, toCoords);
                         cable.properties.set('distance', distance);
-                        cable.properties.set('balloonContent', `${getCableDescription(item.cableType)}<br>Расстояние: ${distance} м`);
                     }
                     // Восстанавливаем название кабеля
                     if (item.cableName) {
@@ -2478,7 +3446,7 @@ function createObjectFromData(data) {
         if (currentCableTool && isEditMode) {
             // Узлы сети нельзя использовать для прокладки кабеля
             if (type === 'node') {
-                alert('Узел сети нельзя использовать для прокладки кабеля!\n\nУзлы подключаются только через жилы оптического кросса.');
+                showError('Узел сети нельзя использовать для прокладки кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
                 return;
             }
             
@@ -2638,14 +3606,22 @@ function exportData() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    
+    showSuccess(`Карта экспортирована (${objects.length} объектов)`, 'Экспорт');
+    logAction(ActionTypes.EXPORT_DATA, { count: objects.length });
 }
 
 function clearMap() {
+    const count = objects.length;
     myMap.geoObjects.removeAll();
     objects = [];
     selectedObjects = [];
     saveData();
     updateStats();
+    
+    if (count > 0) {
+        logAction(ActionTypes.CLEAR_MAP, { count: count });
+    }
 }
 
 function updateStats() {
@@ -4395,7 +5371,7 @@ function showFiberTrace(cableId, fiberNumber) {
     const result = traceFiberPath(cableId, fiberNumber);
     
     if (result.error) {
-        alert('Ошибка трассировки: ' + result.error);
+        showError('Ошибка трассировки: ' + result.error, 'Трассировка');
         return;
     }
     
@@ -4604,7 +5580,7 @@ function showNodeSelectionDialog(crossObj, cableId, fiberNumber) {
     const nodes = getAvailableNodes();
     
     if (nodes.length === 0) {
-        alert('Нет доступных узлов для подключения. Сначала создайте узел сети.');
+        showWarning('Нет доступных узлов для подключения. Сначала создайте узел сети.', 'Нет узлов');
         return;
     }
     
@@ -4983,7 +5959,7 @@ function traceFromNode(crossUniqueId, cableId, fiberNumber) {
     );
     
     if (!crossObj) {
-        alert('Кросс не найден');
+        showError('Кросс не найден', 'Ошибка');
         return;
     }
     
@@ -5010,12 +5986,12 @@ function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeO
     const result = traceFiberPathFromObject(startCrossObj, cableId, fiberNumber);
     
     if (result.error) {
-        alert(`Ошибка трассировки: ${result.error}`);
+        showError(`Ошибка трассировки: ${result.error}`, 'Трассировка');
         return;
     }
     
     if (result.path.length === 0) {
-        alert('Путь не найден');
+        showWarning('Путь не найден', 'Трассировка');
         return;
     }
     
@@ -5194,11 +6170,15 @@ function deleteCableByUniqueId(cableUniqueId) {
     
     if (!cable) return;
     
-    // Удаляем без подтверждения (подтверждение уже было при клике на кнопку)
-    // Удаляем информацию об использованных жилах из связанных объектов
+    // Сохраняем данные для логирования до удаления
     const fromObj = cable.properties.get('from');
     const toObj = cable.properties.get('to');
+    const cableType = getCableDescription(cable.properties.get('cableType'));
+    const fromName = fromObj ? (fromObj.properties.get('name') || getObjectTypeName(fromObj.properties.get('type'))) : '?';
+    const toName = toObj ? (toObj.properties.get('name') || getObjectTypeName(toObj.properties.get('type'))) : '?';
     
+    // Удаляем без подтверждения (подтверждение уже было при клике на кнопку)
+    // Удаляем информацию об использованных жилах из связанных объектов
     if (fromObj) {
         removeCableFromUsedFibers(fromObj, cableUniqueId);
     }
@@ -5208,6 +6188,13 @@ function deleteCableByUniqueId(cableUniqueId) {
     
     myMap.geoObjects.remove(cable);
     objects = objects.filter(o => o !== cable);
+    
+    // Логируем удаление кабеля
+    logAction(ActionTypes.DELETE_CABLE, {
+        cableType: cableType,
+        from: fromName,
+        to: toName
+    });
     
     // Обновляем визуализацию кабелей (количество на линиях)
     updateCableVisualization();
@@ -5751,7 +6738,7 @@ function showMergeCablesDialog(sleeveObj) {
     const connectedCables = getConnectedCables(sleeveObj);
     
     if (connectedCables.length < 2) {
-        alert('Для объединения нужно минимум 2 кабеля');
+        showWarning('Для объединения нужно минимум 2 кабеля', 'Объединение кабелей');
         return;
     }
     
@@ -5772,7 +6759,7 @@ function showMergeCablesDialog(sleeveObj) {
     else if (totalFibers <= 16) newCableType = 'fiber16';
     else if (totalFibers <= 24) newCableType = 'fiber24';
     else {
-        alert(`Общее количество жил (${totalFibers}) превышает максимальную вместимость кабеля (24). Невозможно объединить.`);
+        showError(`Общее количество жил (${totalFibers}) превышает максимальную вместимость кабеля (24). Невозможно объединить.`, 'Объединение кабелей');
         return;
     }
     
@@ -5781,7 +6768,7 @@ function showMergeCablesDialog(sleeveObj) {
     if (maxFibers && maxFibers > 0) {
         const usedFibersCount = getTotalUsedFibersInSleeve(sleeveObj);
         if (usedFibersCount - totalFibers + getFiberCount(newCableType) > maxFibers) {
-            alert(`Объединение невозможно: новый кабель превысит максимальную вместимость муфты!`);
+            showError('Объединение невозможно: новый кабель превысит максимальную вместимость муфты!', 'Переполнение муфты');
             return;
         }
     }
@@ -5804,7 +6791,7 @@ function showMergeCablesDialog(sleeveObj) {
     });
     
     if (targetObjects.size !== 1) {
-        alert('Объединение возможно только для кабелей, идущих от одной муфты к одному объекту');
+        showWarning('Объединение возможно только для кабелей, идущих от одной муфты к одному объекту', 'Объединение кабелей');
         return;
     }
     
@@ -5825,7 +6812,7 @@ function showMergeCablesDialog(sleeveObj) {
     );
     
     if (!newCable) {
-        alert('Ошибка при создании объединенного кабеля');
+        showError('Ошибка при создании объединённого кабеля', 'Объединение кабелей');
         return;
     }
     
@@ -5838,7 +6825,7 @@ function showMergeCablesDialog(sleeveObj) {
     document.getElementById('infoModal').style.display = 'none';
     showObjectInfo(sleeveObj);
     
-    alert(`Кабели успешно объединены в ${getCableDescription(newCableType)}`);
+    showSuccess(`Кабели успешно объединены в ${getCableDescription(newCableType)}`, 'Объединение кабелей');
 }
 
 function toggleFiberUsage(cableUniqueId, fiberNumber) {
@@ -6192,13 +7179,6 @@ function showNetBoxDevices() {
             });
         });
     }
-}
-
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
 }
 
 function importSelectedNetBoxDevices() {
