@@ -60,12 +60,25 @@
                             <select id="objectType" class="form-select">
                                 <option value="support">📡 Опоры связи</option>
                                 <option value="sleeve">🔌 Кабельные муфты</option>
+                                <option value="cross">📦 Оптический кросс</option>
                                 <option value="node">🖥️ Узлы сети</option>
                             </select>
                         </div>
                         <div class="form-group" id="objectNameGroup" style="display: none;">
-                            <label for="objectName">Имя узла</label>
+                            <label for="objectName">Имя</label>
                             <input type="text" id="objectName" class="form-input" placeholder="Введите имя">
+                        </div>
+                        <div class="form-group" id="crossSettingsGroup" style="display: none;">
+                            <label for="crossPorts">Количество портов</label>
+                            <select id="crossPorts" class="form-select">
+                                <option value="4">4 порта</option>
+                                <option value="8">8 портов</option>
+                                <option value="12">12 портов</option>
+                                <option value="16">16 портов</option>
+                                <option value="24" selected>24 порта</option>
+                                <option value="48">48 портов</option>
+                                <option value="96">96 портов</option>
+                            </select>
                         </div>
                         <div class="form-group" id="sleeveSettingsGroup" style="display: none;">
                             <label for="sleeveType">Тип муфты</label>
@@ -249,6 +262,10 @@
                             <div class="legend-color" style="background-color: #FF7700; height: 5px;"></div>
                             <span class="legend-text">Медный кабель</span>
                         </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #22c55e; height: 2px; border-style: dashed;"></div>
+                            <span class="legend-text">Кросс → Узел (жила)</span>
+                        </div>
                     </div>
                 </div>
 
@@ -287,6 +304,18 @@
                             <div class="stat-info">
                                 <div class="stat-value" id="sleeveCount">0</div>
                                 <div class="stat-label">Муфты</div>
+                            </div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-icon" style="background: #8b5cf620; color: #8b5cf6;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                    <line x1="9" y1="3" x2="9" y2="21"></line>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="crossCount">0</div>
+                                <div class="stat-label">Кроссы</div>
                             </div>
                         </div>
                         <div class="stat-item">

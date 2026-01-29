@@ -12,7 +12,6 @@ let currentCableTool = false; // Режим прокладки кабеля
 let cableSource = null; // Начальная точка текущего кабеля
 let cablePreviewLine = null; // Временная линия для предпросмотра кабеля
 let selectedFiberForConnection = null; // Выбранная жила для создания соединения
-let selectedConnection = null; // Выбранное соединение для просмотра (только в режиме просмотра)
 let netboxConfig = {
     url: '',
     token: '',
@@ -116,14 +115,23 @@ function setupEventListeners() {
         }
     });
 
-    // Показ/скрытие поля имени для узлов
+    // Показ/скрытие полей настроек в зависимости от типа объекта
     document.getElementById('objectType').addEventListener('change', function() {
         const nameInputGroup = document.getElementById('objectNameGroup');
         const sleeveSettingsGroup = document.getElementById('sleeveSettingsGroup');
+        const crossSettingsGroup = document.getElementById('crossSettingsGroup');
         const type = this.value;
         
-        nameInputGroup.style.display = type === 'node' ? 'block' : 'none';
+        // Показываем имя для узлов и кроссов
+        nameInputGroup.style.display = (type === 'node' || type === 'cross') ? 'block' : 'none';
         sleeveSettingsGroup.style.display = type === 'sleeve' ? 'block' : 'none';
+        crossSettingsGroup.style.display = type === 'cross' ? 'block' : 'none';
+        
+        // Обновляем label для имени
+        const nameLabel = nameInputGroup.querySelector('label');
+        if (nameLabel) {
+            nameLabel.textContent = type === 'cross' ? 'Имя кросса' : 'Имя узла';
+        }
         
         // Автоматически заполняем максимальное количество волокон для выбранного типа муфты
         if (type === 'sleeve') {
@@ -134,8 +142,8 @@ function setupEventListeners() {
         if (objectPlacementMode) {
             const newType = this.value;
             currentPlacementType = newType;
-            // Для узлов обновляем имя из поля ввода
-            if (newType === 'node') {
+            // Для узлов и кроссов обновляем имя из поля ввода
+            if (newType === 'node' || newType === 'cross') {
                 const nameInput = document.getElementById('objectName');
                 currentPlacementName = nameInput ? nameInput.value.trim() : '';
             } else {
@@ -272,13 +280,14 @@ function handleAddObject() {
     const type = document.getElementById('objectType').value;
     
     // Всегда проверяем данные и запускаем/обновляем режим размещения
-    if (type === 'node') {
+    if (type === 'node' || type === 'cross') {
         const name = document.getElementById('objectName').value.trim();
         if (!name) {
             // Если режим был активен, но имя пустое, отменяем режим
             if (objectPlacementMode) {
                 cancelObjectPlacement();
             }
+            alert(type === 'cross' ? 'Введите имя кросса' : 'Введите имя узла');
             return;
         }
         
@@ -496,6 +505,12 @@ function handleMapClick(e) {
             const sleeveType = document.getElementById('sleeveType').value;
             const maxFibers = parseInt(document.getElementById('sleeveMaxFibers').value) || 0;
             createObject(type, '', coords, { sleeveType: sleeveType, maxFibers: maxFibers });
+        } else if (type === 'cross') {
+            // Для кросса получаем имя и количество портов
+            const name = currentPlacementName || document.getElementById('objectName').value.trim();
+            const crossPorts = parseInt(document.getElementById('crossPorts').value) || 24;
+            createObject(type, name || '', coords, { crossPorts: crossPorts });
+            currentPlacementName = name || '';
         } else {
             // Для опор не нужно имя
             createObject(type, '', coords);
@@ -814,6 +829,9 @@ function updateCursorIndicator(e, objectType) {
             case 'sleeve':
                 text = 'Кабельная муфта';
                 break;
+            case 'cross':
+                text = 'Оптический кросс';
+                break;
             case 'node':
                 text = 'Узел сети';
                 break;
@@ -886,7 +904,7 @@ function updatePhantomPlacemark(type, coords) {
             </svg>`;
     }
     
-    const clickableSize = type === 'node' ? 48 : 48;
+    const clickableSize = 36;
     const iconSize = type === 'node' ? 32 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
     
@@ -981,7 +999,7 @@ function highlightObjectOnHover(obj, e) {
     }
     
     // Создаем увеличенную область клика для подсвеченного объекта
-    const clickableSize = 48;
+    const clickableSize = 36;
     const iconSize = type === 'node' ? 32 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
     
@@ -1202,17 +1220,6 @@ function switchToViewMode() {
     
     clearSelection();
     
-    // Сбрасываем выделение жилы и соединения
-    selectedFiberForConnection = null;
-    selectedConnection = null;
-    if (currentModalObject) {
-        // Обновляем модальное окно, если оно открыто, чтобы убрать выделение
-        const modal = document.getElementById('infoModal');
-        if (modal && modal.style.display === 'block') {
-            showObjectInfo(currentModalObject);
-        }
-    }
-    
     // Убираем подсветку и курсор
     if (hoveredObject) {
         clearHoverHighlight();
@@ -1227,18 +1234,6 @@ function switchToViewMode() {
 
 function switchToEditMode() {
     isEditMode = true;
-    
-    // Сбрасываем выделение жилы и соединения при переходе в режим редактирования
-    selectedFiberForConnection = null;
-    selectedConnection = null;
-    if (currentModalObject) {
-        // Обновляем модальное окно, если оно открыто, чтобы убрать выделение
-        const modal = document.getElementById('infoModal');
-        if (modal && modal.style.display === 'block') {
-            showObjectInfo(currentModalObject);
-        }
-    }
-    
     updateUIForMode();
     updateEditControls();
     makeObjectsDraggable();
@@ -1299,6 +1294,23 @@ function createObject(type, name, coords, options = {}) {
             </svg>`;
             balloonContent = 'Кабельная муфта';
             break;
+        case 'cross':
+            // Оптический кросс - фиолетовый прямоугольник с портами
+            color = '#8b5cf6';
+            iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="4" width="28" height="24" rx="3" fill="${color}" stroke="white" stroke-width="2"/>
+                <line x1="10" y1="4" x2="10" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
+                <line x1="16" y1="4" x2="16" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
+                <line x1="22" y1="4" x2="22" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
+                <circle cx="10" cy="12" r="2" fill="white"/>
+                <circle cx="16" cy="12" r="2" fill="white"/>
+                <circle cx="22" cy="12" r="2" fill="white"/>
+                <circle cx="10" cy="20" r="2" fill="white"/>
+                <circle cx="16" cy="20" r="2" fill="white"/>
+                <circle cx="22" cy="20" r="2" fill="white"/>
+            </svg>`;
+            balloonContent = `Оптический кросс: ${name}`;
+            break;
         case 'node':
             // Узел сети - зеленый круг с иконкой
             color = '#22c55e';
@@ -1319,8 +1331,8 @@ function createObject(type, name, coords, options = {}) {
 
     // Создаем SVG с увеличенной невидимой областью для удобства клика
     // Добавляем прозрачную область вокруг иконки
-    const clickableSize = 48; // Увеличиваем область клика до 48x48 пикселей
-    const iconSize = type === 'node' ? 32 : 28;
+    const clickableSize = 36; // Область клика 36x36 пикселей
+    const iconSize = (type === 'node' || type === 'cross') ? 32 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
     
     // Извлекаем содержимое SVG без тегов svg
@@ -1355,10 +1367,15 @@ function createObject(type, name, coords, options = {}) {
         placemarkProperties.maxFibers = options.maxFibers || 0;
     }
     
+    // Сохраняем настройки кросса
+    if (type === 'cross') {
+        placemarkProperties.crossPorts = options.crossPorts || 24;
+    }
+    
     const placemark = new ymaps.Placemark(coords, placemarkProperties, placemarkOptions);
     
-    // Для узлов всегда добавляем подпись с названием под маркером (даже если имя пустое)
-    if (type === 'node') {
+    // Для узлов и кроссов добавляем подпись с названием под маркером
+    if (type === 'node' || type === 'cross') {
         updateNodeLabel(placemark, name);
         
         // Обновляем позицию метки при перетаскивании
@@ -1382,6 +1399,12 @@ function createObject(type, name, coords, options = {}) {
         
         // Режим прокладки кабеля - обрабатываем выбор объектов
         if (currentCableTool && isEditMode) {
+            // Узлы сети нельзя использовать для прокладки кабеля
+            if (type === 'node') {
+                alert('Узел сети нельзя использовать для прокладки кабеля!\n\nУзлы подключаются только через жилы оптического кросса.');
+                return;
+            }
+            
             if (cableSource && cableSource !== placemark) {
                 // Есть источник - создаем кабель от источника к кликнутому объекту
                 const cableType = document.getElementById('cableType').value;
@@ -1402,8 +1425,8 @@ function createObject(type, name, coords, options = {}) {
             return;
         }
         
-        // Для узлов и муфт показываем информацию
-        if ((type === 'node' || type === 'sleeve')) {
+        // Для узлов, кроссов и муфт показываем информацию
+        if ((type === 'node' || type === 'sleeve' || type === 'cross')) {
             showObjectInfo(placemark);
             return;
         }
@@ -1428,6 +1451,8 @@ function createObject(type, name, coords, options = {}) {
         if (label) {
             label.geometry.setCoordinates(placemark.geometry.getCoordinates());
         }
+        // Обновляем линии соединений кросс-узел
+        updateAllNodeConnectionLines();
     });
 
     objects.push(placemark);
@@ -1500,7 +1525,7 @@ function selectObject(obj) {
         }
         
         // Создаем увеличенную область клика для выделенного объекта
-        const clickableSize = 48;
+        const clickableSize = 36;
         const iconSize = type === 'node' ? 32 : 28;
         const iconOffset = (clickableSize - iconSize) / 2;
         
@@ -1558,7 +1583,7 @@ function deselectObject(obj) {
     }
     
     // Создаем увеличенную область клика для обычного объекта
-    const clickableSize = 48;
+    const clickableSize = 36;
     const iconSize = type === 'node' ? 32 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
     
@@ -1605,6 +1630,15 @@ function addCable(fromObj, toObj, cableType, existingCableId = null, fiberNumber
 function createCableFromPoints(points, cableType, existingCableId = null, fiberNumber = null) {
     if (!points || points.length < 2) {
         return false;
+    }
+    
+    // Проверяем, что кабель не подключается к узлу сети
+    // Узлы сети соединяются только через жилы с кросса
+    for (const obj of points) {
+        if (obj && obj.properties && obj.properties.get('type') === 'node') {
+            alert('Ошибка: Нельзя прокладывать кабель напрямую к узлу сети!\n\nУзлы сети подключаются только через жилы оптического кросса.\nПуть: Кросс → Опора → Муфта → Опора → Кросс → Узел');
+            return false;
+        }
     }
     
     // Проверяем максимальную вместимость муфт
@@ -1826,6 +1860,7 @@ function showCableInfo(cable) {
     const toObj = cable.properties.get('to');
     const distance = cable.properties.get('distance');
     const uniqueId = cable.properties.get('uniqueId');
+    const cableName = cable.properties.get('cableName') || '';
     
     const cableDescription = getCableDescription(cableType);
     
@@ -1836,12 +1871,14 @@ function showCableInfo(cable) {
         const type = fromObj.properties.get('type');
         if (type === 'support') fromType = 'Опора связи';
         else if (type === 'sleeve') fromType = 'Кабельная муфта';
+        else if (type === 'cross') fromType = 'Оптический кросс';
         else if (type === 'node') fromType = 'Узел сети';
     }
     if (toObj && toObj.properties) {
         const type = toObj.properties.get('type');
         if (type === 'support') toType = 'Опора связи';
         else if (type === 'sleeve') toType = 'Кабельная муфта';
+        else if (type === 'cross') toType = 'Оптический кросс';
         else if (type === 'node') toType = 'Узел сети';
     }
     
@@ -1872,7 +1909,19 @@ function showCableInfo(cable) {
     let html = '<div class="info-section">';
     html += `<h3 style="margin: 0 0 15px 0; color: #1e40af; font-size: 18px;">${cableDescription}</h3>`;
     
+    // Поле для названия кабеля
     html += '<div style="margin-bottom: 15px;">';
+    html += '<div class="form-group" style="margin-bottom: 12px;">';
+    html += '<label style="display: block; margin-bottom: 4px; font-weight: 600; color: #495057; font-size: 0.8125rem;">Название кабеля:</label>';
+    if (isEditMode) {
+        html += `<input type="text" id="cableNameInput" value="${cableName}" placeholder="Введите название кабеля" 
+            style="width: 100%; padding: 8px 12px; border: 1px solid #ced4da; border-radius: 4px; font-size: 0.875rem;" 
+            onchange="updateCableName('${uniqueId}', this.value)">`;
+    } else {
+        html += `<div style="padding: 8px 12px; background: #f8f9fa; border-radius: 4px; font-size: 0.875rem;">${cableName || '<span style="color: #6c757d; font-style: italic;">Не задано</span>'}</div>`;
+    }
+    html += '</div>';
+    
     html += `<div style="margin-bottom: 8px;"><strong>От:</strong> ${fromType}${fromName}</div>`;
     html += `<div style="margin-bottom: 8px;"><strong>До:</strong> ${toType}${toName}</div>`;
     
@@ -1885,7 +1934,8 @@ function showCableInfo(cable) {
         // Обновляем сохраненное расстояние
         cable.properties.set('distance', displayDistance);
         // Обновляем balloonContent
-        cable.properties.set('balloonContent', `${cableDescription}<br>Расстояние: ${displayDistance} м`);
+        const namePrefix = cableName ? `${cableName} - ` : '';
+        cable.properties.set('balloonContent', `${namePrefix}${cableDescription}<br>Расстояние: ${displayDistance} м`);
         // Сохраняем данные
         saveData();
     }
@@ -1912,6 +1962,25 @@ function showCableInfo(cable) {
     modalContent.innerHTML = html;
     modal.style.display = 'block';
     currentModalObject = cable;
+}
+
+// Обновление названия кабеля
+function updateCableName(cableUniqueId, newName) {
+    const cable = objects.find(obj => 
+        obj.properties && 
+        obj.properties.get('type') === 'cable' &&
+        obj.properties.get('uniqueId') === cableUniqueId
+    );
+    
+    if (cable) {
+        cable.properties.set('cableName', newName);
+        const cableType = cable.properties.get('cableType');
+        const cableDescription = getCableDescription(cableType);
+        const distance = cable.properties.get('distance') || 0;
+        const namePrefix = newName ? `${newName} - ` : '';
+        cable.properties.set('balloonContent', `${namePrefix}${cableDescription}<br>Расстояние: ${distance} м`);
+        saveData();
+    }
 }
 
 function updateCablePreview(sourceObj, targetCoords) {
@@ -1984,14 +2053,12 @@ function removeCablePreview() {
 }
 
 function findObjectAtCoords(coords, tolerance = null) {
-    // Используем более широкий tolerance для удобства выбора
-    // Примерно соответствует 10-15 метрам на карте (зависит от масштаба)
+    // Уменьшенный tolerance для более точного выбора
     if (tolerance === null) {
         // Вычисляем tolerance на основе текущего масштаба карты
         const zoom = myMap.getZoom();
         // Чем больше зум, тем меньше tolerance (более точный выбор)
-        // При зуме 10-15 используем ~0.001, при зуме 15+ используем ~0.0005
-        tolerance = zoom < 12 ? 0.002 : (zoom < 15 ? 0.001 : 0.0005);
+        tolerance = zoom < 12 ? 0.001 : (zoom < 15 ? 0.0005 : 0.00025);
     }
     
     // Сначала ищем объекты, которые точно попадают в область клика
@@ -2064,6 +2131,10 @@ function saveData() {
             if (props.distance !== undefined) {
                 result.distance = props.distance;
             }
+            // Сохраняем название кабеля
+            if (props.cableName) {
+                result.cableName = props.cableName;
+            }
             return result;
         } else {
             const result = {
@@ -2071,6 +2142,10 @@ function saveData() {
                 name: props.name,
                 geometry: geometry
             };
+            // Сохраняем uniqueId объекта
+            if (props.uniqueId) {
+                result.uniqueId = props.uniqueId;
+            }
             // Сохраняем информацию об использованных жилах
             if (props.usedFibers) {
                 result.usedFibers = props.usedFibers;
@@ -2078,6 +2153,28 @@ function saveData() {
             // Сохраняем информацию о соединениях жил в муфте
             if (props.fiberConnections) {
                 result.fiberConnections = props.fiberConnections;
+            }
+            // Сохраняем подписи жил
+            if (props.fiberLabels) {
+                result.fiberLabels = props.fiberLabels;
+            }
+            // Сохраняем настройки муфты
+            if (props.type === 'sleeve') {
+                if (props.sleeveType) {
+                    result.sleeveType = props.sleeveType;
+                }
+                if (props.maxFibers !== undefined) {
+                    result.maxFibers = props.maxFibers;
+                }
+            }
+            // Сохраняем настройки кросса
+            if (props.type === 'cross') {
+                if (props.crossPorts) {
+                    result.crossPorts = props.crossPorts;
+                }
+                if (props.nodeConnections) {
+                    result.nodeConnections = props.nodeConnections;
+                }
             }
             // Сохраняем информацию о NetBox
             if (props.netboxId) {
@@ -2106,18 +2203,21 @@ function loadData() {
         importData(parsedData);
         // Убеждаемся, что все подписи узлов отображаются
         ensureNodeLabelsVisible();
+        // Обновляем визуальные линии соединений кросс-узел
+        updateAllNodeConnectionLines();
     }
 }
 
 function ensureNodeLabelsVisible() {
-    // Проверяем все узлы и убеждаемся, что у них есть подписи
+    // Проверяем все узлы и кроссы, убеждаемся что у них есть подписи
     objects.forEach(obj => {
-        if (obj.properties && obj.properties.get('type') === 'node') {
-            const name = obj.properties.get('name') || '';
-            let label = obj.properties.get('label');
-            
-            // Всегда обновляем подпись, чтобы убедиться что она отображается
-            updateNodeLabel(obj, name);
+        if (obj.properties) {
+            const type = obj.properties.get('type');
+            if (type === 'node' || type === 'cross') {
+                const name = obj.properties.get('name') || '';
+                // Всегда обновляем подпись, чтобы убедиться что она отображается
+                updateNodeLabel(obj, name);
+            }
         }
     });
 }
@@ -2146,18 +2246,25 @@ function importData(data) {
             const toObj = objectRefs[item.to];
             if (fromObj && toObj) {
                 addCable(fromObj, toObj, item.cableType, item.uniqueId);
-                // Обновляем расстояние для загруженного кабеля, если оно не было сохранено
+                // Находим созданный кабель для обновления дополнительных свойств
                 const cable = objects.find(obj => 
                     obj.properties && 
                     obj.properties.get('type') === 'cable' &&
                     obj.properties.get('uniqueId') === item.uniqueId
                 );
-                if (cable && !cable.properties.get('distance')) {
-                    const fromCoords = fromObj.geometry.getCoordinates();
-                    const toCoords = toObj.geometry.getCoordinates();
-                    const distance = calculateDistance(fromCoords, toCoords);
-                    cable.properties.set('distance', distance);
-                    cable.properties.set('balloonContent', `${getCableDescription(item.cableType)}<br>Расстояние: ${distance} м`);
+                if (cable) {
+                    // Обновляем расстояние для загруженного кабеля, если оно не было сохранено
+                    if (!cable.properties.get('distance')) {
+                        const fromCoords = fromObj.geometry.getCoordinates();
+                        const toCoords = toObj.geometry.getCoordinates();
+                        const distance = calculateDistance(fromCoords, toCoords);
+                        cable.properties.set('distance', distance);
+                        cable.properties.set('balloonContent', `${getCableDescription(item.cableType)}<br>Расстояние: ${distance} м`);
+                    }
+                    // Восстанавливаем название кабеля
+                    if (item.cableName) {
+                        cable.properties.set('cableName', item.cableName);
+                    }
                 }
             }
         }
@@ -2168,11 +2275,14 @@ function importData(data) {
     
     // Обновляем визуализацию кабелей (количество на линиях)
     updateCableVisualization();
+    
+    // Обновляем визуальные линии соединений кросс-узел
+    updateAllNodeConnectionLines();
 }
 
 
 function createObjectFromData(data) {
-    const { type, name, geometry, usedFibers, fiberConnections, netboxId, netboxUrl, netboxDeviceType, netboxSite, sleeveType, maxFibers } = data;
+    const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, netboxId, netboxUrl, netboxDeviceType, netboxSite, sleeveType, maxFibers, crossPorts, nodeConnections, uniqueId } = data;
     
     let iconSvg, color, balloonContent;
     
@@ -2195,6 +2305,23 @@ function createObjectFromData(data) {
             </svg>`;
             balloonContent = 'Кабельная муфта';
             break;
+        case 'cross':
+            // Оптический кросс - фиолетовый прямоугольник с портами
+            color = '#8b5cf6';
+            iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="4" width="28" height="24" rx="3" fill="${color}" stroke="white" stroke-width="2"/>
+                <line x1="10" y1="4" x2="10" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
+                <line x1="16" y1="4" x2="16" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
+                <line x1="22" y1="4" x2="22" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
+                <circle cx="10" cy="12" r="2" fill="white"/>
+                <circle cx="16" cy="12" r="2" fill="white"/>
+                <circle cx="22" cy="12" r="2" fill="white"/>
+                <circle cx="10" cy="20" r="2" fill="white"/>
+                <circle cx="16" cy="20" r="2" fill="white"/>
+                <circle cx="22" cy="20" r="2" fill="white"/>
+            </svg>`;
+            balloonContent = `Оптический кросс: ${name}`;
+            break;
         case 'node':
             // Узел сети - зеленый круг с иконкой
             color = '#22c55e';
@@ -2215,8 +2342,8 @@ function createObjectFromData(data) {
 
     // Создаем SVG с увеличенной невидимой областью для удобства клика
     // Добавляем прозрачную область вокруг иконки
-    const clickableSize = 48; // Увеличиваем область клика до 48x48 пикселей
-    const iconSize = type === 'node' ? 32 : 28;
+    const clickableSize = 36; // Область клика 36x36 пикселей
+    const iconSize = (type === 'node' || type === 'cross') ? 32 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
     
     // Извлекаем содержимое SVG без тегов svg
@@ -2245,9 +2372,9 @@ function createObjectFromData(data) {
         balloonContent: balloonContent
     }, placemarkOptions);
     
-    // Для узлов всегда добавляем подпись с названием под маркером
-    if (type === 'node') {
-        const labelContent = name ? escapeHtml(name) : 'Узел сети';
+    // Для узлов и кроссов добавляем подпись с названием под маркером
+    if (type === 'node' || type === 'cross') {
+        const labelContent = name ? escapeHtml(name) : (type === 'cross' ? 'Оптический кросс' : 'Узел сети');
         const label = new ymaps.Placemark(geometry, {}, {
             iconLayout: 'default#imageWithContent',
             iconImageHref: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==',
@@ -2274,6 +2401,11 @@ function createObjectFromData(data) {
         });
     }
     
+    // Восстанавливаем uniqueId объекта
+    if (uniqueId) {
+        placemark.properties.set('uniqueId', uniqueId);
+    }
+    
     // Восстанавливаем информацию об использованных жилах
     if (usedFibers) {
         placemark.properties.set('usedFibers', usedFibers);
@@ -2284,6 +2416,11 @@ function createObjectFromData(data) {
         placemark.properties.set('fiberConnections', fiberConnections);
     }
     
+    // Восстанавливаем подписи жил
+    if (fiberLabels) {
+        placemark.properties.set('fiberLabels', fiberLabels);
+    }
+    
     // Восстанавливаем настройки муфты
     if (type === 'sleeve') {
         if (sleeveType) {
@@ -2291,6 +2428,17 @@ function createObjectFromData(data) {
         }
         if (maxFibers !== undefined) {
             placemark.properties.set('maxFibers', maxFibers);
+        }
+    }
+    
+    // Восстанавливаем настройки кросса
+    if (type === 'cross') {
+        if (crossPorts) {
+            placemark.properties.set('crossPorts', crossPorts);
+        }
+        // Восстанавливаем соединения с узлами
+        if (nodeConnections) {
+            placemark.properties.set('nodeConnections', nodeConnections);
         }
     }
     
@@ -2319,6 +2467,12 @@ function createObjectFromData(data) {
         
         // Режим прокладки кабеля - обрабатываем выбор объектов
         if (currentCableTool && isEditMode) {
+            // Узлы сети нельзя использовать для прокладки кабеля
+            if (type === 'node') {
+                alert('Узел сети нельзя использовать для прокладки кабеля!\n\nУзлы подключаются только через жилы оптического кросса.');
+                return;
+            }
+            
             if (cableSource && cableSource !== placemark) {
                 // Есть источник - создаем кабель от источника к кликнутому объекту
                 const cableType = document.getElementById('cableType').value;
@@ -2339,8 +2493,8 @@ function createObjectFromData(data) {
             return;
         }
         
-        // Для узлов и муфт показываем информацию
-        if ((type === 'node' || type === 'sleeve')) {
+        // Для узлов, кроссов и муфт показываем информацию
+        if ((type === 'node' || type === 'sleeve' || type === 'cross')) {
             showObjectInfo(placemark);
             return;
         }
@@ -2365,6 +2519,8 @@ function createObjectFromData(data) {
         if (label) {
             label.geometry.setCoordinates(placemark.geometry.getCoordinates());
         }
+        // Обновляем линии соединений кросс-узел
+        updateAllNodeConnectionLines();
     });
 
     objects.push(placemark);
@@ -2395,6 +2551,10 @@ function exportData() {
             if (props.distance !== undefined) {
                 result.distance = props.distance;
             }
+            // Сохраняем название кабеля
+            if (props.cableName) {
+                result.cableName = props.cableName;
+            }
             return result;
         } else {
             const result = {
@@ -2402,6 +2562,10 @@ function exportData() {
                 name: props.name,
                 geometry: geometry
             };
+            // Сохраняем uniqueId объекта
+            if (props.uniqueId) {
+                result.uniqueId = props.uniqueId;
+            }
             // Сохраняем информацию об использованных жилах
             if (props.usedFibers) {
                 result.usedFibers = props.usedFibers;
@@ -2409,6 +2573,28 @@ function exportData() {
             // Сохраняем информацию о соединениях жил в муфте
             if (props.fiberConnections) {
                 result.fiberConnections = props.fiberConnections;
+            }
+            // Сохраняем подписи жил
+            if (props.fiberLabels) {
+                result.fiberLabels = props.fiberLabels;
+            }
+            // Сохраняем настройки муфты
+            if (props.type === 'sleeve') {
+                if (props.sleeveType) {
+                    result.sleeveType = props.sleeveType;
+                }
+                if (props.maxFibers !== undefined) {
+                    result.maxFibers = props.maxFibers;
+                }
+            }
+            // Сохраняем настройки кросса
+            if (props.type === 'cross') {
+                if (props.crossPorts) {
+                    result.crossPorts = props.crossPorts;
+                }
+                if (props.nodeConnections) {
+                    result.nodeConnections = props.nodeConnections;
+                }
             }
             // Сохраняем информацию о NetBox
             if (props.netboxId) {
@@ -2451,11 +2637,13 @@ function updateStats() {
     const nodeCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'node').length;
     const supportCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'support').length;
     const sleeveCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'sleeve').length;
+    const crossCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'cross').length;
     const cableCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'cable').length;
 
     document.getElementById('nodeCount').textContent = nodeCount;
     document.getElementById('supportCount').textContent = supportCount;
     document.getElementById('sleeveCount').textContent = sleeveCount;
+    document.getElementById('crossCount').textContent = crossCount;
     document.getElementById('cableCount').textContent = cableCount;
 }
 
@@ -2474,6 +2662,8 @@ function showObjectInfo(obj) {
         title = name ? `Узел сети: ${name}` : 'Узел сети';
     } else if (type === 'sleeve') {
         title = 'Кабельная муфта';
+    } else if (type === 'cross') {
+        title = name ? `Оптический кросс: ${name}` : 'Оптический кросс';
     }
     
     document.getElementById('modalTitle').textContent = title;
@@ -2562,6 +2752,68 @@ function showObjectInfo(obj) {
             }
             html += '</div></div>';
         }
+        
+        // Показываем подключенные жилы (от кроссов)
+        // Получаем или создаём uniqueId для узла
+        const nodeUniqueId = getObjectUniqueId(obj);
+        const connectedFibers = getNodeConnectedFibers(nodeUniqueId);
+        
+        if (connectedFibers.length > 0) {
+            html += '<div class="connected-fibers-section" style="margin-bottom: 20px; padding: 16px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0;">';
+            html += '<h4 style="margin: 0 0 12px 0; color: #166534; font-size: 0.9375rem; font-weight: 600;">🔌 Подключенные жилы</h4>';
+            html += '<div style="display: flex; flex-direction: column; gap: 8px;">';
+            
+            connectedFibers.forEach((conn, index) => {
+                html += `<div class="fiber-connection-item" style="display: flex; align-items: center; justify-content: space-between; padding: 10px; background: white; border-radius: 4px; border: 1px solid #dcfce7;">`;
+                html += `<div style="flex: 1;">`;
+                html += `<div style="font-weight: 600; color: #166534;">Жила ${conn.fiberNumber}</div>`;
+                html += `<div style="font-size: 0.8rem; color: #6b7280;">От кросса: ${escapeHtml(conn.crossName)}</div>`;
+                if (conn.fiberLabel) {
+                    html += `<div style="font-size: 0.75rem; color: #8b5cf6;">📝 ${escapeHtml(conn.fiberLabel)}</div>`;
+                }
+                html += `</div>`;
+                html += `<button class="btn-trace-from-node" data-cross-id="${conn.crossUniqueId}" data-cable-id="${conn.cableId}" data-fiber-number="${conn.fiberNumber}" style="padding: 8px 12px; background: #f59e0b; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">🔍 Трассировка</button>`;
+                html += `</div>`;
+            });
+            
+            html += '</div></div>';
+        } else {
+            html += '<div style="margin-bottom: 20px; padding: 16px; background: #fef3c7; border-radius: 6px; border: 1px solid #fde68a;">';
+            html += '<div style="color: #92400e; font-size: 0.875rem;">⚠️ К этому узлу не подключено ни одной жилы.</div>';
+            html += '<div style="color: #a16207; font-size: 0.8rem; margin-top: 4px;">Подключите жилу через оптический кросс.</div>';
+            html += '</div>';
+        }
+    }
+    
+    // Обработка информации о кроссах
+    if (type === 'cross') {
+        const crossPorts = obj.properties.get('crossPorts') || 24;
+        
+        html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6;">';
+        html += '<h4 style="margin: 0 0 12px 0; color: #2c3e50; font-size: 0.9375rem; font-weight: 600;">Информация о кроссе</h4>';
+        html += `<div style="color: #495057; font-size: 0.875rem; margin-bottom: 8px;"><strong>Количество портов:</strong> ${crossPorts}</div>`;
+        
+        // Подсчитываем использованные порты
+        const usedPorts = getTotalUsedFibersInSleeve(obj);
+        const usagePercent = Math.round((usedPorts / crossPorts) * 100);
+        const statusColor = usedPorts > crossPorts ? '#dc2626' : (usagePercent >= 80 ? '#f59e0b' : '#22c55e');
+        
+        html += `<div style="color: #495057; font-size: 0.875rem;"><strong>Использовано:</strong> <span style="color: ${statusColor}; font-weight: 600;">${usedPorts}/${crossPorts} портов</span> (${usagePercent}%)</div>`;
+        html += '</div>';
+        
+        // Секция редактирования для кроссов (только в режиме редактирования)
+        if (isEditMode) {
+            html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6;">';
+            html += '<h4 style="margin: 0 0 12px 0; color: #2c3e50; font-size: 0.9375rem; font-weight: 600;">Редактирование кросса</h4>';
+            html += '<div class="form-group" style="margin-bottom: 12px;">';
+            html += '<label for="editCrossName" style="display: block; margin-bottom: 6px; color: #495057; font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название кросса</label>';
+            html += `<input type="text" id="editCrossName" class="form-input" value="${escapeHtml(name)}" placeholder="Введите название кросса" style="width: 100%; padding: 9px 12px; border: 1px solid #ced4da; border-radius: 4px; font-size: 0.875rem;">`;
+            html += '</div>';
+            html += '<button id="saveCrossEdit" class="btn-primary" style="width: 100%; padding: 10px 14px; margin-top: 8px;">';
+            html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline; margin-right: 8px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>';
+            html += 'Сохранить изменения</button>';
+            html += '</div>';
+        }
     }
     
     // Добавляем кнопки управления объектом (только в режиме редактирования)
@@ -2576,12 +2828,15 @@ function showObjectInfo(obj) {
         html += '</div>';
     }
     
-    // Для всех объектов (включая муфты) показываем информацию о подключенных кабелях
+    // Для всех объектов (включая муфты и кроссы) показываем информацию о подключенных кабелях
     if (connectedCables.length === 0) {
         html += '<div class="no-cables" style="padding: 15px; text-align: center; color: #6c757d; font-size: 0.875rem;">К этому объекту не подключено кабелей</div>';
     } else {
-        // Для муфт показываем визуальное объединение жил
-        if (type === 'sleeve' && connectedCables.length > 1) {
+        // Для муфт и кроссов показываем визуальное объединение жил
+        if ((type === 'sleeve' || type === 'cross') && connectedCables.length > 1) {
+            html += renderFiberConnectionsVisualization(obj, connectedCables);
+        } else if (type === 'cross' && connectedCables.length === 1) {
+            // Для кросса с одним кабелем тоже показываем визуализацию с возможностью подключения к узлам
             html += renderFiberConnectionsVisualization(obj, connectedCables);
         } else {
             // Для других объектов или одной муфты с одним кабелем - обычное отображение
@@ -2650,23 +2905,7 @@ function showObjectInfo(obj) {
     
     // Показываем модальное окно
     const modal = document.getElementById('infoModal');
-    const modalContent = modal.querySelector('.modal-content');
-    
-    // Увеличиваем размер модального окна для муфт
-    if (type === 'sleeve') {
-        modalContent.style.maxWidth = '1000px';
-        modalContent.style.width = '95%';
-    } else {
-        modalContent.style.maxWidth = '600px';
-        modalContent.style.width = '90%';
-    }
-    
     modal.style.display = 'block';
-    
-    // Обновляем стили соединений, если жила уже была выбрана
-    setTimeout(() => {
-        updateConnectionStyles();
-    }, 100);
 }
 
 function setupEditAndDeleteListeners() {
@@ -2681,6 +2920,30 @@ function setupEditAndDeleteListeners() {
                 // Обновляем имя узла
                 currentModalObject.properties.set('name', newName);
                 currentModalObject.properties.set('balloonContent', `Узел сети: ${newName}`);
+                
+                // Обновляем подпись на карте
+                updateNodeLabel(currentModalObject, newName);
+                
+                // Сохраняем данные
+                saveData();
+                
+                // Обновляем модальное окно
+                showObjectInfo(currentModalObject);
+            }
+        });
+    }
+    
+    // Обработчик сохранения редактирования кросса
+    const saveCrossBtn = document.getElementById('saveCrossEdit');
+    if (saveCrossBtn) {
+        saveCrossBtn.addEventListener('click', function() {
+            if (!currentModalObject) return;
+            
+            const newName = document.getElementById('editCrossName').value.trim();
+            if (newName) {
+                // Обновляем имя кросса
+                currentModalObject.properties.set('name', newName);
+                currentModalObject.properties.set('balloonContent', `Оптический кросс: ${newName}`);
                 
                 // Обновляем подпись на карте
                 updateNodeLabel(currentModalObject, newName);
@@ -2859,11 +3122,23 @@ function setupModalEventListeners() {
         // Обработчики для соединения жил в муфтах
         setupFiberConnectionHandlers();
     }
+    
+    // Обработчики для трассировки от узла сети
+    document.querySelectorAll('.btn-trace-from-node').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const crossId = this.getAttribute('data-cross-id');
+            const cableId = this.getAttribute('data-cable-id');
+            const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
+            traceFromNode(crossId, cableId, fiberNumber);
+        });
+    });
 }
 
-// Настройка обработчиков для соединения жил в муфтах
+// Настройка обработчиков для соединения жил в муфтах и кроссах
 function setupFiberConnectionHandlers() {
-    if (!currentModalObject || currentModalObject.properties.get('type') !== 'sleeve') {
+    const objType = currentModalObject ? currentModalObject.properties.get('type') : null;
+    if (!currentModalObject || (objType !== 'sleeve' && objType !== 'cross')) {
         return;
     }
     
@@ -2877,35 +3152,57 @@ function setupFiberConnectionHandlers() {
     // Сбрасываем выбранную жилу
     selectedFiberForConnection = null;
     
-    // Обработчики кликов по жилам в SVG (работаем с hitbox-кругами и основными кругами)
-    document.querySelectorAll('#fiber-connections-svg circle[id^="fiber-hitbox-"], #fiber-connections-svg circle[id^="fiber-"]:not([id^="fiber-hitbox-"])').forEach(circle => {
+    // Обработчики кликов по жилам в SVG
+    document.querySelectorAll('#fiber-connections-svg circle[id^="fiber-"]').forEach(circle => {
         circle.addEventListener('click', function(e) {
             e.stopPropagation();
             const cableId = this.getAttribute('data-cable-id');
             const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
             
-            // Находим основной круг жилы (не hitbox)
-            const fiberKey = `fiber-${cableId}-${fiberNumber}`;
-            const fiberCircle = document.getElementById(fiberKey);
-            if (!fiberCircle) return;
-            
             if (!selectedFiberForConnection) {
-                // Сбрасываем выделение всех жил и соединений перед выбором новой
-                selectedConnection = null;
-                resetFiberSelection();
+                // Проверяем, не подключена ли жила к узлу сети
+                const nodeConnections = sleeveObj.properties.get('nodeConnections') || {};
+                const nodeConnKey = `${cableId}-${fiberNumber}`;
+                if (nodeConnections[nodeConnKey]) {
+                    // Жила подключена к узлу - показываем ошибку
+                    const instruction = document.querySelector('.fiber-connections-container');
+                    if (instruction) {
+                        const existingMsg = instruction.querySelector('.connection-hint');
+                        if (existingMsg) existingMsg.remove();
+                        const hint = document.createElement('div');
+                        hint.className = 'connection-hint';
+                        hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
+                        hint.textContent = `Жила ${fiberNumber} уже подключена к узлу "${nodeConnections[nodeConnKey].nodeName}". Отключите её от узла, чтобы соединить с другой жилой.`;
+                        instruction.appendChild(hint);
+                    }
+                    return;
+                }
+                
+                // Проверяем, не соединена ли уже эта жила с другой жилой
+                const fiberAlreadyConnected = fiberConnections.find(conn => 
+                    (conn.from.cableId === cableId && conn.from.fiberNumber === fiberNumber) ||
+                    (conn.to.cableId === cableId && conn.to.fiberNumber === fiberNumber)
+                );
+                
+                if (fiberAlreadyConnected) {
+                    // Жила уже соединена - показываем ошибку
+                    const instruction = document.querySelector('.fiber-connections-container');
+                    if (instruction) {
+                        const existingMsg = instruction.querySelector('.connection-hint');
+                        if (existingMsg) existingMsg.remove();
+                        const hint = document.createElement('div');
+                        hint.className = 'connection-hint';
+                        hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
+                        hint.textContent = `Жила ${fiberNumber} кабеля ${cableId.substring(0, 8)}... уже соединена с другой жилой. Одна жила может быть соединена только с одной другой жилой.`;
+                        instruction.appendChild(hint);
+                    }
+                    return;
+                }
                 
                 // Выбираем первую жилу
                 selectedFiberForConnection = { cableId, fiberNumber };
-                fiberCircle.setAttribute('stroke', '#f59e0b');
-                fiberCircle.setAttribute('stroke-width', '4');
-                fiberCircle.setAttribute('stroke-dasharray', 'none');
-                fiberCircle.setAttribute('opacity', '1');
-                fiberCircle.setAttribute('r', '18');
-                
-                // Обновляем стили соединений, связанных с выбранной жилой (только в режиме просмотра)
-                if (!isEditMode) {
-                    updateConnectionStyles();
-                }
+                this.setAttribute('stroke', '#f59e0b');
+                this.setAttribute('stroke-width', '3');
                 
                 // Подсвечиваем инструкцию
                 const instruction = document.querySelector('.fiber-connections-container');
@@ -2921,6 +3218,22 @@ function setupFiberConnectionHandlers() {
             } else {
                 // Выбираем вторую жилу и создаем соединение
                 if (selectedFiberForConnection.cableId !== cableId || selectedFiberForConnection.fiberNumber !== fiberNumber) {
+                    // Проверяем, не пытаемся ли соединить жилы одного кабеля
+                    if (selectedFiberForConnection.cableId === cableId) {
+                        const instruction = document.querySelector('.fiber-connections-container');
+                        if (instruction) {
+                            const existingMsg = instruction.querySelector('.connection-hint');
+                            if (existingMsg) existingMsg.remove();
+                            const hint = document.createElement('div');
+                            hint.className = 'connection-hint';
+                            hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
+                            hint.textContent = `Нельзя соединить жилы одного кабеля. Выберите жилу из другого кабеля.`;
+                            instruction.appendChild(hint);
+                        }
+                        resetFiberSelection();
+                        return;
+                    }
+                    
                     // Проверяем, не существует ли уже такое соединение
                     const existingConn = fiberConnections.find(conn => 
                         (conn.from.cableId === selectedFiberForConnection.cableId && conn.from.fiberNumber === selectedFiberForConnection.fiberNumber &&
@@ -2928,6 +3241,68 @@ function setupFiberConnectionHandlers() {
                         (conn.from.cableId === cableId && conn.from.fiberNumber === fiberNumber &&
                          conn.to.cableId === selectedFiberForConnection.cableId && conn.to.fiberNumber === selectedFiberForConnection.fiberNumber)
                     );
+                    
+                    // Проверяем, не подключена ли вторая жила к узлу сети
+                    const nodeConnections = sleeveObj.properties.get('nodeConnections') || {};
+                    const nodeConnKey = `${cableId}-${fiberNumber}`;
+                    if (nodeConnections[nodeConnKey]) {
+                        const instruction = document.querySelector('.fiber-connections-container');
+                        if (instruction) {
+                            const existingMsg = instruction.querySelector('.connection-hint');
+                            if (existingMsg) existingMsg.remove();
+                            const hint = document.createElement('div');
+                            hint.className = 'connection-hint';
+                            hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
+                            hint.textContent = `Жила ${fiberNumber} уже подключена к узлу "${nodeConnections[nodeConnKey].nodeName}". Отключите её от узла, чтобы соединить с другой жилой.`;
+                            instruction.appendChild(hint);
+                        }
+                        resetFiberSelection();
+                        return;
+                    }
+                    
+                    // Проверяем, не соединена ли уже первая жила с другой жилой
+                    const firstFiberAlreadyConnected = fiberConnections.find(conn => 
+                        (conn.from.cableId === selectedFiberForConnection.cableId && conn.from.fiberNumber === selectedFiberForConnection.fiberNumber) ||
+                        (conn.to.cableId === selectedFiberForConnection.cableId && conn.to.fiberNumber === selectedFiberForConnection.fiberNumber)
+                    );
+                    
+                    // Проверяем, не соединена ли уже вторая жила с другой жилой
+                    const secondFiberAlreadyConnected = fiberConnections.find(conn => 
+                        (conn.from.cableId === cableId && conn.from.fiberNumber === fiberNumber) ||
+                        (conn.to.cableId === cableId && conn.to.fiberNumber === fiberNumber)
+                    );
+                    
+                    if (firstFiberAlreadyConnected) {
+                        // Первая жила уже соединена - показываем ошибку
+                        const instruction = document.querySelector('.fiber-connections-container');
+                        if (instruction) {
+                            const existingMsg = instruction.querySelector('.connection-hint');
+                            if (existingMsg) existingMsg.remove();
+                            const hint = document.createElement('div');
+                            hint.className = 'connection-hint';
+                            hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
+                            hint.textContent = `Жила ${selectedFiberForConnection.fiberNumber} кабеля ${selectedFiberForConnection.cableId.substring(0, 8)}... уже соединена с другой жилой. Одна жила может быть соединена только с одной другой жилой.`;
+                            instruction.appendChild(hint);
+                        }
+                        resetFiberSelection();
+                        return;
+                    }
+                    
+                    if (secondFiberAlreadyConnected) {
+                        // Вторая жила уже соединена - показываем ошибку
+                        const instruction = document.querySelector('.fiber-connections-container');
+                        if (instruction) {
+                            const existingMsg = instruction.querySelector('.connection-hint');
+                            if (existingMsg) existingMsg.remove();
+                            const hint = document.createElement('div');
+                            hint.className = 'connection-hint';
+                            hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
+                            hint.textContent = `Жила ${fiberNumber} кабеля ${cableId.substring(0, 8)}... уже соединена с другой жилой. Одна жила может быть соединена только с одной другой жилой.`;
+                            instruction.appendChild(hint);
+                        }
+                        resetFiberSelection();
+                        return;
+                    }
                     
                     if (!existingConn) {
                         // Добавляем новое соединение
@@ -2950,183 +3325,1260 @@ function setupFiberConnectionHandlers() {
         });
     });
     
-    // Обработчики кликов по соединениям
+    // Обработчики кликов по соединениям для удаления
     document.querySelectorAll('#fiber-connections-svg path[id^="connection-"], #fiber-connections-svg polygon[data-connection-index]').forEach(element => {
         element.addEventListener('click', function(e) {
             e.stopPropagation();
             const connIndex = parseInt(this.getAttribute('data-connection-index'));
             if (connIndex >= 0 && connIndex < fiberConnections.length) {
-                if (isEditMode) {
-                    // В режиме редактирования - удаляем соединение
-                    fiberConnections.splice(connIndex, 1);
-                    sleeveObj.properties.set('fiberConnections', fiberConnections);
-                    saveData();
-                    showObjectInfo(sleeveObj);
-                } else {
-                    // В режиме просмотра - выделяем соединение
-                    highlightConnection(connIndex, fiberConnections);
-                }
+                fiberConnections.splice(connIndex, 1);
+                sleeveObj.properties.set('fiberConnections', fiberConnections);
+                saveData();
+                showObjectInfo(sleeveObj);
             }
+        });
+    });
+    
+    // Обработчики изменения подписей жил
+    document.querySelectorAll('.fiber-label-input').forEach(input => {
+        input.addEventListener('change', function(e) {
+            e.stopPropagation();
+            const cableId = this.getAttribute('data-cable-id');
+            const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
+            const newLabel = this.value.trim();
+            
+            updateFiberLabel(sleeveObj, cableId, fiberNumber, newLabel);
+        });
+    });
+    
+    // Обработчики подключения к узлу (для кроссов)
+    document.querySelectorAll('.btn-connect-node').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const cableId = this.getAttribute('data-cable-id');
+            const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
+            showNodeSelectionDialog(sleeveObj, cableId, fiberNumber);
+        });
+    });
+    
+    // Обработчики отключения от узла
+    document.querySelectorAll('.btn-disconnect-node').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const cableId = this.getAttribute('data-cable-id');
+            const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
+            disconnectFiberFromNode(sleeveObj, cableId, fiberNumber);
         });
     });
 }
 
-// Выделение соединения и связанных жил (только в режиме просмотра)
-function highlightConnection(connIndex, fiberConnections) {
-    if (!currentModalObject || isEditMode || connIndex < 0 || connIndex >= fiberConnections.length) return;
-    
-    // Устанавливаем selectedConnection
-    selectedConnection = connIndex;
-    const connection = fiberConnections[connIndex];
-    
-    // Сбрасываем предыдущее выделение жил
-    selectedFiberForConnection = null;
-    document.querySelectorAll('#fiber-connections-svg circle[id^="fiber-"]:not([id^="fiber-hitbox-"])').forEach(c => {
-        const isUsed = c.getAttribute('data-fiber-used') === 'true';
-        if (isUsed) {
-            c.setAttribute('stroke', '#dc2626');
-            c.setAttribute('stroke-width', '2.5');
-            c.setAttribute('stroke-dasharray', '3,3');
-            c.setAttribute('opacity', '0.7');
-            c.setAttribute('r', '16');
-        } else {
-            c.setAttribute('stroke', '#333');
-            c.setAttribute('stroke-width', '2');
-            c.setAttribute('stroke-dasharray', 'none');
-            c.setAttribute('opacity', '1');
-            c.setAttribute('r', '16');
-        }
-    });
-    
-    // Выделяем жилы, связанные с этим соединением
-    const fromKey = `fiber-${connection.from.cableId}-${connection.from.fiberNumber}`;
-    const toKey = `fiber-${connection.to.cableId}-${connection.to.fiberNumber}`;
-    
-    const fromCircle = document.getElementById(fromKey);
-    const toCircle = document.getElementById(toKey);
-    
-    if (fromCircle) {
-        fromCircle.setAttribute('stroke', '#f59e0b');
-        fromCircle.setAttribute('stroke-width', '4');
-        fromCircle.setAttribute('stroke-dasharray', 'none');
-        fromCircle.setAttribute('opacity', '1');
-        fromCircle.setAttribute('r', '18');
+// Обновление подписи жилы
+function updateFiberLabel(sleeveObj, cableId, fiberNumber, label) {
+    let fiberLabels = sleeveObj.properties.get('fiberLabels');
+    if (!fiberLabels) {
+        fiberLabels = {};
     }
     
-    if (toCircle) {
-        toCircle.setAttribute('stroke', '#f59e0b');
-        toCircle.setAttribute('stroke-width', '4');
-        toCircle.setAttribute('stroke-dasharray', 'none');
-        toCircle.setAttribute('opacity', '1');
-        toCircle.setAttribute('r', '18');
+    const key = `${cableId}-${fiberNumber}`;
+    if (label) {
+        fiberLabels[key] = label;
+    } else {
+        delete fiberLabels[key];
     }
     
-    // Выделяем само соединение напрямую
-    const connectionPath = document.getElementById(`connection-${connIndex}`);
-    const connectionArrow = document.querySelector(`#fiber-connections-svg polygon[data-connection-index="${connIndex}"]`);
-    
-    if (connectionPath) {
-        connectionPath.setAttribute('stroke', '#f59e0b');
-        connectionPath.setAttribute('stroke-width', '3');
-        connectionPath.setAttribute('opacity', '1');
-        connectionPath.setAttribute('stroke-dasharray', 'none');
-    }
-    
-    if (connectionArrow) {
-        connectionArrow.setAttribute('fill', '#f59e0b');
-        connectionArrow.setAttribute('opacity', '1');
-    }
-    
-    // Также обновляем все остальные соединения через updateConnectionStyles
-    updateConnectionStyles();
+    sleeveObj.properties.set('fiberLabels', fiberLabels);
+    saveData();
 }
 
-// Обновление стилей соединений в зависимости от выбранной жилы или соединения (только в режиме просмотра)
-function updateConnectionStyles() {
-    if (!currentModalObject || isEditMode) return; // Не обновляем в режиме редактирования
+// ==================== Трассировка жил ====================
+
+// Получает уникальный ID объекта (создаёт если нет)
+function getObjectUniqueId(obj) {
+    if (!obj || !obj.properties) return null;
+    let id = obj.properties.get('uniqueId');
+    if (!id) {
+        const type = obj.properties.get('type') || 'obj';
+        id = `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        obj.properties.set('uniqueId', id);
+    }
+    return id;
+}
+
+// Трассировка жилы начиная с указанного объекта (кросса или муфты)
+function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
+    const path = [];
+    const visitedFibers = new Set();
+    const visitedObjects = new Set();
     
-    const fiberConnections = currentModalObject.properties.get('fiberConnections') || [];
+    // Находим кабель по ID
+    function findCableById(cableId) {
+        return objects.find(obj => 
+            obj.properties && 
+            obj.properties.get('type') === 'cable' &&
+            obj.properties.get('uniqueId') === cableId
+        );
+    }
     
-    document.querySelectorAll('#fiber-connections-svg path[id^="connection-"]').forEach(path => {
-        const connIndex = parseInt(path.getAttribute('data-connection-index'));
-        if (connIndex >= 0 && connIndex < fiberConnections.length) {
-            const connection = fiberConnections[connIndex];
+    // Находит соединение жил в муфте/кроссе
+    function findFiberConnection(cableId, fiberNumber, sleeveObj) {
+        const connections = sleeveObj.properties.get('fiberConnections') || [];
+        
+        for (const conn of connections) {
+            if (conn.from.cableId === cableId && conn.from.fiberNumber === fiberNumber) {
+                return { cableId: conn.to.cableId, fiberNumber: conn.to.fiberNumber };
+            }
+            if (conn.to.cableId === cableId && conn.to.fiberNumber === fiberNumber) {
+                return { cableId: conn.from.cableId, fiberNumber: conn.from.fiberNumber };
+            }
+        }
+        return null;
+    }
+    
+    // Находим другой конец кабеля
+    function getOtherEnd(cable, currentObj) {
+        const fromObj = cable.properties.get('from');
+        const toObj = cable.properties.get('to');
+        
+        if (!fromObj || !toObj) return null;
+        
+        // Сначала пробуем сравнить по ссылке
+        if (fromObj === currentObj) {
+            return toObj;
+        } else if (toObj === currentObj) {
+            return fromObj;
+        }
+        
+        // Затем сравниваем по uniqueId
+        const currentId = getObjectUniqueId(currentObj);
+        const fromId = getObjectUniqueId(fromObj);
+        const toId = getObjectUniqueId(toObj);
+        
+        if (fromId === currentId) {
+            return toObj;
+        } else if (toId === currentId) {
+            return fromObj;
+        }
+        
+        // Если не нашли по ID, сравниваем по координатам
+        const currentCoords = currentObj.geometry ? currentObj.geometry.getCoordinates() : null;
+        const fromCoords = fromObj.geometry ? fromObj.geometry.getCoordinates() : null;
+        const toCoords = toObj.geometry ? toObj.geometry.getCoordinates() : null;
+        
+        if (currentCoords && fromCoords && 
+            Math.abs(currentCoords[0] - fromCoords[0]) < 0.0001 && 
+            Math.abs(currentCoords[1] - fromCoords[1]) < 0.0001) {
+            return toObj;
+        } else if (currentCoords && toCoords && 
+            Math.abs(currentCoords[0] - toCoords[0]) < 0.0001 && 
+            Math.abs(currentCoords[1] - toCoords[1]) < 0.0001) {
+            return fromObj;
+        }
+        
+        return null;
+    }
+    
+    // Находим начальный кабель
+    const startCable = findCableById(startCableId);
+    if (!startCable) return { path: [], error: 'Кабель не найден' };
+    
+    const startObjectId = getObjectUniqueId(startObject);
+    const startObjType = startObject.properties.get('type');
+    const startObjName = startObject.properties.get('name') || getObjectTypeName(startObjType);
+    
+    // Добавляем начальный объект (кросс или муфта)
+    path.push({
+        type: 'start',
+        objectType: startObjType,
+        objectName: startObjName,
+        object: startObject
+    });
+    
+    visitedObjects.add(startObjectId);
+    
+    // Текущее состояние трассировки
+    let currentCableId = startCableId;
+    let currentFiberNumber = startFiberNumber;
+    let currentCable = startCable;
+    let currentObject = startObject;
+    
+    const maxIterations = 100;
+    let iterations = 0;
+    
+    while (iterations < maxIterations) {
+        iterations++;
+        
+        // Добавляем текущий кабель в путь
+        const cableName = currentCable.properties.get('cableName') || getCableDescription(currentCable.properties.get('cableType'));
+        path.push({
+            type: 'cable',
+            cableId: currentCableId,
+            cableName: cableName,
+            fiberNumber: currentFiberNumber,
+            cable: currentCable
+        });
+        
+        // Находим следующий объект (другой конец кабеля)
+        const nextObject = getOtherEnd(currentCable, currentObject);
+        
+        if (!nextObject) break;
+        
+        const nextObjectId = getObjectUniqueId(nextObject);
+        
+        // Проверяем, не зациклились ли мы
+        if (visitedObjects.has(nextObjectId)) break;
+        visitedObjects.add(nextObjectId);
+        
+        const objType = nextObject.properties.get('type');
+        const objName = nextObject.properties.get('name') || getObjectTypeName(objType);
+        
+        // Добавляем следующий объект в путь
+        path.push({
+            type: 'object',
+            objectType: objType,
+            objectName: objName,
+            object: nextObject
+        });
+        
+        // Если это муфта или кросс - ищем соединение с другой жилой
+        if (objType === 'sleeve' || objType === 'cross') {
+            // Для кросса проверяем подключение к узлу
+            if (objType === 'cross') {
+                const nodeConnections = nextObject.properties.get('nodeConnections') || {};
+                const nodeConnKey = `${currentCableId}-${currentFiberNumber}`;
+                const nodeConn = nodeConnections[nodeConnKey];
+                
+                if (nodeConn) {
+                    // Жила подключена к узлу - добавляем узел в путь и завершаем
+                    const connectedNode = objects.find(obj => 
+                        obj.properties && 
+                        obj.properties.get('type') === 'node' &&
+                        obj.properties.get('uniqueId') === nodeConn.nodeId
+                    );
+                    
+                    if (connectedNode) {
+                        path.push({
+                            type: 'nodeConnection',
+                            cableId: currentCableId,
+                            fiberNumber: currentFiberNumber,
+                            nodeName: nodeConn.nodeName,
+                            cross: nextObject
+                        });
+                        
+                        path.push({
+                            type: 'object',
+                            objectType: 'node',
+                            objectName: connectedNode.properties.get('name') || 'Узел сети',
+                            object: connectedNode
+                        });
+                    }
+                    break;
+                }
+            }
             
-            // Проверяем, выбрано ли это соединение напрямую
-            const isConnectionSelected = selectedConnection !== null && selectedConnection === connIndex;
+            // Проверяем, не проходили ли мы эту жилу
+            const fiberKey = `${currentCableId}-${currentFiberNumber}`;
+            if (visitedFibers.has(fiberKey)) break;
+            visitedFibers.add(fiberKey);
             
-            // Или связано ли это соединение с выбранной жилой
-            const isFiberSelected = selectedFiberForConnection && (
-                (selectedFiberForConnection.cableId === connection.from.cableId && 
-                 selectedFiberForConnection.fiberNumber === connection.from.fiberNumber) ||
-                (selectedFiberForConnection.cableId === connection.to.cableId && 
-                 selectedFiberForConnection.fiberNumber === connection.to.fiberNumber)
-            );
+            // Ищем соединение с другой жилой
+            const nextFiber = findFiberConnection(currentCableId, currentFiberNumber, nextObject);
             
-            if (isConnectionSelected || isFiberSelected) {
-                path.setAttribute('stroke', '#f59e0b');
-                path.setAttribute('stroke-width', '3');
-                path.setAttribute('opacity', '1');
-                path.setAttribute('stroke-dasharray', 'none');
-            } else {
-                path.setAttribute('stroke', '#3b82f6');
-                path.setAttribute('stroke-width', '2');
-                path.setAttribute('opacity', '0.8');
-                path.setAttribute('stroke-dasharray', '5,3');
+            if (!nextFiber) {
+                // Соединение не найдено - конец трассы
+                break;
+            }
+            
+            // Находим следующий кабель
+            const nextCable = findCableById(nextFiber.cableId);
+            if (!nextCable) break;
+            
+            // Добавляем соединение в путь
+            const fiberLabels = nextObject.properties.get('fiberLabels') || {};
+            const fromLabel = fiberLabels[`${currentCableId}-${currentFiberNumber}`] || '';
+            const toLabel = fiberLabels[`${nextFiber.cableId}-${nextFiber.fiberNumber}`] || '';
+            
+            path.push({
+                type: 'connection',
+                fromCableId: currentCableId,
+                fromFiberNumber: currentFiberNumber,
+                fromLabel: fromLabel,
+                toCableId: nextFiber.cableId,
+                toFiberNumber: nextFiber.fiberNumber,
+                toLabel: toLabel,
+                sleeve: nextObject
+            });
+            
+            // Обновляем текущее состояние
+            currentCableId = nextFiber.cableId;
+            currentFiberNumber = nextFiber.fiberNumber;
+            currentCable = nextCable;
+            currentObject = nextObject;
+            
+        } else if (objType === 'support') {
+            // Опора - ищем следующий кабель, проходящий через неё
+            const nextCableForSupport = findNextCableThroughObject(nextObject, currentCable);
+            
+            if (!nextCableForSupport) {
+                // Нет следующего кабеля - конец трассы
+                break;
+            }
+            
+            // Продолжаем с тем же номером жилы
+            currentCable = nextCableForSupport;
+            currentCableId = nextCableForSupport.properties.get('uniqueId');
+            currentObject = nextObject;
+            // currentFiberNumber остаётся тем же
+            
+        } else {
+            // Узел или другой тип - конец трассы
+            break;
+        }
+    }
+    
+    // Вспомогательная функция для поиска следующего кабеля через объект
+    function findNextCableThroughObject(obj, excludeCable) {
+        const objCoords = obj.geometry ? obj.geometry.getCoordinates() : null;
+        const objId = getObjectUniqueId(obj);
+        const excludeId = excludeCable ? excludeCable.properties.get('uniqueId') : null;
+        
+        // Ищем другой кабель, подключенный к этому объекту
+        for (const cable of objects) {
+            if (!cable.properties || cable.properties.get('type') !== 'cable') continue;
+            
+            const cableId = cable.properties.get('uniqueId');
+            if (excludeId && cableId === excludeId) continue;
+            
+            const fromObj = cable.properties.get('from');
+            const toObj = cable.properties.get('to');
+            
+            if (!fromObj || !toObj) continue;
+            
+            // Проверяем по ссылке
+            if (fromObj === obj || toObj === obj) {
+                return cable;
+            }
+            
+            // Проверяем по uniqueId
+            const fromId = getObjectUniqueId(fromObj);
+            const toId = getObjectUniqueId(toObj);
+            
+            if (objId && (fromId === objId || toId === objId)) {
+                return cable;
+            }
+            
+            // Проверяем по координатам
+            if (objCoords) {
+                const fromCoords = fromObj.geometry ? fromObj.geometry.getCoordinates() : null;
+                const toCoords = toObj.geometry ? toObj.geometry.getCoordinates() : null;
+                
+                if (fromCoords && Math.abs(fromCoords[0] - objCoords[0]) < 0.0001 && Math.abs(fromCoords[1] - objCoords[1]) < 0.0001) {
+                    return cable;
+                }
+                if (toCoords && Math.abs(toCoords[0] - objCoords[0]) < 0.0001 && Math.abs(toCoords[1] - objCoords[1]) < 0.0001) {
+                    return cable;
+                }
+            }
+        }
+        
+        return null;
+    }
+    
+    return { path, error: null };
+}
+
+// Находит все соединённые жилы через муфты
+function traceFiberPath(startCableId, startFiberNumber) {
+    const path = [];
+    const visitedFibers = new Set();
+    const visitedObjects = new Set();
+    
+    // Функция для поиска следующего соединения в муфте/кроссе
+    function findFiberConnection(cableId, fiberNumber, sleeveObj) {
+        const connections = sleeveObj.properties.get('fiberConnections') || [];
+        
+        for (const conn of connections) {
+            if (conn.from.cableId === cableId && conn.from.fiberNumber === fiberNumber) {
+                return { cableId: conn.to.cableId, fiberNumber: conn.to.fiberNumber };
+            }
+            if (conn.to.cableId === cableId && conn.to.fiberNumber === fiberNumber) {
+                return { cableId: conn.from.cableId, fiberNumber: conn.from.fiberNumber };
+            }
+        }
+        return null;
+    }
+    
+    // Находим кабель по ID
+    function findCableById(cableId) {
+        return objects.find(obj => 
+            obj.properties && 
+            obj.properties.get('type') === 'cable' &&
+            obj.properties.get('uniqueId') === cableId
+        );
+    }
+    
+    // Находим другой конец кабеля (не равный данному объекту)
+    function getOtherEnd(cable, currentObj) {
+        const fromObj = cable.properties.get('from');
+        const toObj = cable.properties.get('to');
+        
+        if (!fromObj || !toObj) return null;
+        
+        // Сначала пробуем сравнить по ссылке
+        if (fromObj === currentObj) {
+            return toObj;
+        } else if (toObj === currentObj) {
+            return fromObj;
+        }
+        
+        // Затем сравниваем по uniqueId
+        const currentId = getObjectUniqueId(currentObj);
+        const fromId = getObjectUniqueId(fromObj);
+        const toId = getObjectUniqueId(toObj);
+        
+        if (fromId === currentId) {
+            return toObj;
+        } else if (toId === currentId) {
+            return fromObj;
+        }
+        
+        // Если не нашли по ID, сравниваем по координатам
+        const currentCoords = currentObj.geometry ? currentObj.geometry.getCoordinates() : null;
+        const fromCoords = fromObj.geometry ? fromObj.geometry.getCoordinates() : null;
+        const toCoords = toObj.geometry ? toObj.geometry.getCoordinates() : null;
+        
+        if (currentCoords && fromCoords && 
+            Math.abs(currentCoords[0] - fromCoords[0]) < 0.0001 && 
+            Math.abs(currentCoords[1] - fromCoords[1]) < 0.0001) {
+            return toObj;
+        } else if (currentCoords && toCoords && 
+            Math.abs(currentCoords[0] - toCoords[0]) < 0.0001 && 
+            Math.abs(currentCoords[1] - toCoords[1]) < 0.0001) {
+            return fromObj;
+        }
+        
+        return null;
+    }
+    
+    // Находим начальный кабель
+    const startCable = findCableById(startCableId);
+    if (!startCable) return { path: [], error: 'Кабель не найден' };
+    
+    // Начинаем трассировку
+    let currentCableId = startCableId;
+    let currentFiberNumber = startFiberNumber;
+    let currentCable = startCable;
+    
+    // Добавляем начальную точку
+    const fromObj = currentCable.properties.get('from');
+    const toObj = currentCable.properties.get('to');
+    const cableName = currentCable.properties.get('cableName') || getCableDescription(currentCable.properties.get('cableType'));
+    
+    path.push({
+        type: 'start',
+        objectType: fromObj.properties.get('type'),
+        objectName: fromObj.properties.get('name') || getObjectTypeName(fromObj.properties.get('type')),
+        object: fromObj
+    });
+    
+    path.push({
+        type: 'cable',
+        cableId: currentCableId,
+        cableName: cableName,
+        fiberNumber: currentFiberNumber,
+        cable: currentCable
+    });
+    
+    // Продолжаем трассировку через муфты
+    let currentObject = toObj;
+    const maxIterations = 100;
+    let iterations = 0;
+    
+    while (iterations < maxIterations) {
+        iterations++;
+        
+        if (!currentObject) break;
+        
+        const currentObjectId = getObjectUniqueId(currentObject);
+        
+        // Проверяем, не зациклились ли мы
+        if (visitedObjects.has(currentObjectId)) break;
+        visitedObjects.add(currentObjectId);
+        
+        const objType = currentObject.properties.get('type');
+        const objName = currentObject.properties.get('name') || getObjectTypeName(objType);
+        
+        path.push({
+            type: 'object',
+            objectType: objType,
+            objectName: objName,
+            object: currentObject
+        });
+        
+        // Если это муфта или кросс, ищем соединение с другой жилой
+        if (objType === 'sleeve' || objType === 'cross') {
+            // Для кросса сначала проверяем подключение к узлу
+            if (objType === 'cross') {
+                const nodeConnections = currentObject.properties.get('nodeConnections') || {};
+                const nodeConnKey = `${currentCableId}-${currentFiberNumber}`;
+                const nodeConn = nodeConnections[nodeConnKey];
+                
+                if (nodeConn) {
+                    // Жила подключена к узлу - добавляем узел в путь и завершаем
+                    const connectedNode = objects.find(obj => 
+                        obj.properties && 
+                        obj.properties.get('type') === 'node' &&
+                        obj.properties.get('uniqueId') === nodeConn.nodeId
+                    );
+                    
+                    if (connectedNode) {
+                        path.push({
+                            type: 'nodeConnection',
+                            cableId: currentCableId,
+                            fiberNumber: currentFiberNumber,
+                            nodeName: nodeConn.nodeName,
+                            cross: currentObject
+                        });
+                        
+                        path.push({
+                            type: 'object',
+                            objectType: 'node',
+                            objectName: connectedNode.properties.get('name') || 'Узел сети',
+                            object: connectedNode
+                        });
+                    }
+                    break;
+                }
+            }
+            
+            // Проверяем, не проходили ли мы уже эту жилу
+            const fiberKey = `${currentCableId}-${currentFiberNumber}`;
+            if (visitedFibers.has(fiberKey)) break;
+            visitedFibers.add(fiberKey);
+            
+            // Ищем соединение с другой жилой
+            const nextFiber = findFiberConnection(currentCableId, currentFiberNumber, currentObject);
+            
+            if (!nextFiber) {
+                // Соединение не найдено - конец трассы в этой муфте
+                break;
+            }
+            
+            // Находим следующий кабель
+            const nextCable = findCableById(nextFiber.cableId);
+            if (!nextCable) break;
+            
+            // Добавляем соединение в путь
+            const fiberLabels = currentObject.properties.get('fiberLabels') || {};
+            const fromLabel = fiberLabels[`${currentCableId}-${currentFiberNumber}`] || '';
+            const toLabel = fiberLabels[`${nextFiber.cableId}-${nextFiber.fiberNumber}`] || '';
+            
+            path.push({
+                type: 'connection',
+                fromCableId: currentCableId,
+                fromFiberNumber: currentFiberNumber,
+                fromLabel: fromLabel,
+                toCableId: nextFiber.cableId,
+                toFiberNumber: nextFiber.fiberNumber,
+                toLabel: toLabel,
+                sleeve: currentObject
+            });
+            
+            // Обновляем текущий кабель и жилу
+            currentCableId = nextFiber.cableId;
+            currentFiberNumber = nextFiber.fiberNumber;
+            currentCable = nextCable;
+            
+            // Добавляем кабель в путь
+            const nextCableName = nextCable.properties.get('cableName') || getCableDescription(nextCable.properties.get('cableType'));
+            path.push({
+                type: 'cable',
+                cableId: currentCableId,
+                cableName: nextCableName,
+                fiberNumber: currentFiberNumber,
+                cable: nextCable
+            });
+            
+            // Определяем следующий объект (другой конец кабеля)
+            const nextObject = getOtherEnd(nextCable, currentObject);
+            
+            if (!nextObject) {
+                // Не удалось определить следующий объект
+                break;
+            }
+            
+            currentObject = nextObject;
+        } else if (objType === 'support') {
+            // Опора - ищем следующий кабель, проходящий через неё
+            const nextCableForSupport = findNextCableThroughSupport(currentObject, currentCable);
+            
+            if (!nextCableForSupport) {
+                // Нет следующего кабеля - конец трассы
+                break;
+            }
+            
+            // Добавляем следующий кабель в путь
+            const supportNextCableName = nextCableForSupport.properties.get('cableName') || getCableDescription(nextCableForSupport.properties.get('cableType'));
+            const supportNextCableId = nextCableForSupport.properties.get('uniqueId');
+            
+            path.push({
+                type: 'cable',
+                cableId: supportNextCableId,
+                cableName: supportNextCableName,
+                fiberNumber: currentFiberNumber,
+                cable: nextCableForSupport
+            });
+            
+            // Находим следующий объект
+            const nextObjectAfterSupport = getOtherEnd(nextCableForSupport, currentObject);
+            
+            if (!nextObjectAfterSupport) {
+                break;
+            }
+            
+            currentCable = nextCableForSupport;
+            currentCableId = supportNextCableId;
+            currentObject = nextObjectAfterSupport;
+            // currentFiberNumber остаётся тем же
+            
+        } else {
+            // Узел или другой тип - конец трассы
+            break;
+        }
+    }
+    
+    // Вспомогательная функция для поиска следующего кабеля через опору
+    function findNextCableThroughSupport(supportObj, excludeCable) {
+        const supportCoords = supportObj.geometry ? supportObj.geometry.getCoordinates() : null;
+        const supportId = getObjectUniqueId(supportObj);
+        const excludeId = excludeCable ? excludeCable.properties.get('uniqueId') : null;
+        
+        for (const cable of objects) {
+            if (!cable.properties || cable.properties.get('type') !== 'cable') continue;
+            
+            const cableId = cable.properties.get('uniqueId');
+            if (excludeId && cableId === excludeId) continue;
+            
+            const fromObj = cable.properties.get('from');
+            const toObj = cable.properties.get('to');
+            
+            if (!fromObj || !toObj) continue;
+            
+            // Проверяем по ссылке
+            if (fromObj === supportObj || toObj === supportObj) {
+                return cable;
+            }
+            
+            // Проверяем по uniqueId
+            const fromId = getObjectUniqueId(fromObj);
+            const toId = getObjectUniqueId(toObj);
+            
+            if (supportId && (fromId === supportId || toId === supportId)) {
+                return cable;
+            }
+            
+            // Проверяем по координатам
+            if (supportCoords) {
+                const fromCoords = fromObj.geometry ? fromObj.geometry.getCoordinates() : null;
+                const toCoords = toObj.geometry ? toObj.geometry.getCoordinates() : null;
+                
+                if (fromCoords && Math.abs(fromCoords[0] - supportCoords[0]) < 0.0001 && Math.abs(fromCoords[1] - supportCoords[1]) < 0.0001) {
+                    return cable;
+                }
+                if (toCoords && Math.abs(toCoords[0] - supportCoords[0]) < 0.0001 && Math.abs(toCoords[1] - supportCoords[1]) < 0.0001) {
+                    return cable;
+                }
+            }
+        }
+        
+        return null;
+    }
+    
+    return { path, iterations };
+}
+
+// Получает название типа объекта
+function getObjectTypeName(type) {
+    switch (type) {
+        case 'support': return 'Опора связи';
+        case 'sleeve': return 'Кабельная муфта';
+        case 'cross': return 'Оптический кросс';
+        case 'node': return 'Узел сети';
+        default: return 'Объект';
+    }
+}
+
+// Показывает модальное окно с результатами трассировки
+function showFiberTrace(cableId, fiberNumber) {
+    const result = traceFiberPath(cableId, fiberNumber);
+    
+    if (result.error) {
+        alert('Ошибка трассировки: ' + result.error);
+        return;
+    }
+    
+    const path = result.path;
+    
+    // Создаем модальное окно с результатами
+    const modal = document.getElementById('infoModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalContent = document.getElementById('modalInfo');
+    
+    if (!modal || !modalContent) return;
+    
+    modalTitle.textContent = 'Трассировка жилы';
+    
+    let html = '<div class="trace-result" style="padding: 10px;">';
+    html += '<div style="background: #e0f2fe; padding: 12px; border-radius: 8px; margin-bottom: 15px;">';
+    html += '<strong>Маршрут жилы:</strong>';
+    html += '</div>';
+    
+    html += '<div class="trace-path" style="position: relative; padding-left: 20px;">';
+    
+    // Отрисовываем путь
+    path.forEach((item, index) => {
+        const isLast = index === path.length - 1;
+        
+        if (item.type === 'start' || item.type === 'object') {
+            // Объект (начало/конец/промежуточный)
+            let icon = '📍';
+            let color = '#6b7280';
+            if (item.objectType === 'sleeve') {
+                icon = '🔗';
+                color = '#ef4444';
+            } else if (item.objectType === 'cross') {
+                icon = '📦';
+                color = '#8b5cf6';
+            } else if (item.objectType === 'node') {
+                icon = '🖥️';
+                color = '#22c55e';
+            } else if (item.objectType === 'support') {
+                icon = '📡';
+                color = '#3b82f6';
+            }
+            
+            html += `<div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: ${isLast ? '0' : '8px'};">`;
+            html += `<div style="width: 32px; height: 32px; border-radius: 50%; background: ${color}; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 16px;">${icon}</div>`;
+            html += `<div style="flex: 1; padding-top: 4px;">`;
+            html += `<strong style="color: ${color};">${item.objectName}</strong>`;
+            html += `<div style="font-size: 0.8rem; color: #6b7280;">${getObjectTypeName(item.objectType)}</div>`;
+            html += `</div></div>`;
+        } else if (item.type === 'nodeConnection') {
+            // Подключение к узлу (от кросса)
+            html += `<div style="display: flex; align-items: center; gap: 4px; margin: 4px 0 4px 24px; font-size: 0.8rem; color: #22c55e;">`;
+            html += `<span>🔌 Вывод на узел:</span>`;
+            html += `<span style="background: #dcfce7; padding: 2px 6px; border-radius: 4px;">Жила ${item.fiberNumber} → ${item.nodeName}</span>`;
+            html += `</div>`;
+        } else if (item.type === 'cable') {
+            // Кабель
+            const fiberColors = getFiberColors(item.cable.properties.get('cableType'));
+            const fiber = fiberColors.find(f => f.number === item.fiberNumber);
+            const fiberColor = fiber ? fiber.color : '#888';
+            const fiberName = fiber ? fiber.name : `Жила ${item.fiberNumber}`;
+            
+            html += `<div style="display: flex; align-items: center; gap: 8px; margin: 4px 0 4px 12px; padding: 8px 12px; background: #f8f9fa; border-radius: 6px; border-left: 4px solid ${fiberColor};">`;
+            html += `<span style="font-size: 0.875rem;">📦 <strong>${item.cableName}</strong></span>`;
+            html += `<span style="background: ${fiberColor}; color: ${fiberColor === '#FFFFFF' || fiberColor === '#FFFACD' ? '#000' : '#fff'}; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">Жила ${item.fiberNumber}: ${fiberName}</span>`;
+            html += `</div>`;
+        } else if (item.type === 'connection') {
+            // Соединение в муфте
+            html += `<div style="display: flex; align-items: center; gap: 4px; margin: 4px 0 4px 24px; font-size: 0.8rem; color: #6366f1;">`;
+            html += `<span>↔️ Соединение:</span>`;
+            html += `<span style="background: #e0e7ff; padding: 2px 6px; border-radius: 4px;">Жила ${item.fromFiberNumber}</span>`;
+            if (item.fromLabel) html += `<span style="color: #9ca3af;">[${item.fromLabel}]</span>`;
+            html += `<span>⟷</span>`;
+            html += `<span style="background: #e0e7ff; padding: 2px 6px; border-radius: 4px;">Жила ${item.toFiberNumber}</span>`;
+            if (item.toLabel) html += `<span style="color: #9ca3af;">[${item.toLabel}]</span>`;
+            html += `</div>`;
+        }
+    });
+    
+    html += '</div>';
+    
+    // Кнопка для подсветки на карте
+    html += '<div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #e5e7eb;">';
+    html += `<button onclick="highlightTracePath()" class="btn-primary" style="width: 100%;">`;
+    html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">';
+    html += '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
+    html += '</svg>Показать на карте</button>';
+    html += '</div>';
+    
+    html += '</div>';
+    
+    modalContent.innerHTML = html;
+    modal.style.display = 'block';
+    
+    // Сохраняем путь для подсветки
+    window.currentTracePath = path;
+}
+
+// Подсветка трассы на карте
+let traceHighlightObjects = [];
+
+function highlightTracePath() {
+    // Очищаем предыдущую подсветку
+    clearTraceHighlight();
+    
+    const path = window.currentTracePath;
+    if (!path || path.length === 0) return;
+    
+    // Собираем координаты для подсветки
+    path.forEach(item => {
+        if (item.type === 'cable' && item.cable) {
+            // Подсвечиваем кабель
+            const coords = item.cable.geometry.getCoordinates();
+            const highlightLine = new ymaps.Polyline(coords, {}, {
+                strokeColor: '#f59e0b',
+                strokeWidth: 8,
+                strokeOpacity: 0.7,
+                zIndex: 1500
+            });
+            traceHighlightObjects.push(highlightLine);
+            myMap.geoObjects.add(highlightLine);
+        } else if ((item.type === 'start' || item.type === 'object') && item.object) {
+            // Подсвечиваем объект
+            const coords = item.object.geometry.getCoordinates();
+            const highlightCircle = new ymaps.Circle([coords, 30], {}, {
+                fillColor: '#f59e0b',
+                fillOpacity: 0.5,
+                strokeColor: '#f59e0b',
+                strokeWidth: 3,
+                zIndex: 1500
+            });
+            traceHighlightObjects.push(highlightCircle);
+            myMap.geoObjects.add(highlightCircle);
+        }
+    });
+    
+    // Центрируем карту на трассе
+    if (traceHighlightObjects.length > 0) {
+        const bounds = [];
+        path.forEach(item => {
+            if (item.object && item.object.geometry) {
+                bounds.push(item.object.geometry.getCoordinates());
+            } else if (item.cable && item.cable.geometry) {
+                const coords = item.cable.geometry.getCoordinates();
+                if (Array.isArray(coords[0])) {
+                    coords.forEach(c => bounds.push(c));
+                } else {
+                    bounds.push(coords);
+                }
+            }
+        });
+        
+        if (bounds.length > 0) {
+            myMap.setBounds(ymaps.util.bounds.fromPoints(bounds), {
+                checkZoomRange: true,
+                zoomMargin: 50
+            });
+        }
+    }
+    
+    // Автоматически очищаем подсветку через 10 секунд
+    setTimeout(clearTraceHighlight, 10000);
+}
+
+function clearTraceHighlight() {
+    traceHighlightObjects.forEach(obj => {
+        myMap.geoObjects.remove(obj);
+    });
+    traceHighlightObjects = [];
+}
+
+// ==================== Соединения кросс-узел ====================
+
+// Массив для хранения визуальных линий соединений кросс-узел
+let nodeConnectionLines = [];
+
+// Получает список доступных узлов для подключения
+function getAvailableNodes() {
+    return objects.filter(obj => 
+        obj.properties && obj.properties.get('type') === 'node'
+    );
+}
+
+// Показывает диалог выбора узла для подключения жилы
+function showNodeSelectionDialog(crossObj, cableId, fiberNumber) {
+    const nodes = getAvailableNodes();
+    
+    if (nodes.length === 0) {
+        alert('Нет доступных узлов для подключения. Сначала создайте узел сети.');
+        return;
+    }
+    
+    // Создаем простой диалог выбора
+    let nodeList = 'Выберите узел для подключения жилы:\n\n';
+    nodes.forEach((node, index) => {
+        const name = node.properties.get('name') || 'Узел без имени';
+        nodeList += `${index + 1}. ${name}\n`;
+    });
+    nodeList += '\nВведите номер узла (или 0 для отмены):';
+    
+    const choice = prompt(nodeList);
+    if (choice === null || choice === '0' || choice === '') return;
+    
+    const nodeIndex = parseInt(choice) - 1;
+    if (nodeIndex >= 0 && nodeIndex < nodes.length) {
+        connectFiberToNode(crossObj, cableId, fiberNumber, nodes[nodeIndex]);
+    }
+}
+
+// Подключает жилу кросса к узлу
+function connectFiberToNode(crossObj, cableId, fiberNumber, nodeObj) {
+    let nodeConnections = crossObj.properties.get('nodeConnections');
+    if (!nodeConnections) {
+        nodeConnections = {};
+    }
+    
+    const key = `${cableId}-${fiberNumber}`;
+    const nodeUniqueId = nodeObj.properties.get('uniqueId') || generateUniqueId('node');
+    const crossUniqueId = crossObj.properties.get('uniqueId') || generateUniqueId('cross');
+    
+    if (!nodeObj.properties.get('uniqueId')) {
+        nodeObj.properties.set('uniqueId', nodeUniqueId);
+    }
+    if (!crossObj.properties.get('uniqueId')) {
+        crossObj.properties.set('uniqueId', crossUniqueId);
+    }
+    
+    nodeConnections[key] = {
+        nodeId: nodeUniqueId,
+        nodeName: nodeObj.properties.get('name') || 'Узел'
+    };
+    
+    crossObj.properties.set('nodeConnections', nodeConnections);
+    
+    // Создаем визуальную линию соединения
+    createNodeConnectionLine(crossObj, nodeObj, cableId, fiberNumber);
+    
+    saveData();
+    
+    // Обновляем модальное окно
+    showObjectInfo(crossObj);
+}
+
+// Отключает жилу от узла
+function disconnectFiberFromNode(crossObj, cableId, fiberNumber) {
+    let nodeConnections = crossObj.properties.get('nodeConnections');
+    if (!nodeConnections) return;
+    
+    const key = `${cableId}-${fiberNumber}`;
+    
+    // Удаляем визуальную линию
+    removeNodeConnectionLine(crossObj, cableId, fiberNumber);
+    
+    delete nodeConnections[key];
+    
+    crossObj.properties.set('nodeConnections', nodeConnections);
+    saveData();
+    
+    // Обновляем модальное окно
+    showObjectInfo(crossObj);
+}
+
+// Создает визуальную линию соединения кросс-узел
+function createNodeConnectionLine(crossObj, nodeObj, cableId, fiberNumber) {
+    const crossCoords = crossObj.geometry.getCoordinates();
+    const nodeCoords = nodeObj.geometry.getCoordinates();
+    const crossUniqueId = crossObj.properties.get('uniqueId');
+    const key = `${crossUniqueId}-${cableId}-${fiberNumber}`;
+    
+    // Удаляем старую линию, если есть
+    removeNodeConnectionLineByKey(key);
+    
+    // Создаем пунктирную линию соединения
+    const line = new ymaps.Polyline([crossCoords, nodeCoords], {
+        hintContent: `Жила ${fiberNumber} → ${nodeObj.properties.get('name') || 'Узел'}`,
+        balloonContent: `<strong>Соединение кросс-узел</strong><br>Жила ${fiberNumber}<br>→ ${nodeObj.properties.get('name') || 'Узел'}`
+    }, {
+        strokeColor: '#22c55e',
+        strokeWidth: 2,
+        strokeStyle: 'shortdash',
+        strokeOpacity: 0.8
+    });
+    
+    line.properties.set('type', 'nodeConnectionLine');
+    line.properties.set('connectionKey', key);
+    line.properties.set('crossId', crossUniqueId);
+    line.properties.set('cableId', cableId);
+    line.properties.set('fiberNumber', fiberNumber);
+    
+    nodeConnectionLines.push(line);
+    myMap.geoObjects.add(line);
+}
+
+// Удаляет визуальную линию соединения кросс-узел
+function removeNodeConnectionLine(crossObj, cableId, fiberNumber) {
+    const crossUniqueId = crossObj.properties.get('uniqueId');
+    const key = `${crossUniqueId}-${cableId}-${fiberNumber}`;
+    removeNodeConnectionLineByKey(key);
+}
+
+// Удаляет линию по ключу
+function removeNodeConnectionLineByKey(key) {
+    const lineIndex = nodeConnectionLines.findIndex(line => 
+        line.properties.get('connectionKey') === key
+    );
+    
+    if (lineIndex !== -1) {
+        myMap.geoObjects.remove(nodeConnectionLines[lineIndex]);
+        nodeConnectionLines.splice(lineIndex, 1);
+    }
+}
+
+// Обновляет все визуальные линии соединений кросс-узел
+function updateAllNodeConnectionLines() {
+    // Удаляем все существующие линии
+    nodeConnectionLines.forEach(line => {
+        myMap.geoObjects.remove(line);
+    });
+    nodeConnectionLines = [];
+    
+    // Проходим по всем кроссам и создаем линии
+    objects.forEach(obj => {
+        if (obj.properties && obj.properties.get('type') === 'cross') {
+            const nodeConnections = obj.properties.get('nodeConnections');
+            if (nodeConnections) {
+                Object.keys(nodeConnections).forEach(key => {
+                    const [cableId, fiberNumber] = key.split('-').slice(0, -1).join('-').split('-');
+                    const fiberNum = parseInt(key.split('-').pop());
+                    const conn = nodeConnections[key];
+                    
+                    // Находим узел по ID
+                    const nodeObj = objects.find(n => 
+                        n.properties && 
+                        n.properties.get('type') === 'node' &&
+                        n.properties.get('uniqueId') === conn.nodeId
+                    );
+                    
+                    if (nodeObj) {
+                        // Парсим ключ правильно (cableId может содержать дефисы)
+                        const parts = key.split('-');
+                        const fiberNumberParsed = parseInt(parts.pop());
+                        const cableIdParsed = parts.join('-');
+                        
+                        createNodeConnectionLine(obj, nodeObj, cableIdParsed, fiberNumberParsed);
+                    }
+                });
+            }
+        }
+    });
+}
+
+// Генерирует уникальный ID
+function generateUniqueId(prefix) {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+// Получает все жилы, подключенные к узлу
+function getNodeConnectedFibers(nodeUniqueId) {
+    const connectedFibers = [];
+    
+    if (!nodeUniqueId) return connectedFibers;
+    
+    // Проходим по всем кроссам и ищем соединения с этим узлом
+    objects.forEach(obj => {
+        if (obj.properties && obj.properties.get('type') === 'cross') {
+            const nodeConnections = obj.properties.get('nodeConnections');
+            const fiberLabels = obj.properties.get('fiberLabels') || {};
+            const crossName = obj.properties.get('name') || 'Кросс без имени';
+            const crossUniqueId = obj.properties.get('uniqueId');
+            
+            if (nodeConnections) {
+                Object.keys(nodeConnections).forEach(key => {
+                    const conn = nodeConnections[key];
+                    if (conn.nodeId === nodeUniqueId) {
+                        // Парсим ключ (cableId-fiberNumber)
+                        const parts = key.split('-');
+                        const fiberNumber = parseInt(parts.pop());
+                        const cableId = parts.join('-');
+                        
+                        connectedFibers.push({
+                            crossObj: obj,
+                            crossName: crossName,
+                            crossUniqueId: crossUniqueId,
+                            cableId: cableId,
+                            fiberNumber: fiberNumber,
+                            fiberLabel: fiberLabels[key] || ''
+                        });
+                    }
+                });
             }
         }
     });
     
-    // Обновляем стрелки
-    document.querySelectorAll('#fiber-connections-svg polygon[data-connection-index]').forEach(polygon => {
-        const connIndex = parseInt(polygon.getAttribute('data-connection-index'));
-        if (connIndex >= 0 && connIndex < fiberConnections.length) {
-            const connection = fiberConnections[connIndex];
+    return connectedFibers;
+}
+
+// Трассировка от узла сети
+function traceFromNode(crossUniqueId, cableId, fiberNumber) {
+    // Находим кросс
+    const crossObj = objects.find(obj => 
+        obj.properties && 
+        obj.properties.get('type') === 'cross' &&
+        obj.properties.get('uniqueId') === crossUniqueId
+    );
+    
+    if (!crossObj) {
+        alert('Кросс не найден');
+        return;
+    }
+    
+    // Находим узел, к которому подключена эта жила
+    const nodeConnections = crossObj.properties.get('nodeConnections') || {};
+    const key = `${cableId}-${fiberNumber}`;
+    const nodeConn = nodeConnections[key];
+    
+    let nodeObj = null;
+    if (nodeConn) {
+        nodeObj = objects.find(obj => 
+            obj.properties && 
+            obj.properties.get('type') === 'node' &&
+            obj.properties.get('uniqueId') === nodeConn.nodeId
+        );
+    }
+    
+    // Запускаем трассировку от кросса (начальная точка - кросс, направление - от узла)
+    showFiberTraceFromCross(crossObj, cableId, fiberNumber, nodeObj);
+}
+
+// Показывает трассировку начиная от кросса
+function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeObj = null) {
+    const result = traceFiberPathFromObject(startCrossObj, cableId, fiberNumber);
+    
+    if (result.error) {
+        alert(`Ошибка трассировки: ${result.error}`);
+        return;
+    }
+    
+    if (result.path.length === 0) {
+        alert('Путь не найден');
+        return;
+    }
+    
+    // Отображаем результат в модальном окне
+    const modal = document.getElementById('infoModal');
+    const title = document.getElementById('modalTitle');
+    const content = document.getElementById('modalInfo');
+    
+    title.textContent = `🔍 Трассировка жилы ${fiberNumber}`;
+    
+    let html = '<div class="trace-path" style="padding: 10px;">';
+    html += '<h4 style="margin: 0 0 16px 0; color: #1e40af; font-size: 1rem; font-weight: 600;">📍 Путь жилы:</h4>';
+    
+    // Если есть узел, добавляем его в начало пути
+    let stepNumber = 1;
+    if (startNodeObj) {
+        const nodeName = startNodeObj.properties.get('name') || 'Узел сети';
+        html += `<div style="display: flex; align-items: center; margin-bottom: 8px;">
+            <span style="width: 32px; height: 32px; background: #22c55e; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🖥️</span>
+            <div style="margin-left: 12px; padding: 10px 14px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0; flex: 1;">
+                <span style="font-weight: 600; color: #166534;">🖥️ ${escapeHtml(nodeName)}</span>
+                <span style="color: #6b7280; font-size: 0.8rem;"> (Узел сети - начало трассы)</span>
+            </div>
+        </div>`;
+        
+        // Добавляем стрелку соединения узел → кросс
+        html += `<div style="display: flex; align-items: center; margin-bottom: 8px;">
+            <span style="width: 32px; height: 32px; background: #8b5cf6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔌</span>
+            <div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1;">
+                <span style="color: #7c3aed;">Подключение к кроссу через жилу ${fiberNumber}</span>
+            </div>
+        </div>`;
+        stepNumber++;
+    }
+    
+    result.path.forEach((item, index) => {
+        if (item.type === 'start') {
+            const icon = item.objectType === 'cross' ? '📦' : (item.objectType === 'sleeve' ? '🔴' : '📍');
+            html += `<div style="display: flex; align-items: center; margin-bottom: 8px;">
+                <span style="width: 32px; height: 32px; background: #22c55e; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">${stepNumber}</span>
+                <div style="margin-left: 12px; padding: 10px 14px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0; flex: 1;">
+                    <span style="font-weight: 600; color: #166534;">${icon} ${escapeHtml(item.objectName)}</span>
+                    <span style="color: #6b7280; font-size: 0.8rem;"> (${getObjectTypeName(item.objectType)})</span>
+                </div>
+            </div>`;
+            stepNumber++;
+        } else if (item.type === 'cable') {
+            html += `<div style="display: flex; align-items: center; margin-bottom: 8px;">
+                <span style="width: 32px; height: 32px; background: #3b82f6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">➡</span>
+                <div style="margin-left: 12px; padding: 10px 14px; background: #eff6ff; border-radius: 6px; border: 1px solid #bfdbfe; flex: 1;">
+                    <span style="color: #1e40af;">📡 ${escapeHtml(item.cableName)}</span>
+                    <span style="background: #dbeafe; padding: 2px 8px; border-radius: 4px; font-weight: 600; color: #1e40af; margin-left: 8px;">Жила ${item.fiberNumber}</span>
+                </div>
+            </div>`;
+        } else if (item.type === 'connection') {
+            const fromLabelText = item.fromLabel ? ` (${escapeHtml(item.fromLabel)})` : '';
+            const toLabelText = item.toLabel ? ` (${escapeHtml(item.toLabel)})` : '';
+            html += `<div style="display: flex; align-items: center; margin-bottom: 8px;">
+                <span style="width: 32px; height: 32px; background: #f59e0b; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">⚡</span>
+                <div style="margin-left: 12px; padding: 10px 14px; background: #fffbeb; border-radius: 6px; border: 1px solid #fde68a; flex: 1;">
+                    <span style="color: #92400e;">🔗 Соединение: Жила ${item.fromFiberNumber}${fromLabelText} → Жила ${item.toFiberNumber}${toLabelText}</span>
+                </div>
+            </div>`;
+        } else if (item.type === 'nodeConnection') {
+            html += `<div style="display: flex; align-items: center; margin-bottom: 8px;">
+                <span style="width: 32px; height: 32px; background: #8b5cf6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔌</span>
+                <div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1;">
+                    <span style="color: #7c3aed;">🔌 Вывод на узел: Жила ${item.fiberNumber} → ${escapeHtml(item.nodeName)}</span>
+                </div>
+            </div>`;
+        } else if (item.type === 'object') {
+            const bgColor = item.objectType === 'sleeve' ? '#fef2f2' : (item.objectType === 'cross' ? '#f5f3ff' : (item.objectType === 'node' ? '#f0fdf4' : '#f8fafc'));
+            const borderColor = item.objectType === 'sleeve' ? '#fecaca' : (item.objectType === 'cross' ? '#ddd6fe' : (item.objectType === 'node' ? '#bbf7d0' : '#e2e8f0'));
+            const textColor = item.objectType === 'sleeve' ? '#dc2626' : (item.objectType === 'cross' ? '#7c3aed' : (item.objectType === 'node' ? '#166534' : '#475569'));
+            const icon = item.objectType === 'sleeve' ? '🔴' : (item.objectType === 'cross' ? '📦' : (item.objectType === 'node' ? '🖥️' : '📍'));
             
-            const isConnectionSelected = selectedConnection !== null && selectedConnection === connIndex;
-            const isFiberSelected = selectedFiberForConnection && (
-                (selectedFiberForConnection.cableId === connection.from.cableId && 
-                 selectedFiberForConnection.fiberNumber === connection.from.fiberNumber) ||
-                (selectedFiberForConnection.cableId === connection.to.cableId && 
-                 selectedFiberForConnection.fiberNumber === connection.to.fiberNumber)
-            );
-            
-            if (isConnectionSelected || isFiberSelected) {
-                polygon.setAttribute('fill', '#f59e0b');
-                polygon.setAttribute('opacity', '1');
-            } else {
-                polygon.setAttribute('fill', '#3b82f6');
-                polygon.setAttribute('opacity', '0.8');
-            }
+            html += `<div style="display: flex; align-items: center; margin-bottom: 8px;">
+                <span style="width: 32px; height: 32px; background: ${textColor}; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">${stepNumber}</span>
+                <div style="margin-left: 12px; padding: 10px 14px; background: ${bgColor}; border-radius: 6px; border: 1px solid ${borderColor}; flex: 1;">
+                    <span style="font-weight: 600; color: ${textColor};">${icon} ${escapeHtml(item.objectName)}</span>
+                    <span style="color: #6b7280; font-size: 0.8rem;"> (${getObjectTypeName(item.objectType)})</span>
+                </div>
+            </div>`;
+            stepNumber++;
         }
     });
+    
+    html += '</div>';
+    
+    // Итоговая статистика
+    const sleevesCount = result.path.filter(p => p.type === 'object' && p.objectType === 'sleeve').length;
+    const crossesCount = result.path.filter(p => p.type === 'object' && p.objectType === 'cross').length;
+    const cablesCount = result.path.filter(p => p.type === 'cable').length;
+    const connectionsCount = result.path.filter(p => p.type === 'connection').length;
+    
+    html += `<div style="margin-top: 16px; padding: 12px; background: #f1f5f9; border-radius: 6px; border: 1px solid #e2e8f0;">
+        <div style="font-weight: 600; color: #334155; margin-bottom: 8px;">📊 Статистика трассы:</div>
+        <div style="display: flex; flex-wrap: wrap; gap: 12px; font-size: 0.875rem; color: #64748b;">
+            <span>📡 Кабелей: ${cablesCount}</span>
+            <span>🔴 Муфт: ${sleevesCount}</span>
+            <span>📦 Кроссов: ${crossesCount}</span>
+            <span>🔗 Соединений: ${connectionsCount}</span>
+        </div>
+    </div>`;
+    
+    content.innerHTML = html;
+    modal.style.display = 'block';
 }
 
 // Сброс выделения жилы
 function resetFiberSelection() {
     selectedFiberForConnection = null;
-    selectedConnection = null;
-    document.querySelectorAll('#fiber-connections-svg circle[id^="fiber-"]:not([id^="fiber-hitbox-"])').forEach(c => {
+    document.querySelectorAll('#fiber-connections-svg circle[id^="fiber-"]').forEach(c => {
         const isUsed = c.getAttribute('data-fiber-used') === 'true';
-        if (isUsed) {
+        const isConnected = c.getAttribute('data-fiber-connected') === 'true';
+        
+        if (isConnected) {
+            c.setAttribute('stroke', '#3b82f6');
+            c.setAttribute('stroke-width', '3');
+        } else if (isUsed) {
             c.setAttribute('stroke', '#dc2626');
-            c.setAttribute('stroke-width', '2.5');
-            c.setAttribute('stroke-dasharray', '3,3');
-            c.setAttribute('opacity', '0.7');
-            c.setAttribute('r', '16');
+            c.setAttribute('stroke-width', '2');
         } else {
             c.setAttribute('stroke', '#333');
-            c.setAttribute('stroke-width', '2');
-            c.setAttribute('stroke-dasharray', 'none');
-            c.setAttribute('opacity', '1');
-            c.setAttribute('r', '16');
+            c.setAttribute('stroke-width', '1');
         }
     });
-    
-    // Обновляем стили соединений (только в режиме просмотра)
-    if (!isEditMode) {
-        updateConnectionStyles();
-    }
     
     // Убираем подсказку
     const hint = document.querySelector('.connection-hint');
@@ -3401,10 +4853,13 @@ function setUsedFibers(obj, cableUniqueId, fiberNumbers) {
     saveData();
 }
 
-// Визуализация объединения жил в муфтах
+// Визуализация объединения жил в муфтах и кроссах
 function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
+    const objType = sleeveObj.properties.get('type');
+    const isCross = objType === 'cross';
+    
     let html = '<div class="fiber-connections-container" style="margin-top: 20px;">';
-    html += '<h4 style="margin: 0 0 15px 0; color: #2c3e50; font-size: 1rem; font-weight: 600;">Объединение жил в муфте</h4>';
+    html += `<h4 style="margin: 0 0 15px 0; color: #2c3e50; font-size: 1rem; font-weight: 600;">${isCross ? 'Управление жилами в кроссе' : 'Объединение жил в муфте'}</h4>`;
     
     // Получаем сохраненные соединения жил
     let fiberConnections = sleeveObj.properties.get('fiberConnections');
@@ -3413,10 +4868,25 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         sleeveObj.properties.set('fiberConnections', fiberConnections);
     }
     
+    // Получаем подписи жил
+    let fiberLabels = sleeveObj.properties.get('fiberLabels');
+    if (!fiberLabels) {
+        fiberLabels = {};
+        sleeveObj.properties.set('fiberLabels', fiberLabels);
+    }
+    
+    // Получаем соединения с узлами (для кроссов)
+    let nodeConnections = sleeveObj.properties.get('nodeConnections');
+    if (!nodeConnections) {
+        nodeConnections = {};
+        sleeveObj.properties.set('nodeConnections', nodeConnections);
+    }
+    
     // Подготавливаем данные о кабелях и их жилах
     const cablesData = connectedCables.map((cable, index) => {
         const cableType = cable.properties.get('cableType');
         const cableDescription = getCableDescription(cableType);
+        const cableName = cable.properties.get('cableName') || '';
         const fibers = getFiberColors(cableType);
         let cableUniqueId = cable.properties.get('uniqueId');
         if (!cableUniqueId) {
@@ -3435,6 +4905,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             cableUniqueId,
             cableType,
             cableDescription,
+            cableName,
             fibers,
             usedFibers,
             index: index + 1,
@@ -3445,16 +4916,24 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     // Определяем максимальное количество жил для расчета высоты
     const maxFibers = Math.max(...cablesData.map(c => c.fibers.length));
     
-    // Создаем SVG для визуализации соединений (адаптивный размер)
-    const svgWidth = Math.min(900, Math.max(600, window.innerWidth - 120));
-    const fiberSpacing = 45; // Увеличено расстояние между жилами для удобства
-    const svgHeight = Math.max(500, maxFibers * fiberSpacing + 120);
+    // Создаем SVG для визуализации соединений
+    const svgWidth = Math.min(800, window.innerWidth - 100);
+    const svgHeight = Math.max(400, maxFibers * 35 + 100);
     const cableColumnWidth = svgWidth / (cablesData.length + 1);
     
     // Инструкция для режима редактирования
-    if (isEditMode && cablesData.length >= 2) {
+    if (isEditMode) {
         html += '<div style="padding: 10px; background: #e0f2fe; border-radius: 6px; margin-bottom: 15px; font-size: 0.875rem; color: #0369a1;">';
-        html += '<strong>Инструкция:</strong> Кликните по жиле первого кабеля, затем по жиле второго кабеля для создания соединения. Клик по существующему соединению удалит его.';
+        if (isCross) {
+            html += '<strong>Инструкция:</strong> В оптическом кроссе можно соединять жилы между кабелями и выводить жилы на узлы сети.<br>';
+            html += '<span style="color: #22c55e;"><strong>Вывод на узел:</strong> Нажмите "Подключить к узлу" рядом с жилой, чтобы вывести её на узел сети.</span><br>';
+            if (cablesData.length >= 2) {
+                html += '<span style="color: #3b82f6;"><strong>Соединение жил:</strong> Кликните по жиле первого кабеля, затем по жиле второго для создания соединения.</span>';
+            }
+        } else if (cablesData.length >= 2) {
+            html += '<strong>Инструкция:</strong> Кликните по жиле первого кабеля, затем по жиле второго кабеля для создания соединения. Клик по существующему соединению удалит его.<br>';
+            html += '<span style="color: #dc2626;"><strong>Важно:</strong> Жила может быть соединена только с одной жилой из <u>другого</u> кабеля. Уже соединённые жилы выделены синей обводкой.</span>';
+        }
         html += '</div>';
     }
     
@@ -3464,68 +4943,66 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     // Создаем карту позиций жил для отрисовки соединений
     const fiberPositions = new Map();
     
+    // Создаем множество уже соединенных жил
+    const connectedFibers = new Set();
+    fiberConnections.forEach(conn => {
+        connectedFibers.add(`${conn.from.cableId}-${conn.from.fiberNumber}`);
+        connectedFibers.add(`${conn.to.cableId}-${conn.to.fiberNumber}`);
+    });
+    
     // Рисуем кабели и их жилы
     cablesData.forEach((cableData, cableIndex) => {
         const x = cableColumnWidth * (cableIndex + 1);
-        const startY = 60;
-        const fiberSpacing = 45; // Увеличено расстояние между жилами
+        const startY = 50;
+        const fiberSpacing = 30;
         
         // Заголовок кабеля
-        html += `<text x="${x}" y="30" text-anchor="middle" style="font-size: 14px; font-weight: 600; fill: #2c3e50;">Кабель ${cableData.index}</text>`;
-        html += `<text x="${x}" y="45" text-anchor="middle" style="font-size: 11px; fill: #6c757d;">${cableData.cableDescription}</text>`;
+        const svgCableTitle = cableData.cableName || `Кабель ${cableData.index}`;
+        html += `<text x="${x}" y="25" text-anchor="middle" style="font-size: 11px; font-weight: 600; fill: #2c3e50;">${svgCableTitle}</text>`;
+        html += `<text x="${x}" y="38" text-anchor="middle" style="font-size: 9px; fill: #6c757d;">${cableData.cableDescription}</text>`;
         
         // Рисуем жилы
         cableData.fibers.forEach((fiber, fiberIndex) => {
             const y = startY + fiberIndex * fiberSpacing;
             const isUsed = cableData.usedFibers.includes(fiber.number);
             const fiberKey = `${cableData.cableUniqueId}-${fiber.number}`;
-            
-            // Проверяем, выбрана ли эта жила (только в режиме просмотра)
-            const isSelected = !isEditMode && selectedFiberForConnection && 
-                               selectedFiberForConnection.cableId === cableData.cableUniqueId && 
-                               selectedFiberForConnection.fiberNumber === fiber.number;
+            const isConnected = connectedFibers.has(fiberKey);
             
             // Сохраняем позицию жилы
             fiberPositions.set(fiberKey, { x, y, cableIndex, fiberIndex, cableData, fiber });
             
-            // Определяем стиль обводки в зависимости от состояния жилы
-            let strokeColor, strokeWidth, strokeDasharray, opacity, fiberRadius;
-            if (isSelected) {
-                // Выделение выбранной жилы оранжевым цветом (только в просмотре)
-                strokeColor = '#f59e0b';
-                strokeWidth = '4';
+            // Определяем стиль обводки: соединенная жила - синяя обводка, используемая - красная пунктирная
+            let strokeColor = '#333';
+            let strokeWidth = '1';
+            let strokeDasharray = 'none';
+            let opacity = '1';
+            
+            if (isConnected) {
+                strokeColor = '#3b82f6'; // синий цвет для соединенных жил
+                strokeWidth = '3';
                 strokeDasharray = 'none';
-                opacity = '1';
-                fiberRadius = 18; // Увеличенный радиус для выбранной жилы
             } else if (isUsed) {
-                // Используемая жила
                 strokeColor = '#dc2626';
-                strokeWidth = '2.5';
+                strokeWidth = '2';
                 strokeDasharray = '3,3';
                 opacity = '0.7';
-                fiberRadius = 16; // Увеличенный радиус для удобства
-            } else {
-                // Обычная жила
-                strokeColor = '#333';
-                strokeWidth = '2';
-                strokeDasharray = 'none';
-                opacity = '1';
-                fiberRadius = 16; // Увеличенный радиус для удобства
             }
             
-            // Круг жилы (кликабельный в режиме редактирования, с увеличенной кликабельной областью)
+            // Круг жилы (кликабельный в режиме редактирования)
             const clickable = isEditMode ? 'cursor: pointer;' : '';
-            // Добавляем невидимый круг большего радиуса для увеличения кликабельной области
-            if (isEditMode) {
-                html += `<circle id="fiber-hitbox-${fiberKey}" cx="${x}" cy="${y}" r="22" fill="transparent" stroke="none" style="cursor: pointer; pointer-events: all;" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}"/>`;
-            }
-            html += `<circle id="fiber-${fiberKey}" cx="${x}" cy="${y}" r="${fiberRadius}" fill="${fiber.color}" stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-dasharray="${strokeDasharray}" opacity="${opacity}" style="${clickable}" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" data-fiber-used="${isUsed}"/>`;
+            html += `<circle id="fiber-${fiberKey}" cx="${x}" cy="${y}" r="12" fill="${fiber.color}" stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-dasharray="${strokeDasharray}" opacity="${opacity}" style="${clickable}" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" data-fiber-connected="${isConnected}" data-fiber-used="${isUsed}"/>`;
             
-            // Номер жилы (увеличенный размер)
-            html += `<text x="${x}" y="${y + 5}" text-anchor="middle" style="font-size: 11px; font-weight: 600; fill: ${fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' ? '#000' : '#fff'}; pointer-events: none;">${fiber.number}</text>`;
+            // Номер жилы
+            html += `<text x="${x}" y="${y + 4}" text-anchor="middle" style="font-size: 9px; font-weight: 600; fill: ${fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' ? '#000' : '#fff'}; pointer-events: none;">${fiber.number}</text>`;
             
-            // Название жилы (увеличенный размер и отступ)
-            html += `<text x="${x + 25}" y="${y + 5}" style="font-size: 12px; fill: #495057; pointer-events: none;">${fiber.name}</text>`;
+            // Получаем пользовательскую подпись жилы
+            const fiberLabelKey = `${cableData.cableUniqueId}-${fiber.number}`;
+            const customLabel = fiberLabels[fiberLabelKey] || '';
+            
+            // Название жилы с индикацией статуса соединения и подписью
+            const statusText = isConnected ? ' (соед.)' : '';
+            const labelText = customLabel ? ` [${customLabel}]` : '';
+            html += `<text x="${x + 20}" y="${y + 4}" style="font-size: 10px; fill: ${isConnected ? '#3b82f6' : '#495057'};">${fiber.name}${labelText}${statusText}</text>`;
         });
     });
     
@@ -3543,32 +5020,16 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             const x2 = toPos.x;
             const y2 = toPos.y;
             
-            // Проверяем, связано ли это соединение с выбранной жилой (только в режиме просмотра)
-            const isConnectionSelected = !isEditMode && selectedFiberForConnection && (
-                (selectedFiberForConnection.cableId === connection.from.cableId && 
-                 selectedFiberForConnection.fiberNumber === connection.from.fiberNumber) ||
-                (selectedFiberForConnection.cableId === connection.to.cableId && 
-                 selectedFiberForConnection.fiberNumber === connection.to.fiberNumber)
-            );
-            
-            // Определяем стиль соединения в зависимости от того, выбрана ли связанная жила
-            const connectionColor = isConnectionSelected ? '#f59e0b' : '#3b82f6';
-            const connectionStrokeWidth = isConnectionSelected ? '3' : '2';
-            const connectionOpacity = isConnectionSelected ? '1' : '0.8';
-            const connectionDashArray = isConnectionSelected ? 'none' : '5,3';
-            
-            // Линия соединения (кликабельная для удаления в режиме редактирования или выделения в режиме просмотра)
-            // Используем радиус 16 для обычных жил и 18 для выбранных
-            const fiberRadius = 16;
+            // Линия соединения (кликабельная для удаления в режиме редактирования)
             const midX = (x1 + x2) / 2;
-            const midY = (y1 + y2) / 2 - 15;
-            const clickable = 'cursor: pointer;'; // Кликабельно и в режиме просмотра, и в режиме редактирования
-            html += `<path id="connection-${connIndex}" d="M ${x1 + fiberRadius} ${y1} Q ${midX} ${midY} ${x2 - fiberRadius} ${y2}" 
-                stroke="${connectionColor}" stroke-width="${connectionStrokeWidth}" fill="none" opacity="${connectionOpacity}" stroke-dasharray="${connectionDashArray}" style="${clickable}" data-connection-index="${connIndex}"/>`;
+            const midY = (y1 + y2) / 2 - 10;
+            const clickable = isEditMode ? 'cursor: pointer;' : '';
+            html += `<path id="connection-${connIndex}" d="M ${x1 + 12} ${y1} Q ${midX} ${midY} ${x2 - 12} ${y2}" 
+                stroke="#3b82f6" stroke-width="2" fill="none" opacity="0.8" stroke-dasharray="5,3" style="${clickable}" data-connection-index="${connIndex}"/>`;
             
-            // Стрелка в середине (увеличенная)
-            html += `<polygon points="${midX - 4},${midY - 3} ${midX},${midY + 3} ${midX + 4},${midY - 3}" 
-                fill="${connectionColor}" opacity="${connectionOpacity}" style="${clickable}" data-connection-index="${connIndex}"/>`;
+            // Стрелка в середине
+            html += `<polygon points="${midX - 3},${midY - 2} ${midX},${midY + 2} ${midX + 3},${midY - 2}" 
+                fill="#3b82f6" opacity="0.8" style="${clickable}" data-connection-index="${connIndex}"/>`;
         }
     });
     
@@ -3581,7 +5042,8 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     cablesData.forEach((cableData, index) => {
         html += `<div class="cable-info" data-cable-id="${cableData.cableUniqueId}" style="border: 1px solid #dee2e6; border-radius: 6px; padding: 12px; background: #f8f9fa;">`;
         html += `<div class="cable-header" style="margin-bottom: 10px;">`;
-        html += `<h5 style="margin: 0 0 5px 0; color: #2c3e50; font-size: 0.875rem;">Кабель ${cableData.index}: ${cableData.cableDescription}</h5>`;
+        const cableTitle = cableData.cableName ? `${cableData.cableName} (${cableData.cableDescription})` : `Кабель ${cableData.index}: ${cableData.cableDescription}`;
+        html += `<h5 style="margin: 0 0 5px 0; color: #2c3e50; font-size: 0.875rem;">${cableTitle}</h5>`;
         html += `<div style="font-size: 0.75rem; color: #6c757d; margin-bottom: 8px;">${cableData.isFromSleeve ? '← От муфты' : '→ К муфте'}</div>`;
         
         // Добавляем элементы управления кабелем (только в режиме редактирования)
@@ -3603,15 +5065,52 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         
         cableData.fibers.forEach((fiber) => {
             const isUsed = cableData.usedFibers.includes(fiber.number);
+            const fiberLabelKey = `${cableData.cableUniqueId}-${fiber.number}`;
+            const customLabel = fiberLabels[fiberLabelKey] || '';
+            
+            // Проверяем, есть ли соединение для этой жилы (для кнопки трассировки)
+            const isConnected = fiberConnections.some(conn => 
+                (conn.from.cableId === cableData.cableUniqueId && conn.from.fiberNumber === fiber.number) ||
+                (conn.to.cableId === cableData.cableUniqueId && conn.to.fiberNumber === fiber.number)
+            );
+            
+            // Проверяем подключение к узлу (для кроссов)
+            const nodeConnection = nodeConnections[fiberLabelKey];
+            const hasNodeConnection = !!nodeConnection;
+            
             html += `
                 <div class="fiber-item ${isUsed ? 'fiber-used' : 'fiber-free'}" 
                      data-cable-id="${cableData.cableUniqueId}" 
                      data-fiber-number="${fiber.number}"
-                     style="display: flex; align-items: center; gap: 8px; padding: 6px; background: ${isUsed ? '#fee2e2' : '#ffffff'}; border-radius: 4px; border: 1px solid ${isUsed ? '#dc2626' : '#e5e7eb'}; ${isEditMode && !isUsed ? 'cursor: pointer;' : ''}">
-                    <div class="fiber-color" style="width: 20px; height: 20px; border-radius: 50%; background-color: ${fiber.color}; border: 2px solid #333; flex-shrink: 0;"></div>
-                    <span style="font-size: 0.8125rem; color: #495057; flex: 1;">Жила ${fiber.number}: ${fiber.name}</span>
-                    ${isUsed ? '<span style="font-size: 0.7rem; color: #dc2626; font-weight: 600;">(используется)</span>' : '<span style="font-size: 0.7rem; color: #22c55e; font-weight: 600;">(свободна)</span>'}
-                    ${!isUsed && isEditMode ? `<button class="btn-continue-cable" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Продолжить кабель с этой жилой" style="padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">→</button>` : ''}
+                     style="display: flex; flex-direction: column; gap: 4px; padding: 8px; background: ${isUsed ? '#fee2e2' : (hasNodeConnection ? '#dcfce7' : '#ffffff')}; border-radius: 4px; border: 1px solid ${isUsed ? '#dc2626' : (hasNodeConnection ? '#22c55e' : '#e5e7eb')};">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div class="fiber-color" style="width: 20px; height: 20px; border-radius: 50%; background-color: ${fiber.color}; border: 2px solid #333; flex-shrink: 0;"></div>
+                        <span style="font-size: 0.8125rem; color: #495057; flex: 1;">Жила ${fiber.number}: ${fiber.name}</span>
+                        ${isUsed ? '<span style="font-size: 0.7rem; color: #dc2626; font-weight: 600;">(исп.)</span>' : (hasNodeConnection ? '<span style="font-size: 0.7rem; color: #22c55e; font-weight: 600;">(на узел)</span>' : '<span style="font-size: 0.7rem; color: #22c55e; font-weight: 600;">(своб.)</span>')}
+                        ${!isUsed && isEditMode ? `<button class="btn-continue-cable" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Продолжить кабель с этой жилой" style="padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">→</button>` : ''}
+                    </div>
+                    ${hasNodeConnection ? `
+                        <div style="display: flex; align-items: center; gap: 4px; margin-left: 28px; padding: 4px 8px; background: #f0fdf4; border-radius: 3px;">
+                            <span style="font-size: 0.75rem; color: #166534;">🖥️ → ${nodeConnection.nodeName}</span>
+                            ${isEditMode ? `<button class="btn-disconnect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от узла" style="padding: 2px 6px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}
+                        </div>
+                    ` : ''}
+                    ${isCross && !hasNodeConnection && !isConnected && isEditMode ? `
+                        <div style="margin-left: 28px;">
+                            <button class="btn-connect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к узлу" style="padding: 4px 8px; background: #22c55e; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.7rem;">🖥️ Подключить к узлу</button>
+                        </div>
+                    ` : ''}
+                    ${isEditMode ? `
+                        <div style="display: flex; align-items: center; gap: 4px; margin-left: 28px;">
+                            <input type="text" 
+                                   class="fiber-label-input" 
+                                   data-cable-id="${cableData.cableUniqueId}" 
+                                   data-fiber-number="${fiber.number}"
+                                   value="${customLabel}" 
+                                   placeholder="Подпись жилы..." 
+                                   style="flex: 1; padding: 4px 8px; border: 1px solid #ced4da; border-radius: 3px; font-size: 0.75rem;">
+                        </div>
+                    ` : (customLabel ? `<div style="margin-left: 28px; font-size: 0.75rem; color: #6366f1; font-weight: 500;">📝 ${customLabel}</div>` : '')}
                 </div>
             `;
         });
@@ -4195,4 +5694,5 @@ setTimeout(() => {
     updateEditControls();
     updateStats();
     updateCableVisualization();
+    updateAllNodeConnectionLines();
 }, 100);
