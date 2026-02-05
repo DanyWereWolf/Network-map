@@ -145,6 +145,11 @@ function rejectUser(userId) {
         return { success: false, error: 'Пользователь не найден' };
     }
     
+    // Защита главного администратора
+    if (users[userIndex].username === 'admin') {
+        return { success: false, error: 'Нельзя отклонить главного администратора' };
+    }
+    
     users[userIndex].status = 'rejected';
     saveUsers(users);
     

@@ -850,6 +850,12 @@ function saveUser() {
             return;
         }
         
+        // Защита главного администратора: нельзя снять роль admin с пользователя 'admin'
+        if (users[userIndex].username === 'admin' && role !== 'admin') {
+            showError('Нельзя снять роль администратора с главного администратора');
+            return;
+        }
+        
         users[userIndex].fullName = fullName || users[userIndex].username;
         users[userIndex].role = role;
         
@@ -916,6 +922,12 @@ function deleteUser(userId) {
     // Нельзя удалить себя
     if (userId === currentUser.userId) {
         showError('Нельзя удалить свой аккаунт');
+        return;
+    }
+    
+    // Защита главного администратора: нельзя удалить пользователя 'admin'
+    if (users[userIndex].username === 'admin') {
+        showError('Нельзя удалить главного администратора');
         return;
     }
     
@@ -1870,7 +1882,6 @@ function handleMapClick(e) {
 }
 
 function handleMapMouseMove(e) {
-    // Сохраняем координаты мыши для индикатора
     try {
         if (e.originalEvent) {
             window.lastMouseX = e.originalEvent.clientX || 0;
@@ -1882,161 +1893,33 @@ function handleMapMouseMove(e) {
                 window.lastMouseY = domEvent.clientY || 0;
             }
         }
-    } catch (error) {
-        // Игнорируем ошибки получения координат
-    }
+    } catch (err) {}
     
-    // Всегда показываем подсветку при наведении на объекты (в режиме редактирования)
+    const mapCoords = e.get('coords');
+    
     if (!isEditMode) {
-        // Сбрасываем подсветку в режиме просмотра
-        if (hoveredObject) {
-            clearHoverHighlight();
-        }
         return;
     }
     
-    // В режиме размещения объектов показываем фантомный объект под курсором
+    // Режим размещения: фантомный объект и индикатор типа под курсором
     if (objectPlacementMode) {
         const type = currentPlacementType;
-        const coords = e.get('coords');
-        
-        // Создаем или обновляем фантомный объект под курсором
-        updatePhantomPlacemark(type, coords);
-        
-        // Всегда показываем индикатор типа создаваемого объекта
-        if (type) {
-            updateCursorIndicator(e, type);
-        }
-        
-        // В режиме размещения тоже показываем подсветку объектов при наведении
-        const objectUnderCursor = findObjectAtCoords(coords);
-        
-        if (objectUnderCursor && objectUnderCursor !== hoveredObject) {
-            if (hoveredObject) {
-                clearHoverHighlight();
-            }
-            highlightObjectOnHover(objectUnderCursor, e);
-            // Скрываем фантомный объект при наведении на существующий
-            if (phantomPlacemark) {
-                myMap.geoObjects.remove(phantomPlacemark);
-                phantomPlacemark = null;
-            }
-        } else if (!objectUnderCursor && hoveredObject) {
-            clearHoverHighlight();
-            // Показываем фантомный объект обратно
-            updatePhantomPlacemark(type, coords);
-            // После снятия подсветки снова показываем индикатор типа создаваемого объекта
-            if (type) {
-                updateCursorIndicator(e, type);
-            }
-        }
+        updatePhantomPlacemark(type, mapCoords);
+        if (type) updateCursorIndicator(e, type);
         return;
     }
     
-    // Режим прокладки кабеля - обновляем предпросмотр
+    // Режим прокладки кабеля: привязка к ближайшему объекту и предпросмотр линии
     if (currentCableTool && cableSource) {
-        const coords = e.get('coords');
-        
-        // Уменьшенный tolerance для более точного "прилипания" к объектам
-        const zoom = myMap.getZoom();
-        const autoSnapTolerance = zoom < 12 ? 0.0015 : (zoom < 15 ? 0.001 : 0.0005);
-        
-        // Ищем ближайший объект для "притягивания"
-        let nearestObject = null;
-        let minDistance = Infinity;
-        
-        objects.forEach(obj => {
-            if (obj && obj.geometry && obj.properties) {
-                const objType = obj.properties.get('type');
-                // Исключаем кабели, метки кабелей и сам источник
-                if (objType !== 'cable' && objType !== 'cableLabel' && obj !== cableSource) {
-                    try {
-                        const objCoords = obj.geometry.getCoordinates();
-                        const latDiff = Math.abs(objCoords[0] - coords[0]);
-                        const lonDiff = Math.abs(objCoords[1] - coords[1]);
-                        const distance = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff);
-                        
-                        if (distance < autoSnapTolerance && distance < minDistance) {
-                            minDistance = distance;
-                            nearestObject = obj;
-                        }
-                    } catch (error) {
-                        // Игнорируем ошибки
-                    }
-                }
-            }
-        });
-        
-        let targetObject = null;
-        let previewCoords = coords;
-        
-        // Если нашли ближайший объект, "притягиваем" к нему и подсвечиваем
-        if (nearestObject) {
-            targetObject = nearestObject;
-            previewCoords = nearestObject.geometry.getCoordinates();
-            
-            // Подсвечиваем объект
-            if (targetObject !== hoveredObject) {
-                if (hoveredObject) {
-                    clearHoverHighlight();
-                }
-                highlightObjectOnHover(targetObject, e);
-            }
-        } else {
-            // Убираем подсветку, если ушли от объекта
-            if (hoveredObject) {
-                clearHoverHighlight();
+        const snapObj = findObjectAtCoords(mapCoords);
+        let previewCoords = mapCoords;
+        if (snapObj && snapObj !== cableSource) {
+            const t = snapObj.properties.get('type');
+            if (t !== 'cable' && t !== 'cableLabel') {
+                previewCoords = snapObj.geometry.getCoordinates();
             }
         }
-        
-        // Обновляем предпросмотр кабеля от источника к курсору
         updateCablePreview(cableSource, previewCoords);
-        return;
-    }
-    
-    // В обычном режиме редактирования показываем подсветку
-    {
-        // Если нет выбранной точки, проверяем наведение на объекты и кабели (как в vols.expert)
-        const coords = e.get('coords');
-        const objectUnderCursor = findObjectAtCoords(coords);
-        
-        // Проверяем также кабели при наведении
-        let cableUnderCursor = null;
-        objects.forEach(obj => {
-            if (obj && obj.geometry && obj.properties) {
-                const type = obj.properties.get('type');
-                if (type === 'cable') {
-                    try {
-                        const cableCoords = obj.geometry.getCoordinates();
-                        if (cableCoords && cableCoords.length >= 2) {
-                            const fromCoords = cableCoords[0];
-                            const toCoords = cableCoords[cableCoords.length - 1];
-                            const result = pointToLineDistance(coords, fromCoords, toCoords);
-                            const zoom = myMap.getZoom();
-                            const cableTolerance = zoom < 12 ? 0.000008 : (zoom < 15 ? 0.000005 : 0.000003);
-                            if (result.distance < cableTolerance && result.param >= -0.01 && result.param <= 1.01) {
-                                cableUnderCursor = obj;
-                            }
-                        }
-                    } catch (error) {
-                        // Игнорируем ошибки
-                    }
-                }
-            }
-        });
-        
-        const targetObject = objectUnderCursor || cableUnderCursor;
-        
-        if (targetObject && targetObject !== hoveredObject) {
-            // Навели на новый объект - подсвечиваем его (как в vols.expert)
-            if (hoveredObject) {
-                clearHoverHighlight();
-            }
-            highlightObjectOnHover(targetObject, e);
-        } else if (!targetObject && hoveredObject) {
-            // Убрали мышь с объекта
-            clearHoverHighlight();
-        }
     }
 }
 
@@ -2062,8 +1945,8 @@ function createCursorIndicator() {
     document.body.appendChild(cursorIndicator);
 }
 
-// Обновляет позицию индикатора под курсором
-function updateCursorIndicator(e, objectType) {
+// Обновляет подпись выделенного объекта. objectCoord — геокоординаты точки; если заданы, подпись показывается под точкой, иначе под курсором
+function updateCursorIndicator(e, objectType, objectCoord) {
     if (!cursorIndicator) return;
     
     if (objectType && e) {
@@ -2090,17 +1973,23 @@ function updateCursorIndicator(e, objectType) {
         cursorIndicator.textContent = text;
         cursorIndicator.style.display = 'block';
         
-        // Получаем координаты курсора
-        // Используем последние известные координаты мыши
-        const clientX = window.lastMouseX || 0;
-        const clientY = window.lastMouseY || 0;
-        
-        if (clientX > 0 && clientY > 0) {
-            cursorIndicator.style.left = (clientX + 15) + 'px';
-            cursorIndicator.style.top = (clientY - 35) + 'px';
+        let clientX = window.lastMouseX || 0;
+        let clientY = window.lastMouseY || 0;
+        if (objectCoord && (objectCoord.length >= 2)) {
+            const pt = geoToClient(objectCoord);
+            if (pt) {
+                clientX = pt[0];
+                clientY = pt[1];
+            }
+        }
+        if (clientX > 0 || clientY > 0) {
+            cursorIndicator.style.left = clientX + 'px';
+            cursorIndicator.style.top = (clientY + 14) + 'px';
+            cursorIndicator.style.transform = 'translate(-50%, 0)';
         }
     } else {
         cursorIndicator.style.display = 'none';
+        cursorIndicator.style.transform = '';
     }
 }
 
@@ -2190,14 +2079,34 @@ function removePhantomPlacemark() {
     }
 }
 
-// Подсвечивает объект при наведении мыши в режиме прокладки кабеля
+// Подключает подсветку при наведении к геообъекту (срабатывает когда курсор над интерактивной областью)
+function attachHoverEventsToObject(obj) {
+    if (!obj || !obj.events) return;
+    const objType = obj.properties ? obj.properties.get('type') : null;
+    if (!objType || objType === 'cableLabel') return;
+    
+    obj.events.add('mouseenter', function(e) {
+        const domEvent = e.get && e.get('domEvent');
+        if (domEvent) {
+            window.lastMouseX = domEvent.clientX || 0;
+            window.lastMouseY = domEvent.clientY || 0;
+        }
+        if (objectPlacementMode && phantomPlacemark) {
+            myMap.geoObjects.remove(phantomPlacemark);
+            phantomPlacemark = null;
+        }
+        if (hoveredObject && hoveredObject !== obj) clearHoverHighlight();
+        highlightObjectOnHover(obj, e);
+    });
+    
+    obj.events.add('mouseleave', function() {
+        if (hoveredObject === obj) clearHoverHighlight();
+    });
+}
+
+// Подсвечивает объект при наведении мыши (режим просмотра и редактирования)
 function highlightObjectOnHover(obj, e) {
     if (!obj || !obj.properties) {
-        return;
-    }
-    
-    // В режиме редактирования не подсвечиваем объекты
-    if (isEditMode) {
         return;
     }
     
@@ -2210,8 +2119,9 @@ function highlightObjectOnHover(obj, e) {
     
     const type = obj.properties.get('type');
     
-    // Показываем индикатор под курсором
-    updateCursorIndicator(e, type);
+    // Подпись под выделенной точкой (или под ближайшей точкой кабеля)
+    const objCoord = (type === 'cable' || type === 'cableLabel') ? (e && e.get('coords') ? e.get('coords') : null) : (obj.geometry ? obj.geometry.getCoordinates() : null);
+    updateCursorIndicator(e, type, objCoord);
     
     // Для кабелей только показываем индикатор и круг, не меняем иконку
     if (type === 'cable' || type === 'cableLabel') {
@@ -2245,13 +2155,27 @@ function highlightObjectOnHover(obj, e) {
                 <circle cx="16" cy="16" r="3" fill="#22c55e"/>
             </svg>`;
             break;
+        case 'cross':
+            iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="4" width="28" height="24" rx="3" fill="#8b5cf6" stroke="#a78bfa" stroke-width="3"/>
+                <line x1="10" y1="4" x2="10" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
+                <line x1="16" y1="4" x2="16" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
+                <line x1="22" y1="4" x2="22" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
+                <circle cx="10" cy="12" r="2" fill="white"/>
+                <circle cx="16" cy="12" r="2" fill="white"/>
+                <circle cx="22" cy="12" r="2" fill="white"/>
+                <circle cx="10" cy="20" r="2" fill="white"/>
+                <circle cx="16" cy="20" r="2" fill="white"/>
+                <circle cx="22" cy="20" r="2" fill="white"/>
+            </svg>`;
+            break;
         default:
             return;
     }
     
     // Создаем увеличенную область клика для подсвеченного объекта
     const clickableSize = 44;
-    const iconSize = type === 'node' ? 32 : 28;
+    const iconSize = (type === 'node' || type === 'cross') ? 32 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
     
     const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
@@ -2740,6 +2664,7 @@ function createObject(type, name, coords, options = {}) {
         updateConnectedCables(placemark);
     });
 
+    attachHoverEventsToObject(placemark);
     objects.push(placemark);
     myMap.geoObjects.add(placemark);
     saveData();
@@ -3058,6 +2983,7 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
         return false;
     });
     
+    attachHoverEventsToObject(polyline);
     objects.push(polyline);
     myMap.geoObjects.add(polyline);
     
@@ -3492,6 +3418,28 @@ function removeCablePreview() {
     // Убираем подсветку при удалении предпросмотра
     if (hoveredObject) {
         clearHoverHighlight();
+    }
+}
+
+// Преобразует геокоординаты [lat, lon] в клиентские координаты (пиксели относительно viewport)
+function geoToClient(geoCoord) {
+    if (!myMap || !geoCoord || geoCoord.length < 2) return null;
+    try {
+        const bounds = myMap.getBounds();
+        if (!bounds || bounds.length < 2) return null;
+        const rect = myMap.container.getElement().getBoundingClientRect();
+        const minLat = Math.min(bounds[0][0], bounds[1][0]);
+        const maxLat = Math.max(bounds[0][0], bounds[1][0]);
+        const minLon = Math.min(bounds[0][1], bounds[1][1]);
+        const maxLon = Math.max(bounds[0][1], bounds[1][1]);
+        const lat = geoCoord[0];
+        const lon = geoCoord[1];
+        if (maxLat === minLat || maxLon === minLon) return null;
+        const x = rect.left + (lon - minLon) / (maxLon - minLon) * rect.width;
+        const y = rect.top + (maxLat - lat) / (maxLat - minLat) * rect.height;
+        return [x, y];
+    } catch (e) {
+        return null;
     }
 }
 
@@ -3984,6 +3932,7 @@ function createObjectFromData(data) {
         updateConnectedCables(placemark);
     });
 
+    attachHoverEventsToObject(placemark);
     objects.push(placemark);
     myMap.geoObjects.add(placemark);
     updateStats();
@@ -4351,7 +4300,7 @@ function showObjectInfo(obj) {
                                 <div class="fiber-color" style="background-color: ${fiber.color}; ${isUsed ? 'opacity: 0.5; border: 2px dashed #dc2626;' : ''}"></div>
                                 <span class="fiber-label">Жила ${fiber.number}: ${fiber.name} ${isUsed ? '<span class="fiber-status">(используется)</span>' : '<span class="fiber-status fiber-free-text">(свободна)</span>'}</span>
                             </div>
-                            ${!isUsed && isEditMode ? `<button class="btn-continue-cable" data-cable-id="${cableUniqueId}" data-fiber-number="${fiber.number}" title="Продолжить кабель с этой жилой">→</button>` : ''}
+                            ${!isUsed && isEditMode && type !== 'sleeve' && type !== 'cross' ? `<button class="btn-continue-cable" data-cable-id="${cableUniqueId}" data-fiber-number="${fiber.number}" title="Продолжить кабель с этой жилой">→</button>` : ''}
                         </div>
                     `;
                 });
@@ -7176,7 +7125,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
                         </div>
                         <span style="font-size: 0.8125rem; color: var(--text-primary); flex: 1;"><strong>${fiber.name}</strong></span>
                         ${isUsed ? '<span style="font-size: 0.7rem; color: #dc2626; font-weight: 600;">(исп.)</span>' : (hasNodeConnection ? '<span style="font-size: 0.7rem; color: #22c55e; font-weight: 600;">(на узел)</span>' : '<span style="font-size: 0.7rem; color: #22c55e; font-weight: 600;">(своб.)</span>')}
-                        ${!isUsed && isEditMode ? `<button class="btn-continue-cable" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Продолжить кабель с этой жилой" style="padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">→</button>` : ''}
+                        ${''}
                     </div>
                     ${hasNodeConnection ? `
                         <div style="display: flex; align-items: center; gap: 4px; margin-left: 32px; padding: 4px 8px; background: #f0fdf4; border-radius: 3px;">
