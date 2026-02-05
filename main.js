@@ -1,3 +1,8 @@
+// Версия приложения (синхронизировать с package.json и тегами релизов на GitHub)
+const APP_VERSION = '1.0.0';
+// Репозиторий GitHub для проверки обновлений (указать владельца и имя репозитория)
+const GITHUB_REPO = { owner: 'DanyWereWolf', repo: 'Network-map' };
+
 let myMap;
 let objects = [];
 let selectedObjects = [];
@@ -96,6 +101,11 @@ document.addEventListener('DOMContentLoaded', function() {
     initUserUI();
     
     ymaps.ready(init);
+    
+    // Проверка обновлений через GitHub (один раз при загрузке, с задержкой)
+    if (GITHUB_REPO.owner && GITHUB_REPO.repo) {
+        setTimeout(function() { checkForUpdates(true); }, 2500);
+    }
 });
 
 // ==================== Система уведомлений ====================
@@ -142,6 +152,53 @@ function showSuccess(message, title = null) { showToast(message, 'success', titl
 function showError(message, title = null) { showToast(message, 'error', title, 6000); }
 function showWarning(message, title = null) { showToast(message, 'warning', title, 5000); }
 function showInfo(message, title = null) { showToast(message, 'info', title); }
+
+// ==================== Проверка обновлений через GitHub ====================
+function parseVersion(str) {
+    const s = (str || '').replace(/^v/i, '').trim();
+    const parts = s.split('.').map(n => parseInt(n, 10) || 0);
+    return [parts[0] || 0, parts[1] || 0, parts[2] || 0];
+}
+function compareVersions(a, b) {
+    const va = parseVersion(a);
+    const vb = parseVersion(b);
+    for (let i = 0; i < 3; i++) {
+        if (va[i] > vb[i]) return 1;
+        if (va[i] < vb[i]) return -1;
+    }
+    return 0;
+}
+async function checkForUpdates(silent = false) {
+    if (!GITHUB_REPO.owner || !GITHUB_REPO.repo) {
+        if (!silent) showInfo('Проверка обновлений не настроена. Укажите GITHUB_REPO в коде.', 'Обновления');
+        return { checked: false };
+    }
+    try {
+        const url = `https://api.github.com/repos/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/releases/latest`;
+        const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' } });
+        if (!res.ok) {
+            if (!silent) showWarning('Не удалось проверить обновления. Репозиторий или релиз не найден.', 'Обновления');
+            return { checked: true, error: res.status };
+        }
+        const data = await res.json();
+        const latest = (data.tag_name || '').trim();
+        if (!latest) {
+            if (!silent) showInfo('Нет данных о последней версии.', 'Обновления');
+            return { checked: true };
+        }
+        if (compareVersions(latest, APP_VERSION) > 0) {
+            const url = data.html_url || `https://github.com/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/releases`;
+            const msg = `Доступна версия ${latest} (у вас ${APP_VERSION}). <a href="${url}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">Перейти к загрузке</a>`;
+            showToast(msg, 'success', 'Доступно обновление', 10000);
+            return { checked: true, update: true, latest, url };
+        }
+        if (!silent) showInfo(`Установлена актуальная версия ${APP_VERSION}.`, 'Обновления');
+        return { checked: true, update: false };
+    } catch (e) {
+        if (!silent) showWarning('Ошибка при проверке обновлений: ' + (e.message || 'сеть'), 'Обновления');
+        return { checked: true, error: e };
+    }
+}
 
 // ==================== Система истории изменений ====================
 const MAX_HISTORY_ENTRIES = 500; // Максимальное количество записей в истории
@@ -354,6 +411,10 @@ function openHelpModal() {
     const content = document.getElementById('helpModalContent');
     if (modal && content) {
         content.innerHTML = getHelpContentHtml();
+        const checkBtn = document.getElementById('helpCheckUpdatesBtn');
+        if (checkBtn) {
+            checkBtn.addEventListener('click', function() { checkForUpdates(false); });
+        }
         modal.style.display = 'block';
     }
 }
@@ -437,6 +498,13 @@ function getHelpContentHtml() {
 <div class="help-section">
     <h3>Хранение данных</h3>
     <p>Данные хранятся в браузере (localStorage): объекты карты, пользователи, сессия, история изменений, тема. Для переноса данных используйте экспорт и импорт.</p>
+</div>
+
+<div class="help-section help-section-updates">
+    <h3>Версия и обновления</h3>
+    <p>Текущая версия: <strong id="helpCurrentVersion">' + APP_VERSION + '</strong></p>
+    <p>Если проект подключён к GitHub, можно проверить наличие новой версии (релизы в репозитории).</p>
+    <button type="button" id="helpCheckUpdatesBtn" class="btn-secondary btn-check-updates" style="margin-top: 8px;">Проверить обновления</button>
 </div>
 `;
 }
