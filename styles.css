@@ -1290,32 +1290,111 @@ button {
     font-weight: 600;
 }
 
-.close {
-    color: white;
-    font-size: 28px;
+.close,
+.close-users,
+.close-history,
+.close-user-edit,
+.close-help,
+.close-netbox,
+.close-import,
+.close-node-selection {
+    color: #fff;
+    font-size: 26px;
     font-weight: bold;
     cursor: pointer;
-    line-height: 20px;
-    background: rgba(255, 255, 255, 0.2);
-    width: 32px;
-    height: 32px;
+    line-height: 1;
+    background: rgba(255, 255, 255, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    width: 34px;
+    height: 34px;
     border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: all 0.2s;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
 .close:hover,
-.close:focus {
-    background: rgba(255, 255, 255, 0.3);
-    transform: scale(1.1);
+.close:focus,
+.close-users:hover,
+.close-users:focus,
+.close-history:hover,
+.close-history:focus,
+.close-user-edit:hover,
+.close-user-edit:focus,
+.close-help:hover,
+.close-help:focus,
+.close-netbox:hover,
+.close-netbox:focus,
+.close-import:hover,
+.close-import:focus,
+.close-node-selection:hover,
+.close-node-selection:focus {
+    background: rgba(255, 255, 255, 0.5);
+    border-color: rgba(255, 255, 255, 0.9);
+    color: #fff;
+    transform: scale(1.08);
 }
 
 .modal-body {
     padding: 24px;
     max-height: 70vh;
     overflow-y: auto;
+}
+
+/* Модальное окно справки */
+.help-modal-content {
+    max-width: 640px;
+}
+.help-modal-body {
+    max-height: 75vh;
+    overflow-y: auto;
+}
+.help-section {
+    margin-bottom: 1.25rem;
+    color: var(--text-primary);
+}
+.help-section:last-child {
+    margin-bottom: 0;
+}
+.help-section h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--accent-primary);
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.35rem;
+}
+.help-section h4 {
+    margin: 0.75rem 0 0.35rem 0;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.help-section p,
+.help-section ul {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+.help-section ul {
+    padding-left: 1.25rem;
+}
+.help-section li {
+    margin-bottom: 0.25rem;
+}
+.help-section kbd {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 0.8125rem;
+    font-family: inherit;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
 }
 
 /* Стили для остальных элементов модальных окон */
@@ -1527,29 +1606,7 @@ button {
     text-align: center;
 }
 
-.close-netbox, .close-import {
-    color: white;
-    font-size: 28px;
-    font-weight: bold;
-    cursor: pointer;
-    line-height: 20px;
-    background: rgba(255, 255, 255, 0.2);
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-}
-
-.close-netbox:hover,
-.close-netbox:focus,
-.close-import:hover,
-.close-import:focus {
-    background: rgba(255, 255, 255, 0.3);
-    transform: scale(1.1);
-}
+/* Стили кнопок закрытия модалок заданы в общем блоке .close, .close-help и др. выше */
 
 .import-actions {
     display: flex;
@@ -1627,40 +1684,42 @@ button {
     font-size: 1rem;
 }
 
-/* ==================== Модальное окно выбора узла ==================== */
-.close-node-selection {
-    color: white;
-    font-size: 28px;
-    font-weight: bold;
-    cursor: pointer;
-    line-height: 20px;
-    background: rgba(255, 255, 255, 0.2);
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
+/* ==================== Модальное окно выбора узла (как балун групп — одна карточка, без двойного балуна) ==================== */
+#nodeSelectionModal .modal-content.node-selection-modal-content {
+    max-width: 500px;
+    width: auto;
+    margin: 5% auto;
+    padding: 0;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none;
+    animation: modalSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
-
-.close-node-selection:hover,
-.close-node-selection:focus {
-    background: rgba(255, 255, 255, 0.3);
-    transform: scale(1.1);
+#nodeSelectionModal .node-selection-balloon {
+    min-width: 320px;
+    max-width: 500px;
+    background: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+}
+#nodeSelectionModal .node-selection-body {
+    padding: 16px 14px;
 }
 
 .node-selection-info {
-    background: #e0f2fe;
-    border-left: 4px solid #3b82f6;
+    background: var(--bg-tertiary);
+    border-left: 4px solid var(--accent-primary);
     padding: 12px 16px;
     border-radius: 8px;
-    margin-bottom: 20px;
+    margin-bottom: 16px;
 }
 
 .node-selection-info p {
     margin: 0;
-    color: #1e40af;
+    color: var(--text-primary);
     font-size: 0.875rem;
 }
 
@@ -2347,9 +2406,234 @@ button {
         font-size: 0.95rem;
     }
     
-    .close, .close-users, .close-history, .close-user-edit, .close-netbox, .close-import, .close-node-selection {
-        font-size: 20px;
-        width: 28px;
-        height: 28px;
+    .close, .close-users, .close-history, .close-user-edit, .close-help, .close-netbox, .close-import, .close-node-selection {
+        font-size: 22px;
+        width: 32px;
+        height: 32px;
     }
+}
+
+/* ==================== Балун карты (Яндекс.Карты) — тема приложения ==================== */
+[class*="ymaps"][class*="balloon"] {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
+[class*="balloon__content"],
+[class*="balloon-panel"],
+[class*="balloon__layout"] {
+    background: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: var(--radius-md) !important;
+    box-shadow: var(--shadow-lg) !important;
+}
+[class*="balloon__tail"] {
+    background: var(--bg-secondary) !important;
+    border-color: var(--border-color) !important;
+}
+
+/* Всплывающая подсказка (hint) карты — опускаем чуть ниже метки */
+#map [class*="hint"] {
+    transform: translateY(10px) !important;
+}
+/* Когда внутри наш балун выбора группы — убираем обёртку API (один балун, не два) */
+[class*="balloon__content"]:has(.network-map-balloon),
+[class*="balloon-panel"]:has(.network-map-balloon) {
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+[class*="balloon__layout"]:has(.network-map-balloon) [class*="balloon__tail"] {
+    display: none !important;
+}
+/* Балун выбора группы — карточка с чёткой структурой */
+.network-map-balloon {
+    background: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    min-width: 240px;
+    max-width: 320px;
+}
+.network-map-balloon .cross-group-item,
+.network-map-balloon .node-group-item {
+    color: var(--text-primary);
+    padding: 10px 14px;
+    font-size: 0.9375rem;
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+.network-map-balloon .cross-group-item:last-child,
+.network-map-balloon .node-group-item:last-child {
+    border-bottom: none;
+}
+.network-map-balloon .cross-group-item:hover,
+.network-map-balloon .node-group-item:hover {
+    background: var(--bg-hover) !important;
+}
+
+/* Список элементов группы — прокрутка при большом количестве */
+.group-balloon-list {
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+/* Шапка балуна — отдельный блок, контрастная кнопка закрытия */
+.group-balloon-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+}
+.group-balloon-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.9375rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.group-balloon-close {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.group-balloon-close:hover {
+    background: var(--bg-hover);
+    border-color: var(--text-muted);
+}
+[data-theme="dark"] .group-balloon-close {
+    background: rgba(255, 255, 255, 0.25);
+    border: 2px solid rgba(255, 255, 255, 0.55);
+    color: #fff;
+}
+[data-theme="dark"] .group-balloon-close:hover {
+    background: rgba(255, 255, 255, 0.4);
+    border-color: rgba(255, 255, 255, 0.75);
+    color: #fff;
+}
+
+/* Блок «Название группы» — явное поле и акцентная кнопка */
+.group-name-row {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-card);
+}
+.group-name-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+.group-name-controls {
+    display: flex;
+    gap: 8px;
+}
+.group-name-input {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.group-name-input::placeholder {
+    color: var(--text-muted);
+}
+.group-name-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+[data-theme="dark"] .group-name-input {
+    background: var(--bg-primary);
+    border-color: var(--border-color);
+}
+[data-theme="dark"] .group-name-input:focus {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+.group-name-save {
+    flex-shrink: 0;
+    padding: 8px 14px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    border: none;
+    cursor: pointer;
+    background: var(--accent-primary);
+    color: #fff;
+    transition: background 0.2s, transform 0.1s;
+}
+.group-name-save:hover {
+    background: #2563eb;
+    color: #fff;
+}
+.group-name-save:active {
+    transform: scale(0.98);
+}
+
+/* Элемент группы: название + кнопка «Переместить» */
+.cross-group-item,
+.node-group-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+.group-item-name {
+    flex: 1;
+    min-width: 0;
+}
+.group-item-move {
+    flex-shrink: 0;
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+}
+.group-item-move:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+}
+
+/* Курсор-прицел на карте: хорошо виден в светлой и тёмной теме */
+#map.map-crosshair-active {
+    cursor: crosshair;
+}
+[data-theme="dark"] #map.map-crosshair-active {
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cline x1='16' y1='2' x2='16' y2='12' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='16' y1='20' x2='16' y2='30' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='2' y1='16' x2='12' y2='16' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='20' y1='16' x2='30' y2='16' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='3' fill='none' stroke='%23fff' stroke-width='1.5'/%3E%3C/svg%3E") 16 16, crosshair;
 }

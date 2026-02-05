@@ -19,6 +19,43 @@ let netboxConfig = {
 };
 let netboxDevices = []; // Загруженные устройства из NetBox
 let currentUser = null; // Текущий авторизованный пользователь
+let crossGroupPlacemarks = []; // Метки групп кроссов в одном месте
+let nodeGroupPlacemarks = []; // Метки групп узлов в одном месте
+let crossGroupNames = new Map(); // ключ: "lat,lon", значение: название группы кроссов
+let nodeGroupNames = new Map(); // ключ: "lat,lon", значение: название группы узлов
+const GROUP_NAMES_STORAGE_KEY = 'network-map-group-names';
+
+function groupKey(coords) {
+    return coords[0].toFixed(6) + ',' + coords[1].toFixed(6);
+}
+function getCrossGroupName(coords) {
+    return crossGroupNames.get(groupKey(coords)) || '';
+}
+function setCrossGroupName(coords, name) {
+    const key = groupKey(coords);
+    if (name && name.trim()) crossGroupNames.set(key, name.trim());
+    else crossGroupNames.delete(key);
+    saveGroupNames();
+    updateCrossDisplay();
+}
+function getNodeGroupName(coords) {
+    return nodeGroupNames.get(groupKey(coords)) || '';
+}
+function setNodeGroupName(coords, name) {
+    const key = groupKey(coords);
+    if (name && name.trim()) nodeGroupNames.set(key, name.trim());
+    else nodeGroupNames.delete(key);
+    saveGroupNames();
+    updateNodeDisplay();
+}
+function saveGroupNames() {
+    try {
+        localStorage.setItem(GROUP_NAMES_STORAGE_KEY, JSON.stringify({
+            cross: Object.fromEntries(crossGroupNames),
+            node: Object.fromEntries(nodeGroupNames)
+        }));
+    } catch (e) {}
+}
 
 // ==================== Проверка авторизации ====================
 function checkAuth() {
@@ -311,6 +348,99 @@ function closeHistoryModal() {
     }
 }
 
+// Открыть модальное окно справки
+function openHelpModal() {
+    const modal = document.getElementById('helpModal');
+    const content = document.getElementById('helpModalContent');
+    if (modal && content) {
+        content.innerHTML = getHelpContentHtml();
+        modal.style.display = 'block';
+    }
+}
+
+// Закрыть модальное окно справки
+function closeHelpModal() {
+    const modal = document.getElementById('helpModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// HTML-контент страницы справки
+function getHelpContentHtml() {
+    return `
+<div class="help-section">
+    <h3>О программе</h3>
+    <p><strong>Карта локальной сети</strong> — веб-приложение для визуализации и управления сетевой инфраструктурой на базе Яндекс.Карт. Позволяет отображать узлы, кроссы, муфты, опоры и кабели, прокладывать трассы и отслеживать соединения жил.</p>
+</div>
+
+<div class="help-section">
+    <h3>Режимы работы</h3>
+    <ul>
+        <li><strong>Просмотр</strong> — навигация по карте, клик по объектам для просмотра информации, трассировка жил. Редактирование недоступно.</li>
+        <li><strong>Редактирование</strong> — всё то же плюс добавление/удаление объектов, прокладка кабелей, соединение жил в кроссах и муфтах, подключение жил к узлам. Доступно только пользователям с правами редактора.</li>
+    </ul>
+</div>
+
+<div class="help-section">
+    <h3>Типы объектов</h3>
+    <ul>
+        <li><strong>Узел сети</strong> — конечное сетевое устройство (сервер, коммутатор). К узлам подключаются жилы из кроссов.</li>
+        <li><strong>Оптический кросс</strong> — точка коммутации: соединение жил между кабелями и вывод жил на узлы сети.</li>
+        <li><strong>Кабельная муфта</strong> — сращивание кабелей: соединение жил между кабелями (без вывода на узлы). Тип муфты задаётся при создании (вместимость по волокнам).</li>
+        <li><strong>Опора связи</strong> — промежуточная точка для воздушных линий; кабель проходит транзитом.</li>
+        <li><strong>Кабель</strong> — оптический (4/8/16/24 жилы) или медный; соединяет два объекта (муфта, кросс, узел, опора).</li>
+    </ul>
+</div>
+
+<div class="help-section">
+    <h3>Как пользоваться</h3>
+    <h4>Добавление объектов</h4>
+    <p>В режиме редактирования выберите тип объекта в боковой панели (Узлы, Кроссы, Муфты, Опоры), при необходимости укажите тип муфты или название группы, затем кликните по карте в нужном месте.</p>
+    <h4>Прокладка кабеля</h4>
+    <p>Нажмите «Проложить кабель», выберите тип кабеля, затем кликните по первому объекту (муфта, кросс, узел или опора), затем по второму. Кабель появится между ними.</p>
+    <h4>Соединение жил в кроссе</h4>
+    <p>Откройте карточку кросса (клик по объекту). В блоке «Управление жилами в кроссе» можно: соединить две жилы из разных кабелей (выбрать первую, затем вторую); подключить жилу к узлу сети (кнопка «Подключить к узлу»); отключить жилу от узла (кнопка «✕» в режиме редактирования).</p>
+    <h4>Соединение жил в муфте</h4>
+    <p>В карточке муфты отображается блок «Объединение жил в муфте». Выберите жилу одного кабеля, затем жилу другого — они соединятся. Одна жила может быть соединена только с одной жилой из другого кабеля.</p>
+    <h4>Группы кроссов и узлов</h4>
+    <p>Несколько кроссов или узлов в одной точке объединяются в группу. При клике по группе открывается баллун со списком: выбор объекта для просмотра или (в режиме редактирования) для прокладки кабеля. Название группы можно изменить; объект можно вынести из группы кнопкой «Переместить».</p>
+</div>
+
+<div class="help-section">
+    <h3>Поиск и интерфейс</h3>
+    <ul>
+        <li><strong>Поиск</strong> — поле в шапке: введите название или часть названия объекта, выберите результат — карта центрируется на объекте.</li>
+        <li><strong>Легенда</strong> — в боковой панели: условные обозначения типов объектов и кабелей.</li>
+        <li><strong>Тема</strong> — кнопка солнца/луны рядом с пользователем: переключение светлой и тёмной темы.</li>
+        <li><strong>Экспорт / Импорт</strong> — сохранение карты в JSON и загрузка из файла (в боковой панели).</li>
+        <li><strong>Импорт из NetBox</strong> — загрузка устройств из NetBox API по настроенному URL и токену.</li>
+    </ul>
+</div>
+
+<div class="help-section">
+    <h3>Роли</h3>
+    <ul>
+        <li><strong>Администратор</strong> — полный доступ: редактирование, управление пользователями, история изменений.</li>
+        <li><strong>Пользователь</strong> — просмотр карты, информация об объектах, трассировка; без редактирования.</li>
+    </ul>
+</div>
+
+<div class="help-section">
+    <h3>Горячие клавиши</h3>
+    <ul>
+        <li><kbd>Escape</kbd> — отмена текущей операции (например, прокладки кабеля).</li>
+        <li><kbd>Delete</kbd> — удаление выбранного объекта (в режиме редактирования).</li>
+    </ul>
+</div>
+
+<div class="help-section">
+    <h3>Хранение данных</h3>
+    <p>Данные хранятся в браузере (localStorage): объекты карты, пользователи, сессия, история изменений, тема. Для переноса данных используйте экспорт и импорт.</p>
+</div>
+`;
+}
+
 // Отрисовать список истории
 function renderHistoryList(filter = 'all') {
     const container = document.getElementById('historyList');
@@ -495,11 +625,20 @@ function initUserUI() {
         historyBtn.addEventListener('click', openHistoryModal);
     }
     
+    // Кнопка справки
+    const infoHelpBtn = document.getElementById('infoHelpBtn');
+    if (infoHelpBtn) {
+        infoHelpBtn.addEventListener('click', openHelpModal);
+    }
+    
     // Обработчики модального окна пользователей
     setupUsersModalHandlers();
     
     // Обработчики модального окна истории
     setupHistoryModalHandlers();
+    
+    // Обработчики модального окна справки
+    setupHelpModalHandlers();
     
     // Обновляем счётчик истории
     updateHistoryBadge();
@@ -547,6 +686,20 @@ function setupHistoryModalHandlers() {
                 renderHistoryList();
                 showInfo('История очищена');
             }
+        });
+    }
+}
+
+// Настройка обработчиков модального окна справки
+function setupHelpModalHandlers() {
+    const closeBtn = document.querySelector('.close-help');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closeHelpModal);
+    }
+    const modal = document.getElementById('helpModal');
+    if (modal) {
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) closeHelpModal();
         });
     }
 }
@@ -993,6 +1146,12 @@ function init() {
         zoom: 15
     });
     
+    try {
+        const stored = JSON.parse(localStorage.getItem(GROUP_NAMES_STORAGE_KEY));
+        if (stored && stored.cross) crossGroupNames = new Map(Object.entries(stored.cross));
+        if (stored && stored.node) nodeGroupNames = new Map(Object.entries(stored.node));
+    } catch (e) {}
+    
     // Создаем индикатор под курсором
     createCursorIndicator();
     
@@ -1047,16 +1206,18 @@ function setupEventListeners() {
             clearSelection();
             removeCablePreview();
             cableSource = null;
-            // Изменяем курсор карты
-            myMap.container.getElement().style.cursor = 'crosshair';
+            const mapEl = myMap.container.getElement();
+            mapEl.style.cursor = 'crosshair';
+            mapEl.classList.add('map-crosshair-active');
         } else {
             cableBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><line x1="12" y1="2" x2="12" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line></svg><span>Проложить кабель</span>';
             cableBtn.style.background = '#3498db';
             clearSelection();
             removeCablePreview();
             cableSource = null;
-            // Восстанавливаем курсор карты
-            myMap.container.getElement().style.cursor = '';
+            const mapEl = myMap.container.getElement();
+            mapEl.style.cursor = '';
+            mapEl.classList.remove('map-crosshair-active');
         }
     });
 
@@ -1530,7 +1691,9 @@ function handleAddObject() {
         removeCablePreview();
         cableSource = null;
         if (myMap && myMap.container) {
-            myMap.container.getElement().style.cursor = '';
+            const mapEl = myMap.container.getElement();
+            mapEl.style.cursor = '';
+            mapEl.classList.remove('map-crosshair-active');
         }
     }
 
@@ -1549,23 +1712,27 @@ function handleAddObject() {
             return;
         }
         
-        // Включаем или обновляем режим размещения
         objectPlacementMode = true;
         currentPlacementType = type;
         currentPlacementName = name;
-        
-        // Обновляем UI
+        if (myMap && myMap.container) {
+            const mapEl = myMap.container.getElement();
+            mapEl.style.cursor = 'crosshair';
+            mapEl.classList.add('map-crosshair-active');
+        }
         const addBtn = document.getElementById('addObject');
         addBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span>Завершить размещение</span>';
         addBtn.style.background = '#e74c3c';
         addBtn.onclick = cancelObjectPlacement;
     } else {
-        // Для опор и муфт также включаем/обновляем режим размещения
         objectPlacementMode = true;
         currentPlacementType = type;
         currentPlacementName = '';
-        
-        // Обновляем UI
+        if (myMap && myMap.container) {
+            const mapEl = myMap.container.getElement();
+            mapEl.style.cursor = 'crosshair';
+            mapEl.classList.add('map-crosshair-active');
+        }
         const addBtn = document.getElementById('addObject');
         addBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span>Завершить размещение</span>';
         addBtn.style.background = '#e74c3c';
@@ -1577,20 +1744,16 @@ function cancelObjectPlacement() {
     objectPlacementMode = false;
     currentPlacementType = null;
     currentPlacementName = null;
-    
-    // Удаляем фантомный объект
     removePhantomPlacemark();
-    
-    // Скрываем индикатор
-    if (cursorIndicator) {
-        cursorIndicator.style.display = 'none';
+    if (cursorIndicator) cursorIndicator.style.display = 'none';
+    if (hoveredObject) clearHoverHighlight();
+    if (myMap && myMap.container) {
+        const mapEl = myMap.container.getElement();
+        if (!currentCableTool) {
+            mapEl.style.cursor = '';
+            mapEl.classList.remove('map-crosshair-active');
+        }
     }
-    
-    // Убираем подсветку
-    if (hoveredObject) {
-        clearHoverHighlight();
-    }
-    
     // Восстанавливаем кнопку
     const addBtn = document.getElementById('addObject');
     addBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg><span>Добавить на карту</span>';
@@ -1967,6 +2130,12 @@ function updateCursorIndicator(e, objectType, objectCoord) {
             case 'cable':
                 text = 'Кабель';
                 break;
+            case 'crossGroup':
+                text = 'Группа кроссов';
+                break;
+            case 'nodeGroup':
+                text = 'Группа узлов';
+                break;
             default:
                 text = 'Объект';
         }
@@ -2085,7 +2254,7 @@ function attachHoverEventsToObject(obj) {
     const objType = obj.properties ? obj.properties.get('type') : null;
     if (!objType || objType === 'cableLabel') return;
     
-    obj.events.add('mouseenter', function(e) {
+    function onMouseEnter(e) {
         const domEvent = e.get && e.get('domEvent');
         if (domEvent) {
             window.lastMouseX = domEvent.clientX || 0;
@@ -2097,11 +2266,14 @@ function attachHoverEventsToObject(obj) {
         }
         if (hoveredObject && hoveredObject !== obj) clearHoverHighlight();
         highlightObjectOnHover(obj, e);
-    });
-    
-    obj.events.add('mouseleave', function() {
+    }
+    function onMouseLeave() {
         if (hoveredObject === obj) clearHoverHighlight();
-    });
+    }
+    obj.events.add('mouseenter', onMouseEnter);
+    obj.events.add('mouseleave', onMouseLeave);
+    obj.events.add('mouseover', onMouseEnter);
+    obj.events.add('mouseout', onMouseLeave);
 }
 
 // Подсвечивает объект при наведении мыши (режим просмотра и редактирования)
@@ -2155,6 +2327,24 @@ function highlightObjectOnHover(obj, e) {
                 <circle cx="16" cy="16" r="3" fill="#22c55e"/>
             </svg>`;
             break;
+        case 'nodeGroup': {
+            const nodeGroup = obj.properties.get('nodeGroup');
+            const nCount = nodeGroup ? nodeGroup.length : 1;
+            iconSvg = `<svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="20" cy="20" r="18" fill="#22c55e" stroke="#4ade80" stroke-width="3"/>
+                <text x="20" y="24" text-anchor="middle" fill="white" font-size="14" font-weight="bold">${nCount}</text>
+            </svg>`;
+            break;
+        }
+        case 'crossGroup': {
+            const crossGroup = obj.properties.get('crossGroup');
+            const count = crossGroup ? crossGroup.length : 1;
+            iconSvg = `<svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="4" width="36" height="32" rx="4" fill="#8b5cf6" stroke="#a78bfa" stroke-width="3"/>
+                <text x="20" y="24" text-anchor="middle" fill="white" font-size="14" font-weight="bold">${count}</text>
+            </svg>`;
+            break;
+        }
         case 'cross':
             iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
                 <rect x="2" y="4" width="28" height="24" rx="3" fill="#8b5cf6" stroke="#a78bfa" stroke-width="3"/>
@@ -2173,9 +2363,9 @@ function highlightObjectOnHover(obj, e) {
             return;
     }
     
-    // Создаем увеличенную область клика для подсвеченного объекта
+    // Одинаковая схема для всех точечных объектов: иконка в прозрачной обёртке 44x44, круг обводки
     const clickableSize = 44;
-    const iconSize = (type === 'node' || type === 'cross') ? 32 : 28;
+    const iconSize = (type === 'node' || type === 'cross') ? 32 : (type === 'crossGroup' || type === 'nodeGroup') ? 40 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
     
     const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
@@ -2188,7 +2378,6 @@ function highlightObjectOnHover(obj, e) {
     
     const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(clickableSvg)));
     
-    // Сохраняем оригинальную иконку для восстановления
     hoveredObjectOriginalIcon = {
         href: obj.options.get('iconImageHref'),
         size: obj.options.get('iconImageSize'),
@@ -2201,7 +2390,6 @@ function highlightObjectOnHover(obj, e) {
         iconImageOffset: [-clickableSize / 2, -clickableSize / 2]
     });
     
-    // Показываем круг вокруг объекта для визуализации кликабельной зоны
     showHoverCircle(obj, e);
 }
 
@@ -2260,12 +2448,14 @@ function showHoverCircle(obj, e) {
         const zoom = myMap.getZoom();
         const radius = zoom < 12 ? 0.00025 : (zoom < 15 ? 0.00018 : 0.00012);
         
+        // Группы: круг поверх метки (zIndex 2000), толстая яркая обводка
+        const isGroup = type === 'crossGroup' || type === 'nodeGroup';
         hoverCircle = new ymaps.Circle([coords, radius], {}, {
-            fillColor: 'rgba(59, 130, 246, 0.2)',
+            fillColor: isGroup ? 'rgba(59, 130, 246, 0.25)' : 'rgba(59, 130, 246, 0.15)',
             strokeColor: '#3b82f6',
-            strokeWidth: 2.5,
+            strokeWidth: isGroup ? 4 : 2.5,
             strokeStyle: 'solid',
-            zIndex: 999
+            zIndex: isGroup ? 9999 : 999
         });
         
         myMap.geoObjects.add(hoverCircle);
@@ -2408,7 +2598,9 @@ function switchToViewMode() {
         clearHoverHighlight();
     }
     if (myMap && myMap.container) {
-        myMap.container.getElement().style.cursor = '';
+        const mapEl = myMap.container.getElement();
+        mapEl.style.cursor = '';
+        mapEl.classList.remove('map-crosshair-active');
     }
     
     updateEditControls();
@@ -2452,6 +2644,8 @@ function makeObjectsDraggable() {
             obj.options.set('draggable', true);
         }
     });
+    crossGroupPlacemarks.forEach(pm => { if (pm.options) pm.options.set('draggable', true); });
+    nodeGroupPlacemarks.forEach(pm => { if (pm.options) pm.options.set('draggable', true); });
 }
 
 function makeObjectsNonDraggable() {
@@ -2460,6 +2654,8 @@ function makeObjectsNonDraggable() {
             obj.options.set('draggable', false);
         }
     });
+    crossGroupPlacemarks.forEach(pm => { if (pm.options) pm.options.set('draggable', false); });
+    nodeGroupPlacemarks.forEach(pm => { if (pm.options) pm.options.set('draggable', false); });
 }
 
 function createObject(type, name, coords, options = {}) {
@@ -2567,8 +2763,23 @@ function createObject(type, name, coords, options = {}) {
     // Для узлов и кроссов добавляем подпись с названием под маркером
     if (type === 'node' || type === 'cross') {
         updateNodeLabel(placemark, name);
-        
-        // Обновляем позицию метки при перетаскивании
+        if (type === 'cross') {
+            const labelContent = name ? escapeHtml(name) : 'Оптический кросс';
+            const label = new ymaps.Placemark(coords, {}, {
+                iconLayout: 'default#imageWithContent',
+                iconImageHref: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==',
+                iconImageSize: [1, 1],
+                iconImageOffset: [0, 0],
+                iconContent: '<div style="color: #2c3e50; font-size: 12px; font-weight: 600; text-align: center; white-space: nowrap; text-shadow: 1px 1px 2px rgba(255,255,255,0.9); padding: 2px 4px; margin-top: 8px; background: rgba(255,255,255,0.8); border-radius: 3px;">' + labelContent + '</div>',
+                iconContentOffset: [0, 20],
+                zIndex: 1000,
+                zIndexHover: 1000,
+                cursor: 'default',
+                hasBalloon: false,
+                hasHint: false
+            });
+            placemark.properties.set('label', label);
+        }
         placemark.events.add('dragend', function() {
             const coords = placemark.geometry.getCoordinates();
             const label = placemark.properties.get('label');
@@ -2647,18 +2858,16 @@ function createObject(type, name, coords, options = {}) {
     placemark.events.add('dragend', function() {
         saveData();
         updateConnectedCables(placemark);
-        // Обновляем позицию подписи, если она есть
         const label = placemark.properties.get('label');
         if (label) {
             label.geometry.setCoordinates(placemark.geometry.getCoordinates());
         }
-        // Обновляем линии соединений кросс-узел
         updateAllNodeConnectionLines();
-        // Обновляем позицию пульсирующего круга
         updateSelectionPulsePosition(placemark);
+        if (type === 'cross') updateCrossDisplay();
+        if (type === 'node') updateNodeDisplay();
     });
     
-    // Обновляем позицию круга и кабелей при перетаскивании
     placemark.events.add('drag', function() {
         updateSelectionPulsePosition(placemark);
         updateConnectedCables(placemark);
@@ -2666,11 +2875,16 @@ function createObject(type, name, coords, options = {}) {
 
     attachHoverEventsToObject(placemark);
     objects.push(placemark);
-    myMap.geoObjects.add(placemark);
+    if (type === 'cross') {
+        updateCrossDisplay();
+    } else if (type === 'node') {
+        updateNodeDisplay();
+    } else {
+        myMap.geoObjects.add(placemark);
+    }
     saveData();
     updateStats();
     
-    // Логируем создание объекта
     logAction(ActionTypes.CREATE_OBJECT, {
         objectType: type,
         name: name || ''
@@ -2688,7 +2902,6 @@ function deleteObject(obj) {
         myMap.geoObjects.remove(label);
     }
     
-    // Удаляем связанные кабели
     const cablesToRemove = objects.filter(cable => 
         cable.properties && 
         cable.properties.get('type') === 'cable' &&
@@ -2700,12 +2913,14 @@ function deleteObject(obj) {
         objects = objects.filter(o => o !== cable);
     });
     
-    // Удаляем сам объект
     myMap.geoObjects.remove(obj);
+    const hadLabel = obj.properties && obj.properties.get('label');
+    if (hadLabel) try { myMap.geoObjects.remove(hadLabel); } catch (e) {}
     objects = objects.filter(o => o !== obj);
     
-    // Обновляем визуализацию кабелей (количество на линиях)
     updateCableVisualization();
+    if (objType === 'cross') updateCrossDisplay();
+    if (objType === 'node') updateNodeDisplay();
     
     saveData();
     updateStats();
@@ -2721,15 +2936,15 @@ function selectObject(obj) {
     if (!selectedObjects.includes(obj)) {
         selectedObjects.push(obj);
         
-        // В режиме редактирования не меняем визуальное отображение
-        if (isEditMode) {
+        const type = obj.properties.get('type');
+        // Группы всегда показывают выделение; остальные — только в режиме просмотра
+        if (isEditMode && type !== 'crossGroup' && type !== 'nodeGroup') {
             return;
         }
         
-        // В режиме просмотра - увеличиваем иконку
-        const type = obj.properties.get('type');
+        // Увеличиваем иконку и добавляем обводку
         const clickableSize = 50;
-        const iconSize = (type === 'node' || type === 'cross') ? 38 : 34;
+        const iconSize = (type === 'node' || type === 'cross') ? 38 : (type === 'crossGroup' || type === 'nodeGroup') ? 40 : 34;
         const iconOffset = (clickableSize - iconSize) / 2;
         
         let iconSvg;
@@ -2760,6 +2975,24 @@ function selectObject(obj) {
                     <rect x="15" y="7" width="8" height="24" rx="1" fill="white" opacity="0.95"/>
                 </svg>`;
                 break;
+            case 'nodeGroup': {
+                const nodeGroup = obj.properties.get('nodeGroup');
+                const nCount = nodeGroup ? nodeGroup.length : 1;
+                iconSvg = `<svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="20" cy="20" r="18" fill="#22c55e" stroke="white" stroke-width="3"/>
+                    <text x="20" y="24" text-anchor="middle" fill="white" font-size="14" font-weight="bold">${nCount}</text>
+                </svg>`;
+                break;
+            }
+            case 'crossGroup': {
+                const crossGroup = obj.properties.get('crossGroup');
+                const count = crossGroup ? crossGroup.length : 1;
+                iconSvg = `<svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="2" y="4" width="36" height="32" rx="4" fill="#8b5cf6" stroke="white" stroke-width="3"/>
+                    <text x="20" y="24" text-anchor="middle" fill="white" font-size="14" font-weight="bold">${count}</text>
+                </svg>`;
+                break;
+            }
             default:
                 iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg">
                     <circle cx="15" cy="15" r="13" fill="#94a3b8" stroke="white" stroke-width="2"/>
@@ -2814,13 +3047,13 @@ function deselectObject(obj) {
     // Удаляем пульсирующий круг
     removeSelectionPulse(obj);
     
-    // В режиме редактирования не меняем иконку
-    if (isEditMode) {
+    const type = obj.properties.get('type');
+    // В режиме редактирования не меняем иконку, кроме групп
+    if (isEditMode && type !== 'crossGroup' && type !== 'nodeGroup') {
         return;
     }
     
     // Восстанавливаем оригинальную иконку
-    const type = obj.properties.get('type');
     let iconSvg;
     
     switch(type) {
@@ -2850,29 +3083,43 @@ function deselectObject(obj) {
                 <rect x="13" y="6" width="6" height="20" rx="1" fill="white" opacity="0.95"/>
             </svg>`;
             break;
+        case 'crossGroup': {
+            const crossGroup = obj.properties.get('crossGroup');
+            const count = crossGroup ? crossGroup.length : 1;
+            iconSvg = `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="4" width="32" height="28" rx="4" fill="#8b5cf6" stroke="#a78bfa" stroke-width="2"/>
+                <text x="18" y="22" text-anchor="middle" fill="white" font-size="14" font-weight="bold">${count}</text>
+            </svg>`;
+            break;
+        }
+        case 'nodeGroup': {
+            const nodeGroup = obj.properties.get('nodeGroup');
+            const nCount = nodeGroup ? nodeGroup.length : 1;
+            iconSvg = `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="18" cy="18" r="16" fill="#22c55e" stroke="#4ade80" stroke-width="2"/>
+                <text x="18" y="22" text-anchor="middle" fill="white" font-size="14" font-weight="bold">${nCount}</text>
+            </svg>`;
+            break;
+        }
         default:
             iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="12" cy="12" r="10" fill="#94a3b8" stroke="white" stroke-width="2"/>
             </svg>`;
     }
     
-    // Создаем увеличенную область клика для обычного объекта
+    // Создаем область клика (для групп — иконка 36px)
     const clickableSize = 44;
-    const iconSize = (type === 'node' || type === 'cross') ? 32 : 28;
+    const iconSize = (type === 'node' || type === 'cross') ? 32 : (type === 'crossGroup' || type === 'nodeGroup') ? 36 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
     
-    // Извлекаем содержимое SVG без тегов svg
     const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
-    
     const clickableSvg = `<svg width="${clickableSize}" height="${clickableSize}" viewBox="0 0 ${clickableSize} ${clickableSize}" xmlns="http://www.w3.org/2000/svg">
         <rect x="0" y="0" width="${clickableSize}" height="${clickableSize}" fill="transparent"/>
         <g transform="translate(${iconOffset}, ${iconOffset})">
             ${svgContent}
         </g>
     </svg>`;
-    
     const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(clickableSvg)));
-    
     obj.options.set({
         iconImageHref: svgDataUrl,
         iconImageSize: [clickableSize, clickableSize],
@@ -3660,13 +3907,10 @@ function importData(data) {
         }
     });
     
-    // Убеждаемся, что все подписи узлов отображаются
     ensureNodeLabelsVisible();
-    
-    // Обновляем визуализацию кабелей (количество на линиях)
     updateCableVisualization();
-    
-    // Обновляем визуальные линии соединений кросс-узел
+    updateCrossDisplay();
+    updateNodeDisplay();
     updateAllNodeConnectionLines();
 }
 
@@ -3780,14 +4024,15 @@ function createObjectFromData(data) {
         });
         
         placemark.properties.set('label', label);
-        myMap.geoObjects.add(label);
+        if (type !== 'cross' && type !== 'node') myMap.geoObjects.add(label);
         
-        // Обновляем позицию метки при перетаскивании
         placemark.events.add('dragend', function() {
             const coords = placemark.geometry.getCoordinates();
             if (label && label.geometry) {
                 label.geometry.setCoordinates(coords);
             }
+            if (type === 'cross') updateCrossDisplay();
+            if (type === 'node') updateNodeDisplay();
         });
     }
     
@@ -3934,7 +4179,7 @@ function createObjectFromData(data) {
 
     attachHoverEventsToObject(placemark);
     objects.push(placemark);
-    myMap.geoObjects.add(placemark);
+    if (type !== 'cross' && type !== 'node') myMap.geoObjects.add(placemark);
     updateStats();
     
     return placemark;
@@ -4043,6 +4288,8 @@ function clearMap() {
     myMap.geoObjects.removeAll();
     objects = [];
     selectedObjects = [];
+    crossGroupPlacemarks = [];
+    nodeGroupPlacemarks = [];
     saveData();
     updateStats();
     
@@ -4115,16 +4362,6 @@ function showObjectInfo(obj) {
         }
         
         html += '</div>';
-        
-        // Добавляем кнопку объединения кабелей для муфт (только в режиме редактирования)
-        if (isEditMode && connectedCables.length > 1) {
-            html += '<div style="margin-bottom: 15px; padding: 12px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--accent-primary);">';
-            html += '<button id="mergeCablesBtn" class="btn-secondary" style="width: 100%;">';
-            html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;"><path d="M8 17l4 4 4-4M12 2v19"></path></svg>';
-            html += 'Объединить кабели</button>';
-            html += '<small style="display: block; margin-top: 8px; color: var(--text-muted); font-size: 11px;">Объединить несколько кабелей в один (например, 4×4 жилы = 16 жил)</small>';
-            html += '</div>';
-        }
     }
     
     // Обработка информации об узлах
@@ -4487,16 +4724,6 @@ function setupEditAndDeleteListeners() {
         });
     }
     
-    // Обработчик объединения кабелей
-    const mergeCablesBtn = document.getElementById('mergeCablesBtn');
-    if (mergeCablesBtn) {
-        mergeCablesBtn.addEventListener('click', function() {
-            if (!currentModalObject || currentModalObject.properties.get('type') !== 'sleeve') return;
-            
-            showMergeCablesDialog(currentModalObject);
-        });
-    }
-    
     // Обработчик удаления объекта
     const deleteBtn = document.getElementById('deleteCurrentObject');
     if (deleteBtn) {
@@ -4580,7 +4807,6 @@ function updateNodeLabel(placemark, name) {
                 hasHint: false
             });
             placemark.properties.set('label', label);
-            myMap.geoObjects.add(label);
         } else {
             // Обновляем существующую метку
             label.properties.set({
@@ -6252,11 +6478,8 @@ function createNodeConnectionLine(crossObj, nodeObj, cableId, fiberNumber) {
     // Удаляем старую линию, если есть
     removeNodeConnectionLineByKey(key);
     
-    // Создаем пунктирную линию соединения
-    const line = new ymaps.Polyline([crossCoords, nodeCoords], {
-        hintContent: `Жила ${fiberNumber} → ${nodeObj.properties.get('name') || 'Узел'}`,
-        balloonContent: `<strong>Соединение кросс-узел</strong><br>Жила ${fiberNumber}<br>→ ${nodeObj.properties.get('name') || 'Узел'}`
-    }, {
+    const nodeName = nodeObj.properties.get('name') || 'Узел';
+    const line = new ymaps.Polyline([crossCoords, nodeCoords], {}, {
         strokeColor: '#22c55e',
         strokeWidth: 2,
         strokeStyle: 'shortdash',
@@ -6268,6 +6491,23 @@ function createNodeConnectionLine(crossObj, nodeObj, cableId, fiberNumber) {
     line.properties.set('crossId', crossUniqueId);
     line.properties.set('cableId', cableId);
     line.properties.set('fiberNumber', fiberNumber);
+    line.properties.set('nodeName', nodeName);
+    
+    // Открываем баллун так же, как у групп — через myMap.balloon.open(), без встроенного баллуна API
+    line.events.add('click', function (e) {
+        const coords = e.get('coords');
+        const fiberNum = line.properties.get('fiberNumber');
+        const name = line.properties.get('nodeName') || 'Узел';
+        const balloonHtml = '<div class="network-map-balloon">' +
+            '<div class="group-balloon-header">' +
+            '<span class="group-balloon-title">Соединение кросс-узел</span>' +
+            '<button type="button" class="group-balloon-close" title="Закрыть" onclick="myMap.balloon.close()">&times;</button>' +
+            '</div>' +
+            '<div class="node-selection-body" style="padding: 16px 14px;">' +
+            'Жила ' + fiberNum + '<br>→ ' + escapeHtml(name) +
+            '</div></div>';
+        myMap.balloon.open(coords, balloonHtml, { maxWidth: 320, closeButton: false });
+    });
     
     nodeConnectionLines.push(line);
     myMap.geoObjects.add(line);
@@ -6796,6 +7036,351 @@ function getCableGroups() {
     });
     
     return groups;
+}
+
+// Допустимое расстояние (в градусах), чтобы считать кроссы «в одном месте»
+const CROSS_SAME_PLACE_EPS = 0.00002;
+
+// Группирует кроссы по месту на карте (несколько кроссов в одной точке — одна группа)
+function getCrossGroups() {
+    const crosses = objects.filter(obj => obj.properties && obj.properties.get('type') === 'cross');
+    if (crosses.length === 0) return [];
+    const groups = new Map();
+    crosses.forEach(cross => {
+        const coords = cross.geometry.getCoordinates();
+        const key = `${coords[0].toFixed(5)},${coords[1].toFixed(5)}`;
+        if (!groups.has(key)) groups.set(key, { coords: coords, crosses: [] });
+        groups.get(key).crosses.push(cross);
+    });
+    return Array.from(groups.values());
+}
+
+// Обновляет отображение кроссов: один кросс — одна метка; несколько в одном месте — одна групповая метка с выбором
+function updateCrossDisplay() {
+    crossGroupPlacemarks.forEach(pm => {
+        try { myMap.geoObjects.remove(pm); } catch (e) {}
+    });
+    crossGroupPlacemarks = [];
+    const allCrosses = objects.filter(obj => obj.properties && obj.properties.get('type') === 'cross');
+    allCrosses.forEach(cross => {
+        try { myMap.geoObjects.remove(cross); } catch (e) {}
+        const label = cross.properties.get('label');
+        if (label) try { myMap.geoObjects.remove(label); } catch (e) {}
+    });
+    const groups = getCrossGroups();
+    groups.forEach(group => {
+        if (group.crosses.length === 1) {
+            const cross = group.crosses[0];
+            myMap.geoObjects.add(cross);
+            const label = cross.properties.get('label');
+            if (label) myMap.geoObjects.add(label);
+            return;
+        }
+        const coords = group.coords;
+        const n = group.crosses.length;
+        const crossGroupName = getCrossGroupName(coords);
+        const iconSvg = `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+            <rect x="2" y="4" width="32" height="28" rx="4" fill="#8b5cf6" stroke="#a78bfa" stroke-width="2"/>
+            <text x="18" y="22" text-anchor="middle" fill="white" font-size="14" font-weight="bold">${n}</text>
+        </svg>`;
+        const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(iconSvg)));
+        const groupPlacemark = new ymaps.Placemark(coords, {
+            type: 'crossGroup',
+            crossGroup: group.crosses,
+            balloonContent: ''
+        }, {
+            iconLayout: 'default#image',
+            iconImageHref: svgDataUrl,
+            iconImageSize: [36, 36],
+            iconImageOffset: [-18, -18],
+            zIndex: 2000,
+            zIndexHover: 2000,
+            hasBalloon: false,
+            hasHint: true,
+            hintContent: crossGroupName || `Группа кроссов (${n})`,
+            draggable: isEditMode,
+            syncOverlayInit: true,
+            cursor: 'pointer'
+        });
+        groupPlacemark.properties.set('labelContent', crossGroupName || (group.crosses.length + ' кр.'));
+        groupPlacemark.events.add('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (objectPlacementMode) return;
+            const crosses = groupPlacemark.properties.get('crossGroup');
+            if (crosses.length === 1) {
+                if (currentCableTool && isEditMode) {
+                    if (cableSource && cableSource !== crosses[0]) {
+                        const cableType = document.getElementById('cableType').value;
+                        if (addCable(cableSource, crosses[0], cableType)) {
+                            cableSource = crosses[0];
+                            clearSelection();
+                            selectObject(cableSource);
+                            removeCablePreview();
+                        }
+                    } else {
+                        cableSource = crosses[0];
+                        clearSelection();
+                        selectObject(cableSource);
+                    }
+                } else {
+                    showObjectInfo(crosses[0]);
+                }
+                return;
+            }
+            const names = crosses.map(c => c.properties.get('name') || 'Без имени');
+            const listHtml = crosses.map((c, i) =>
+                `<div class="cross-group-item" data-index="${i}">` +
+                `<span class="group-item-name">${escapeHtml(names[i])}</span>` +
+                (isEditMode ? `<button type="button" class="group-item-move" title="Вынести и переместить">Переместить</button>` : '') +
+                `</div>`
+            ).join('');
+            const groupNameRow = '<div class="group-name-row">' +
+                '<label class="group-name-label">Название группы</label>' +
+                '<div class="group-name-controls">' +
+                '<input type="text" class="group-name-input" value="' + escapeHtml(crossGroupName) + '" placeholder="' + escapeHtml(n + ' кр.') + '">' +
+                '<button type="button" class="group-name-save">Сохранить</button>' +
+                '</div></div>';
+            const balloonHtml = '<div class="cross-group-list network-map-balloon" data-lat="' + coords[0] + '" data-lon="' + coords[1] + '" data-group-type="cross">' +
+                '<div class="group-balloon-header">' +
+                '<span class="group-balloon-title">' + escapeHtml(crossGroupName || 'Выберите кросс') + '</span>' +
+                '<button type="button" class="group-balloon-close" title="Закрыть" onclick="myMap.balloon.close()">&times;</button>' +
+                '</div>' +
+                groupNameRow +
+                '<div class="group-balloon-list">' + listHtml + '</div></div>';
+            myMap.balloon.open(coords, balloonHtml, { maxWidth: 320, closeButton: false });
+            setTimeout(() => {
+                const saveBtn = document.querySelector('.cross-group-list .group-name-save');
+                if (saveBtn) {
+                    saveBtn.addEventListener('click', function() {
+                        const c = document.querySelector('.cross-group-list.network-map-balloon');
+                        if (c) {
+                            const lat = parseFloat(c.getAttribute('data-lat')), lon = parseFloat(c.getAttribute('data-lon'));
+                            const inp = c.querySelector('.group-name-input');
+                            if (!isNaN(lat) && !isNaN(lon) && inp) setCrossGroupName([lat, lon], inp.value);
+                            myMap.balloon.close();
+                        }
+                    });
+                }
+                document.querySelectorAll('.cross-group-item').forEach((el, i) => {
+                    const moveBtn = el.querySelector('.group-item-move');
+                    if (moveBtn) {
+                        moveBtn.addEventListener('click', function(ev) { ev.stopPropagation(); ev.preventDefault();
+                            const offsetCoords = [coords[0] + 0.00008, coords[1]];
+                            crosses[i].geometry.setCoordinates(offsetCoords);
+                            const lbl = crosses[i].properties.get('label');
+                            if (lbl && lbl.geometry) lbl.geometry.setCoordinates(offsetCoords);
+                            updateConnectedCables(crosses[i]);
+                            updateAllNodeConnectionLines();
+                            saveData();
+                            myMap.balloon.close();
+                            updateCrossDisplay();
+                        });
+                    }
+                    el.addEventListener('click', (e) => {
+                        if (e.target && e.target.closest('.group-item-move')) return;
+                        myMap.balloon.close();
+                        if (currentCableTool && isEditMode) {
+                            if (cableSource && cableSource !== crosses[i]) {
+                                const cableType = document.getElementById('cableType').value;
+                                if (addCable(cableSource, crosses[i], cableType)) {
+                                    cableSource = crosses[i];
+                                    clearSelection();
+                                    selectObject(cableSource);
+                                    removeCablePreview();
+                                }
+                            } else {
+                                cableSource = crosses[i];
+                                clearSelection();
+                                selectObject(cableSource);
+                            }
+                        } else {
+                            showObjectInfo(crosses[i]);
+                        }
+                    });
+                });
+            }, 50);
+        });
+        groupPlacemark.events.add('dragend', function() {
+            const newCoords = groupPlacemark.geometry.getCoordinates();
+            const crosses = groupPlacemark.properties.get('crossGroup');
+            const oldCoords = crosses[0].geometry.getCoordinates();
+            const oldKey = groupKey(oldCoords);
+            const savedName = crossGroupNames.get(oldKey);
+            crosses.forEach(c => {
+                c.geometry.setCoordinates(newCoords);
+                const lbl = c.properties.get('label');
+                if (lbl && lbl.geometry) lbl.geometry.setCoordinates(newCoords);
+                updateConnectedCables(c);
+            });
+            updateAllNodeConnectionLines();
+            if (savedName) {
+                crossGroupNames.delete(oldKey);
+                crossGroupNames.set(groupKey(newCoords), savedName);
+                saveGroupNames();
+            }
+            saveData();
+            updateCrossDisplay();
+        });
+        attachHoverEventsToObject(groupPlacemark);
+        myMap.geoObjects.add(groupPlacemark);
+        crossGroupPlacemarks.push(groupPlacemark);
+    });
+}
+
+// Группирует узлы по месту на карте
+function getNodeGroups() {
+    const nodes = objects.filter(obj => obj.properties && obj.properties.get('type') === 'node');
+    if (nodes.length === 0) return [];
+    const groups = new Map();
+    nodes.forEach(node => {
+        const coords = node.geometry.getCoordinates();
+        const key = `${coords[0].toFixed(5)},${coords[1].toFixed(5)}`;
+        if (!groups.has(key)) groups.set(key, { coords: coords, nodes: [] });
+        groups.get(key).nodes.push(node);
+    });
+    return Array.from(groups.values());
+}
+
+// Обновляет отображение узлов: один узел — одна метка; несколько в одном месте — групповая метка с выбором
+function updateNodeDisplay() {
+    nodeGroupPlacemarks.forEach(pm => {
+        try { myMap.geoObjects.remove(pm); } catch (e) {}
+    });
+    nodeGroupPlacemarks = [];
+    const allNodes = objects.filter(obj => obj.properties && obj.properties.get('type') === 'node');
+    allNodes.forEach(node => {
+        try { myMap.geoObjects.remove(node); } catch (e) {}
+        const label = node.properties.get('label');
+        if (label) try { myMap.geoObjects.remove(label); } catch (e) {}
+    });
+    const groups = getNodeGroups();
+    groups.forEach(group => {
+        if (group.nodes.length === 1) {
+            const node = group.nodes[0];
+            myMap.geoObjects.add(node);
+            const label = node.properties.get('label');
+            if (label) myMap.geoObjects.add(label);
+            return;
+        }
+        const coords = group.coords;
+        const n = group.nodes.length;
+        const nodeGroupName = getNodeGroupName(coords);
+        const iconSvg = `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="18" cy="18" r="16" fill="#22c55e" stroke="#4ade80" stroke-width="2"/>
+            <text x="18" y="22" text-anchor="middle" fill="white" font-size="14" font-weight="bold">${n}</text>
+        </svg>`;
+        const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(iconSvg)));
+        const groupPlacemark = new ymaps.Placemark(coords, {
+            type: 'nodeGroup',
+            nodeGroup: group.nodes,
+            balloonContent: ''
+        }, {
+            iconLayout: 'default#image',
+            iconImageHref: svgDataUrl,
+            iconImageSize: [36, 36],
+            iconImageOffset: [-18, -18],
+            zIndex: 2000,
+            zIndexHover: 2000,
+            hasBalloon: false,
+            hasHint: true,
+            hintContent: nodeGroupName || `Группа узлов (${n})`,
+            draggable: isEditMode,
+            syncOverlayInit: true,
+            cursor: 'pointer'
+        });
+        groupPlacemark.properties.set('labelContent', nodeGroupName || (group.nodes.length + ' уз.'));
+        groupPlacemark.events.add('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (objectPlacementMode) return;
+            const nodes = groupPlacemark.properties.get('nodeGroup');
+            if (nodes.length === 1) {
+                showObjectInfo(nodes[0]);
+                return;
+            }
+            const names = nodes.map(c => c.properties.get('name') || 'Без имени');
+            const listHtml = nodes.map((c, i) =>
+                `<div class="node-group-item" data-index="${i}">` +
+                `<span class="group-item-name">${escapeHtml(names[i])}</span>` +
+                (isEditMode ? `<button type="button" class="group-item-move" title="Вынести и переместить">Переместить</button>` : '') +
+                `</div>`
+            ).join('');
+            const nodeGroupNameRow = '<div class="group-name-row">' +
+                '<label class="group-name-label">Название группы</label>' +
+                '<div class="group-name-controls">' +
+                '<input type="text" class="group-name-input" value="' + escapeHtml(nodeGroupName) + '" placeholder="' + escapeHtml(n + ' уз.') + '">' +
+                '<button type="button" class="group-name-save">Сохранить</button>' +
+                '</div></div>';
+            const balloonHtml = '<div class="node-group-list network-map-balloon" data-lat="' + coords[0] + '" data-lon="' + coords[1] + '" data-group-type="node">' +
+                '<div class="group-balloon-header">' +
+                '<span class="group-balloon-title">' + escapeHtml(nodeGroupName || 'Выберите узел') + '</span>' +
+                '<button type="button" class="group-balloon-close" title="Закрыть" onclick="myMap.balloon.close()">&times;</button>' +
+                '</div>' +
+                nodeGroupNameRow +
+                '<div class="group-balloon-list">' + listHtml + '</div></div>';
+            myMap.balloon.open(coords, balloonHtml, { maxWidth: 320, closeButton: false });
+            setTimeout(() => {
+                const saveBtn = document.querySelector('.node-group-list .group-name-save');
+                if (saveBtn) {
+                    saveBtn.addEventListener('click', function() {
+                        const c = document.querySelector('.node-group-list.network-map-balloon');
+                        if (c) {
+                            const lat = parseFloat(c.getAttribute('data-lat')), lon = parseFloat(c.getAttribute('data-lon'));
+                            const inp = c.querySelector('.group-name-input');
+                            if (!isNaN(lat) && !isNaN(lon) && inp) setNodeGroupName([lat, lon], inp.value);
+                            myMap.balloon.close();
+                        }
+                    });
+                }
+                document.querySelectorAll('.node-group-item').forEach((el, i) => {
+                    const moveBtn = el.querySelector('.group-item-move');
+                    if (moveBtn) {
+                        moveBtn.addEventListener('click', function(ev) { ev.stopPropagation(); ev.preventDefault();
+                            const offsetCoords = [coords[0] + 0.00008, coords[1]];
+                            nodes[i].geometry.setCoordinates(offsetCoords);
+                            const lbl = nodes[i].properties.get('label');
+                            if (lbl && lbl.geometry) lbl.geometry.setCoordinates(offsetCoords);
+                            updateConnectedCables(nodes[i]);
+                            updateAllNodeConnectionLines();
+                            saveData();
+                            myMap.balloon.close();
+                            updateNodeDisplay();
+                        });
+                    }
+                    el.addEventListener('click', (e) => {
+                        if (e.target && e.target.closest('.group-item-move')) return;
+                        myMap.balloon.close();
+                        showObjectInfo(nodes[i]);
+                    });
+                });
+            }, 50);
+        });
+        groupPlacemark.events.add('dragend', function() {
+            const newCoords = groupPlacemark.geometry.getCoordinates();
+            const nodes = groupPlacemark.properties.get('nodeGroup');
+            const oldCoords = nodes[0].geometry.getCoordinates();
+            const oldKey = groupKey(oldCoords);
+            const savedName = nodeGroupNames.get(oldKey);
+            nodes.forEach(n => {
+                n.geometry.setCoordinates(newCoords);
+                const lbl = n.properties.get('label');
+                if (lbl && lbl.geometry) lbl.geometry.setCoordinates(newCoords);
+                updateConnectedCables(n);
+            });
+            updateAllNodeConnectionLines();
+            if (savedName) {
+                nodeGroupNames.delete(oldKey);
+                nodeGroupNames.set(groupKey(newCoords), savedName);
+                saveGroupNames();
+            }
+            saveData();
+            updateNodeDisplay();
+        });
+        attachHoverEventsToObject(groupPlacemark);
+        myMap.geoObjects.add(groupPlacemark);
+        nodeGroupPlacemarks.push(groupPlacemark);
+    });
 }
 
 // Обновляет визуализацию кабелей - добавляет метки с количеством кабелей между объектами
