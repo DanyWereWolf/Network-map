@@ -353,6 +353,33 @@
                     </div>
                 </div>
 
+                <!-- Синхронизация (совместная работа) -->
+                <div class="accordion-section">
+                    <div class="accordion-header" data-accordion="sync">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M17 1l4 4-4 4"></path>
+                            <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+                            <path d="M7 23l-4-4 4-4"></path>
+                            <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+                        </svg>
+                        <span>Синхронизация</span>
+                        <svg class="accordion-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </div>
+                    <div class="accordion-content" id="sync-content">
+                        <p class="text-muted-inline" style="font-size: 0.8125rem; margin-bottom: 10px;">Несколько человек могут редактировать карту одновременно. Запустите сервер <code style="font-size: 0.75rem;">node server.js</code> на одном компьютере и укажите его адрес.</p>
+                        <div class="form-group">
+                            <label for="syncServerUrl">Адрес сервера (WebSocket)</label>
+                            <input type="text" id="syncServerUrl" class="form-input" placeholder="ws://localhost:8765" value="ws://localhost:8765">
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                            <button id="syncConnectBtn" class="btn-primary" style="flex: 1;">Подключиться</button>
+                            <span id="syncStatus" class="sync-status sync-disconnected">Отключено</span>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Легенда -->
                 <div class="accordion-section">
                     <div class="accordion-header" data-accordion="legend">
@@ -741,5 +768,6 @@
     <script src="js/help.js"></script>
     <script src="js/history.js"></script>
     <script src="main.js"></script>
+    <script src="js/sync.js"></script>
 </body>
 </html>

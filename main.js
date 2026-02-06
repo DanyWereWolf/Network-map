@@ -52,10 +52,15 @@ function setNodeGroupName(coords, name) {
 }
 function saveGroupNames() {
     try {
-        localStorage.setItem(GROUP_NAMES_STORAGE_KEY, JSON.stringify({
-            cross: Object.fromEntries(crossGroupNames),
-            node: Object.fromEntries(nodeGroupNames)
-        }));
+        var payload = { cross: Object.fromEntries(crossGroupNames), node: Object.fromEntries(nodeGroupNames) };
+        localStorage.setItem(GROUP_NAMES_STORAGE_KEY, JSON.stringify(payload));
+        if (typeof API_BASE !== 'undefined' && API_BASE) {
+            fetch(API_BASE + '/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
+                body: JSON.stringify({ groupNames: payload })
+            }).catch(function() {});
+        }
     } catch (e) {}
 }
 
@@ -395,41 +400,36 @@ function renderUsersList() {
 // Одобрить заявку пользователя
 function approveUserRequest(userId) {
     if (typeof AuthSystem === 'undefined') return;
-    
-    // Получаем данные пользователя до одобрения
-    const users = AuthSystem.getUsers();
-    const user = users.find(u => u.id === userId);
-    const username = user ? user.username : '';
-    
-    const result = AuthSystem.approveUser(userId);
-    if (result.success) {
-        showSuccess('Заявка одобрена. Пользователь получил доступ.', 'Заявка');
-        renderUsersList();
-        logAction(ActionTypes.USER_APPROVED, { username: username });
-    } else {
-        showError(result.error, 'Ошибка');
-    }
+    var users = AuthSystem.getUsers();
+    var user = users.find(function(u) { return u.id === userId; });
+    var username = user ? user.username : '';
+    Promise.resolve(AuthSystem.approveUser(userId)).then(function(result) {
+        if (result.success) {
+            showSuccess('Заявка одобрена. Пользователь получил доступ.', 'Заявка');
+            renderUsersList();
+            logAction(ActionTypes.USER_APPROVED, { username: username });
+        } else {
+            showError(result.error, 'Ошибка');
+        }
+    });
 }
 
 // Отклонить заявку пользователя
 function rejectUserRequest(userId) {
     if (!confirm('Вы уверены, что хотите отклонить эту заявку?')) return;
-    
     if (typeof AuthSystem === 'undefined') return;
-    
-    // Получаем данные пользователя до отклонения
-    const users = AuthSystem.getUsers();
-    const user = users.find(u => u.id === userId);
-    const username = user ? user.username : '';
-    
-    const result = AuthSystem.rejectUser(userId);
-    if (result.success) {
-        showWarning('Заявка отклонена.', 'Заявка');
-        renderUsersList();
-        logAction(ActionTypes.USER_REJECTED, { username: username });
-    } else {
-        showError(result.error, 'Ошибка');
-    }
+    var users = AuthSystem.getUsers();
+    var user = users.find(function(u) { return u.id === userId; });
+    var username = user ? user.username : '';
+    Promise.resolve(AuthSystem.rejectUser(userId)).then(function(result) {
+        if (result.success) {
+            showWarning('Заявка отклонена.', 'Заявка');
+            renderUsersList();
+            logAction(ActionTypes.USER_REJECTED, { username: username });
+        } else {
+            showError(result.error, 'Ошибка');
+        }
+    });
 }
 
 function openUserEditModal(userId = null) {
@@ -726,6 +726,12 @@ function setupEventListeners() {
     document.getElementById('importFile').addEventListener('change', handleFileImport);
     document.getElementById('exportData').addEventListener('click', exportData);
 
+    // Синхронизация (совместная работа)
+    const syncConnectBtn = document.getElementById('syncConnectBtn');
+    if (syncConnectBtn && typeof syncConnect === 'function') {
+        syncConnectBtn.addEventListener('click', function() { syncConnect(); });
+    }
+
     // Очистка карты
     document.getElementById('clearAll').addEventListener('click', function() {
         if (confirm('Очистить всю карту? Все данные будут удалены.')) {
@@ -905,11 +911,15 @@ function initTheme() {
 function setTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('networkMapTheme', theme);
-    
-    // Обновляем иконки
-    const lightIcon = document.querySelector('.theme-icon-light');
-    const darkIcon = document.querySelector('.theme-icon-dark');
-    
+    if (typeof API_BASE !== 'undefined' && API_BASE) {
+        fetch(API_BASE + '/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
+            body: JSON.stringify({ theme: theme })
+        }).catch(function() {});
+    }
+    var lightIcon = document.querySelector('.theme-icon-light');
+    var darkIcon = document.querySelector('.theme-icon-dark');
     if (theme === 'dark') {
         if (lightIcon) lightIcon.style.display = 'none';
         if (darkIcon) darkIcon.style.display = 'block';
@@ -2364,16 +2374,16 @@ function createObject(type, name, coords, options = {}) {
         saveData();
         updateConnectedCables(placemark);
         const label = placemark.properties.get('label');
-        if (label) {
-            label.geometry.setCoordinates(placemark.geometry.getCoordinates());
-        }
+        if (label) label.geometry.setCoordinates(placemark.geometry.getCoordinates());
         updateAllNodeConnectionLines();
         updateSelectionPulsePosition(placemark);
-        if (type === 'cross') updateCrossDisplay();
+        if (type === 'cross') updateCrossDisplay(); // пересобирает отображение и снова добавляет подпись
         if (type === 'node') updateNodeDisplay();
     });
     
     placemark.events.add('drag', function() {
+        const label = placemark.properties.get('label');
+        if (label) { try { myMap.geoObjects.remove(label); } catch (e) {} } // скрыть подпись во время перемещения
         updateSelectionPulsePosition(placemark);
         updateConnectedCables(placemark);
     });
@@ -3255,11 +3265,11 @@ function findObjectAtCoords(coords, tolerance = null) {
 
 
 
-function saveData() {
-    const data = objects.map(obj => {
+/** Возвращает текущее состояние карты в формате для сохранения/синхронизации */
+function getSerializedData() {
+    return objects.map(obj => {
         const props = obj.properties.getAll();
         const geometry = obj.geometry.getCoordinates();
-        
         if (props.type === 'cable') {
             const result = {
                 type: 'cable',
@@ -3268,89 +3278,123 @@ function saveData() {
                 to: objects.indexOf(props.to),
                 geometry: geometry
             };
-            // Сохраняем uniqueId кабеля
-            if (props.uniqueId) {
-                result.uniqueId = props.uniqueId;
-            }
-            // Сохраняем расстояние кабеля
-            if (props.distance !== undefined) {
-                result.distance = props.distance;
-            }
-            // Сохраняем название кабеля
-            if (props.cableName) {
-                result.cableName = props.cableName;
-            }
-            return result;
-        } else {
-            const result = {
-                type: props.type,
-                name: props.name,
-                geometry: geometry
-            };
-            // Сохраняем uniqueId объекта
-            if (props.uniqueId) {
-                result.uniqueId = props.uniqueId;
-            }
-            // Сохраняем информацию об использованных жилах
-            if (props.usedFibers) {
-                result.usedFibers = props.usedFibers;
-            }
-            // Сохраняем информацию о соединениях жил в муфте
-            if (props.fiberConnections) {
-                result.fiberConnections = props.fiberConnections;
-            }
-            // Сохраняем подписи жил
-            if (props.fiberLabels) {
-                result.fiberLabels = props.fiberLabels;
-            }
-            // Сохраняем настройки муфты
-            if (props.type === 'sleeve') {
-                if (props.sleeveType) {
-                    result.sleeveType = props.sleeveType;
-                }
-                if (props.maxFibers !== undefined) {
-                    result.maxFibers = props.maxFibers;
-                }
-            }
-            // Сохраняем настройки кросса
-            if (props.type === 'cross') {
-                if (props.crossPorts) {
-                    result.crossPorts = props.crossPorts;
-                }
-                if (props.nodeConnections) {
-                    result.nodeConnections = props.nodeConnections;
-                }
-            }
-            // Сохраняем информацию о NetBox
-            if (props.netboxId) {
-                result.netboxId = props.netboxId;
-            }
-            if (props.netboxUrl) {
-                result.netboxUrl = props.netboxUrl;
-            }
-            if (props.netboxDeviceType) {
-                result.netboxDeviceType = props.netboxDeviceType;
-            }
-            if (props.netboxSite) {
-                result.netboxSite = props.netboxSite;
-            }
+            if (props.uniqueId) result.uniqueId = props.uniqueId;
+            if (props.distance !== undefined) result.distance = props.distance;
+            if (props.cableName) result.cableName = props.cableName;
             return result;
         }
+        const result = {
+            type: props.type,
+            name: props.name,
+            geometry: geometry
+        };
+        if (props.uniqueId) result.uniqueId = props.uniqueId;
+        if (props.usedFibers) result.usedFibers = props.usedFibers;
+        if (props.fiberConnections) result.fiberConnections = props.fiberConnections;
+        if (props.fiberLabels) result.fiberLabels = props.fiberLabels;
+        if (props.type === 'sleeve') {
+            if (props.sleeveType) result.sleeveType = props.sleeveType;
+            if (props.maxFibers !== undefined) result.maxFibers = props.maxFibers;
+        }
+        if (props.type === 'cross') {
+            if (props.crossPorts) result.crossPorts = props.crossPorts;
+            if (props.nodeConnections) result.nodeConnections = props.nodeConnections;
+        }
+        if (props.netboxId) result.netboxId = props.netboxId;
+        if (props.netboxUrl) result.netboxUrl = props.netboxUrl;
+        if (props.netboxDeviceType) result.netboxDeviceType = props.netboxDeviceType;
+        if (props.netboxSite) result.netboxSite = props.netboxSite;
+        return result;
     });
-    
+}
+
+function getAuthToken() {
+    try { return localStorage.getItem('networkMap_token') || ''; } catch (e) { return ''; }
+}
+
+function saveData() {
+    const data = getSerializedData();
     localStorage.setItem('networkMapData', JSON.stringify(data));
+    if (typeof API_BASE !== 'undefined' && API_BASE) {
+        fetch(API_BASE + '/api/map', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
+            body: JSON.stringify({ data: data })
+        }).catch(function() {});
+    }
+    if (typeof window.syncSendState === 'function') window.syncSendState(data);
+}
+
+function loadDataFromStorage() {
+    const data = localStorage.getItem('networkMapData');
+    if (data) {
+        try {
+            const parsedData = JSON.parse(data);
+            importData(parsedData);
+            ensureNodeLabelsVisible();
+            updateAllNodeConnectionLines();
+        } catch (e) {}
+    }
 }
 
 function loadData() {
-    const data = localStorage.getItem('networkMapData');
-    if (data) {
-        const parsedData = JSON.parse(data);
-        importData(parsedData);
-        // Убеждаемся, что все подписи узлов отображаются
-        ensureNodeLabelsVisible();
-        // Обновляем визуальные линии соединений кросс-узел
-        updateAllNodeConnectionLines();
+    if (typeof API_BASE !== 'undefined' && API_BASE) {
+        fetch(API_BASE + '/api/map', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } })
+            .then(function(r) { return r.json(); })
+            .then(function(body) {
+                if (body && Array.isArray(body.data)) {
+                    applyRemoteState(body.data);
+                } else {
+                    loadDataFromStorage();
+                }
+            })
+            .catch(function() { loadDataFromStorage(); })
+            .then(function() {
+                if (typeof AuthSystem !== 'undefined' && AuthSystem.refreshUsersFromApi) AuthSystem.refreshUsersFromApi();
+                if (typeof API_BASE === 'undefined' || !API_BASE) return;
+                var token = getAuthToken();
+                fetch(API_BASE + '/api/history', { headers: { 'Authorization': 'Bearer ' + token } }).then(function(r) { return r.json(); }).then(function(b) {
+                    if (b && Array.isArray(b.history)) try { localStorage.setItem('networkMap_history', JSON.stringify(b.history)); } catch (e) {}
+                }).catch(function() {});
+                fetch(API_BASE + '/api/settings').then(function(r) { return r.json(); }).then(function(s) {
+                    if (!s) return;
+                    if (s.theme) try { localStorage.setItem('networkMapTheme', s.theme); document.documentElement.setAttribute('data-theme', s.theme); } catch (e) {}
+                    if (s.groupNames && typeof crossGroupNames !== 'undefined' && typeof nodeGroupNames !== 'undefined') {
+                        try {
+                            if (s.groupNames.cross && typeof s.groupNames.cross === 'object') Object.keys(s.groupNames.cross).forEach(function(k) { crossGroupNames.set(k, s.groupNames.cross[k]); });
+                            if (s.groupNames.node && typeof s.groupNames.node === 'object') Object.keys(s.groupNames.node).forEach(function(k) { nodeGroupNames.set(k, s.groupNames.node[k]); });
+                        } catch (e) {}
+                    }
+                }).catch(function() {});
+            });
+    } else {
+        loadDataFromStorage();
     }
+}
+
+function postHistoryToApi(history) {
+    if (typeof API_BASE === 'undefined' || !API_BASE || !Array.isArray(history)) return;
+    fetch(API_BASE + '/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
+        body: JSON.stringify({ history: history })
+    }).catch(function() {});
+}
+
+/**
+ * Применить состояние карты, полученное по синхронизации (без отправки обратно на сервер).
+ * Вызывается из js/sync.js при получении данных от других пользователей.
+ */
+function applyRemoteState(data) {
+    if (!Array.isArray(data)) return;
+    clearMap();
+    importData(data);
+    ensureNodeLabelsVisible();
+    updateAllNodeConnectionLines();
+    updateStats();
+    try {
+        localStorage.setItem('networkMapData', JSON.stringify(data));
+    } catch (e) {}
 }
 
 function ensureNodeLabelsVisible() {
@@ -3667,19 +3711,19 @@ function createObjectFromData(data) {
     placemark.events.add('dragend', function() {
         saveData();
         updateConnectedCables(placemark);
-        // Обновляем позицию подписи, если она есть
         const label = placemark.properties.get('label');
         if (label) {
             label.geometry.setCoordinates(placemark.geometry.getCoordinates());
+            try { myMap.geoObjects.add(label); } catch (e) {} // вернуть подпись на карту после перемещения
         }
-        // Обновляем линии соединений кросс-узел
         updateAllNodeConnectionLines();
-        // Обновляем позицию пульсирующего круга
         updateSelectionPulsePosition(placemark);
     });
     
-    // Обновляем позицию круга и кабелей при перетаскивании
+    // Скрываем подпись во время перемещения; обновляем круг и кабели
     placemark.events.add('drag', function() {
+        const label = placemark.properties.get('label');
+        if (label) { try { myMap.geoObjects.remove(label); } catch (e) {} }
         updateSelectionPulsePosition(placemark);
         updateConnectedCables(placemark);
     });

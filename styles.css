@@ -1223,6 +1223,19 @@ button {
     background: var(--text-muted);
 }
 
+/* Синхронизация (совместная работа) */
+.sync-status {
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
+.sync-status.sync-connected {
+    color: var(--accent-success);
+}
+.sync-status.sync-disconnected {
+    color: var(--text-muted);
+}
+
 /* ==================== Модальные окна ==================== */
 .modal {
     display: none;

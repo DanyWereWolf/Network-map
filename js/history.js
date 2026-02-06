@@ -101,12 +101,14 @@ function logAction(actionType, details) {
     };
     history.push(entry);
     saveHistory(history);
+    if (typeof window.postHistoryToApi === 'function') window.postHistoryToApi(history);
     updateHistoryBadge();
     return entry;
 }
 
 function clearHistory() {
     localStorage.removeItem('networkMap_history');
+    if (typeof window.postHistoryToApi === 'function') window.postHistoryToApi([]);
     updateHistoryBadge();
 }
 

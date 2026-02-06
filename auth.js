@@ -12,11 +12,10 @@ function hashPassword(password) {
     return 'hash_' + Math.abs(hash).toString(16) + '_' + password.length;
 }
 
-// Инициализация системы пользователей
+// Инициализация системы пользователей (только для режима без API — с API админ создаётся на сервере)
 function initUserSystem() {
+    if (typeof API_BASE !== 'undefined' && API_BASE) return;
     const users = getUsers();
-    
-    // Если нет пользователей, создаём администратора по умолчанию
     if (users.length === 0) {
         const defaultAdmin = {
             id: generateUserId(),
@@ -54,106 +53,106 @@ function findUserByUsername(username) {
     return users.find(u => u.username.toLowerCase() === username.toLowerCase());
 }
 
-// Авторизация пользователя
+// Авторизация пользователя (при API_BASE возвращает Promise)
 function loginUser(username, password) {
+    if (typeof API_BASE !== 'undefined' && API_BASE) {
+        return fetch(API_BASE + '/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: username, password: password })
+        }).then(function(r) { return r.json(); }).then(function(body) {
+            if (body.success && body.token && body.user) {
+                localStorage.setItem('networkMap_token', body.token);
+                localStorage.setItem('networkMap_session', JSON.stringify(body.user));
+                return { success: true, user: body.user };
+            }
+            return { success: false, error: body.error || 'Ошибка входа' };
+        }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
+    }
     const user = findUserByUsername(username);
-    
-    if (!user) {
-        return { success: false, error: 'Пользователь не найден' };
-    }
-    
-    if (user.password !== hashPassword(password)) {
-        return { success: false, error: 'Неверный пароль' };
-    }
-    
-    // Проверяем статус заявки
-    if (user.status === 'pending') {
-        return { success: false, error: 'Ваша заявка на регистрацию ожидает одобрения администратором' };
-    }
-    
-    if (user.status === 'rejected') {
-        return { success: false, error: 'Ваша заявка на регистрацию была отклонена' };
-    }
-    
-    // Сохраняем сессию
-    const session = {
-        userId: user.id,
-        username: user.username,
-        fullName: user.fullName,
-        role: user.role,
-        loginAt: new Date().toISOString()
-    };
+    if (!user) return { success: false, error: 'Пользователь не найден' };
+    if (user.password !== hashPassword(password)) return { success: false, error: 'Неверный пароль' };
+    if (user.status === 'pending') return { success: false, error: 'Ваша заявка на регистрацию ожидает одобрения администратором' };
+    if (user.status === 'rejected') return { success: false, error: 'Ваша заявка на регистрацию была отклонена' };
+    var session = { userId: user.id, username: user.username, fullName: user.fullName, role: user.role, loginAt: new Date().toISOString() };
     localStorage.setItem('networkMap_session', JSON.stringify(session));
-    
     return { success: true, user: session };
 }
 
 // Регистрация нового пользователя (создание заявки)
 function registerUser(username, password, fullName) {
-    // Проверки
-    if (username.length < 3) {
-        return { success: false, error: 'Имя пользователя должно быть не менее 3 символов' };
+    if (username.length < 3) return { success: false, error: 'Имя пользователя должно быть не менее 3 символов' };
+    if (password.length < 6) return { success: false, error: 'Пароль должен быть не менее 6 символов' };
+    if (typeof API_BASE !== 'undefined' && API_BASE) {
+        return fetch(API_BASE + '/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: username, password: password, fullName: fullName || username })
+        }).then(function(r) { return r.json(); }).then(function(body) {
+            return body.success ? { success: true, pending: true } : { success: false, error: body.error || 'Ошибка' };
+        }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
     }
-    
-    if (password.length < 6) {
-        return { success: false, error: 'Пароль должен быть не менее 6 символов' };
-    }
-    
-    if (findUserByUsername(username)) {
-        return { success: false, error: 'Пользователь с таким именем уже существует' };
-    }
-    
-    const users = getUsers();
-    
-    const newUser = {
-        id: generateUserId(),
-        username: username,
-        password: hashPassword(password),
-        fullName: fullName || username,
-        role: 'user',
-        status: 'pending', // Новые пользователи ожидают одобрения
-        createdAt: new Date().toISOString()
-    };
-    
+    if (findUserByUsername(username)) return { success: false, error: 'Пользователь с таким именем уже существует' };
+    var users = getUsers();
+    var newUser = { id: generateUserId(), username: username, password: hashPassword(password), fullName: fullName || username, role: 'user', status: 'pending', createdAt: new Date().toISOString() };
     users.push(newUser);
     saveUsers(users);
-    
     return { success: true, user: newUser, pending: true };
 }
 
 // Одобрить заявку пользователя
 function approveUser(userId) {
-    const users = getUsers();
-    const userIndex = users.findIndex(u => u.id === userId);
-    
-    if (userIndex === -1) {
-        return { success: false, error: 'Пользователь не найден' };
+    if (typeof API_BASE !== 'undefined' && API_BASE) {
+        var token = localStorage.getItem('networkMap_token') || '';
+        return fetch(API_BASE + '/api/users/approve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ userId: userId })
+        }).then(function(r) { return r.json(); }).then(function(body) {
+            if (body.error) return { success: false, error: body.error };
+            return refreshUsersFromApi().then(function() { return { success: true }; });
+        }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
     }
-    
-    users[userIndex].status = 'approved';
+    var users = getUsers();
+    var i = users.findIndex(function(u) { return u.id === userId; });
+    if (i === -1) return { success: false, error: 'Пользователь не найден' };
+    users[i].status = 'approved';
     saveUsers(users);
-    
     return { success: true };
 }
 
 // Отклонить заявку пользователя
 function rejectUser(userId) {
-    const users = getUsers();
-    const userIndex = users.findIndex(u => u.id === userId);
-    
-    if (userIndex === -1) {
-        return { success: false, error: 'Пользователь не найден' };
+    if (typeof API_BASE !== 'undefined' && API_BASE) {
+        var token = localStorage.getItem('networkMap_token') || '';
+        return fetch(API_BASE + '/api/users/reject', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ userId: userId })
+        }).then(function(r) { return r.json(); }).then(function(body) {
+            if (body.error) return { success: false, error: body.error };
+            return refreshUsersFromApi().then(function() { return { success: true }; });
+        }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
     }
-    
-    // Защита главного администратора
-    if (users[userIndex].username === 'admin') {
-        return { success: false, error: 'Нельзя отклонить главного администратора' };
-    }
-    
-    users[userIndex].status = 'rejected';
+    var users = getUsers();
+    var i = users.findIndex(function(u) { return u.id === userId; });
+    if (i === -1) return { success: false, error: 'Пользователь не найден' };
+    if (users[i].username === 'admin') return { success: false, error: 'Нельзя отклонить главного администратора' };
+    users[i].status = 'rejected';
     saveUsers(users);
-    
     return { success: true };
+}
+
+// Обновить кэш пользователей с сервера (при работе с API)
+function refreshUsersFromApi() {
+    if (typeof API_BASE === 'undefined' || !API_BASE) return Promise.resolve();
+    var token = localStorage.getItem('networkMap_token') || '';
+    return fetch(API_BASE + '/api/users', { headers: { 'Authorization': 'Bearer ' + token } })
+        .then(function(r) { return r.json(); })
+        .then(function(body) {
+            if (body.users) localStorage.setItem('networkMap_users', JSON.stringify(body.users));
+        })
+        .catch(function() {});
 }
 
 // Получить заявки на рассмотрении
@@ -162,9 +161,9 @@ function getPendingUsers() {
     return users.filter(u => u.status === 'pending');
 }
 
-// Получить текущую сессию
+// Получить текущую сессию (при API токен хранится отдельно в networkMap_token)
 function getCurrentSession() {
-    const sessionJson = localStorage.getItem('networkMap_session');
+    var sessionJson = localStorage.getItem('networkMap_session');
     return sessionJson ? JSON.parse(sessionJson) : null;
 }
 
@@ -181,7 +180,12 @@ function isAdmin() {
 
 // Выход из системы
 function logout() {
+    if (typeof API_BASE !== 'undefined' && API_BASE) {
+        var token = localStorage.getItem('networkMap_token');
+        if (token) fetch(API_BASE + '/api/auth/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } }).catch(function() {});
+    }
     localStorage.removeItem('networkMap_session');
+    localStorage.removeItem('networkMap_token');
     window.location.href = 'auth.html';
 }
 
@@ -233,54 +237,39 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
     }
     
-    // Обработчик формы входа (только на странице auth.html)
     const loginForm = document.getElementById('loginForm');
     if (loginForm) {
         loginForm.addEventListener('submit', function(e) {
             e.preventDefault();
-            
-            const username = document.getElementById('loginUsername').value.trim();
-            const password = document.getElementById('loginPassword').value;
-            
-            const result = loginUser(username, password);
-            
-            if (result.success) {
-                showMessage('Вход выполнен успешно! Перенаправление...', 'success');
-                setTimeout(() => {
-                    window.location.href = 'index.html';
-                }, 1000);
-            } else {
-                showMessage(result.error, 'error');
-            }
+            var username = document.getElementById('loginUsername').value.trim();
+            var password = document.getElementById('loginPassword').value;
+            Promise.resolve(loginUser(username, password)).then(function(result) {
+                if (result.success) {
+                    showMessage('Вход выполнен успешно! Перенаправление...', 'success');
+                    setTimeout(function() { window.location.href = 'index.html'; }, 1000);
+                } else {
+                    showMessage(result.error, 'error');
+                }
+            });
         });
     }
-    
-    // Обработчик формы регистрации
     const registerForm = document.getElementById('registerForm');
     if (registerForm) {
         registerForm.addEventListener('submit', function(e) {
             e.preventDefault();
-            
-            const username = document.getElementById('regUsername').value.trim();
-            const fullName = document.getElementById('regFullName').value.trim();
-            const password = document.getElementById('regPassword').value;
-            const passwordConfirm = document.getElementById('regPasswordConfirm').value;
-            
-            if (password !== passwordConfirm) {
-                showMessage('Пароли не совпадают', 'error');
-                return;
-            }
-            
-            const result = registerUser(username, password, fullName);
-            
-            if (result.success) {
-                showMessage('Заявка на регистрацию отправлена! Ожидайте одобрения администратором.', 'success');
-                setTimeout(() => {
-                    switchForm('login');
-                }, 2500);
-            } else {
-                showMessage(result.error, 'error');
-            }
+            var username = document.getElementById('regUsername').value.trim();
+            var fullName = document.getElementById('regFullName').value.trim();
+            var password = document.getElementById('regPassword').value;
+            var passwordConfirm = document.getElementById('regPasswordConfirm').value;
+            if (password !== passwordConfirm) { showMessage('Пароли не совпадают', 'error'); return; }
+            Promise.resolve(registerUser(username, password, fullName)).then(function(result) {
+                if (result.success) {
+                    showMessage('Заявка на регистрацию отправлена! Ожидайте одобрения администратором.', 'success');
+                    setTimeout(function() { switchForm('login'); }, 2500);
+                } else {
+                    showMessage(result.error, 'error');
+                }
+            });
         });
     }
 });
@@ -297,5 +286,6 @@ window.AuthSystem = {
     getUsers,
     saveUsers,
     hashPassword,
-    findUserByUsername
+    findUserByUsername,
+    refreshUsersFromApi
 };
