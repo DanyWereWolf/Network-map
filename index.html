@@ -93,6 +93,13 @@
                             <path d="M12 8h.01"></path>
                         </svg>
                     </button>
+                    <button id="updatesBtn" class="user-menu-btn" title="Обновления">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                    </button>
                     <button id="themeToggle" class="user-menu-btn theme-toggle" title="Сменить тему">
                         <svg class="theme-icon-light" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <circle cx="12" cy="12" r="5"></circle>
@@ -659,6 +666,26 @@
                 <div class="form-group" style="display: flex; gap: 10px;">
                     <button id="saveUserBtn" class="btn-primary" style="flex: 1;">Сохранить</button>
                     <button id="cancelUserEditBtn" class="btn-secondary" style="flex: 1;">Отмена</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Окно обновлений -->
+    <div id="updatesModal" class="modal">
+        <div class="modal-content updates-modal-content">
+            <div class="modal-header">
+                <h2>Обновления</h2>
+                <span class="close-updates">&times;</span>
+            </div>
+            <div class="modal-body updates-modal-body">
+                <div class="updates-current">
+                    <span class="updates-label">Текущая версия:</span>
+                    <span id="updatesVersionDisplay" class="version-current">—</span>
+                </div>
+                <div id="updatesStatus" class="updates-status"></div>
+                <div class="updates-actions">
+                    <button type="button" id="updatesCheckBtn" class="btn-primary">Проверить обновления</button>
                 </div>
             </div>
         </div>

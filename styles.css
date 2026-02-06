@@ -1352,6 +1352,46 @@ button {
     max-height: 75vh;
     overflow-y: auto;
 }
+
+/* Окно обновлений */
+.updates-modal-content {
+    max-width: 420px;
+}
+.updates-modal-body {
+    padding: 20px 24px;
+}
+.updates-current {
+    margin-bottom: 16px;
+    font-size: 1rem;
+}
+.updates-label {
+    color: var(--text-secondary);
+    margin-right: 8px;
+}
+.version-current {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.version-current.version-latest {
+    color: #16a34a;
+}
+.version-current.version-outdated {
+    color: #dc2626;
+}
+.updates-status {
+    min-height: 24px;
+    margin-bottom: 20px;
+    font-size: 0.9375rem;
+    color: var(--text-secondary);
+}
+.updates-status a {
+    color: var(--accent-primary);
+    text-decoration: underline;
+}
+.updates-actions .btn-primary {
+    width: 100%;
+}
+
 .help-section {
     margin-bottom: 1.25rem;
     color: var(--text-primary);

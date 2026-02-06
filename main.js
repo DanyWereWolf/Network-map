@@ -1,7 +1,10 @@
-// Версия приложения (синхронизировать с package.json и тегами релизов на GitHub)
+// Версия приложения (менять при каждом релизе; теги на GitHub: v1.0.0, v1.0.1 и т.д.)
 const APP_VERSION = '1.0.0';
-// Репозиторий GitHub для проверки обновлений (указать владельца и имя репозитория)
+// Репозиторий для проверки обновлений: https://github.com/DanyWereWolf/Network-map
 const GITHUB_REPO = { owner: 'DanyWereWolf', repo: 'Network-map' };
+
+/** Результат проверки обновлений при старте сессии (заполняется автоматически) */
+let lastUpdateCheckResult = null;
 
 let myMap;
 let objects = [];
@@ -101,11 +104,16 @@ document.addEventListener('DOMContentLoaded', function() {
     initUserUI();
     
     ymaps.ready(init);
-    
-    // Проверка обновлений через GitHub (один раз при загрузке, с задержкой)
-    if (GITHUB_REPO.owner && GITHUB_REPO.repo) {
-        setTimeout(function() { checkForUpdates(true); }, 2500);
-    }
+    // Проверка версии при начале сессии (результат показывается в окне «Обновления»)
+    (async function() {
+        await new Promise(function(r) { setTimeout(r, 1500); });
+        const result = await checkForUpdates(true);
+        lastUpdateCheckResult = result;
+        var updatesModal = document.getElementById('updatesModal');
+        if (updatesModal && updatesModal.style.display === 'block') {
+            renderUpdatesModalContent(result);
+        }
+    })();
 });
 
 // ==================== Система уведомлений ====================
@@ -153,7 +161,7 @@ function showError(message, title = null) { showToast(message, 'error', title, 6
 function showWarning(message, title = null) { showToast(message, 'warning', title, 5000); }
 function showInfo(message, title = null) { showToast(message, 'info', title); }
 
-// ==================== Проверка обновлений через GitHub ====================
+// ==================== Проверка обновлений (GitHub Releases) ====================
 function parseVersion(str) {
     const s = (str || '').replace(/^v/i, '').trim();
     const parts = s.split('.').map(n => parseInt(n, 10) || 0);
@@ -169,15 +177,12 @@ function compareVersions(a, b) {
     return 0;
 }
 async function checkForUpdates(silent = false) {
-    if (!GITHUB_REPO.owner || !GITHUB_REPO.repo) {
-        if (!silent) showInfo('Проверка обновлений не настроена. Укажите GITHUB_REPO в коде.', 'Обновления');
-        return { checked: false };
-    }
+    if (!GITHUB_REPO.owner || !GITHUB_REPO.repo) return { checked: false };
     try {
         const url = `https://api.github.com/repos/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/releases/latest`;
         const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' } });
         if (!res.ok) {
-            if (!silent) showWarning('Не удалось проверить обновления. Репозиторий или релиз не найден.', 'Обновления');
+            if (!silent) showWarning('Не удалось проверить обновления.', 'Обновления');
             return { checked: true, error: res.status };
         }
         const data = await res.json();
@@ -187,15 +192,15 @@ async function checkForUpdates(silent = false) {
             return { checked: true };
         }
         if (compareVersions(latest, APP_VERSION) > 0) {
-            const url = data.html_url || `https://github.com/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/releases`;
-            const msg = `Доступна версия ${latest} (у вас ${APP_VERSION}). <a href="${url}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">Перейти к загрузке</a>`;
+            const releaseUrl = data.html_url || `https://github.com/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/releases`;
+            const msg = `Доступна версия ${latest} (у вас ${APP_VERSION}). <a href="${releaseUrl}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">Перейти к загрузке</a>`;
             showToast(msg, 'success', 'Доступно обновление', 10000);
-            return { checked: true, update: true, latest, url };
+            return { checked: true, update: true, latest, url: releaseUrl };
         }
         if (!silent) showInfo(`Установлена актуальная версия ${APP_VERSION}.`, 'Обновления');
         return { checked: true, update: false };
     } catch (e) {
-        if (!silent) showWarning('Ошибка при проверке обновлений: ' + (e.message || 'сеть'), 'Обновления');
+        if (!silent) showWarning('Ошибка при проверке обновлений.', 'Обновления');
         return { checked: true, error: e };
     }
 }
@@ -405,16 +410,86 @@ function closeHistoryModal() {
     }
 }
 
+// Окно обновлений (показывает результат проверки, выполненной при старте сессии)
+function openUpdatesModal() {
+    const modal = document.getElementById('updatesModal');
+    if (!modal) return;
+    const versionEl = document.getElementById('updatesVersionDisplay');
+    if (versionEl) {
+        versionEl.textContent = APP_VERSION;
+        versionEl.className = 'version-current';
+    }
+    const checkBtn = document.getElementById('updatesCheckBtn');
+    if (checkBtn) checkBtn.disabled = false;
+    if (lastUpdateCheckResult) {
+        renderUpdatesModalContent(lastUpdateCheckResult);
+    } else {
+        renderUpdatesModalContent(null);
+        var statusEl = document.getElementById('updatesStatus');
+        if (statusEl) statusEl.innerHTML = 'Проверка выполняется при загрузке приложения. Закройте и откройте окно через пару секунд или нажмите «Проверить обновления».';
+    }
+    modal.style.display = 'block';
+}
+
+function closeUpdatesModal() {
+    const modal = document.getElementById('updatesModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function renderUpdatesModalContent(result) {
+    const versionEl = document.getElementById('updatesVersionDisplay');
+    const statusEl = document.getElementById('updatesStatus');
+    const checkBtn = document.getElementById('updatesCheckBtn');
+    if (versionEl) {
+        versionEl.textContent = APP_VERSION;
+        versionEl.className = 'version-current';
+    }
+    if (!statusEl) return;
+    if (result && result.checking) {
+        statusEl.innerHTML = 'Проверка…';
+        if (checkBtn) checkBtn.disabled = true;
+        return;
+    }
+    if (checkBtn) checkBtn.disabled = false;
+    if (!result || !result.checked) {
+        statusEl.innerHTML = 'Проверка выполняется при загрузке приложения или нажмите «Проверить обновления».';
+        return;
+    }
+    if (result.error) {
+        statusEl.innerHTML = 'Не удалось проверить обновления. Проверьте подключение к интернету.';
+        return;
+    }
+    if (result.update && result.latest && result.url) {
+        if (versionEl) versionEl.className = 'version-current version-outdated';
+        statusEl.innerHTML = 'Доступна новая версия <strong>' + escapeHtml(result.latest) + '</strong>. <a href="' + escapeHtml(result.url) + '" target="_blank" rel="noopener">Перейти к загрузке</a>';
+        return;
+    }
+    if (versionEl) versionEl.className = 'version-current version-latest';
+    statusEl.innerHTML = 'У вас установлена последняя версия.';
+}
+
+function setupUpdatesModalHandlers() {
+    const closeBtn = document.querySelector('.close-updates');
+    if (closeBtn) closeBtn.addEventListener('click', closeUpdatesModal);
+    const modal = document.getElementById('updatesModal');
+    if (modal) modal.addEventListener('click', function(e) { if (e.target === modal) closeUpdatesModal(); });
+    const checkBtn = document.getElementById('updatesCheckBtn');
+    if (checkBtn) {
+        checkBtn.addEventListener('click', async function() {
+            renderUpdatesModalContent({ checking: true });
+            const result = await checkForUpdates(true);
+            lastUpdateCheckResult = result;
+            renderUpdatesModalContent(result);
+        });
+    }
+}
+
 // Открыть модальное окно справки
 function openHelpModal() {
     const modal = document.getElementById('helpModal');
     const content = document.getElementById('helpModalContent');
     if (modal && content) {
         content.innerHTML = getHelpContentHtml();
-        const checkBtn = document.getElementById('helpCheckUpdatesBtn');
-        if (checkBtn) {
-            checkBtn.addEventListener('click', function() { checkForUpdates(false); });
-        }
         modal.style.display = 'block';
     }
 }
@@ -500,11 +575,9 @@ function getHelpContentHtml() {
     <p>Данные хранятся в браузере (localStorage): объекты карты, пользователи, сессия, история изменений, тема. Для переноса данных используйте экспорт и импорт.</p>
 </div>
 
-<div class="help-section help-section-updates">
-    <h3>Версия и обновления</h3>
-    <p>Текущая версия: <strong id="helpCurrentVersion">' + APP_VERSION + '</strong></p>
-    <p>Если проект подключён к GitHub, можно проверить наличие новой версии (релизы в репозитории).</p>
-    <button type="button" id="helpCheckUpdatesBtn" class="btn-secondary btn-check-updates" style="margin-top: 8px;">Проверить обновления</button>
+<div class="help-section">
+    <h3>Обновления</h3>
+    <p>Нажмите кнопку со стрелкой вниз в шапке (рядом со справкой) — откроется окно <strong>Обновления</strong>. Там можно проверить версию: если доступна новая — текущая версия подсвечивается красным и есть ссылка на загрузку; если установлена последняя — зелёным.</p>
 </div>
 `;
 }
@@ -695,9 +768,9 @@ function initUserUI() {
     
     // Кнопка справки
     const infoHelpBtn = document.getElementById('infoHelpBtn');
-    if (infoHelpBtn) {
-        infoHelpBtn.addEventListener('click', openHelpModal);
-    }
+    if (infoHelpBtn) infoHelpBtn.addEventListener('click', openHelpModal);
+    const updatesBtn = document.getElementById('updatesBtn');
+    if (updatesBtn) updatesBtn.addEventListener('click', openUpdatesModal);
     
     // Обработчики модального окна пользователей
     setupUsersModalHandlers();
@@ -707,6 +780,7 @@ function initUserUI() {
     
     // Обработчики модального окна справки
     setupHelpModalHandlers();
+    setupUpdatesModalHandlers();
     
     // Обновляем счётчик истории
     updateHistoryBadge();
