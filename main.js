@@ -25,7 +25,6 @@ let crossGroupPlacemarks = []; // Метки групп кроссов в одн
 let nodeGroupPlacemarks = []; // Метки групп узлов в одном месте
 let crossGroupNames = new Map(); // ключ: "lat,lon", значение: название группы кроссов
 let nodeGroupNames = new Map(); // ключ: "lat,lon", значение: название группы узлов
-const GROUP_NAMES_STORAGE_KEY = 'network-map-group-names';
 
 function groupKey(coords) {
     return coords[0].toFixed(6) + ',' + coords[1].toFixed(6);
@@ -51,16 +50,14 @@ function setNodeGroupName(coords, name) {
     updateNodeDisplay();
 }
 function saveGroupNames() {
+    if (!getApiBase()) return;
     try {
         var payload = { cross: Object.fromEntries(crossGroupNames), node: Object.fromEntries(nodeGroupNames) };
-        localStorage.setItem(GROUP_NAMES_STORAGE_KEY, JSON.stringify(payload));
-        if (typeof API_BASE !== 'undefined' && API_BASE) {
-            fetch(API_BASE + '/api/settings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
-                body: JSON.stringify({ groupNames: payload })
-            }).catch(function() {});
-        }
+        fetch(getApiBase() + '/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
+            body: JSON.stringify({ groupNames: payload })
+        }).catch(function() {});
     } catch (e) {}
 }
 
@@ -639,11 +636,7 @@ function init() {
         zoom: 15
     });
     
-    try {
-        const stored = JSON.parse(localStorage.getItem(GROUP_NAMES_STORAGE_KEY));
-        if (stored && stored.cross) crossGroupNames = new Map(Object.entries(stored.cross));
-        if (stored && stored.node) nodeGroupNames = new Map(Object.entries(stored.node));
-    } catch (e) {}
+    // Имена групп подгружаются с сервера в loadData() из /api/settings
     
     // Создаем индикатор под курсором
     createCursorIndicator();
@@ -887,32 +880,18 @@ function setupEventListeners() {
 // ==================== Тема (светлая/тёмная) ====================
 function initTheme() {
     const themeToggle = document.getElementById('themeToggle');
-    
-    // Загружаем сохранённую тему или системную
-    const savedTheme = localStorage.getItem('networkMapTheme');
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const theme = savedTheme || (prefersDark ? 'dark' : 'light');
-    
-    setTheme(theme);
-    
-    // Обработчик переключения
-    if (themeToggle) {
-        themeToggle.addEventListener('click', toggleTheme);
-    }
-    
-    // Слушаем изменение системной темы
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-        if (!localStorage.getItem('networkMapTheme')) {
-            setTheme(e.matches ? 'dark' : 'light');
-        }
+    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+    if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
+        if (!getApiBase()) document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
     });
 }
 
 function setTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('networkMapTheme', theme);
-    if (typeof API_BASE !== 'undefined' && API_BASE) {
-        fetch(API_BASE + '/api/settings', {
+    if (getApiBase()) {
+        fetch(getApiBase() + '/api/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
             body: JSON.stringify({ theme: theme })
@@ -2652,7 +2631,7 @@ function clearSelection() {
 
 // Универсальная функция создания кабеля (для обратной совместимости)
 // Поддерживает как старый формат (2 точки), так и новый (массив точек)
-// skipHistoryLog = true при восстановлении из localStorage или импорте файла, чтобы не засорять историю
+// skipHistoryLog = true при импорте файла, чтобы не засорять историю
 function addCable(fromObj, toObj, cableType, existingCableId = null, fiberNumber = null, skipHistoryLog = false) {
     // Если toObj - массив, значит это новый формат с несколькими точками
     if (Array.isArray(toObj)) {
@@ -3308,15 +3287,10 @@ function getSerializedData() {
     });
 }
 
-function getAuthToken() {
-    try { return localStorage.getItem('networkMap_token') || ''; } catch (e) { return ''; }
-}
-
 function saveData() {
     const data = getSerializedData();
-    localStorage.setItem('networkMapData', JSON.stringify(data));
-    if (typeof API_BASE !== 'undefined' && API_BASE) {
-        fetch(API_BASE + '/api/map', {
+    if (getApiBase()) {
+        fetch(getApiBase() + '/api/map', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
             body: JSON.stringify({ data: data })
@@ -3326,55 +3300,54 @@ function saveData() {
 }
 
 function loadDataFromStorage() {
-    const data = localStorage.getItem('networkMapData');
-    if (data) {
-        try {
-            const parsedData = JSON.parse(data);
-            importData(parsedData);
-            ensureNodeLabelsVisible();
-            updateAllNodeConnectionLines();
-        } catch (e) {}
-    }
+    // Данные только с сервера (localStorage не используется)
 }
 
 function loadData() {
-    if (typeof API_BASE !== 'undefined' && API_BASE) {
-        fetch(API_BASE + '/api/map', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } })
-            .then(function(r) { return r.json(); })
-            .then(function(body) {
-                if (body && Array.isArray(body.data)) {
-                    applyRemoteState(body.data);
-                } else {
-                    loadDataFromStorage();
-                }
-            })
-            .catch(function() { loadDataFromStorage(); })
-            .then(function() {
-                if (typeof AuthSystem !== 'undefined' && AuthSystem.refreshUsersFromApi) AuthSystem.refreshUsersFromApi();
-                if (typeof API_BASE === 'undefined' || !API_BASE) return;
-                var token = getAuthToken();
-                fetch(API_BASE + '/api/history', { headers: { 'Authorization': 'Bearer ' + token } }).then(function(r) { return r.json(); }).then(function(b) {
-                    if (b && Array.isArray(b.history)) try { localStorage.setItem('networkMap_history', JSON.stringify(b.history)); } catch (e) {}
-                }).catch(function() {});
-                fetch(API_BASE + '/api/settings').then(function(r) { return r.json(); }).then(function(s) {
-                    if (!s) return;
-                    if (s.theme) try { localStorage.setItem('networkMapTheme', s.theme); document.documentElement.setAttribute('data-theme', s.theme); } catch (e) {}
-                    if (s.groupNames && typeof crossGroupNames !== 'undefined' && typeof nodeGroupNames !== 'undefined') {
-                        try {
-                            if (s.groupNames.cross && typeof s.groupNames.cross === 'object') Object.keys(s.groupNames.cross).forEach(function(k) { crossGroupNames.set(k, s.groupNames.cross[k]); });
-                            if (s.groupNames.node && typeof s.groupNames.node === 'object') Object.keys(s.groupNames.node).forEach(function(k) { nodeGroupNames.set(k, s.groupNames.node[k]); });
-                        } catch (e) {}
-                    }
-                }).catch(function() {});
-            });
-    } else {
-        loadDataFromStorage();
+    if (!getApiBase()) {
+        showNoApiMessage();
+        return;
     }
+    fetch(getApiBase() + '/api/map', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } })
+        .then(function(r) { return r.json(); })
+        .then(function(body) {
+            if (body && Array.isArray(body.data)) {
+                applyRemoteState(body.data);
+            }
+        })
+        .catch(function() {})
+        .then(function() {
+            if (typeof AuthSystem !== 'undefined' && AuthSystem.refreshUsersFromApi) AuthSystem.refreshUsersFromApi();
+            var token = getAuthToken();
+            fetch(getApiBase() + '/api/history', { headers: { 'Authorization': 'Bearer ' + token } }).then(function(r) { return r.json(); }).then(function(b) {
+                if (b && Array.isArray(b.history) && typeof window.setHistoryFromApi === 'function') window.setHistoryFromApi(b.history);
+            }).catch(function() {});
+            fetch(getApiBase() + '/api/settings').then(function(r) { return r.json(); }).then(function(s) {
+                if (!s) return;
+                if (s.theme) try { document.documentElement.setAttribute('data-theme', s.theme); setTheme(s.theme); } catch (e) {}
+                if (s.groupNames && typeof crossGroupNames !== 'undefined' && typeof nodeGroupNames !== 'undefined') {
+                    try {
+                        if (s.groupNames.cross && typeof s.groupNames.cross === 'object') Object.keys(s.groupNames.cross).forEach(function(k) { crossGroupNames.set(k, s.groupNames.cross[k]); });
+                        if (s.groupNames.node && typeof s.groupNames.node === 'object') Object.keys(s.groupNames.node).forEach(function(k) { nodeGroupNames.set(k, s.groupNames.node[k]); });
+                    } catch (e) {}
+                }
+            }).catch(function() {});
+        });
+}
+
+function showNoApiMessage() {
+    var overlay = document.getElementById('noApiOverlay');
+    if (overlay) return;
+    overlay = document.createElement('div');
+    overlay.id = 'noApiOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);color:#fff;display:flex;align-items:center;justify-content:center;z-index:99999;font-family:sans-serif;text-align:center;padding:20px;box-sizing:border-box;';
+    overlay.innerHTML = '<div><h2 style="margin:0 0 12px;">Приложение работает только с сервером</h2><p style="margin:0 0 8px;">Запустите сервер: <code style="background:#333;padding:4px 8px;">npm run api</code></p><p style="margin:0;">Затем откройте <a href="http://localhost:3000" style="color:#6eb8ff;">http://localhost:3000</a></p></div>';
+    document.body.appendChild(overlay);
 }
 
 function postHistoryToApi(history) {
-    if (typeof API_BASE === 'undefined' || !API_BASE || !Array.isArray(history)) return;
-    fetch(API_BASE + '/api/history', {
+    if (!getApiBase() || !Array.isArray(history)) return;
+    fetch(getApiBase() + '/api/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
         body: JSON.stringify({ history: history })
@@ -3392,9 +3365,6 @@ function applyRemoteState(data) {
     ensureNodeLabelsVisible();
     updateAllNodeConnectionLines();
     updateStats();
-    try {
-        localStorage.setItem('networkMapData', JSON.stringify(data));
-    } catch (e) {}
 }
 
 function ensureNodeLabelsVisible() {
@@ -7543,18 +7513,14 @@ function setupNetBoxEventListeners() {
 }
 
 function loadNetBoxConfig() {
-    const saved = localStorage.getItem('netboxConfig');
-    if (saved) {
-        try {
-            netboxConfig = JSON.parse(saved);
-        } catch (e) {
-            console.error('Ошибка загрузки конфигурации NetBox:', e);
-        }
-    }
+    try {
+        var saved = sessionStorage.getItem('netboxConfig');
+        if (saved) netboxConfig = JSON.parse(saved);
+    } catch (e) { console.error('Ошибка загрузки конфигурации NetBox:', e); }
 }
 
 function saveNetBoxConfig() {
-    localStorage.setItem('netboxConfig', JSON.stringify(netboxConfig));
+    try { sessionStorage.setItem('netboxConfig', JSON.stringify(netboxConfig)); } catch (e) {}
 }
 
 function showNetBoxStatus(message, type) {

@@ -12,34 +12,23 @@ function hashPassword(password) {
     return 'hash_' + Math.abs(hash).toString(16) + '_' + password.length;
 }
 
-// Инициализация системы пользователей (только для режима без API — с API админ создаётся на сервере)
+// Инициализация системы пользователей (только при работе с API — пользователи с сервера)
 function initUserSystem() {
-    if (typeof API_BASE !== 'undefined' && API_BASE) return;
-    const users = getUsers();
-    if (users.length === 0) {
-        const defaultAdmin = {
-            id: generateUserId(),
-            username: 'admin',
-            password: hashPassword('admin123'),
-            fullName: 'Администратор',
-            role: 'admin',
-            createdAt: new Date().toISOString()
-        };
-        users.push(defaultAdmin);
-        saveUsers(users);
-        console.log('Создан администратор по умолчанию: admin / admin123');
-    }
+    if (!getApiBase()) return;
+    refreshUsersFromApi();
 }
 
-// Получить список пользователей
+// Получить список пользователей (кэш из sessionStorage при работе с API)
 function getUsers() {
-    const usersJson = localStorage.getItem('networkMap_users');
-    return usersJson ? JSON.parse(usersJson) : [];
+    try {
+        const usersJson = sessionStorage.getItem('networkMap_users');
+        return usersJson ? JSON.parse(usersJson) : [];
+    } catch (e) { return []; }
 }
 
-// Сохранить список пользователей
+// Сохранить список пользователей в кэш (только при API)
 function saveUsers(users) {
-    localStorage.setItem('networkMap_users', JSON.stringify(users));
+    try { sessionStorage.setItem('networkMap_users', JSON.stringify(users)); } catch (e) {}
 }
 
 // Генерация уникального ID
@@ -53,104 +42,125 @@ function findUserByUsername(username) {
     return users.find(u => u.username.toLowerCase() === username.toLowerCase());
 }
 
-// Авторизация пользователя (при API_BASE возвращает Promise)
-function loginUser(username, password) {
-    if (typeof API_BASE !== 'undefined' && API_BASE) {
-        return fetch(API_BASE + '/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: username, password: password })
-        }).then(function(r) { return r.json(); }).then(function(body) {
-            if (body.success && body.token && body.user) {
+var REMEMBER_EXPIRY_DAYS = 30;
+
+function clearExpiredRememberAuth() {
+    try {
+        var exp = localStorage.getItem('networkMap_tokenExpiry');
+        if (exp && Date.now() > parseInt(exp, 10)) {
+            localStorage.removeItem('networkMap_token');
+            localStorage.removeItem('networkMap_session');
+            localStorage.removeItem('networkMap_tokenExpiry');
+        }
+    } catch (e) {}
+}
+
+function getAuthToken() {
+    clearExpiredRememberAuth();
+    try {
+        var exp = localStorage.getItem('networkMap_tokenExpiry');
+        if (exp && Date.now() <= parseInt(exp, 10)) {
+            var t = localStorage.getItem('networkMap_token');
+            if (t) return t;
+        }
+        return sessionStorage.getItem('networkMap_token') || '';
+    } catch (e) { return ''; }
+}
+
+function getStoredSession() {
+    clearExpiredRememberAuth();
+    try {
+        var exp = localStorage.getItem('networkMap_tokenExpiry');
+        if (exp && Date.now() <= parseInt(exp, 10)) {
+            var s = localStorage.getItem('networkMap_session');
+            if (s) return JSON.parse(s);
+        }
+        var s = sessionStorage.getItem('networkMap_session');
+        return s ? JSON.parse(s) : null;
+    } catch (e) { return null; }
+}
+
+// Авторизация пользователя (только через API). rememberMe — сохранить в localStorage на 30 дней
+function loginUser(username, password, rememberMe) {
+    if (!getApiBase()) {
+        return Promise.resolve({ success: false, error: 'Запустите сервер: npm run api, затем откройте http://localhost:3000' });
+    }
+    return fetch(getApiBase() + '/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username, password: password })
+    }).then(function(r) { return r.json(); }).then(function(body) {
+        if (body.success && body.token && body.user) {
+            if (rememberMe) {
+                var expiry = Date.now() + REMEMBER_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
                 localStorage.setItem('networkMap_token', body.token);
                 localStorage.setItem('networkMap_session', JSON.stringify(body.user));
-                return { success: true, user: body.user };
+                localStorage.setItem('networkMap_tokenExpiry', String(expiry));
+                sessionStorage.removeItem('networkMap_token');
+                sessionStorage.removeItem('networkMap_session');
+            } else {
+                sessionStorage.setItem('networkMap_token', body.token);
+                sessionStorage.setItem('networkMap_session', JSON.stringify(body.user));
+                localStorage.removeItem('networkMap_token');
+                localStorage.removeItem('networkMap_session');
+                localStorage.removeItem('networkMap_tokenExpiry');
             }
-            return { success: false, error: body.error || 'Ошибка входа' };
-        }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
-    }
-    const user = findUserByUsername(username);
-    if (!user) return { success: false, error: 'Пользователь не найден' };
-    if (user.password !== hashPassword(password)) return { success: false, error: 'Неверный пароль' };
-    if (user.status === 'pending') return { success: false, error: 'Ваша заявка на регистрацию ожидает одобрения администратором' };
-    if (user.status === 'rejected') return { success: false, error: 'Ваша заявка на регистрацию была отклонена' };
-    var session = { userId: user.id, username: user.username, fullName: user.fullName, role: user.role, loginAt: new Date().toISOString() };
-    localStorage.setItem('networkMap_session', JSON.stringify(session));
-    return { success: true, user: session };
+            return { success: true, user: body.user };
+        }
+        return { success: false, error: body.error || 'Ошибка входа' };
+    }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
 }
 
-// Регистрация нового пользователя (создание заявки)
+// Регистрация нового пользователя (создание заявки, только через API)
 function registerUser(username, password, fullName) {
-    if (username.length < 3) return { success: false, error: 'Имя пользователя должно быть не менее 3 символов' };
-    if (password.length < 6) return { success: false, error: 'Пароль должен быть не менее 6 символов' };
-    if (typeof API_BASE !== 'undefined' && API_BASE) {
-        return fetch(API_BASE + '/api/auth/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: username, password: password, fullName: fullName || username })
-        }).then(function(r) { return r.json(); }).then(function(body) {
-            return body.success ? { success: true, pending: true } : { success: false, error: body.error || 'Ошибка' };
-        }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
-    }
-    if (findUserByUsername(username)) return { success: false, error: 'Пользователь с таким именем уже существует' };
-    var users = getUsers();
-    var newUser = { id: generateUserId(), username: username, password: hashPassword(password), fullName: fullName || username, role: 'user', status: 'pending', createdAt: new Date().toISOString() };
-    users.push(newUser);
-    saveUsers(users);
-    return { success: true, user: newUser, pending: true };
+    if (username.length < 3) return Promise.resolve({ success: false, error: 'Имя пользователя должно быть не менее 3 символов' });
+    if (password.length < 6) return Promise.resolve({ success: false, error: 'Пароль должен быть не менее 6 символов' });
+    if (!getApiBase()) return Promise.resolve({ success: false, error: 'Запустите сервер: npm run api, затем откройте http://localhost:3000' });
+    return fetch(getApiBase() + '/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username, password: password, fullName: fullName || username })
+    }).then(function(r) { return r.json(); }).then(function(body) {
+        return body.success ? { success: true, pending: true } : { success: false, error: body.error || 'Ошибка' };
+    }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
 }
 
-// Одобрить заявку пользователя
+// Одобрить заявку пользователя (только через API)
 function approveUser(userId) {
-    if (typeof API_BASE !== 'undefined' && API_BASE) {
-        var token = localStorage.getItem('networkMap_token') || '';
-        return fetch(API_BASE + '/api/users/approve', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-            body: JSON.stringify({ userId: userId })
-        }).then(function(r) { return r.json(); }).then(function(body) {
-            if (body.error) return { success: false, error: body.error };
-            return refreshUsersFromApi().then(function() { return { success: true }; });
-        }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
-    }
-    var users = getUsers();
-    var i = users.findIndex(function(u) { return u.id === userId; });
-    if (i === -1) return { success: false, error: 'Пользователь не найден' };
-    users[i].status = 'approved';
-    saveUsers(users);
-    return { success: true };
+    if (!getApiBase()) return Promise.resolve({ success: false, error: 'Сервер недоступен' });
+    var token = getAuthToken();
+    return fetch(getApiBase() + '/api/users/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ userId: userId })
+    }).then(function(r) { return r.json(); }).then(function(body) {
+        if (body.error) return { success: false, error: body.error };
+        return refreshUsersFromApi().then(function() { return { success: true }; });
+    }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
 }
 
-// Отклонить заявку пользователя
+// Отклонить заявку пользователя (только через API)
 function rejectUser(userId) {
-    if (typeof API_BASE !== 'undefined' && API_BASE) {
-        var token = localStorage.getItem('networkMap_token') || '';
-        return fetch(API_BASE + '/api/users/reject', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-            body: JSON.stringify({ userId: userId })
-        }).then(function(r) { return r.json(); }).then(function(body) {
-            if (body.error) return { success: false, error: body.error };
-            return refreshUsersFromApi().then(function() { return { success: true }; });
-        }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
-    }
-    var users = getUsers();
-    var i = users.findIndex(function(u) { return u.id === userId; });
-    if (i === -1) return { success: false, error: 'Пользователь не найден' };
-    if (users[i].username === 'admin') return { success: false, error: 'Нельзя отклонить главного администратора' };
-    users[i].status = 'rejected';
-    saveUsers(users);
-    return { success: true };
+    if (!getApiBase()) return Promise.resolve({ success: false, error: 'Сервер недоступен' });
+    var token = getAuthToken();
+    return fetch(getApiBase() + '/api/users/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ userId: userId })
+    }).then(function(r) { return r.json(); }).then(function(body) {
+        if (body.error) return { success: false, error: body.error };
+        return refreshUsersFromApi().then(function() { return { success: true }; });
+    }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
 }
 
-// Обновить кэш пользователей с сервера (при работе с API)
+// Обновить кэш пользователей с сервера
 function refreshUsersFromApi() {
-    if (typeof API_BASE === 'undefined' || !API_BASE) return Promise.resolve();
-    var token = localStorage.getItem('networkMap_token') || '';
-    return fetch(API_BASE + '/api/users', { headers: { 'Authorization': 'Bearer ' + token } })
+    if (!getApiBase()) return Promise.resolve();
+    var token = getAuthToken();
+    return fetch(getApiBase() + '/api/users', { headers: { 'Authorization': 'Bearer ' + token } })
         .then(function(r) { return r.json(); })
         .then(function(body) {
-            if (body.users) localStorage.setItem('networkMap_users', JSON.stringify(body.users));
+            if (body.users) sessionStorage.setItem('networkMap_users', JSON.stringify(body.users));
         })
         .catch(function() {});
 }
@@ -161,10 +171,9 @@ function getPendingUsers() {
     return users.filter(u => u.status === 'pending');
 }
 
-// Получить текущую сессию (при API токен хранится отдельно в networkMap_token)
+// Получить текущую сессию (из sessionStorage или localStorage при «запомнить меня»)
 function getCurrentSession() {
-    var sessionJson = localStorage.getItem('networkMap_session');
-    return sessionJson ? JSON.parse(sessionJson) : null;
+    return getStoredSession();
 }
 
 // Проверка, авторизован ли пользователь
@@ -180,12 +189,16 @@ function isAdmin() {
 
 // Выход из системы
 function logout() {
-    if (typeof API_BASE !== 'undefined' && API_BASE) {
-        var token = localStorage.getItem('networkMap_token');
-        if (token) fetch(API_BASE + '/api/auth/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } }).catch(function() {});
+    if (getApiBase()) {
+        var token = getAuthToken();
+        if (token) fetch(getApiBase() + '/api/auth/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } }).catch(function() {});
     }
-    localStorage.removeItem('networkMap_session');
+    sessionStorage.removeItem('networkMap_session');
+    sessionStorage.removeItem('networkMap_token');
+    sessionStorage.removeItem('networkMap_users');
     localStorage.removeItem('networkMap_token');
+    localStorage.removeItem('networkMap_session');
+    localStorage.removeItem('networkMap_tokenExpiry');
     window.location.href = 'auth.html';
 }
 
@@ -225,13 +238,17 @@ function togglePassword(inputId) {
 // ==================== Инициализация ====================
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Инициализируем систему пользователей
     initUserSystem();
-    
-    // Проверяем, находимся ли мы на странице авторизации
     const isAuthPage = document.getElementById('loginForm') !== null;
-    
-    // Перенаправление только со страницы авторизации
+
+    if (isAuthPage && !getApiBase()) {
+        var msg = document.getElementById('authMessage');
+        if (msg) {
+            msg.className = 'auth-message error';
+            msg.textContent = 'Для работы приложения запустите сервер (npm run api) и откройте http://localhost:3000';
+        }
+    }
+
     if (isAuthPage && isAuthenticated()) {
         window.location.href = 'index.html';
         return;
@@ -243,7 +260,8 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             var username = document.getElementById('loginUsername').value.trim();
             var password = document.getElementById('loginPassword').value;
-            Promise.resolve(loginUser(username, password)).then(function(result) {
+            var rememberMe = document.getElementById('loginRememberMe') ? document.getElementById('loginRememberMe').checked : false;
+            Promise.resolve(loginUser(username, password, rememberMe)).then(function(result) {
                 if (result.success) {
                     showMessage('Вход выполнен успешно! Перенаправление...', 'success');
                     setTimeout(function() { window.location.href = 'index.html'; }, 1000);

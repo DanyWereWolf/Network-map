@@ -1,9 +1,11 @@
 /**
  * REST API и база данных для «Карта локальной сети».
- * Запуск: node server-api.js [порт]
- * По умолчанию порт 3000. База SQLite: ./data/network-map.db
+ * Один сервер отдаёт и приложение (HTML/JS/CSS), и API — база всегда из проекта.
+ * Запуск: node server-api.js [порт]  →  открыть http://localhost:3000
+ * Данные: ./data/store.json
  */
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const db = require('./database');
 
@@ -200,10 +202,13 @@ app.post('/api/settings', (req, res) => {
 // Здоровье
 app.get('/api/health', (req, res) => res.json({ ok: true, db: 'sqlite' }));
 
+// Раздаём приложение с того же сервера (после маршрутов /api/*)
+app.use(express.static(path.join(__dirname)));
+
 db.getDb();
 db.initDefaultAdmin();
 
 app.listen(PORT, () => {
-    console.log('API запущен: http://localhost:' + PORT);
-    console.log('База данных: ' + require('path').join(__dirname, 'data', 'network-map.db'));
+    console.log('Приложение и API: http://localhost:' + PORT);
+    console.log('Данные: ' + path.join(__dirname, 'data', 'store.json'));
 });

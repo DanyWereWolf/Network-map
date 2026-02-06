@@ -9,8 +9,15 @@ const GITHUB_REPO = { owner: 'DanyWereWolf', repo: 'Network-map' };
 var lastUpdateCheckResult = null;
 
 /**
- * Адрес API (база данных). Если задан — карта, пользователи и история берутся с сервера.
- * Пример: 'http://localhost:3000' (запуск сервера: npm run api)
- * Пустая строка — работа только с localStorage (без сервера).
+ * Адрес API (база данных). Если пусто — используется тот же хост, с которого открыта страница
+ * (при запуске через npm run api база всегда подтягивается из проекта, без настройки).
+ * Можно задать вручную, например: 'http://localhost:3000'
  */
-var API_BASE = ''; // Для работы с БД укажите, например: 'http://localhost:3000'
+var API_BASE = '';
+
+/** Базовый URL для API: заданный API_BASE или текущий хост (только http/https). */
+function getApiBase() {
+    if (typeof API_BASE !== 'undefined' && API_BASE && String(API_BASE).trim() !== '') return String(API_BASE).trim();
+    var o = typeof window !== 'undefined' && window.location && window.location.origin;
+    return (o && (o.indexOf('http://') === 0 || o.indexOf('https://') === 0)) ? o : '';
+}

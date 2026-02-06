@@ -70,16 +70,24 @@ ActionIcons[ActionTypes.USER_APPROVED] = '✅';
 ActionIcons[ActionTypes.USER_REJECTED] = '❌';
 ActionIcons[ActionTypes.USER_DELETED] = '🚫';
 
+var _historyMemory = [];
+
 function getHistory() {
-    var historyJson = localStorage.getItem('networkMap_history');
-    return historyJson ? JSON.parse(historyJson) : [];
+    return _historyMemory.slice ? _historyMemory.slice() : [];
 }
 
 function saveHistory(history) {
     if (history.length > MAX_HISTORY_ENTRIES) {
         history = history.slice(-MAX_HISTORY_ENTRIES);
     }
-    localStorage.setItem('networkMap_history', JSON.stringify(history));
+    _historyMemory = history;
+    if (typeof window.postHistoryToApi === 'function') window.postHistoryToApi(history);
+    updateHistoryBadge();
+}
+
+function setHistoryFromApi(arr) {
+    _historyMemory = Array.isArray(arr) ? arr.slice() : [];
+    updateHistoryBadge();
 }
 
 function logAction(actionType, details) {
@@ -101,13 +109,11 @@ function logAction(actionType, details) {
     };
     history.push(entry);
     saveHistory(history);
-    if (typeof window.postHistoryToApi === 'function') window.postHistoryToApi(history);
-    updateHistoryBadge();
     return entry;
 }
 
 function clearHistory() {
-    localStorage.removeItem('networkMap_history');
+    _historyMemory = [];
     if (typeof window.postHistoryToApi === 'function') window.postHistoryToApi([]);
     updateHistoryBadge();
 }
@@ -258,3 +264,5 @@ function setupHistoryModalHandlers() {
         });
     }
 }
+
+if (typeof window !== 'undefined') window.setHistoryFromApi = setHistoryFromApi;

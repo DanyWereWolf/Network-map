@@ -1,101 +1,166 @@
 /**
- * SQLite-база данных для карты, пользователей, истории и настроек.
+ * Хранение данных в JSON-файле (без нативных модулей, работает на любой Node.js).
+ * Файл: ./data/store.json
  */
-const Database = require('better-sqlite3');
 const path = require('path');
+const fs = require('fs');
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data', 'network-map.db');
+const STORE_PATH = process.env.DB_PATH ? process.env.DB_PATH.replace(/\.db$/i, '-store.json') : path.join(__dirname, 'data', 'store.json');
 
-let db;
+let store = null;
+
+function loadStore() {
+    if (store) return store;
+    const dir = path.dirname(STORE_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(STORE_PATH)) {
+        store = {
+            mapData: [],
+            users: [],
+            history: [],
+            settings: {},
+            sessions: []
+        };
+        saveStore();
+        return store;
+    }
+    try {
+        store = JSON.parse(fs.readFileSync(STORE_PATH, 'utf8'));
+    } catch (e) {
+        store = { mapData: [], users: [], history: [], settings: {}, sessions: [] };
+        saveStore();
+    }
+    if (!store.sessions) store.sessions = [];
+    if (!store.settings) store.settings = {};
+    return store;
+}
+
+function saveStore() {
+    if (!store) return;
+    const dir = path.dirname(STORE_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 0), 'utf8');
+}
 
 function getDb() {
-    if (!db) {
-        const fs = require('fs');
-        const dir = path.dirname(DB_PATH);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        db = new Database(DB_PATH);
-        initSchema();
-    }
-    return db;
+    loadStore();
+    initSchema();
+    return {
+        prepare: function (sql) {
+            return {
+                get: function (p) {
+                    if (sql.includes('map_data') && sql.includes('id = 1')) {
+                        const s = loadStore();
+                        return s.mapData !== undefined ? { data: JSON.stringify(s.mapData) } : null;
+                    }
+                    if (sql.includes('history') && sql.includes('id = 1')) {
+                        const s = loadStore();
+                        return s.history !== undefined ? { data: JSON.stringify(s.history) } : null;
+                    }
+                    if (sql.includes('settings') && sql.includes('key =')) {
+                        const s = loadStore();
+                        const key = (p || '').toString();
+                        const val = s.settings && s.settings[key] !== undefined ? s.settings[key] : '';
+                        return key === 'users' ? { value: JSON.stringify(s.users || []) } : { value: val };
+                    }
+                    return null;
+                },
+                run: function () {
+                    const args = Array.prototype.slice.call(arguments);
+                    const s = loadStore();
+                    if (sql.includes('UPDATE map_data')) {
+                        s.mapData = JSON.parse(args[0] || '[]');
+                    } else if (sql.includes('UPDATE history')) {
+                        s.history = JSON.parse(args[0] || '[]');
+                    } else if (sql.includes('INSERT OR REPLACE INTO settings')) {
+                        const key = args[0], value = args[1];
+                        if (!s.settings) s.settings = {};
+                        if (key === 'users') s.users = JSON.parse(value || '[]');
+                        else s.settings[key] = value;
+                    } else if (sql.includes('INSERT INTO sessions')) {
+                        s.sessions.push({ token: args[0], user_id: args[1], expires_at: args[2] });
+                    } else if (sql.includes('DELETE FROM sessions')) {
+                        s.sessions = s.sessions.filter(ses => ses.token !== args[0]);
+                    }
+                    saveStore();
+                },
+                all: function (token) {
+                    const s = loadStore();
+                    const now = new Date().toISOString();
+                    const found = (s.sessions || []).filter(ses => ses.token === token && ses.expires_at > now);
+                    return found.map(ses => ({ user_id: ses.user_id }));
+                }
+            };
+        },
+        exec: function (sql) {
+            loadStore();
+            if (sql.includes('CREATE TABLE') && sql.includes('map_data')) {
+                if (!Array.isArray(store.mapData)) store.mapData = [];
+                if (!Array.isArray(store.history)) store.history = [];
+                if (!store.settings) store.settings = {};
+                if (!store.sessions) store.sessions = [];
+                saveStore();
+            }
+        }
+    };
 }
 
 function initSchema() {
-    const d = getDb();
-    d.exec(`
-        CREATE TABLE IF NOT EXISTS map_data (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            data TEXT NOT NULL DEFAULT '[]',
-            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        INSERT OR IGNORE INTO map_data (id, data) VALUES (1, '[]');
-
-        CREATE TABLE IF NOT EXISTS users (
-            id TEXT PRIMARY KEY,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            full_name TEXT NOT NULL DEFAULT '',
-            role TEXT NOT NULL DEFAULT 'user',
-            status TEXT NOT NULL DEFAULT 'approved',
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-
-        CREATE TABLE IF NOT EXISTS sessions (
-            token TEXT PRIMARY KEY,
-            user_id TEXT NOT NULL,
-            expires_at TEXT NOT NULL,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        );
-
-        CREATE TABLE IF NOT EXISTS history (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            data TEXT NOT NULL DEFAULT '[]',
-            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        INSERT OR IGNORE INTO history (id, data) VALUES (1, '[]');
-
-        CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL DEFAULT ''
-        );
-    `);
+    const s = loadStore();
+    if (!Array.isArray(s.mapData)) s.mapData = [];
+    if (!Array.isArray(s.users)) s.users = [];
+    if (!Array.isArray(s.history)) s.history = [];
+    if (!s.settings || typeof s.settings !== 'object') s.settings = {};
+    if (!Array.isArray(s.sessions)) s.sessions = [];
+    saveStore();
 }
 
 function getMapData() {
-    const row = getDb().prepare('SELECT data FROM map_data WHERE id = 1').get();
-    return row ? JSON.parse(row.data) : [];
+    const s = loadStore();
+    return Array.isArray(s.mapData) ? s.mapData : [];
 }
 
 function setMapData(data) {
     if (!Array.isArray(data)) throw new Error('data must be array');
-    getDb().prepare('UPDATE map_data SET data = ?, updated_at = datetime(\'now\') WHERE id = 1').run(JSON.stringify(data));
+    const s = loadStore();
+    s.mapData = data;
+    saveStore();
 }
 
 function getUsers() {
-    const row = getDb().prepare('SELECT value FROM settings WHERE key = ?').get('users');
-    return row ? JSON.parse(row.value) : [];
+    const s = loadStore();
+    return Array.isArray(s.users) ? s.users : [];
 }
 
 function setUsers(users) {
-    getDb().prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run('users', JSON.stringify(users));
+    const s = loadStore();
+    s.users = Array.isArray(users) ? users : [];
+    saveStore();
 }
 
 function getHistory() {
-    const row = getDb().prepare('SELECT data FROM history WHERE id = 1').get();
-    return row ? JSON.parse(row.data) : [];
+    const s = loadStore();
+    return Array.isArray(s.history) ? s.history : [];
 }
 
 function setHistory(history) {
     if (!Array.isArray(history)) throw new Error('history must be array');
-    getDb().prepare('UPDATE history SET data = ?, updated_at = datetime(\'now\') WHERE id = 1').run(JSON.stringify(history));
+    const s = loadStore();
+    s.history = history;
+    saveStore();
 }
 
 function getSetting(key) {
-    const row = getDb().prepare('SELECT value FROM settings WHERE key = ?').get(key);
-    return row ? row.value : null;
+    const s = loadStore();
+    if (!s.settings || s.settings[key] === undefined) return null;
+    return s.settings[key];
 }
 
 function setSetting(key, value) {
-    getDb().prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, value === undefined || value === null ? '' : String(value));
+    const s = loadStore();
+    if (!s.settings) s.settings = {};
+    s.settings[key] = value === undefined || value === null ? '' : String(value);
+    saveStore();
 }
 
 function getSettings() {
@@ -104,18 +169,17 @@ function getSettings() {
     const netboxConfig = getSetting('netboxConfig');
     return {
         theme: theme || '',
-        groupNames: groupNames ? JSON.parse(groupNames) : {},
-        netboxConfig: netboxConfig ? JSON.parse(netboxConfig) : { url: '', token: '', ignoreSSL: false }
+        groupNames: groupNames ? (typeof groupNames === 'string' ? JSON.parse(groupNames) : groupNames) : {},
+        netboxConfig: netboxConfig ? (typeof netboxConfig === 'string' ? JSON.parse(netboxConfig) : netboxConfig) : { url: '', token: '', ignoreSSL: false }
     };
 }
 
 function setSettings(obj) {
     if (obj.theme !== undefined) setSetting('theme', obj.theme);
-    if (obj.groupNames !== undefined) setSetting('groupNames', JSON.stringify(obj.groupNames));
-    if (obj.netboxConfig !== undefined) setSetting('netboxConfig', JSON.stringify(obj.netboxConfig));
+    if (obj.groupNames !== undefined) setSetting('groupNames', typeof obj.groupNames === 'string' ? obj.groupNames : JSON.stringify(obj.groupNames));
+    if (obj.netboxConfig !== undefined) setSetting('netboxConfig', typeof obj.netboxConfig === 'string' ? obj.netboxConfig : JSON.stringify(obj.netboxConfig));
 }
 
-// Инициализация пользователей в том же формате, что и в auth.js (localStorage)
 function initDefaultAdmin() {
     let users = getUsers();
     if (users.length === 0) {
