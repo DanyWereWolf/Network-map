@@ -241,7 +241,7 @@
                             </select>
                             <label for="sleeveMaxFibers" style="margin-top: 8px;">Макс. количество волокон</label>
                             <input type="number" id="sleeveMaxFibers" class="form-input" placeholder="0" min="0" max="288" value="0">
-                            <small style="display: block; margin-top: 5px; color: #666; font-size: 11px;">0 = неограничено</small>
+                            <small class="text-muted-inline" style="display: block; margin-top: 5px; font-size: 11px;">0 = неограничено</small>
                         </div>
                         <button id="addObject" class="btn-primary">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -516,7 +516,7 @@
                         <input type="checkbox" id="netboxIgnoreSSL" style="margin-right: 8px; width: auto;">
                         <span>Игнорировать ошибки SSL сертификата</span>
                     </label>
-                    <small style="display: block; margin-top: 5px; color: #666; font-size: 12px;">
+                    <small class="text-muted-inline" style="display: block; margin-top: 5px; font-size: 12px;">
                         Внимание: Отключение проверки SSL снижает безопасность. Используйте только для тестирования или с самоподписанными сертификатами.
                     </small>
                 </div>
@@ -654,7 +654,7 @@
                 <div class="form-group">
                     <label for="editPassword">Пароль</label>
                     <input type="password" id="editPassword" class="form-input" placeholder="Введите пароль">
-                    <small style="color: #666; font-size: 11px;">Оставьте пустым, чтобы не менять пароль</small>
+                    <small class="text-muted-inline" style="font-size: 11px;">Оставьте пустым, чтобы не менять пароль</small>
                 </div>
                 <div class="form-group">
                     <label for="editRole">Роль</label>
@@ -734,6 +734,12 @@
     <div id="toastContainer" class="toast-container"></div>
 
     <script src="auth.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/notifications.js"></script>
+    <script src="js/updates.js"></script>
+    <script src="js/help.js"></script>
+    <script src="js/history.js"></script>
     <script src="main.js"></script>
 </body>
 </html>

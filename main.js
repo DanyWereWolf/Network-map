@@ -1,10 +1,4 @@
-// Версия приложения (менять при каждом релизе; теги на GitHub: v1.0.0, v1.0.1 и т.д.)
-const APP_VERSION = '1.0.0';
-// Репозиторий для проверки обновлений: https://github.com/DanyWereWolf/Network-map
-const GITHUB_REPO = { owner: 'DanyWereWolf', repo: 'Network-map' };
-
-/** Результат проверки обновлений при старте сессии (заполняется автоматически) */
-let lastUpdateCheckResult = null;
+// Конфиг (APP_VERSION, GITHUB_REPO, lastUpdateCheckResult) подключается из js/config.js
 
 let myMap;
 let objects = [];
@@ -116,598 +110,13 @@ document.addEventListener('DOMContentLoaded', function() {
     })();
 });
 
-// ==================== Система уведомлений ====================
-function showToast(message, type = 'info', title = null, duration = 4000) {
-    const container = document.getElementById('toastContainer');
-    if (!container) return;
-    
-    const icons = {
-        success: '✓',
-        error: '✕',
-        warning: '⚠',
-        info: 'ℹ'
-    };
-    
-    const titles = {
-        success: 'Успешно',
-        error: 'Ошибка',
-        warning: 'Внимание',
-        info: 'Информация'
-    };
-    
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.innerHTML = `
-        <div class="toast-icon">${icons[type] || icons.info}</div>
-        <div class="toast-content">
-            <div class="toast-title">${title || titles[type] || titles.info}</div>
-            <div class="toast-message">${message}</div>
-        </div>
-        <button class="toast-close" onclick="this.parentElement.remove()">✕</button>
-    `;
-    
-    container.appendChild(toast);
-    
-    // Автоматическое скрытие
-    setTimeout(() => {
-        toast.classList.add('toast-hiding');
-        setTimeout(() => toast.remove(), 300);
-    }, duration);
-}
+// Уведомления: js/notifications.js
 
-// Удобные функции для разных типов уведомлений
-function showSuccess(message, title = null) { showToast(message, 'success', title); }
-function showError(message, title = null) { showToast(message, 'error', title, 6000); }
-function showWarning(message, title = null) { showToast(message, 'warning', title, 5000); }
-function showInfo(message, title = null) { showToast(message, 'info', title); }
+// Обновления, история, справка: js/updates.js, js/history.js, js/help.js
 
-// ==================== Проверка обновлений (GitHub Releases) ====================
-function parseVersion(str) {
-    const s = (str || '').replace(/^v/i, '').trim();
-    const parts = s.split('.').map(n => parseInt(n, 10) || 0);
-    return [parts[0] || 0, parts[1] || 0, parts[2] || 0];
-}
-function compareVersions(a, b) {
-    const va = parseVersion(a);
-    const vb = parseVersion(b);
-    for (let i = 0; i < 3; i++) {
-        if (va[i] > vb[i]) return 1;
-        if (va[i] < vb[i]) return -1;
-    }
-    return 0;
-}
-async function checkForUpdates(silent = false) {
-    if (!GITHUB_REPO.owner || !GITHUB_REPO.repo) return { checked: false };
-    try {
-        const url = `https://api.github.com/repos/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/releases/latest`;
-        const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' } });
-        if (!res.ok) {
-            if (!silent) showWarning('Не удалось проверить обновления.', 'Обновления');
-            return { checked: true, error: res.status };
-        }
-        const data = await res.json();
-        const latest = (data.tag_name || '').trim();
-        if (!latest) {
-            if (!silent) showInfo('Нет данных о последней версии.', 'Обновления');
-            return { checked: true };
-        }
-        if (compareVersions(latest, APP_VERSION) > 0) {
-            const releaseUrl = data.html_url || `https://github.com/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/releases`;
-            const msg = `Доступна версия ${latest} (у вас ${APP_VERSION}). <a href="${releaseUrl}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">Перейти к загрузке</a>`;
-            showToast(msg, 'success', 'Доступно обновление', 10000);
-            return { checked: true, update: true, latest, url: releaseUrl };
-        }
-        if (!silent) showInfo(`Установлена актуальная версия ${APP_VERSION}.`, 'Обновления');
-        return { checked: true, update: false };
-    } catch (e) {
-        if (!silent) showWarning('Ошибка при проверке обновлений.', 'Обновления');
-        return { checked: true, error: e };
-    }
-}
+// (ActionTypes, logAction, getHistory и др. — в js/history.js)
 
-// ==================== Система истории изменений ====================
-const MAX_HISTORY_ENTRIES = 500; // Максимальное количество записей в истории
-
-// Типы действий
-const ActionTypes = {
-    // Объекты
-    CREATE_OBJECT: 'create_object',
-    DELETE_OBJECT: 'delete_object',
-    EDIT_OBJECT: 'edit_object',
-    MOVE_OBJECT: 'move_object',
-    
-    // Кабели
-    CREATE_CABLE: 'create_cable',
-    DELETE_CABLE: 'delete_cable',
-    EDIT_CABLE: 'edit_cable',
-    MERGE_CABLES: 'merge_cables',
-    
-    // Соединения жил
-    CONNECT_FIBERS: 'connect_fibers',
-    DISCONNECT_FIBERS: 'disconnect_fibers',
-    
-    // Соединение с узлом
-    CONNECT_TO_NODE: 'connect_to_node',
-    DISCONNECT_FROM_NODE: 'disconnect_from_node',
-    
-    // Импорт/Экспорт
-    IMPORT_DATA: 'import_data',
-    EXPORT_DATA: 'export_data',
-    CLEAR_MAP: 'clear_map',
-    
-    // Пользователи
-    USER_LOGIN: 'user_login',
-    USER_CREATED: 'user_created',
-    USER_APPROVED: 'user_approved',
-    USER_REJECTED: 'user_rejected',
-    USER_DELETED: 'user_deleted'
-};
-
-// Названия действий на русском
-const ActionNames = {
-    [ActionTypes.CREATE_OBJECT]: 'Создание объекта',
-    [ActionTypes.DELETE_OBJECT]: 'Удаление объекта',
-    [ActionTypes.EDIT_OBJECT]: 'Редактирование объекта',
-    [ActionTypes.MOVE_OBJECT]: 'Перемещение объекта',
-    [ActionTypes.CREATE_CABLE]: 'Прокладка кабеля',
-    [ActionTypes.DELETE_CABLE]: 'Удаление кабеля',
-    [ActionTypes.EDIT_CABLE]: 'Редактирование кабеля',
-    [ActionTypes.MERGE_CABLES]: 'Объединение кабелей',
-    [ActionTypes.CONNECT_FIBERS]: 'Соединение жил',
-    [ActionTypes.DISCONNECT_FIBERS]: 'Разъединение жил',
-    [ActionTypes.CONNECT_TO_NODE]: 'Подключение к узлу',
-    [ActionTypes.DISCONNECT_FROM_NODE]: 'Отключение от узла',
-    [ActionTypes.IMPORT_DATA]: 'Импорт данных',
-    [ActionTypes.EXPORT_DATA]: 'Экспорт данных',
-    [ActionTypes.CLEAR_MAP]: 'Очистка карты',
-    [ActionTypes.USER_LOGIN]: 'Вход в систему',
-    [ActionTypes.USER_CREATED]: 'Создание пользователя',
-    [ActionTypes.USER_APPROVED]: 'Одобрение заявки',
-    [ActionTypes.USER_REJECTED]: 'Отклонение заявки',
-    [ActionTypes.USER_DELETED]: 'Удаление пользователя'
-};
-
-// Иконки для типов действий
-const ActionIcons = {
-    [ActionTypes.CREATE_OBJECT]: '➕',
-    [ActionTypes.DELETE_OBJECT]: '🗑️',
-    [ActionTypes.EDIT_OBJECT]: '✏️',
-    [ActionTypes.MOVE_OBJECT]: '📍',
-    [ActionTypes.CREATE_CABLE]: '🔗',
-    [ActionTypes.DELETE_CABLE]: '✂️',
-    [ActionTypes.EDIT_CABLE]: '✏️',
-    [ActionTypes.MERGE_CABLES]: '🔀',
-    [ActionTypes.CONNECT_FIBERS]: '🔌',
-    [ActionTypes.DISCONNECT_FIBERS]: '⚡',
-    [ActionTypes.CONNECT_TO_NODE]: '🖥️',
-    [ActionTypes.DISCONNECT_FROM_NODE]: '🔓',
-    [ActionTypes.IMPORT_DATA]: '📥',
-    [ActionTypes.EXPORT_DATA]: '📤',
-    [ActionTypes.CLEAR_MAP]: '🧹',
-    [ActionTypes.USER_LOGIN]: '🔑',
-    [ActionTypes.USER_CREATED]: '👤',
-    [ActionTypes.USER_APPROVED]: '✅',
-    [ActionTypes.USER_REJECTED]: '❌',
-    [ActionTypes.USER_DELETED]: '🚫'
-};
-
-// Получить историю из localStorage
-function getHistory() {
-    const historyJson = localStorage.getItem('networkMap_history');
-    return historyJson ? JSON.parse(historyJson) : [];
-}
-
-// Сохранить историю в localStorage
-function saveHistory(history) {
-    // Ограничиваем количество записей
-    if (history.length > MAX_HISTORY_ENTRIES) {
-        history = history.slice(-MAX_HISTORY_ENTRIES);
-    }
-    localStorage.setItem('networkMap_history', JSON.stringify(history));
-}
-
-// Добавить запись в историю
-function logAction(actionType, details = {}) {
-    const history = getHistory();
-    
-    const entry = {
-        id: 'log_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-        timestamp: new Date().toISOString(),
-        actionType: actionType,
-        actionName: ActionNames[actionType] || actionType,
-        icon: ActionIcons[actionType] || '📝',
-        user: currentUser ? {
-            id: currentUser.userId,
-            username: currentUser.username,
-            fullName: currentUser.fullName
-        } : null,
-        details: details
-    };
-    
-    history.push(entry);
-    saveHistory(history);
-    
-    // Обновляем счётчик в UI, если есть
-    updateHistoryBadge();
-    
-    return entry;
-}
-
-// Очистить историю
-function clearHistory() {
-    localStorage.removeItem('networkMap_history');
-    updateHistoryBadge();
-}
-
-// Обновить счётчик истории в UI
-function updateHistoryBadge() {
-    const badge = document.getElementById('historyBadge');
-    if (badge) {
-        const history = getHistory();
-        const todayCount = history.filter(h => {
-            const date = new Date(h.timestamp);
-            const today = new Date();
-            return date.toDateString() === today.toDateString();
-        }).length;
-        
-        badge.textContent = todayCount;
-        badge.style.display = todayCount > 0 ? 'flex' : 'none';
-    }
-}
-
-// Форматирование времени
-function formatHistoryTime(isoString) {
-    const date = new Date(isoString);
-    const now = new Date();
-    const diff = now - date;
-    
-    // Меньше минуты
-    if (diff < 60000) {
-        return 'только что';
-    }
-    
-    // Меньше часа
-    if (diff < 3600000) {
-        const mins = Math.floor(diff / 60000);
-        return `${mins} мин. назад`;
-    }
-    
-    // Сегодня
-    if (date.toDateString() === now.toDateString()) {
-        return 'сегодня в ' + date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-    }
-    
-    // Вчера
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    if (date.toDateString() === yesterday.toDateString()) {
-        return 'вчера в ' + date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-    }
-    
-    // Другая дата
-    return date.toLocaleDateString('ru-RU', { 
-        day: 'numeric', 
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-}
-
-// Открыть модальное окно истории
-function openHistoryModal() {
-    const modal = document.getElementById('historyModal');
-    if (modal) {
-        modal.style.display = 'block';
-        renderHistoryList();
-    }
-}
-
-// Закрыть модальное окно истории
-function closeHistoryModal() {
-    const modal = document.getElementById('historyModal');
-    if (modal) {
-        modal.style.display = 'none';
-    }
-}
-
-// Окно обновлений (показывает результат проверки, выполненной при старте сессии)
-function openUpdatesModal() {
-    const modal = document.getElementById('updatesModal');
-    if (!modal) return;
-    const versionEl = document.getElementById('updatesVersionDisplay');
-    if (versionEl) {
-        versionEl.textContent = APP_VERSION;
-        versionEl.className = 'version-current';
-    }
-    const checkBtn = document.getElementById('updatesCheckBtn');
-    if (checkBtn) checkBtn.disabled = false;
-    if (lastUpdateCheckResult) {
-        renderUpdatesModalContent(lastUpdateCheckResult);
-    } else {
-        renderUpdatesModalContent(null);
-        var statusEl = document.getElementById('updatesStatus');
-        if (statusEl) statusEl.innerHTML = 'Проверка выполняется при загрузке приложения. Закройте и откройте окно через пару секунд или нажмите «Проверить обновления».';
-    }
-    modal.style.display = 'block';
-}
-
-function closeUpdatesModal() {
-    const modal = document.getElementById('updatesModal');
-    if (modal) modal.style.display = 'none';
-}
-
-function renderUpdatesModalContent(result) {
-    const versionEl = document.getElementById('updatesVersionDisplay');
-    const statusEl = document.getElementById('updatesStatus');
-    const checkBtn = document.getElementById('updatesCheckBtn');
-    if (versionEl) {
-        versionEl.textContent = APP_VERSION;
-        versionEl.className = 'version-current';
-    }
-    if (!statusEl) return;
-    if (result && result.checking) {
-        statusEl.innerHTML = 'Проверка…';
-        if (checkBtn) checkBtn.disabled = true;
-        return;
-    }
-    if (checkBtn) checkBtn.disabled = false;
-    if (!result || !result.checked) {
-        statusEl.innerHTML = 'Проверка выполняется при загрузке приложения или нажмите «Проверить обновления».';
-        return;
-    }
-    if (result.error) {
-        statusEl.innerHTML = 'Не удалось проверить обновления. Проверьте подключение к интернету.';
-        return;
-    }
-    if (result.update && result.latest && result.url) {
-        if (versionEl) versionEl.className = 'version-current version-outdated';
-        statusEl.innerHTML = 'Доступна новая версия <strong>' + escapeHtml(result.latest) + '</strong>. <a href="' + escapeHtml(result.url) + '" target="_blank" rel="noopener">Перейти к загрузке</a>';
-        return;
-    }
-    if (versionEl) versionEl.className = 'version-current version-latest';
-    statusEl.innerHTML = 'У вас установлена последняя версия.';
-}
-
-function setupUpdatesModalHandlers() {
-    const closeBtn = document.querySelector('.close-updates');
-    if (closeBtn) closeBtn.addEventListener('click', closeUpdatesModal);
-    const modal = document.getElementById('updatesModal');
-    if (modal) modal.addEventListener('click', function(e) { if (e.target === modal) closeUpdatesModal(); });
-    const checkBtn = document.getElementById('updatesCheckBtn');
-    if (checkBtn) {
-        checkBtn.addEventListener('click', async function() {
-            renderUpdatesModalContent({ checking: true });
-            const result = await checkForUpdates(true);
-            lastUpdateCheckResult = result;
-            renderUpdatesModalContent(result);
-        });
-    }
-}
-
-// Открыть модальное окно справки
-function openHelpModal() {
-    const modal = document.getElementById('helpModal');
-    const content = document.getElementById('helpModalContent');
-    if (modal && content) {
-        content.innerHTML = getHelpContentHtml();
-        modal.style.display = 'block';
-    }
-}
-
-// Закрыть модальное окно справки
-function closeHelpModal() {
-    const modal = document.getElementById('helpModal');
-    if (modal) {
-        modal.style.display = 'none';
-    }
-}
-
-// HTML-контент страницы справки
-function getHelpContentHtml() {
-    return `
-<div class="help-section">
-    <h3>О программе</h3>
-    <p><strong>Карта локальной сети</strong> — веб-приложение для визуализации и управления сетевой инфраструктурой на базе Яндекс.Карт. Позволяет отображать узлы, кроссы, муфты, опоры и кабели, прокладывать трассы и отслеживать соединения жил.</p>
-</div>
-
-<div class="help-section">
-    <h3>Режимы работы</h3>
-    <ul>
-        <li><strong>Просмотр</strong> — навигация по карте, клик по объектам для просмотра информации, трассировка жил. Редактирование недоступно.</li>
-        <li><strong>Редактирование</strong> — всё то же плюс добавление/удаление объектов, прокладка кабелей, соединение жил в кроссах и муфтах, подключение жил к узлам. Доступно только пользователям с правами редактора.</li>
-    </ul>
-</div>
-
-<div class="help-section">
-    <h3>Типы объектов</h3>
-    <ul>
-        <li><strong>Узел сети</strong> — конечное сетевое устройство (сервер, коммутатор). К узлам подключаются жилы из кроссов.</li>
-        <li><strong>Оптический кросс</strong> — точка коммутации: соединение жил между кабелями и вывод жил на узлы сети.</li>
-        <li><strong>Кабельная муфта</strong> — сращивание кабелей: соединение жил между кабелями (без вывода на узлы). Тип муфты задаётся при создании (вместимость по волокнам).</li>
-        <li><strong>Опора связи</strong> — промежуточная точка для воздушных линий; кабель проходит транзитом.</li>
-        <li><strong>Кабель</strong> — оптический (4/8/16/24 жилы) или медный; соединяет два объекта (муфта, кросс, узел, опора).</li>
-    </ul>
-</div>
-
-<div class="help-section">
-    <h3>Как пользоваться</h3>
-    <h4>Добавление объектов</h4>
-    <p>В режиме редактирования выберите тип объекта в боковой панели (Узлы, Кроссы, Муфты, Опоры), при необходимости укажите тип муфты или название группы, затем кликните по карте в нужном месте.</p>
-    <h4>Прокладка кабеля</h4>
-    <p>Нажмите «Проложить кабель», выберите тип кабеля, затем кликните по первому объекту (муфта, кросс, узел или опора), затем по второму. Кабель появится между ними.</p>
-    <h4>Соединение жил в кроссе</h4>
-    <p>Откройте карточку кросса (клик по объекту). В блоке «Управление жилами в кроссе» можно: соединить две жилы из разных кабелей (выбрать первую, затем вторую); подключить жилу к узлу сети (кнопка «Подключить к узлу»); отключить жилу от узла (кнопка «✕» в режиме редактирования).</p>
-    <h4>Соединение жил в муфте</h4>
-    <p>В карточке муфты отображается блок «Объединение жил в муфте». Выберите жилу одного кабеля, затем жилу другого — они соединятся. Одна жила может быть соединена только с одной жилой из другого кабеля.</p>
-    <h4>Группы кроссов и узлов</h4>
-    <p>Несколько кроссов или узлов в одной точке объединяются в группу. При клике по группе открывается баллун со списком: выбор объекта для просмотра или (в режиме редактирования) для прокладки кабеля. Название группы можно изменить; объект можно вынести из группы кнопкой «Переместить».</p>
-</div>
-
-<div class="help-section">
-    <h3>Поиск и интерфейс</h3>
-    <ul>
-        <li><strong>Поиск</strong> — поле в шапке: введите название или часть названия объекта, выберите результат — карта центрируется на объекте.</li>
-        <li><strong>Легенда</strong> — в боковой панели: условные обозначения типов объектов и кабелей.</li>
-        <li><strong>Тема</strong> — кнопка солнца/луны рядом с пользователем: переключение светлой и тёмной темы.</li>
-        <li><strong>Экспорт / Импорт</strong> — сохранение карты в JSON и загрузка из файла (в боковой панели).</li>
-        <li><strong>Импорт из NetBox</strong> — загрузка устройств из NetBox API по настроенному URL и токену.</li>
-    </ul>
-</div>
-
-<div class="help-section">
-    <h3>Роли</h3>
-    <ul>
-        <li><strong>Администратор</strong> — полный доступ: редактирование, управление пользователями, история изменений.</li>
-        <li><strong>Пользователь</strong> — просмотр карты, информация об объектах, трассировка; без редактирования.</li>
-    </ul>
-</div>
-
-<div class="help-section">
-    <h3>Горячие клавиши</h3>
-    <ul>
-        <li><kbd>Escape</kbd> — отмена текущей операции (например, прокладки кабеля).</li>
-        <li><kbd>Delete</kbd> — удаление выбранного объекта (в режиме редактирования).</li>
-    </ul>
-</div>
-
-<div class="help-section">
-    <h3>Хранение данных</h3>
-    <p>Данные хранятся в браузере (localStorage): объекты карты, пользователи, сессия, история изменений, тема. Для переноса данных используйте экспорт и импорт.</p>
-</div>
-
-<div class="help-section">
-    <h3>Обновления</h3>
-    <p>Нажмите кнопку со стрелкой вниз в шапке (рядом со справкой) — откроется окно <strong>Обновления</strong>. Там можно проверить версию: если доступна новая — текущая версия подсвечивается красным и есть ссылка на загрузку; если установлена последняя — зелёным.</p>
-</div>
-`;
-}
-
-// Отрисовать список истории
-function renderHistoryList(filter = 'all') {
-    const container = document.getElementById('historyList');
-    if (!container) return;
-    
-    let history = getHistory();
-    
-    // Фильтрация
-    if (filter !== 'all') {
-        const today = new Date();
-        if (filter === 'today') {
-            history = history.filter(h => new Date(h.timestamp).toDateString() === today.toDateString());
-        } else if (filter === 'week') {
-            const weekAgo = new Date(today);
-            weekAgo.setDate(weekAgo.getDate() - 7);
-            history = history.filter(h => new Date(h.timestamp) >= weekAgo);
-        }
-    }
-    
-    // Сортируем по дате (новые сверху)
-    history = history.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    
-    if (history.length === 0) {
-        container.innerHTML = `
-            <div class="history-empty">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <polyline points="12 6 12 12 16 14"></polyline>
-                </svg>
-                <p>История пуста</p>
-            </div>
-        `;
-        return;
-    }
-    
-    let html = '';
-    let currentDate = '';
-    
-    history.forEach(entry => {
-        const entryDate = new Date(entry.timestamp).toLocaleDateString('ru-RU', {
-            weekday: 'long',
-            day: 'numeric',
-            month: 'long'
-        });
-        
-        // Добавляем разделитель по дате
-        if (entryDate !== currentDate) {
-            currentDate = entryDate;
-            html += `<div class="history-date-divider">${entryDate}</div>`;
-        }
-        
-        const userName = entry.user ? (entry.user.fullName || entry.user.username) : 'Система';
-        const detailsText = formatHistoryDetails(entry);
-        
-        html += `
-            <div class="history-item">
-                <div class="history-item-icon">${entry.icon}</div>
-                <div class="history-item-content">
-                    <div class="history-item-action">${entry.actionName}</div>
-                    <div class="history-item-details">${detailsText}</div>
-                    <div class="history-item-meta">
-                        <span class="history-item-user">${escapeHtml(userName)}</span>
-                        <span class="history-item-time">${formatHistoryTime(entry.timestamp)}</span>
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-    
-    container.innerHTML = html;
-}
-
-// Форматирование деталей действия
-function formatHistoryDetails(entry) {
-    const d = entry.details;
-    
-    switch (entry.actionType) {
-        case ActionTypes.CREATE_OBJECT:
-            return `${getObjectTypeName(d.objectType) || d.objectType}: "${d.name || 'без имени'}"`;
-        
-        case ActionTypes.DELETE_OBJECT:
-            return `${getObjectTypeName(d.objectType) || d.objectType}: "${d.name || 'без имени'}"`;
-        
-        case ActionTypes.EDIT_OBJECT:
-            return `${getObjectTypeName(d.objectType) || d.objectType}: "${d.name || 'без имени'}"`;
-        
-        case ActionTypes.CREATE_CABLE:
-            return `${d.cableType || 'Кабель'}: ${d.from || '?'} → ${d.to || '?'}`;
-        
-        case ActionTypes.DELETE_CABLE:
-            return `${d.cableType || 'Кабель'}: ${d.from || '?'} → ${d.to || '?'}`;
-        
-        case ActionTypes.CONNECT_FIBERS:
-            return `Жила ${d.fromFiber} → Жила ${d.toFiber}`;
-        
-        case ActionTypes.DISCONNECT_FIBERS:
-            return `Жила ${d.fromFiber} ↔ Жила ${d.toFiber}`;
-        
-        case ActionTypes.CONNECT_TO_NODE:
-            return `Жила ${d.fiberNumber} → ${d.nodeName || 'узел'}`;
-        
-        case ActionTypes.DISCONNECT_FROM_NODE:
-            return `Жила ${d.fiberNumber} от ${d.nodeName || 'узла'}`;
-        
-        case ActionTypes.IMPORT_DATA:
-            return `${d.count || 0} объектов`;
-        
-        case ActionTypes.EXPORT_DATA:
-            return `${d.count || 0} объектов`;
-        
-        case ActionTypes.CLEAR_MAP:
-            return `Удалено ${d.count || 0} объектов`;
-        
-        case ActionTypes.USER_CREATED:
-        case ActionTypes.USER_APPROVED:
-        case ActionTypes.USER_REJECTED:
-        case ActionTypes.USER_DELETED:
-            return d.username || '';
-        
-        case ActionTypes.USER_LOGIN:
-            return '';
-        
-        default:
-            return d.description || '';
-    }
-}
+// (openHelpModal, getHelpContentHtml — в js/help.js; renderHistoryList, formatHistoryDetails — в js/history.js)
 
 // ==================== UI пользователя ====================
 function initUserUI() {
@@ -784,67 +193,9 @@ function initUserUI() {
     
     // Обновляем счётчик истории
     updateHistoryBadge();
-    
-    // Логируем вход в систему (только если это новый вход)
-    const lastLoginLog = localStorage.getItem('networkMap_lastLoginLog');
-    const now = Date.now();
-    if (!lastLoginLog || now - parseInt(lastLoginLog) > 3600000) { // 1 час
-        logAction(ActionTypes.USER_LOGIN);
-        localStorage.setItem('networkMap_lastLoginLog', now.toString());
-    }
 }
 
-// Настройка обработчиков модального окна истории
-function setupHistoryModalHandlers() {
-    // Закрытие модального окна
-    const closeBtn = document.querySelector('.close-history');
-    if (closeBtn) {
-        closeBtn.addEventListener('click', closeHistoryModal);
-    }
-    
-    const modal = document.getElementById('historyModal');
-    if (modal) {
-        modal.addEventListener('click', function(e) {
-            if (e.target === modal) closeHistoryModal();
-        });
-    }
-    
-    // Фильтры
-    const filterBtns = document.querySelectorAll('.history-filter-btn');
-    filterBtns.forEach(btn => {
-        btn.addEventListener('click', function() {
-            filterBtns.forEach(b => b.classList.remove('active'));
-            this.classList.add('active');
-            renderHistoryList(this.dataset.filter);
-        });
-    });
-    
-    // Кнопка очистки истории
-    const clearBtn = document.getElementById('clearHistoryBtn');
-    if (clearBtn) {
-        clearBtn.addEventListener('click', function() {
-            if (confirm('Очистить всю историю изменений?')) {
-                clearHistory();
-                renderHistoryList();
-                showInfo('История очищена');
-            }
-        });
-    }
-}
-
-// Настройка обработчиков модального окна справки
-function setupHelpModalHandlers() {
-    const closeBtn = document.querySelector('.close-help');
-    if (closeBtn) {
-        closeBtn.addEventListener('click', closeHelpModal);
-    }
-    const modal = document.getElementById('helpModal');
-    if (modal) {
-        modal.addEventListener('click', function(e) {
-            if (e.target === modal) closeHelpModal();
-        });
-    }
-}
+// setupHistoryModalHandlers, setupHelpModalHandlers — в js/history.js и js/help.js
 
 // Скрываем элементы только для админов
 function hideAdminOnlyElements() {
@@ -2697,22 +2048,34 @@ function handleDeleteSelected() {
 
 function handleFileImport(e) {
     const file = e.target.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            try {
-                const data = JSON.parse(e.target.result);
-                clearMap();
-                importData(data);
-                showSuccess(`Карта импортирована (${data.length} объектов)`, 'Импорт');
-                logAction(ActionTypes.IMPORT_DATA, { count: data.length });
-            } catch (error) {
-                console.error('Ошибка при импорте файла:', error);
-                showError('Ошибка при чтении файла. Проверьте формат JSON.', 'Импорт');
+    if (!file) return;
+    const fileInput = e.target;
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+        try {
+            const raw = ev.target.result;
+            const data = JSON.parse(raw);
+            if (!Array.isArray(data)) {
+                showError('Файл должен содержать массив объектов карты (JSON-массив).', 'Импорт');
+                fileInput.value = '';
+                return;
             }
-        };
-        reader.readAsText(file);
-    }
+            // Подтверждение, если на карте уже есть объекты
+            if (objects.length > 0 && !confirm('Текущая карта будет полностью заменена импортируемыми данными. Продолжить?')) {
+                fileInput.value = '';
+                return;
+            }
+            clearMap();
+            importData(data);
+            showSuccess(`Карта импортирована (${data.length} объектов)`, 'Импорт');
+            logAction(ActionTypes.IMPORT_DATA, { count: data.length });
+        } catch (error) {
+            console.error('Ошибка при импорте файла:', error);
+            showError('Ошибка при чтении файла. Проверьте, что выбран корректный JSON-файл экспорта карты.', 'Импорт');
+        }
+        fileInput.value = '';
+    };
+    reader.readAsText(file);
 }
 
 function switchToViewMode() {
@@ -3279,18 +2642,19 @@ function clearSelection() {
 
 // Универсальная функция создания кабеля (для обратной совместимости)
 // Поддерживает как старый формат (2 точки), так и новый (массив точек)
-function addCable(fromObj, toObj, cableType, existingCableId = null, fiberNumber = null) {
+// skipHistoryLog = true при восстановлении из localStorage или импорте файла, чтобы не засорять историю
+function addCable(fromObj, toObj, cableType, existingCableId = null, fiberNumber = null, skipHistoryLog = false) {
     // Если toObj - массив, значит это новый формат с несколькими точками
     if (Array.isArray(toObj)) {
-        return createCableFromPoints(toObj, cableType, existingCableId);
+        return createCableFromPoints(toObj, cableType, existingCableId, null, skipHistoryLog);
     }
     
     // Старый формат: создаем кабель между двумя точками
-    return createCableFromPoints([fromObj, toObj], cableType, existingCableId, fiberNumber);
+    return createCableFromPoints([fromObj, toObj], cableType, existingCableId, fiberNumber, skipHistoryLog);
 }
 
 // Создает кабель из массива точек
-function createCableFromPoints(points, cableType, existingCableId = null, fiberNumber = null) {
+function createCableFromPoints(points, cableType, existingCableId = null, fiberNumber = null, skipHistoryLog = false) {
     if (!points || points.length < 2) {
         return false;
     }
@@ -3388,14 +2752,15 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     saveData();
     updateStats();
     
-    // Логируем создание кабеля
-    const fromName = points[0].properties.get('name') || getObjectTypeName(points[0].properties.get('type'));
-    const toName = points[points.length - 1].properties.get('name') || getObjectTypeName(points[points.length - 1].properties.get('type'));
-    logAction(ActionTypes.CREATE_CABLE, {
-        cableType: cableDescription,
-        from: fromName,
-        to: toName
-    });
+    if (!skipHistoryLog) {
+        const fromName = points[0].properties.get('name') || getObjectTypeName(points[0].properties.get('type'));
+        const toName = points[points.length - 1].properties.get('name') || getObjectTypeName(points[points.length - 1].properties.get('type'));
+        logAction(ActionTypes.CREATE_CABLE, {
+            cableType: cableDescription,
+            from: fromName,
+            to: toName
+        });
+    }
     
     return true;
 }
@@ -3659,15 +3024,15 @@ function showCableInfo(cable) {
     html += `<div style="font-size: 0.7rem; color: var(--accent-success); margin-bottom: 2px;">Жил</div>`;
     html += `<div style="font-size: 1rem; font-weight: 600; color: var(--text-primary);">${fiberCount}</div>`;
     html += `</div>`;
-    html += `<div style="flex: 1; padding: 10px; background: ${totalCablesOnSegment > 1 ? '#fef3c7' : 'var(--bg-tertiary)'}; border-radius: 8px; text-align: center; border: 1px solid ${totalCablesOnSegment > 1 ? '#fcd34d' : 'var(--border-color)'};">`;
-    html += `<div style="font-size: 0.7rem; color: ${totalCablesOnSegment > 1 ? '#92400e' : 'var(--text-muted)'}; margin-bottom: 2px;">На участке</div>`;
-    html += `<div style="font-size: 1rem; font-weight: 600; color: ${totalCablesOnSegment > 1 ? '#78350f' : 'var(--text-primary)'};">${totalCablesOnSegment} каб.</div>`;
+    html += `<div style="flex: 1; padding: 10px; background: ${totalCablesOnSegment > 1 ? 'var(--bg-accent)' : 'var(--bg-tertiary)'}; border-radius: 8px; text-align: center; border: 1px solid ${totalCablesOnSegment > 1 ? 'var(--accent-warning)' : 'var(--border-color)'};">`;
+    html += `<div style="font-size: 0.7rem; color: ${totalCablesOnSegment > 1 ? 'var(--accent-warning)' : 'var(--text-muted)'}; margin-bottom: 2px;">На участке</div>`;
+    html += `<div style="font-size: 1rem; font-weight: 600; color: var(--text-primary);">${totalCablesOnSegment} каб.</div>`;
     html += `</div></div>`;
     
     // Параллельные кабели на этом участке
     if (parallelCables.length > 0) {
-        html += '<div style="margin-bottom: 16px; padding: 12px; background: #fffbeb; border-radius: 8px; border: 1px solid #fcd34d;">';
-        html += `<h4 style="margin: 0 0 10px 0; color: #92400e; font-size: 0.8rem; font-weight: 600;">📦 Другие кабели на этом участке (${parallelCables.length})</h4>`;
+        html += '<div style="margin-bottom: 16px; padding: 12px; background: var(--bg-accent); border-radius: 8px; border: 1px solid var(--accent-warning);">';
+        html += `<h4 style="margin: 0 0 10px 0; color: var(--accent-warning); font-size: 0.8rem; font-weight: 600;">📦 Другие кабели на этом участке (${parallelCables.length})</h4>`;
         html += '<div style="display: flex; flex-direction: column; gap: 6px;">';
         
         parallelCables.forEach((pCable, idx) => {
@@ -4025,7 +3390,7 @@ function importData(data) {
             const fromObj = objectRefs[item.from];
             const toObj = objectRefs[item.to];
             if (fromObj && toObj) {
-                addCable(fromObj, toObj, item.cableType, item.uniqueId);
+                addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true);
                 // Находим созданный кабель для обновления дополнительных свойств
                 const cable = objects.find(obj => 
                     obj.properties && 
@@ -6150,16 +5515,7 @@ function traceFiberPath(startCableId, startFiberNumber) {
     return { path, iterations };
 }
 
-// Получает название типа объекта
-function getObjectTypeName(type) {
-    switch (type) {
-        case 'support': return 'Опора связи';
-        case 'sleeve': return 'Кабельная муфта';
-        case 'cross': return 'Оптический кросс';
-        case 'node': return 'Узел сети';
-        default: return 'Объект';
-    }
-}
+// getObjectTypeName — в js/utils.js
 
 // Показывает модальное окно с результатами трассировки
 function showFiberTrace(cableId, fiberNumber) {
@@ -6480,12 +5836,7 @@ function renderNodeList(nodes, searchQuery) {
     nodeListContainer.innerHTML = html;
 }
 
-// Экранирование HTML
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
+// escapeHtml — в js/utils.js
 
 // Экранирование специальных символов для регулярного выражения
 function escapeRegExpForSearch(string) {
