@@ -1,14 +1,19 @@
 /**
  * Синхронизация карты между несколькими пользователями (WebSocket).
- * Адрес сервера сохраняется; отправка состояния с задержкой (debounce), чтобы не лагало при двух пользователях.
+ * Отправка только при изменениях на карте (вызов saveData); короткий debounce только для объединения быстрых правок.
  */
 (function() {
     var ws = null;
     var myClientId = 'client_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
     var SYNC_URL_KEY = 'networkMap_syncUrl';
-    var SEND_DEBOUNCE_MS = 2000;
+    var SEND_DEBOUNCE_MS = 400;
     var sendTimer = null;
     var pendingState = null;
+    var reconnectTimer = null;
+    var reconnectAttempts = 0;
+    var maxReconnectAttempts = 10;
+    var reconnectDelayMs = 2000;
+    var userRequestedDisconnect = false;
 
     function getDefaultSyncUrl() {
         if (typeof window !== 'undefined' && window.location && window.location.host) {
@@ -31,6 +36,33 @@
         }
     }
 
+    function updateSyncOnlineList(clients) {
+        var el = document.getElementById('syncOnlineList');
+        if (!el) return;
+        if (!clients || clients.length === 0) {
+            el.style.display = 'none';
+            el.textContent = '';
+            return;
+        }
+        var parts = clients.map(function(c) {
+            return c.id === myClientId ? 'вы' : (c.displayName || 'Участник');
+        });
+        el.textContent = 'В сети: ' + parts.length + ' — ' + parts.join(', ');
+        el.style.display = 'block';
+    }
+
+    function forceSendState() {
+        if (sendTimer) clearTimeout(sendTimer);
+        sendTimer = null;
+        var toSend = pendingState;
+        pendingState = null;
+        if (ws && ws.readyState === WebSocket.OPEN && toSend) {
+            try {
+                ws.send(JSON.stringify({ type: 'state', clientId: myClientId, data: toSend }));
+            } catch (e) {}
+        }
+    }
+
     function loadSavedSyncUrl() {
         var urlInput = document.getElementById('syncServerUrl');
         if (!urlInput) return;
@@ -49,6 +81,7 @@
             disconnect();
             return;
         }
+        userRequestedDisconnect = false;
         var btn = document.getElementById('syncConnectBtn');
         if (btn) btn.disabled = true;
         updateSyncUIStatus(false, 'Подключение…');
@@ -60,6 +93,7 @@
             return;
         }
         ws.onopen = function() {
+            reconnectAttempts = 0;
             try { sessionStorage.setItem(SYNC_URL_KEY, url); } catch (e) {}
             window.syncIsConnected = true;
             updateSyncUIStatus(true);
@@ -68,14 +102,23 @@
                 var data = getSerializedData();
                 ws.send(JSON.stringify({ type: 'state', clientId: myClientId, data: data }));
             }
+            var displayName = 'Участник';
+            if (typeof currentUser !== 'undefined' && currentUser) {
+                displayName = (currentUser.fullName || currentUser.username || displayName).toString().trim().slice(0, 100) || displayName;
+            }
+            try {
+                ws.send(JSON.stringify({ type: 'hello', displayName: displayName }));
+            } catch (e) {}
             if (btn) btn.disabled = false;
         };
         ws.onclose = function() {
             ws = null;
             window.syncIsConnected = false;
             updateSyncUIStatus(false);
+            updateSyncOnlineList([]);
             if (btn) btn.disabled = false;
             if (typeof window.showSyncRequiredOverlay === 'function') window.showSyncRequiredOverlay();
+            if (!userRequestedDisconnect) scheduleReconnect();
         };
         ws.onerror = function() {
             updateSyncUIStatus(false, 'Ошибка соединения');
@@ -83,8 +126,26 @@
         ws.onmessage = function(event) {
             try {
                 var msg = JSON.parse(event.data);
+                if (msg.type === 'clients' && Array.isArray(msg.clients)) {
+                    updateSyncOnlineList(msg.clients);
+                    return;
+                }
                 if (msg.type === 'state' && Array.isArray(msg.data) && typeof applyRemoteState === 'function') {
                     var data = msg.data;
+                    var hasPending = !!pendingState;
+                    if (hasPending) {
+                        var applyServer = confirm('Карта обновлена с сервера. Применить изменения с сервера?\n(Ваши несохранённые правки будут заменены.)');
+                        if (applyServer) {
+                            if (sendTimer) { clearTimeout(sendTimer); sendTimer = null; }
+                            pendingState = null;
+                            applyRemoteState(data);
+                            updateSyncUIStatus(true);
+                            if (typeof window.hideSyncRequiredOverlay === 'function') window.hideSyncRequiredOverlay();
+                        } else {
+                            forceSendState();
+                        }
+                        return;
+                    }
                     updateSyncUIStatus(true, 'Обновление карты…');
                     setTimeout(function() {
                         try {
@@ -98,11 +159,23 @@
         };
     }
 
+    function scheduleReconnect() {
+        if (reconnectTimer || !sessionStorage.getItem(SYNC_URL_KEY)) return;
+        if (reconnectAttempts >= maxReconnectAttempts) return;
+        reconnectAttempts++;
+        reconnectTimer = setTimeout(function() {
+            reconnectTimer = null;
+            connect();
+        }, reconnectDelayMs);
+    }
+
     function disconnect() {
+        userRequestedDisconnect = true;
         if (reconnectTimer) {
             clearTimeout(reconnectTimer);
             reconnectTimer = null;
         }
+        reconnectAttempts = maxReconnectAttempts;
         if (ws) {
             ws.close();
             ws = null;
@@ -147,4 +220,5 @@
     window.syncConnect = connect;
     window.syncDisconnect = disconnect;
     window.syncAutoConnectIfSaved = autoConnectIfSaved;
+    window.syncForceSendState = forceSendState;
 })();

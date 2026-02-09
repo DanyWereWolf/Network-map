@@ -39,7 +39,15 @@ function saveStore() {
     if (!store) return;
     const dir = path.dirname(STORE_PATH);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 0), 'utf8');
+    const json = JSON.stringify(store, null, 0);
+    const tmpPath = STORE_PATH + '.tmp.' + Date.now();
+    try {
+        fs.writeFileSync(tmpPath, json, 'utf8');
+        fs.renameSync(tmpPath, STORE_PATH);
+    } catch (e) {
+        try { fs.unlinkSync(tmpPath); } catch (_) {}
+        throw e;
+    }
 }
 
 function getDb() {

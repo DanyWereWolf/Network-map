@@ -267,28 +267,59 @@ db.initDefaultAdmin();
 const server = http.createServer(app);
 var syncCurrentState = { clientId: 'server', data: db.getMapData() || [] };
 const wss = new WebSocket.Server({ server, path: '/sync' });
+const syncClientNames = new Map(); // clientId -> displayName
+
+function broadcastSyncClients() {
+    const list = [];
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN && client.clientId) {
+            list.push({ id: client.clientId, displayName: syncClientNames.get(client.clientId) || 'Участник' });
+        }
+    });
+    const payload = JSON.stringify({ type: 'clients', clients: list });
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            try { client.send(payload); } catch (e) {}
+        }
+    });
+}
+
 wss.on('connection', (ws, req) => {
     const clientId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+    ws.clientId = clientId;
     ws.connectedAt = Date.now();
+    syncClientNames.set(clientId, 'Участник');
+    broadcastSyncClients();
     try {
         ws.send(JSON.stringify({ type: 'state', clientId: syncCurrentState.clientId, data: syncCurrentState.data }));
     } catch (e) {}
     ws.on('message', (raw) => {
         try {
-            const msg = JSON.parse(raw.toString());
-            if (msg.type === 'state' && Array.isArray(msg.data)) {
-                var justConnected = (Date.now() - (ws.connectedAt || 0)) < 4000;
-                if (!justConnected) {
-                    syncCurrentState = { clientId, data: msg.data };
-                    try { db.setMapData(msg.data); } catch (e) {}
-                    wss.clients.forEach(client => {
-                        if (client !== ws && client.readyState === WebSocket.OPEN) {
-                            client.send(JSON.stringify({ type: 'state', clientId, data: msg.data }));
-                        }
-                    });
-                }
+            const str = raw.toString();
+            if (str.length > 15 * 1024 * 1024) return;
+            const msg = JSON.parse(str);
+            if (msg.type === 'hello') {
+                const name = (msg.displayName && String(msg.displayName).trim()) || 'Участник';
+                syncClientNames.set(clientId, name.slice(0, 100));
+                broadcastSyncClients();
+                return;
+            }
+            if (msg.type !== 'state' || !Array.isArray(msg.data)) return;
+            var justConnected = (Date.now() - (ws.connectedAt || 0)) < 4000;
+            if (!justConnected) {
+                syncCurrentState = { clientId: msg.clientId || clientId, data: msg.data };
+                try { db.setMapData(msg.data); } catch (e) {}
+                wss.clients.forEach(client => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN) {
+                        client.send(JSON.stringify({ type: 'state', clientId: syncCurrentState.clientId, data: msg.data }));
+                    }
+                });
             }
         } catch (e) {}
+    });
+    ws.on('close', function() {
+        syncClientNames.delete(clientId);
+        broadcastSyncClients();
     });
 });
 

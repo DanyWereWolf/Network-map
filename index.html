@@ -368,7 +368,7 @@
                         </svg>
                     </div>
                     <div class="accordion-content" id="sync-content">
-                        <p class="text-muted-inline" style="font-size: 0.8125rem; margin-bottom: 10px;">Несколько человек могут редактировать карту одновременно. Запустите сервер <code style="font-size: 0.75rem;">node server.js</code> на одном компьютере и укажите его адрес.</p>
+                        <p class="text-muted-inline" style="font-size: 0.8125rem; margin-bottom: 10px;">Одна карта на всех. Подключитесь к синхронизации — адрес подставится автоматически (тот же сервер, что и приложение).</p>
                         <div class="form-group">
                             <label for="syncServerUrl">Адрес сервера (WebSocket)</label>
                             <input type="text" id="syncServerUrl" class="form-input" placeholder="ws://.../sync (по умолчанию тот же сервер)">
@@ -377,6 +377,7 @@
                             <button id="syncConnectBtn" class="btn-primary" style="flex: 1;">Подключиться</button>
                             <span id="syncStatus" class="sync-status sync-disconnected">Отключено</span>
                         </div>
+                        <div id="syncOnlineList" class="sync-online-list text-muted-inline" style="font-size: 0.8125rem; display: none;"></div>
                     </div>
                 </div>
 
