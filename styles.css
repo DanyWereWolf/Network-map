@@ -453,6 +453,13 @@ body {
     font-size: 14px;
 }
 
+.user-item-online {
+    font-weight: 500;
+    font-size: 11px;
+    color: #22c55e;
+    margin-left: 6px;
+}
+
 .user-item-username {
     font-size: 12px;
     color: var(--text-muted);

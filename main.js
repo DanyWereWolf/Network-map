@@ -323,6 +323,7 @@ function renderUsersList() {
     
     let html = '';
     
+    const onlineIds = (typeof window.syncOnlineUserIds !== 'undefined' && Array.isArray(window.syncOnlineUserIds)) ? window.syncOnlineUserIds : [];
     // Активные пользователи
     activeUsers.forEach(user => {
         const initial = (user.fullName || user.username).charAt(0).toUpperCase();
@@ -330,12 +331,13 @@ function renderUsersList() {
         const roleText = user.role === 'admin' ? 'Администратор' : 'Пользователь';
         const createdDate = user.createdAt ? new Date(user.createdAt).toLocaleDateString('ru-RU') : '';
         const isCurrentUser = user.id === currentUser.userId;
+        const isOnline = onlineIds.some(id => id == user.id);
         
         html += `
             <div class="user-item">
                 <div class="user-item-avatar ${roleClass}">${initial}</div>
                 <div class="user-item-info">
-                    <div class="user-item-name">${escapeHtml(user.fullName || user.username)}${isCurrentUser ? ' (вы)' : ''}</div>
+                    <div class="user-item-name">${escapeHtml(user.fullName || user.username)}${isCurrentUser ? ' (вы)' : ''}${isOnline ? ' <span class="user-item-online">В сети</span>' : ''}</div>
                     <div class="user-item-username">@${escapeHtml(user.username)}</div>
                     <div class="user-item-date">Создан: ${createdDate}</div>
                 </div>
@@ -393,6 +395,7 @@ function renderUsersList() {
     
     container.innerHTML = html;
 }
+window.renderUsersList = renderUsersList;
 
 // Одобрить заявку пользователя
 function approveUserRequest(userId) {
@@ -3383,8 +3386,8 @@ function postHistoryToApi(history) {
  */
 function applyRemoteState(data) {
     if (!Array.isArray(data)) return;
-    clearMap();
-    importData(data);
+    clearMap({ skipSave: true, skipHistory: true });
+    importData(data, { skipSave: true, skipHistory: true });
     ensureNodeLabelsVisible();
     updateAllNodeConnectionLines();
     updateStats();
@@ -3404,8 +3407,8 @@ function ensureNodeLabelsVisible() {
     });
 }
 
-function importData(data) {
-    clearMap();
+function importData(data, opts) {
+    clearMap(opts || {});
     
     const objectRefs = [];
     data.forEach(item => {
@@ -3827,17 +3830,18 @@ function exportData() {
     logAction(ActionTypes.EXPORT_DATA, { count: objects.length });
 }
 
-function clearMap() {
+function clearMap(opts) {
+    opts = opts || {};
     const count = objects.length;
     myMap.geoObjects.removeAll();
     objects = [];
     selectedObjects = [];
     crossGroupPlacemarks = [];
     nodeGroupPlacemarks = [];
-    saveData();
+    if (!opts.skipSave) saveData();
     updateStats();
     
-    if (count > 0) {
+    if (count > 0 && !opts.skipHistory) {
         logAction(ActionTypes.CLEAR_MAP, { count: count });
     }
 }

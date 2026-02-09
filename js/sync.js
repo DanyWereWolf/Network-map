@@ -103,17 +103,20 @@
                 ws.send(JSON.stringify({ type: 'state', clientId: myClientId, data: data }));
             }
             var displayName = 'Участник';
+            var userId = null;
             if (typeof currentUser !== 'undefined' && currentUser) {
                 displayName = (currentUser.fullName || currentUser.username || displayName).toString().trim().slice(0, 100) || displayName;
+                userId = currentUser.userId != null ? currentUser.userId : null;
             }
             try {
-                ws.send(JSON.stringify({ type: 'hello', displayName: displayName }));
+                ws.send(JSON.stringify({ type: 'hello', displayName: displayName, userId: userId }));
             } catch (e) {}
             if (btn) btn.disabled = false;
         };
         ws.onclose = function() {
             ws = null;
             window.syncIsConnected = false;
+            window.syncOnlineUserIds = [];
             updateSyncUIStatus(false);
             updateSyncOnlineList([]);
             if (btn) btn.disabled = false;
@@ -126,8 +129,18 @@
         ws.onmessage = function(event) {
             try {
                 var msg = JSON.parse(event.data);
+                if (msg.type === 'yourId' && msg.clientId) {
+                    myClientId = msg.clientId;
+                    return;
+                }
                 if (msg.type === 'clients' && Array.isArray(msg.clients)) {
+                    var userIds = [];
+                    msg.clients.forEach(function(c) {
+                        if (c.userId != null && userIds.indexOf(c.userId) === -1) userIds.push(c.userId);
+                    });
+                    window.syncOnlineUserIds = userIds;
                     updateSyncOnlineList(msg.clients);
+                    if (typeof window.renderUsersList === 'function') window.renderUsersList();
                     return;
                 }
                 if (msg.type === 'state' && Array.isArray(msg.data) && typeof applyRemoteState === 'function') {

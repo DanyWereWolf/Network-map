@@ -269,11 +269,17 @@ var syncCurrentState = { clientId: 'server', data: db.getMapData() || [] };
 const wss = new WebSocket.Server({ server, path: '/sync' });
 const syncClientNames = new Map(); // clientId -> displayName
 
+const syncClientUserIds = new Map(); // clientId -> userId (number or string)
+
 function broadcastSyncClients() {
     const list = [];
     wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN && client.clientId) {
-            list.push({ id: client.clientId, displayName: syncClientNames.get(client.clientId) || 'Участник' });
+            list.push({
+                id: client.clientId,
+                displayName: syncClientNames.get(client.clientId) || 'Участник',
+                userId: syncClientUserIds.get(client.clientId) || null
+            });
         }
     });
     const payload = JSON.stringify({ type: 'clients', clients: list });
@@ -292,6 +298,18 @@ wss.on('connection', (ws, req) => {
     broadcastSyncClients();
     try {
         ws.send(JSON.stringify({ type: 'state', clientId: syncCurrentState.clientId, data: syncCurrentState.data }));
+        ws.send(JSON.stringify({ type: 'yourId', clientId: clientId }));
+        var list = [];
+        wss.clients.forEach(function(c) {
+            if (c.readyState === WebSocket.OPEN && c.clientId) {
+                list.push({
+                    id: c.clientId,
+                    displayName: syncClientNames.get(c.clientId) || 'Участник',
+                    userId: syncClientUserIds.get(c.clientId) || null
+                });
+            }
+        });
+        ws.send(JSON.stringify({ type: 'clients', clients: list }));
     } catch (e) {}
     ws.on('message', (raw) => {
         try {
@@ -301,6 +319,7 @@ wss.on('connection', (ws, req) => {
             if (msg.type === 'hello') {
                 const name = (msg.displayName && String(msg.displayName).trim()) || 'Участник';
                 syncClientNames.set(clientId, name.slice(0, 100));
+                if (msg.userId !== undefined && msg.userId !== null) syncClientUserIds.set(clientId, msg.userId);
                 broadcastSyncClients();
                 return;
             }
@@ -319,6 +338,7 @@ wss.on('connection', (ws, req) => {
     });
     ws.on('close', function() {
         syncClientNames.delete(clientId);
+        syncClientUserIds.delete(clientId);
         broadcastSyncClients();
     });
 });
