@@ -3342,11 +3342,14 @@ function loadData() {
 function showSyncRequiredOverlay() {
     var el = document.getElementById('syncRequiredOverlay');
     if (el) { el.style.display = 'flex'; return; }
+    var mapEl = document.getElementById('map');
+    if (!mapEl) return;
     el = document.createElement('div');
     el.id = 'syncRequiredOverlay';
-    el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);color:#fff;display:flex;align-items:center;justify-content:center;z-index:99998;font-family:sans-serif;text-align:center;padding:24px;box-sizing:border-box;';
-    el.innerHTML = '<div><h2 style="margin:0 0 12px;">Общая карта</h2><p style="margin:0 0 8px;">Подключитесь к синхронизации в боковой панели,<br>чтобы работать с картой (одна карта на всех).</p><p style="margin:0;font-size:14px;opacity:0.9;">Блок «Синхронизация» → Подключиться</p></div>';
-    document.body.appendChild(el);
+    el.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.75);color:#fff;display:flex;align-items:center;justify-content:center;z-index:99998;font-family:sans-serif;text-align:center;padding:24px;box-sizing:border-box;';
+    el.innerHTML = '<div><h2 style="margin:0 0 12px;">Общая карта</h2><p style="margin:0 0 8px;">Подключитесь к синхронизации в боковой панели слева,<br>чтобы работать с картой (одна карта на всех).</p><p style="margin:0;font-size:14px;opacity:0.9;">Блок «Синхронизация» → Подключиться</p></div>';
+    mapEl.style.position = 'relative';
+    mapEl.appendChild(el);
 }
 function hideSyncRequiredOverlay() {
     var el = document.getElementById('syncRequiredOverlay');
