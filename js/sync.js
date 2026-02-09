@@ -72,6 +72,7 @@
             ws = null;
             updateSyncUIStatus(false);
             if (btn) btn.disabled = false;
+            if (typeof window.showSyncRequiredOverlay === 'function') window.showSyncRequiredOverlay();
         };
         ws.onerror = function() {
             updateSyncUIStatus(false, 'Ошибка соединения');
@@ -79,8 +80,16 @@
         ws.onmessage = function(event) {
             try {
                 var msg = JSON.parse(event.data);
-                if (msg.type === 'state' && msg.clientId !== myClientId && Array.isArray(msg.data) && typeof applyRemoteState === 'function') {
-                    applyRemoteState(msg.data);
+                if (msg.type === 'state' && Array.isArray(msg.data) && typeof applyRemoteState === 'function') {
+                    var data = msg.data;
+                    updateSyncUIStatus(true, 'Обновление карты…');
+                    setTimeout(function() {
+                        try {
+                            applyRemoteState(data);
+                            updateSyncUIStatus(true);
+                            if (typeof window.hideSyncRequiredOverlay === 'function') window.hideSyncRequiredOverlay();
+                        } catch (e) { updateSyncUIStatus(true); }
+                    }, 0);
                 }
             } catch (e) {}
         };

@@ -3305,13 +3305,7 @@ function getSerializedData() {
 
 function saveData() {
     const data = getSerializedData();
-    if (getApiBase()) {
-        fetch(getApiBase() + '/api/map', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
-            body: JSON.stringify({ data: data })
-        }).catch(function() {});
-    }
+    // Сохранение только через синхронизацию: сервер пишет в БД при получении состояния
     if (typeof window.syncSendState === 'function') window.syncSendState(data);
 }
 
@@ -3324,32 +3318,42 @@ function loadData() {
         showNoApiMessage();
         return;
     }
-    fetch(getApiBase() + '/api/map', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } })
-        .then(function(r) { return r.json(); })
-        .then(function(body) {
-            if (body && Array.isArray(body.data)) {
-                applyRemoteState(body.data);
+    // Карта не загружается с API — только через синхронизацию (одна карта на всех)
+    (function() {
+        if (typeof AuthSystem !== 'undefined' && AuthSystem.refreshUsersFromApi) AuthSystem.refreshUsersFromApi();
+        var token = getAuthToken();
+        fetch(getApiBase() + '/api/history', { headers: { 'Authorization': 'Bearer ' + token } }).then(function(r) { return r.json(); }).then(function(b) {
+            if (b && Array.isArray(b.history) && typeof window.setHistoryFromApi === 'function') window.setHistoryFromApi(b.history);
+        }).catch(function() {});
+        fetch(getApiBase() + '/api/settings').then(function(r) { return r.json(); }).then(function(s) {
+            if (!s) return;
+            if (s.theme) try { document.documentElement.setAttribute('data-theme', s.theme); setTheme(s.theme); } catch (e) {}
+            if (s.groupNames && typeof crossGroupNames !== 'undefined' && typeof nodeGroupNames !== 'undefined') {
+                try {
+                    if (s.groupNames.cross && typeof s.groupNames.cross === 'object') Object.keys(s.groupNames.cross).forEach(function(k) { crossGroupNames.set(k, s.groupNames.cross[k]); });
+                    if (s.groupNames.node && typeof s.groupNames.node === 'object') Object.keys(s.groupNames.node).forEach(function(k) { nodeGroupNames.set(k, s.groupNames.node[k]); });
+                } catch (e) {}
             }
-        })
-        .catch(function() {})
-        .then(function() {
-            if (typeof AuthSystem !== 'undefined' && AuthSystem.refreshUsersFromApi) AuthSystem.refreshUsersFromApi();
-            var token = getAuthToken();
-            fetch(getApiBase() + '/api/history', { headers: { 'Authorization': 'Bearer ' + token } }).then(function(r) { return r.json(); }).then(function(b) {
-                if (b && Array.isArray(b.history) && typeof window.setHistoryFromApi === 'function') window.setHistoryFromApi(b.history);
-            }).catch(function() {});
-            fetch(getApiBase() + '/api/settings').then(function(r) { return r.json(); }).then(function(s) {
-                if (!s) return;
-                if (s.theme) try { document.documentElement.setAttribute('data-theme', s.theme); setTheme(s.theme); } catch (e) {}
-                if (s.groupNames && typeof crossGroupNames !== 'undefined' && typeof nodeGroupNames !== 'undefined') {
-                    try {
-                        if (s.groupNames.cross && typeof s.groupNames.cross === 'object') Object.keys(s.groupNames.cross).forEach(function(k) { crossGroupNames.set(k, s.groupNames.cross[k]); });
-                        if (s.groupNames.node && typeof s.groupNames.node === 'object') Object.keys(s.groupNames.node).forEach(function(k) { nodeGroupNames.set(k, s.groupNames.node[k]); });
-                    } catch (e) {}
-                }
-            }).catch(function() {});
-        });
+        }).catch(function() {});
+    })();
+    showSyncRequiredOverlay();
 }
+
+function showSyncRequiredOverlay() {
+    var el = document.getElementById('syncRequiredOverlay');
+    if (el) { el.style.display = 'flex'; return; }
+    el = document.createElement('div');
+    el.id = 'syncRequiredOverlay';
+    el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);color:#fff;display:flex;align-items:center;justify-content:center;z-index:99998;font-family:sans-serif;text-align:center;padding:24px;box-sizing:border-box;';
+    el.innerHTML = '<div><h2 style="margin:0 0 12px;">Общая карта</h2><p style="margin:0 0 8px;">Подключитесь к синхронизации в боковой панели,<br>чтобы работать с картой (одна карта на всех).</p><p style="margin:0;font-size:14px;opacity:0.9;">Блок «Синхронизация» → Подключиться</p></div>';
+    document.body.appendChild(el);
+}
+function hideSyncRequiredOverlay() {
+    var el = document.getElementById('syncRequiredOverlay');
+    if (el) el.style.display = 'none';
+}
+window.showSyncRequiredOverlay = showSyncRequiredOverlay;
+window.hideSyncRequiredOverlay = hideSyncRequiredOverlay;
 
 function showNoApiMessage() {
     var overlay = document.getElementById('noApiOverlay');

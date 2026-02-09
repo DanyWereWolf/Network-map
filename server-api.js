@@ -263,27 +263,30 @@ app.use(express.static(path.join(__dirname)));
 db.getDb();
 db.initDefaultAdmin();
 
-// ————— WebSocket: синхронизация карты (тот же процесс, путь /sync) —————
+// ————— WebSocket: одна общая карта для всех, хранится в БД —————
 const server = http.createServer(app);
-let syncCurrentState = null;
+var syncCurrentState = { clientId: 'server', data: db.getMapData() || [] };
 const wss = new WebSocket.Server({ server, path: '/sync' });
 wss.on('connection', (ws, req) => {
     const clientId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
-    if (syncCurrentState && syncCurrentState.data) {
-        try {
-            ws.send(JSON.stringify({ type: 'state', clientId: syncCurrentState.clientId, data: syncCurrentState.data }));
-        } catch (e) {}
-    }
+    ws.connectedAt = Date.now();
+    try {
+        ws.send(JSON.stringify({ type: 'state', clientId: syncCurrentState.clientId, data: syncCurrentState.data }));
+    } catch (e) {}
     ws.on('message', (raw) => {
         try {
             const msg = JSON.parse(raw.toString());
             if (msg.type === 'state' && Array.isArray(msg.data)) {
-                syncCurrentState = { clientId, data: msg.data };
-                wss.clients.forEach(client => {
-                    if (client !== ws && client.readyState === WebSocket.OPEN) {
-                        client.send(JSON.stringify({ type: 'state', clientId, data: msg.data }));
-                    }
-                });
+                var justConnected = (Date.now() - (ws.connectedAt || 0)) < 4000;
+                if (!justConnected) {
+                    syncCurrentState = { clientId, data: msg.data };
+                    try { db.setMapData(msg.data); } catch (e) {}
+                    wss.clients.forEach(client => {
+                        if (client !== ws && client.readyState === WebSocket.OPEN) {
+                            client.send(JSON.stringify({ type: 'state', clientId, data: msg.data }));
+                        }
+                    });
+                }
             }
         } catch (e) {}
     });
