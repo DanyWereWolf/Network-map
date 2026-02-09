@@ -1,15 +1,29 @@
 /**
  * REST API и база данных для «Карта локальной сети».
  * Один сервер отдаёт и приложение (HTML/JS/CSS), и API — база всегда из проекта.
- * Запуск: node server-api.js [порт]  →  открыть http://localhost:3000
+ * Слушает на всех интерфейсах (0.0.0.0): доступ по localhost и по IP в сети.
+ * Запуск: node server-api.js [порт]  или  HOST=0.0.0.0 PORT=3000 node server-api.js
  * Данные: ./data/store.json
  */
 const express = require('express');
 const path = require('path');
+const os = require('os');
 const cors = require('cors');
 const db = require('./database');
 
-const PORT = parseInt(process.env.PORT || process.argv[2] || '3000', 10);
+function loadServerConfig() {
+    let config = {};
+    try {
+        const configPath = path.join(__dirname, 'server-config.json');
+        if (require('fs').existsSync(configPath)) {
+            config = JSON.parse(require('fs').readFileSync(configPath, 'utf8'));
+        }
+    } catch (e) {}
+    return config;
+}
+const serverConfig = loadServerConfig();
+const PORT = parseInt(process.env.PORT || process.argv[2] || serverConfig.port || '3000', 10);
+const HOST = process.env.HOST || serverConfig.host || '0.0.0.0';
 const app = express();
 
 app.use(cors({ origin: true, credentials: true }));
@@ -208,7 +222,27 @@ app.use(express.static(path.join(__dirname)));
 db.getDb();
 db.initDefaultAdmin();
 
-app.listen(PORT, () => {
-    console.log('Приложение и API: http://localhost:' + PORT);
+function getLocalIPs() {
+    const ifaces = os.networkInterfaces();
+    const ips = [];
+    for (const name of Object.keys(ifaces)) {
+        for (const iface of ifaces[name]) {
+            if (iface.family === 'IPv4' && !iface.internal) ips.push(iface.address);
+        }
+    }
+    return ips;
+}
+
+app.listen(PORT, HOST, () => {
+    console.log('Приложение и API:');
+    console.log('  Локально:    http://localhost:' + PORT);
+    const ips = getLocalIPs();
+    if (ips.length) {
+        ips.forEach(ip => console.log('  В сети:      http://' + ip + ':' + PORT));
+        console.log('  На других устройствах откройте адрес «В сети» в браузере.');
+    }
     console.log('Данные: ' + path.join(__dirname, 'data', 'store.json'));
+    if (!require('fs').existsSync(path.join(__dirname, 'server-config.json'))) {
+        console.log('Настройки: порт/хост можно задать в server-config.json (скопируйте из server-config.example.json).');
+    }
 });
