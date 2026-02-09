@@ -61,7 +61,9 @@
         }
         ws.onopen = function() {
             try { sessionStorage.setItem(SYNC_URL_KEY, url); } catch (e) {}
+            window.syncIsConnected = true;
             updateSyncUIStatus(true);
+            if (typeof window.hideSyncRequiredOverlay === 'function') window.hideSyncRequiredOverlay();
             if (typeof getSerializedData === 'function') {
                 var data = getSerializedData();
                 ws.send(JSON.stringify({ type: 'state', clientId: myClientId, data: data }));
@@ -70,6 +72,7 @@
         };
         ws.onclose = function() {
             ws = null;
+            window.syncIsConnected = false;
             updateSyncUIStatus(false);
             if (btn) btn.disabled = false;
             if (typeof window.showSyncRequiredOverlay === 'function') window.showSyncRequiredOverlay();
@@ -123,13 +126,25 @@
         }, SEND_DEBOUNCE_MS);
     }
 
+    function autoConnectIfSaved() {
+        try {
+            var saved = sessionStorage.getItem(SYNC_URL_KEY);
+            if (saved && saved.trim()) connect();
+        } catch (e) {}
+    }
+
     if (typeof document !== 'undefined' && document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', loadSavedSyncUrl);
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSavedSyncUrl();
+            setTimeout(autoConnectIfSaved, 1200);
+        });
     } else {
         loadSavedSyncUrl();
+        setTimeout(autoConnectIfSaved, 1200);
     }
 
     window.syncSendState = sendState;
     window.syncConnect = connect;
     window.syncDisconnect = disconnect;
+    window.syncAutoConnectIfSaved = autoConnectIfSaved;
 })();

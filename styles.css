@@ -1198,10 +1198,16 @@ button {
 
 
 /* ==================== Карта ==================== */
+.map-area-wrapper {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    width: calc(100% - 360px);
+}
 .map {
     flex: 1;
     height: 100%;
-    width: calc(100% - 360px);
+    width: 100%;
     transition: all 0.3s ease-in-out;
 }
 
@@ -2085,8 +2091,12 @@ button {
         width: 300px;
     }
     
-    .map {
+    .map-area-wrapper {
         width: calc(100% - 300px);
+    }
+    
+    .map {
+        width: 100%;
     }
     
     .user-name {
@@ -2181,6 +2191,11 @@ button {
     
     .container {
         flex-direction: column;
+    }
+    
+    .map-area-wrapper {
+        width: 100%;
+        min-height: 300px;
     }
     
     .sidebar {
