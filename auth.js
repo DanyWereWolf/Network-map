@@ -171,6 +171,25 @@ function getPendingUsers() {
     return users.filter(u => u.status === 'pending');
 }
 
+// Обновить сессию с сервера (роль и т.д. после изменений админом)
+function refreshSessionFromApi() {
+    if (!getApiBase()) return Promise.resolve();
+    var token = getAuthToken();
+    if (!token) return Promise.resolve();
+    return fetch(getApiBase() + '/api/auth/session', { headers: { 'Authorization': 'Bearer ' + token } })
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(body) {
+            if (body && body.user) {
+                var session = body.user;
+                try {
+                    sessionStorage.setItem('networkMap_session', JSON.stringify(session));
+                    if (localStorage.getItem('networkMap_tokenExpiry')) localStorage.setItem('networkMap_session', JSON.stringify(session));
+                } catch (e) {}
+            }
+        })
+        .catch(function() {});
+}
+
 // Получить текущую сессию (из sessionStorage или localStorage при «запомнить меня»)
 function getCurrentSession() {
     return getStoredSession();
@@ -305,5 +324,6 @@ window.AuthSystem = {
     saveUsers,
     hashPassword,
     findUserByUsername,
-    refreshUsersFromApi
+    refreshUsersFromApi,
+    refreshSessionFromApi
 };

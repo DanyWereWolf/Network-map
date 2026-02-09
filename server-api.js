@@ -6,9 +6,11 @@
  * Данные: ./data/store.json
  */
 const express = require('express');
+const http = require('http');
 const path = require('path');
 const os = require('os');
 const cors = require('cors');
+const WebSocket = require('ws');
 const db = require('./database');
 
 function loadServerConfig() {
@@ -169,6 +171,45 @@ app.post('/api/users/reject', (req, res) => {
     res.json({ ok: true });
 });
 
+app.put('/api/users/:userId', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!admin || admin.role !== 'admin') return res.status(403).json({ error: 'Только администратор' });
+    const userId = req.params.userId;
+    const { fullName, role, password } = req.body || {};
+    const users = db.getUsers();
+    const i = users.findIndex(u => u.id === userId);
+    if (i === -1) return res.status(404).json({ error: 'Пользователь не найден' });
+    if (users[i].username === 'admin' && role !== undefined && role !== 'admin') return res.status(400).json({ error: 'Нельзя снять роль администратора с главного администратора' });
+    if (fullName !== undefined) { users[i].fullName = fullName; users[i].full_name = fullName; }
+    if (role !== undefined) users[i].role = role;
+    if (password && String(password).length >= 6) users[i].password = hashPassword(password);
+    db.setUsers(users);
+    res.json({ ok: true });
+});
+
+app.post('/api/users', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!admin || admin.role !== 'admin') return res.status(403).json({ error: 'Только администратор' });
+    const { username, password, fullName, role } = req.body || {};
+    if (!username || username.length < 3) return res.status(400).json({ error: 'Имя не менее 3 символов' });
+    if (!password || password.length < 6) return res.status(400).json({ error: 'Пароль не менее 6 символов' });
+    const users = db.getUsers();
+    if (users.find(u => u.username.toLowerCase() === username.toLowerCase())) return res.status(400).json({ error: 'Пользователь уже существует' });
+    const newUser = {
+        id: 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        username: username,
+        password: hashPassword(password),
+        fullName: fullName || username,
+        full_name: fullName || username,
+        role: role || 'user',
+        status: 'approved',
+        createdAt: new Date().toISOString()
+    };
+    users.push(newUser);
+    db.setUsers(users);
+    res.json({ ok: true, user: { id: newUser.id, username: newUser.username } });
+});
+
 // ————— История —————
 app.get('/api/history', (req, res) => {
     try {
@@ -222,6 +263,32 @@ app.use(express.static(path.join(__dirname)));
 db.getDb();
 db.initDefaultAdmin();
 
+// ————— WebSocket: синхронизация карты (тот же процесс, путь /sync) —————
+const server = http.createServer(app);
+let syncCurrentState = null;
+const wss = new WebSocket.Server({ server, path: '/sync' });
+wss.on('connection', (ws, req) => {
+    const clientId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+    if (syncCurrentState && syncCurrentState.data) {
+        try {
+            ws.send(JSON.stringify({ type: 'state', clientId: syncCurrentState.clientId, data: syncCurrentState.data }));
+        } catch (e) {}
+    }
+    ws.on('message', (raw) => {
+        try {
+            const msg = JSON.parse(raw.toString());
+            if (msg.type === 'state' && Array.isArray(msg.data)) {
+                syncCurrentState = { clientId, data: msg.data };
+                wss.clients.forEach(client => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN) {
+                        client.send(JSON.stringify({ type: 'state', clientId, data: msg.data }));
+                    }
+                });
+            }
+        } catch (e) {}
+    });
+});
+
 function getLocalIPs() {
     const ifaces = os.networkInterfaces();
     const ips = [];
@@ -233,7 +300,7 @@ function getLocalIPs() {
     return ips;
 }
 
-app.listen(PORT, HOST, () => {
+server.listen(PORT, HOST, () => {
     console.log('Приложение и API:');
     console.log('  Локально:    http://localhost:' + PORT);
     const ips = getLocalIPs();
@@ -241,6 +308,7 @@ app.listen(PORT, HOST, () => {
         ips.forEach(ip => console.log('  В сети:      http://' + ip + ':' + PORT));
         console.log('  На других устройствах откройте адрес «В сети» в браузере.');
     }
+    console.log('Синхронизация: ws://...:' + PORT + '/sync (в одном процессе с API)');
     console.log('Данные: ' + path.join(__dirname, 'data', 'store.json'));
     if (!require('fs').existsSync(path.join(__dirname, 'server-config.json'))) {
         console.log('Настройки: порт/хост можно задать в server-config.json (скопируйте из server-config.example.json).');

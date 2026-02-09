@@ -486,63 +486,76 @@ function saveUser() {
     const users = AuthSystem.getUsers();
     
     if (userId) {
-        // Редактирование существующего
+        // Редактирование существующего — сохраняем на сервере
         const userIndex = users.findIndex(u => u.id === userId);
         if (userIndex === -1) {
             showError('Пользователь не найден');
             return;
         }
-        
-        // Защита главного администратора: нельзя снять роль admin с пользователя 'admin'
         if (users[userIndex].username === 'admin' && role !== 'admin') {
             showError('Нельзя снять роль администратора с главного администратора');
             return;
         }
-        
-        users[userIndex].fullName = fullName || users[userIndex].username;
-        users[userIndex].role = role;
-        
-        if (password) {
-            users[userIndex].password = AuthSystem.hashPassword(password);
+        var payload = { fullName: fullName || users[userIndex].username, role: role };
+        if (password && password.length >= 6) payload.password = password;
+        if (getApiBase()) {
+            fetch(getApiBase() + '/api/users/' + encodeURIComponent(userId), {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
+                body: JSON.stringify(payload)
+            }).then(function(r) {
+                if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+                if (typeof AuthSystem !== 'undefined' && AuthSystem.refreshUsersFromApi) return AuthSystem.refreshUsersFromApi();
+            }).then(function() {
+                showSuccess('Пользователь обновлён');
+                closeUserEditModal();
+                renderUsersList();
+            }).catch(function(e) {
+                showError(e.message || 'Не удалось обновить пользователя');
+            });
+            return;
         }
-        
+        users[userIndex].fullName = payload.fullName;
+        users[userIndex].role = role;
+        if (password) users[userIndex].password = AuthSystem.hashPassword(password);
         AuthSystem.saveUsers(users);
         showSuccess('Пользователь обновлён');
     } else {
-        // Создание нового
-        if (!username) {
-            showError('Введите имя пользователя');
+        // Создание нового — сохраняем на сервере
+        if (!username) { showError('Введите имя пользователя'); return; }
+        if (!password) { showError('Введите пароль'); return; }
+        if (password.length < 6) { showError('Пароль должен быть не менее 6 символов'); return; }
+        if (AuthSystem.findUserByUsername(username)) { showError('Пользователь с таким именем уже существует'); return; }
+        if (getApiBase()) {
+            fetch(getApiBase() + '/api/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
+                body: JSON.stringify({ username: username, password: password, fullName: fullName || username, role: role || 'user' })
+            }).then(function(r) {
+                if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+                return (typeof AuthSystem !== 'undefined' && AuthSystem.refreshUsersFromApi) ? AuthSystem.refreshUsersFromApi() : Promise.resolve();
+            }).then(function() {
+                showSuccess('Пользователь создан');
+                logAction(ActionTypes.USER_CREATED, { username: username });
+                closeUserEditModal();
+                renderUsersList();
+            }).catch(function(e) { showError(e.message || 'Не удалось создать пользователя'); });
             return;
         }
-        if (!password) {
-            showError('Введите пароль');
-            return;
-        }
-        if (password.length < 6) {
-            showError('Пароль должен быть не менее 6 символов');
-            return;
-        }
-        if (AuthSystem.findUserByUsername(username)) {
-            showError('Пользователь с таким именем уже существует');
-            return;
-        }
-        
         const newUser = {
             id: 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
             username: username,
             password: AuthSystem.hashPassword(password),
             fullName: fullName || username,
             role: role,
-            status: 'approved', // Созданные админом сразу одобрены
+            status: 'approved',
             createdAt: new Date().toISOString()
         };
-        
         users.push(newUser);
         AuthSystem.saveUsers(users);
         showSuccess('Пользователь создан');
         logAction(ActionTypes.USER_CREATED, { username: username });
     }
-    
     closeUserEditModal();
     renderUsersList();
 }
@@ -651,6 +664,9 @@ function init() {
     loadData();
     setupEventListeners();
     switchToViewMode();
+    if (getApiBase() && typeof AuthSystem !== 'undefined' && AuthSystem.refreshSessionFromApi) {
+        setInterval(AuthSystem.refreshSessionFromApi, 60000);
+    }
 }
 
 function setupEventListeners() {

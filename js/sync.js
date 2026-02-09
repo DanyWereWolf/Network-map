@@ -1,13 +1,22 @@
 /**
  * Синхронизация карты между несколькими пользователями (WebSocket).
- * При изменении карты состояние отправляется на сервер и рассылается остальным.
+ * Адрес сервера сохраняется; отправка состояния с задержкой (debounce), чтобы не лагало при двух пользователях.
  */
 (function() {
     var ws = null;
     var myClientId = 'client_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
-    var reconnectTimer = null;
-    var reconnectAttempts = 0;
-    var maxReconnectAttempts = 5;
+    var SYNC_URL_KEY = 'networkMap_syncUrl';
+    var SEND_DEBOUNCE_MS = 2000;
+    var sendTimer = null;
+    var pendingState = null;
+
+    function getDefaultSyncUrl() {
+        if (typeof window !== 'undefined' && window.location && window.location.host) {
+            var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            return protocol + '//' + window.location.host + '/sync';
+        }
+        return 'ws://localhost:3000/sync';
+    }
 
     function updateSyncUIStatus(connected, errorText) {
         var statusEl = document.getElementById('syncStatus');
@@ -22,13 +31,20 @@
         }
     }
 
+    function loadSavedSyncUrl() {
+        var urlInput = document.getElementById('syncServerUrl');
+        if (!urlInput) return;
+        try {
+            var saved = sessionStorage.getItem(SYNC_URL_KEY);
+            if (saved && saved.trim()) urlInput.value = saved.trim();
+            else urlInput.placeholder = getDefaultSyncUrl();
+        } catch (e) {}
+    }
+
     function connect() {
         var urlInput = document.getElementById('syncServerUrl');
         var url = (urlInput && urlInput.value) ? urlInput.value.trim() : '';
-        if (!url) {
-            if (typeof showWarning === 'function') showWarning('Введите адрес сервера синхронизации (например ws://localhost:8765)', 'Синхронизация');
-            return;
-        }
+        if (!url) url = getDefaultSyncUrl();
         if (ws && ws.readyState === WebSocket.OPEN) {
             disconnect();
             return;
@@ -44,12 +60,13 @@
             return;
         }
         ws.onopen = function() {
-            reconnectAttempts = 0;
+            try { sessionStorage.setItem(SYNC_URL_KEY, url); } catch (e) {}
             updateSyncUIStatus(true);
             if (typeof getSerializedData === 'function') {
                 var data = getSerializedData();
                 ws.send(JSON.stringify({ type: 'state', clientId: myClientId, data: data }));
             }
+            if (btn) btn.disabled = false;
         };
         ws.onclose = function() {
             ws = null;
@@ -82,11 +99,25 @@
     }
 
     function sendState(data) {
-        if (ws && ws.readyState === WebSocket.OPEN && data) {
-            try {
-                ws.send(JSON.stringify({ type: 'state', clientId: myClientId, data: data }));
-            } catch (e) {}
-        }
+        if (!data) return;
+        pendingState = data;
+        if (sendTimer) clearTimeout(sendTimer);
+        sendTimer = setTimeout(function() {
+            sendTimer = null;
+            var toSend = pendingState;
+            pendingState = null;
+            if (ws && ws.readyState === WebSocket.OPEN && toSend) {
+                try {
+                    ws.send(JSON.stringify({ type: 'state', clientId: myClientId, data: toSend }));
+                } catch (e) {}
+            }
+        }, SEND_DEBOUNCE_MS);
+    }
+
+    if (typeof document !== 'undefined' && document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', loadSavedSyncUrl);
+    } else {
+        loadSavedSyncUrl();
     }
 
     window.syncSendState = sendState;
