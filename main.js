@@ -177,7 +177,14 @@ function initUserUI() {
     if (historyBtn) {
         historyBtn.addEventListener('click', openHistoryModal);
     }
-    
+
+    // Кнопки отмены и повтора
+    var undoBtn = document.getElementById('undoBtn');
+    var redoBtn = document.getElementById('redoBtn');
+    if (undoBtn) undoBtn.addEventListener('click', function() { if (typeof undoLast === 'function') undoLast(); });
+    if (redoBtn) redoBtn.addEventListener('click', function() { if (typeof redoLast === 'function') redoLast(); });
+    if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
+
     // Кнопка справки
     const infoHelpBtn = document.getElementById('infoHelpBtn');
     if (infoHelpBtn) infoHelpBtn.addEventListener('click', openHelpModal);
@@ -785,6 +792,11 @@ function setupEventListeners() {
                 return;
             }
             if (typeof undoLast === 'function') undoLast();
+            return;
+        }
+        if (e.ctrlKey && (e.key === 'y' || e.key === 'Y')) {
+            e.preventDefault();
+            if (typeof redoLast === 'function') redoLast();
         }
     });
 
@@ -3440,23 +3452,53 @@ function saveData() {
     if (typeof window.syncSendState === 'function') window.syncSendState(data);
 }
 
-/** Сохранить текущее состояние карты для отмены (Ctrl+Z). Один уровень отмены. */
+var MAX_UNDO_LEVELS = 50;
+/** Сохранить текущее состояние карты перед изменением (для отмены). */
 function pushUndoState() {
     try {
         var data = getSerializedData();
-        if (Array.isArray(data) && data.length >= 0) window._undoState = JSON.parse(JSON.stringify(data));
+        if (!Array.isArray(data)) return;
+        if (!window._undoStack) window._undoStack = [];
+        window._undoStack.push(JSON.parse(JSON.stringify(data)));
+        if (window._undoStack.length > MAX_UNDO_LEVELS) window._undoStack.shift();
+        window._redoStack = [];
+        updateUndoRedoButtons();
     } catch (e) {}
 }
-/** Отменить последнее действие (восстановить сохранённое состояние). */
+/** Отменить последнее действие. */
 function undoLast() {
-    if (!window._undoState || !Array.isArray(window._undoState)) return;
+    if (!window._undoStack || !window._undoStack.length) return;
     try {
-        applyRemoteState(window._undoState);
-        window._undoState = null;
+        var redoState = getSerializedData();
+        var undoState = window._undoStack.pop();
+        applyRemoteState(undoState);
+        if (!window._redoStack) window._redoStack = [];
+        window._redoStack.push(redoState);
         if (typeof showNotification === 'function') showNotification('Отмена выполнена');
+        updateUndoRedoButtons();
+    } catch (err) {}
+}
+/** Повторить отменённое действие. */
+function redoLast() {
+    if (!window._redoStack || !window._redoStack.length) return;
+    try {
+        var undoState = getSerializedData();
+        var redoState = window._redoStack.pop();
+        applyRemoteState(redoState);
+        if (!window._undoStack) window._undoStack = [];
+        window._undoStack.push(undoState);
+        if (typeof showNotification === 'function') showNotification('Повтор выполнена');
+        updateUndoRedoButtons();
     } catch (err) {}
 }
 window.undoLast = undoLast;
+window.redoLast = redoLast;
+function updateUndoRedoButtons() {
+    var undoBtn = document.getElementById('undoBtn');
+    var redoBtn = document.getElementById('redoBtn');
+    if (undoBtn) undoBtn.disabled = !window._undoStack || window._undoStack.length === 0;
+    if (redoBtn) redoBtn.disabled = !window._redoStack || window._redoStack.length === 0;
+}
 
 function loadDataFromStorage() {
     // Данные только с сервера (localStorage не используется)
@@ -3614,17 +3656,16 @@ function applyRemoteState(data) {
  * Применить удалённое состояние по слиянию: обновить только изменённые объекты/кабели, без clearMap.
  */
 function applyRemoteStateMerged(data) {
-    var incomingObjs = data.filter(function(i) { return i.type !== 'cable'; });
     var incomingCables = data.filter(function(i) { return i.type === 'cable'; });
-    var incomingObjIds = {};
     var incomingCableIds = {};
-    incomingObjs.forEach(function(o) { if (o.uniqueId != null) incomingObjIds[o.uniqueId] = true; });
     incomingCables.forEach(function(c) { if (c.uniqueId != null) incomingCableIds[c.uniqueId] = true; });
 
     var refs = [];
+    var refIndexByDataIndex = {};
     var i, item, existing, created, label;
-    for (i = 0; i < incomingObjs.length; i++) {
-        item = incomingObjs[i];
+    for (i = 0; i < data.length; i++) {
+        item = data[i];
+        if (item.type === 'cable') continue;
         existing = objects.find(function(o) {
             var t = o.properties && o.properties.get('type');
             return t && t !== 'cable' && t !== 'cableLabel' && o.properties.get('uniqueId') === item.uniqueId;
@@ -3639,6 +3680,7 @@ function applyRemoteStateMerged(data) {
             created = createObjectFromData(item);
             if (created) refs.push(created);
         }
+        refIndexByDataIndex[i] = refs.length - 1;
     }
 
     var toRemoveObjs = objects.filter(function(o) {
@@ -3674,9 +3716,12 @@ function applyRemoteStateMerged(data) {
     });
 
     incomingCables.forEach(function(item) {
-        if (item.from == null || item.to == null || item.from >= refs.length || item.to >= refs.length) return;
-        var fromObj = refs[item.from];
-        var toObj = refs[item.to];
+        if (item.from == null || item.to == null) return;
+        var fromIdx = refIndexByDataIndex[item.from];
+        var toIdx = refIndexByDataIndex[item.to];
+        if (fromIdx == null || toIdx == null || fromIdx >= refs.length || toIdx >= refs.length) return;
+        var fromObj = refs[fromIdx];
+        var toObj = refs[toIdx];
         if (!fromObj || !toObj) return;
         var existingCable = objects.find(function(o) {
             return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId;
