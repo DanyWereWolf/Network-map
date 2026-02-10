@@ -755,8 +755,17 @@ function setupEventListeners() {
     // Горячие клавиши: Escape и Ctrl+Z — отмена текущей операции или отмена последнего действия
     document.addEventListener('keydown', function(e) {
         var inInput = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.getAttribute('contenteditable') === 'true');
-        if (inInput && e.key !== 'Escape') return;
         if (e.key === 'Escape') {
+            // Сначала закрываем модальные окна, если открыты
+            var modalIds = ['infoModal', 'nodeSelectionModal', 'usersModal', 'userEditModal', 'updatesModal'];
+            for (var i = 0; i < modalIds.length; i++) {
+                var m = document.getElementById(modalIds[i]);
+                if (m && m.style && m.style.display === 'block') {
+                    m.style.display = 'none';
+                    e.preventDefault();
+                    return;
+                }
+            }
             if (objectPlacementMode) { cancelObjectPlacement(); e.preventDefault(); return; }
             if (currentCableTool) {
                 var cableBtn = document.getElementById('addCable');
@@ -765,6 +774,8 @@ function setupEventListeners() {
             }
             return;
         }
+        // В полях ввода не перехватываем Ctrl+Z (стандартная отмена ввода)
+        if (inInput) return;
         if (e.ctrlKey && (e.key === 'z' || e.key === 'Z')) {
             e.preventDefault();
             if (objectPlacementMode) { cancelObjectPlacement(); return; }
@@ -3288,6 +3299,32 @@ function geoToClient(geoCoord) {
     }
 }
 
+/** По геометрии кабеля найти упорядоченный список объектов (для восстановления кабеля через опоры). Соседние дубликаты убираются. */
+function findObjectsAtGeometry(refs, geometry, tolerance) {
+    if (!Array.isArray(refs) || !Array.isArray(geometry) || geometry.length < 2) return null;
+    tolerance = tolerance || 0.0003;
+    var points = [];
+    var last = null;
+    for (var g = 0; g < geometry.length; g++) {
+        var coord = geometry[g];
+        if (!coord || coord.length < 2) continue;
+        var best = null, bestDist = tolerance;
+        for (var r = 0; r < refs.length; r++) {
+            var o = refs[r];
+            if (!o || !o.geometry) continue;
+            var c = o.geometry.getCoordinates();
+            if (!c || c.length < 2) continue;
+            var d = Math.sqrt(Math.pow(c[0] - coord[0], 2) + Math.pow(c[1] - coord[1], 2));
+            if (d < bestDist) { bestDist = d; best = o; }
+        }
+        if (best && best !== last) {
+            points.push(best);
+            last = best;
+        }
+    }
+    return points.length >= 2 ? points : null;
+}
+
 function findObjectAtCoords(coords, tolerance = null) {
     // Уменьшенный tolerance для более точного выбора
     if (tolerance === null) {
@@ -3649,11 +3686,19 @@ function applyRemoteStateMerged(data) {
             if (item.distance !== undefined) existingCable.properties.set('distance', item.distance);
             if (item.cableName != null) existingCable.properties.set('cableName', item.cableName);
         } else {
-            addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true);
+            var points = (item.geometry && item.geometry.length > 2)
+                ? findObjectsAtGeometry(refs, item.geometry)
+                : null;
+            if (points && points.length >= 2) {
+                addCable(points[0], points, item.cableType, item.uniqueId, undefined, true);
+            } else {
+                addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true);
+            }
             var cable = objects.find(function(o) {
                 return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId;
             });
             if (cable) {
+                if (item.geometry && item.geometry.length >= 2) cable.geometry.setCoordinates(item.geometry);
                 if (item.distance !== undefined) cable.properties.set('distance', item.distance);
                 if (item.cableName != null) cable.properties.set('cableName', item.cableName);
             }
@@ -3794,14 +3839,25 @@ function importData(data, opts) {
             const fromObj = objectRefs[item.from];
             const toObj = objectRefs[item.to];
             if (fromObj && toObj) {
-                addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true);
+                var refsOnly = objectRefs.filter(function(r) { return r != null; });
+                var points = (item.geometry && item.geometry.length > 2)
+                    ? findObjectsAtGeometry(refsOnly, item.geometry)
+                    : null;
+                if (points && points.length >= 2) {
+                    addCable(points[0], points, item.cableType, item.uniqueId, undefined, true);
+                } else {
+                    addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true);
+                }
                 // Находим созданный кабель для обновления дополнительных свойств
-                const cable = objects.find(obj => 
-                    obj.properties && 
+                const cable = objects.find(obj =>
+                    obj.properties &&
                     obj.properties.get('type') === 'cable' &&
                     obj.properties.get('uniqueId') === item.uniqueId
                 );
                 if (cable) {
+                    if (item.geometry && item.geometry.length >= 2) {
+                        cable.geometry.setCoordinates(item.geometry);
+                    }
                     // Обновляем расстояние для загруженного кабеля, если оно не было сохранено
                     if (!cable.properties.get('distance')) {
                         const fromCoords = fromObj.geometry.getCoordinates();
