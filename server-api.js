@@ -322,6 +322,69 @@ function mergeMapState(current, incoming) {
     return mergedObjs.concat(mergedCables);
 }
 
+/** Применить одну операцию к состоянию карты (как в Эсборд — пооперационная синхронизация) */
+function applyOperationToState(state, op) {
+    if (!Array.isArray(state)) return state;
+    var objCount = state.filter(function(i) { return i.type !== 'cable'; }).length;
+    var i, idx, fromIdx, toIdx, fromUid, toUid, c;
+    if (op.type === 'add_object' && op.data) {
+        state = state.slice(0, objCount).concat([op.data]).concat(state.slice(objCount));
+        state = state.map(function(item) {
+            if (item.type !== 'cable') return item;
+            var from = item.from, to = item.to;
+            if (from >= objCount) from++; if (to >= objCount) to++;
+            return Object.assign({}, item, { from: from, to: to });
+        });
+        return state;
+    }
+    if (op.type === 'update_object' && op.uniqueId != null && op.data) {
+        idx = state.findIndex(function(i) { return i.type !== 'cable' && i.uniqueId === op.uniqueId; });
+        if (idx >= 0) {
+            state = state.slice();
+            state[idx] = Object.assign({}, state[idx], op.data);
+        }
+        return state;
+    }
+    if (op.type === 'delete_object' && op.uniqueId != null) {
+        idx = state.findIndex(function(i) { return i.type !== 'cable' && i.uniqueId === op.uniqueId; });
+        if (idx < 0) return state;
+        state = state.filter(function(_, i) { return i !== idx; });
+        state = state.map(function(item, i) {
+            if (item.type !== 'cable') return item;
+            var from = item.from, to = item.to;
+            if (from === idx || to === idx) return null;
+            if (from > idx) from--; if (to > idx) to--;
+            return Object.assign({}, item, { from: from, to: to });
+        }).filter(Boolean);
+        return state;
+    }
+    if (op.type === 'add_cable' && op.data) {
+        fromUid = op.data.fromUniqueId; toUid = op.data.toUniqueId;
+        fromIdx = state.findIndex(function(i) { return i.type !== 'cable' && i.uniqueId === fromUid; });
+        toIdx = state.findIndex(function(i) { return i.type !== 'cable' && i.uniqueId === toUid; });
+        if (fromIdx >= 0 && toIdx >= 0) {
+            c = { type: 'cable', cableType: op.data.cableType, from: fromIdx, to: toIdx, geometry: op.data.geometry };
+            if (op.data.uniqueId != null) c.uniqueId = op.data.uniqueId;
+            if (op.data.distance !== undefined) c.distance = op.data.distance;
+            if (op.data.cableName != null) c.cableName = op.data.cableName;
+            return state.concat([c]);
+        }
+        return state;
+    }
+    if (op.type === 'update_cable' && op.uniqueId != null && op.data) {
+        idx = state.findIndex(function(i) { return i.type === 'cable' && i.uniqueId === op.uniqueId; });
+        if (idx >= 0) {
+            state = state.slice();
+            state[idx] = Object.assign({}, state[idx], op.data);
+        }
+        return state;
+    }
+    if (op.type === 'delete_cable' && op.uniqueId != null) {
+        return state.filter(function(i) { return !(i.type === 'cable' && i.uniqueId === op.uniqueId); });
+    }
+    return state;
+}
+
 function broadcastSyncClients() {
     const list = [];
     wss.clients.forEach(client => {
@@ -384,6 +447,17 @@ wss.on('connection', (ws, req) => {
                     };
                     scheduleCursorsBroadcast();
                 }
+                return;
+            }
+            if (msg.type === 'op' && msg.op) {
+                syncCurrentState.data = applyOperationToState(syncCurrentState.data, msg.op);
+                syncCurrentState.clientId = msg.clientId || clientId;
+                wss.clients.forEach(client => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN) {
+                        try { client.send(JSON.stringify({ type: 'op', op: msg.op })); } catch (e) {}
+                    }
+                });
+                scheduleSyncWrite();
                 return;
             }
             if (msg.type !== 'state' || !Array.isArray(msg.data)) return;

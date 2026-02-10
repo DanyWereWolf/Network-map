@@ -2283,6 +2283,9 @@ function createObject(type, name, coords, options = {}) {
         placemarkProperties.crossPorts = options.crossPorts || 24;
     }
     
+    if (!placemarkProperties.uniqueId) {
+        placemarkProperties.uniqueId = 'obj-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    }
     const placemark = new ymaps.Placemark(coords, placemarkProperties, placemarkOptions);
     
     // Для узлов и кроссов добавляем подпись с названием под маркером
@@ -2383,6 +2386,10 @@ function createObject(type, name, coords, options = {}) {
     placemark.events.add('dragend', function() {
         window.syncDragInProgress = false;
         if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
+        var uid = placemark.properties.get('uniqueId');
+        if (typeof window.syncSendOp === 'function' && uid) {
+            window.syncSendOp({ type: 'update_object', uniqueId: uid, data: { geometry: placemark.geometry.getCoordinates(), name: placemark.properties.get('name') } });
+        }
         saveData();
         updateConnectedCables(placemark);
         const label = placemark.properties.get('label');
@@ -2409,19 +2416,23 @@ function createObject(type, name, coords, options = {}) {
     } else {
         myMap.geoObjects.add(placemark);
     }
+    if (typeof window.syncSendOp === 'function') {
+        var data = serializeOneObject(placemark);
+        if (data) window.syncSendOp({ type: 'add_object', data: data });
+    }
     saveData();
     updateStats();
-    
     logAction(ActionTypes.CREATE_OBJECT, {
         objectType: type,
         name: name || ''
     });
 }
 
-function deleteObject(obj) {
+function deleteObject(obj, opts) {
     // Сохраняем данные для логирования до удаления
     const objType = obj.properties.get('type');
     const objName = obj.properties.get('name') || '';
+    const objUniqueId = obj.properties.get('uniqueId');
     
     // Удаляем подпись, если она есть
     const label = obj.properties.get('label');
@@ -2449,14 +2460,17 @@ function deleteObject(obj) {
     if (objType === 'cross') updateCrossDisplay();
     if (objType === 'node') updateNodeDisplay();
     
-    saveData();
+    if (!(opts && opts.skipSync)) {
+        if (typeof window.syncSendOp === 'function' && objUniqueId) {
+            window.syncSendOp({ type: 'delete_object', uniqueId: objUniqueId });
+        }
+        saveData();
+        logAction(ActionTypes.DELETE_OBJECT, {
+            objectType: objType,
+            name: objName
+        });
+    }
     updateStats();
-    
-    // Логируем удаление объекта
-    logAction(ActionTypes.DELETE_OBJECT, {
-        objectType: objType,
-        name: objName
-    });
 }
 
 function selectObject(obj) {
@@ -2682,18 +2696,18 @@ function clearSelection() {
 // Универсальная функция создания кабеля (для обратной совместимости)
 // Поддерживает как старый формат (2 точки), так и новый (массив точек)
 // skipHistoryLog = true при импорте файла, чтобы не засорять историю
-function addCable(fromObj, toObj, cableType, existingCableId = null, fiberNumber = null, skipHistoryLog = false) {
+function addCable(fromObj, toObj, cableType, existingCableId = null, fiberNumber = null, skipHistoryLog = false, skipSync = false) {
     // Если toObj - массив, значит это новый формат с несколькими точками
     if (Array.isArray(toObj)) {
-        return createCableFromPoints(toObj, cableType, existingCableId, null, skipHistoryLog);
+        return createCableFromPoints(toObj, cableType, existingCableId, null, skipHistoryLog, skipSync);
     }
     
     // Старый формат: создаем кабель между двумя точками
-    return createCableFromPoints([fromObj, toObj], cableType, existingCableId, fiberNumber, skipHistoryLog);
+    return createCableFromPoints([fromObj, toObj], cableType, existingCableId, fiberNumber, skipHistoryLog, skipSync);
 }
 
 // Создает кабель из массива точек
-function createCableFromPoints(points, cableType, existingCableId = null, fiberNumber = null, skipHistoryLog = false) {
+function createCableFromPoints(points, cableType, existingCableId = null, fiberNumber = null, skipHistoryLog = false, skipSync = false) {
     if (!points || points.length < 2) {
         return false;
     }
@@ -2788,19 +2802,35 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     // Обновляем визуализацию кабелей
     updateCableVisualization();
     
-    saveData();
-    updateStats();
-    
-    if (!skipHistoryLog) {
-        const fromName = points[0].properties.get('name') || getObjectTypeName(points[0].properties.get('type'));
-        const toName = points[points.length - 1].properties.get('name') || getObjectTypeName(points[points.length - 1].properties.get('type'));
-        logAction(ActionTypes.CREATE_CABLE, {
-            cableType: cableDescription,
-            from: fromName,
-            to: toName
-        });
+    if (!skipSync) {
+        saveData();
+        if (typeof window.syncSendOp === 'function') {
+            const fromUid = points[0].properties.get('uniqueId');
+            const toUid = points[points.length - 1].properties.get('uniqueId');
+            window.syncSendOp({
+                type: 'add_cable',
+                data: {
+                    fromUniqueId: fromUid,
+                    toUniqueId: toUid,
+                    cableType: cableType,
+                    uniqueId: cableUniqueId,
+                    geometry: coords,
+                    distance: totalDistance,
+                    cableName: polyline.properties.get('cableName') || null
+                }
+            });
+        }
+        if (!skipHistoryLog) {
+            const fromName = points[0].properties.get('name') || getObjectTypeName(points[0].properties.get('type'));
+            const toName = points[points.length - 1].properties.get('name') || getObjectTypeName(points[points.length - 1].properties.get('type'));
+            logAction(ActionTypes.CREATE_CABLE, {
+                cableType: cableDescription,
+                from: fromName,
+                to: toName
+            });
+        }
     }
-    
+    updateStats();
     return true;
 }
 
@@ -3294,6 +3324,14 @@ function findObjectAtCoords(coords, tolerance = null) {
 
 
 
+/** Сериализация одного объекта/кабеля для отправки операцией (как в Эсборд) */
+function serializeOneObject(obj) {
+    var idx = objects.indexOf(obj);
+    if (idx < 0) return null;
+    var arr = getSerializedData();
+    return arr[idx] || null;
+}
+
 /** Возвращает текущее состояние карты в формате для сохранения/синхронизации */
 function getSerializedData() {
     return objects.map(obj => {
@@ -3586,6 +3624,87 @@ function applyRemoteStateMerged(data) {
     updateStats();
 }
 
+/**
+ * Применить одну операцию с сервера (пооперационная синхронизация, как в Эсборд).
+ * Обновляет только затронутый объект/кабель — без перезагрузки всей карты.
+ */
+function applyOperationToMap(op) {
+    if (!op || !op.type) return;
+    var objCount = 0;
+    objects.forEach(function(o) {
+        if (o.properties && o.properties.get('type') !== 'cable' && o.properties.get('type') !== 'cableLabel') objCount++;
+    });
+    if (op.type === 'add_object' && op.data) {
+        var newObj = createObjectFromData(op.data, { skipAddToObjects: true });
+        if (!newObj) return;
+        objects.splice(objCount, 0, newObj);
+        if (newObj.properties.get('type') !== 'cross' && newObj.properties.get('type') !== 'node') myMap.geoObjects.add(newObj);
+        updateCrossDisplay();
+        updateNodeDisplay();
+        ensureNodeLabelsVisible();
+        updateAllNodeConnectionLines();
+        updateStats();
+        return;
+    }
+    if (op.type === 'update_object' && op.uniqueId != null && op.data) {
+        var obj = objects.find(function(o) {
+            var t = o.properties && o.properties.get('type');
+            return t && t !== 'cable' && t !== 'cableLabel' && o.properties.get('uniqueId') === op.uniqueId;
+        });
+        if (obj) {
+            if (op.data.geometry && obj.geometry) obj.geometry.setCoordinates(op.data.geometry);
+            if (op.data.name != null) obj.properties.set('name', op.data.name);
+            var lbl = obj.properties.get('label');
+            if (lbl && lbl.geometry && op.data.geometry) lbl.geometry.setCoordinates(op.data.geometry);
+            updateCrossDisplay();
+            updateNodeDisplay();
+            updateAllNodeConnectionLines();
+            updateStats();
+        }
+        return;
+    }
+    if (op.type === 'delete_object' && op.uniqueId != null) {
+        var toDel = objects.find(function(o) {
+            var t = o.properties && o.properties.get('type');
+            return t && t !== 'cable' && t !== 'cableLabel' && o.properties.get('uniqueId') === op.uniqueId;
+        });
+        if (toDel) deleteObject(toDel, { skipSync: true });
+        return;
+    }
+    if (op.type === 'add_cable' && op.data) {
+        var fromUid = op.data.fromUniqueId, toUid = op.data.toUniqueId;
+        var fromObj = objects.find(function(o) { return o.properties && o.properties.get('type') !== 'cable' && o.properties.get('uniqueId') === fromUid; });
+        var toObj = objects.find(function(o) { return o.properties && o.properties.get('type') !== 'cable' && o.properties.get('uniqueId') === toUid; });
+        if (fromObj && toObj) {
+            addCable(fromObj, toObj, op.data.cableType, op.data.uniqueId, undefined, true, true);
+            var cable = objects.find(function(o) { return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === op.data.uniqueId; });
+            if (cable) {
+                if (op.data.distance !== undefined) cable.properties.set('distance', op.data.distance);
+                if (op.data.cableName != null) cable.properties.set('cableName', op.data.cableName);
+            }
+            updateCableVisualization();
+            updateAllNodeConnectionLines();
+            updateStats();
+        }
+        return;
+    }
+    if (op.type === 'update_cable' && op.uniqueId != null && op.data) {
+        var cable = objects.find(function(o) { return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === op.uniqueId; });
+        if (cable) {
+            if (op.data.geometry && cable.geometry) cable.geometry.setCoordinates(op.data.geometry);
+            if (op.data.distance !== undefined) cable.properties.set('distance', op.data.distance);
+            if (op.data.cableName != null) cable.properties.set('cableName', op.data.cableName);
+            updateAllNodeConnectionLines();
+            updateStats();
+        }
+        return;
+    }
+    if (op.type === 'delete_cable' && op.uniqueId != null) {
+        deleteCableByUniqueId(op.uniqueId, { skipSync: true });
+    }
+}
+window.applyOperationToMap = applyOperationToMap;
+
 function ensureNodeLabelsVisible() {
     // Проверяем все узлы и кроссы, убеждаемся что у них есть подписи
     objects.forEach(obj => {
@@ -3655,7 +3774,7 @@ function importData(data, opts) {
 }
 
 
-function createObjectFromData(data) {
+function createObjectFromData(data, opts) {
     const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, netboxId, netboxUrl, netboxDeviceType, netboxSite, sleeveType, maxFibers, crossPorts, nodeConnections, uniqueId } = data;
     
     let iconSvg, color, balloonContent;
@@ -3900,6 +4019,10 @@ function createObjectFromData(data) {
         placemark.events.add('dragend', function() {
             window.syncDragInProgress = false;
             if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
+            var uid = placemark.properties.get('uniqueId');
+            if (typeof window.syncSendOp === 'function' && uid) {
+                window.syncSendOp({ type: 'update_object', uniqueId: uid, data: { geometry: placemark.geometry.getCoordinates(), name: placemark.properties.get('name') } });
+            }
             saveData();
             updateConnectedCables(placemark);
             const label = placemark.properties.get('label');
@@ -3920,10 +4043,11 @@ function createObjectFromData(data) {
     });
 
     attachHoverEventsToObject(placemark);
-    objects.push(placemark);
-    if (type !== 'cross' && type !== 'node') myMap.geoObjects.add(placemark);
-    updateStats();
-    
+    if (!(opts && opts.skipAddToObjects)) {
+        objects.push(placemark);
+        if (type !== 'cross' && type !== 'node') myMap.geoObjects.add(placemark);
+        updateStats();
+    }
     return placemark;
 }
 
@@ -6557,7 +6681,7 @@ function resetFiberSelection() {
     if (hint) hint.remove();
 }
 
-function deleteCableByUniqueId(cableUniqueId) {
+function deleteCableByUniqueId(cableUniqueId, opts) {
     const cable = objects.find(obj => 
         obj.properties && 
         obj.properties.get('type') === 'cable' &&
@@ -6585,12 +6709,17 @@ function deleteCableByUniqueId(cableUniqueId) {
     myMap.geoObjects.remove(cable);
     objects = objects.filter(o => o !== cable);
     
-    // Логируем удаление кабеля
-    logAction(ActionTypes.DELETE_CABLE, {
-        cableType: cableType,
-        from: fromName,
-        to: toName
-    });
+    if (!(opts && opts.skipSync)) {
+        if (typeof window.syncSendOp === 'function') {
+            window.syncSendOp({ type: 'delete_cable', uniqueId: cableUniqueId });
+        }
+        logAction(ActionTypes.DELETE_CABLE, {
+            cableType: cableType,
+            from: fromName,
+            to: toName
+        });
+        saveData();
+    }
     
     // Обновляем визуализацию кабелей (количество на линиях)
     updateCableVisualization();
@@ -6602,7 +6731,6 @@ function deleteCableByUniqueId(cableUniqueId) {
         currentModalObject = null;
     }
     
-    saveData();
     updateStats();
     
     // Обновляем модальное окно, если оно открыто для другого объекта

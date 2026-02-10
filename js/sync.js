@@ -196,6 +196,13 @@
                     }
                     return;
                 }
+                if (msg.type === 'op' && msg.op && typeof window.applyOperationToMap === 'function') {
+                    try {
+                        window.applyOperationToMap(msg.op);
+                        updateSyncUIStatus(true);
+                    } catch (e) {}
+                    return;
+                }
                 if (msg.type === 'state' && Array.isArray(msg.data) && typeof applyRemoteState === 'function') {
                     var data = msg.data;
                     if (sendTimer) { clearTimeout(sendTimer); sendTimer = null; }
@@ -304,7 +311,17 @@
         }
     }
 
+    function sendOp(op) {
+        if (!op || !op.type) return;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            try {
+                ws.send(JSON.stringify({ type: 'op', op: op, clientId: myClientId }));
+            } catch (e) {}
+        }
+    }
+
     window.syncSendState = sendState;
+    window.syncSendOp = sendOp;
     window.syncSendCursor = sendCursorPosition;
     window.syncConnect = connect;
     window.syncDisconnect = disconnect;
