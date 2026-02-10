@@ -3516,6 +3516,10 @@ function postHistoryToApi(history) {
  */
 function applyRemoteState(data) {
     if (!Array.isArray(data)) return;
+    // Удаляем метки курсоров других пользователей с карты, иначе остаются «следы»
+    collaboratorCursorsPlacemarks.forEach(function(pm) {
+        try { if (myMap && myMap.geoObjects) myMap.geoObjects.remove(pm); } catch (e) {}
+    });
     collaboratorCursorsPlacemarks = [];
     try {
         if (data.length === 0) {
