@@ -323,6 +323,18 @@ wss.on('connection', (ws, req) => {
                 broadcastSyncClients();
                 return;
             }
+            if (msg.type === 'cursor') {
+                var pos = msg.position;
+                if (Array.isArray(pos) && pos.length >= 2 && typeof pos[0] === 'number' && typeof pos[1] === 'number') {
+                    ws.cursor = {
+                        position: [Number(pos[0]), Number(pos[1])],
+                        displayName: syncClientNames.get(clientId) || 'Участник',
+                        userId: syncClientUserIds.get(clientId) || null
+                    };
+                    scheduleCursorsBroadcast();
+                }
+                return;
+            }
             if (msg.type !== 'state' || !Array.isArray(msg.data)) return;
             var justConnected = (Date.now() - (ws.connectedAt || 0)) < 4000;
             if (!justConnected) {
@@ -339,9 +351,50 @@ wss.on('connection', (ws, req) => {
     ws.on('close', function() {
         syncClientNames.delete(clientId);
         syncClientUserIds.delete(clientId);
+        ws.cursor = null;
         broadcastSyncClients();
+        broadcastCursors();
     });
 });
+
+var lastCursorsBroadcast = 0;
+var cursorsBroadcastTimer = null;
+var CURSORS_BROADCAST_THROTTLE_MS = 100;
+
+function scheduleCursorsBroadcast() {
+    if (cursorsBroadcastTimer) return;
+    var elapsed = Date.now() - lastCursorsBroadcast;
+    if (elapsed >= CURSORS_BROADCAST_THROTTLE_MS) {
+        lastCursorsBroadcast = Date.now();
+        broadcastCursors();
+        return;
+    }
+    cursorsBroadcastTimer = setTimeout(function() {
+        cursorsBroadcastTimer = null;
+        lastCursorsBroadcast = Date.now();
+        broadcastCursors();
+    }, CURSORS_BROADCAST_THROTTLE_MS - elapsed);
+}
+
+function broadcastCursors() {
+    const list = [];
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN && client.clientId && client.cursor && client.cursor.position) {
+            list.push({
+                id: client.clientId,
+                displayName: client.cursor.displayName,
+                userId: client.cursor.userId,
+                position: client.cursor.position
+            });
+        }
+    });
+    const payload = JSON.stringify({ type: 'cursors', cursors: list });
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            try { client.send(payload); } catch (e) {}
+        }
+    });
+}
 
 function getLocalIPs() {
     const ifaces = os.networkInterfaces();

@@ -14,6 +14,13 @@
     var maxReconnectAttempts = 10;
     var reconnectDelayMs = 2000;
     var userRequestedDisconnect = false;
+    var CURSOR_THROTTLE_MS = 120;
+    var lastCursorSend = 0;
+    var lastCursorPos = null;
+    var cursorFlushIntervalId = null;
+    var lastCursorsUiUpdate = 0;
+    var pendingCursorsUi = null;
+    var CURSORS_UI_THROTTLE_MS = 100;
 
     function getDefaultSyncUrl() {
         if (typeof window !== 'undefined' && window.location && window.location.host) {
@@ -96,6 +103,9 @@
             reconnectAttempts = 0;
             try { sessionStorage.setItem(SYNC_URL_KEY, url); } catch (e) {}
             window.syncIsConnected = true;
+            if (!cursorFlushIntervalId) {
+                cursorFlushIntervalId = setInterval(flushCursorIfPending, CURSOR_THROTTLE_MS);
+            }
             updateSyncUIStatus(true);
             if (typeof window.hideSyncRequiredOverlay === 'function') window.hideSyncRequiredOverlay();
             if (typeof getSerializedData === 'function') {
@@ -116,7 +126,13 @@
         ws.onclose = function() {
             ws = null;
             window.syncIsConnected = false;
+            if (cursorFlushIntervalId) {
+                clearInterval(cursorFlushIntervalId);
+                cursorFlushIntervalId = null;
+            }
+            pendingCursorsUi = null;
             window.syncOnlineUserIds = [];
+            if (typeof window.updateCollaboratorCursors === 'function') window.updateCollaboratorCursors([]);
             updateSyncUIStatus(false);
             updateSyncOnlineList([]);
             if (btn) btn.disabled = false;
@@ -141,6 +157,18 @@
                     window.syncOnlineUserIds = userIds;
                     updateSyncOnlineList(msg.clients);
                     if (typeof window.renderUsersList === 'function') window.renderUsersList();
+                    return;
+                }
+                if (msg.type === 'cursors' && Array.isArray(msg.cursors)) {
+                    var others = msg.cursors.filter(function(c) { return c.id !== myClientId; });
+                    var now = Date.now();
+                    if (now - lastCursorsUiUpdate >= CURSORS_UI_THROTTLE_MS) {
+                        lastCursorsUiUpdate = now;
+                        pendingCursorsUi = null;
+                        if (typeof window.updateCollaboratorCursors === 'function') window.updateCollaboratorCursors(others);
+                    } else {
+                        pendingCursorsUi = others;
+                    }
                     return;
                 }
                 if (msg.type === 'state' && Array.isArray(msg.data) && typeof applyRemoteState === 'function') {
@@ -229,7 +257,44 @@
         setTimeout(autoConnectIfSaved, 1200);
     }
 
+    function sendCursorPosition(position) {
+        if (!position || !Array.isArray(position) || position.length < 2) return;
+        var now = Date.now();
+        if (now - lastCursorSend < CURSOR_THROTTLE_MS) {
+            lastCursorPos = position;
+            return;
+        }
+        lastCursorSend = now;
+        lastCursorPos = null;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            try {
+                ws.send(JSON.stringify({ type: 'cursor', position: position }));
+            } catch (e) {}
+        }
+    }
+    function flushCursorIfPending() {
+        if (lastCursorPos && ws && ws.readyState === WebSocket.OPEN) {
+            var now = Date.now();
+            if (now - lastCursorSend >= CURSOR_THROTTLE_MS) {
+                lastCursorSend = now;
+                try {
+                    ws.send(JSON.stringify({ type: 'cursor', position: lastCursorPos }));
+                } catch (e) {}
+                lastCursorPos = null;
+            }
+        }
+        if (pendingCursorsUi && typeof window.updateCollaboratorCursors === 'function') {
+            var t = Date.now();
+            if (t - lastCursorsUiUpdate >= CURSORS_UI_THROTTLE_MS) {
+                lastCursorsUiUpdate = t;
+                window.updateCollaboratorCursors(pendingCursorsUi);
+                pendingCursorsUi = null;
+            }
+        }
+    }
+
     window.syncSendState = sendState;
+    window.syncSendCursor = sendCursorPosition;
     window.syncConnect = connect;
     window.syncDisconnect = disconnect;
     window.syncAutoConnectIfSaved = autoConnectIfSaved;

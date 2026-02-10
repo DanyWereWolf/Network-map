@@ -25,6 +25,7 @@ let crossGroupPlacemarks = []; // Метки групп кроссов в одн
 let nodeGroupPlacemarks = []; // Метки групп узлов в одном месте
 let crossGroupNames = new Map(); // ключ: "lat,lon", значение: название группы кроссов
 let nodeGroupNames = new Map(); // ключ: "lat,lon", значение: название группы узлов
+let collaboratorCursorsPlacemarks = []; // Метки курсоров других пользователей на карте (совместная работа)
 
 function groupKey(coords) {
     return coords[0].toFixed(6) + ',' + coords[1].toFixed(6);
@@ -1545,6 +1546,7 @@ function handleMapClick(e) {
     
 }
 
+var mapMouseMoveRafId = null;
 function handleMapMouseMove(e) {
     try {
         if (e.originalEvent) {
@@ -1560,7 +1562,8 @@ function handleMapMouseMove(e) {
     } catch (err) {}
     
     const mapCoords = e.get('coords');
-    
+    if (mapCoords && typeof window.syncSendCursor === 'function') window.syncSendCursor(mapCoords);
+
     if (!isEditMode) {
         return;
     }
@@ -1573,17 +1576,23 @@ function handleMapMouseMove(e) {
         return;
     }
     
-    // Режим прокладки кабеля: привязка к ближайшему объекту и предпросмотр линии
-    if (currentCableTool && cableSource) {
-        const snapObj = findObjectAtCoords(mapCoords);
-        let previewCoords = mapCoords;
-        if (snapObj && snapObj !== cableSource) {
-            const t = snapObj.properties.get('type');
-            if (t !== 'cable' && t !== 'cableLabel') {
-                previewCoords = snapObj.geometry.getCoordinates();
+    // Режим прокладки кабеля: тяжёлый путь (findObjectAtCoords + updateCablePreview) — не чаще одного раза за кадр
+    if (currentCableTool && cableSource && mapCoords) {
+        if (mapMouseMoveRafId != null) cancelAnimationFrame(mapMouseMoveRafId);
+        var coords = mapCoords;
+        var ev = e;
+        mapMouseMoveRafId = requestAnimationFrame(function() {
+            mapMouseMoveRafId = null;
+            var snapObj = findObjectAtCoords(coords);
+            var previewCoords = coords;
+            if (snapObj && snapObj !== cableSource) {
+                var t = snapObj.properties.get('type');
+                if (t !== 'cable' && t !== 'cableLabel') {
+                    previewCoords = snapObj.geometry.getCoordinates();
+                }
             }
-        }
-        updateCablePreview(cableSource, previewCoords);
+            updateCablePreview(cableSource, previewCoords);
+        });
     }
 }
 
@@ -2382,8 +2391,7 @@ function createObject(type, name, coords, options = {}) {
     placemark.events.add('drag', function() {
         const label = placemark.properties.get('label');
         if (label) { try { myMap.geoObjects.remove(label); } catch (e) {} } // скрыть подпись во время перемещения
-        updateSelectionPulsePosition(placemark);
-        updateConnectedCables(placemark);
+        scheduleDragUpdate(placemark);
     });
 
     attachHoverEventsToObject(placemark);
@@ -2534,6 +2542,23 @@ function selectObject(obj) {
 function addSelectionPulse(obj) {
     // Отключено - выделение только увеличением иконки
     return;
+}
+
+// Throttle обновлений во время drag (не чаще одного раза за кадр), чтобы избежать лагов
+var dragUpdateRafId = null;
+var dragUpdatePlacemark = null;
+function scheduleDragUpdate(pm) {
+    dragUpdatePlacemark = pm;
+    if (dragUpdateRafId != null) return;
+    dragUpdateRafId = requestAnimationFrame(function() {
+        dragUpdateRafId = null;
+        var placemark = dragUpdatePlacemark;
+        dragUpdatePlacemark = null;
+        if (placemark) {
+            updateSelectionPulsePosition(placemark);
+            updateConnectedCables(placemark);
+        }
+    });
 }
 
 // Обновляет позицию пульсирующего круга
@@ -3361,6 +3386,67 @@ function hideSyncRequiredOverlay() {
 window.showSyncRequiredOverlay = showSyncRequiredOverlay;
 window.hideSyncRequiredOverlay = hideSyncRequiredOverlay;
 
+/** Цвета для курсоров участников (как на досках вроде Эсборд) */
+var COLLABORATOR_CURSOR_COLORS = ['#3b82f6', '#22c55e', '#eab308', '#ef4444', '#8b5cf6', '#ec4899'];
+
+/**
+ * Обновить метки курсоров других пользователей на карте (совместная работа в стиле Эсборд).
+ * cursors: массив { id, displayName, position: [lat, lng] }. Переиспользуем метки при тех же id — только обновляем координаты.
+ */
+function updateCollaboratorCursors(cursors) {
+    if (!myMap || !myMap.geoObjects) return;
+    if (!cursors || cursors.length === 0) {
+        collaboratorCursorsPlacemarks.forEach(function(pm) {
+            try { myMap.geoObjects.remove(pm); } catch (e) {}
+        });
+        collaboratorCursorsPlacemarks = [];
+        return;
+    }
+    var ids = cursors.map(function(c) { return c.id; }).join(',');
+    var prevIds = collaboratorCursorsPlacemarks.length ? (collaboratorCursorsPlacemarks._ids || '') : '';
+    if (ids === prevIds && collaboratorCursorsPlacemarks.length === cursors.length) {
+        cursors.forEach(function(c, idx) {
+            var pos = c.position;
+            if (!Array.isArray(pos) || pos.length < 2) return;
+            var pm = collaboratorCursorsPlacemarks[idx];
+            if (pm && pm.geometry) try { pm.geometry.setCoordinates(pos); } catch (e) {}
+        });
+        return;
+    }
+    collaboratorCursorsPlacemarks.forEach(function(pm) {
+        try { myMap.geoObjects.remove(pm); } catch (e) {}
+    });
+    collaboratorCursorsPlacemarks = [];
+    collaboratorCursorsPlacemarks._ids = ids;
+    cursors.forEach(function(c, idx) {
+        var pos = c.position;
+        if (!Array.isArray(pos) || pos.length < 2) return;
+        var color = COLLABORATOR_CURSOR_COLORS[idx % COLLABORATOR_CURSOR_COLORS.length];
+        var name = (c.displayName || 'Участник').toString().trim();
+        var initial = name.charAt(0).toUpperCase();
+        var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">' +
+            '<circle cx="14" cy="14" r="12" fill="' + color + '" stroke="white" stroke-width="2"/>' +
+            '<text x="14" y="18" text-anchor="middle" fill="white" font-size="12" font-weight="bold" font-family="sans-serif">' + initial + '</text>' +
+            '</svg>';
+        var dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+        var pm = new ymaps.Placemark(pos, {
+            balloonContent: name,
+            hintContent: name
+        }, {
+            iconLayout: 'default#image',
+            iconImageHref: dataUrl,
+            iconImageSize: [28, 28],
+            iconImageOffset: [-14, -14],
+            zIndex: 9998,
+            cursor: 'default',
+            interactive: true
+        });
+        myMap.geoObjects.add(pm);
+        collaboratorCursorsPlacemarks.push(pm);
+    });
+}
+window.updateCollaboratorCursors = updateCollaboratorCursors;
+
 function showNoApiMessage() {
     var overlay = document.getElementById('noApiOverlay');
     if (overlay) return;
@@ -3716,12 +3802,11 @@ function createObjectFromData(data) {
         updateSelectionPulsePosition(placemark);
     });
     
-    // Скрываем подпись во время перемещения; обновляем круг и кабели
+    // Скрываем подпись во время перемещения; обновляем круг и кабели (throttle — раз за кадр)
     placemark.events.add('drag', function() {
         const label = placemark.properties.get('label');
         if (label) { try { myMap.geoObjects.remove(label); } catch (e) {} }
-        updateSelectionPulsePosition(placemark);
-        updateConnectedCables(placemark);
+        scheduleDragUpdate(placemark);
     });
 
     attachHoverEventsToObject(placemark);
