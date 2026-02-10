@@ -2900,19 +2900,30 @@ function markFiberAsUsed(obj, cableId, fiberNumber) {
 
 
 function updateConnectedCables(obj) {
-    const cables = objects.filter(cable => 
-        cable.properties && 
-        cable.properties.get('type') === 'cable' &&
-        (cable.properties.get('from') === obj || cable.properties.get('to') === obj)
-    );
+    const cables = objects.filter(cable => {
+        if (!cable.properties || cable.properties.get('type') !== 'cable') return false;
+        var from = cable.properties.get('from');
+        var to = cable.properties.get('to');
+        if (from === obj || to === obj) return true;
+        var points = cable.properties.get('points');
+        return Array.isArray(points) && points.indexOf(obj) !== -1;
+    });
     
     cables.forEach(cable => {
-        const fromObj = cable.properties.get('from');
-        const toObj = cable.properties.get('to');
-        const fromCoords = fromObj.geometry.getCoordinates();
-        const toCoords = toObj.geometry.getCoordinates();
-        
-        cable.geometry.setCoordinates([fromCoords, toCoords]);
+        var points = cable.properties.get('points');
+        if (Array.isArray(points) && points.length > 2) {
+            try {
+                var coords = points.map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; }).filter(Boolean);
+                if (coords.length >= 2) cable.geometry.setCoordinates(coords);
+            } catch (e) {}
+        } else {
+            const fromObj = cable.properties.get('from');
+            const toObj = cable.properties.get('to');
+            if (!fromObj || !toObj || !fromObj.geometry || !toObj.geometry) return;
+            const fromCoords = fromObj.geometry.getCoordinates();
+            const toCoords = toObj.geometry.getCoordinates();
+            cable.geometry.setCoordinates([fromCoords, toCoords]);
+        }
     });
 }
 
@@ -3474,6 +3485,7 @@ function undoLast() {
         applyRemoteState(undoState);
         if (!window._redoStack) window._redoStack = [];
         window._redoStack.push(redoState);
+        if (window._redoStack.length > MAX_UNDO_LEVELS) window._redoStack.shift();
         if (typeof showNotification === 'function') showNotification('Отмена выполнена');
         updateUndoRedoButtons();
     } catch (err) {}
@@ -3487,6 +3499,7 @@ function redoLast() {
         applyRemoteState(redoState);
         if (!window._undoStack) window._undoStack = [];
         window._undoStack.push(undoState);
+        if (window._undoStack.length > MAX_UNDO_LEVELS) window._undoStack.shift();
         if (typeof showNotification === 'function') showNotification('Повтор выполнена');
         updateUndoRedoButtons();
     } catch (err) {}
@@ -3727,7 +3740,18 @@ function applyRemoteStateMerged(data) {
             return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId;
         });
         if (existingCable) {
-            if (existingCable.geometry && item.geometry) existingCable.geometry.setCoordinates(item.geometry);
+            var pointsArr = (item.geometry && item.geometry.length > 2)
+                ? findObjectsAtGeometry(refs, item.geometry)
+                : null;
+            if (!pointsArr || pointsArr.length < 2) pointsArr = [fromObj, toObj];
+            existingCable.properties.set('from', fromObj);
+            existingCable.properties.set('to', toObj);
+            existingCable.properties.set('points', pointsArr);
+            if (existingCable.geometry && item.geometry && item.geometry.length >= 2) {
+                existingCable.geometry.setCoordinates(item.geometry);
+            } else if (existingCable.geometry && pointsArr.length >= 2) {
+                existingCable.geometry.setCoordinates(pointsArr.map(function(p) { return p.geometry.getCoordinates(); }));
+            }
             if (item.distance !== undefined) existingCable.properties.set('distance', item.distance);
             if (item.cableName != null) existingCable.properties.set('cableName', item.cableName);
         } else {
@@ -3756,6 +3780,19 @@ function applyRemoteStateMerged(data) {
     ensureNodeLabelsVisible();
     updateAllNodeConnectionLines();
     updateStats();
+
+    // Принудительное обновление отображения кабелей (после отмены/загрузки полилинии могут не перерисоваться)
+    setTimeout(function() {
+        incomingCables.forEach(function(item) {
+            var cable = objects.find(function(o) {
+                return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId;
+            });
+            if (cable && cable.geometry && item.geometry && item.geometry.length >= 2) {
+                cable.geometry.setCoordinates(item.geometry);
+            }
+        });
+        updateCableVisualization();
+    }, 0);
 
     // При совместной работе после применения удалённого состояния убираем из выделения объекты,
     // которых уже нет на карте (ссылки могли стать невалидными)
