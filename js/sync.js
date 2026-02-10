@@ -21,6 +21,9 @@
     var lastCursorsUiUpdate = 0;
     var pendingCursorsUi = null;
     var CURSORS_UI_THROTTLE_MS = 100;
+    var applyStateTimer = null;
+    var pendingApplyState = null;
+    var APPLY_STATE_DEBOUNCE_MS = 280;
 
     function getDefaultSyncUrl() {
         if (typeof window !== 'undefined' && window.location && window.location.host) {
@@ -68,6 +71,26 @@
                 ws.send(JSON.stringify({ type: 'state', clientId: myClientId, data: toSend }));
             } catch (e) {}
         }
+    }
+
+    function doApplyPendingState() {
+        if (!pendingApplyState || !Array.isArray(pendingApplyState)) return;
+        if (typeof window.syncDragInProgress !== 'undefined' && window.syncDragInProgress) return;
+        var data = pendingApplyState;
+        pendingApplyState = null;
+        try {
+            if (typeof applyRemoteState === 'function') applyRemoteState(data);
+            updateSyncUIStatus(true);
+            if (typeof window.hideSyncRequiredOverlay === 'function') window.hideSyncRequiredOverlay();
+        } catch (e) { updateSyncUIStatus(true); }
+    }
+
+    function applyPendingStateAfterDrag() {
+        if (applyStateTimer) {
+            clearTimeout(applyStateTimer);
+            applyStateTimer = null;
+        }
+        doApplyPendingState();
     }
 
     function loadSavedSyncUrl() {
@@ -126,6 +149,8 @@
         ws.onclose = function() {
             ws = null;
             window.syncIsConnected = false;
+            if (applyStateTimer) { clearTimeout(applyStateTimer); applyStateTimer = null; }
+            pendingApplyState = null;
             if (cursorFlushIntervalId) {
                 clearInterval(cursorFlushIntervalId);
                 cursorFlushIntervalId = null;
@@ -175,13 +200,12 @@
                     var data = msg.data;
                     if (sendTimer) { clearTimeout(sendTimer); sendTimer = null; }
                     pendingState = null;
-                    setTimeout(function() {
-                        try {
-                            applyRemoteState(data);
-                            updateSyncUIStatus(true);
-                            if (typeof window.hideSyncRequiredOverlay === 'function') window.hideSyncRequiredOverlay();
-                        } catch (e) { updateSyncUIStatus(true); }
-                    }, 0);
+                    pendingApplyState = data;
+                    if (applyStateTimer) clearTimeout(applyStateTimer);
+                    applyStateTimer = setTimeout(function() {
+                        applyStateTimer = null;
+                        doApplyPendingState();
+                    }, APPLY_STATE_DEBOUNCE_MS);
                 }
             } catch (e) {}
         };
@@ -286,4 +310,5 @@
     window.syncDisconnect = disconnect;
     window.syncAutoConnectIfSaved = autoConnectIfSaved;
     window.syncForceSendState = forceSendState;
+    window.syncApplyPendingState = applyPendingStateAfterDrag;
 })();

@@ -906,6 +906,9 @@ function initTheme() {
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
         if (!getApiBase()) document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
     });
+    window.addEventListener('blur', function() {
+        window.syncDragInProgress = false;
+    });
 }
 
 function setTheme(theme) {
@@ -2378,6 +2381,8 @@ function createObject(type, name, coords, options = {}) {
     });
 
     placemark.events.add('dragend', function() {
+        window.syncDragInProgress = false;
+        if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
         saveData();
         updateConnectedCables(placemark);
         const label = placemark.properties.get('label');
@@ -2389,6 +2394,7 @@ function createObject(type, name, coords, options = {}) {
     });
     
     placemark.events.add('drag', function() {
+        if (!window.syncDragInProgress) window.syncDragInProgress = true;
         const label = placemark.properties.get('label');
         if (label) { try { myMap.geoObjects.remove(label); } catch (e) {} } // скрыть подпись во время перемещения
         scheduleDragUpdate(placemark);
@@ -3472,11 +3478,16 @@ function postHistoryToApi(history) {
  */
 function applyRemoteState(data) {
     if (!Array.isArray(data)) return;
+    collaboratorCursorsPlacemarks = [];
     clearMap({ skipSave: true, skipHistory: true });
-    importData(data, { skipSave: true, skipHistory: true });
-    ensureNodeLabelsVisible();
-    updateAllNodeConnectionLines();
-    updateStats();
+    try {
+        importData(data, { skipSave: true, skipHistory: true });
+        ensureNodeLabelsVisible();
+        updateAllNodeConnectionLines();
+        updateStats();
+    } catch (e) {
+        updateStats();
+    }
 }
 
 function ensureNodeLabelsVisible() {
@@ -3790,20 +3801,23 @@ function createObjectFromData(data) {
         }
     });
 
-    placemark.events.add('dragend', function() {
-        saveData();
-        updateConnectedCables(placemark);
-        const label = placemark.properties.get('label');
-        if (label) {
-            label.geometry.setCoordinates(placemark.geometry.getCoordinates());
-            try { myMap.geoObjects.add(label); } catch (e) {} // вернуть подпись на карту после перемещения
-        }
-        updateAllNodeConnectionLines();
-        updateSelectionPulsePosition(placemark);
-    });
+        placemark.events.add('dragend', function() {
+            window.syncDragInProgress = false;
+            if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
+            saveData();
+            updateConnectedCables(placemark);
+            const label = placemark.properties.get('label');
+            if (label) {
+                label.geometry.setCoordinates(placemark.geometry.getCoordinates());
+                try { myMap.geoObjects.add(label); } catch (e) {} // вернуть подпись на карту после перемещения
+            }
+            updateAllNodeConnectionLines();
+            updateSelectionPulsePosition(placemark);
+        });
     
     // Скрываем подпись во время перемещения; обновляем круг и кабели (throttle — раз за кадр)
     placemark.events.add('drag', function() {
+        if (!window.syncDragInProgress) window.syncDragInProgress = true;
         const label = placemark.properties.get('label');
         if (label) { try { myMap.geoObjects.remove(label); } catch (e) {} }
         scheduleDragUpdate(placemark);
@@ -6820,7 +6834,12 @@ function updateCrossDisplay() {
                 });
             }, 50);
         });
+        groupPlacemark.events.add('drag', function() {
+            if (!window.syncDragInProgress) window.syncDragInProgress = true;
+        });
         groupPlacemark.events.add('dragend', function() {
+            window.syncDragInProgress = false;
+            if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
             const newCoords = groupPlacemark.geometry.getCoordinates();
             const crosses = groupPlacemark.properties.get('crossGroup');
             const oldCoords = crosses[0].geometry.getCoordinates();
@@ -6975,7 +6994,12 @@ function updateNodeDisplay() {
                 });
             }, 50);
         });
+        groupPlacemark.events.add('drag', function() {
+            if (!window.syncDragInProgress) window.syncDragInProgress = true;
+        });
         groupPlacemark.events.add('dragend', function() {
+            window.syncDragInProgress = false;
+            if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
             const newCoords = groupPlacemark.geometry.getCoordinates();
             const nodes = groupPlacemark.properties.get('nodeGroup');
             const oldCoords = nodes[0].geometry.getCoordinates();
