@@ -2882,6 +2882,40 @@ function markFiberAsUsed(obj, cableId, fiberNumber) {
 
 
 
+/**
+ * Проверка при запуске: выравнивает геометрию кабелей по фактическому положению точек (from, points, to).
+ * Вызывать после применения состояния (applyRemoteStateMerged / importData).
+ */
+function validateAndFixCableGeometryOnLoad() {
+    if (!objects || !objects.length) return;
+    var cables = objects.filter(function(o) {
+        return o.properties && o.properties.get('type') === 'cable' && o.geometry;
+    });
+    cables.forEach(function(cable) {
+        var fromObj = cable.properties.get('from');
+        var toObj = cable.properties.get('to');
+        var points = cable.properties.get('points');
+        var coords = [];
+        if (Array.isArray(points) && points.length >= 2) {
+            coords = points
+                .map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; })
+                .filter(function(c) { return c && Array.isArray(c) && c.length >= 2; });
+        }
+        if (coords.length < 2 && fromObj && toObj && fromObj.geometry && toObj.geometry) {
+            try {
+                var fc = fromObj.geometry.getCoordinates();
+                var tc = toObj.geometry.getCoordinates();
+                if (fc && tc) coords = [fc, tc];
+            } catch (e) {}
+        }
+        if (coords.length >= 2) {
+            try {
+                cable.geometry.setCoordinates(coords);
+            } catch (e) {}
+        }
+    });
+}
+
 function updateConnectedCables(obj) {
     const cables = objects.filter(cable => {
         if (!cable.properties || cable.properties.get('type') !== 'cable') return false;
@@ -3767,7 +3801,7 @@ function applyRemoteStateMerged(data) {
     updateAllNodeConnectionLines();
     updateStats();
 
-    // Принудительное обновление отображения кабелей по сохранённой геометрии (от точки до точки)
+    // Принудительное обновление отображения кабелей: сначала по сохранённой геометрии, затем проверка по положению точек
     setTimeout(function() {
         incomingCables.forEach(function(item) {
             var cable = objects.find(function(o) {
@@ -3786,6 +3820,7 @@ function applyRemoteStateMerged(data) {
                 }
             }
         });
+        validateAndFixCableGeometryOnLoad();
         updateCableVisualization();
     }, 0);
 
@@ -3944,7 +3979,8 @@ function importData(data, opts) {
                 if (item.cableName) cable.properties.set('cableName', item.cableName);
             }
     });
-    
+
+    validateAndFixCableGeometryOnLoad();
     ensureNodeLabelsVisible();
     updateCableVisualization();
     updateCrossDisplay();
