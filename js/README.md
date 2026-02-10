@@ -1,14 +1,15 @@
-# Модули приложения «Карта локальной сети»
+# Модули приложения (js/)
 
-Скрипты подключаются в `index.html` в указанном порядке. Общие переменные (например `APP_VERSION`, `currentUser`) задаются в `config.js` или в `main.js`.
+Скрипты подключаются в `index.html` в указанном порядке.
 
 | Файл | Назначение |
 |------|------------|
-| **config.js** | Версия приложения (`APP_VERSION`), репозиторий (`GITHUB_REPO`), результат проверки обновлений (`lastUpdateCheckResult`) |
+| **config.js** | Версия (`APP_VERSION`), репозиторий (`GITHUB_REPO`), результат проверки обновлений |
 | **utils.js** | `escapeHtml()`, `getObjectTypeName()` |
 | **notifications.js** | `showToast()`, `showSuccess()`, `showError()`, `showWarning()`, `showInfo()` |
-| **updates.js** | Проверка обновлений: `checkForUpdates()`, `openUpdatesModal()`, `renderUpdatesModalContent()`, `setupUpdatesModalHandlers()` |
-| **help.js** | Справка: `openHelpModal()`, `closeHelpModal()`, `getHelpContentHtml()`, `setupHelpModalHandlers()` |
-| **history.js** | История изменений: `ActionTypes`, `logAction()`, `getHistory()`, `openHistoryModal()`, `renderHistoryList()`, `setupHistoryModalHandlers()` и др. |
+| **updates.js** | Проверка обновлений: `checkForUpdates()`, `openUpdatesModal()`, `setupUpdatesModalHandlers()` |
+| **help.js** | Справка: `openHelpModal()`, `getHelpContentHtml()`, `setupHelpModalHandlers()` |
+| **history.js** | История изменений: `ActionTypes`, `logAction()`, `getHistory()`, `openHistoryModal()`, `setupHistoryModalHandlers()` и др. |
+| **sync.js** | Синхронизация карты: WebSocket, `syncSendState` / `syncSendOp`, приём состояния и операций, курсоры участников, `updateCollaboratorCursors` |
 
-Версию приложения перед релизом меняют в **config.js** (константа `APP_VERSION`).
+Версию перед релизом меняют в **config.js** (`APP_VERSION`).
