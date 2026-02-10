@@ -220,11 +220,11 @@ function hideAdminOnlyElements() {
         netboxAccordion.parentElement.style.display = 'none';
     }
     
-    // Скрываем кнопки действий (удаление)
+    // Скрываем кнопки действий (удаление) и опасные действия
     const actionsSection = document.querySelector('.actions-section');
-    if (actionsSection) {
-        actionsSection.style.display = 'none';
-    }
+    if (actionsSection) actionsSection.style.display = 'none';
+    const dangerSection = document.querySelector('.accordion-section-danger');
+    if (dangerSection) dangerSection.style.display = 'none';
     
     // Показываем предупреждение
     const sidebarContent = document.querySelector('.sidebar-content');
@@ -728,9 +728,6 @@ function setupEventListeners() {
     });
 
 
-    // Удаление объектов
-    document.getElementById('deleteSelected').addEventListener('click', handleDeleteSelected);
-
     // Импорт/экспорт
     document.getElementById('importBtn').addEventListener('click', function() {
         document.getElementById('importFile').click();
@@ -745,10 +742,38 @@ function setupEventListeners() {
         syncConnectBtn.addEventListener('click', function() { syncConnect(); });
     }
 
-    // Очистка карты
-    document.getElementById('clearAll').addEventListener('click', function() {
-        if (confirm('Очистить всю карту? Все данные будут удалены.')) {
-            clearMap();
+    // Очистка карты (кнопка в блоке «Опасные действия»)
+    var clearAllBtn = document.getElementById('clearAll');
+    if (clearAllBtn) {
+        clearAllBtn.addEventListener('click', function() {
+            if (confirm('Очистить всю карту? Все объекты и кабели будут удалены. Это действие нельзя отменить.')) {
+                clearMap();
+            }
+        });
+    }
+
+    // Горячие клавиши: Escape и Ctrl+Z — отмена текущей операции или отмена последнего действия
+    document.addEventListener('keydown', function(e) {
+        var inInput = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.getAttribute('contenteditable') === 'true');
+        if (inInput && e.key !== 'Escape') return;
+        if (e.key === 'Escape') {
+            if (objectPlacementMode) { cancelObjectPlacement(); e.preventDefault(); return; }
+            if (currentCableTool) {
+                var cableBtn = document.getElementById('addCable');
+                if (cableBtn) cableBtn.click();
+                e.preventDefault();
+            }
+            return;
+        }
+        if (e.ctrlKey && (e.key === 'z' || e.key === 'Z')) {
+            e.preventDefault();
+            if (objectPlacementMode) { cancelObjectPlacement(); return; }
+            if (currentCableTool) {
+                var cableBtn = document.getElementById('addCable');
+                if (cableBtn) cableBtn.click();
+                return;
+            }
+            if (typeof undoLast === 'function') undoLast();
         }
     });
 
@@ -1165,6 +1190,8 @@ function goToSearchResult(result) {
     setTimeout(() => {
         if (result.type === 'cable') {
             showCableInfo(obj);
+        } else if (result.type === 'support') {
+            showSupportInfo(obj);
         } else if (result.type === 'node' || result.type === 'cross' || result.type === 'sleeve') {
             showObjectInfo(obj);
         }
@@ -2052,16 +2079,11 @@ function clearHoverHighlight() {
 
 
 function handleDeleteSelected() {
-    if (!isEditMode) {
-        return;
-    }
-
-    if (selectedObjects.length === 0) {
-        return;
-    }
-
+    if (!isEditMode) return;
+    if (selectedObjects.length === 0) return;
+    pushUndoState();
     if (confirm(`Удалить ${selectedObjects.length} объектов?`)) {
-        selectedObjects.forEach(obj => deleteObject(obj));
+        selectedObjects.slice().forEach(obj => deleteObject(obj, { fromBatch: true }));
         clearSelection();
     }
 }
@@ -2155,7 +2177,7 @@ function updateUIForMode() {
 }
 
 function updateEditControls() {
-    const editControls = document.querySelectorAll('#addObject, #addCable, #deleteSelected, #clearAll');
+    const editControls = document.querySelectorAll('#addObject, #addCable, #clearAll');
     
     editControls.forEach(control => {
         control.style.opacity = isEditMode ? '1' : '0.5';
@@ -2360,14 +2382,13 @@ function createObject(type, name, coords, options = {}) {
             return;
         }
         
-        // Для опор - только выделение в режиме редактирования
+        // Для опор — показываем окно с информацией и выделяем опору (чтобы выделение работало при совместной работе)
         if (type === 'support') {
-            if (!isEditMode) return;
-            if (selectedObjects.includes(placemark)) {
-                deselectObject(placemark);
-            } else {
+            if (isEditMode) {
+                clearSelection();
                 selectObject(placemark);
             }
+            showSupportInfo(placemark);
             return;
         }
         
@@ -2408,6 +2429,7 @@ function createObject(type, name, coords, options = {}) {
     });
 
     attachHoverEventsToObject(placemark);
+    pushUndoState();
     objects.push(placemark);
     if (type === 'cross') {
         updateCrossDisplay();
@@ -2429,6 +2451,7 @@ function createObject(type, name, coords, options = {}) {
 }
 
 function deleteObject(obj, opts) {
+    if (!(opts && opts.skipSync) && !(opts && opts.fromBatch)) pushUndoState();
     // Сохраняем данные для логирования до удаления
     const objType = obj.properties.get('type');
     const objName = obj.properties.get('name') || '';
@@ -2708,9 +2731,8 @@ function addCable(fromObj, toObj, cableType, existingCableId = null, fiberNumber
 
 // Создает кабель из массива точек
 function createCableFromPoints(points, cableType, existingCableId = null, fiberNumber = null, skipHistoryLog = false, skipSync = false) {
-    if (!points || points.length < 2) {
-        return false;
-    }
+    if (!points || points.length < 2) return false;
+    if (!skipSync) pushUndoState();
     
     // Проверяем, что кабель не подключается к узлу сети
     // Узлы сети соединяются только через жилы с кросса
@@ -3381,6 +3403,24 @@ function saveData() {
     if (typeof window.syncSendState === 'function') window.syncSendState(data);
 }
 
+/** Сохранить текущее состояние карты для отмены (Ctrl+Z). Один уровень отмены. */
+function pushUndoState() {
+    try {
+        var data = getSerializedData();
+        if (Array.isArray(data) && data.length >= 0) window._undoState = JSON.parse(JSON.stringify(data));
+    } catch (e) {}
+}
+/** Отменить последнее действие (восстановить сохранённое состояние). */
+function undoLast() {
+    if (!window._undoState || !Array.isArray(window._undoState)) return;
+    try {
+        applyRemoteState(window._undoState);
+        window._undoState = null;
+        if (typeof showNotification === 'function') showNotification('Отмена выполнена');
+    } catch (err) {}
+}
+window.undoLast = undoLast;
+
 function loadDataFromStorage() {
     // Данные только с сервера (localStorage не используется)
 }
@@ -3626,6 +3666,14 @@ function applyRemoteStateMerged(data) {
     ensureNodeLabelsVisible();
     updateAllNodeConnectionLines();
     updateStats();
+
+    // При совместной работе после применения удалённого состояния убираем из выделения объекты,
+    // которых уже нет на карте (ссылки могли стать невалидными)
+    selectedObjects = selectedObjects.filter(function(o) { return objects.indexOf(o) !== -1; });
+    selectedObjects.forEach(function(o) {
+        var pulse = o.properties && o.properties.get('selectionPulse');
+        if (!pulse && o.geometry) updateSelectionPulsePosition(o);
+    });
 }
 
 /**
@@ -3997,14 +4045,13 @@ function createObjectFromData(data, opts) {
             return;
         }
         
-        // Для опор - только выделение в режиме редактирования
+        // Для опор — показываем окно с информацией и выделяем опору (чтобы выделение работало при совместной работе)
         if (type === 'support') {
-            if (!isEditMode) return;
-            if (selectedObjects.includes(placemark)) {
-                deselectObject(placemark);
-            } else {
+            if (isEditMode) {
+                clearSelection();
                 selectObject(placemark);
             }
+            showSupportInfo(placemark);
             return;
         }
         
@@ -4176,11 +4223,16 @@ function updateStats() {
     const crossCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'cross').length;
     const cableCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'cable').length;
 
-    document.getElementById('nodeCount').textContent = nodeCount;
-    document.getElementById('supportCount').textContent = supportCount;
-    document.getElementById('sleeveCount').textContent = sleeveCount;
-    document.getElementById('crossCount').textContent = crossCount;
-    document.getElementById('cableCount').textContent = cableCount;
+    const nodeEl = document.getElementById('nodeCount');
+    const supportEl = document.getElementById('supportCount');
+    const sleeveEl = document.getElementById('sleeveCount');
+    const crossEl = document.getElementById('crossCount');
+    const cableEl = document.getElementById('cableCount');
+    if (nodeEl) nodeEl.textContent = nodeCount;
+    if (supportEl) supportEl.textContent = supportCount;
+    if (sleeveEl) sleeveEl.textContent = sleeveCount;
+    if (crossEl) crossEl.textContent = crossCount;
+    if (cableEl) cableEl.textContent = cableCount;
 }
 
 // Функции для работы с модальным окном
@@ -6686,6 +6738,7 @@ function resetFiberSelection() {
 }
 
 function deleteCableByUniqueId(cableUniqueId, opts) {
+    if (!(opts && opts.skipSync)) pushUndoState();
     const cable = objects.find(obj => 
         obj.properties && 
         obj.properties.get('type') === 'cable' &&

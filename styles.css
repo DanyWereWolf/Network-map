@@ -1203,6 +1203,23 @@ button {
     margin-top: 16px;
 }
 
+/* Опасные действия — свёрнутый блок внизу, чтобы не нажать случайно */
+.accordion-section-danger .accordion-header {
+    color: var(--accent-warning);
+}
+.accordion-section-danger .accordion-header:hover {
+    color: var(--accent-danger);
+}
+.danger-zone-hint {
+    font-size: 0.8rem;
+    margin-bottom: 10px;
+    color: var(--text-muted);
+}
+.btn-danger-zone {
+    margin-top: 0;
+}
+
+
 
 /* ==================== Карта ==================== */
 .map-area-wrapper {
