@@ -152,10 +152,6 @@ function initUserUI() {
     if (editModeBtn && currentUser.role !== 'admin') {
         editModeBtn.style.display = 'none';
     }
-    // Скрываем кнопки отмены/повтора для обычных пользователей
-    var undoRedoEl = document.querySelector('.header-undo-redo');
-    if (undoRedoEl) undoRedoEl.style.display = currentUser.role === 'admin' ? 'flex' : 'none';
-
     // Скрываем секции редактирования для обычных пользователей
     if (currentUser.role !== 'admin') {
         hideAdminOnlyElements();
@@ -180,13 +176,6 @@ function initUserUI() {
     if (historyBtn) {
         historyBtn.addEventListener('click', openHistoryModal);
     }
-
-    // Кнопки отмены и повтора
-    var undoBtn = document.getElementById('undoBtn');
-    var redoBtn = document.getElementById('redoBtn');
-    if (undoBtn) undoBtn.addEventListener('click', function() { if (typeof undoLast === 'function') undoLast(); });
-    if (redoBtn) redoBtn.addEventListener('click', function() { if (typeof redoLast === 'function') redoLast(); });
-    if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
 
     // Кнопка справки
     const infoHelpBtn = document.getElementById('infoHelpBtn');
@@ -662,10 +651,6 @@ function init() {
         center: [54.663609, 86.162243],
         zoom: 15
     });
-    // Отмена/повтор только в рамках сессии — при загрузке страницы история пустая
-    window._undoStack = [];
-    window._redoStack = [];
-    
     // Имена групп подгружаются с сервера в loadData() из /api/settings
     
     // Создаем индикатор под курсором
@@ -760,7 +745,6 @@ function setupEventListeners() {
     if (clearAllBtn) {
         clearAllBtn.addEventListener('click', function() {
             if (confirm('Очистить всю карту? Все объекты и кабели будут удалены. Это действие нельзя отменить.')) {
-                if (canEdit() && isEditMode) pushUndoState();
                 clearMap();
             }
         });
@@ -788,7 +772,6 @@ function setupEventListeners() {
             }
             return;
         }
-        // В полях ввода не перехватываем Ctrl+Z (стандартная отмена ввода)
         if (inInput) return;
         if (e.ctrlKey && (e.key === 'z' || e.key === 'Z')) {
             if (canEdit() && isEditMode) {
@@ -797,16 +780,7 @@ function setupEventListeners() {
                 if (currentCableTool) {
                     var cableBtn = document.getElementById('addCable');
                     if (cableBtn) cableBtn.click();
-                    return;
                 }
-                if (typeof undoLast === 'function') undoLast();
-            }
-            return;
-        }
-        if (e.ctrlKey && (e.key === 'y' || e.key === 'Y')) {
-            if (canEdit() && isEditMode) {
-                e.preventDefault();
-                if (typeof redoLast === 'function') redoLast();
             }
         }
     });
@@ -2115,7 +2089,6 @@ function clearHoverHighlight() {
 function handleDeleteSelected() {
     if (!isEditMode) return;
     if (selectedObjects.length === 0) return;
-    pushUndoState();
     if (confirm(`Удалить ${selectedObjects.length} объектов?`)) {
         selectedObjects.slice().forEach(obj => deleteObject(obj, { fromBatch: true }));
         clearSelection();
@@ -2216,14 +2189,6 @@ function updateEditControls() {
         control.style.opacity = isEditMode ? '1' : '0.5';
         control.style.pointerEvents = isEditMode ? 'all' : 'none';
     });
-    var undoRedoEl = document.querySelector('.header-undo-redo');
-    if (undoRedoEl) {
-        undoRedoEl.style.opacity = isEditMode ? '1' : '0.5';
-        undoRedoEl.style.pointerEvents = isEditMode ? 'all' : 'none';
-        var u = document.getElementById('undoBtn'), r = document.getElementById('redoBtn');
-        if (u) u.disabled = !isEditMode || !window._undoStack || !window._undoStack.length;
-        if (r) r.disabled = !isEditMode || !window._redoStack || !window._redoStack.length;
-    }
 }
 
 function makeObjectsDraggable() {
@@ -2470,7 +2435,6 @@ function createObject(type, name, coords, options = {}) {
     });
 
     attachHoverEventsToObject(placemark);
-    pushUndoState();
     objects.push(placemark);
     if (type === 'cross') {
         updateCrossDisplay();
@@ -2493,7 +2457,6 @@ function createObject(type, name, coords, options = {}) {
 }
 
 function deleteObject(obj, opts) {
-    if (!(opts && opts.skipSync) && !(opts && opts.fromBatch)) pushUndoState();
     // Сохраняем данные для логирования до удаления
     const objType = obj.properties.get('type');
     const objName = obj.properties.get('name') || '';
@@ -2775,7 +2738,6 @@ function addCable(fromObj, toObj, cableType, existingCableId = null, fiberNumber
 // Создает кабель из массива точек
 function createCableFromPoints(points, cableType, existingCableId = null, fiberNumber = null, skipHistoryLog = false, skipSync = false) {
     if (!points || points.length < 2) return false;
-    if (!skipSync) pushUndoState();
     
     // Проверяем, что кабель не подключается к узлу сети
     // Узлы сети соединяются только через жилы с кросса
@@ -3510,72 +3472,6 @@ function saveData() {
     if (typeof window.syncSendState === 'function') window.syncSendState(data);
 }
 
-var MAX_UNDO_LEVELS = 50;
-/** Сохранить текущее состояние карты перед изменением (для отмены). Не вызывать во время применения состояния (отмена/синхронизация/импорт). */
-function pushUndoState() {
-    try {
-        if (window._applyingRemoteState) return;
-        var data = getSerializedData();
-        if (!Array.isArray(data)) return;
-        if (!window._undoStack) window._undoStack = [];
-        window._undoStack.push(JSON.parse(JSON.stringify(data)));
-        if (window._undoStack.length > MAX_UNDO_LEVELS) window._undoStack.shift();
-        window._redoStack = [];
-        updateUndoRedoButtons();
-    } catch (e) {}
-}
-/** Отменить последнее действие. */
-function undoLast() {
-    if (!canEdit() || !isEditMode) return;
-    if (!window._undoStack || !window._undoStack.length) return;
-    try {
-        var redoState = getSerializedData();
-        var undoState = window._undoStack.pop();
-        applyRemoteState(undoState);
-        if (!window._redoStack) window._redoStack = [];
-        window._redoStack.push(redoState);
-        if (window._redoStack.length > MAX_UNDO_LEVELS) window._redoStack.shift();
-        saveData();
-        if (typeof window.syncForceSendState === 'function') window.syncForceSendState();
-        if (typeof showNotification === 'function') showNotification('Отмена выполнена');
-        updateUndoRedoButtons();
-    } catch (err) {}
-}
-/** Повторить отменённое действие. */
-function redoLast() {
-    if (!canEdit() || !isEditMode) return;
-    if (!window._redoStack || !window._redoStack.length) return;
-    try {
-        var undoState = getSerializedData();
-        var redoState = window._redoStack.pop();
-        applyRemoteState(redoState);
-        if (!window._undoStack) window._undoStack = [];
-        window._undoStack.push(undoState);
-        if (window._undoStack.length > MAX_UNDO_LEVELS) window._undoStack.shift();
-        saveData();
-        if (typeof window.syncForceSendState === 'function') window.syncForceSendState();
-        if (typeof showNotification === 'function') showNotification('Повтор выполнена');
-        updateUndoRedoButtons();
-    } catch (err) {}
-}
-window.undoLast = undoLast;
-window.redoLast = redoLast;
-/** Очистить историю отмены/повтора (вызывается при получении состояния по синхронизации). */
-function clearUndoRedoStacks() {
-    window._undoStack = [];
-    window._redoStack = [];
-    updateUndoRedoButtons();
-}
-window.clearUndoRedoStacks = clearUndoRedoStacks;
-function updateUndoRedoButtons() {
-    var undoBtn = document.getElementById('undoBtn');
-    var redoBtn = document.getElementById('redoBtn');
-    var canUndo = isEditMode && window._undoStack && window._undoStack.length > 0;
-    var canRedo = isEditMode && window._redoStack && window._redoStack.length > 0;
-    if (undoBtn) undoBtn.disabled = !canUndo;
-    if (redoBtn) redoBtn.disabled = !canRedo;
-}
-
 function loadDataFromStorage() {
     // Данные только с сервера (localStorage не используется)
 }
@@ -3711,7 +3607,6 @@ function postHistoryToApi(history) {
  */
 function applyRemoteState(data) {
     if (!Array.isArray(data)) return;
-    window._applyingRemoteState = true;
     try {
         collaboratorCursorsPlacemarks.forEach(function(pm) {
             try { if (myMap && myMap.geoObjects) myMap.geoObjects.remove(pm); } catch (e) {}
@@ -3725,8 +3620,6 @@ function applyRemoteState(data) {
         applyRemoteStateMerged(data);
     } catch (e) {
         updateStats();
-    } finally {
-        window._applyingRemoteState = false;
     }
 }
 
@@ -6958,7 +6851,6 @@ function resetFiberSelection() {
 }
 
 function deleteCableByUniqueId(cableUniqueId, opts) {
-    if (!(opts && opts.skipSync)) pushUndoState();
     const cable = objects.find(obj => 
         obj.properties && 
         obj.properties.get('type') === 'cable' &&

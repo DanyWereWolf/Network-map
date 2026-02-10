@@ -123,18 +123,6 @@ body {
     flex-shrink: 0;
 }
 
-.header-undo-redo {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-right: 8px;
-}
-
-.header-undo-redo .user-menu-btn:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-}
-
 /* ==================== Поиск по карте ==================== */
 .header-search {
     flex: 1;
