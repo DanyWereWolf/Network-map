@@ -3329,6 +3329,22 @@ function normalizeCableGeometry(geom) {
     return flat.length >= 2 ? flat : null;
 }
 
+/** Найти объект из refs, ближайший к заданной координате (для однозначного определения начала/конца кабеля по геометрии). */
+function findRefClosestToCoord(refs, coord, tolerance) {
+    if (!Array.isArray(refs) || !coord || coord.length < 2) return null;
+    tolerance = tolerance || 0.0005;
+    var best = null, bestDist = tolerance;
+    for (var r = 0; r < refs.length; r++) {
+        var o = refs[r];
+        if (!o || !o.geometry) continue;
+        var c = o.geometry.getCoordinates();
+        if (!c || c.length < 2) continue;
+        var d = Math.sqrt(Math.pow(c[0] - coord[0], 2) + Math.pow(c[1] - coord[1], 2));
+        if (d < bestDist) { bestDist = d; best = o; }
+    }
+    return best;
+}
+
 /** По геометрии кабеля найти упорядоченный список объектов (для восстановления кабеля через опоры). Соседние дубликаты убираются. */
 function findObjectsAtGeometry(refs, geometry, tolerance) {
     var geom = normalizeCableGeometry(geometry) || (Array.isArray(geometry) ? geometry : null);
@@ -3687,12 +3703,20 @@ function applyRemoteStateMerged(data) {
     });
 
     incomingCables.forEach(function(item) {
-        if (item.from == null || item.to == null) return;
-        var fromIdx = refIndexByDataIndex[item.from];
-        var toIdx = refIndexByDataIndex[item.to];
-        if (fromIdx == null || toIdx == null || fromIdx >= refs.length || toIdx >= refs.length) return;
-        var fromObj = refs[fromIdx];
-        var toObj = refs[toIdx];
+        var coords = normalizeCableGeometry(item.geometry);
+        var fromObj = null, toObj = null;
+        if (coords && coords.length >= 2) {
+            fromObj = findRefClosestToCoord(refs, coords[0]);
+            toObj = findRefClosestToCoord(refs, coords[coords.length - 1]);
+        }
+        if (!fromObj || !toObj) {
+            if (item.from == null || item.to == null) return;
+            var fromIdx = refIndexByDataIndex[item.from];
+            var toIdx = refIndexByDataIndex[item.to];
+            if (fromIdx == null || toIdx == null || fromIdx >= refs.length || toIdx >= refs.length) return;
+            fromObj = refs[fromIdx];
+            toObj = refs[toIdx];
+        }
         if (!fromObj || !toObj) return;
         var existingCable = objects.find(function(o) {
             return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId;
@@ -3706,9 +3730,8 @@ function applyRemoteStateMerged(data) {
             existingCable.properties.set('to', toObj);
             existingCable.properties.set('points', pointsArr);
             if (existingCable.geometry) {
-                var coordsToSet = normalizeCableGeometry(item.geometry);
-                if (coordsToSet && coordsToSet.length >= 2) {
-                    existingCable.geometry.setCoordinates(coordsToSet);
+                if (coords && coords.length >= 2) {
+                    existingCable.geometry.setCoordinates(coords);
                 } else if (pointsArr.length >= 2) {
                     try {
                         existingCable.geometry.setCoordinates(pointsArr.map(function(p) { return p.geometry.getCoordinates(); }));
@@ -3730,8 +3753,7 @@ function applyRemoteStateMerged(data) {
                 return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId;
             });
             if (cable) {
-                var coordsToSet = normalizeCableGeometry(item.geometry);
-                if (cable.geometry && coordsToSet && coordsToSet.length >= 2) cable.geometry.setCoordinates(coordsToSet);
+                if (cable.geometry && coords && coords.length >= 2) cable.geometry.setCoordinates(coords);
                 if (item.distance !== undefined) cable.properties.set('distance', item.distance);
                 if (item.cableName != null) cable.properties.set('cableName', item.cableName);
             }
@@ -3745,16 +3767,17 @@ function applyRemoteStateMerged(data) {
     updateAllNodeConnectionLines();
     updateStats();
 
-    // Принудительное обновление отображения кабелей (после отмены/загрузки полилинии могут не перерисоваться)
+    // Принудительное обновление отображения кабелей по сохранённой геометрии (от точки до точки)
     setTimeout(function() {
         incomingCables.forEach(function(item) {
             var cable = objects.find(function(o) {
                 return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId;
             });
             if (!cable || !cable.geometry) return;
-            var coords = normalizeCableGeometry(item.geometry);
-            if (coords && coords.length >= 2) cable.geometry.setCoordinates(coords);
-            else {
+            var geom = normalizeCableGeometry(item.geometry);
+            if (geom && geom.length >= 2) {
+                cable.geometry.setCoordinates(geom);
+            } else {
                 var pts = cable.properties.get('points');
                 if (Array.isArray(pts) && pts.length >= 2) {
                     try {
@@ -3885,47 +3908,41 @@ function importData(data, opts) {
     });
     
     data.forEach((item, index) => {
-            if (item.type === 'cable' && 
-            item.from !== undefined && 
-            item.to !== undefined && 
-            item.from < objectRefs.length && 
-            item.to < objectRefs.length) {
-            
-            const fromObj = objectRefs[item.from];
-            const toObj = objectRefs[item.to];
-            if (fromObj && toObj) {
-                var refsOnly = objectRefs.filter(function(r) { return r != null; });
-                var points = (item.geometry && item.geometry.length > 2)
-                    ? findObjectsAtGeometry(refsOnly, item.geometry)
-                    : null;
-                if (points && points.length >= 2) {
-                    addCable(points[0], points, item.cableType, item.uniqueId, undefined, true, true);
-                } else {
-                    addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true, true);
-                }
-                // Находим созданный кабель для обновления дополнительных свойств
-                const cable = objects.find(obj =>
-                    obj.properties &&
-                    obj.properties.get('type') === 'cable' &&
-                    obj.properties.get('uniqueId') === item.uniqueId
-                );
-                if (cable) {
-                    var coordsToSet = normalizeCableGeometry(item.geometry);
-                    if (cable.geometry && coordsToSet && coordsToSet.length >= 2) cable.geometry.setCoordinates(coordsToSet);
-                    // Обновляем расстояние для загруженного кабеля, если оно не было сохранено
-                    if (!cable.properties.get('distance')) {
-                        const fromCoords = fromObj.geometry.getCoordinates();
-                        const toCoords = toObj.geometry.getCoordinates();
-                        const distance = calculateDistance(fromCoords, toCoords);
-                        cable.properties.set('distance', distance);
-                    }
-                    // Восстанавливаем название кабеля
-                    if (item.cableName) {
-                        cable.properties.set('cableName', item.cableName);
-                    }
-                }
+            if (item.type !== 'cable') return;
+            var refsOnly = objectRefs.filter(function(r) { return r != null; });
+            var coords = normalizeCableGeometry(item.geometry);
+            var fromObj = null, toObj = null;
+            if (coords && coords.length >= 2) {
+                fromObj = findRefClosestToCoord(refsOnly, coords[0]);
+                toObj = findRefClosestToCoord(refsOnly, coords[coords.length - 1]);
             }
-        }
+            if (!fromObj || !toObj) {
+                if (item.from === undefined || item.to === undefined || item.from >= objectRefs.length || item.to >= objectRefs.length) return;
+                fromObj = objectRefs[item.from];
+                toObj = objectRefs[item.to];
+            }
+            if (!fromObj || !toObj) return;
+            var points = (coords && coords.length > 2) ? findObjectsAtGeometry(refsOnly, item.geometry) : null;
+            if (points && points.length >= 2) {
+                addCable(points[0], points, item.cableType, item.uniqueId, undefined, true, true);
+            } else {
+                addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true, true);
+            }
+            const cable = objects.find(obj =>
+                obj.properties &&
+                obj.properties.get('type') === 'cable' &&
+                obj.properties.get('uniqueId') === item.uniqueId
+            );
+            if (cable) {
+                if (cable.geometry && coords && coords.length >= 2) cable.geometry.setCoordinates(coords);
+                if (!cable.properties.get('distance')) {
+                    const fromCoords = fromObj.geometry.getCoordinates();
+                    const toCoords = toObj.geometry.getCoordinates();
+                    const distance = calculateDistance(fromCoords, toCoords);
+                    cable.properties.set('distance', distance);
+                }
+                if (item.cableName) cable.properties.set('cableName', item.cableName);
+            }
     });
     
     ensureNodeLabelsVisible();
