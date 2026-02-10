@@ -760,6 +760,7 @@ function setupEventListeners() {
     if (clearAllBtn) {
         clearAllBtn.addEventListener('click', function() {
             if (confirm('Очистить всю карту? Все объекты и кабели будут удалены. Это действие нельзя отменить.')) {
+                if (canEdit() && isEditMode) pushUndoState();
                 clearMap();
             }
         });
@@ -3510,9 +3511,10 @@ function saveData() {
 }
 
 var MAX_UNDO_LEVELS = 50;
-/** Сохранить текущее состояние карты перед изменением (для отмены). */
+/** Сохранить текущее состояние карты перед изменением (для отмены). Не вызывать во время применения состояния (отмена/синхронизация/импорт). */
 function pushUndoState() {
     try {
+        if (window._applyingRemoteState) return;
         var data = getSerializedData();
         if (!Array.isArray(data)) return;
         if (!window._undoStack) window._undoStack = [];
@@ -3568,8 +3570,10 @@ window.clearUndoRedoStacks = clearUndoRedoStacks;
 function updateUndoRedoButtons() {
     var undoBtn = document.getElementById('undoBtn');
     var redoBtn = document.getElementById('redoBtn');
-    if (undoBtn) undoBtn.disabled = !window._undoStack || window._undoStack.length === 0;
-    if (redoBtn) redoBtn.disabled = !window._redoStack || window._redoStack.length === 0;
+    var canUndo = isEditMode && window._undoStack && window._undoStack.length > 0;
+    var canRedo = isEditMode && window._redoStack && window._redoStack.length > 0;
+    if (undoBtn) undoBtn.disabled = !canUndo;
+    if (redoBtn) redoBtn.disabled = !canRedo;
 }
 
 function loadDataFromStorage() {
@@ -3707,12 +3711,12 @@ function postHistoryToApi(history) {
  */
 function applyRemoteState(data) {
     if (!Array.isArray(data)) return;
-    // Удаляем метки курсоров других пользователей с карты, иначе остаются «следы»
-    collaboratorCursorsPlacemarks.forEach(function(pm) {
-        try { if (myMap && myMap.geoObjects) myMap.geoObjects.remove(pm); } catch (e) {}
-    });
-    collaboratorCursorsPlacemarks = [];
+    window._applyingRemoteState = true;
     try {
+        collaboratorCursorsPlacemarks.forEach(function(pm) {
+            try { if (myMap && myMap.geoObjects) myMap.geoObjects.remove(pm); } catch (e) {}
+        });
+        collaboratorCursorsPlacemarks = [];
         if (data.length === 0) {
             clearMap({ skipSave: true, skipHistory: true });
             updateStats();
@@ -3721,6 +3725,8 @@ function applyRemoteState(data) {
         applyRemoteStateMerged(data);
     } catch (e) {
         updateStats();
+    } finally {
+        window._applyingRemoteState = false;
     }
 }
 
@@ -3823,9 +3829,9 @@ function applyRemoteStateMerged(data) {
                 ? findObjectsAtGeometry(refs, item.geometry)
                 : null;
             if (points && points.length >= 2) {
-                addCable(points[0], points, item.cableType, item.uniqueId, undefined, true);
+                addCable(points[0], points, item.cableType, item.uniqueId, undefined, true, true);
             } else {
-                addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true);
+                addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true, true);
             }
             var cable = objects.find(function(o) {
                 return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId;
@@ -4000,9 +4006,9 @@ function importData(data, opts) {
                     ? findObjectsAtGeometry(refsOnly, item.geometry)
                     : null;
                 if (points && points.length >= 2) {
-                    addCable(points[0], points, item.cableType, item.uniqueId, undefined, true);
+                    addCable(points[0], points, item.cableType, item.uniqueId, undefined, true, true);
                 } else {
-                    addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true);
+                    addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true, true);
                 }
                 // Находим созданный кабель для обновления дополнительных свойств
                 const cable = objects.find(obj =>
@@ -4419,7 +4425,10 @@ function clearMap(opts) {
     selectedObjects = [];
     crossGroupPlacemarks = [];
     nodeGroupPlacemarks = [];
-    if (!opts.skipSave) saveData();
+    if (!opts.skipSave) {
+        saveData();
+        if (typeof window.syncForceSendState === 'function') window.syncForceSendState();
+    }
     updateStats();
     
     if (count > 0 && !opts.skipHistory) {
@@ -6981,12 +6990,13 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
         if (typeof window.syncSendOp === 'function') {
             window.syncSendOp({ type: 'delete_cable', uniqueId: cableUniqueId });
         }
+        saveData();
+        if (typeof window.syncForceSendState === 'function') window.syncForceSendState();
         logAction(ActionTypes.DELETE_CABLE, {
             cableType: cableType,
             from: fromName,
             to: toName
         });
-        saveData();
     }
     
     // Обновляем визуализацию кабелей (количество на линиях)
