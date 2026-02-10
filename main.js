@@ -3474,20 +3474,116 @@ function postHistoryToApi(history) {
 
 /**
  * Применить состояние карты, полученное по синхронизации (без отправки обратно на сервер).
- * Вызывается из js/sync.js при получении данных от других пользователей.
+ * Режим слияния: только обновить/добавить/удалить изменённое, без полной перезагрузки карты.
  */
 function applyRemoteState(data) {
     if (!Array.isArray(data)) return;
     collaboratorCursorsPlacemarks = [];
-    clearMap({ skipSave: true, skipHistory: true });
     try {
-        importData(data, { skipSave: true, skipHistory: true });
-        ensureNodeLabelsVisible();
-        updateAllNodeConnectionLines();
-        updateStats();
+        if (data.length === 0) {
+            clearMap({ skipSave: true, skipHistory: true });
+            updateStats();
+            return;
+        }
+        applyRemoteStateMerged(data);
     } catch (e) {
         updateStats();
     }
+}
+
+/**
+ * Применить удалённое состояние по слиянию: обновить только изменённые объекты/кабели, без clearMap.
+ */
+function applyRemoteStateMerged(data) {
+    var incomingObjs = data.filter(function(i) { return i.type !== 'cable'; });
+    var incomingCables = data.filter(function(i) { return i.type === 'cable'; });
+    var incomingObjIds = {};
+    var incomingCableIds = {};
+    incomingObjs.forEach(function(o) { if (o.uniqueId != null) incomingObjIds[o.uniqueId] = true; });
+    incomingCables.forEach(function(c) { if (c.uniqueId != null) incomingCableIds[c.uniqueId] = true; });
+
+    var refs = [];
+    var i, item, existing, created, label;
+    for (i = 0; i < incomingObjs.length; i++) {
+        item = incomingObjs[i];
+        existing = objects.find(function(o) {
+            var t = o.properties && o.properties.get('type');
+            return t && t !== 'cable' && t !== 'cableLabel' && o.properties.get('uniqueId') === item.uniqueId;
+        });
+        if (existing) {
+            if (existing.geometry && item.geometry) existing.geometry.setCoordinates(item.geometry);
+            if (item.name != null) existing.properties.set('name', item.name);
+            label = existing.properties.get('label');
+            if (label && label.geometry && item.geometry) label.geometry.setCoordinates(item.geometry);
+            refs.push(existing);
+        } else {
+            created = createObjectFromData(item);
+            if (created) refs.push(created);
+        }
+    }
+
+    var toRemoveObjs = objects.filter(function(o) {
+        var t = o.properties && o.properties.get('type');
+        if (!t || t === 'cable' || t === 'cableLabel') return false;
+        return refs.indexOf(o) === -1;
+    });
+    var toRemoveCables = objects.filter(function(o) {
+        if (!o.properties || o.properties.get('type') !== 'cable') return false;
+        if (!incomingCableIds[o.properties.get('uniqueId')]) return true;
+        var from = o.properties.get('from');
+        var to = o.properties.get('to');
+        return toRemoveObjs.indexOf(from) !== -1 || toRemoveObjs.indexOf(to) !== -1;
+    });
+
+    toRemoveCables.forEach(function(cable) {
+        myMap.geoObjects.remove(cable);
+        objects = objects.filter(function(o) { return o !== cable; });
+    });
+    toRemoveObjs.forEach(function(obj) {
+        label = obj.properties.get('label');
+        if (label) { try { myMap.geoObjects.remove(label); } catch (e) {} }
+        var cablesToRemove = objects.filter(function(c) {
+            return c.properties && c.properties.get('type') === 'cable' &&
+                (c.properties.get('from') === obj || c.properties.get('to') === obj);
+        });
+        cablesToRemove.forEach(function(c) {
+            myMap.geoObjects.remove(c);
+            objects = objects.filter(function(o) { return o !== c; });
+        });
+        myMap.geoObjects.remove(obj);
+        objects = objects.filter(function(o) { return o !== obj; });
+    });
+
+    incomingCables.forEach(function(item) {
+        if (item.from == null || item.to == null || item.from >= refs.length || item.to >= refs.length) return;
+        var fromObj = refs[item.from];
+        var toObj = refs[item.to];
+        if (!fromObj || !toObj) return;
+        var existingCable = objects.find(function(o) {
+            return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId;
+        });
+        if (existingCable) {
+            if (existingCable.geometry && item.geometry) existingCable.geometry.setCoordinates(item.geometry);
+            if (item.distance !== undefined) existingCable.properties.set('distance', item.distance);
+            if (item.cableName != null) existingCable.properties.set('cableName', item.cableName);
+        } else {
+            addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true);
+            var cable = objects.find(function(o) {
+                return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId;
+            });
+            if (cable) {
+                if (item.distance !== undefined) cable.properties.set('distance', item.distance);
+                if (item.cableName != null) cable.properties.set('cableName', item.cableName);
+            }
+        }
+    });
+
+    updateCableVisualization();
+    updateCrossDisplay();
+    updateNodeDisplay();
+    ensureNodeLabelsVisible();
+    updateAllNodeConnectionLines();
+    updateStats();
 }
 
 function ensureNodeLabelsVisible() {

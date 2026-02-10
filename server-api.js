@@ -271,6 +271,57 @@ const syncClientNames = new Map(); // clientId -> displayName
 
 const syncClientUserIds = new Map(); // clientId -> userId (number or string)
 
+/** Слияние входящего состояния с текущим по uniqueId — правки разных пользователей не затирают друг друга */
+function mergeMapState(current, incoming) {
+    if (!Array.isArray(incoming) || incoming.length === 0) return current;
+    if (!Array.isArray(current) || current.length === 0) return incoming;
+    var currentObjs = current.filter(function(i) { return i.type !== 'cable'; });
+    var currentCables = current.filter(function(i) { return i.type === 'cable'; });
+    var incomingObjs = incoming.filter(function(i) { return i.type !== 'cable'; });
+    var incomingCables = incoming.filter(function(i) { return i.type === 'cable'; });
+    var mergedObjs = [];
+    var i, j, o, inc, uid, idx, fromUid, toUid, fromIdx, toIdx, c, cableData, existing;
+    for (i = 0; i < currentObjs.length; i++) mergedObjs.push(currentObjs[i]);
+    for (j = 0; j < incomingObjs.length; j++) {
+        inc = incomingObjs[j];
+        uid = inc.uniqueId != null ? inc.uniqueId : 'obj-' + j;
+        idx = mergedObjs.findIndex(function(o) { return (o.uniqueId != null ? o.uniqueId : '') === uid; });
+        if (idx >= 0) mergedObjs[idx] = inc; else mergedObjs.push(inc);
+    }
+    var mergedCables = [];
+    for (i = 0; i < currentCables.length; i++) {
+        c = currentCables[i];
+        fromUid = currentObjs[c.from] && currentObjs[c.from].uniqueId;
+        toUid = currentObjs[c.to] && currentObjs[c.to].uniqueId;
+        if (fromUid == null || toUid == null) continue;
+        fromIdx = mergedObjs.findIndex(function(o) { return o.uniqueId === fromUid; });
+        toIdx = mergedObjs.findIndex(function(o) { return o.uniqueId === toUid; });
+        if (fromIdx >= 0 && toIdx >= 0) {
+            cableData = { type: 'cable', cableType: c.cableType, from: fromIdx, to: toIdx, geometry: c.geometry };
+            if (c.uniqueId != null) cableData.uniqueId = c.uniqueId;
+            if (c.distance !== undefined) cableData.distance = c.distance;
+            if (c.cableName != null) cableData.cableName = c.cableName;
+            mergedCables.push(cableData);
+        }
+    }
+    for (j = 0; j < incomingCables.length; j++) {
+        c = incomingCables[j];
+        fromUid = incomingObjs[c.from] && incomingObjs[c.from].uniqueId;
+        toUid = incomingObjs[c.to] && incomingObjs[c.to].uniqueId;
+        if (fromUid == null || toUid == null) continue;
+        fromIdx = mergedObjs.findIndex(function(o) { return o.uniqueId === fromUid; });
+        toIdx = mergedObjs.findIndex(function(o) { return o.uniqueId === toUid; });
+        if (fromIdx < 0 || toIdx < 0) continue;
+        cableData = { type: 'cable', cableType: c.cableType, from: fromIdx, to: toIdx, geometry: c.geometry };
+        if (c.uniqueId != null) cableData.uniqueId = c.uniqueId;
+        if (c.distance !== undefined) cableData.distance = c.distance;
+        if (c.cableName != null) cableData.cableName = c.cableName;
+        existing = mergedCables.findIndex(function(x) { return x.uniqueId === c.uniqueId; });
+        if (existing >= 0) mergedCables[existing] = cableData; else mergedCables.push(cableData);
+    }
+    return mergedObjs.concat(mergedCables);
+}
+
 function broadcastSyncClients() {
     const list = [];
     wss.clients.forEach(client => {
@@ -338,10 +389,11 @@ wss.on('connection', (ws, req) => {
             if (msg.type !== 'state' || !Array.isArray(msg.data)) return;
             var justConnected = (Date.now() - (ws.connectedAt || 0)) < 4000;
             if (!justConnected) {
-                syncCurrentState = { clientId: msg.clientId || clientId, data: msg.data };
+                syncCurrentState.data = mergeMapState(syncCurrentState.data, msg.data);
+                syncCurrentState.clientId = msg.clientId || clientId;
                 wss.clients.forEach(client => {
                     if (client !== ws && client.readyState === WebSocket.OPEN) {
-                        client.send(JSON.stringify({ type: 'state', clientId: syncCurrentState.clientId, data: msg.data }));
+                        client.send(JSON.stringify({ type: 'state', clientId: syncCurrentState.clientId, data: syncCurrentState.data }));
                     }
                 });
                 scheduleSyncWrite();
