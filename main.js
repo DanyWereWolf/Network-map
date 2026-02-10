@@ -2910,19 +2910,24 @@ function updateConnectedCables(obj) {
     });
     
     cables.forEach(cable => {
+        if (!cable.geometry) return;
         var points = cable.properties.get('points');
         if (Array.isArray(points) && points.length > 2) {
             try {
-                var coords = points.map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; }).filter(Boolean);
+                var coords = points
+                    .map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; })
+                    .filter(function(c) { return c && Array.isArray(c) && c.length >= 2; });
                 if (coords.length >= 2) cable.geometry.setCoordinates(coords);
             } catch (e) {}
         } else {
-            const fromObj = cable.properties.get('from');
-            const toObj = cable.properties.get('to');
+            var fromObj = cable.properties.get('from');
+            var toObj = cable.properties.get('to');
             if (!fromObj || !toObj || !fromObj.geometry || !toObj.geometry) return;
-            const fromCoords = fromObj.geometry.getCoordinates();
-            const toCoords = toObj.geometry.getCoordinates();
-            cable.geometry.setCoordinates([fromCoords, toCoords]);
+            try {
+                var fromCoords = fromObj.geometry.getCoordinates();
+                var toCoords = toObj.geometry.getCoordinates();
+                if (fromCoords && toCoords) cable.geometry.setCoordinates([fromCoords, toCoords]);
+            } catch (e) {}
         }
     });
 }
@@ -3322,14 +3327,34 @@ function geoToClient(geoCoord) {
     }
 }
 
+/** Привести геометрию кабеля к плоскому массиву [[lat, lon], ...] для setCoordinates. */
+function normalizeCableGeometry(geom) {
+    if (!Array.isArray(geom) || geom.length < 2) return null;
+    var flat = [];
+    function add(c) {
+        if (Array.isArray(c) && c.length >= 2 && typeof c[0] === 'number' && typeof c[1] === 'number') {
+            flat.push([c[0], c[1]]);
+        }
+    }
+    for (var i = 0; i < geom.length; i++) {
+        var p = geom[i];
+        if (Array.isArray(p) && p.length >= 2) {
+            if (typeof p[0] === 'number') add(p);
+            else if (Array.isArray(p[0])) for (var j = 0; j < p.length; j++) add(p[j]);
+        }
+    }
+    return flat.length >= 2 ? flat : null;
+}
+
 /** По геометрии кабеля найти упорядоченный список объектов (для восстановления кабеля через опоры). Соседние дубликаты убираются. */
 function findObjectsAtGeometry(refs, geometry, tolerance) {
-    if (!Array.isArray(refs) || !Array.isArray(geometry) || geometry.length < 2) return null;
+    var geom = normalizeCableGeometry(geometry) || (Array.isArray(geometry) ? geometry : null);
+    if (!Array.isArray(refs) || !geom || geom.length < 2) return null;
     tolerance = tolerance || 0.0003;
     var points = [];
     var last = null;
-    for (var g = 0; g < geometry.length; g++) {
-        var coord = geometry[g];
+    for (var g = 0; g < geom.length; g++) {
+        var coord = geom[g];
         if (!coord || coord.length < 2) continue;
         var best = null, bestDist = tolerance;
         for (var r = 0; r < refs.length; r++) {
@@ -3418,14 +3443,15 @@ function serializeOneObject(obj) {
 function getSerializedData() {
     return objects.map(obj => {
         const props = obj.properties.getAll();
-        const geometry = obj.geometry.getCoordinates();
+        var geometry = obj.geometry.getCoordinates();
         if (props.type === 'cable') {
+            var cableGeom = normalizeCableGeometry(geometry) || geometry;
             const result = {
                 type: 'cable',
                 cableType: props.cableType,
                 from: objects.indexOf(props.from),
                 to: objects.indexOf(props.to),
-                geometry: geometry
+                geometry: cableGeom
             };
             if (props.uniqueId) result.uniqueId = props.uniqueId;
             if (props.distance !== undefined) result.distance = props.distance;
@@ -3486,6 +3512,7 @@ function undoLast() {
         if (!window._redoStack) window._redoStack = [];
         window._redoStack.push(redoState);
         if (window._redoStack.length > MAX_UNDO_LEVELS) window._redoStack.shift();
+        saveData();
         if (typeof showNotification === 'function') showNotification('Отмена выполнена');
         updateUndoRedoButtons();
     } catch (err) {}
@@ -3500,6 +3527,7 @@ function redoLast() {
         if (!window._undoStack) window._undoStack = [];
         window._undoStack.push(undoState);
         if (window._undoStack.length > MAX_UNDO_LEVELS) window._undoStack.shift();
+        saveData();
         if (typeof showNotification === 'function') showNotification('Повтор выполнена');
         updateUndoRedoButtons();
     } catch (err) {}
@@ -3747,10 +3775,15 @@ function applyRemoteStateMerged(data) {
             existingCable.properties.set('from', fromObj);
             existingCable.properties.set('to', toObj);
             existingCable.properties.set('points', pointsArr);
-            if (existingCable.geometry && item.geometry && item.geometry.length >= 2) {
-                existingCable.geometry.setCoordinates(item.geometry);
-            } else if (existingCable.geometry && pointsArr.length >= 2) {
-                existingCable.geometry.setCoordinates(pointsArr.map(function(p) { return p.geometry.getCoordinates(); }));
+            if (existingCable.geometry) {
+                var coordsToSet = normalizeCableGeometry(item.geometry);
+                if (coordsToSet && coordsToSet.length >= 2) {
+                    existingCable.geometry.setCoordinates(coordsToSet);
+                } else if (pointsArr.length >= 2) {
+                    try {
+                        existingCable.geometry.setCoordinates(pointsArr.map(function(p) { return p.geometry.getCoordinates(); }));
+                    } catch (e) {}
+                }
             }
             if (item.distance !== undefined) existingCable.properties.set('distance', item.distance);
             if (item.cableName != null) existingCable.properties.set('cableName', item.cableName);
@@ -3767,7 +3800,8 @@ function applyRemoteStateMerged(data) {
                 return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId;
             });
             if (cable) {
-                if (item.geometry && item.geometry.length >= 2) cable.geometry.setCoordinates(item.geometry);
+                var coordsToSet = normalizeCableGeometry(item.geometry);
+                if (cable.geometry && coordsToSet && coordsToSet.length >= 2) cable.geometry.setCoordinates(coordsToSet);
                 if (item.distance !== undefined) cable.properties.set('distance', item.distance);
                 if (item.cableName != null) cable.properties.set('cableName', item.cableName);
             }
@@ -3787,8 +3821,16 @@ function applyRemoteStateMerged(data) {
             var cable = objects.find(function(o) {
                 return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId;
             });
-            if (cable && cable.geometry && item.geometry && item.geometry.length >= 2) {
-                cable.geometry.setCoordinates(item.geometry);
+            if (!cable || !cable.geometry) return;
+            var coords = normalizeCableGeometry(item.geometry);
+            if (coords && coords.length >= 2) cable.geometry.setCoordinates(coords);
+            else {
+                var pts = cable.properties.get('points');
+                if (Array.isArray(pts) && pts.length >= 2) {
+                    try {
+                        cable.geometry.setCoordinates(pts.map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; }).filter(Boolean));
+                    } catch (e) {}
+                }
             }
         });
         updateCableVisualization();
@@ -3870,7 +3912,8 @@ function applyOperationToMap(op) {
     if (op.type === 'update_cable' && op.uniqueId != null && op.data) {
         var cable = objects.find(function(o) { return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === op.uniqueId; });
         if (cable) {
-            if (op.data.geometry && cable.geometry) cable.geometry.setCoordinates(op.data.geometry);
+            var opCoords = normalizeCableGeometry(op.data.geometry);
+            if (cable.geometry && opCoords && opCoords.length >= 2) cable.geometry.setCoordinates(opCoords);
             if (op.data.distance !== undefined) cable.properties.set('distance', op.data.distance);
             if (op.data.cableName != null) cable.properties.set('cableName', op.data.cableName);
             updateAllNodeConnectionLines();
@@ -3937,9 +3980,8 @@ function importData(data, opts) {
                     obj.properties.get('uniqueId') === item.uniqueId
                 );
                 if (cable) {
-                    if (item.geometry && item.geometry.length >= 2) {
-                        cable.geometry.setCoordinates(item.geometry);
-                    }
+                    var coordsToSet = normalizeCableGeometry(item.geometry);
+                    if (cable.geometry && coordsToSet && coordsToSet.length >= 2) cable.geometry.setCoordinates(coordsToSet);
                     // Обновляем расстояние для загруженного кабеля, если оно не было сохранено
                     if (!cable.properties.get('distance')) {
                         const fromCoords = fromObj.geometry.getCoordinates();
@@ -7060,10 +7102,14 @@ function getCableGroups() {
             const toObj = obj.properties.get('to');
             
             if (fromObj && toObj) {
+                var fromCoords, toCoords;
+                try {
+                    fromCoords = fromObj.geometry && fromObj.geometry.getCoordinates();
+                    toCoords = toObj.geometry && toObj.geometry.getCoordinates();
+                } catch (e) { return; }
+                if (!fromCoords || !toCoords || fromCoords.length < 2 || toCoords.length < 2) return;
                 // Создаем уникальный ключ для пары объектов
                 // Используем сами объекты, но упорядочиваем их для консистентности
-                const fromCoords = fromObj.geometry.getCoordinates();
-                const toCoords = toObj.geometry.getCoordinates();
                 
                 // Сортируем координаты для создания уникального ключа (независимо от направления)
                 const sorted = [fromCoords, toCoords].sort((a, b) => {
