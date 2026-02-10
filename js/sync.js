@@ -173,21 +173,8 @@
                 }
                 if (msg.type === 'state' && Array.isArray(msg.data) && typeof applyRemoteState === 'function') {
                     var data = msg.data;
-                    var hasPending = !!pendingState;
-                    if (hasPending) {
-                        var applyServer = confirm('Карта обновлена с сервера. Применить изменения с сервера?\n(Ваши несохранённые правки будут заменены.)');
-                        if (applyServer) {
-                            if (sendTimer) { clearTimeout(sendTimer); sendTimer = null; }
-                            pendingState = null;
-                            applyRemoteState(data);
-                            updateSyncUIStatus(true);
-                            if (typeof window.hideSyncRequiredOverlay === 'function') window.hideSyncRequiredOverlay();
-                        } else {
-                            forceSendState();
-                        }
-                        return;
-                    }
-                    updateSyncUIStatus(true, 'Обновление карты…');
+                    if (sendTimer) { clearTimeout(sendTimer); sendTimer = null; }
+                    pendingState = null;
                     setTimeout(function() {
                         try {
                             applyRemoteState(data);

@@ -339,12 +339,12 @@ wss.on('connection', (ws, req) => {
             var justConnected = (Date.now() - (ws.connectedAt || 0)) < 4000;
             if (!justConnected) {
                 syncCurrentState = { clientId: msg.clientId || clientId, data: msg.data };
-                try { db.setMapData(msg.data); } catch (e) {}
                 wss.clients.forEach(client => {
                     if (client !== ws && client.readyState === WebSocket.OPEN) {
                         client.send(JSON.stringify({ type: 'state', clientId: syncCurrentState.clientId, data: msg.data }));
                     }
                 });
+                scheduleSyncWrite();
             }
         } catch (e) {}
     });
@@ -356,6 +356,19 @@ wss.on('connection', (ws, req) => {
         broadcastCursors();
     });
 });
+
+var syncWriteTimer = null;
+var SYNC_WRITE_DELAY_MS = 1800;
+
+function scheduleSyncWrite() {
+    if (syncWriteTimer) clearTimeout(syncWriteTimer);
+    syncWriteTimer = setTimeout(function() {
+        syncWriteTimer = null;
+        try {
+            db.setMapData(syncCurrentState.data);
+        } catch (e) {}
+    }, SYNC_WRITE_DELAY_MS);
+}
 
 var lastCursorsBroadcast = 0;
 var cursorsBroadcastTimer = null;
