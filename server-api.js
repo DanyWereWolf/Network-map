@@ -271,9 +271,10 @@ const syncClientNames = new Map(); // clientId -> displayName
 
 const syncClientUserIds = new Map(); // clientId -> userId (number or string)
 
-/** Слияние входящего состояния с текущим по uniqueId — правки разных пользователей не затирают друг друга */
+/** Слияние входящего состояния с текущим по uniqueId — правки разных пользователей не затирают друг друга. Пустой массив = очистка карты, сохраняем его. */
 function mergeMapState(current, incoming) {
-    if (!Array.isArray(incoming) || incoming.length === 0) return current;
+    if (!Array.isArray(incoming)) return current;
+    if (incoming.length === 0) return incoming;
     if (!Array.isArray(current) || current.length === 0) return incoming;
     var currentObjs = current.filter(function(i) { return i.type !== 'cable'; });
     var currentCables = current.filter(function(i) { return i.type === 'cable'; });
