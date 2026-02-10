@@ -80,6 +80,7 @@
         pendingApplyState = null;
         try {
             if (typeof applyRemoteState === 'function') applyRemoteState(data);
+            if (typeof window.clearUndoRedoStacks === 'function') window.clearUndoRedoStacks();
             updateSyncUIStatus(true);
             if (typeof window.hideSyncRequiredOverlay === 'function') window.hideSyncRequiredOverlay();
         } catch (e) { updateSyncUIStatus(true); }

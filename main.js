@@ -662,6 +662,9 @@ function init() {
         center: [54.663609, 86.162243],
         zoom: 15
     });
+    // Отмена/повтор только в рамках сессии — при загрузке страницы история пустая
+    window._undoStack = [];
+    window._redoStack = [];
     
     // Имена групп подгружаются с сервера в loadData() из /api/settings
     
@@ -2480,6 +2483,7 @@ function createObject(type, name, coords, options = {}) {
         if (data) window.syncSendOp({ type: 'add_object', data: data });
     }
     saveData();
+    if (typeof window.syncForceSendState === 'function') window.syncForceSendState();
     updateStats();
     logAction(ActionTypes.CREATE_OBJECT, {
         objectType: type,
@@ -2525,6 +2529,7 @@ function deleteObject(obj, opts) {
             window.syncSendOp({ type: 'delete_object', uniqueId: objUniqueId });
         }
         saveData();
+        if (typeof window.syncForceSendState === 'function') window.syncForceSendState();
         logAction(ActionTypes.DELETE_OBJECT, {
             objectType: objType,
             name: objName
@@ -2863,6 +2868,7 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     
     if (!skipSync) {
         saveData();
+        if (typeof window.syncForceSendState === 'function') window.syncForceSendState();
         if (typeof window.syncSendOp === 'function') {
             const fromUid = points[0].properties.get('uniqueId');
             const toUid = points[points.length - 1].properties.get('uniqueId');
@@ -3552,6 +3558,13 @@ function redoLast() {
 }
 window.undoLast = undoLast;
 window.redoLast = redoLast;
+/** Очистить историю отмены/повтора (вызывается при получении состояния по синхронизации). */
+function clearUndoRedoStacks() {
+    window._undoStack = [];
+    window._redoStack = [];
+    updateUndoRedoButtons();
+}
+window.clearUndoRedoStacks = clearUndoRedoStacks;
 function updateUndoRedoButtons() {
     var undoBtn = document.getElementById('undoBtn');
     var redoBtn = document.getElementById('redoBtn');
