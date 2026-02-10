@@ -152,7 +152,10 @@ function initUserUI() {
     if (editModeBtn && currentUser.role !== 'admin') {
         editModeBtn.style.display = 'none';
     }
-    
+    // Скрываем кнопки отмены/повтора для обычных пользователей
+    var undoRedoEl = document.querySelector('.header-undo-redo');
+    if (undoRedoEl) undoRedoEl.style.display = currentUser.role === 'admin' ? 'flex' : 'none';
+
     // Скрываем секции редактирования для обычных пользователей
     if (currentUser.role !== 'admin') {
         hideAdminOnlyElements();
@@ -784,19 +787,23 @@ function setupEventListeners() {
         // В полях ввода не перехватываем Ctrl+Z (стандартная отмена ввода)
         if (inInput) return;
         if (e.ctrlKey && (e.key === 'z' || e.key === 'Z')) {
-            e.preventDefault();
-            if (objectPlacementMode) { cancelObjectPlacement(); return; }
-            if (currentCableTool) {
-                var cableBtn = document.getElementById('addCable');
-                if (cableBtn) cableBtn.click();
-                return;
+            if (canEdit() && isEditMode) {
+                e.preventDefault();
+                if (objectPlacementMode) { cancelObjectPlacement(); return; }
+                if (currentCableTool) {
+                    var cableBtn = document.getElementById('addCable');
+                    if (cableBtn) cableBtn.click();
+                    return;
+                }
+                if (typeof undoLast === 'function') undoLast();
             }
-            if (typeof undoLast === 'function') undoLast();
             return;
         }
         if (e.ctrlKey && (e.key === 'y' || e.key === 'Y')) {
-            e.preventDefault();
-            if (typeof redoLast === 'function') redoLast();
+            if (canEdit() && isEditMode) {
+                e.preventDefault();
+                if (typeof redoLast === 'function') redoLast();
+            }
         }
     });
 
@@ -2201,11 +2208,18 @@ function updateUIForMode() {
 
 function updateEditControls() {
     const editControls = document.querySelectorAll('#addObject, #addCable, #clearAll');
-    
     editControls.forEach(control => {
         control.style.opacity = isEditMode ? '1' : '0.5';
         control.style.pointerEvents = isEditMode ? 'all' : 'none';
     });
+    var undoRedoEl = document.querySelector('.header-undo-redo');
+    if (undoRedoEl) {
+        undoRedoEl.style.opacity = isEditMode ? '1' : '0.5';
+        undoRedoEl.style.pointerEvents = isEditMode ? 'all' : 'none';
+        var u = document.getElementById('undoBtn'), r = document.getElementById('redoBtn');
+        if (u) u.disabled = !isEditMode || !window._undoStack || !window._undoStack.length;
+        if (r) r.disabled = !isEditMode || !window._redoStack || !window._redoStack.length;
+    }
 }
 
 function makeObjectsDraggable() {
@@ -3504,6 +3518,7 @@ function pushUndoState() {
 }
 /** Отменить последнее действие. */
 function undoLast() {
+    if (!canEdit() || !isEditMode) return;
     if (!window._undoStack || !window._undoStack.length) return;
     try {
         var redoState = getSerializedData();
@@ -3513,12 +3528,14 @@ function undoLast() {
         window._redoStack.push(redoState);
         if (window._redoStack.length > MAX_UNDO_LEVELS) window._redoStack.shift();
         saveData();
+        if (typeof window.syncForceSendState === 'function') window.syncForceSendState();
         if (typeof showNotification === 'function') showNotification('Отмена выполнена');
         updateUndoRedoButtons();
     } catch (err) {}
 }
 /** Повторить отменённое действие. */
 function redoLast() {
+    if (!canEdit() || !isEditMode) return;
     if (!window._redoStack || !window._redoStack.length) return;
     try {
         var undoState = getSerializedData();
@@ -3528,6 +3545,7 @@ function redoLast() {
         window._undoStack.push(undoState);
         if (window._undoStack.length > MAX_UNDO_LEVELS) window._undoStack.shift();
         saveData();
+        if (typeof window.syncForceSendState === 'function') window.syncForceSendState();
         if (typeof showNotification === 'function') showNotification('Повтор выполнена');
         updateUndoRedoButtons();
     } catch (err) {}
