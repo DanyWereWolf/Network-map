@@ -325,9 +325,10 @@ body {
 }
 
 .sidebar-toggle .arrow-icon {
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
     stroke: var(--text-secondary);
+    stroke-width: 2.5;
 }
 
 .sidebar-toggle .arrow-right {
@@ -344,6 +345,16 @@ body.sidebar-collapsed .sidebar {
 body.sidebar-collapsed .sidebar-toggle {
     left: 0;
     transform: translate(-50%, -50%);
+    background: var(--bg-card);
+    border: 2px solid var(--accent-primary);
+    box-shadow: var(--shadow-lg);
+}
+
+body.sidebar-collapsed .sidebar-toggle .arrow-icon {
+    stroke: var(--accent-primary);
+    stroke-width: 3;
+    width: 22px;
+    height: 22px;
 }
 
 body.sidebar-collapsed .sidebar-toggle .arrow-left {
