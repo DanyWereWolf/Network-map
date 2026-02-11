@@ -1,7 +1,8 @@
 /**
  * Система истории изменений
+ * История хранится без ограничений по количеству записей
  */
-var MAX_HISTORY_ENTRIES = 500;
+var MAX_HISTORY_ENTRIES = Infinity;
 
 var ActionTypes = {
     CREATE_OBJECT: 'create_object',
@@ -71,6 +72,28 @@ ActionIcons[ActionTypes.USER_REJECTED] = '❌';
 ActionIcons[ActionTypes.USER_DELETED] = '🚫';
 
 var _historyMemory = [];
+var HISTORY_SEEN_STORAGE_KEY = 'networkMap:lastHistorySeenAt';
+
+function getLastHistorySeenAt() {
+    try {
+        if (typeof localStorage === 'undefined') return null;
+        var raw = localStorage.getItem(HISTORY_SEEN_STORAGE_KEY);
+        if (!raw) return null;
+        var dt = new Date(raw);
+        return isNaN(dt.getTime()) ? null : dt;
+    } catch (e) {
+        return null;
+    }
+}
+
+function setLastHistorySeenAt(date) {
+    try {
+        if (typeof localStorage === 'undefined') return;
+        localStorage.setItem(HISTORY_SEEN_STORAGE_KEY, date.toISOString());
+    } catch (e) {
+        // игнорируем ошибки localStorage
+    }
+}
 
 function getHistory() {
     return _historyMemory.slice ? _historyMemory.slice() : [];
@@ -122,12 +145,13 @@ function updateHistoryBadge() {
     var badge = document.getElementById('historyBadge');
     if (badge) {
         var history = getHistory();
-        var today = new Date();
-        var todayCount = history.filter(function(h) {
-            return new Date(h.timestamp).toDateString() === today.toDateString();
-        }).length;
-        badge.textContent = todayCount;
-        badge.style.display = todayCount > 0 ? 'flex' : 'none';
+        var lastSeenAt = getLastHistorySeenAt();
+        var unreadCount = lastSeenAt
+            ? history.filter(function(h) { return new Date(h.timestamp) > lastSeenAt; }).length
+            : history.length;
+        var displayCount = unreadCount > 999 ? '999+' : unreadCount;
+        badge.textContent = displayCount;
+        badge.style.display = unreadCount > 0 ? 'flex' : 'none';
     }
 }
 
@@ -153,6 +177,9 @@ function openHistoryModal() {
     if (modal) {
         modal.style.display = 'block';
         renderHistoryList();
+        // При открытии считаем все события прочитанными, но сами записи не удаляем
+        setLastHistorySeenAt(new Date());
+        updateHistoryBadge();
     }
 }
 
