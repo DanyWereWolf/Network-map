@@ -294,7 +294,7 @@ body {
     z-index: 1000;
     flex-shrink: 0;
     box-shadow: var(--shadow-lg);
-    transition: background var(--transition-normal), border-color var(--transition-normal), transform var(--transition-normal);
+    transition: background var(--transition-normal), border-color var(--transition-normal), width var(--transition-normal);
 }
 
 /* Кнопка сворачивания боковой панели */
@@ -335,7 +335,10 @@ body {
 }
 
 body.sidebar-collapsed .sidebar {
-    transform: translateX(-100%);
+    width: 0;
+    padding: 0;
+    border-right: none;
+    box-shadow: none;
 }
 
 body.sidebar-collapsed .sidebar-toggle {
@@ -1280,7 +1283,7 @@ button {
     position: relative;
     flex: 1;
     min-height: 0;
-    width: calc(100% - 360px);
+    width: calc(100% - var(--sidebar-width));
 }
 .map {
     flex: 1;
@@ -2302,7 +2305,9 @@ button {
     }
     
     body.sidebar-collapsed .sidebar {
-        transform: translateY(-100%);
+        max-height: 0;
+        padding: 0;
+        border-bottom: none;
     }
     
     body.sidebar-collapsed .sidebar-toggle {

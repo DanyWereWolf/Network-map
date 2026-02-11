@@ -1887,6 +1887,12 @@ function highlightObjectOnHover(obj, e) {
         return;
     }
     
+    // Для узлов не меняем основную иконку, подсвечиваем только кругом вокруг
+    if (type === 'node') {
+        showHoverCircle(obj, e);
+        return;
+    }
+    
     // Создаем подсвеченную версию иконки (с голубой обводкой)
     let iconSvg;
     
@@ -2031,12 +2037,30 @@ function showHoverCircle(obj, e) {
         const zoom = myMap.getZoom();
         const radius = zoom < 12 ? 0.00025 : (zoom < 15 ? 0.00018 : 0.00012);
         
-        // Группы: круг поверх метки (zIndex 2000), толстая яркая обводка
+        // Цвет подсветки: для узлов — по типу узла, для остальных — синий
+        let fillColor = 'rgba(59, 130, 246, 0.15)';
+        let strokeColor = '#3b82f6';
+        let strokeWidth = 2.5;
         const isGroup = type === 'crossGroup' || type === 'nodeGroup';
+        
+        if (type === 'node') {
+            const nodeKind = obj.properties.get('nodeKind') || 'network';
+            if (nodeKind === 'aggregation') {
+                strokeColor = '#ef4444';
+                fillColor = 'rgba(239, 68, 68, 0.18)';
+            } else {
+                strokeColor = '#22c55e';
+                fillColor = 'rgba(34, 197, 94, 0.18)';
+            }
+        } else if (isGroup) {
+            fillColor = 'rgba(59, 130, 246, 0.25)';
+            strokeWidth = 4;
+        }
+        
         hoverCircle = new ymaps.Circle([coords, radius], {}, {
-            fillColor: isGroup ? 'rgba(59, 130, 246, 0.25)' : 'rgba(59, 130, 246, 0.15)',
-            strokeColor: '#3b82f6',
-            strokeWidth: isGroup ? 4 : 2.5,
+            fillColor: fillColor,
+            strokeColor: strokeColor,
+            strokeWidth: strokeWidth,
             strokeStyle: 'solid',
             zIndex: isGroup ? 9999 : 999
         });
