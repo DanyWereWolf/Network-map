@@ -193,6 +193,9 @@ function initUserUI() {
     setupHelpModalHandlers();
     setupUpdatesModalHandlers();
     
+    // Переключатель боковой панели
+    setupSidebarToggle();
+    
     // Обновляем счётчик истории
     updateHistoryBadge();
 }
@@ -790,12 +793,14 @@ function setupEventListeners() {
         const nameInputGroup = document.getElementById('objectNameGroup');
         const sleeveSettingsGroup = document.getElementById('sleeveSettingsGroup');
         const crossSettingsGroup = document.getElementById('crossSettingsGroup');
+        const nodeSettingsGroup = document.getElementById('nodeSettingsGroup');
         const type = this.value;
         
         // Показываем имя для узлов и кроссов
         nameInputGroup.style.display = (type === 'node' || type === 'cross') ? 'block' : 'none';
         sleeveSettingsGroup.style.display = type === 'sleeve' ? 'block' : 'none';
         crossSettingsGroup.style.display = type === 'cross' ? 'block' : 'none';
+        nodeSettingsGroup.style.display = type === 'node' ? 'block' : 'none';
         
         // Обновляем label для имени
         const nameLabel = nameInputGroup.querySelector('label');
@@ -819,6 +824,11 @@ function setupEventListeners() {
             } else {
                 currentPlacementName = '';
             }
+            // Обновляем тип узла в режиме размещения
+            if (newType === 'node') {
+                const nodeKindSelect = document.getElementById('nodeKind');
+                currentPlacementNodeKind = nodeKindSelect ? nodeKindSelect.value : 'network';
+            }
         }
     });
     
@@ -828,6 +838,16 @@ function setupEventListeners() {
         objectNameInput.addEventListener('input', function() {
             if (objectPlacementMode && currentPlacementType === 'node') {
                 currentPlacementName = this.value.trim();
+            }
+        });
+    }
+    
+    // Обновление типа узла при изменении селекта (если режим размещения активен)
+    const nodeKindSelect = document.getElementById('nodeKind');
+    if (nodeKindSelect) {
+        nodeKindSelect.addEventListener('change', function() {
+            if (objectPlacementMode && currentPlacementType === 'node') {
+                currentPlacementNodeKind = this.value || 'network';
             }
         });
     }
@@ -1213,6 +1233,7 @@ function goToSearchResult(result) {
 let objectPlacementMode = false;
 let currentPlacementType = null;
 let currentPlacementName = null;
+let currentPlacementNodeKind = 'network';
 
 function handleAddObject() {
     if (!isEditMode) {
@@ -1250,6 +1271,12 @@ function handleAddObject() {
             }
             showWarning(type === 'cross' ? 'Введите имя кросса' : 'Введите имя узла', 'Требуется имя');
             return;
+        }
+        
+        // Сохраняем выбранный тип узла на время режима размещения
+        if (type === 'node') {
+            const nodeKindSelect = document.getElementById('nodeKind');
+            currentPlacementNodeKind = nodeKindSelect ? nodeKindSelect.value : 'network';
         }
         
         objectPlacementMode = true;
@@ -1458,9 +1485,12 @@ function handleMapClick(e) {
         if (type === 'node') {
             // Для узлов используем сохраненное имя или текущее из формы
             const name = currentPlacementName || document.getElementById('objectName').value.trim();
-            createObject(type, name || '', coords);
+            const nodeKindSelect = document.getElementById('nodeKind');
+            const nodeKind = currentPlacementNodeKind || (nodeKindSelect ? nodeKindSelect.value : 'network');
+            createObject(type, name || '', coords, { nodeKind: nodeKind });
             // Обновляем сохраненное имя для следующего размещения (даже если пустое)
             currentPlacementName = name || '';
+            currentPlacementNodeKind = nodeKind;
         } else if (type === 'sleeve') {
             // Для муфт получаем настройки из формы
             const sleeveType = document.getElementById('sleeveType').value;
@@ -1725,6 +1755,11 @@ function updatePhantomPlacemark(type, coords) {
     
     // Создаем новый фантомный объект
     let iconSvg, color;
+    let nodeKind = 'network';
+    if (type === 'node') {
+        const nodeKindSelect = document.getElementById('nodeKind');
+        nodeKind = currentPlacementNodeKind || (nodeKindSelect ? nodeKindSelect.value : 'network');
+    }
     
     switch(type) {
         case 'support':
@@ -1742,7 +1777,7 @@ function updatePhantomPlacemark(type, coords) {
             </svg>`;
             break;
         case 'node':
-            color = '#22c55e';
+            color = (nodeKind === 'aggregation') ? '#ef4444' : '#22c55e';
             iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="16" cy="16" r="14" fill="${color}" stroke="white" stroke-width="2.5" opacity="0.6"/>
                 <circle cx="16" cy="16" r="6" fill="white" opacity="0.5"/>
@@ -2211,6 +2246,10 @@ function makeObjectsNonDraggable() {
     nodeGroupPlacemarks.forEach(pm => { if (pm.options) pm.options.set('draggable', false); });
 }
 
+function getNodeColorByKind(nodeKind) {
+    return nodeKind === 'aggregation' ? '#ef4444' : '#22c55e';
+}
+
 function createObject(type, name, coords, options = {}) {
     let iconSvg, color, balloonContent;
     
@@ -2251,8 +2290,9 @@ function createObject(type, name, coords, options = {}) {
             balloonContent = `Оптический кросс: ${name}`;
             break;
         case 'node':
-            // Узел сети - зеленый круг с иконкой
-            color = '#22c55e';
+            // Узел сети / узел агрегации - цвет зависит от типа
+            const nodeKind = options.nodeKind || 'network';
+            color = getNodeColorByKind(nodeKind);
             iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="16" cy="16" r="14" fill="${color}" stroke="white" stroke-width="2.5"/>
                 <circle cx="16" cy="16" r="6" fill="white" opacity="0.95"/>
@@ -2299,6 +2339,11 @@ function createObject(type, name, coords, options = {}) {
         name: name,
         balloonContent: balloonContent
     };
+    
+    // Сохраняем тип узла (для смены цвета и отображения в группах)
+    if (type === 'node') {
+        placemarkProperties.nodeKind = (options.nodeKind || 'network');
+    }
     
     // Сохраняем настройки муфты
     if (type === 'sleeve' && options.sleeveType) {
@@ -3508,6 +3553,9 @@ function getSerializedData() {
             if (props.crossPorts) result.crossPorts = props.crossPorts;
             if (props.nodeConnections) result.nodeConnections = props.nodeConnections;
         }
+        if (props.type === 'node') {
+            if (props.nodeKind) result.nodeKind = props.nodeKind;
+        }
         if (props.netboxId) result.netboxId = props.netboxId;
         if (props.netboxUrl) result.netboxUrl = props.netboxUrl;
         if (props.netboxDeviceType) result.netboxDeviceType = props.netboxDeviceType;
@@ -3990,7 +4038,7 @@ function importData(data, opts) {
 
 
 function createObjectFromData(data, opts) {
-    const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, netboxId, netboxUrl, netboxDeviceType, netboxSite, sleeveType, maxFibers, crossPorts, nodeConnections, uniqueId } = data;
+    const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, netboxId, netboxUrl, netboxDeviceType, netboxSite, sleeveType, maxFibers, crossPorts, nodeConnections, uniqueId, nodeKind } = data;
     
     let iconSvg, color, balloonContent;
     
@@ -4031,8 +4079,9 @@ function createObjectFromData(data, opts) {
             balloonContent = `Оптический кросс: ${name}`;
             break;
         case 'node':
-            // Узел сети - зеленый круг с иконкой
-            color = '#22c55e';
+            // Узел сети / узел агрегации - цвет зависит от типа
+            const effectiveNodeKind = nodeKind || 'network';
+            color = getNodeColorByKind(effectiveNodeKind);
             iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="16" cy="16" r="14" fill="${color}" stroke="white" stroke-width="2.5"/>
                 <circle cx="16" cy="16" r="6" fill="white" opacity="0.95"/>
@@ -4079,6 +4128,10 @@ function createObjectFromData(data, opts) {
         name: name,
         balloonContent: balloonContent
     }, placemarkOptions);
+    
+    if (type === 'node') {
+        placemark.properties.set('nodeKind', nodeKind || 'network');
+    }
     
     // Для узлов и кроссов добавляем подпись с названием под маркером
     if (type === 'node' || type === 'cross') {
@@ -4459,6 +4512,7 @@ function showObjectInfo(obj) {
         const netboxUrl = obj.properties.get('netboxUrl');
         const netboxDeviceType = obj.properties.get('netboxDeviceType');
         const netboxSite = obj.properties.get('netboxSite');
+        const nodeKind = obj.properties.get('nodeKind') || 'network';
         
         // Секция редактирования для узлов (только в режиме редактирования)
         if (isEditMode) {
@@ -4467,6 +4521,13 @@ function showObjectInfo(obj) {
             html += '<div class="form-group" style="margin-bottom: 12px;">';
             html += '<label for="editNodeName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название узла</label>';
             html += `<input type="text" id="editNodeName" class="form-input" value="${escapeHtml(name)}" placeholder="Введите название узла">`;
+            html += '</div>';
+            html += '<div class="form-group" style="margin-bottom: 12px;">';
+            html += '<label for="editNodeKind" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Тип узла</label>';
+            html += '<select id="editNodeKind" class="form-select">';
+            html += `<option value="network"${nodeKind === 'network' ? ' selected' : ''}>Узел сети (зелёный)</option>`;
+            html += `<option value="aggregation"${nodeKind === 'aggregation' ? ' selected' : ''}>Узел агрегации (красный)</option>`;
+            html += '</select>';
             html += '</div>';
             html += '<button id="saveNodeEdit" class="btn-primary" style="width: 100%; padding: 10px 14px; margin-top: 8px;">';
             html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline; margin-right: 8px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>';
@@ -4762,6 +4823,9 @@ function setupEditAndDeleteListeners() {
             if (!currentModalObject) return;
             
             const newName = document.getElementById('editNodeName').value.trim();
+            const nodeKindSelect = document.getElementById('editNodeKind');
+            const newNodeKind = nodeKindSelect ? (nodeKindSelect.value || 'network') : (currentModalObject.properties.get('nodeKind') || 'network');
+            
             if (newName) {
                 // Обновляем имя узла
                 currentModalObject.properties.set('name', newName);
@@ -4769,13 +4833,18 @@ function setupEditAndDeleteListeners() {
                 
                 // Обновляем подпись на карте
                 updateNodeLabel(currentModalObject, newName);
-                
-                // Сохраняем данные
-                saveData();
-                
-                // Обновляем модальное окно
-                showObjectInfo(currentModalObject);
             }
+            
+            // Обновляем тип узла и его иконку
+            currentModalObject.properties.set('nodeKind', newNodeKind);
+            updateNodeIcon(currentModalObject);
+            updateNodeDisplay();
+            
+            // Сохраняем данные
+            saveData();
+            
+            // Обновляем модальное окно
+            showObjectInfo(currentModalObject);
         });
     }
     
@@ -4904,6 +4973,61 @@ function updateNodeLabel(placemark, name) {
             label.geometry.setCoordinates(coords);
         }
     }
+}
+
+function updateNodeIcon(placemark) {
+    if (!placemark || !placemark.properties) return;
+    const type = placemark.properties.get('type');
+    if (type !== 'node') return;
+    
+    const nodeKind = placemark.properties.get('nodeKind') || 'network';
+    const color = getNodeColorByKind(nodeKind);
+    
+    const iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="16" cy="16" r="14" fill="${color}" stroke="white" stroke-width="2.5"/>
+        <circle cx="16" cy="16" r="6" fill="white" opacity="0.95"/>
+        <circle cx="16" cy="16" r="3" fill="${color}"/>
+    </svg>`;
+    
+    const clickableSize = 44;
+    const iconSize = 32;
+    const iconOffset = (clickableSize - iconSize) / 2;
+    
+    const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
+    const clickableSvg = `<svg width="${clickableSize}" height="${clickableSize}" viewBox="0 0 ${clickableSize} ${clickableSize}" xmlns="http://www.w3.org/2000/svg">
+        <rect x="0" y="0" width="${clickableSize}" height="${clickableSize}" fill="transparent"/>
+        <g transform="translate(${iconOffset}, ${iconOffset})">
+            ${svgContent}
+        </g>
+    </svg>`;
+    
+    const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(clickableSvg)));
+    
+    placemark.options.set('iconImageHref', svgDataUrl);
+    placemark.options.set('iconImageSize', [clickableSize, clickableSize]);
+    placemark.options.set('iconImageOffset', [-clickableSize / 2, -clickableSize / 2]);
+}
+
+function setupSidebarToggle() {
+    const toggleBtn = document.getElementById('sidebarToggle');
+    if (!toggleBtn) return;
+    
+    toggleBtn.addEventListener('click', function() {
+        const body = document.body;
+        const collapsed = body.classList.toggle('sidebar-collapsed');
+        
+        toggleBtn.setAttribute('aria-label', collapsed ? 'Показать панель' : 'Скрыть панель');
+        toggleBtn.setAttribute('title', collapsed ? 'Показать панель' : 'Скрыть панель');
+        
+        // Обновляем размер карты после изменения ширины панели
+        if (typeof myMap !== 'undefined' && myMap && myMap.container) {
+            setTimeout(function() {
+                try {
+                    myMap.container.fitToViewport();
+                } catch (e) {}
+            }, 300);
+        }
+    });
 }
 
 function setupModalEventListeners() {
@@ -7389,12 +7513,15 @@ function updateNodeDisplay() {
                 return;
             }
             const names = nodes.map(c => c.properties.get('name') || 'Без имени');
-            const listHtml = nodes.map((c, i) =>
-                `<div class="node-group-item" data-index="${i}">` +
+            const listHtml = nodes.map((c, i) => {
+                const kind = c.properties.get('nodeKind') || 'network';
+                const color = getNodeColorByKind(kind);
+                return `<div class="node-group-item" data-index="${i}">` +
+                `<span class="group-item-color-dot" style="display:inline-block;width:10px;height:10px;border-radius:9999px;background:${color};margin-right:6px;border:1px solid rgba(0,0,0,0.1);vertical-align:middle;"></span>` +
                 `<span class="group-item-name">${escapeHtml(names[i])}</span>` +
                 (isEditMode ? `<button type="button" class="group-item-move" title="Вынести и переместить">Переместить</button>` : '') +
-                `</div>`
-            ).join('');
+                `</div>`;
+            }).join('');
             const nodeGroupNameRow = '<div class="group-name-row">' +
                 '<label class="group-name-label">Название группы</label>' +
                 '<div class="group-name-controls">' +

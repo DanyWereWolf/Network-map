@@ -193,6 +193,13 @@
                             <label for="objectName">Имя</label>
                             <input type="text" id="objectName" class="form-input" placeholder="Введите имя">
                         </div>
+                        <div class="form-group" id="nodeSettingsGroup" style="display: none;">
+                            <label for="nodeKind">Тип узла</label>
+                            <select id="nodeKind" class="form-select">
+                                <option value="network">Узел сети (зелёный)</option>
+                                <option value="aggregation">Узел агрегации (красный)</option>
+                            </select>
+                        </div>
                         <div class="form-group" id="crossSettingsGroup" style="display: none;">
                             <label for="crossPorts">Количество портов</label>
                             <select id="crossPorts" class="form-select">
@@ -513,6 +520,15 @@
                 </div>
             </div>
         </div>
+
+        <button id="sidebarToggle" class="sidebar-toggle" aria-label="Скрыть панель" title="Скрыть панель">
+            <svg class="arrow-icon arrow-left" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="15 6 9 12 15 18"></polyline>
+            </svg>
+            <svg class="arrow-icon arrow-right" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9 6 15 12 9 18"></polyline>
+            </svg>
+        </button>
 
         <div class="map-area-wrapper" id="mapAreaWrapper">
             <div id="map" class="map"></div>

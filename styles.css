@@ -294,7 +294,61 @@ body {
     z-index: 1000;
     flex-shrink: 0;
     box-shadow: var(--shadow-lg);
-    transition: background var(--transition-normal), border-color var(--transition-normal);
+    transition: background var(--transition-normal), border-color var(--transition-normal), transform var(--transition-normal);
+}
+
+/* Кнопка сворачивания боковой панели */
+.sidebar-toggle {
+    position: absolute;
+    top: 50%;
+    left: var(--sidebar-width);
+    transform: translate(-50%, -50%);
+    width: 28px;
+    height: 48px;
+    padding: 0;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    box-shadow: var(--shadow-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 1100;
+    transition: left var(--transition-normal), transform var(--transition-normal), box-shadow var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast), opacity var(--transition-fast);
+}
+
+.sidebar-toggle:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-lg);
+}
+
+.sidebar-toggle .arrow-icon {
+    width: 18px;
+    height: 18px;
+    stroke: var(--text-secondary);
+}
+
+.sidebar-toggle .arrow-right {
+    display: none;
+}
+
+body.sidebar-collapsed .sidebar {
+    transform: translateX(-100%);
+}
+
+body.sidebar-collapsed .sidebar-toggle {
+    left: 0;
+    transform: translate(-50%, -50%);
+}
+
+body.sidebar-collapsed .sidebar-toggle .arrow-left {
+    display: none;
+}
+
+body.sidebar-collapsed .sidebar-toggle .arrow-right {
+    display: block;
 }
 
 /* Переключатель темы */
@@ -2235,6 +2289,25 @@ button {
         width: 100%;
         flex: 1;
         min-height: 300px;
+    }
+    
+    .sidebar-toggle {
+        top: auto;
+        bottom: 0;
+        left: 50%;
+        transform: translate(-50%, 50%);
+        width: 60px;
+        height: 28px;
+        border-radius: 999px 999px 0 0;
+    }
+    
+    body.sidebar-collapsed .sidebar {
+        transform: translateY(-100%);
+    }
+    
+    body.sidebar-collapsed .sidebar-toggle {
+        bottom: 0;
+        transform: translate(-50%, 50%);
     }
     
     .sidebar-content {
