@@ -176,6 +176,7 @@ function openHistoryModal() {
     var modal = document.getElementById('historyModal');
     if (modal) {
         modal.style.display = 'block';
+        buildHistoryFilterOptions();
         renderHistoryList();
         // При открытии считаем все события прочитанными, но сами записи не удаляем
         setLastHistorySeenAt(new Date());
@@ -223,19 +224,107 @@ function formatHistoryDetails(entry) {
     }
 }
 
+function getHistoryFilterState() {
+    var userEl = document.getElementById('historyFilterUser');
+    var actionEl = document.getElementById('historyFilterAction');
+    var dateFromEl = document.getElementById('historyFilterDateFrom');
+    var dateToEl = document.getElementById('historyFilterDateTo');
+    var dateFilter = 'all';
+    var activeBtn = document.querySelector('.history-filter-btn.active');
+    if (activeBtn) dateFilter = activeBtn.getAttribute('data-filter') || 'all';
+    return {
+        user: userEl ? userEl.value : '',
+        actionType: actionEl ? actionEl.value : '',
+        dateFilter: dateFilter,
+        dateFrom: dateFromEl && dateFromEl.value ? dateFromEl.value : null,
+        dateTo: dateToEl && dateToEl.value ? dateToEl.value : null
+    };
+}
+
+function applyHistoryFiltersToList(history, state) {
+    var list = history;
+    if (state.user) {
+        list = list.filter(function(h) {
+            var u = h.user;
+            if (!u) return state.user === '__system__';
+            return (u.username === state.user) || ((u.fullName || u.username) === state.user);
+        });
+    }
+    if (state.actionType) {
+        list = list.filter(function(h) { return h.actionType === state.actionType; });
+    }
+    var today = new Date();
+    if (state.dateFilter === 'today') {
+        list = list.filter(function(h) { return new Date(h.timestamp).toDateString() === today.toDateString(); });
+    } else if (state.dateFilter === 'week') {
+        var weekAgo = new Date(today);
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        list = list.filter(function(h) { return new Date(h.timestamp) >= weekAgo; });
+    }
+    if (state.dateFrom) {
+        var from = new Date(state.dateFrom);
+        from.setHours(0, 0, 0, 0);
+        list = list.filter(function(h) { return new Date(h.timestamp) >= from; });
+    }
+    if (state.dateTo) {
+        var to = new Date(state.dateTo);
+        to.setHours(23, 59, 59, 999);
+        list = list.filter(function(h) { return new Date(h.timestamp) <= to; });
+    }
+    return list;
+}
+
+function buildHistoryFilterOptions() {
+    var history = getHistory();
+    var usersMap = {};
+    history.forEach(function(h) {
+        var key, label;
+        if (h.user) {
+            key = h.user.username || '';
+            label = h.user.fullName || h.user.username || 'Пользователь';
+        } else {
+            key = '__system__';
+            label = 'Система';
+        }
+        if (key) usersMap[key] = label;
+    });
+    var userSelect = document.getElementById('historyFilterUser');
+    if (userSelect) {
+        var cur = userSelect.value;
+        userSelect.innerHTML = '<option value="">Все</option>';
+        Object.keys(usersMap).sort().forEach(function(key) {
+            var opt = document.createElement('option');
+            opt.value = key;
+            opt.textContent = usersMap[key];
+            if (key === cur) opt.selected = true;
+            userSelect.appendChild(opt);
+        });
+    }
+    var actionSelect = document.getElementById('historyFilterAction');
+    if (actionSelect) {
+        var curAction = actionSelect.value;
+        actionSelect.innerHTML = '<option value="">Все</option>';
+        Object.keys(ActionNames).forEach(function(type) {
+            var opt = document.createElement('option');
+            opt.value = type;
+            opt.textContent = ActionNames[type];
+            if (type === curAction) opt.selected = true;
+            actionSelect.appendChild(opt);
+        });
+    }
+}
+
 function renderHistoryList(filter) {
-    filter = filter || 'all';
     var container = document.getElementById('historyList');
     if (!container) return;
     var history = getHistory();
-    var today = new Date();
-    if (filter === 'today') {
-        history = history.filter(function(h) { return new Date(h.timestamp).toDateString() === today.toDateString(); });
-    } else if (filter === 'week') {
-        var weekAgo = new Date(today);
-        weekAgo.setDate(weekAgo.getDate() - 7);
-        history = history.filter(function(h) { return new Date(h.timestamp) >= weekAgo; });
+    var state;
+    if (typeof filter === 'string') {
+        state = { dateFilter: filter || 'all', user: '', actionType: '', dateFrom: null, dateTo: null };
+    } else {
+        state = filter && typeof filter === 'object' ? filter : getHistoryFilterState();
     }
+    history = applyHistoryFiltersToList(history, state);
     history = history.sort(function(a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
     if (history.length === 0) {
         container.innerHTML = '<div class="history-empty">' +
@@ -277,15 +366,28 @@ function setupHistoryModalHandlers() {
             btn.addEventListener('click', function() {
                 for (var j = 0; j < filterBtns.length; j++) filterBtns[j].classList.remove('active');
                 btn.classList.add('active');
-                renderHistoryList(btn.getAttribute('data-filter') || 'all');
+                var dateFromEl = document.getElementById('historyFilterDateFrom');
+                var dateToEl = document.getElementById('historyFilterDateTo');
+                if (dateFromEl) dateFromEl.value = '';
+                if (dateToEl) dateToEl.value = '';
+                renderHistoryList();
             });
         })(filterBtns[i]);
     }
+    var userSelect = document.getElementById('historyFilterUser');
+    if (userSelect) userSelect.addEventListener('change', function() { renderHistoryList(); });
+    var actionSelect = document.getElementById('historyFilterAction');
+    if (actionSelect) actionSelect.addEventListener('change', function() { renderHistoryList(); });
+    var dateFromEl = document.getElementById('historyFilterDateFrom');
+    if (dateFromEl) dateFromEl.addEventListener('change', function() { renderHistoryList(); });
+    var dateToEl = document.getElementById('historyFilterDateTo');
+    if (dateToEl) dateToEl.addEventListener('change', function() { renderHistoryList(); });
     var clearBtn = document.getElementById('clearHistoryBtn');
     if (clearBtn) {
         clearBtn.addEventListener('click', function() {
             if (confirm('Очистить всю историю изменений?')) {
                 clearHistory();
+                buildHistoryFilterOptions();
                 renderHistoryList();
             }
         });

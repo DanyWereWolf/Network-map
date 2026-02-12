@@ -740,10 +740,53 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
 
 .history-filters {
     display: flex;
-    gap: 8px;
+    flex-direction: column;
+    gap: 10px;
     margin-bottom: 16px;
     padding-bottom: 12px;
     border-bottom: 1px solid var(--border-color);
+}
+
+.history-filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.history-filter-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.history-filter-select {
+    padding: 6px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 13px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-width: 120px;
+}
+
+.history-filter-dates {
+    flex-wrap: wrap;
+}
+
+.history-filter-date-sep {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 0 2px;
+}
+
+.history-filter-date {
+    padding: 6px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 13px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
 }
 
 .history-filter-btn {
@@ -1038,6 +1081,37 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
 .accordion-section.active .accordion-content {
     max-height: 1000px;
     padding: 16px;
+}
+
+/* Фильтр карты */
+.map-filter-hint {
+    margin: 0 0 10px 0;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+.map-filter-checkboxes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 16px;
+    margin-bottom: 12px;
+}
+.map-filter-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+.map-filter-check input {
+    margin: 0;
+}
+.map-filter-note {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.35;
 }
 
 /* ==================== Формы ==================== */

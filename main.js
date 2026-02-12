@@ -27,6 +27,7 @@ let nodeGroupPlacemarks = []; // Метки групп узлов в одном 
 let crossGroupNames = new Map(); // ключ: "lat,lon", значение: название группы кроссов
 let nodeGroupNames = new Map(); // ключ: "lat,lon", значение: название группы узлов
 let collaboratorCursorsPlacemarks = []; // Метки курсоров других пользователей на карте (совместная работа)
+let mapFilter = { node: true, cross: true, sleeve: true, support: true }; // Фильтр отображения на карте
 
 function groupKey(coords) {
     return coords[0].toFixed(6) + ',' + coords[1].toFixed(6);
@@ -745,6 +746,12 @@ function setupEventListeners() {
     if (syncConnectBtn && typeof syncConnect === 'function') {
         syncConnectBtn.addEventListener('click', function() { syncConnect(); });
     }
+
+    // Фильтр карты: при смене чекбоксов обновляем видимость объектов
+    ['mapFilterNode', 'mapFilterCross', 'mapFilterSleeve', 'mapFilterSupport'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('change', function() { if (typeof applyMapFilter === 'function') applyMapFilter(); });
+    });
 
     // Горячие клавиши: Escape и Ctrl+Z — отмена текущей операции или отмена последнего действия
     document.addEventListener('keydown', function(e) {
@@ -2567,6 +2574,7 @@ function createObject(type, name, coords, options = {}) {
         updateNodeDisplay();
     } else {
         myMap.geoObjects.add(placemark);
+        if (typeof applyMapFilter === 'function') applyMapFilter();
     }
     if (typeof window.syncSendOp === 'function') {
         var data = serializeOneObject(placemark);
@@ -2999,6 +3007,7 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     attachHoverEventsToObject(polyline);
     objects.push(polyline);
     myMap.geoObjects.add(polyline);
+    if (typeof applyMapFilter === 'function') applyMapFilter();
     
     // Если указан номер жилы, помечаем её как использованную
     if (fiberNumber !== null && points.length >= 2) {
@@ -7666,6 +7675,7 @@ function updateCrossDisplay() {
         myMap.geoObjects.add(groupPlacemark);
         crossGroupPlacemarks.push(groupPlacemark);
     });
+    if (typeof applyMapFilter === 'function') applyMapFilter();
 }
 
 // Группирует узлы по месту на карте
@@ -7829,6 +7839,71 @@ function updateNodeDisplay() {
         myMap.geoObjects.add(groupPlacemark);
         nodeGroupPlacemarks.push(groupPlacemark);
     });
+    if (typeof applyMapFilter === 'function') applyMapFilter();
+}
+
+// Возвращает текущее состояние фильтра карты из чекбоксов
+function getMapFilterState() {
+    var nodeEl = document.getElementById('mapFilterNode');
+    var crossEl = document.getElementById('mapFilterCross');
+    var sleeveEl = document.getElementById('mapFilterSleeve');
+    var supportEl = document.getElementById('mapFilterSupport');
+    return {
+        node: nodeEl ? nodeEl.checked : true,
+        cross: crossEl ? crossEl.checked : true,
+        sleeve: sleeveEl ? sleeveEl.checked : true,
+        support: supportEl ? supportEl.checked : true
+    };
+}
+
+// Применяет фильтр карты: скрывает/показывает объекты по типу; кабели — только если все точки видимы
+function applyMapFilter() {
+    if (!myMap || !objects) return;
+    var filter = getMapFilterState();
+    mapFilter = filter;
+    function isObjVisible(obj) {
+        if (!obj || !obj.properties) return false;
+        var type = obj.properties.get('type');
+        if (type === 'cable' || type === 'cableLabel') return false;
+        return filter[type] === true;
+    }
+    var visibleCables = new Set();
+    objects.forEach(function(obj) {
+        if (!obj.properties) return;
+        var type = obj.properties.get('type');
+        if (type === 'cable') {
+            var from = obj.properties.get('from');
+            var to = obj.properties.get('to');
+            var points = obj.properties.get('points');
+            var visible = from && to && isObjVisible(from) && isObjVisible(to) &&
+                (!Array.isArray(points) || points.length === 0 || points.every(function(p) { return isObjVisible(p); }));
+            if (visible) visibleCables.add(obj);
+        }
+    });
+    objects.forEach(function(obj) {
+        if (!obj.properties) return;
+        var type = obj.properties.get('type');
+        var visible = false;
+        if (type === 'cable') {
+            visible = visibleCables.has(obj);
+        } else if (type === 'cableLabel') {
+            var cables = obj.properties.get('cables');
+            visible = Array.isArray(cables) && cables.some(function(c) { return visibleCables.has(c); });
+        } else {
+            visible = filter[type] === true;
+        }
+        try {
+            if (obj.options) obj.options.set('visible', visible);
+            var label = obj.properties.get('label');
+            if (label && label.options) label.options.set('visible', visible);
+        } catch (e) {}
+    });
+    crossGroupPlacemarks.forEach(function(pm) {
+        try { if (pm.options) pm.options.set('visible', filter.cross); } catch (e) {}
+    });
+    nodeGroupPlacemarks.forEach(function(pm) {
+        try { if (pm.options) pm.options.set('visible', filter.node); } catch (e) {}
+    });
 }
 
 // Обновляет визуализацию кабелей - добавляет метки с количеством кабелей между объектами
@@ -7875,6 +7950,7 @@ function updateCableVisualization() {
             myMap.geoObjects.add(label);
         }
     });
+    if (typeof applyMapFilter === 'function') applyMapFilter();
 }
 
 function getUsedFibers(obj, cableUniqueId) {
