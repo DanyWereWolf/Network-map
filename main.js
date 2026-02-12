@@ -2581,6 +2581,17 @@ function createObject(type, name, coords, options = {}) {
     });
 }
 
+// Возвращает кабели, проходящие через объект (опора как промежуточная точка или муфта/кросс как начало/конец)
+function getCablesThroughObject(obj) {
+    if (!objects || !obj) return [];
+    return objects.filter(function(cable) {
+        if (!cable.properties || cable.properties.get('type') !== 'cable') return false;
+        if (cable.properties.get('from') === obj || cable.properties.get('to') === obj) return true;
+        var points = cable.properties.get('points');
+        return Array.isArray(points) && points.indexOf(obj) !== -1;
+    });
+}
+
 function deleteObject(obj, opts) {
     // Сохраняем данные для логирования до удаления
     const objType = obj.properties.get('type');
@@ -2617,11 +2628,16 @@ function deleteObject(obj, opts) {
         myMap.geoObjects.remove(label);
     }
     
-    const cablesToRemove = objects.filter(cable => 
-        cable.properties && 
-        cable.properties.get('type') === 'cable' &&
-        (cable.properties.get('from') === obj || cable.properties.get('to') === obj)
-    );
+    let cablesToRemove = objects.filter(cable => {
+        if (!cable.properties || cable.properties.get('type') !== 'cable') return false;
+        if (cable.properties.get('from') === obj || cable.properties.get('to') === obj) return true;
+        // Для опоры: удаляем кабели, у которых опора — промежуточная точка
+        if (objType === 'support') {
+            var points = cable.properties.get('points');
+            if (Array.isArray(points) && points.indexOf(obj) !== -1) return true;
+        }
+        return false;
+    });
     
     cablesToRemove.forEach(cable => {
         myMap.geoObjects.remove(cable);
@@ -3119,7 +3135,6 @@ function getCableColor(type) {
         case 'fiber8': return '#00AA00'; // Зеленый
         case 'fiber16': return '#008800'; // Темно-зеленый
         case 'fiber24': return '#006600'; // Очень темный зеленый
-        case 'copper': return '#FF7700'; // Оранжевый
         default: return '#64748b'; // Серый
     }
 }
@@ -3130,7 +3145,6 @@ function getCableWidth(type) {
         case 'fiber8': return 3;
         case 'fiber16': return 4;
         case 'fiber24': return 5;
-        case 'copper': return 4;
         default: return 2;
     }
 }
@@ -3141,7 +3155,6 @@ function getCableDescription(type) {
         case 'fiber8': return 'ВОЛС 8 жил';
         case 'fiber16': return 'ВОЛС 16 жил';
         case 'fiber24': return 'ВОЛС 24 жилы';
-        case 'copper': return 'Медный кабель';
         default: return 'Кабель';
     }
 }
@@ -3263,8 +3276,7 @@ function showCableInfo(cable) {
     
     // Определяем цвет кабеля
     let cableColor = '#00AA00';
-    if (cableType === 'copper') cableColor = '#888888';
-    else if (cableType === 'fiber4') cableColor = '#e74c3c';
+    if (cableType === 'fiber4') cableColor = '#e74c3c';
     else if (cableType === 'fiber8') cableColor = '#e67e22';
     else if (cableType === 'fiber16') cableColor = '#9b59b6';
     else if (cableType === 'fiber24') cableColor = '#1abc9c';
@@ -3354,8 +3366,7 @@ function showCableInfo(cable) {
             const pId = pCable.properties.get('uniqueId');
             
             let pColor = '#00AA00';
-            if (pType === 'copper') pColor = '#888888';
-            else if (pType === 'fiber4') pColor = '#e74c3c';
+            if (pType === 'fiber4') pColor = '#e74c3c';
             else if (pType === 'fiber8') pColor = '#e67e22';
             else if (pType === 'fiber16') pColor = '#9b59b6';
             else if (pType === 'fiber24') pColor = '#1abc9c';
@@ -4803,7 +4814,6 @@ function showObjectInfo(obj) {
                                     <option value="fiber8" ${cableType === 'fiber8' ? 'selected' : ''}>ВОЛС 8 жил</option>
                                     <option value="fiber16" ${cableType === 'fiber16' ? 'selected' : ''}>ВОЛС 16 жил</option>
                                     <option value="fiber24" ${cableType === 'fiber24' ? 'selected' : ''}>ВОЛС 24 жилы</option>
-                                    <option value="copper" ${cableType === 'copper' ? 'selected' : ''}>Медный кабель</option>
                                 </select>` : `<span style="font-size: 0.875rem; color: var(--text-secondary);">${cableDescription}</span>`}
                                 ${isEditMode ? `<button class="btn-delete-cable" data-cable-id="${cableUniqueId}" title="Удалить кабель">✕</button>` : ''}
                             </div>
@@ -4920,8 +4930,7 @@ function showSupportInfo(supportObj) {
             
             // Определяем цвет кабеля
             let cableColor = '#00AA00';
-            if (cableType === 'copper') cableColor = '#FF7700';
-            else if (cableType === 'fiber4') cableColor = '#00FF00';
+            if (cableType === 'fiber4') cableColor = '#00FF00';
             else if (cableType === 'fiber8') cableColor = '#00AA00';
             else if (cableType === 'fiber16') cableColor = '#008800';
             else if (cableType === 'fiber24') cableColor = '#006600';
@@ -5058,8 +5067,17 @@ function setupEditAndDeleteListeners() {
     if (deleteBtn) {
         deleteBtn.addEventListener('click', function() {
             if (!currentModalObject) return;
-            
-            if (confirm('Вы уверены, что хотите удалить этот объект?')) {
+            var obj = currentModalObject;
+            var msg = 'Вы уверены, что хотите удалить этот объект?';
+            if (obj.properties && obj.properties.get('type') === 'support') {
+                var cablesOnSupport = getCablesThroughObject(obj);
+                if (cablesOnSupport.length > 0) {
+                    msg = cablesOnSupport.length === 1
+                        ? 'На этой опоре проложен кабель. Удалить опору и кабель?'
+                        : 'На этой опоре проложено кабелей: ' + cablesOnSupport.length + '. Удалить опору и все эти кабели?';
+                }
+            }
+            if (confirm(msg)) {
                 deleteObject(currentModalObject);
                 
                 // Закрываем модальное окно
@@ -7373,7 +7391,6 @@ function getFiberCount(cableType) {
         case 'fiber8': return 8;
         case 'fiber16': return 16;
         case 'fiber24': return 24;
-        case 'copper': return 4;
         default: return 0;
     }
 }
@@ -8098,7 +8115,6 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             html += `<option value="fiber8" ${cableData.cableType === 'fiber8' ? 'selected' : ''}>ВОЛС 8 жил</option>`;
             html += `<option value="fiber16" ${cableData.cableType === 'fiber16' ? 'selected' : ''}>ВОЛС 16 жил</option>`;
             html += `<option value="fiber24" ${cableData.cableType === 'fiber24' ? 'selected' : ''}>ВОЛС 24 жилы</option>`;
-            html += `<option value="copper" ${cableData.cableType === 'copper' ? 'selected' : ''}>Медный кабель</option>`;
             html += `</select>`;
             html += `<button class="btn-delete-cable" data-cable-id="${cableData.cableUniqueId}" title="Удалить кабель" style="padding: 6px 10px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8125rem;">✕</button>`;
             html += `</div>`;
@@ -8332,14 +8348,6 @@ function getFiberColors(cableType) {
         case 'fiber8': fiberCount = 8; break;
         case 'fiber16': fiberCount = 16; break;
         case 'fiber24': fiberCount = 24; break;
-        case 'copper': 
-            // Для медного кабеля используем стандартные цвета пар витой пары
-            return [
-                { number: 1, name: 'Бело-синий / Синий', color: '#4169E1' },
-                { number: 2, name: 'Бело-оранжевый / Оранжевый', color: '#FF8C00' },
-                { number: 3, name: 'Бело-зеленый / Зеленый', color: '#32CD32' },
-                { number: 4, name: 'Бело-коричневый / Коричневый', color: '#8B4513' }
-            ];
         default: return [];
     }
     
