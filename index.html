@@ -492,8 +492,8 @@
                     </div>
                 </div>
 
-                <!-- Опасные действия (свёрнуто по умолчанию, чтобы не нажать случайно) -->
-                <div class="accordion-section accordion-section-danger">
+                <!-- Опасные действия — блок скрыт, кнопки «Очистить карту» и «Очистить историю» убраны -->
+                <div class="accordion-section accordion-section-danger" style="display: none;">
                     <div class="accordion-header" data-accordion="danger">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
@@ -505,17 +505,8 @@
                             <polyline points="6 9 12 15 18 9"></polyline>
                         </svg>
                     </div>
-                    <div class="accordion-content" id="danger-content">
-                        <p class="text-muted-inline danger-zone-hint">Необратимо удалит все объекты и кабели с карты.</p>
-                        <button id="clearAll" class="btn-danger btn-danger-zone" title="Очистить всю карту (требуется подтверждение)">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="3 6 5 6 21 6"></polyline>
-                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                                <line x1="10" y1="11" x2="10" y2="17"></line>
-                                <line x1="14" y1="11" x2="14" y2="17"></line>
-                            </svg>
-                            Очистить карту
-                        </button>
+                    <div class="accordion-content" id="danger-content" style="display: none;">
+                        <!-- Кнопка «Очистить карту» убрана по требованию -->
                     </div>
                 </div>
             </div>
@@ -769,12 +760,6 @@
                     <button class="history-filter-btn active" data-filter="all">Все</button>
                     <button class="history-filter-btn" data-filter="today">Сегодня</button>
                     <button class="history-filter-btn" data-filter="week">За неделю</button>
-                    <button class="history-clear-btn" id="clearHistoryBtn" title="Очистить историю">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                        </svg>
-                    </button>
                 </div>
                 <div id="historyList" class="history-list">
                     <!-- История будет генерироваться динамически -->

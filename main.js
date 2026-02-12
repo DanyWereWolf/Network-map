@@ -743,16 +743,6 @@ function setupEventListeners() {
         syncConnectBtn.addEventListener('click', function() { syncConnect(); });
     }
 
-    // Очистка карты (кнопка в блоке «Опасные действия»)
-    var clearAllBtn = document.getElementById('clearAll');
-    if (clearAllBtn) {
-        clearAllBtn.addEventListener('click', function() {
-            if (confirm('Очистить всю карту? Все объекты и кабели будут удалены. Это действие нельзя отменить.')) {
-                clearMap();
-            }
-        });
-    }
-
     // Горячие клавиши: Escape и Ctrl+Z — отмена текущей операции или отмена последнего действия
     document.addEventListener('keydown', function(e) {
         var inInput = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.getAttribute('contenteditable') === 'true');
@@ -797,7 +787,7 @@ function setupEventListeners() {
         const type = this.value;
         
         // Показываем имя для узлов и кроссов
-        nameInputGroup.style.display = (type === 'node' || type === 'cross') ? 'block' : 'none';
+        nameInputGroup.style.display = (type === 'node' || type === 'cross' || type === 'support') ? 'block' : 'none';
         sleeveSettingsGroup.style.display = type === 'sleeve' ? 'block' : 'none';
         crossSettingsGroup.style.display = type === 'cross' ? 'block' : 'none';
         nodeSettingsGroup.style.display = type === 'node' ? 'block' : 'none';
@@ -805,7 +795,7 @@ function setupEventListeners() {
         // Обновляем label для имени
         const nameLabel = nameInputGroup.querySelector('label');
         if (nameLabel) {
-            nameLabel.textContent = type === 'cross' ? 'Имя кросса' : 'Имя узла';
+            nameLabel.textContent = type === 'cross' ? 'Имя кросса' : (type === 'support' ? 'Подпись опоры' : 'Имя узла');
         }
         
         // Автоматически заполняем максимальное количество волокон для выбранного типа муфты
@@ -1497,13 +1487,14 @@ function handleMapClick(e) {
             const maxFibers = parseInt(document.getElementById('sleeveMaxFibers').value) || 0;
             createObject(type, '', coords, { sleeveType: sleeveType, maxFibers: maxFibers });
         } else if (type === 'cross') {
-            // Для кросса получаем имя и количество портов
             const name = currentPlacementName || document.getElementById('objectName').value.trim();
             const crossPorts = parseInt(document.getElementById('crossPorts').value) || 24;
             createObject(type, name || '', coords, { crossPorts: crossPorts });
             currentPlacementName = name || '';
+        } else if (type === 'support') {
+            const name = document.getElementById('objectName').value.trim();
+            createObject(type, name || '', coords);
         } else {
-            // Для опор не нужно имя
             createObject(type, '', coords);
         }
         return;
@@ -1550,6 +1541,16 @@ function handleMapClick(e) {
         const clickedObject = findObjectAtCoords(coords);
         
         if (clickedObject && clickedObject.geometry) {
+            var objType = clickedObject.properties ? clickedObject.properties.get('type') : null;
+            var allowedCablePoint = (objType === 'sleeve' || objType === 'cross');
+            if (objType === 'node') {
+                showError('Нельзя прокладывать кабель к узлу сети. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
+                return;
+            }
+            if (!allowedCablePoint) {
+                showError('Кабель можно прокладывать только от муфты или кросса до муфты или кросса. Выберите муфту или кросс.', 'Недопустимое действие');
+                return;
+            }
             if (cableSource && cableSource !== clickedObject) {
                 // Есть источник - создаем кабель от источника к кликнутому объекту
                 const cableType = document.getElementById('cableType').value;
@@ -1577,7 +1578,8 @@ function handleMapClick(e) {
                 objects.forEach(obj => {
                     if (obj && obj.geometry && obj.properties) {
                         const objType = obj.properties.get('type');
-                        if (objType !== 'cable' && objType !== 'cableLabel' && obj !== cableSource) {
+                        var allowedAsCablePoint = (objType === 'sleeve' || objType === 'cross');
+                        if (allowedAsCablePoint && obj !== cableSource) {
                             try {
                                 const objCoords = obj.geometry.getCoordinates();
                                 const latDiff = Math.abs(objCoords[0] - coords[0]);
@@ -2243,7 +2245,7 @@ function updateUIForMode() {
 }
 
 function updateEditControls() {
-    const editControls = document.querySelectorAll('#addObject, #addCable, #clearAll');
+    const editControls = document.querySelectorAll('#addObject, #addCable');
     editControls.forEach(control => {
         control.style.opacity = isEditMode ? '1' : '0.5';
         control.style.pointerEvents = isEditMode ? 'all' : 'none';
@@ -2285,7 +2287,7 @@ function createObject(type, name, coords, options = {}) {
                 <rect x="2" y="2" width="24" height="24" rx="4" fill="${color}" stroke="white" stroke-width="2"/>
                 <rect x="10" y="6" width="8" height="16" rx="1" fill="white" opacity="0.9"/>
             </svg>`;
-            balloonContent = 'Опора связи';
+            balloonContent = name ? 'Опора связи: ' + name : 'Опора связи';
             break;
         case 'sleeve':
             // Кабельная муфта - красный шестиугольник
@@ -2413,6 +2415,18 @@ function createObject(type, name, coords, options = {}) {
             }
         });
     }
+    
+    // Для опор с подписью — подпись под маркером и обновление при перетаскивании
+    if (type === 'support' && name) {
+        updateSupportLabel(placemark, name);
+        var supportLabel = placemark.properties.get('label');
+        if (supportLabel) myMap.geoObjects.add(supportLabel);
+        placemark.events.add('dragend', function() {
+            var c = placemark.geometry.getCoordinates();
+            var lbl = placemark.properties.get('label');
+            if (lbl && lbl.geometry) lbl.geometry.setCoordinates(c);
+        });
+    }
 
     placemark.events.add('click', function(e) {
         e.preventDefault();
@@ -2423,14 +2437,16 @@ function createObject(type, name, coords, options = {}) {
             return;
         }
         
-        // Режим прокладки кабеля - обрабатываем выбор объектов
+        // Режим прокладки кабеля - обрабатываем выбор объектов (только муфта или кросс)
         if (currentCableTool && isEditMode) {
-            // Узлы сети нельзя использовать для прокладки кабеля
             if (type === 'node') {
                 showError('Узел сети нельзя использовать для прокладки кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
                 return;
             }
-            
+            if (type === 'support') {
+                showError('Кабель можно прокладывать только от муфты или кросса до муфты или кросса. Выберите муфту или кросс.', 'Недопустимое действие');
+                return;
+            }
             if (cableSource && cableSource !== placemark) {
                 // Есть источник - создаем кабель от источника к кликнутому объекту
                 const cableType = document.getElementById('cableType').value;
@@ -2530,6 +2546,30 @@ function deleteObject(obj, opts) {
     const objType = obj.properties.get('type');
     const objName = obj.properties.get('name') || '';
     const objUniqueId = obj.properties.get('uniqueId');
+    
+    // При удалении узла снимаем все связи жил с этим узлом во всех кроссах
+    if (objType === 'node' && objUniqueId) {
+        objects.forEach(function(crossObj) {
+            if (!crossObj.properties || crossObj.properties.get('type') !== 'cross') return;
+            var nodeConnections = crossObj.properties.get('nodeConnections');
+            if (!nodeConnections) return;
+            var changed = false;
+            Object.keys(nodeConnections).forEach(function(key) {
+                var conn = nodeConnections[key];
+                if (conn && conn.nodeId === objUniqueId) {
+                    var parts = key.split('-');
+                    var fiberNum = parseInt(parts.pop(), 10);
+                    var cableId = parts.join('-');
+                    if (!isNaN(fiberNum) && cableId) {
+                        removeNodeConnectionLine(crossObj, cableId, fiberNum);
+                        delete nodeConnections[key];
+                        changed = true;
+                    }
+                }
+            });
+            if (changed) crossObj.properties.set('nodeConnections', nodeConnections);
+        });
+    }
     
     // Удаляем подпись, если она есть
     const label = obj.properties.get('label');
@@ -2804,15 +2844,30 @@ function addCable(fromObj, toObj, cableType, existingCableId = null, fiberNumber
     return createCableFromPoints([fromObj, toObj], cableType, existingCableId, fiberNumber, skipHistoryLog, skipSync);
 }
 
-// Создает кабель из массива точек
+// Создает кабель из массива точек. Начало и конец кабеля — только муфта или кросс; промежуточные точки — опоры.
 function createCableFromPoints(points, cableType, existingCableId = null, fiberNumber = null, skipHistoryLog = false, skipSync = false) {
     if (!points || points.length < 2) return false;
     
-    // Проверяем, что кабель не подключается к узлу сети
-    // Узлы сети соединяются только через жилы с кросса
-    for (const obj of points) {
+    var firstType = points[0] && points[0].properties ? points[0].properties.get('type') : null;
+    var lastType = points[points.length - 1] && points[points.length - 1].properties ? points[points.length - 1].properties.get('type') : null;
+    
+    if (firstType === 'node' || lastType === 'node') {
+        showError('Нельзя прокладывать кабель напрямую к узлу сети. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
+        return false;
+    }
+    if (firstType !== 'sleeve' && firstType !== 'cross') {
+        showError('Кабель можно прокладывать только от муфты или кросса до муфты или кросса. Начальная точка должна быть муфтой или кроссом.', 'Недопустимое действие');
+        return false;
+    }
+    if (lastType !== 'sleeve' && lastType !== 'cross') {
+        showError('Кабель можно прокладывать только от муфты или кросса до муфты или кросса. Конечная точка должна быть муфтой или кроссом.', 'Недопустимое действие');
+        return false;
+    }
+    
+    for (var idx = 0; idx < points.length; idx++) {
+        var obj = points[idx];
         if (obj && obj.properties && obj.properties.get('type') === 'node') {
-            showError('Нельзя прокладывать кабель напрямую к узлу сети. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
+            showError('Узел сети не может быть промежуточной точкой кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
             return false;
         }
     }
@@ -4074,7 +4129,7 @@ function createObjectFromData(data, opts) {
                 <rect x="2" y="2" width="24" height="24" rx="4" fill="${color}" stroke="white" stroke-width="2"/>
                 <rect x="10" y="6" width="8" height="16" rx="1" fill="white" opacity="0.9"/>
             </svg>`;
-            balloonContent = 'Опора связи';
+            balloonContent = name ? 'Опора связи: ' + name : 'Опора связи';
             break;
         case 'sleeve':
             // Кабельная муфта - красный шестиугольник
@@ -4251,14 +4306,16 @@ function createObjectFromData(data, opts) {
             return;
         }
         
-        // Режим прокладки кабеля - обрабатываем выбор объектов
+        // Режим прокладки кабеля - обрабатываем выбор объектов (только муфта или кросс)
         if (currentCableTool && isEditMode) {
-            // Узлы сети нельзя использовать для прокладки кабеля
             if (type === 'node') {
                 showError('Узел сети нельзя использовать для прокладки кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
                 return;
             }
-            
+            if (type === 'support') {
+                showError('Кабель можно прокладывать только от муфты или кросса до муфты или кросса. Выберите муфту или кросс.', 'Недопустимое действие');
+                return;
+            }
             if (cableSource && cableSource !== placemark) {
                 // Есть источник - создаем кабель от источника к кликнутому объекту
                 const cableType = document.getElementById('cableType').value;
@@ -4333,10 +4390,20 @@ function createObjectFromData(data, opts) {
         scheduleDragUpdate(placemark);
     });
 
+    if (type === 'support' && name) {
+        updateSupportLabel(placemark, name);
+    }
+    
     attachHoverEventsToObject(placemark);
     if (!(opts && opts.skipAddToObjects)) {
         objects.push(placemark);
-        if (type !== 'cross' && type !== 'node') myMap.geoObjects.add(placemark);
+        if (type !== 'cross' && type !== 'node') {
+            myMap.geoObjects.add(placemark);
+            if (type === 'support') {
+                var supportLbl = placemark.properties.get('label');
+                if (supportLbl) myMap.geoObjects.add(supportLbl);
+            }
+        }
         updateStats();
     }
     return placemark;
@@ -4741,21 +4808,35 @@ function showObjectInfo(obj) {
 function showSupportInfo(supportObj) {
     currentModalObject = supportObj;
     
-    // Получаем все кабели, проходящие через эту опору
     const connectedCables = getConnectedCables(supportObj);
+    const supportName = supportObj.properties.get('name') || '';
     
-    document.getElementById('modalTitle').textContent = '📡 Опора связи';
+    document.getElementById('modalTitle').textContent = supportName ? '📡 Опора связи: ' + supportName : '📡 Опора связи';
     
     let html = '';
     
-    // Информация об опоре
     html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
     html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Информация об опоре</h4>';
     
+    if (supportName) {
+        html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Подпись:</strong> ' + escapeHtml(supportName) + '</div>';
+    }
+    
     const coords = supportObj.geometry.getCoordinates();
-    html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Координаты:</strong> ${coords[0].toFixed(6)}, ${coords[1].toFixed(6)}</div>`;
-    html += `<div style="color: var(--text-secondary); font-size: 0.875rem;"><strong>Кабелей проходит:</strong> ${connectedCables.length}</div>`;
+    html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Координаты:</strong> ' + coords[0].toFixed(6) + ', ' + coords[1].toFixed(6) + '</div>';
+    html += '<div style="color: var(--text-secondary); font-size: 0.875rem;"><strong>Кабелей проходит:</strong> ' + connectedCables.length + '</div>';
     html += '</div>';
+    
+    if (isEditMode) {
+        html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
+        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Редактирование опоры</h4>';
+        html += '<div class="form-group" style="margin-bottom: 12px;">';
+        html += '<label for="editSupportName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Подпись опоры</label>';
+        html += '<input type="text" id="editSupportName" class="form-input" value="' + escapeHtml(supportName) + '" placeholder="Например: № 15">';
+        html += '</div>';
+        html += '<button id="saveSupportEdit" class="btn-primary" style="width: 100%; padding: 10px 14px; margin-top: 8px;">Сохранить</button>';
+        html += '</div>';
+    }
     
     // Кнопки управления (в режиме редактирования)
     if (isEditMode) {
@@ -4896,6 +4977,26 @@ function setupEditAndDeleteListeners() {
         });
     }
     
+    var saveSupportBtn = document.getElementById('saveSupportEdit');
+    if (saveSupportBtn) {
+        saveSupportBtn.addEventListener('click', function() {
+            if (!currentModalObject) return;
+            if (currentModalObject.properties.get('type') !== 'support') return;
+            var newName = (document.getElementById('editSupportName') && document.getElementById('editSupportName').value) ? document.getElementById('editSupportName').value.trim() : '';
+            currentModalObject.properties.set('name', newName);
+            currentModalObject.properties.set('balloonContent', newName ? 'Опора связи: ' + newName : 'Опора связи');
+            updateSupportLabel(currentModalObject, newName);
+            var lbl = currentModalObject.properties.get('label');
+            if (lbl && newName) {
+                try { myMap.geoObjects.add(lbl); } catch (e) {}
+            } else if (lbl && !newName) {
+                try { myMap.geoObjects.remove(lbl); } catch (e) {}
+            }
+            saveData();
+            showSupportInfo(currentModalObject);
+        });
+    }
+    
     // Обработчик дублирования объекта
     const duplicateBtn = document.getElementById('duplicateCurrentObject');
     if (duplicateBtn) {
@@ -4996,6 +5097,45 @@ function updateNodeLabel(placemark, name) {
             });
             label.geometry.setCoordinates(coords);
         }
+    }
+}
+
+function updateSupportLabel(placemark, name) {
+    if (!placemark || !placemark.properties) return;
+    if (placemark.properties.get('type') !== 'support') return;
+    
+    var label = placemark.properties.get('label');
+    var coords = placemark.geometry.getCoordinates();
+    
+    if (!name || name.trim() === '') {
+        if (label) {
+            try { myMap.geoObjects.remove(label); } catch (e) {}
+            placemark.properties.unset('label');
+        }
+        return;
+    }
+    
+    var displayName = escapeHtml(name.trim());
+    var labelContent = '<div style="color: #2c3e50; font-size: 12px; font-weight: 600; text-align: center; white-space: nowrap; text-shadow: 1px 1px 2px rgba(255,255,255,0.9), -1px -1px 2px rgba(255,255,255,0.9), 1px -1px 2px rgba(255,255,255,0.9), -1px 1px 2px rgba(255,255,255,0.9); padding: 2px 4px; margin-top: 8px; background: rgba(255,255,255,0.8); border-radius: 3px;">' + displayName + '</div>';
+    
+    if (!label) {
+        label = new ymaps.Placemark(coords, {}, {
+            iconLayout: 'default#imageWithContent',
+            iconImageHref: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==',
+            iconImageSize: [1, 1],
+            iconImageOffset: [0, 0],
+            iconContent: labelContent,
+            iconContentOffset: [0, 20],
+            zIndex: 1000,
+            zIndexHover: 1000,
+            cursor: 'default',
+            hasBalloon: false,
+            hasHint: false
+        });
+        placemark.properties.set('label', label);
+    } else {
+        label.properties.set({ iconContent: labelContent });
+        label.geometry.setCoordinates(coords);
     }
 }
 
