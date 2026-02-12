@@ -1114,6 +1114,17 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     line-height: 1.35;
 }
 
+.map-filter-save-start {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+}
+
+.map-filter-save-start .btn-secondary {
+    width: 100%;
+    justify-content: center;
+}
+
 /* ==================== Формы ==================== */
 .form-group {
     margin-bottom: 16px;

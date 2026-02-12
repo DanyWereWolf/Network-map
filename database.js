@@ -6,6 +6,8 @@ const path = require('path');
 const fs = require('fs');
 
 const STORE_PATH = process.env.DB_PATH ? process.env.DB_PATH.replace(/\.db$/i, '-store.json') : path.join(__dirname, 'data', 'store.json');
+const BACKUPS_DIR = path.join(path.dirname(STORE_PATH), 'backups');
+const BACKUP_RETENTION_DAYS = 30; // хранить бэкапы за последний месяц
 
 let store = null;
 
@@ -188,6 +190,83 @@ function setSettings(obj) {
     if (obj.netboxConfig !== undefined) setSetting('netboxConfig', typeof obj.netboxConfig === 'string' ? obj.netboxConfig : JSON.stringify(obj.netboxConfig));
 }
 
+// Начальная позиция карты по пользователю (центр и зум при открытии)
+function getMapStartForUser(userId) {
+    const raw = getSetting('userMapStarts');
+    if (!raw) return null;
+    try {
+        const map = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        const data = map && userId ? map[String(userId)] : null;
+        if (data && Array.isArray(data.center) && data.center.length >= 2 && typeof data.zoom === 'number') return data;
+        return null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function setMapStartForUser(userId, data) {
+    const s = loadStore();
+    if (!s.settings) s.settings = {};
+    let map = {};
+    try {
+        if (s.settings.userMapStarts) map = typeof s.settings.userMapStarts === 'string' ? JSON.parse(s.settings.userMapStarts) : s.settings.userMapStarts;
+    } catch (e) {}
+    if (!data || !Array.isArray(data.center) || data.center.length < 2) {
+        if (userId) delete map[String(userId)];
+    } else {
+        map[String(userId)] = { center: data.center.slice(0, 2), zoom: typeof data.zoom === 'number' ? data.zoom : 15 };
+    }
+    s.settings.userMapStarts = JSON.stringify(map);
+    saveStore();
+}
+
+/**
+ * Создаёт резервную копию store в data/backups/backup-YYYY-MM-DD.json.
+ * Затем удаляет бэкапы старше BACKUP_RETENTION_DAYS (оставляет месяц).
+ */
+function createDailyBackup() {
+    try {
+        if (!fs.existsSync(STORE_PATH)) return;
+        const dir = BACKUPS_DIR;
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        const now = new Date();
+        const dateStr = now.getFullYear() + '-' +
+            String(now.getMonth() + 1).padStart(2, '0') + '-' +
+            String(now.getDate()).padStart(2, '0');
+        const backupPath = path.join(dir, 'backup-' + dateStr + '.json');
+        const data = fs.readFileSync(STORE_PATH, 'utf8');
+        fs.writeFileSync(backupPath, data, 'utf8');
+        pruneBackupsKeepDays(BACKUP_RETENTION_DAYS);
+        console.log('[Backup] Сохранён: backup-' + dateStr + '.json');
+    } catch (e) {
+        console.error('[Backup] Ошибка:', e.message);
+    }
+}
+
+/**
+ * Удаляет старые бэкапы, оставляя только последние keepDays файлов по дате в имени.
+ */
+function pruneBackupsKeepDays(keepDays) {
+    try {
+        if (!fs.existsSync(BACKUPS_DIR)) return;
+        const files = fs.readdirSync(BACKUPS_DIR)
+            .filter(f => f.startsWith('backup-') && f.endsWith('.json'))
+            .map(f => {
+                const match = f.match(/backup-(\d{4})-(\d{2})-(\d{2})\.json/);
+                return match ? { name: f, date: match.slice(1, 4).join('-') } : null;
+            })
+            .filter(Boolean)
+            .sort((a, b) => b.date.localeCompare(a.date));
+        if (files.length <= keepDays) return;
+        for (let i = keepDays; i < files.length; i++) {
+            const filePath = path.join(BACKUPS_DIR, files[i].name);
+            try { fs.unlinkSync(filePath); console.log('[Backup] Удалён старый:', files[i].name); } catch (e) {}
+        }
+    } catch (e) {
+        console.error('[Backup] Ошибка очистки:', e.message);
+    }
+}
+
 function initDefaultAdmin() {
     let users = getUsers();
     if (users.length === 0) {
@@ -226,5 +305,8 @@ module.exports = {
     setSettings,
     getSetting,
     setSetting,
+    getMapStartForUser,
+    setMapStartForUser,
+    createDailyBackup,
     initDefaultAdmin
 };

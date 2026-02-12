@@ -237,6 +237,11 @@ app.post('/api/history', (req, res) => {
 app.get('/api/settings', (req, res) => {
     try {
         const settings = db.getSettings();
+        const user = getSessionUser(req);
+        if (user && db.getMapStartForUser) {
+            const mapStart = db.getMapStartForUser(user.userId);
+            if (mapStart) settings.mapStart = mapStart;
+        }
         res.json(settings);
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
@@ -246,8 +251,12 @@ app.get('/api/settings', (req, res) => {
 app.post('/api/settings', (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    const body = req.body || {};
     try {
-        db.setSettings(req.body || {});
+        if (body.mapStart !== undefined && db.setMapStartForUser) {
+            db.setMapStartForUser(user.userId, body.mapStart);
+        }
+        db.setSettings(body);
         res.json({ ok: true });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
@@ -262,6 +271,15 @@ app.use(express.static(path.join(__dirname)));
 
 db.getDb();
 db.initDefaultAdmin();
+
+// Ежедневное резервное копирование: первый бэкап через 1 мин, далее раз в сутки; храним месяц
+if (db.createDailyBackup) {
+    const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+    setTimeout(function runBackup() {
+        db.createDailyBackup();
+        setInterval(db.createDailyBackup, BACKUP_INTERVAL_MS);
+    }, 60 * 1000);
+}
 
 // ————— WebSocket: одна общая карта для всех, хранится в БД —————
 const server = http.createServer(app);
@@ -557,6 +575,7 @@ server.listen(PORT, HOST, () => {
     }
     console.log('Синхронизация: ws://...:' + PORT + '/sync (в одном процессе с API)');
     console.log('Данные: ' + path.join(__dirname, 'data', 'store.json'));
+    if (db.createDailyBackup) console.log('Резервные копии: ежедневно в data/backups/, хранятся 30 дней.');
     if (!require('fs').existsSync(path.join(__dirname, 'server-config.json'))) {
         console.log('Настройки: порт/хост можно задать в server-config.json (скопируйте из server-config.example.json).');
     }

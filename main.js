@@ -753,6 +753,34 @@ function setupEventListeners() {
         if (el) el.addEventListener('change', function() { if (typeof applyMapFilter === 'function') applyMapFilter(); });
     });
 
+    // Сохранить текущий вид карты как начальный для этого пользователя
+    var saveMapStartBtn = document.getElementById('saveMapStartBtn');
+    if (saveMapStartBtn) {
+        saveMapStartBtn.addEventListener('click', function() {
+            if (!myMap || !getApiBase() || !getAuthToken()) {
+                if (typeof showWarning === 'function') showWarning('Нужно быть авторизованным для сохранения начальной позиции.', 'Настройка');
+                return;
+            }
+            var center = myMap.getCenter();
+            if (!center) return;
+            var lat = Array.isArray(center) ? center[0] : (center[0] != null ? center[0] : (center.lat && center.lat()));
+            var lon = Array.isArray(center) ? center[1] : (center[1] != null ? center[1] : (center.lng && center.lng()));
+            if (typeof lat !== 'number' || typeof lon !== 'number') return;
+            var zoom = myMap.getZoom();
+            if (typeof zoom !== 'number') zoom = 15;
+            fetch(getApiBase() + '/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
+                body: JSON.stringify({ mapStart: { center: [lat, lon], zoom: zoom } })
+            }).then(function(r) {
+                if (!r.ok) throw new Error('Ошибка сохранения');
+                if (typeof showInfo === 'function') showInfo('Текущий вид сохранён. При следующем открытии карта откроется здесь.', 'Начальная точка');
+            }).catch(function() {
+                if (typeof showWarning === 'function') showWarning('Не удалось сохранить начальную позицию.', 'Ошибка');
+            });
+        });
+    }
+
     // Горячие клавиши: Escape и Ctrl+Z — отмена текущей операции или отмена последнего действия
     document.addEventListener('keydown', function(e) {
         var inInput = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.getAttribute('contenteditable') === 'true');
@@ -3716,7 +3744,7 @@ function loadData() {
         fetch(getApiBase() + '/api/history', { headers: { 'Authorization': 'Bearer ' + token } }).then(function(r) { return r.json(); }).then(function(b) {
             if (b && Array.isArray(b.history) && typeof window.setHistoryFromApi === 'function') window.setHistoryFromApi(b.history);
         }).catch(function() {});
-        fetch(getApiBase() + '/api/settings').then(function(r) { return r.json(); }).then(function(s) {
+        fetch(getApiBase() + '/api/settings', { headers: { 'Authorization': 'Bearer ' + token } }).then(function(r) { return r.json(); }).then(function(s) {
             if (!s) return;
             if (s.theme) try { document.documentElement.setAttribute('data-theme', s.theme); setTheme(s.theme); } catch (e) {}
             if (s.groupNames && typeof crossGroupNames !== 'undefined' && typeof nodeGroupNames !== 'undefined') {
@@ -3724,6 +3752,9 @@ function loadData() {
                     if (s.groupNames.cross && typeof s.groupNames.cross === 'object') Object.keys(s.groupNames.cross).forEach(function(k) { crossGroupNames.set(k, s.groupNames.cross[k]); });
                     if (s.groupNames.node && typeof s.groupNames.node === 'object') Object.keys(s.groupNames.node).forEach(function(k) { nodeGroupNames.set(k, s.groupNames.node[k]); });
                 } catch (e) {}
+            }
+            if (s.mapStart && typeof myMap !== 'undefined' && myMap && Array.isArray(s.mapStart.center) && s.mapStart.center.length >= 2) {
+                try { myMap.setCenter(s.mapStart.center, s.mapStart.zoom || 15); } catch (e) {}
             }
         }).catch(function() {});
     })();
