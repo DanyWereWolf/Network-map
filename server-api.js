@@ -187,6 +187,21 @@ app.put('/api/users/:userId', (req, res) => {
     res.json({ ok: true });
 });
 
+app.delete('/api/users/:userId', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!admin || admin.role !== 'admin') return res.status(403).json({ error: 'Только администратор' });
+    const userId = req.params.userId;
+    const users = db.getUsers();
+    const i = users.findIndex(u => u.id === userId);
+    if (i === -1) return res.status(404).json({ error: 'Пользователь не найден' });
+    if (userId === admin.userId) return res.status(400).json({ error: 'Нельзя удалить свой аккаунт' });
+    if (users[i].username === 'admin') return res.status(400).json({ error: 'Нельзя удалить главного администратора' });
+    const deleted = users[i];
+    users.splice(i, 1);
+    db.setUsers(users);
+    res.json({ ok: true, user: { id: deleted.id, username: deleted.username } });
+});
+
 app.post('/api/users', (req, res) => {
     const admin = getSessionUser(req);
     if (!admin || admin.role !== 'admin') return res.status(403).json({ error: 'Только администратор' });

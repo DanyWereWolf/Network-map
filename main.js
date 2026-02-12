@@ -596,9 +596,28 @@ function deleteUser(userId) {
     }
     
     const username = users[userIndex].username;
+    
+    // При работе с API удаляем пользователя на сервере
+    if (getApiBase()) {
+        fetch(getApiBase() + '/api/users/' + encodeURIComponent(userId), {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+        }).then(function(r) {
+            if (!r.ok) return r.json().then(function(b) { throw new Error((b && b.error) || 'Ошибка удаления'); });
+            return (typeof AuthSystem !== 'undefined' && AuthSystem.refreshUsersFromApi) ? AuthSystem.refreshUsersFromApi() : Promise.resolve();
+        }).then(function() {
+            showSuccess('Пользователь удалён');
+            renderUsersList();
+            logAction(ActionTypes.USER_DELETED, { username: username });
+        }).catch(function(e) {
+            showError(e.message || 'Не удалось удалить пользователя');
+        });
+        return;
+    }
+    
+    // Режим без API (локальный кэш)
     users.splice(userIndex, 1);
     AuthSystem.saveUsers(users);
-    
     showSuccess('Пользователь удалён');
     renderUsersList();
     logAction(ActionTypes.USER_DELETED, { username: username });
@@ -781,9 +800,8 @@ function setupEventListeners() {
         });
     }
 
-    // Горячие клавиши: Escape и Ctrl+Z — отмена текущей операции или отмена последнего действия
+    // Горячая клавиша: Escape — отмена текущей операции/закрытие модальных окон
     document.addEventListener('keydown', function(e) {
-        var inInput = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.getAttribute('contenteditable') === 'true');
         if (e.key === 'Escape') {
             // Сначала закрываем модальные окна, если открыты
             var modalIds = ['infoModal', 'nodeSelectionModal', 'usersModal', 'userEditModal', 'updatesModal'];
@@ -802,17 +820,6 @@ function setupEventListeners() {
                 e.preventDefault();
             }
             return;
-        }
-        if (inInput) return;
-        if (e.ctrlKey && (e.key === 'z' || e.key === 'Z')) {
-            if (canEdit() && isEditMode) {
-                e.preventDefault();
-                if (objectPlacementMode) { cancelObjectPlacement(); return; }
-                if (currentCableTool) {
-                    var cableBtn = document.getElementById('addCable');
-                    if (cableBtn) cableBtn.click();
-                }
-            }
         }
     });
 
