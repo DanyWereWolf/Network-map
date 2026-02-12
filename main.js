@@ -11,7 +11,8 @@ let hoverCircle = null; // Круг, показывающий кликабель
 let cursorIndicator = null; // Индикатор под курсором
 let phantomPlacemark = null; // Фантомный объект под курсором в режиме размещения
 let currentCableTool = false; // Режим прокладки кабеля
-let cableSource = null; // Начальная точка текущего кабеля
+let cableSource = null; // Начальная точка текущего кабеля (только муфта/кросс)
+let cableWaypoints = []; // Промежуточные точки трассы (опоры) между началом и концом кабеля
 let cablePreviewLine = null; // Временная линия для предпросмотра кабеля
 let selectedFiberForConnection = null; // Выбранная жила для создания соединения
 let netboxConfig = {
@@ -713,6 +714,7 @@ function setupEventListeners() {
             clearSelection();
             removeCablePreview();
             cableSource = null;
+            cableWaypoints = [];
             const mapEl = myMap.container.getElement();
             mapEl.style.cursor = 'crosshair';
             mapEl.classList.add('map-crosshair-active');
@@ -722,6 +724,7 @@ function setupEventListeners() {
             clearSelection();
             removeCablePreview();
             cableSource = null;
+            cableWaypoints = [];
             const mapEl = myMap.container.getElement();
             mapEl.style.cursor = '';
             mapEl.classList.remove('map-crosshair-active');
@@ -1241,6 +1244,7 @@ function handleAddObject() {
         clearSelection();
         removeCablePreview();
         cableSource = null;
+        cableWaypoints = [];
         if (myMap && myMap.container) {
             const mapEl = myMap.container.getElement();
             mapEl.style.cursor = '';
@@ -1542,71 +1546,91 @@ function handleMapClick(e) {
         
         if (clickedObject && clickedObject.geometry) {
             var objType = clickedObject.properties ? clickedObject.properties.get('type') : null;
-            var allowedCablePoint = (objType === 'sleeve' || objType === 'cross');
             if (objType === 'node') {
                 showError('Нельзя прокладывать кабель к узлу сети. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
                 return;
             }
-            if (!allowedCablePoint) {
-                showError('Кабель можно прокладывать только от муфты или кросса до муфты или кросса. Выберите муфту или кросс.', 'Недопустимое действие');
+            // Начало кабеля: только муфта или кросс
+            if (!cableSource) {
+                if (objType !== 'sleeve' && objType !== 'cross') {
+                    showError('Начало кабеля должно быть муфтой или кроссом. Выберите муфту или кросс.', 'Недопустимое действие');
+                    return;
+                }
+                cableSource = clickedObject;
+                cableWaypoints = [];
+                clearSelection();
+                selectObject(cableSource);
                 return;
             }
-            if (cableSource && cableSource !== clickedObject) {
-                // Есть источник - создаем кабель от источника к кликнутому объекту
+            // Уже есть начало — добавляем точку или завершаем кабель
+            if (clickedObject === cableSource) {
+                cableWaypoints = [];
+                clearSelection();
+                selectObject(cableSource);
+                return;
+            }
+            if (objType === 'support') {
+                cableWaypoints.push(clickedObject);
+                clearSelection();
+                selectObject(cableSource);
+                return;
+            }
+            if (objType === 'sleeve' || objType === 'cross') {
+                const points = [cableSource].concat(cableWaypoints).concat([clickedObject]);
                 const cableType = document.getElementById('cableType').value;
-                const success = addCable(cableSource, clickedObject, cableType);
+                const success = createCableFromPoints(points, cableType);
                 if (success) {
-                    // Кабель создан - новый источник = кликнутый объект (продолжаем цепочку)
                     cableSource = clickedObject;
+                    cableWaypoints = [];
                     clearSelection();
                     selectObject(cableSource);
                     removeCablePreview();
                 }
-            } else {
-                // Нет источника или кликнули на тот же объект - устанавливаем как источник
-                cableSource = clickedObject;
-                clearSelection();
-                selectObject(cableSource);
+                return;
             }
+            showError('Кабель прокладывается от муфты/кросса до муфты/кросса. Промежуточными точками могут быть опоры.', 'Недопустимое действие');
         } else {
-            // Клик по пустому месту - ищем ближайший объект (автоматическое прилипание)
+            // Клик по пустому месту — прилипание к ближайшему объекту (муфта/кросс/опора)
             if (cableSource) {
                 const autoSelectTolerance = zoom < 12 ? 0.0015 : (zoom < 15 ? 0.001 : 0.0005);
                 let nearestObject = null;
                 let minDist = Infinity;
-                
                 objects.forEach(obj => {
                     if (obj && obj.geometry && obj.properties) {
-                        const objType = obj.properties.get('type');
-                        var allowedAsCablePoint = (objType === 'sleeve' || objType === 'cross');
-                        if (allowedAsCablePoint && obj !== cableSource) {
-                            try {
-                                const objCoords = obj.geometry.getCoordinates();
-                                const latDiff = Math.abs(objCoords[0] - coords[0]);
-                                const lonDiff = Math.abs(objCoords[1] - coords[1]);
-                                const distance = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff);
-                                
-                                if (distance < autoSelectTolerance && distance < minDist) {
-                                    minDist = distance;
-                                    nearestObject = obj;
-                                }
-                            } catch (error) {
-                                // Игнорируем ошибки
-                            }
+                        const t = obj.properties.get('type');
+                        if (t !== 'sleeve' && t !== 'cross' && t !== 'support') return;
+                        if (t === 'sleeve' || t === 'cross') {
+                            if (obj === cableSource) return;
                         }
+                        try {
+                            const objCoords = obj.geometry.getCoordinates();
+                            const latDiff = Math.abs(objCoords[0] - coords[0]);
+                            const lonDiff = Math.abs(objCoords[1] - coords[1]);
+                            const distance = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff);
+                            if (distance < autoSelectTolerance && distance < minDist) {
+                                minDist = distance;
+                                nearestObject = obj;
+                            }
+                        } catch (error) {}
                     }
                 });
-                
                 if (nearestObject) {
-                    // Создаем кабель от источника к ближайшему объекту
-                    const cableType = document.getElementById('cableType').value;
-                    const success = addCable(cableSource, nearestObject, cableType);
-                    if (success) {
-                        // Кабель создан - новый источник = ближайший объект (продолжаем цепочку)
-                        cableSource = nearestObject;
+                    const t = nearestObject.properties.get('type');
+                    if (t === 'support') {
+                        cableWaypoints.push(nearestObject);
                         clearSelection();
                         selectObject(cableSource);
-                        removeCablePreview();
+                    } else {
+                        const points = [cableSource].concat(cableWaypoints).concat([nearestObject]);
+                        const cableType = document.getElementById('cableType').value;
+                        const success = createCableFromPoints(points, cableType);
+                        if (success) {
+                            cableSource = nearestObject;
+                            cableWaypoints = [];
+                            clearSelection();
+                            selectObject(cableSource);
+                            removeCablePreview();
+                        }
                     }
                 }
             }
@@ -1661,7 +1685,7 @@ function handleMapMouseMove(e) {
                     previewCoords = snapObj.geometry.getCoordinates();
                 }
             }
-            updateCablePreview(cableSource, previewCoords);
+            updateCablePreview(cableSource, cableWaypoints, previewCoords);
         });
     }
 }
@@ -2193,6 +2217,7 @@ function switchToViewMode() {
     isEditMode = false;
     currentCableTool = false;
     cableSource = null;
+    cableWaypoints = [];
     
     // Отменяем режим размещения объектов
     if (objectPlacementMode) {
@@ -2437,32 +2462,47 @@ function createObject(type, name, coords, options = {}) {
             return;
         }
         
-        // Режим прокладки кабеля - обрабатываем выбор объектов (только муфта или кросс)
+        // Режим прокладки кабеля: начало/конец — муфта или кросс, промежуточные точки — опоры
         if (currentCableTool && isEditMode) {
             if (type === 'node') {
                 showError('Узел сети нельзя использовать для прокладки кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
                 return;
             }
-            if (type === 'support') {
-                showError('Кабель можно прокладывать только от муфты или кросса до муфты или кросса. Выберите муфту или кросс.', 'Недопустимое действие');
+            if (!cableSource) {
+                if (type !== 'sleeve' && type !== 'cross') {
+                    showError('Начало кабеля должно быть муфтой или кроссом. Выберите муфту или кросс.', 'Недопустимое действие');
+                    return;
+                }
+                cableSource = placemark;
+                cableWaypoints = [];
+                clearSelection();
+                selectObject(cableSource);
                 return;
             }
-            if (cableSource && cableSource !== placemark) {
-                // Есть источник - создаем кабель от источника к кликнутому объекту
+            if (placemark === cableSource) {
+                cableWaypoints = [];
+                clearSelection();
+                selectObject(cableSource);
+                return;
+            }
+            if (type === 'support') {
+                cableWaypoints.push(placemark);
+                clearSelection();
+                selectObject(cableSource);
+                return;
+            }
+            if (type === 'sleeve' || type === 'cross') {
+                const points = [cableSource].concat(cableWaypoints).concat([placemark]);
                 const cableType = document.getElementById('cableType').value;
-                const success = addCable(cableSource, placemark, cableType);
+                const success = createCableFromPoints(points, cableType);
                 if (success) {
-                    // Кабель создан - новый источник = кликнутый объект (продолжаем цепочку)
                     cableSource = placemark;
+                    cableWaypoints = [];
                     clearSelection();
                     selectObject(cableSource);
                     removeCablePreview();
                 }
-            } else {
-                // Нет источника или кликнули на тот же объект - устанавливаем как источник
-                cableSource = placemark;
-                clearSelection();
-                selectObject(cableSource);
+                return;
             }
             return;
         }
@@ -3390,39 +3430,31 @@ function updateCableName(cableUniqueId, newName) {
     }
 }
 
-function updateCablePreview(sourceObj, targetCoords) {
+function updateCablePreview(sourceObj, waypoints, targetCoords) {
     if (!sourceObj || !sourceObj.geometry) {
         return;
     }
-    
+    waypoints = waypoints || [];
     const sourceCoords = sourceObj.geometry.getCoordinates();
-    
-    // Если координаты одинаковые, не создаем предпросмотр (нулевая длина)
-    if (sourceCoords[0] === targetCoords[0] && sourceCoords[1] === targetCoords[1]) {
-        // Используем координаты, немного смещенные от источника, чтобы линия была видна
+    const waypointCoords = waypoints.map(function(w) { return w && w.geometry ? w.geometry.getCoordinates() : null; }).filter(Boolean);
+    const allCoords = [sourceCoords].concat(waypointCoords).concat([targetCoords]);
+    var last = allCoords[allCoords.length - 1];
+    if (sourceCoords[0] === last[0] && sourceCoords[1] === last[1] && waypointCoords.length === 0) {
         const zoom = myMap.getZoom();
         const offset = zoom < 12 ? 0.0001 : (zoom < 15 ? 0.00005 : 0.00002);
-        targetCoords = [sourceCoords[0] + offset, sourceCoords[1] + offset];
+        allCoords[allCoords.length - 1] = [sourceCoords[0] + offset, sourceCoords[1] + offset];
     }
-    
-    // Получаем цвет и ширину кабеля из формы
     const cableType = document.getElementById('cableType').value;
     const cableWidth = getCableWidth(cableType);
-    
-    // Если предпросмотр уже существует, обновляем его
     if (cablePreviewLine) {
-        cablePreviewLine.geometry.setCoordinates([sourceCoords, targetCoords]);
-        // Обновляем параметры предпросмотра (яркий синий)
+        cablePreviewLine.geometry.setCoordinates(allCoords);
         cablePreviewLine.options.set({
             strokeColor: '#3b82f6',
             strokeWidth: Math.max(cableWidth, 5),
             strokeOpacity: 0.9
         });
     } else {
-        // Создаем новую временную линию предпросмотра
-        cablePreviewLine = new ymaps.Polyline([
-            sourceCoords, targetCoords
-        ], {}, {
+        cablePreviewLine = new ymaps.Polyline(allCoords, {}, {
             strokeColor: '#3b82f6',
             strokeWidth: Math.max(cableWidth, 5),
             strokeOpacity: 0.9,
@@ -3430,7 +3462,6 @@ function updateCablePreview(sourceObj, targetCoords) {
             zIndex: 1000,
             interactive: false
         });
-        
         myMap.geoObjects.add(cablePreviewLine);
     }
 }
@@ -4306,32 +4337,47 @@ function createObjectFromData(data, opts) {
             return;
         }
         
-        // Режим прокладки кабеля - обрабатываем выбор объектов (только муфта или кросс)
+        // Режим прокладки кабеля: начало/конец — муфта или кросс, промежуточные точки — опоры
         if (currentCableTool && isEditMode) {
             if (type === 'node') {
                 showError('Узел сети нельзя использовать для прокладки кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
                 return;
             }
-            if (type === 'support') {
-                showError('Кабель можно прокладывать только от муфты или кросса до муфты или кросса. Выберите муфту или кросс.', 'Недопустимое действие');
+            if (!cableSource) {
+                if (type !== 'sleeve' && type !== 'cross') {
+                    showError('Начало кабеля должно быть муфтой или кроссом. Выберите муфту или кросс.', 'Недопустимое действие');
+                    return;
+                }
+                cableSource = placemark;
+                cableWaypoints = [];
+                clearSelection();
+                selectObject(cableSource);
                 return;
             }
-            if (cableSource && cableSource !== placemark) {
-                // Есть источник - создаем кабель от источника к кликнутому объекту
+            if (placemark === cableSource) {
+                cableWaypoints = [];
+                clearSelection();
+                selectObject(cableSource);
+                return;
+            }
+            if (type === 'support') {
+                cableWaypoints.push(placemark);
+                clearSelection();
+                selectObject(cableSource);
+                return;
+            }
+            if (type === 'sleeve' || type === 'cross') {
+                const points = [cableSource].concat(cableWaypoints).concat([placemark]);
                 const cableType = document.getElementById('cableType').value;
-                const success = addCable(cableSource, placemark, cableType);
+                const success = createCableFromPoints(points, cableType);
                 if (success) {
-                    // Кабель создан - новый источник = кликнутый объект (продолжаем цепочку)
                     cableSource = placemark;
+                    cableWaypoints = [];
                     clearSelection();
                     selectObject(cableSource);
                     removeCablePreview();
                 }
-            } else {
-                // Нет источника или кликнули на тот же объект - устанавливаем как источник
-                cableSource = placemark;
-                clearSelection();
-                selectObject(cableSource);
+                return;
             }
             return;
         }
