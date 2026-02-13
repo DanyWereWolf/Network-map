@@ -181,13 +181,13 @@
                         <p class="map-filter-hint">Показать на карте:</p>
                         <div class="map-filter-checkboxes">
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterNode" checked> Узлы</label>
-                            <label class="map-filter-check map-filter-check-indent"><input type="checkbox" id="mapFilterNodeAggregationOnly"> Только узлы агрегации</label>
+                            <label class="map-filter-check map-filter-check-indent" title="Показывает только узлы агрегации; кроссы, муфты, опоры и крепления остаются видимыми"><input type="checkbox" id="mapFilterNodeAggregationOnly"> Только узлы агрегации</label>
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterCross" checked> Кроссы</label>
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterSleeve" checked> Муфты</label>
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterSupport" checked> Опоры</label>
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterAttachment" checked> Крепление узлов</label>
                         </div>
-                        <p class="map-filter-note">Кабели отображаются только между видимыми объектами.</p>
+                        <p class="map-filter-note">Кабели отображаются только между видимыми объектами. «Только узлы агрегации» скрывает обычные узлы сети, остальные объекты остаются на карте.</p>
                         <div class="map-filter-save-start">
                             <button type="button" id="saveMapStartBtn" class="btn-secondary" title="При следующем открытии карта откроется в этом месте и с этим масштабом">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>

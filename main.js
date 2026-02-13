@@ -1789,6 +1789,9 @@ function updateCursorIndicator(e, objectType, objectCoord) {
             case 'nodeGroup':
                 text = 'Группа узлов';
                 break;
+            case 'attachment':
+                text = 'Крепление узлов';
+                break;
             default:
                 text = 'Объект';
         }
@@ -3317,6 +3320,7 @@ function showCableInfo(cable) {
         else if (type === 'sleeve') { typeName = 'Кабельная муфта'; icon = '🔴'; }
         else if (type === 'cross') { typeName = 'Оптический кросс'; icon = '📦'; }
         else if (type === 'node') { typeName = 'Узел сети'; icon = '🖥️'; }
+        else if (type === 'attachment') { typeName = 'Крепление узлов'; icon = '🔗'; }
         return { type: typeName, name, icon };
     };
     
@@ -4701,6 +4705,17 @@ function showObjectInfo(obj) {
     // Формируем содержимое
     let html = '';
     
+    // Информация о креплении узлов
+    if (type === 'attachment') {
+        html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
+        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Информация о креплении</h4>';
+        if (name) {
+            html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Название:</strong> ' + escapeHtml(name) + '</div>';
+        }
+        html += '<div style="color: var(--text-secondary); font-size: 0.875rem;">Через крепление можно прокладывать кабель (как через опору).</div>';
+        html += '</div>';
+    }
+    
     // Добавляем информацию о муфте (всегда для муфт)
     if (type === 'sleeve') {
         const sleeveType = obj.properties.get('sleeveType') || 'Не указан';
@@ -4856,9 +4871,10 @@ function showObjectInfo(obj) {
         html += '</div>';
     }
     
-    // Для всех объектов (включая муфты и кроссы) показываем информацию о подключенных кабелях
+    // Для всех объектов (включая муфты, кроссы, крепления) показываем информацию о подключенных кабелях
     if (connectedCables.length === 0) {
-        html += '<div class="no-cables" style="padding: 15px; text-align: center; color: var(--text-muted); font-size: 0.875rem;">К этому объекту не подключено кабелей</div>';
+        const noCablesText = (type === 'attachment') ? 'К этому креплению не подключено кабелей' : 'К этому объекту не подключено кабелей';
+        html += '<div class="no-cables" style="padding: 15px; text-align: center; color: var(--text-muted); font-size: 0.875rem;">' + noCablesText + '</div>';
     } else {
         // Для муфт и кроссов показываем визуальное объединение жил
         if ((type === 'sleeve' || type === 'cross') && connectedCables.length > 1) {
