@@ -766,10 +766,13 @@ function setupEventListeners() {
         syncConnectBtn.addEventListener('click', function() { syncConnect(); });
     }
 
-    // Фильтр карты: при смене чекбоксов обновляем видимость объектов
+    // Фильтр карты: при смене чекбоксов обновляем видимость объектов и перерисовываем группы узлов
     ['mapFilterNode', 'mapFilterNodeAggregationOnly', 'mapFilterCross', 'mapFilterSleeve', 'mapFilterSupport', 'mapFilterAttachment'].forEach(function(id) {
         var el = document.getElementById(id);
-        if (el) el.addEventListener('change', function() { if (typeof applyMapFilter === 'function') applyMapFilter(); });
+        if (el) el.addEventListener('change', function() {
+            if (typeof applyMapFilter === 'function') applyMapFilter();
+            if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
+        });
     });
 
     // Сохранить текущий вид карты как начальный для этого пользователя
@@ -1596,10 +1599,10 @@ function handleMapClick(e) {
                 showError('Нельзя прокладывать кабель к узлу сети. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
                 return;
             }
-            // Начало кабеля: только муфта или кросс
+            // Начало кабеля: муфта, кросс или крепление узлов
             if (!cableSource) {
-                if (objType !== 'sleeve' && objType !== 'cross') {
-                    showError('Начало кабеля должно быть муфтой или кроссом. Выберите муфту или кросс.', 'Недопустимое действие');
+                if (objType !== 'sleeve' && objType !== 'cross' && objType !== 'attachment') {
+                    showError('Начало кабеля должно быть муфтой, кроссом или креплением узлов. Выберите муфту, кросс или крепление.', 'Недопустимое действие');
                     return;
                 }
                 cableSource = clickedObject;
@@ -1615,13 +1618,13 @@ function handleMapClick(e) {
                 selectObject(cableSource);
                 return;
             }
-            if (objType === 'support') {
+            if (objType === 'support' || objType === 'attachment') {
                 cableWaypoints.push(clickedObject);
                 clearSelection();
                 selectObject(cableSource);
                 return;
             }
-            if (objType === 'sleeve' || objType === 'cross') {
+            if (objType === 'sleeve' || objType === 'cross' || objType === 'attachment') {
                 const points = [cableSource].concat(cableWaypoints).concat([clickedObject]);
                 const cableType = document.getElementById('cableType').value;
                 const success = createCableFromPoints(points, cableType);
@@ -1634,7 +1637,7 @@ function handleMapClick(e) {
                 }
                 return;
             }
-            showError('Кабель прокладывается от муфты/кросса до муфты/кросса. Промежуточными точками могут быть опоры.', 'Недопустимое действие');
+            showError('Кабель прокладывается от муфты/кросса/крепления до муфты/кросса/крепления. Промежуточными точками могут быть опоры или крепления.', 'Недопустимое действие');
         } else {
             // Клик по пустому месту — прилипание к ближайшему объекту (муфта/кросс/опора)
             if (cableSource) {
@@ -1644,8 +1647,8 @@ function handleMapClick(e) {
                 objects.forEach(obj => {
                     if (obj && obj.geometry && obj.properties) {
                         const t = obj.properties.get('type');
-                        if (t !== 'sleeve' && t !== 'cross' && t !== 'support') return;
-                        if (t === 'sleeve' || t === 'cross') {
+                        if (t !== 'sleeve' && t !== 'cross' && t !== 'support' && t !== 'attachment') return;
+                        if (t === 'sleeve' || t === 'cross' || t === 'attachment') {
                             if (obj === cableSource) return;
                         }
                         try {
@@ -1662,7 +1665,7 @@ function handleMapClick(e) {
                 });
                 if (nearestObject) {
                     const t = nearestObject.properties.get('type');
-                    if (t === 'support') {
+                    if (t === 'support' || t === 'attachment') {
                         cableWaypoints.push(nearestObject);
                         clearSelection();
                         selectObject(cableSource);
@@ -2541,7 +2544,7 @@ function createObject(type, name, coords, options = {}) {
                 selectObject(cableSource);
                 return;
             }
-            if (type === 'support') {
+            if (type === 'support' || type === 'attachment') {
                 cableWaypoints.push(placemark);
                 clearSelection();
                 selectObject(cableSource);
@@ -4441,7 +4444,7 @@ function createObjectFromData(data, opts) {
                 selectObject(cableSource);
                 return;
             }
-            if (type === 'support') {
+            if (type === 'support' || type === 'attachment') {
                 cableWaypoints.push(placemark);
                 clearSelection();
                 selectObject(cableSource);
@@ -7767,18 +7770,24 @@ function updateNodeDisplay() {
         const label = node.properties.get('label');
         if (label) try { myMap.geoObjects.remove(label); } catch (e) {}
     });
+    const mapFilterState = typeof getMapFilterState === 'function' ? getMapFilterState() : {};
+    const aggregationOnly = !!mapFilterState.nodeAggregationOnly;
     const groups = getNodeGroups();
     groups.forEach(group => {
-        if (group.nodes.length === 1) {
-            const node = group.nodes[0];
+        const displayNodes = aggregationOnly
+            ? group.nodes.filter(function(nd) { return (nd.properties && nd.properties.get('nodeKind')) === 'aggregation'; })
+            : group.nodes;
+        if (displayNodes.length === 0) return;
+        if (displayNodes.length === 1) {
+            const node = displayNodes[0];
             myMap.geoObjects.add(node);
             const label = node.properties.get('label');
             if (label) myMap.geoObjects.add(label);
             return;
         }
         const coords = group.coords;
-        const n = group.nodes.length;
-        const hasAggregation = group.nodes.some(function(nd) { return (nd.properties && nd.properties.get('nodeKind')) === 'aggregation'; });
+        const n = displayNodes.length;
+        const hasAggregation = displayNodes.some(function(nd) { return (nd.properties && nd.properties.get('nodeKind')) === 'aggregation'; });
         const groupColor = hasAggregation ? '#ef4444' : '#22c55e';
         const groupStroke = hasAggregation ? '#f87171' : '#4ade80';
         const nodeGroupName = getNodeGroupName(coords);
@@ -7790,6 +7799,7 @@ function updateNodeDisplay() {
         const groupPlacemark = new ymaps.Placemark(coords, {
             type: 'nodeGroup',
             nodeGroup: group.nodes,
+            displayNodes: displayNodes,
             balloonContent: ''
         }, {
             iconLayout: 'default#image',
@@ -7800,17 +7810,17 @@ function updateNodeDisplay() {
             zIndexHover: 2000,
             hasBalloon: false,
             hasHint: true,
-            hintContent: nodeGroupName || `Группа узлов (${n})`,
+            hintContent: nodeGroupName || (n === 1 ? 'Узел' : `Группа узлов (${n})`),
             draggable: isEditMode,
             syncOverlayInit: true,
             cursor: 'pointer'
         });
-        groupPlacemark.properties.set('labelContent', nodeGroupName || (group.nodes.length + ' уз.'));
+        groupPlacemark.properties.set('labelContent', nodeGroupName || (n + ' уз.'));
         groupPlacemark.events.add('click', function(e) {
             e.preventDefault();
             e.stopPropagation();
             if (objectPlacementMode) return;
-            const nodes = groupPlacemark.properties.get('nodeGroup');
+            const nodes = groupPlacemark.properties.get('displayNodes') || groupPlacemark.properties.get('nodeGroup');
             if (nodes.length === 1) {
                 showObjectInfo(nodes[0]);
                 return;

@@ -6,18 +6,21 @@ function showToast(message, type, title, duration) {
     duration = duration !== undefined ? duration : 4000;
     const container = document.getElementById('toastContainer');
     if (!container) return;
-
+    const msg = (message == null || message === '') ? 'Произошла ошибка' : String(message);
     const icons = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
     const titles = { success: 'Успешно', error: 'Ошибка', warning: 'Внимание', info: 'Информация' };
+    const titleText = title || titles[type] || titles.info;
 
     const toast = document.createElement('div');
     toast.className = 'toast toast-' + type;
     toast.innerHTML = '<div class="toast-icon">' + (icons[type] || icons.info) + '</div>' +
         '<div class="toast-content">' +
-        '<div class="toast-title">' + (title || titles[type] || titles.info) + '</div>' +
-        '<div class="toast-message">' + message + '</div>' +
+        '<div class="toast-title"></div>' +
+        '<div class="toast-message"></div>' +
         '</div>' +
         '<button class="toast-close" onclick="this.parentElement.remove()">✕</button>';
+    toast.querySelector('.toast-title').textContent = titleText;
+    toast.querySelector('.toast-message').textContent = msg;
     container.appendChild(toast);
 
     setTimeout(function() {
