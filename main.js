@@ -27,7 +27,7 @@ let nodeGroupPlacemarks = []; // Метки групп узлов в одном 
 let crossGroupNames = new Map(); // ключ: "lat,lon", значение: название группы кроссов
 let nodeGroupNames = new Map(); // ключ: "lat,lon", значение: название группы узлов
 let collaboratorCursorsPlacemarks = []; // Метки курсоров других пользователей на карте (совместная работа)
-let mapFilter = { node: true, cross: true, sleeve: true, support: true }; // Фильтр отображения на карте
+let mapFilter = { node: true, nodeAggregationOnly: false, cross: true, sleeve: true, support: true, attachment: true }; // Фильтр отображения на карте
 
 function groupKey(coords) {
     return coords[0].toFixed(6) + ',' + coords[1].toFixed(6);
@@ -767,7 +767,7 @@ function setupEventListeners() {
     }
 
     // Фильтр карты: при смене чекбоксов обновляем видимость объектов
-    ['mapFilterNode', 'mapFilterCross', 'mapFilterSleeve', 'mapFilterSupport'].forEach(function(id) {
+    ['mapFilterNode', 'mapFilterNodeAggregationOnly', 'mapFilterCross', 'mapFilterSleeve', 'mapFilterSupport', 'mapFilterAttachment'].forEach(function(id) {
         var el = document.getElementById(id);
         if (el) el.addEventListener('change', function() { if (typeof applyMapFilter === 'function') applyMapFilter(); });
     });
@@ -832,7 +832,7 @@ function setupEventListeners() {
         const type = this.value;
         
         // Показываем имя для узлов и кроссов
-        nameInputGroup.style.display = (type === 'node' || type === 'cross' || type === 'support') ? 'block' : 'none';
+        nameInputGroup.style.display = (type === 'node' || type === 'cross' || type === 'support' || type === 'attachment') ? 'block' : 'none';
         sleeveSettingsGroup.style.display = type === 'sleeve' ? 'block' : 'none';
         crossSettingsGroup.style.display = type === 'cross' ? 'block' : 'none';
         nodeSettingsGroup.style.display = type === 'node' ? 'block' : 'none';
@@ -840,7 +840,7 @@ function setupEventListeners() {
         // Обновляем label для имени
         const nameLabel = nameInputGroup.querySelector('label');
         if (nameLabel) {
-            nameLabel.textContent = type === 'cross' ? 'Имя кросса' : (type === 'support' ? 'Подпись опоры' : 'Имя узла');
+            nameLabel.textContent = type === 'cross' ? 'Имя кросса' : (type === 'support' ? 'Подпись опоры' : (type === 'attachment' ? 'Название' : 'Имя узла'));
         }
         
         // Автоматически заполняем максимальное количество волокон для выбранного типа муфты
@@ -1183,6 +1183,7 @@ function renderSearchResults(results, query) {
             case 'cross': return '📦';
             case 'sleeve': return '🔴';
             case 'support': return '📍';
+            case 'attachment': return '🔗';
             case 'cable': return '🔌';
             default: return '📍';
         }
@@ -1538,6 +1539,9 @@ function handleMapClick(e) {
             createObject(type, name || '', coords, { crossPorts: crossPorts });
             currentPlacementName = name || '';
         } else if (type === 'support') {
+            const name = document.getElementById('objectName').value.trim();
+            createObject(type, name || '', coords);
+        } else if (type === 'attachment') {
             const name = document.getElementById('objectName').value.trim();
             createObject(type, name || '', coords);
         } else {
@@ -2393,6 +2397,16 @@ function createObject(type, name, coords, options = {}) {
             </svg>`;
             balloonContent = `Узел сети: ${name}`;
             break;
+        case 'attachment':
+            // Крепление узлов — точка прокладки кабеля (оранжевый значок)
+            color = '#f59e0b';
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="14" cy="14" r="12" fill="${color}" stroke="white" stroke-width="2"/>
+                <path d="M10 14 L14 10 L18 14 L14 18 Z" fill="white" opacity="0.95"/>
+                <circle cx="14" cy="14" r="2" fill="${color}"/>
+            </svg>`;
+            balloonContent = name ? 'Крепление узлов: ' + name : 'Крепление узлов';
+            break;
         default:
             color = '#94a3b8';
             iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -2511,8 +2525,8 @@ function createObject(type, name, coords, options = {}) {
                 return;
             }
             if (!cableSource) {
-                if (type !== 'sleeve' && type !== 'cross') {
-                    showError('Начало кабеля должно быть муфтой или кроссом. Выберите муфту или кросс.', 'Недопустимое действие');
+                if (type !== 'sleeve' && type !== 'cross' && type !== 'attachment') {
+                    showError('Начало кабеля должно быть муфтой, кроссом или креплением узлов. Выберите муфту, кросс или крепление.', 'Недопустимое действие');
                     return;
                 }
                 cableSource = placemark;
@@ -2533,7 +2547,7 @@ function createObject(type, name, coords, options = {}) {
                 selectObject(cableSource);
                 return;
             }
-            if (type === 'sleeve' || type === 'cross') {
+            if (type === 'sleeve' || type === 'cross' || type === 'attachment') {
                 const points = [cableSource].concat(cableWaypoints).concat([placemark]);
                 const cableType = document.getElementById('cableType').value;
                 const success = createCableFromPoints(points, cableType);
@@ -2549,8 +2563,8 @@ function createObject(type, name, coords, options = {}) {
             return;
         }
         
-        // Для узлов, кроссов и муфт показываем информацию
-        if ((type === 'node' || type === 'sleeve' || type === 'cross')) {
+        // Для узлов, кроссов, муфт и креплений показываем информацию
+        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'attachment')) {
             showObjectInfo(placemark);
             return;
         }
@@ -2954,12 +2968,12 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
         showError('Нельзя прокладывать кабель напрямую к узлу сети. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
         return false;
     }
-    if (firstType !== 'sleeve' && firstType !== 'cross') {
-        showError('Кабель можно прокладывать только от муфты или кросса до муфты или кросса. Начальная точка должна быть муфтой или кроссом.', 'Недопустимое действие');
+    if (firstType !== 'sleeve' && firstType !== 'cross' && firstType !== 'attachment') {
+        showError('Кабель можно прокладывать от муфты, кросса или крепления узлов. Начальная точка должна быть муфтой, кроссом или креплением.', 'Недопустимое действие');
         return false;
     }
-    if (lastType !== 'sleeve' && lastType !== 'cross') {
-        showError('Кабель можно прокладывать только от муфты или кросса до муфты или кросса. Конечная точка должна быть муфтой или кроссом.', 'Недопустимое действие');
+    if (lastType !== 'sleeve' && lastType !== 'cross' && lastType !== 'attachment') {
+        showError('Кабель можно прокладывать до муфты, кросса или крепления узлов. Конечная точка должна быть муфтой, кроссом или креплением.', 'Недопустимое действие');
         return false;
     }
     
@@ -4257,6 +4271,15 @@ function createObjectFromData(data, opts) {
             </svg>`;
             balloonContent = `Узел сети: ${name}`;
             break;
+        case 'attachment':
+            color = '#f59e0b';
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="14" cy="14" r="12" fill="${color}" stroke="white" stroke-width="2"/>
+                <path d="M10 14 L14 10 L18 14 L14 18 Z" fill="white" opacity="0.95"/>
+                <circle cx="14" cy="14" r="2" fill="${color}"/>
+            </svg>`;
+            balloonContent = name ? 'Крепление узлов: ' + name : 'Крепление узлов';
+            break;
         default:
             color = '#94a3b8';
             iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -4402,8 +4425,8 @@ function createObjectFromData(data, opts) {
                 return;
             }
             if (!cableSource) {
-                if (type !== 'sleeve' && type !== 'cross') {
-                    showError('Начало кабеля должно быть муфтой или кроссом. Выберите муфту или кросс.', 'Недопустимое действие');
+                if (type !== 'sleeve' && type !== 'cross' && type !== 'attachment') {
+                    showError('Начало кабеля должно быть муфтой, кроссом или креплением узлов. Выберите муфту, кросс или крепление.', 'Недопустимое действие');
                     return;
                 }
                 cableSource = placemark;
@@ -4424,7 +4447,7 @@ function createObjectFromData(data, opts) {
                 selectObject(cableSource);
                 return;
             }
-            if (type === 'sleeve' || type === 'cross') {
+            if (type === 'sleeve' || type === 'cross' || type === 'attachment') {
                 const points = [cableSource].concat(cableWaypoints).concat([placemark]);
                 const cableType = document.getElementById('cableType').value;
                 const success = createCableFromPoints(points, cableType);
@@ -4440,8 +4463,8 @@ function createObjectFromData(data, opts) {
             return;
         }
         
-        // Для узлов, кроссов и муфт показываем информацию
-        if ((type === 'node' || type === 'sleeve' || type === 'cross')) {
+        // Для узлов, кроссов, муфт и креплений показываем информацию
+        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'attachment')) {
             showObjectInfo(placemark);
             return;
         }
@@ -4666,6 +4689,8 @@ function showObjectInfo(obj) {
         title = 'Кабельная муфта';
     } else if (type === 'cross') {
         title = name ? `Оптический кросс: ${name}` : 'Оптический кросс';
+    } else if (type === 'attachment') {
+        title = name ? `Крепление узлов: ${name}` : 'Крепление узлов';
     }
     
     document.getElementById('modalTitle').textContent = title;
@@ -7753,9 +7778,12 @@ function updateNodeDisplay() {
         }
         const coords = group.coords;
         const n = group.nodes.length;
+        const hasAggregation = group.nodes.some(function(nd) { return (nd.properties && nd.properties.get('nodeKind')) === 'aggregation'; });
+        const groupColor = hasAggregation ? '#ef4444' : '#22c55e';
+        const groupStroke = hasAggregation ? '#f87171' : '#4ade80';
         const nodeGroupName = getNodeGroupName(coords);
         const iconSvg = `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="18" cy="18" r="16" fill="#22c55e" stroke="#4ade80" stroke-width="2"/>
+            <circle cx="18" cy="18" r="16" fill="${groupColor}" stroke="${groupStroke}" stroke-width="2"/>
             <text x="18" y="22" text-anchor="middle" fill="white" font-size="14" font-weight="bold">${n}</text>
         </svg>`;
         const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(iconSvg)));
@@ -7883,14 +7911,18 @@ function updateNodeDisplay() {
 // Возвращает текущее состояние фильтра карты из чекбоксов
 function getMapFilterState() {
     var nodeEl = document.getElementById('mapFilterNode');
+    var nodeAggEl = document.getElementById('mapFilterNodeAggregationOnly');
     var crossEl = document.getElementById('mapFilterCross');
     var sleeveEl = document.getElementById('mapFilterSleeve');
     var supportEl = document.getElementById('mapFilterSupport');
+    var attachmentEl = document.getElementById('mapFilterAttachment');
     return {
         node: nodeEl ? nodeEl.checked : true,
+        nodeAggregationOnly: nodeAggEl ? nodeAggEl.checked : false,
         cross: crossEl ? crossEl.checked : true,
         sleeve: sleeveEl ? sleeveEl.checked : true,
-        support: supportEl ? supportEl.checked : true
+        support: supportEl ? supportEl.checked : true,
+        attachment: attachmentEl ? attachmentEl.checked : true
     };
 }
 
@@ -7903,6 +7935,11 @@ function applyMapFilter() {
         if (!obj || !obj.properties) return false;
         var type = obj.properties.get('type');
         if (type === 'cable' || type === 'cableLabel') return false;
+        if (type === 'node') {
+            if (!filter.node) return false;
+            if (filter.nodeAggregationOnly) return obj.properties.get('nodeKind') === 'aggregation';
+            return true;
+        }
         return filter[type] === true;
     }
     var visibleCables = new Set();
@@ -7940,7 +7977,12 @@ function applyMapFilter() {
         try { if (pm.options) pm.options.set('visible', filter.cross); } catch (e) {}
     });
     nodeGroupPlacemarks.forEach(function(pm) {
-        try { if (pm.options) pm.options.set('visible', filter.node); } catch (e) {}
+        var visible = filter.node;
+        if (visible && filter.nodeAggregationOnly) {
+            var group = pm.properties && pm.properties.get('nodeGroup');
+            visible = Array.isArray(group) && group.some(function(nd) { return nd.properties && nd.properties.get('nodeKind') === 'aggregation'; });
+        }
+        try { if (pm.options) pm.options.set('visible', visible); } catch (e) {}
     });
 }
 

@@ -15,6 +15,7 @@ function getObjectTypeName(type) {
         case 'sleeve': return 'Кабельная муфта';
         case 'cross': return 'Оптический кросс';
         case 'node': return 'Узел сети';
+        case 'attachment': return 'Крепление узлов';
         default: return 'Объект';
     }
 }

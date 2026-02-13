@@ -181,9 +181,11 @@
                         <p class="map-filter-hint">Показать на карте:</p>
                         <div class="map-filter-checkboxes">
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterNode" checked> Узлы</label>
+                            <label class="map-filter-check map-filter-check-indent"><input type="checkbox" id="mapFilterNodeAggregationOnly"> Только узлы агрегации</label>
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterCross" checked> Кроссы</label>
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterSleeve" checked> Муфты</label>
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterSupport" checked> Опоры</label>
+                            <label class="map-filter-check"><input type="checkbox" id="mapFilterAttachment" checked> Крепление узлов</label>
                         </div>
                         <p class="map-filter-note">Кабели отображаются только между видимыми объектами.</p>
                         <div class="map-filter-save-start">
@@ -216,6 +218,7 @@
                                 <option value="sleeve">🔌 Кабельные муфты</option>
                                 <option value="cross">📦 Оптический кросс</option>
                                 <option value="node">🖥️ Узлы сети</option>
+                                <option value="attachment">🔗 Крепление узлов</option>
                             </select>
                         </div>
                         <div class="form-group" id="objectNameGroup" style="display: none;">

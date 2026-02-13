@@ -1107,6 +1107,9 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
 .map-filter-check input {
     margin: 0;
 }
+.map-filter-check-indent {
+    margin-left: 1.25em;
+}
 .map-filter-note {
     margin: 0;
     font-size: 0.75rem;
