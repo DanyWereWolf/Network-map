@@ -2971,22 +2971,22 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     var lastType = points[points.length - 1] && points[points.length - 1].properties ? points[points.length - 1].properties.get('type') : null;
     
     if (firstType === 'node' || lastType === 'node') {
-        showError('Нельзя прокладывать кабель напрямую к узлу сети. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
+        if (!skipSync) showError('Нельзя прокладывать кабель напрямую к узлу сети. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
         return false;
     }
     if (firstType !== 'sleeve' && firstType !== 'cross' && firstType !== 'attachment') {
-        showError('Кабель можно прокладывать от муфты, кросса или крепления узлов. Начальная точка должна быть муфтой, кроссом или креплением.', 'Недопустимое действие');
+        if (!skipSync) showError('Кабель можно прокладывать от муфты, кросса или крепления узлов. Начальная точка должна быть муфтой, кроссом или креплением.', 'Недопустимое действие');
         return false;
     }
     if (lastType !== 'sleeve' && lastType !== 'cross' && lastType !== 'attachment') {
-        showError('Кабель можно прокладывать до муфты, кросса или крепления узлов. Конечная точка должна быть муфтой, кроссом или креплением.', 'Недопустимое действие');
+        if (!skipSync) showError('Кабель можно прокладывать до муфты, кросса или крепления узлов. Конечная точка должна быть муфтой, кроссом или креплением.', 'Недопустимое действие');
         return false;
     }
     
     for (var idx = 0; idx < points.length; idx++) {
         var obj = points[idx];
         if (obj && obj.properties && obj.properties.get('type') === 'node') {
-            showError('Узел сети не может быть промежуточной точкой кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
+            if (!skipSync) showError('Узел сети не может быть промежуточной точкой кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
             return false;
         }
     }
@@ -3003,7 +3003,7 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
                 // Учитываем, что муфта будет использоваться для двух сегментов (кроме первой и последней)
                 const segmentsCount = (i === 0 || i === points.length - 1) ? 1 : 2;
                 if (usedFibersCount + (fiberCount * segmentsCount) > maxFibers) {
-                    showError(`Превышена максимальная вместимость муфты! Использовано: ${usedFibersCount}/${maxFibers} волокон. Попытка добавить: ${fiberCount * segmentsCount} волокон`, 'Переполнение муфты');
+                    if (!skipSync) showError(`Превышена максимальная вместимость муфты! Использовано: ${usedFibersCount}/${maxFibers} волокон. Попытка добавить: ${fiberCount * segmentsCount} волокон`, 'Переполнение муфты');
                     return false;
                 }
             }
@@ -3594,19 +3594,27 @@ function normalizeCableGeometry(geom) {
     return flat.length >= 2 ? flat : null;
 }
 
-/** Найти объект из refs, ближайший к заданной координате (для однозначного определения начала/конца кабеля по геометрии). */
-function findRefClosestToCoord(refs, coord, tolerance) {
+/** Найти объект из refs, ближайший к заданной координате (для однозначного определения начала/конца кабеля по геометрии).
+ * preferCableEndpoint: при true среди объектов в пределах tolerance предпочитаем муфту/кросс/крепление, а не узел (чтобы при перезагрузке карты не выбирать узел вместо крепления в одной точке). */
+function findRefClosestToCoord(refs, coord, tolerance, preferCableEndpoint) {
     if (!Array.isArray(refs) || !coord || coord.length < 2) return null;
     tolerance = tolerance || 0.0005;
     var best = null, bestDist = tolerance;
+    var bestEndpoint = null, bestEndpointDist = tolerance; // муфта/кросс/крепление в пределах tolerance
     for (var r = 0; r < refs.length; r++) {
         var o = refs[r];
         if (!o || !o.geometry) continue;
         var c = o.geometry.getCoordinates();
         if (!c || c.length < 2) continue;
         var d = Math.sqrt(Math.pow(c[0] - coord[0], 2) + Math.pow(c[1] - coord[1], 2));
+        if (d >= tolerance) continue;
+        var t = o.properties && o.properties.get('type');
+        if (preferCableEndpoint && (t === 'sleeve' || t === 'cross' || t === 'attachment')) {
+            if (d < bestEndpointDist) { bestEndpointDist = d; bestEndpoint = o; }
+        }
         if (d < bestDist) { bestDist = d; best = o; }
     }
+    if (preferCableEndpoint && bestEndpoint) return bestEndpoint;
     return best;
 }
 
@@ -3977,8 +3985,8 @@ function applyRemoteStateMerged(data) {
         var coords = normalizeCableGeometry(item.geometry);
         var fromObj = null, toObj = null;
         if (coords && coords.length >= 2) {
-            fromObj = findRefClosestToCoord(refs, coords[0]);
-            toObj = findRefClosestToCoord(refs, coords[coords.length - 1]);
+            fromObj = findRefClosestToCoord(refs, coords[0], undefined, true);
+            toObj = findRefClosestToCoord(refs, coords[coords.length - 1], undefined, true);
         }
         if (!fromObj || !toObj) {
             if (item.from == null || item.to == null) return;
@@ -4185,8 +4193,8 @@ function importData(data, opts) {
             var coords = normalizeCableGeometry(item.geometry);
             var fromObj = null, toObj = null;
             if (coords && coords.length >= 2) {
-                fromObj = findRefClosestToCoord(refsOnly, coords[0]);
-                toObj = findRefClosestToCoord(refsOnly, coords[coords.length - 1]);
+                fromObj = findRefClosestToCoord(refsOnly, coords[0], undefined, true);
+                toObj = findRefClosestToCoord(refsOnly, coords[coords.length - 1], undefined, true);
             }
             if (!fromObj || !toObj) {
                 if (item.from === undefined || item.to === undefined || item.from >= objectRefs.length || item.to >= objectRefs.length) return;
