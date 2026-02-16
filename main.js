@@ -26,6 +26,8 @@ let crossGroupPlacemarks = []; // Метки групп кроссов в одн
 let nodeGroupPlacemarks = []; // Метки групп узлов в одном месте
 let crossGroupNames = new Map(); // ключ: "lat,lon", значение: название группы кроссов
 let nodeGroupNames = new Map(); // ключ: "lat,lon", значение: название группы узлов
+const FIBER_MODAL_SIZE_KEY = 'fiberManagementModalSize';
+let fiberModalResizeState = null; // { el, startX, startY, startW, startH } при перетаскивании ручки
 let collaboratorCursorsPlacemarks = []; // Метки курсоров других пользователей на карте (совместная работа)
 let mapFilter = { node: true, nodeAggregationOnly: false, cross: true, sleeve: true, support: true, attachment: true, olt: true, splitter: true, onu: true }; // Фильтр отображения на карте
 let lastDraggedPlacemark = null; // Не открывать инфо по клику сразу после переноса (OLT/сплиттер/ONU)
@@ -5043,6 +5045,76 @@ function updateStats() {
     if (cableEl) cableEl.textContent = cableCount;
 }
 
+// Размер окна кросса/муфты: применить сохранённый размер
+function applyFiberModalSavedSize(modalContent) {
+    try {
+        const raw = localStorage.getItem(FIBER_MODAL_SIZE_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (data.width) modalContent.style.width = data.width;
+        if (data.height) modalContent.style.height = data.height;
+    } catch (_) {}
+}
+
+// Ручка изменения размера окна кросса/муфты
+function ensureFiberModalResizeHandle(modalContent) {
+    let handle = modalContent.querySelector('.fiber-modal-resize-handle');
+    if (handle) return;
+    handle = document.createElement('div');
+    handle.className = 'fiber-modal-resize-handle';
+    handle.title = 'Изменить размер окна';
+    handle.setAttribute('aria-label', 'Изменить размер окна');
+    modalContent.appendChild(handle);
+
+    const MIN_W = 640, MIN_H = 420;
+
+    handle.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const rect = modalContent.getBoundingClientRect();
+        fiberModalResizeState = {
+            el: modalContent,
+            startX: e.clientX,
+            startY: e.clientY,
+            startW: rect.width,
+            startH: rect.height
+        };
+        document.addEventListener('mousemove', onFiberModalResizeMove);
+        document.addEventListener('mouseup', onFiberModalResizeUp);
+    });
+}
+
+function onFiberModalResizeMove(e) {
+    if (!fiberModalResizeState || !fiberModalResizeState.el) return;
+    const MIN_W = 640, MIN_H = 420;
+    const dw = e.clientX - fiberModalResizeState.startX;
+    const dh = e.clientY - fiberModalResizeState.startY;
+    let w = Math.max(MIN_W, fiberModalResizeState.startW + dw);
+    let h = Math.max(MIN_H, fiberModalResizeState.startH + dh);
+    fiberModalResizeState.el.style.width = w + 'px';
+    fiberModalResizeState.el.style.height = h + 'px';
+}
+
+function onFiberModalResizeUp() {
+    if (fiberModalResizeState && fiberModalResizeState.el) {
+        const w = fiberModalResizeState.el.style.width;
+        const h = fiberModalResizeState.el.style.height;
+        try {
+            localStorage.setItem(FIBER_MODAL_SIZE_KEY, JSON.stringify({ width: w, height: h }));
+        } catch (_) {}
+    }
+    fiberModalResizeState = null;
+    document.removeEventListener('mousemove', onFiberModalResizeMove);
+    document.removeEventListener('mouseup', onFiberModalResizeUp);
+}
+
+function removeFiberModalResizeHandle(modalContent) {
+    const handle = modalContent.querySelector('.fiber-modal-resize-handle');
+    if (handle) handle.remove();
+    modalContent.style.width = '';
+    modalContent.style.height = '';
+}
+
 // Функции для работы с модальным окном
 function showObjectInfo(obj) {
     currentModalObject = obj;
@@ -5396,12 +5468,18 @@ function showObjectInfo(obj) {
     
     document.getElementById('modalInfo').innerHTML = html;
     
-    // Для кросса и муфты — шире модальное окно и больше места под схему
+    // Для кросса и муфты — шире модальное окно, настраиваемый размер и ручка изменения
     const modal = document.getElementById('infoModal');
     const modalContent = modal && modal.querySelector('.modal-content');
     if (modalContent) {
-        if (type === 'cross' || type === 'sleeve') modalContent.classList.add('fiber-management-modal');
-        else modalContent.classList.remove('fiber-management-modal');
+        if (type === 'cross' || type === 'sleeve') {
+            modalContent.classList.add('fiber-management-modal');
+            applyFiberModalSavedSize(modalContent);
+            ensureFiberModalResizeHandle(modalContent);
+        } else {
+            modalContent.classList.remove('fiber-management-modal');
+            removeFiberModalResizeHandle(modalContent);
+        }
     }
     
     setupModalEventListeners();
@@ -6167,16 +6245,17 @@ function setupFiberConnectionHandlers() {
         });
     });
     
-    // Обработчики изменения подписей жил
+    // Обработчики изменения подписей жил (change и blur — чтобы подпись сохранялась при уходе фокуса)
     document.querySelectorAll('.fiber-label-input').forEach(input => {
-        input.addEventListener('change', function(e) {
-            e.stopPropagation();
-            const cableId = this.getAttribute('data-cable-id');
-            const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
-            const newLabel = this.value.trim();
-            
+        function saveLabel() {
+            const cableId = input.getAttribute('data-cable-id');
+            const fiberNumber = parseInt(input.getAttribute('data-fiber-number'), 10);
+            if (!cableId || isNaN(fiberNumber)) return;
+            const newLabel = input.value.trim();
             updateFiberLabel(sleeveObj, cableId, fiberNumber, newLabel);
-        });
+        }
+        input.addEventListener('change', function(e) { e.stopPropagation(); saveLabel(); });
+        input.addEventListener('blur', function(e) { e.stopPropagation(); saveLabel(); });
     });
     
     // Обработчики подключения к узлу (для кроссов)
@@ -6232,8 +6311,10 @@ function setupFiberConnectionHandlers() {
                 var listWrap = document.getElementById('fiber-connections-list-wrap');
                 if (schemeWrap) schemeWrap.style.display = 'block';
                 if (listWrap) listWrap.style.display = 'none';
-                document.querySelectorAll('.fiber-view-btn[data-view="scheme"]').forEach(function(b) { b.classList.add('active'); });
-                document.querySelectorAll('.fiber-view-btn[data-view="list"]').forEach(function(b) { b.classList.remove('active'); });
+                var schemeBtn = document.querySelector('.fiber-view-btn[data-view="scheme"]');
+                var listBtn = document.querySelector('.fiber-view-btn[data-view="list"]');
+                if (schemeBtn) schemeBtn.classList.add('active');
+                if (listBtn) listBtn.classList.remove('active');
             }
         });
     }
@@ -9311,9 +9392,9 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         }
     }
     
-    // Кнопка скрыть/показать схему и блок схемы
+    // Кнопка скрыть/показать схему и блок схемы (схема + список соединений)
     html += '<div class="fiber-scheme-toggle-row">';
-    html += '<button type="button" class="fiber-scheme-visibility-btn" id="fiber-scheme-visibility-btn" title="Скрыть или показать схему">▼ Скрыть схему</button>';
+    html += '<button type="button" class="fiber-scheme-visibility-btn" id="fiber-scheme-visibility-btn" title="Скрыть схему и список соединений. Таблица ниже станет выше.">▼ Скрыть схему</button>';
     html += '</div>';
     html += '<div class="fiber-diagram-block" id="fiber-diagram-block">';
     if (cablesData.length >= 2) {
@@ -9440,8 +9521,10 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         }
         html += '<div class="fiber-connections-list-wrap" id="fiber-connections-list-wrap" style="display: none;">';
         html += '<div class="fiber-connections-list">';
+        if (isEditMode && fiberConnections.length > 0) html += '<p class="fiber-connections-list-sub">Удаление: клик по линии в схеме или кнопка ✕ в строке.</p>';
         if (fiberConnections.length === 0) {
-            html += '<p class="fiber-connections-list-empty">Нет соединений между жилами. Выберите две жилы в таблице или в схеме.</p>';
+            html += '<p class="fiber-connections-list-empty">Нет соединений между жилами.</p>';
+            if (isEditMode) html += '<p class="fiber-connections-list-hint">Переключитесь на «Схема» или кликайте по жилам в таблице ниже: первая жила → вторая жила из другого кабеля.</p>';
         } else {
             fiberConnections.forEach(function(conn, idx) {
                 const fromName = cableNameById(conn.from.cableId);
@@ -9480,8 +9563,10 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         const statusColor = isUsed ? '#b91c1c' : (hasNodeConnection ? '#22c55e' : (hasOltConnection ? '#0ea5e9' : '#22c55e'));
         const itemBorder = isUsed ? '#dc2626' : (hasNodeConnection ? '#22c55e' : (hasOltConnection ? '#0ea5e9' : 'var(--border-color)'));
         const usedClass = isUsed ? ' fiber-used cross-fiber-used' : '';
+        var cellTitle = '';
+        if (isEditMode && !hasAnyOutConnection && !isConnected) cellTitle = 'Клик: выбрать жилу, затем клик по жиле в другом кабеле — создать соединение';
         return `
-            <div class="fiber-item${usedClass}" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}"
+            <div class="fiber-item${usedClass}" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}"${cellTitle ? ' title="' + cellTitle.replace(/"/g, '&quot;') + '"' : ''}
                  style="display: flex; flex-direction: column; gap: 4px; padding: 8px; border-radius: 4px; border: 1px solid ${itemBorder}; min-width: 0;">
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <div class="fiber-color" style="width: 22px; height: 22px; border-radius: 50%; background-color: ${fiber.color}; border: 2px solid #333; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
@@ -9499,6 +9584,8 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     
     // Таблица кабелей и жил: фиксированный заголовок, прокручиваемое тело
     const maxRows = Math.max(1, maxFibers);
+    html += '<div class="cross-fiber-table-section">';
+    html += '<h4 class="cross-fiber-table-caption">Таблица кабелей и жил</h4>';
     html += '<div class="cross-fiber-table-wrap">';
     html += '<table class="cross-fiber-table">';
     html += '<thead><tr>';
@@ -9527,8 +9614,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         html += '</tr>';
     }
     html += '</tbody></table>';
-    html += '</div>';
-    html += '</div>';
+    html += '</div></div></div>';
     
     // Сохраняем данные для обработчиков событий
     html += `<div id="fiber-connections-data" data-sleeve-obj-id="${sleeveObj.properties.get('uniqueId') || 'temp'}" style="display: none;"></div>`;

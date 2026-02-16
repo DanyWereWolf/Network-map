@@ -1449,14 +1449,52 @@ button {
     backdrop-filter: blur(20px);
 }
 
-/* Кросс / муфта: шире окно и больше места под схему жил */
+/* Кросс / муфта: шире окно и больше места под схему жил; настраиваемый размер */
 .modal-content.fiber-management-modal {
     width: 94%;
     max-width: 1200px;
+    min-width: 640px;
+    min-height: 420px;
+    position: relative;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
 }
 
 .modal-content.fiber-management-modal .modal-body {
     max-height: 88vh;
+    min-height: 0;
+    flex: 1;
+    overflow: auto;
+    box-sizing: border-box;
+}
+
+/* Ручка изменения размера окна кросса/муфты */
+.fiber-modal-resize-handle {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 20px;
+    height: 20px;
+    cursor: nwse-resize;
+    z-index: 10;
+}
+
+.fiber-modal-resize-handle::after {
+    content: '';
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    width: 10px;
+    height: 10px;
+    border-right: 2px solid var(--text-muted);
+    border-bottom: 2px solid var(--text-muted);
+    opacity: 0.7;
+}
+
+.fiber-modal-resize-handle:hover::after {
+    opacity: 1;
+    border-color: var(--accent-primary);
 }
 
 /* Блок схемы жил: фиксированная высота и прокрутка */
@@ -1549,6 +1587,23 @@ button {
     color: var(--text-muted);
     font-size: 0.875rem;
     text-align: center;
+}
+
+.fiber-connections-list-hint {
+    margin: 0;
+    padding: 0 16px 12px;
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    text-align: center;
+}
+
+.fiber-connections-list-sub {
+    margin: 0 0 8px 0;
+    padding: 6px 10px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
 }
 
 .fiber-connection-row {
@@ -1914,6 +1969,18 @@ button {
 
 .fiber-item.fiber-used .fiber-label {
     color: #991b1b;
+}
+
+/* Секция таблицы кабелей и жил */
+.cross-fiber-table-section {
+    margin-top: 16px;
+}
+
+.cross-fiber-table-caption {
+    margin: 0 0 10px 0;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text-primary);
 }
 
 /* Таблица кабелей/жил в кроссе: фиксированный заголовок, прокрутка */
