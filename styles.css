@@ -1449,58 +1449,28 @@ button {
     backdrop-filter: blur(20px);
 }
 
-/* Кросс / муфта: шире окно и больше места под схему жил; настраиваемый размер */
+/* Кросс / муфта: широкое окно, почти на весь экран — всё вмещается и видно */
 .modal-content.fiber-management-modal {
-    width: 94%;
-    max-width: 1200px;
-    min-width: 640px;
-    min-height: 420px;
-    position: relative;
-    box-sizing: border-box;
+    width: 96%;
+    max-width: 1600px;
+    margin: 1.5% auto;
+    max-height: 97vh;
     display: flex;
     flex-direction: column;
 }
 
 .modal-content.fiber-management-modal .modal-body {
-    max-height: 88vh;
-    min-height: 0;
+    max-height: calc(97vh - 120px);
+    min-height: 400px;
+    overflow-y: auto;
+    overflow-x: hidden;
     flex: 1;
-    overflow: auto;
-    box-sizing: border-box;
-}
-
-/* Ручка изменения размера окна кросса/муфты */
-.fiber-modal-resize-handle {
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    width: 20px;
-    height: 20px;
-    cursor: nwse-resize;
-    z-index: 10;
-}
-
-.fiber-modal-resize-handle::after {
-    content: '';
-    position: absolute;
-    right: 6px;
-    bottom: 6px;
-    width: 10px;
-    height: 10px;
-    border-right: 2px solid var(--text-muted);
-    border-bottom: 2px solid var(--text-muted);
-    opacity: 0.7;
-}
-
-.fiber-modal-resize-handle:hover::after {
-    opacity: 1;
-    border-color: var(--accent-primary);
 }
 
 /* Блок схемы жил: фиксированная высота и прокрутка */
 .fiber-scheme-wrap {
-    max-height: 52vh;
-    min-height: 280px;
+    max-height: 42vh;
+    min-height: 220px;
     overflow: auto;
     margin-bottom: 14px;
     border-radius: var(--radius-md);
@@ -1565,7 +1535,7 @@ button {
 
 /* Список соединений (альтернатива схеме) */
 .fiber-connections-list-wrap {
-    max-height: 52vh;
+    max-height: 42vh;
     min-height: 120px;
     overflow: auto;
     margin-bottom: 14px;
@@ -1985,24 +1955,25 @@ button {
 
 /* Таблица кабелей/жил в кроссе: фиксированный заголовок, прокрутка */
 .cross-fiber-table-wrap {
-    max-height: 380px;
+    max-height: 38vh;
+    min-height: 200px;
     overflow: auto;
-    margin-top: 15px;
+    margin-top: 12px;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     background: var(--bg-card);
 }
 
-/* Когда схема и список соединений скрыты — таблица занимает больше места */
+/* Когда схема и список соединений скрыты — таблица занимает почти всё место */
 .fiber-connections-container.scheme-hidden .cross-fiber-table-wrap {
-    max-height: 72vh;
-    min-height: 320px;
+    max-height: 75vh;
+    min-height: 360px;
 }
 
 /* В режиме редактирования кросса — таблица заметнее и выше */
 .fiber-connections-container.cross-edit-mode .cross-fiber-table-wrap {
-    max-height: 52vh;
-    min-height: 280px;
+    max-height: 42vh;
+    min-height: 240px;
     border-width: 2px;
     border-color: var(--accent-primary);
     box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);

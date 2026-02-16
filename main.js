@@ -26,8 +26,6 @@ let crossGroupPlacemarks = []; // Метки групп кроссов в одн
 let nodeGroupPlacemarks = []; // Метки групп узлов в одном месте
 let crossGroupNames = new Map(); // ключ: "lat,lon", значение: название группы кроссов
 let nodeGroupNames = new Map(); // ключ: "lat,lon", значение: название группы узлов
-const FIBER_MODAL_SIZE_KEY = 'fiberManagementModalSize';
-let fiberModalResizeState = null; // { el, startX, startY, startW, startH } при перетаскивании ручки
 let collaboratorCursorsPlacemarks = []; // Метки курсоров других пользователей на карте (совместная работа)
 let mapFilter = { node: true, nodeAggregationOnly: false, cross: true, sleeve: true, support: true, attachment: true, olt: true, splitter: true, onu: true }; // Фильтр отображения на карте
 let lastDraggedPlacemark = null; // Не открывать инфо по клику сразу после переноса (OLT/сплиттер/ONU)
@@ -5045,76 +5043,6 @@ function updateStats() {
     if (cableEl) cableEl.textContent = cableCount;
 }
 
-// Размер окна кросса/муфты: применить сохранённый размер
-function applyFiberModalSavedSize(modalContent) {
-    try {
-        const raw = localStorage.getItem(FIBER_MODAL_SIZE_KEY);
-        if (!raw) return;
-        const data = JSON.parse(raw);
-        if (data.width) modalContent.style.width = data.width;
-        if (data.height) modalContent.style.height = data.height;
-    } catch (_) {}
-}
-
-// Ручка изменения размера окна кросса/муфты
-function ensureFiberModalResizeHandle(modalContent) {
-    let handle = modalContent.querySelector('.fiber-modal-resize-handle');
-    if (handle) return;
-    handle = document.createElement('div');
-    handle.className = 'fiber-modal-resize-handle';
-    handle.title = 'Изменить размер окна';
-    handle.setAttribute('aria-label', 'Изменить размер окна');
-    modalContent.appendChild(handle);
-
-    const MIN_W = 640, MIN_H = 420;
-
-    handle.addEventListener('mousedown', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        const rect = modalContent.getBoundingClientRect();
-        fiberModalResizeState = {
-            el: modalContent,
-            startX: e.clientX,
-            startY: e.clientY,
-            startW: rect.width,
-            startH: rect.height
-        };
-        document.addEventListener('mousemove', onFiberModalResizeMove);
-        document.addEventListener('mouseup', onFiberModalResizeUp);
-    });
-}
-
-function onFiberModalResizeMove(e) {
-    if (!fiberModalResizeState || !fiberModalResizeState.el) return;
-    const MIN_W = 640, MIN_H = 420;
-    const dw = e.clientX - fiberModalResizeState.startX;
-    const dh = e.clientY - fiberModalResizeState.startY;
-    let w = Math.max(MIN_W, fiberModalResizeState.startW + dw);
-    let h = Math.max(MIN_H, fiberModalResizeState.startH + dh);
-    fiberModalResizeState.el.style.width = w + 'px';
-    fiberModalResizeState.el.style.height = h + 'px';
-}
-
-function onFiberModalResizeUp() {
-    if (fiberModalResizeState && fiberModalResizeState.el) {
-        const w = fiberModalResizeState.el.style.width;
-        const h = fiberModalResizeState.el.style.height;
-        try {
-            localStorage.setItem(FIBER_MODAL_SIZE_KEY, JSON.stringify({ width: w, height: h }));
-        } catch (_) {}
-    }
-    fiberModalResizeState = null;
-    document.removeEventListener('mousemove', onFiberModalResizeMove);
-    document.removeEventListener('mouseup', onFiberModalResizeUp);
-}
-
-function removeFiberModalResizeHandle(modalContent) {
-    const handle = modalContent.querySelector('.fiber-modal-resize-handle');
-    if (handle) handle.remove();
-    modalContent.style.width = '';
-    modalContent.style.height = '';
-}
-
 // Функции для работы с модальным окном
 function showObjectInfo(obj) {
     currentModalObject = obj;
@@ -5468,18 +5396,12 @@ function showObjectInfo(obj) {
     
     document.getElementById('modalInfo').innerHTML = html;
     
-    // Для кросса и муфты — шире модальное окно, настраиваемый размер и ручка изменения
+    // Для кросса и муфты — шире модальное окно и больше места под схему
     const modal = document.getElementById('infoModal');
     const modalContent = modal && modal.querySelector('.modal-content');
     if (modalContent) {
-        if (type === 'cross' || type === 'sleeve') {
-            modalContent.classList.add('fiber-management-modal');
-            applyFiberModalSavedSize(modalContent);
-            ensureFiberModalResizeHandle(modalContent);
-        } else {
-            modalContent.classList.remove('fiber-management-modal');
-            removeFiberModalResizeHandle(modalContent);
-        }
+        if (type === 'cross' || type === 'sleeve') modalContent.classList.add('fiber-management-modal');
+        else modalContent.classList.remove('fiber-management-modal');
     }
     
     setupModalEventListeners();
