@@ -5910,12 +5910,12 @@ function setupFiberConnectionHandlers() {
     // Сбрасываем выбранную жилу
     selectedFiberForConnection = null;
     
-    // Обработчики кликов по жилам в SVG
-    document.querySelectorAll('#fiber-connections-svg circle[id^="fiber-"]').forEach(circle => {
-        circle.addEventListener('click', function(e) {
+    // Обработчики кликов по жилам в SVG (порты — группа g или круг)
+    document.querySelectorAll('#fiber-connections-svg g[id^="fiber-"], #fiber-connections-svg circle[id^="fiber-"]').forEach(function(el) {
+        el.addEventListener('click', function(e) {
             e.stopPropagation();
             const cableId = this.getAttribute('data-cable-id');
-            const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
+            const fiberNumber = parseInt(this.getAttribute('data-fiber-number'), 10);
             
             if (!selectedFiberForConnection) {
                 // Проверяем, не подключена ли жила к узлу сети
@@ -6139,10 +6139,10 @@ function setupFiberConnectionHandlers() {
             const cableId = tableItem.getAttribute('data-cable-id');
             const fiberNumber = tableItem.getAttribute('data-fiber-number');
             if (!cableId || !fiberNumber) return;
-            const circles = document.querySelectorAll('#fiber-connections-svg circle[id^="fiber-"]');
-            for (var i = 0; i < circles.length; i++) {
-                if (circles[i].getAttribute('data-cable-id') === cableId && circles[i].getAttribute('data-fiber-number') === fiberNumber) {
-                    circles[i].click();
+            const portEls = document.querySelectorAll('#fiber-connections-svg g[id^="fiber-"], #fiber-connections-svg circle[id^="fiber-"]');
+            for (var i = 0; i < portEls.length; i++) {
+                if (portEls[i].getAttribute('data-cable-id') === cableId && portEls[i].getAttribute('data-fiber-number') === String(fiberNumber)) {
+                    portEls[i].click();
                     break;
                 }
             }
@@ -6203,13 +6203,56 @@ function setupFiberConnectionHandlers() {
             showOltSelectionDialog(sleeveObj, cableId, fiberNumber);
         });
     });
-    // Обработчики отключения от OLT
     document.querySelectorAll('.btn-disconnect-olt').forEach(btn => {
         btn.addEventListener('click', function(e) {
             e.stopPropagation();
             const cableId = this.getAttribute('data-cable-id');
             const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
             disconnectFiberFromOlt(sleeveObj, cableId, fiberNumber);
+        });
+    });
+    
+    // Скрыть / Показать схему
+    const schemeVisibilityBtn = document.getElementById('fiber-scheme-visibility-btn');
+    const diagramBlock = document.getElementById('fiber-diagram-block');
+    if (schemeVisibilityBtn && diagramBlock) {
+        schemeVisibilityBtn.addEventListener('click', function() {
+            const hidden = diagramBlock.style.display === 'none';
+            diagramBlock.style.display = hidden ? 'block' : 'none';
+            schemeVisibilityBtn.textContent = hidden ? '▼ Скрыть схему' : '▶ Показать схему';
+            schemeVisibilityBtn.title = hidden ? 'Скрыть схему' : 'Показать схему';
+        });
+    }
+    
+    document.querySelectorAll('.fiber-view-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const view = this.getAttribute('data-view');
+            const schemeWrap = document.getElementById('fiber-scheme-wrap');
+            const listWrap = document.getElementById('fiber-connections-list-wrap');
+            document.querySelectorAll('.fiber-view-btn').forEach(function(b) { b.classList.remove('active'); });
+            this.classList.add('active');
+            if (view === 'list') {
+                if (schemeWrap) schemeWrap.style.display = 'none';
+                if (listWrap) listWrap.style.display = 'block';
+            } else {
+                if (schemeWrap) schemeWrap.style.display = 'block';
+                if (listWrap) listWrap.style.display = 'none';
+            }
+        });
+    });
+    
+    // Удаление соединения из списка (то же, что клик по линии в схеме)
+    document.querySelectorAll('.fiber-conn-delete').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const connIndex = parseInt(this.getAttribute('data-connection-index'), 10);
+            const conns = sleeveObj.properties.get('fiberConnections') || [];
+            if (connIndex >= 0 && connIndex < conns.length) {
+                conns.splice(connIndex, 1);
+                sleeveObj.properties.set('fiberConnections', conns);
+                saveData();
+                showObjectInfo(sleeveObj);
+            }
         });
     });
 }
@@ -8381,24 +8424,26 @@ function updateFiberSelectionUI() {
             if (el.getAttribute('data-cable-id') === sel.cableId && parseInt(el.getAttribute('data-fiber-number'), 10) === sel.fiberNumber) el.classList.add('fiber-selected');
         });
     }
-    document.querySelectorAll('#fiber-connections-svg circle[id^="fiber-"]').forEach(function(c) {
-        const isUsed = c.getAttribute('data-fiber-used') === 'true';
-        const isConnected = c.getAttribute('data-fiber-connected') === 'true';
-        const cId = c.getAttribute('data-cable-id');
-        const fNum = c.getAttribute('data-fiber-number');
+    document.querySelectorAll('#fiber-connections-svg g[id^="fiber-"], #fiber-connections-svg circle[id^="fiber-"]').forEach(function(el) {
+        const rect = el.querySelector && el.querySelector('rect');
+        const target = rect || el;
+        const isUsed = el.getAttribute('data-fiber-used') === 'true';
+        const isConnected = el.getAttribute('data-fiber-connected') === 'true';
+        const cId = el.getAttribute('data-cable-id');
+        const fNum = el.getAttribute('data-fiber-number');
         const isSelected = selectedFiberForConnection && selectedFiberForConnection.cableId === cId && selectedFiberForConnection.fiberNumber === parseInt(fNum, 10);
         if (isSelected) {
-            c.setAttribute('stroke', '#f59e0b');
-            c.setAttribute('stroke-width', '3');
+            target.setAttribute('stroke', '#f59e0b');
+            target.setAttribute('stroke-width', '3');
         } else if (isConnected) {
-            c.setAttribute('stroke', '#3b82f6');
-            c.setAttribute('stroke-width', '3');
+            target.setAttribute('stroke', '#3b82f6');
+            target.setAttribute('stroke-width', '3');
         } else if (isUsed) {
-            c.setAttribute('stroke', '#dc2626');
-            c.setAttribute('stroke-width', '2');
+            target.setAttribute('stroke', '#dc2626');
+            target.setAttribute('stroke-width', '2');
         } else {
-            c.setAttribute('stroke', '#333');
-            c.setAttribute('stroke-width', '1');
+            target.setAttribute('stroke', '#333');
+            target.setAttribute('stroke-width', '1');
         }
     });
     const hint = document.querySelector('.connection-hint');
@@ -9249,7 +9294,18 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         }
     }
     
-    html += '<div class="fiber-scheme-wrap">';
+    // Кнопка скрыть/показать схему и блок схемы
+    html += '<div class="fiber-scheme-toggle-row">';
+    html += '<button type="button" class="fiber-scheme-visibility-btn" id="fiber-scheme-visibility-btn" title="Скрыть или показать схему">▼ Скрыть схему</button>';
+    html += '</div>';
+    html += '<div class="fiber-diagram-block" id="fiber-diagram-block">';
+    if (cablesData.length >= 2) {
+        html += '<div class="fiber-view-toggle">';
+        html += '<button type="button" class="fiber-view-btn active" data-view="scheme">Схема</button>';
+        html += '<button type="button" class="fiber-view-btn" data-view="list">Список соединений</button>';
+        html += '</div>';
+    }
+    html += '<div class="fiber-scheme-wrap" id="fiber-scheme-wrap">';
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     const svgBgColor = isDark ? '#1e293b' : '#ffffff';
     const svgBorderColor = isDark ? '#334155' : '#dee2e6';
@@ -9306,28 +9362,28 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
                 opacity = '0.7';
             }
             
-            // Круг жилы (кликабельный в режиме редактирования)
+            // Порты в стиле патч-панели: прямоугольник с номером (кликабельный в режиме редактирования)
+            const portW = 26;
+            const portH = 20;
+            const portX = x - portW / 2;
+            const portY = y - portH / 2;
             const clickable = isEditMode ? 'cursor: pointer;' : '';
-            html += `<circle id="fiber-${fiberKey}" cx="${x}" cy="${y}" r="12" fill="${fiber.color}" stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-dasharray="${strokeDasharray}" opacity="${opacity}" style="${clickable}" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" data-fiber-connected="${isConnected}" data-fiber-used="${isUsed}"/>`;
+            const textFill = (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00') ? '#000' : '#fff';
+            html += `<g id="fiber-${fiberKey}" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" data-fiber-connected="${isConnected}" data-fiber-used="${isUsed}" style="${clickable}">`;
+            html += `<rect x="${portX}" y="${portY}" width="${portW}" height="${portH}" rx="4" fill="${fiber.color}" stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-dasharray="${strokeDasharray}" opacity="${opacity}" style="pointer-events: inherit;"/>`;
+            html += `<text x="${x}" y="${y + 3}" text-anchor="middle" style="font-size: 10px; font-weight: 600; fill: ${textFill}; pointer-events: none;">${fiber.number}</text>`;
+            html += '</g>';
             
-            // Номер жилы
-            html += `<text x="${x}" y="${y + 4}" text-anchor="middle" style="font-size: 9px; font-weight: 600; fill: ${fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' ? '#000' : '#fff'}; pointer-events: none;">${fiber.number}</text>`;
-            
-            // Получаем подпись жилы (прямую или унаследованную)
             const fiberLabelKey = `${cableData.cableUniqueId}-${fiber.number}`;
             const directLabel = fiberLabels[fiberLabelKey] || '';
             const inheritedInfo = getInheritedFiberLabel(sleeveObj, cableData.cableUniqueId, fiber.number);
             const displayLabel = directLabel || inheritedInfo.label;
             const isInherited = !directLabel && inheritedInfo.inherited;
-            
-            // Название жилы с индикацией статуса соединения и подписью
             const statusText = isConnected ? ' (соед.)' : '';
             let labelText = '';
-            if (displayLabel) {
-                labelText = isInherited ? ` [← ${displayLabel}]` : ` [${displayLabel}]`;
-            }
+            if (displayLabel) labelText = isInherited ? ` [← ${displayLabel}]` : ` [${displayLabel}]`;
             const labelColor = isInherited ? '#8b5cf6' : (isConnected ? '#3b82f6' : svgLabelColor);
-            html += `<text x="${x + 20}" y="${y + 4}" style="font-size: 10px; fill: ${labelColor};">${fiber.name}${labelText}${statusText}</text>`;
+            html += `<text x="${x + portW / 2 + 6}" y="${y + 3}" style="font-size: 10px; fill: ${labelColor};">${fiber.name}${labelText}${statusText}</text>`;
         });
     });
     
@@ -9345,14 +9401,12 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             const x2 = toPos.x;
             const y2 = toPos.y;
             
-            // Линия соединения (кликабельная для удаления в режиме редактирования)
+            const portHalf = 13;
             const midX = (x1 + x2) / 2;
             const midY = (y1 + y2) / 2 - 10;
             const clickable = isEditMode ? 'cursor: pointer;' : '';
-            html += `<path id="connection-${connIndex}" d="M ${x1 + 12} ${y1} Q ${midX} ${midY} ${x2 - 12} ${y2}" 
+            html += `<path id="connection-${connIndex}" d="M ${x1 + portHalf} ${y1} Q ${midX} ${midY} ${x2 - portHalf} ${y2}" 
                 stroke="#3b82f6" stroke-width="2" fill="none" opacity="0.8" stroke-dasharray="5,3" style="${clickable}" data-connection-index="${connIndex}"/>`;
-            
-            // Стрелка в середине
             html += `<polygon points="${midX - 3},${midY - 2} ${midX},${midY + 2} ${midX + 3},${midY - 2}" 
                 fill="#3b82f6" opacity="0.8" style="${clickable}" data-connection-index="${connIndex}"/>`;
         }
@@ -9360,6 +9414,32 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     
     html += '</svg>';
     html += '</div></div>';
+    
+    // Блок «Список соединений» (скрыт по умолчанию)
+    if (cablesData.length >= 2) {
+        function cableNameById(id) {
+            const d = cablesData.find(function(c) { return c.cableUniqueId === id; });
+            return d ? (d.cableName || ('Кабель ' + d.index)) : id.substring(0, 8) + '…';
+        }
+        html += '<div class="fiber-connections-list-wrap" id="fiber-connections-list-wrap" style="display: none;">';
+        html += '<div class="fiber-connections-list">';
+        if (fiberConnections.length === 0) {
+            html += '<p class="fiber-connections-list-empty">Нет соединений между жилами. Выберите две жилы в таблице или в схеме.</p>';
+        } else {
+            fiberConnections.forEach(function(conn, idx) {
+                const fromName = cableNameById(conn.from.cableId);
+                const toName = cableNameById(conn.to.cableId);
+                html += '<div class="fiber-connection-row" data-connection-index="' + idx + '">';
+                html += '<span class="fiber-conn-from">' + escapeHtml(fromName) + ', ж.' + conn.from.fiberNumber + '</span>';
+                html += '<span class="fiber-conn-arrow">↔</span>';
+                html += '<span class="fiber-conn-to">' + escapeHtml(toName) + ', ж.' + conn.to.fiberNumber + '</span>';
+                if (isEditMode) html += '<button type="button" class="fiber-conn-delete" data-connection-index="' + idx + '" title="Удалить соединение">✕</button>';
+                html += '</div>';
+            });
+        }
+        html += '</div></div>';
+    }
+    html += '</div>';
     
     // Функция для ячейки одной жилы (используется в таблице)
     function buildFiberCell(cableData, fiber, sleeveObj, isCross, isEditMode, fiberLabels, fiberConnections, nodeConnections, oltConnections) {

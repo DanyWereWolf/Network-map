@@ -1474,6 +1474,120 @@ button {
     display: block;
 }
 
+/* Скрыть / Показать схему */
+.fiber-scheme-toggle-row {
+    margin-bottom: 10px;
+}
+
+.fiber-scheme-visibility-btn {
+    padding: 6px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+
+.fiber-scheme-visibility-btn:hover {
+    background: var(--bg-accent);
+    color: var(--text-primary);
+}
+
+/* Переключатель Схема / Список соединений */
+.fiber-view-toggle {
+    display: flex;
+    gap: 0;
+    margin-bottom: 12px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    width: fit-content;
+}
+
+.fiber-view-btn {
+    padding: 8px 16px;
+    border: none;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+.fiber-view-btn:hover {
+    background: var(--bg-accent);
+    color: var(--text-primary);
+}
+
+.fiber-view-btn.active {
+    background: var(--accent-primary);
+    color: white;
+}
+
+/* Список соединений (альтернатива схеме) */
+.fiber-connections-list-wrap {
+    max-height: 52vh;
+    min-height: 120px;
+    overflow: auto;
+    margin-bottom: 14px;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+}
+
+.fiber-connections-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.fiber-connections-list-empty {
+    margin: 0;
+    padding: 16px;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    text-align: center;
+}
+
+.fiber-connection-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+}
+
+.fiber-conn-from,
+.fiber-conn-to {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.fiber-conn-arrow {
+    color: var(--accent-primary);
+    font-weight: bold;
+}
+
+.fiber-conn-delete {
+    margin-left: auto;
+    padding: 4px 10px;
+    background: #dc2626;
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.8125rem;
+}
+
+.fiber-conn-delete:hover {
+    background: #b91c1c;
+}
+
 @keyframes modalSlideIn {
     from {
         opacity: 0;
