@@ -1926,6 +1926,12 @@ button {
     background: var(--bg-card);
 }
 
+/* Когда схема и список соединений скрыты — таблица занимает больше места */
+.fiber-connections-container.scheme-hidden .cross-fiber-table-wrap {
+    max-height: 72vh;
+    min-height: 320px;
+}
+
 .cross-fiber-table {
     width: 100%;
     border-collapse: collapse;

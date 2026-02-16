@@ -6212,15 +6212,17 @@ function setupFiberConnectionHandlers() {
         });
     });
     
-    // Скрыть / Показать схему
+    // Скрыть / Показать схему (скрывается и схема, и список соединений; таблица при скрытии получает больше места)
     const schemeVisibilityBtn = document.getElementById('fiber-scheme-visibility-btn');
     const diagramBlock = document.getElementById('fiber-diagram-block');
+    const container = document.querySelector('.fiber-connections-container');
     if (schemeVisibilityBtn && diagramBlock) {
         schemeVisibilityBtn.addEventListener('click', function() {
             const hidden = diagramBlock.style.display === 'none';
             diagramBlock.style.display = hidden ? 'block' : 'none';
             schemeVisibilityBtn.textContent = hidden ? '▼ Скрыть схему' : '▶ Показать схему';
             schemeVisibilityBtn.title = hidden ? 'Скрыть схему' : 'Показать схему';
+            if (container) container.classList.toggle('scheme-hidden', !hidden);
         });
     }
     
