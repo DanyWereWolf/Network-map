@@ -3859,7 +3859,7 @@ function findRefClosestToCoord(refs, coord, tolerance, preferCableEndpoint) {
         var d = Math.sqrt(Math.pow(c[0] - coord[0], 2) + Math.pow(c[1] - coord[1], 2));
         if (d >= tolerance) continue;
         var t = o.properties && o.properties.get('type');
-        if (preferCableEndpoint && (t === 'sleeve' || t === 'cross' || t === 'attachment')) {
+        if (preferCableEndpoint && (t === 'sleeve' || t === 'cross' || t === 'attachment' || t === 'olt' || t === 'splitter')) {
             if (d < bestEndpointDist) { bestEndpointDist = d; bestEndpoint = o; }
         }
         if (d < bestDist) { bestDist = d; best = o; }
@@ -4240,17 +4240,20 @@ function applyRemoteStateMerged(data) {
     incomingCables.forEach(function(item) {
         var coords = normalizeCableGeometry(item.geometry);
         var fromObj = null, toObj = null;
-        if (coords && coords.length >= 2) {
-            fromObj = findRefClosestToCoord(refs, coords[0], undefined, true);
-            toObj = findRefClosestToCoord(refs, coords[coords.length - 1], undefined, true);
-        }
-        if (!fromObj || !toObj) {
-            if (item.from == null || item.to == null) return;
+        // Сначала используем индексы from/to (надёжно для GPON OLT–сплиттер); поиск по координатам только если индексов нет
+        if (item.from != null && item.to != null) {
             var fromIdx = refIndexByDataIndex[item.from];
             var toIdx = refIndexByDataIndex[item.to];
-            if (fromIdx == null || toIdx == null || fromIdx >= refs.length || toIdx >= refs.length) return;
-            fromObj = refs[fromIdx];
-            toObj = refs[toIdx];
+            if (fromIdx != null && toIdx != null && fromIdx < refs.length && toIdx < refs.length) {
+                fromObj = refs[fromIdx];
+                toObj = refs[toIdx];
+            }
+        }
+        if (!fromObj || !toObj) {
+            if (coords && coords.length >= 2) {
+                fromObj = fromObj || findRefClosestToCoord(refs, coords[0], undefined, true);
+                toObj = toObj || findRefClosestToCoord(refs, coords[coords.length - 1], undefined, true);
+            }
         }
         if (!fromObj || !toObj) return;
         var existingCable = objects.find(function(o) {
