@@ -5877,9 +5877,10 @@ function setupModalEventListeners() {
             });
         });
         
-        // Обработчики для соединения жил в муфтах
-        setupFiberConnectionHandlers();
     }
+    
+    // Обработчики для кросса/муфты: переключение Схема/Список, скрытие схемы (всегда), создание/удаление соединений (только в режиме редактирования)
+    setupFiberConnectionHandlers();
     
     // Обработчики для трассировки от узла сети
     document.querySelectorAll('.btn-trace-from-node').forEach(btn => {
@@ -5910,10 +5911,11 @@ function setupFiberConnectionHandlers() {
     // Сбрасываем выбранную жилу
     selectedFiberForConnection = null;
     
-    // Обработчики кликов по жилам в SVG (порты — группа g или круг)
+    // Обработчики кликов по жилам в SVG (порты — группа g или круг); создание соединений только в режиме редактирования
     document.querySelectorAll('#fiber-connections-svg g[id^="fiber-"], #fiber-connections-svg circle[id^="fiber-"]').forEach(function(el) {
         el.addEventListener('click', function(e) {
             e.stopPropagation();
+            if (!isEditMode) return;
             const cableId = this.getAttribute('data-cable-id');
             const fiberNumber = parseInt(this.getAttribute('data-fiber-number'), 10);
             
@@ -6132,10 +6134,11 @@ function setupFiberConnectionHandlers() {
         });
     });
     
-    // Клик по жиле в таблице — тот же сценарий, что и по схеме (выбор / соединение)
+    // Клик по жиле в таблице — тот же сценарий, что и по схеме (только в режиме редактирования)
     document.querySelectorAll('.fiber-connections-container .cross-fiber-table .fiber-item').forEach(function(tableItem) {
         tableItem.addEventListener('click', function(e) {
             if (e.target.closest('button, input, select')) return;
+            if (!isEditMode) return;
             const cableId = tableItem.getAttribute('data-cable-id');
             const fiberNumber = tableItem.getAttribute('data-fiber-number');
             if (!cableId || !fiberNumber) return;
@@ -6149,10 +6152,11 @@ function setupFiberConnectionHandlers() {
         });
     });
     
-    // Обработчики кликов по соединениям для удаления
+    // Обработчики кликов по соединениям для удаления (только в режиме редактирования)
     document.querySelectorAll('#fiber-connections-svg path[id^="connection-"], #fiber-connections-svg polygon[data-connection-index]').forEach(element => {
         element.addEventListener('click', function(e) {
             e.stopPropagation();
+            if (!isEditMode) return;
             const connIndex = parseInt(this.getAttribute('data-connection-index'));
             if (connIndex >= 0 && connIndex < fiberConnections.length) {
                 fiberConnections.splice(connIndex, 1);
@@ -6243,10 +6247,11 @@ function setupFiberConnectionHandlers() {
         });
     });
     
-    // Удаление соединения из списка (то же, что клик по линии в схеме)
+    // Удаление соединения из списка (только в режиме редактирования)
     document.querySelectorAll('.fiber-conn-delete').forEach(function(btn) {
         btn.addEventListener('click', function(e) {
             e.stopPropagation();
+            if (!isEditMode) return;
             const connIndex = parseInt(this.getAttribute('data-connection-index'), 10);
             const conns = sleeveObj.properties.get('fiberConnections') || [];
             if (connIndex >= 0 && connIndex < conns.length) {
