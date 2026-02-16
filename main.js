@@ -1854,6 +1854,15 @@ function updateCursorIndicator(e, objectType, objectCoord) {
             case 'attachment':
                 text = 'Крепление узлов';
                 break;
+            case 'olt':
+                text = 'OLT';
+                break;
+            case 'splitter':
+                text = 'Сплиттер GPON';
+                break;
+            case 'onu':
+                text = 'ONU';
+                break;
             default:
                 text = 'Объект';
         }
@@ -2656,8 +2665,40 @@ function createObject(type, name, coords, options = {}) {
             return;
         }
         
-        // Режим прокладки кабеля: начало/конец — муфта или кросс, промежуточные точки — опоры
+        // Режим прокладки кабеля: начало/конец — муфта или кросс (или для GPON — OLT/сплиттер/ONU), промежуточные точки — опоры
         if (currentCableTool && isEditMode) {
+            var cableTypeVal = document.getElementById('cableType') ? document.getElementById('cableType').value : 'fiber4';
+            var isGpon = (cableTypeVal === 'gpon');
+            if (isGpon) {
+                if (type !== 'olt' && type !== 'splitter' && type !== 'onu') {
+                    if (type === 'node') showError('Узел сети нельзя использовать для прокладки кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
+                    else showError('Кабель GPON прокладывается только между OLT, сплиттером и ONU. Выберите OLT, сплиттер или ONU.', 'Недопустимое действие');
+                    return;
+                }
+                if (!cableSource) {
+                    cableSource = placemark;
+                    cableWaypoints = [];
+                    clearSelection();
+                    selectObject(cableSource);
+                    return;
+                }
+                if (placemark === cableSource) {
+                    cableWaypoints = [];
+                    clearSelection();
+                    selectObject(cableSource);
+                    return;
+                }
+                var points = [cableSource, placemark];
+                var success = createCableFromPoints(points, cableTypeVal);
+                if (success) {
+                    cableSource = placemark;
+                    cableWaypoints = [];
+                    clearSelection();
+                    selectObject(cableSource);
+                    removeCablePreview();
+                }
+                return;
+            }
             if (type === 'node') {
                 showError('Узел сети нельзя использовать для прокладки кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
                 return;
@@ -2701,8 +2742,8 @@ function createObject(type, name, coords, options = {}) {
             return;
         }
         
-        // Для узлов, кроссов, муфт и креплений показываем информацию
-        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'attachment')) {
+        // Для узлов, кроссов, муфт, креплений, OLT, сплиттера, ONU показываем информацию
+        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'attachment' || type === 'olt' || type === 'splitter' || type === 'onu')) {
             showObjectInfo(placemark);
             return;
         }
@@ -4620,8 +4661,40 @@ function createObjectFromData(data, opts) {
             return;
         }
         
-        // Режим прокладки кабеля: начало/конец — муфта или кросс, промежуточные точки — опоры
+        // Режим прокладки кабеля: начало/конец — муфта или кросс (или для GPON — OLT/сплиттер/ONU), промежуточные точки — опоры
         if (currentCableTool && isEditMode) {
+            var cableTypeVal = document.getElementById('cableType') ? document.getElementById('cableType').value : 'fiber4';
+            var isGpon = (cableTypeVal === 'gpon');
+            if (isGpon) {
+                if (type !== 'olt' && type !== 'splitter' && type !== 'onu') {
+                    if (type === 'node') showError('Узел сети нельзя использовать для прокладки кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
+                    else showError('Кабель GPON прокладывается только между OLT, сплиттером и ONU. Выберите OLT, сплиттер или ONU.', 'Недопустимое действие');
+                    return;
+                }
+                if (!cableSource) {
+                    cableSource = placemark;
+                    cableWaypoints = [];
+                    clearSelection();
+                    selectObject(cableSource);
+                    return;
+                }
+                if (placemark === cableSource) {
+                    cableWaypoints = [];
+                    clearSelection();
+                    selectObject(cableSource);
+                    return;
+                }
+                var points = [cableSource, placemark];
+                var success = createCableFromPoints(points, cableTypeVal);
+                if (success) {
+                    cableSource = placemark;
+                    cableWaypoints = [];
+                    clearSelection();
+                    selectObject(cableSource);
+                    removeCablePreview();
+                }
+                return;
+            }
             if (type === 'node') {
                 showError('Узел сети нельзя использовать для прокладки кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
                 return;
@@ -4665,8 +4738,8 @@ function createObjectFromData(data, opts) {
             return;
         }
         
-        // Для узлов, кроссов, муфт и креплений показываем информацию
-        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'attachment')) {
+        // Для узлов, кроссов, муфт, креплений, OLT, сплиттера, ONU показываем информацию
+        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'attachment' || type === 'olt' || type === 'splitter' || type === 'onu')) {
             showObjectInfo(placemark);
             return;
         }
