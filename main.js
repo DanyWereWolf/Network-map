@@ -3974,13 +3974,20 @@ function getSerializedData() {
         var geometry = obj.geometry.getCoordinates();
         if (props.type === 'cable') {
             var cableGeom = normalizeCableGeometry(geometry) || geometry;
+            const fromObj = props.from, toObj = props.to;
             const result = {
                 type: 'cable',
                 cableType: props.cableType,
-                from: objects.indexOf(props.from),
-                to: objects.indexOf(props.to),
+                from: objects.indexOf(fromObj),
+                to: objects.indexOf(toObj),
                 geometry: cableGeom
             };
+            if (fromObj && toObj && fromObj.properties && toObj.properties) {
+                const fu = fromObj.properties.get('uniqueId');
+                const tu = toObj.properties.get('uniqueId');
+                if (fu) result.fromUniqueId = fu;
+                if (tu) result.toUniqueId = tu;
+            }
             if (props.uniqueId) result.uniqueId = props.uniqueId;
             if (props.distance !== undefined) result.distance = props.distance;
             if (props.cableName) result.cableName = props.cableName;
@@ -4247,13 +4254,19 @@ function applyRemoteStateMerged(data) {
     incomingCables.forEach(function(item) {
         var coords = normalizeCableGeometry(item.geometry);
         var fromObj = null, toObj = null;
-        // Сначала используем индексы from/to (надёжно для GPON OLT–сплиттер); поиск по координатам только если индексов нет
-        if (item.from != null && item.to != null) {
-            var fromIdx = refIndexByDataIndex[item.from];
-            var toIdx = refIndexByDataIndex[item.to];
-            if (fromIdx != null && toIdx != null && fromIdx < refs.length && toIdx < refs.length) {
-                fromObj = refs[fromIdx];
-                toObj = refs[toIdx];
+        // Приоритет: по uniqueId (чтобы при группе кроссов в одной точке кабель остался на выбранном кроссе после перезагрузки)
+        if (item.fromUniqueId && item.toUniqueId) {
+            fromObj = refs.find(function(r) { return r.properties && r.properties.get('uniqueId') === item.fromUniqueId; });
+            toObj = refs.find(function(r) { return r.properties && r.properties.get('uniqueId') === item.toUniqueId; });
+        }
+        if (!fromObj || !toObj) {
+            if (item.from != null && item.to != null) {
+                var fromIdx = refIndexByDataIndex[item.from];
+                var toIdx = refIndexByDataIndex[item.to];
+                if (fromIdx != null && toIdx != null && fromIdx < refs.length && toIdx < refs.length) {
+                    fromObj = fromObj || refs[fromIdx];
+                    toObj = toObj || refs[toIdx];
+                }
             }
         }
         if (!fromObj || !toObj) {
@@ -4901,17 +4914,21 @@ function exportData() {
         const geometry = obj.geometry.getCoordinates();
         
         if (props.type === 'cable') {
+            const fromObj = props.from, toObj = props.to;
             const result = {
                 type: 'cable',
                 cableType: props.cableType,
-                from: objects.indexOf(props.from),
-                to: objects.indexOf(props.to),
+                from: objects.indexOf(fromObj),
+                to: objects.indexOf(toObj),
                 geometry: geometry
             };
-            // Сохраняем uniqueId кабеля
-            if (props.uniqueId) {
-                result.uniqueId = props.uniqueId;
+            if (fromObj && toObj && fromObj.properties && toObj.properties) {
+                const fu = fromObj.properties.get('uniqueId');
+                const tu = toObj.properties.get('uniqueId');
+                if (fu) result.fromUniqueId = fu;
+                if (tu) result.toUniqueId = tu;
             }
+            if (props.uniqueId) result.uniqueId = props.uniqueId;
             // Сохраняем расстояние кабеля
             if (props.distance !== undefined) {
                 result.distance = props.distance;
