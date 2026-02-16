@@ -1449,6 +1449,31 @@ button {
     backdrop-filter: blur(20px);
 }
 
+/* Кросс / муфта: шире окно и больше места под схему жил */
+.modal-content.fiber-management-modal {
+    width: 94%;
+    max-width: 1200px;
+}
+
+.modal-content.fiber-management-modal .modal-body {
+    max-height: 88vh;
+}
+
+/* Блок схемы жил: фиксированная высота и прокрутка */
+.fiber-scheme-wrap {
+    max-height: 52vh;
+    min-height: 280px;
+    overflow: auto;
+    margin-bottom: 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+}
+
+.fiber-scheme-wrap svg {
+    display: block;
+}
+
 @keyframes modalSlideIn {
     from {
         opacity: 0;
@@ -1777,40 +1802,14 @@ button {
     color: #991b1b;
 }
 
-/* Таблица кабелей/жил в кроссе: фиксированный заголовок, прокрутка — основное рабочее место */
+/* Таблица кабелей/жил в кроссе: фиксированный заголовок, прокрутка */
 .cross-fiber-table-wrap {
-    max-height: min(420px, 55vh);
+    max-height: 380px;
     overflow: auto;
-    margin-top: 12px;
-    margin-bottom: 12px;
+    margin-top: 15px;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     background: var(--bg-card);
-}
-
-/* Сворачиваемый блок «Схема соединений» */
-.cross-schema-details {
-    margin-top: 4px;
-    margin-bottom: 8px;
-}
-
-.cross-schema-summary {
-    cursor: pointer;
-    padding: 8px 12px;
-    background: var(--bg-tertiary);
-    border-radius: var(--radius-md);
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-    list-style: none;
-    user-select: none;
-}
-
-.cross-schema-details[open] .cross-schema-summary {
-    border-radius: var(--radius-md) var(--radius-md) 0 0;
-}
-
-.cross-schema-details summary::-webkit-details-marker {
-    display: none;
 }
 
 .cross-fiber-table {
@@ -1923,11 +1922,8 @@ button {
     color: #b45309 !important;
 }
 
-/* Панель выбора жилы в кроссе — липкая при прокрутке */
+/* Панель выбора жилы в кроссе */
 .fiber-selection-bar {
-    position: sticky;
-    top: 0;
-    z-index: 5;
     padding: 10px 12px;
     margin-bottom: 12px;
     background: #fffbeb;
@@ -1938,7 +1934,6 @@ button {
     align-items: center;
     flex-wrap: wrap;
     gap: 10px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
 }
 
 .fiber-selection-bar .fiber-selection-text {
