@@ -6674,11 +6674,13 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
     const startObjName = startObject.properties.get('name') || getObjectTypeName(startObjType);
     
     // Добавляем начальный объект (кросс или муфта)
+    const startPort = (startObjType === 'cross') ? ((startObject.properties.get('fiberPorts') || {})[`${startCableId}-${startFiberNumber}`] || null) : null;
     path.push({
         type: 'start',
         objectType: startObjType,
         objectName: startObjName,
-        object: startObject
+        object: startObject,
+        port: startPort
     });
     
     visitedObjects.add(startObjectId);
@@ -6718,13 +6720,15 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
         
         const objType = nextObject.properties.get('type');
         const objName = nextObject.properties.get('name') || getObjectTypeName(objType);
+        const objPort = (objType === 'cross') ? ((nextObject.properties.get('fiberPorts') || {})[`${currentCableId}-${currentFiberNumber}`] || null) : null;
         
         // Добавляем следующий объект в путь
         path.push({
             type: 'object',
             objectType: objType,
             objectName: objName,
-            object: nextObject
+            object: nextObject,
+            port: objPort
         });
         
         // Если это муфта или кросс - ищем соединение с другой жилой
@@ -6963,11 +6967,14 @@ function traceFiberPath(startCableId, startFiberNumber) {
     const toObj = currentCable.properties.get('to');
     const cableName = currentCable.properties.get('cableName') || getCableDescription(currentCable.properties.get('cableType'));
     
+    const fromObjType = fromObj.properties.get('type');
+    const fromPort = (fromObjType === 'cross') ? ((fromObj.properties.get('fiberPorts') || {})[`${startCableId}-${startFiberNumber}`] || null) : null;
     path.push({
         type: 'start',
-        objectType: fromObj.properties.get('type'),
-        objectName: fromObj.properties.get('name') || getObjectTypeName(fromObj.properties.get('type')),
-        object: fromObj
+        objectType: fromObjType,
+        objectName: fromObj.properties.get('name') || getObjectTypeName(fromObjType),
+        object: fromObj,
+        port: fromPort
     });
     
     path.push({
@@ -6996,12 +7003,14 @@ function traceFiberPath(startCableId, startFiberNumber) {
         
         const objType = currentObject.properties.get('type');
         const objName = currentObject.properties.get('name') || getObjectTypeName(objType);
+        const objPort = (objType === 'cross') ? ((currentObject.properties.get('fiberPorts') || {})[`${currentCableId}-${currentFiberNumber}`] || null) : null;
         
         path.push({
             type: 'object',
             objectType: objType,
             objectName: objName,
-            object: currentObject
+            object: currentObject,
+            port: objPort
         });
         
         // Если это муфта или кросс, ищем соединение с другой жилой
@@ -7239,10 +7248,11 @@ function showFiberTrace(cableId, fiberNumber) {
                 color = '#3b82f6';
             }
             
+            const portText = (item.objectType === 'cross' && item.port) ? ` <span style="font-size: 0.8rem; color: #7c3aed; font-weight: 600;">· Порт ${escapeHtml(String(item.port))}</span>` : '';
             html += `<div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: ${isLast ? '0' : '8px'};">`;
             html += `<div style="width: 32px; height: 32px; border-radius: 50%; background: ${color}; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 16px;">${icon}</div>`;
             html += `<div style="flex: 1; padding-top: 4px;">`;
-            html += `<strong style="color: ${color};">${item.objectName}</strong>`;
+            html += `<strong style="color: ${color};">${item.objectName}</strong>${portText}`;
             html += `<div style="font-size: 0.8rem; color: #6b7280;">${getObjectTypeName(item.objectType)}</div>`;
             html += `</div></div>`;
         } else if (item.type === 'nodeConnection') {
@@ -8340,10 +8350,22 @@ function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeO
     result.path.forEach((item, index) => {
         if (item.type === 'start') {
             const icon = item.objectType === 'cross' ? '📦' : (item.objectType === 'sleeve' ? '🔴' : '📍');
+            const portBadge = (item.objectType === 'cross' && item.port) ? ` <span style="background: #ede9fe; color: #5b21b6; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">Порт ${escapeHtml(String(item.port))}</span>` : '';
             html += `<div style="display: flex; align-items: center; margin-bottom: 8px;">
                 <span style="width: 32px; height: 32px; background: #22c55e; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">${stepNumber}</span>
                 <div style="margin-left: 12px; padding: 10px 14px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0; flex: 1;">
-                    <span style="font-weight: 600; color: #166534;">${icon} ${escapeHtml(item.objectName)}</span>
+                    <span style="font-weight: 600; color: #166534;">${icon} ${escapeHtml(item.objectName)}</span>${portBadge}
+                    <span style="color: #6b7280; font-size: 0.8rem;"> (${getObjectTypeName(item.objectType)})</span>
+                </div>
+            </div>`;
+            stepNumber++;
+        } else if (item.type === 'object') {
+            const icon = item.objectType === 'cross' ? '📦' : (item.objectType === 'sleeve' ? '🔴' : (item.objectType === 'node' ? '🖥️' : '📍'));
+            const portBadge = (item.objectType === 'cross' && item.port) ? ` <span style="background: #ede9fe; color: #5b21b6; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">Порт ${escapeHtml(String(item.port))}</span>` : '';
+            html += `<div style="display: flex; align-items: center; margin-bottom: 8px;">
+                <span style="width: 32px; height: 32px; background: #8b5cf6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">${stepNumber}</span>
+                <div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1;">
+                    <span style="font-weight: 600; color: #5b21b6;">${icon} ${escapeHtml(item.objectName)}</span>${portBadge}
                     <span style="color: #6b7280; font-size: 0.8rem;"> (${getObjectTypeName(item.objectType)})</span>
                 </div>
             </div>`;
