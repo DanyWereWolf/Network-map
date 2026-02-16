@@ -756,6 +756,40 @@
         </div>
     </div>
 
+    <!-- Модальное окно для выбора ONU (подключение выхода сплиттера к ONU) -->
+    <div id="onuSelectionModal" class="modal">
+        <div class="modal-content node-selection-modal-content">
+            <div class="network-map-balloon node-selection-balloon">
+                <div class="group-balloon-header">
+                    <span class="group-balloon-title">Подключение выхода к ONU</span>
+                    <button type="button" class="group-balloon-close close-onu-selection" title="Закрыть">&times;</button>
+                </div>
+                <div class="modal-body node-selection-body">
+                    <div class="node-selection-info">
+                        <p id="onuSelectionFiberInfo"></p>
+                    </div>
+                    <div class="form-group">
+                        <label for="onuSearchInput">Поиск ONU</label>
+                        <div class="node-search-wrapper">
+                            <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
+                            <input type="text" id="onuSearchInput" class="form-input node-search-input" placeholder="Введите имя ONU...">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Выберите ONU</label>
+                        <div id="onuListContainer" class="node-list-container"></div>
+                    </div>
+                    <div class="node-selection-actions">
+                        <button id="cancelOnuSelection" class="btn-secondary">Отмена</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Модальное окно управления пользователями -->
     <div id="usersModal" class="modal">
         <div class="modal-content" style="max-width: 700px;">
