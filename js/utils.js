@@ -16,6 +16,9 @@ function getObjectTypeName(type) {
         case 'cross': return 'Оптический кросс';
         case 'node': return 'Узел сети';
         case 'attachment': return 'Крепление узлов';
+        case 'olt': return 'OLT';
+        case 'splitter': return 'Сплиттер GPON';
+        case 'onu': return 'ONU';
         default: return 'Объект';
     }
 }

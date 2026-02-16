@@ -186,6 +186,9 @@
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterSleeve" checked> Муфты</label>
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterSupport" checked> Опоры</label>
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterAttachment" checked> Крепление узлов</label>
+                            <label class="map-filter-check"><input type="checkbox" id="mapFilterOlt" checked> OLT</label>
+                            <label class="map-filter-check"><input type="checkbox" id="mapFilterSplitter" checked> Сплиттеры</label>
+                            <label class="map-filter-check"><input type="checkbox" id="mapFilterOnu" checked> ONU</label>
                         </div>
                         <p class="map-filter-note">Кабели отображаются только между видимыми объектами. «Только узлы агрегации» скрывает обычные узлы сети, остальные объекты остаются на карте.</p>
                         <div class="map-filter-save-start">
@@ -219,6 +222,9 @@
                                 <option value="cross">📦 Оптический кросс</option>
                                 <option value="node">🖥️ Узлы сети</option>
                                 <option value="attachment">🔗 Крепление узлов</option>
+                                <option value="olt">📶 OLT (GPON)</option>
+                                <option value="splitter">🔀 Сплиттер GPON</option>
+                                <option value="onu">📟 ONU</option>
                             </select>
                         </div>
                         <div class="form-group" id="objectNameGroup" style="display: none;">
@@ -230,6 +236,24 @@
                             <select id="nodeKind" class="form-select">
                                 <option value="network">Узел сети (зелёный)</option>
                                 <option value="aggregation">Узел агрегации (красный)</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="oltSettingsGroup" style="display: none;">
+                            <label for="oltPonPorts">Количество PON-портов</label>
+                            <select id="oltPonPorts" class="form-select">
+                                <option value="4">4 порта</option>
+                                <option value="8">8 портов</option>
+                                <option value="16" selected>16 портов</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="splitterSettingsGroup" style="display: none;">
+                            <label for="splitterRatio">Коэффициент деления</label>
+                            <select id="splitterRatio" class="form-select">
+                                <option value="1:4">1:4</option>
+                                <option value="1:8">1:8</option>
+                                <option value="1:16" selected>1:16</option>
+                                <option value="1:32">1:32</option>
+                                <option value="1:64">1:64</option>
                             </select>
                         </div>
                         <div class="form-group" id="crossSettingsGroup" style="display: none;">
@@ -313,6 +337,7 @@
                                 <option value="fiber8">ВОЛС 8 жил</option>
                                 <option value="fiber16">ВОЛС 16 жил</option>
                                 <option value="fiber24">ВОЛС 24 жилы</option>
+                                <option value="gpon">GPON (1 волокно)</option>
                             </select>
                         </div>
                         <button id="addCable" class="btn-primary">
@@ -453,6 +478,10 @@
                             <div class="legend-color" style="background-color: #22c55e; height: 2px; border-style: dashed;"></div>
                             <span class="legend-text">Кросс → Узел (жила)</span>
                         </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #0ea5e9; height: 3px;"></div>
+                            <span class="legend-text">GPON (OLT ↔ Сплиттер ↔ ONU)</span>
+                        </div>
                     </div>
                 </div>
 
@@ -514,6 +543,41 @@
                             <div class="stat-info">
                                 <div class="stat-value" id="cableCount">0</div>
                                 <div class="stat-label">Кабели</div>
+                            </div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-icon" style="background: #0ea5e920; color: #0ea5e9;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 2v4m0 12v4M2 12h4m12 0h4m-3.64-6.36l-2.83 2.83m-8.49 8.49l-2.83 2.83m18.38-14.14l-2.83-2.83M6.34 17.66l-2.83-2.83"></path>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="oltCount">0</div>
+                                <div class="stat-label">OLT</div>
+                            </div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-icon" style="background: #8b5cf620; color: #8b5cf6;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 2v20M2 12h20"></path>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="splitterCount">0</div>
+                                <div class="stat-label">Сплиттеры</div>
+                            </div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-icon" style="background: #10b98120; color: #10b981;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+                                    <path d="M9 9h6v6H9z"></path>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="onuCount">0</div>
+                                <div class="stat-label">ONU</div>
                             </div>
                         </div>
                     </div>
