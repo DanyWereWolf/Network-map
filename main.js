@@ -1624,10 +1624,10 @@ function handleMapClick(e) {
         
         if (clickedObject && clickedObject.geometry) {
             var objType = clickedObject.properties ? clickedObject.properties.get('type') : null;
-            // GPON: только OLT, сплиттер, ONU; два конца, без промежуточных точек
+            // GPON: только OLT и сплиттер; к ONU подключаются через выходы сплиттера
             if (isGponCable) {
-                if (objType !== 'olt' && objType !== 'splitter' && objType !== 'onu') {
-                    showError('Кабель GPON прокладывается только между OLT, сплиттером и ONU. Выберите OLT, сплиттер или ONU.', 'Недопустимое действие');
+                if (objType !== 'olt' && objType !== 'splitter') {
+                    showError('Кабель GPON прокладывается только между OLT и сплиттером. К ONU подключаются через выходы сплиттера.', 'Недопустимое действие');
                     return;
                 }
                 if (!cableSource) {
@@ -1697,7 +1697,7 @@ function handleMapClick(e) {
             }
             showError('Кабель прокладывается от муфты/кросса/крепления до муфты/кросса/крепления. Промежуточными точками могут быть опоры или крепления.', 'Недопустимое действие');
         } else {
-            // Клик по пустому месту — прилипание к ближайшему объекту (муфта/кросс/опора или для GPON — OLT/сплиттер/ONU)
+            // Клик по пустому месту — прилипание к ближайшему объекту (муфта/кросс/опора или для GPON — OLT/сплиттер)
             if (cableSource) {
                 const currentCableType = document.getElementById('cableType') ? document.getElementById('cableType').value : 'fiber4';
                 const isGpon = (currentCableType === 'gpon');
@@ -1708,7 +1708,7 @@ function handleMapClick(e) {
                     if (obj && obj.geometry && obj.properties) {
                         const t = obj.properties.get('type');
                         if (isGpon) {
-                            if (t !== 'olt' && t !== 'splitter' && t !== 'onu') return;
+                            if (t !== 'olt' && t !== 'splitter') return;
                             if (obj === cableSource) return;
                         } else {
                             if (t !== 'sleeve' && t !== 'cross' && t !== 'support' && t !== 'attachment') return;
@@ -2668,14 +2668,15 @@ function createObject(type, name, coords, options = {}) {
             return;
         }
         
-        // Режим прокладки кабеля: начало/конец — муфта или кросс (или для GPON — OLT/сплиттер/ONU), промежуточные точки — опоры
+        // Режим прокладки кабеля: начало/конец — муфта или кросс (или для GPON — только OLT и сплиттер), промежуточные точки — опоры
         if (currentCableTool && isEditMode) {
             var cableTypeVal = document.getElementById('cableType') ? document.getElementById('cableType').value : 'fiber4';
             var isGpon = (cableTypeVal === 'gpon');
             if (isGpon) {
-                if (type !== 'olt' && type !== 'splitter' && type !== 'onu') {
+                if (type !== 'olt' && type !== 'splitter') {
                     if (type === 'node') showError('Узел сети нельзя использовать для прокладки кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
-                    else showError('Кабель GPON прокладывается только между OLT, сплиттером и ONU. Выберите OLT, сплиттер или ONU.', 'Недопустимое действие');
+                    else if (type === 'onu') showError('Кабель GPON прокладывается только между OLT и сплиттером. К ONU подключаются через выходы сплиттера (в баллуне сплиттера).', 'Недопустимое действие');
+                    else showError('Кабель GPON прокладывается только между OLT и сплиттером. Выберите OLT или сплиттер.', 'Недопустимое действие');
                     return;
                 }
                 if (!cableSource) {
@@ -3194,7 +3195,7 @@ function addCable(fromObj, toObj, cableType, existingCableId = null, fiberNumber
     return createCableFromPoints([fromObj, toObj], cableType, existingCableId, fiberNumber, skipHistoryLog, skipSync);
 }
 
-// Создает кабель из массива точек. Начало и конец кабеля — только муфта или кросс; промежуточные точки — опоры. GPON — только OLT/сплиттер/ONU, две точки.
+// Создает кабель из массива точек. Начало и конец кабеля — только муфта или кросс; промежуточные точки — опоры. GPON — только OLT ↔ Сплиттер, две точки.
 function createCableFromPoints(points, cableType, existingCableId = null, fiberNumber = null, skipHistoryLog = false, skipSync = false) {
     if (!points || points.length < 2) return false;
     
@@ -3206,11 +3207,10 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
             if (!skipSync) showError('Кабель GPON прокладывается только между двумя точками (через сплиттер).', 'Недопустимое действие');
             return false;
         }
-        // GPON только: OLT ↔ Сплиттер и Сплиттер ↔ ONU (напрямую OLT–ONU нельзя)
-        var gponOk = (firstType === 'splitter' && (lastType === 'olt' || lastType === 'onu')) ||
-                     (lastType === 'splitter' && (firstType === 'olt' || firstType === 'onu'));
+        // GPON только: OLT ↔ Сплиттер. К ONU подключаются через выходы сплиттера (выбор в баллуне сплиттера).
+        var gponOk = (firstType === 'olt' && lastType === 'splitter') || (firstType === 'splitter' && lastType === 'olt');
         if (!gponOk) {
-            if (!skipSync) showError('Кабель GPON можно проложить только от OLT к сплиттеру или от сплиттера к ONU. Напрямую OLT–ONU прокладывать нельзя.', 'Недопустимое действие');
+            if (!skipSync) showError('Кабель GPON прокладывается только между OLT и сплиттером. К ONU подключаются через выходы сплиттера (в баллуне сплиттера — «Подключить к ONU»).', 'Недопустимое действие');
             return false;
         }
     } else if (firstType === 'node' || lastType === 'node') {
@@ -3233,7 +3233,7 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
             return false;
         }
     }
-    // Для GPON не проверяем вместимость муфт (концы — только OLT/сплиттер/ONU)
+    // Для GPON не проверяем вместимость муфт (концы — только OLT и сплиттер)
     if (cableType !== 'gpon') {
         const fiberCount = getFiberCount(cableType);
         for (let i = 0; i < points.length; i++) {
@@ -4723,14 +4723,15 @@ function createObjectFromData(data, opts) {
             return;
         }
         
-        // Режим прокладки кабеля: начало/конец — муфта или кросс (или для GPON — OLT/сплиттер/ONU), промежуточные точки — опоры
+        // Режим прокладки кабеля: начало/конец — муфта или кросс (или для GPON — только OLT и сплиттер), промежуточные точки — опоры
         if (currentCableTool && isEditMode) {
             var cableTypeVal = document.getElementById('cableType') ? document.getElementById('cableType').value : 'fiber4';
             var isGpon = (cableTypeVal === 'gpon');
             if (isGpon) {
-                if (type !== 'olt' && type !== 'splitter' && type !== 'onu') {
+                if (type !== 'olt' && type !== 'splitter') {
                     if (type === 'node') showError('Узел сети нельзя использовать для прокладки кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
-                    else showError('Кабель GPON прокладывается только между OLT, сплиттером и ONU. Выберите OLT, сплиттер или ONU.', 'Недопустимое действие');
+                    else if (type === 'onu') showError('Кабель GPON прокладывается только между OLT и сплиттером. К ONU подключаются через выходы сплиттера (в баллуне сплиттера).', 'Недопустимое действие');
+                    else showError('Кабель GPON прокладывается только между OLT и сплиттером. Выберите OLT или сплиттер.', 'Недопустимое действие');
                     return;
                 }
                 if (!cableSource) {
