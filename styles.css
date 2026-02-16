@@ -1932,6 +1932,15 @@ button {
     min-height: 320px;
 }
 
+/* В режиме редактирования кросса — таблица заметнее и выше */
+.fiber-connections-container.cross-edit-mode .cross-fiber-table-wrap {
+    max-height: 52vh;
+    min-height: 280px;
+    border-width: 2px;
+    border-color: var(--accent-primary);
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+}
+
 .cross-fiber-table {
     width: 100%;
     border-collapse: collapse;

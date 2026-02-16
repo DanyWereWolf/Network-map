@@ -6227,6 +6227,14 @@ function setupFiberConnectionHandlers() {
             schemeVisibilityBtn.textContent = hidden ? '▼ Скрыть схему' : '▶ Показать схему';
             schemeVisibilityBtn.title = hidden ? 'Скрыть схему' : 'Показать схему';
             if (container) container.classList.toggle('scheme-hidden', !hidden);
+            if (hidden) {
+                var schemeWrap = document.getElementById('fiber-scheme-wrap');
+                var listWrap = document.getElementById('fiber-connections-list-wrap');
+                if (schemeWrap) schemeWrap.style.display = 'block';
+                if (listWrap) listWrap.style.display = 'none';
+                document.querySelectorAll('.fiber-view-btn[data-view="scheme"]').forEach(function(b) { b.classList.add('active'); });
+                document.querySelectorAll('.fiber-view-btn[data-view="list"]').forEach(function(b) { b.classList.remove('active'); });
+            }
         });
     }
     
@@ -9211,7 +9219,9 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     const objType = sleeveObj.properties.get('type');
     const isCross = objType === 'cross';
     
-    let html = '<div class="fiber-connections-container" style="margin-top: 20px;">';
+    var containerClass = 'fiber-connections-container';
+    if (isCross && isEditMode) containerClass += ' cross-edit-mode';
+    let html = '<div class="' + containerClass + '" style="margin-top: 20px;">';
     html += `<h4 style="margin: 0 0 15px 0; color: var(--text-primary); font-size: 1rem; font-weight: 600;">${isCross ? 'Управление жилами в кроссе' : 'Объединение жил в муфте'}</h4>`;
     
     // Получаем сохраненные соединения жил
