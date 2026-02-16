@@ -1943,22 +1943,22 @@ button {
 
 /* Секция таблицы кабелей и жил */
 .cross-fiber-table-section {
-    margin-top: 16px;
+    margin-top: 10px;
 }
 
 .cross-fiber-table-caption {
-    margin: 0 0 10px 0;
-    font-size: 0.9375rem;
+    margin: 0 0 6px 0;
+    font-size: 0.875rem;
     font-weight: 600;
     color: var(--text-primary);
 }
 
-/* Таблица кабелей/жил в кроссе: фиксированный заголовок, прокрутка */
+/* Таблица кабелей/жил в кроссе: максимум видимой области, фиксированный заголовок, прокрутка */
 .cross-fiber-table-wrap {
-    max-height: 38vh;
-    min-height: 200px;
+    max-height: 52vh;
+    min-height: 260px;
     overflow: auto;
-    margin-top: 12px;
+    margin-top: 10px;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     background: var(--bg-card);
@@ -1966,14 +1966,14 @@ button {
 
 /* Когда схема и список соединений скрыты — таблица занимает почти всё место */
 .fiber-connections-container.scheme-hidden .cross-fiber-table-wrap {
-    max-height: 75vh;
-    min-height: 360px;
+    max-height: 82vh;
+    min-height: 400px;
 }
 
 /* В режиме редактирования кросса — таблица заметнее и выше */
 .fiber-connections-container.cross-edit-mode .cross-fiber-table-wrap {
-    max-height: 42vh;
-    min-height: 240px;
+    max-height: 55vh;
+    min-height: 280px;
     border-width: 2px;
     border-color: var(--accent-primary);
     box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
@@ -1982,7 +1982,7 @@ button {
 .cross-fiber-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.8125rem;
+    font-size: 0.75rem;
 }
 
 .cross-fiber-table thead {
@@ -1994,12 +1994,12 @@ button {
 }
 
 .cross-fiber-table th {
-    padding: 10px 8px;
+    padding: 6px 5px;
     text-align: left;
     border-bottom: 2px solid var(--border-color);
     border-right: 1px solid var(--border-color);
     vertical-align: top;
-    min-width: 140px;
+    min-width: 110px;
 }
 
 .cross-fiber-table th:last-child {
@@ -2009,27 +2009,28 @@ button {
 .cross-fiber-th {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 3px;
 }
 
 .cross-fiber-th-title {
     font-weight: 600;
+    font-size: 0.75rem;
     color: var(--text-primary);
 }
 
 .cross-fiber-th-desc {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     color: var(--text-muted);
 }
 
 .cross-fiber-th-dir {
-    font-size: 0.7rem;
+    font-size: 0.65rem;
     color: var(--text-secondary);
 }
 
 .cross-fiber-th-actions {
     display: flex;
-    gap: 6px;
+    gap: 4px;
     align-items: center;
     flex-wrap: wrap;
 }
@@ -2043,14 +2044,44 @@ button {
 }
 
 .cross-fiber-table td {
-    padding: 6px 8px;
+    padding: 3px 5px;
     border-right: 1px solid var(--border-light);
     vertical-align: top;
     background: var(--bg-card);
 }
 
+/* Компактные ячейки жил — больше строк и столбцов видно */
 .cross-fiber-table .fiber-item {
     cursor: pointer;
+    padding: 4px 5px !important;
+    gap: 2px !important;
+    min-height: 0;
+}
+
+.cross-fiber-table .fiber-item .fiber-color {
+    width: 18px !important;
+    height: 18px !important;
+    font-size: 8px !important;
+}
+
+.cross-fiber-table .fiber-item .fiber-name {
+    font-size: 0.7rem !important;
+}
+
+.cross-fiber-table .fiber-item > div[style*="margin-left: 30px"] {
+    margin-left: 18px !important;
+    padding: 2px 4px !important;
+    font-size: 0.65rem !important;
+}
+
+.cross-fiber-table .fiber-item input.fiber-label-input {
+    padding: 2px 4px !important;
+    font-size: 0.65rem !important;
+}
+
+.cross-fiber-table .fiber-item button {
+    padding: 2px 4px !important;
+    font-size: 0.6rem !important;
 }
 
 .cross-fiber-table td:last-child {
@@ -2059,9 +2090,9 @@ button {
 
 .cross-fiber-empty {
     color: var(--text-muted);
-    font-size: 0.875rem;
+    font-size: 0.75rem;
     text-align: center;
-    padding: 8px;
+    padding: 4px 6px;
 }
 
 /* Используемые жилы в кроссе — ярко красные */
