@@ -5266,15 +5266,15 @@ function showObjectInfo(obj) {
     
     // Обработка информации о кроссах
     if (type === 'cross') {
-        const crossPorts = obj.properties.get('crossPorts') || 24;
+        const crossPorts = Math.max(1, parseInt(obj.properties.get('crossPorts'), 10) || 24);
         
         html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
         html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Информация о кроссе</h4>';
         html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Количество портов:</strong> ${crossPorts}</div>`;
         
-        // Подсчитываем использованные порты
-        const usedPorts = getTotalUsedFibersInSleeve(obj);
-        const usagePercent = Math.round((usedPorts / crossPorts) * 100);
+        // Подсчитываем использованные порты (узлы, OLT, сростки)
+        const usedPorts = getTotalUsedPortsInCross(obj);
+        const usagePercent = crossPorts > 0 ? Math.round((usedPorts / crossPorts) * 100) : 0;
         const statusColor = usedPorts > crossPorts ? '#dc2626' : (usagePercent >= 80 ? '#f59e0b' : '#22c55e');
         
         html += `<div style="color: var(--text-secondary); font-size: 0.875rem;"><strong>Использовано:</strong> <span style="color: ${statusColor}; font-weight: 600;">${usedPorts}/${crossPorts} портов</span> (${usagePercent}%)</div>`;
@@ -8693,6 +8693,24 @@ function crossHasFiberForConnection(crossObj, cableId, fiberNumber) {
     if (!cable) return false;
     const n = getFiberCount(cable.properties.get('cableType'));
     return fiberNumber >= 1 && fiberNumber <= n;
+}
+
+// Получает количество использованных портов в кроссе (жилы с подключением к узлу/OLT или в сростке)
+function getTotalUsedPortsInCross(crossObj) {
+    if (!crossObj || !crossObj.properties || crossObj.properties.get('type') !== 'cross') {
+        return 0;
+    }
+    const keys = new Set();
+    const nodeConnections = crossObj.properties.get('nodeConnections') || {};
+    const oltConnections = crossObj.properties.get('oltConnections') || {};
+    const fiberConnections = crossObj.properties.get('fiberConnections') || [];
+    Object.keys(nodeConnections).forEach(function(k) { keys.add(k); });
+    Object.keys(oltConnections).forEach(function(k) { keys.add(k); });
+    fiberConnections.forEach(function(conn) {
+        if (conn.from && conn.from.cableId != null) keys.add(conn.from.cableId + '-' + conn.from.fiberNumber);
+        if (conn.to && conn.to.cableId != null) keys.add(conn.to.cableId + '-' + conn.to.fiberNumber);
+    });
+    return keys.size;
 }
 
 // Получает общее количество использованных волокон в муфте
