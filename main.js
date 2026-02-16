@@ -9246,7 +9246,80 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         }
     }
     
-    html += `<div style="overflow-x: auto; margin-bottom: 15px;">`;
+    // Функция для ячейки одной жилы (используется в таблице)
+    function buildFiberCell(cableData, fiber, sleeveObj, isCross, isEditMode, fiberLabels, fiberConnections, nodeConnections, oltConnections) {
+        const isUsed = cableData.usedFibers.includes(fiber.number);
+        const fiberLabelKey = `${cableData.cableUniqueId}-${fiber.number}`;
+        const directLabel = fiberLabels[fiberLabelKey] || '';
+        const inheritedInfo = getInheritedFiberLabel(sleeveObj, cableData.cableUniqueId, fiber.number);
+        const displayLabel = directLabel || inheritedInfo.label;
+        const isInheritedLabel = !directLabel && inheritedInfo.inherited;
+        const isConnected = fiberConnections.some(conn =>
+            (conn.from.cableId === cableData.cableUniqueId && conn.from.fiberNumber === fiber.number) ||
+            (conn.to.cableId === cableData.cableUniqueId && conn.to.fiberNumber === fiber.number)
+        );
+        const nodeConnection = nodeConnections[fiberLabelKey];
+        const hasNodeConnection = !!nodeConnection;
+        const oltConnection = oltConnections[fiberLabelKey];
+        const hasOltConnection = !!oltConnection;
+        const hasAnyOutConnection = hasNodeConnection || hasOltConnection;
+        const fiberTextColor = (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00') ? '#000' : '#fff';
+        const statusText = isUsed ? '(исп.)' : (hasNodeConnection ? '(на узел)' : (hasOltConnection ? '(на OLT)' : '(своб.)'));
+        const statusColor = isUsed ? '#b91c1c' : (hasNodeConnection ? '#22c55e' : (hasOltConnection ? '#0ea5e9' : '#22c55e'));
+        const itemBorder = isUsed ? '#dc2626' : (hasNodeConnection ? '#22c55e' : (hasOltConnection ? '#0ea5e9' : 'var(--border-color)'));
+        const usedClass = isUsed ? ' fiber-used cross-fiber-used' : '';
+        return `
+            <div class="fiber-item${usedClass}" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}"
+                 style="display: flex; flex-direction: column; gap: 4px; padding: 8px; border-radius: 4px; border: 1px solid ${itemBorder}; min-width: 0;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div class="fiber-color" style="width: 22px; height: 22px; border-radius: 50%; background-color: ${fiber.color}; border: 2px solid #333; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
+                        <span style="font-size: 9px; font-weight: 700; color: ${fiberTextColor};">${fiber.number}</span>
+                    </div>
+                    <span class="fiber-name" style="font-size: 0.8125rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;"><strong>${fiber.name}</strong></span>
+                    <span style="font-size: 0.7rem; color: ${statusColor}; font-weight: 600; white-space: nowrap;">${statusText}</span>
+                </div>
+                ${hasNodeConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #f0fdf4; border-radius: 3px; font-size: 0.75rem;"><span style="color: #166534;">🖥️ → ${nodeConnection.nodeName}</span>${isEditMode ? `<button class="btn-disconnect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от узла" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
+                ${hasOltConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #e0f2fe; border-radius: 3px; font-size: 0.75rem;"><span style="color: #0369a1;">📡 → ${oltConnection.oltName}</span>${isEditMode ? `<button class="btn-disconnect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от OLT" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
+                ${isCross && !hasAnyOutConnection && !isConnected && isEditMode ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;"><button class="btn-connect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к узлу" style="padding: 4px 6px; background: #22c55e; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🖥️ Узел</button><button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 OLT</button></div>` : ''}
+                ${isEditMode ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px;"><input type="text" class="fiber-label-input" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" value="${directLabel}" placeholder="${isInheritedLabel ? '← ' + displayLabel : 'Подпись...'}" style="flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid ${isInheritedLabel ? '#8b5cf6' : '#ced4da'}; border-radius: 3px; font-size: 0.7rem; ${isInheritedLabel ? 'background: #f5f3ff;' : ''}">${isInheritedLabel ? '<span style="font-size: 0.65rem; color: #8b5cf6;">⬅️</span>' : ''}</div>` : (displayLabel ? `<div style="margin-left: 30px; font-size: 0.7rem; color: ${isInheritedLabel ? '#8b5cf6' : '#6366f1'}; overflow: hidden; text-overflow: ellipsis;">${isInheritedLabel ? '⬅️ ' : '📝 '}${displayLabel}</div>` : '')}
+            </div>`;
+    }
+    
+    // Таблица кабелей и жил — сначала (основное рабочее место)
+    const maxRows = Math.max(1, maxFibers);
+    html += '<div class="cross-fiber-table-wrap">';
+    html += '<table class="cross-fiber-table">';
+    html += '<thead><tr>';
+    cablesData.forEach((cableData) => {
+        const cableTitle = cableData.cableName ? cableData.cableName : ('Кабель ' + cableData.index);
+        html += '<th><div class="cross-fiber-th">';
+        html += `<span class="cross-fiber-th-title">${escapeHtml(cableTitle)}</span><span class="cross-fiber-th-desc">${cableData.cableDescription}</span>${cableData.isFromSleeve ? ' <span class="cross-fiber-th-dir">← от муфты</span>' : ' <span class="cross-fiber-th-dir">→ к муфте</span>'}`;
+        if (isEditMode) {
+            html += `<div class="cross-fiber-th-actions"><select class="cable-type-select form-input" data-cable-id="${cableData.cableUniqueId}" style="padding: 4px 6px; font-size: 0.75rem;"><option value="fiber4" ${cableData.cableType === 'fiber4' ? 'selected' : ''}>4 жилы</option><option value="fiber8" ${cableData.cableType === 'fiber8' ? 'selected' : ''}>8</option><option value="fiber16" ${cableData.cableType === 'fiber16' ? 'selected' : ''}>16</option><option value="fiber24" ${cableData.cableType === 'fiber24' ? 'selected' : ''}>24</option><option value="gpon" ${cableData.cableType === 'gpon' ? 'selected' : ''}>GPON</option></select><button class="btn-delete-cable" data-cable-id="${cableData.cableUniqueId}" title="Удалить кабель" style="padding: 4px 8px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">✕</button></div>`;
+        }
+        html += '</div></th>';
+    });
+    html += '</tr></thead><tbody>';
+    for (let row = 0; row < maxRows; row++) {
+        html += '<tr>';
+        cablesData.forEach((cableData) => {
+            const fiber = cableData.fibers[row];
+            html += '<td>';
+            if (fiber) {
+                html += buildFiberCell(cableData, fiber, sleeveObj, isCross, isEditMode, fiberLabels, fiberConnections, nodeConnections, oltConnections);
+            } else {
+                html += '<div class="cross-fiber-empty">—</div>';
+            }
+            html += '</td>';
+        });
+        html += '</tr>';
+    }
+    html += '</tbody></table>';
+    html += '</div>';
+    
+    // Схема соединений — в сворачиваемом блоке (больше места для таблицы)
+    html += '<details class="cross-schema-details"><summary class="cross-schema-summary">▸ Схема соединений</summary>';
+    html += `<div style="overflow-x: auto; margin-top: 10px; margin-bottom: 15px;">`;
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     const svgBgColor = isDark ? '#1e293b' : '#ffffff';
     const svgBorderColor = isDark ? '#334155' : '#dee2e6';
@@ -9357,79 +9430,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     });
     
     html += '</svg>';
-    html += '</div>';
-    
-    // Функция для ячейки одной жилы (используется в таблице)
-    function buildFiberCell(cableData, fiber, sleeveObj, isCross, isEditMode, fiberLabels, fiberConnections, nodeConnections, oltConnections) {
-        const isUsed = cableData.usedFibers.includes(fiber.number);
-        const fiberLabelKey = `${cableData.cableUniqueId}-${fiber.number}`;
-        const directLabel = fiberLabels[fiberLabelKey] || '';
-        const inheritedInfo = getInheritedFiberLabel(sleeveObj, cableData.cableUniqueId, fiber.number);
-        const displayLabel = directLabel || inheritedInfo.label;
-        const isInheritedLabel = !directLabel && inheritedInfo.inherited;
-        const isConnected = fiberConnections.some(conn =>
-            (conn.from.cableId === cableData.cableUniqueId && conn.from.fiberNumber === fiber.number) ||
-            (conn.to.cableId === cableData.cableUniqueId && conn.to.fiberNumber === fiber.number)
-        );
-        const nodeConnection = nodeConnections[fiberLabelKey];
-        const hasNodeConnection = !!nodeConnection;
-        const oltConnection = oltConnections[fiberLabelKey];
-        const hasOltConnection = !!oltConnection;
-        const hasAnyOutConnection = hasNodeConnection || hasOltConnection;
-        const fiberTextColor = (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00') ? '#000' : '#fff';
-        const statusText = isUsed ? '(исп.)' : (hasNodeConnection ? '(на узел)' : (hasOltConnection ? '(на OLT)' : '(своб.)'));
-        const statusColor = isUsed ? '#b91c1c' : (hasNodeConnection ? '#22c55e' : (hasOltConnection ? '#0ea5e9' : '#22c55e'));
-        const itemBorder = isUsed ? '#dc2626' : (hasNodeConnection ? '#22c55e' : (hasOltConnection ? '#0ea5e9' : 'var(--border-color)'));
-        const usedClass = isUsed ? ' fiber-used cross-fiber-used' : '';
-        return `
-            <div class="fiber-item${usedClass}" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}"
-                 style="display: flex; flex-direction: column; gap: 4px; padding: 8px; border-radius: 4px; border: 1px solid ${itemBorder}; min-width: 0;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <div class="fiber-color" style="width: 22px; height: 22px; border-radius: 50%; background-color: ${fiber.color}; border: 2px solid #333; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
-                        <span style="font-size: 9px; font-weight: 700; color: ${fiberTextColor};">${fiber.number}</span>
-                    </div>
-                    <span class="fiber-name" style="font-size: 0.8125rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;"><strong>${fiber.name}</strong></span>
-                    <span style="font-size: 0.7rem; color: ${statusColor}; font-weight: 600; white-space: nowrap;">${statusText}</span>
-                </div>
-                ${hasNodeConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #f0fdf4; border-radius: 3px; font-size: 0.75rem;"><span style="color: #166534;">🖥️ → ${nodeConnection.nodeName}</span>${isEditMode ? `<button class="btn-disconnect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от узла" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
-                ${hasOltConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #e0f2fe; border-radius: 3px; font-size: 0.75rem;"><span style="color: #0369a1;">📡 → ${oltConnection.oltName}</span>${isEditMode ? `<button class="btn-disconnect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от OLT" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
-                ${isCross && !hasAnyOutConnection && !isConnected && isEditMode ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;"><button class="btn-connect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к узлу" style="padding: 4px 6px; background: #22c55e; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🖥️ Узел</button><button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 OLT</button></div>` : ''}
-                ${isEditMode ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px;"><input type="text" class="fiber-label-input" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" value="${directLabel}" placeholder="${isInheritedLabel ? '← ' + displayLabel : 'Подпись...'}" style="flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid ${isInheritedLabel ? '#8b5cf6' : '#ced4da'}; border-radius: 3px; font-size: 0.7rem; ${isInheritedLabel ? 'background: #f5f3ff;' : ''}">${isInheritedLabel ? '<span style="font-size: 0.65rem; color: #8b5cf6;">⬅️</span>' : ''}</div>` : (displayLabel ? `<div style="margin-left: 30px; font-size: 0.7rem; color: ${isInheritedLabel ? '#8b5cf6' : '#6366f1'}; overflow: hidden; text-overflow: ellipsis;">${isInheritedLabel ? '⬅️ ' : '📝 '}${displayLabel}</div>` : '')}
-            </div>`;
-    }
-    
-    // Таблица кабелей и жил: фиксированный заголовок, прокручиваемое тело
-    const maxRows = Math.max(1, maxFibers);
-    html += '<div class="cross-fiber-table-wrap">';
-    html += '<table class="cross-fiber-table">';
-    html += '<thead><tr>';
-    cablesData.forEach((cableData) => {
-        const cableTitle = cableData.cableName ? cableData.cableName : ('Кабель ' + cableData.index);
-        html += '<th><div class="cross-fiber-th">';
-        html += `<span class="cross-fiber-th-title">${escapeHtml(cableTitle)}</span><span class="cross-fiber-th-desc">${cableData.cableDescription}</span>${cableData.isFromSleeve ? ' <span class="cross-fiber-th-dir">← от муфты</span>' : ' <span class="cross-fiber-th-dir">→ к муфте</span>'}`;
-        if (isEditMode) {
-            html += `<div class="cross-fiber-th-actions"><select class="cable-type-select form-input" data-cable-id="${cableData.cableUniqueId}" style="padding: 4px 6px; font-size: 0.75rem;"><option value="fiber4" ${cableData.cableType === 'fiber4' ? 'selected' : ''}>4 жилы</option><option value="fiber8" ${cableData.cableType === 'fiber8' ? 'selected' : ''}>8</option><option value="fiber16" ${cableData.cableType === 'fiber16' ? 'selected' : ''}>16</option><option value="fiber24" ${cableData.cableType === 'fiber24' ? 'selected' : ''}>24</option><option value="gpon" ${cableData.cableType === 'gpon' ? 'selected' : ''}>GPON</option></select><button class="btn-delete-cable" data-cable-id="${cableData.cableUniqueId}" title="Удалить кабель" style="padding: 4px 8px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">✕</button></div>`;
-        }
-        html += '</div></th>';
-    });
-    html += '</tr></thead><tbody>';
-    for (let row = 0; row < maxRows; row++) {
-        html += '<tr>';
-        cablesData.forEach((cableData) => {
-            const fiber = cableData.fibers[row];
-            html += '<td>';
-            if (fiber) {
-                html += buildFiberCell(cableData, fiber, sleeveObj, isCross, isEditMode, fiberLabels, fiberConnections, nodeConnections, oltConnections);
-            } else {
-                html += '<div class="cross-fiber-empty">—</div>';
-            }
-            html += '</td>';
-        });
-        html += '</tr>';
-    }
-    html += '</tbody></table>';
-    html += '</div>';
-    html += '</div>';
+    html += '</div></details>';
     
     // Сохраняем данные для обработчиков событий
     html += `<div id="fiber-connections-data" data-sleeve-obj-id="${sleeveObj.properties.get('uniqueId') || 'temp'}" style="display: none;"></div>`;
