@@ -1857,6 +1857,10 @@ button {
     background: var(--bg-card);
 }
 
+.cross-fiber-table .fiber-item {
+    cursor: pointer;
+}
+
 .cross-fiber-table td:last-child {
     border-right: none;
 }
@@ -1880,6 +1884,62 @@ button {
 .cross-fiber-table .fiber-item.fiber-used .fiber-name {
     color: #7f1d1d !important;
     font-weight: 600;
+}
+
+/* Выбранная жила для соединения (в таблице кроссе) */
+.cross-fiber-table .fiber-item.fiber-selected {
+    box-shadow: 0 0 0 2px #f59e0b;
+    background: #fffbeb !important;
+    border-color: #f59e0b !important;
+}
+
+.cross-fiber-table .fiber-item.fiber-selected .fiber-name {
+    color: #b45309 !important;
+}
+
+/* Панель выбора жилы в кроссе */
+.fiber-selection-bar {
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    background: #fffbeb;
+    border: 1px solid #f59e0b;
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.fiber-selection-bar .fiber-selection-text {
+    color: #92400e;
+    flex: 1;
+    min-width: 0;
+}
+
+.fiber-selection-cancel {
+    padding: 6px 12px;
+    background: #f59e0b;
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.fiber-selection-cancel:hover {
+    background: #d97706;
+}
+
+/* Сворачиваемая инструкция в кроссе */
+.cross-instruction-details summary::-webkit-details-marker {
+    display: none;
+}
+
+.cross-instruction-details[open] summary {
+    border-radius: 6px 6px 0 0;
 }
 
 .btn-continue-cable {

@@ -5970,20 +5970,7 @@ function setupFiberConnectionHandlers() {
                 
                 // Выбираем первую жилу
                 selectedFiberForConnection = { cableId, fiberNumber };
-                this.setAttribute('stroke', '#f59e0b');
-                this.setAttribute('stroke-width', '3');
-                
-                // Подсвечиваем инструкцию
-                const instruction = document.querySelector('.fiber-connections-container');
-                if (instruction) {
-                    const existingMsg = instruction.querySelector('.connection-hint');
-                    if (existingMsg) existingMsg.remove();
-                    const hint = document.createElement('div');
-                    hint.className = 'connection-hint';
-                    hint.style.cssText = 'padding: 8px; background: #fef3c7; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #92400e;';
-                    hint.textContent = `Выбрана жила ${fiberNumber} кабеля ${cableId.substring(0, 8)}... Теперь выберите вторую жилу для соединения.`;
-                    instruction.appendChild(hint);
-                }
+                updateFiberSelectionUI();
             } else {
                 // Выбираем вторую жилу и создаем соединение
                 if (selectedFiberForConnection.cableId !== cableId || selectedFiberForConnection.fiberNumber !== fiberNumber) {
@@ -6139,6 +6126,23 @@ function setupFiberConnectionHandlers() {
                 
                 // Сбрасываем выделение
                 resetFiberSelection();
+            }
+        });
+    });
+    
+    // Клик по жиле в таблице — тот же сценарий, что и по схеме (выбор / соединение)
+    document.querySelectorAll('.fiber-connections-container .cross-fiber-table .fiber-item').forEach(function(tableItem) {
+        tableItem.addEventListener('click', function(e) {
+            if (e.target.closest('button, input, select')) return;
+            const cableId = tableItem.getAttribute('data-cable-id');
+            const fiberNumber = tableItem.getAttribute('data-fiber-number');
+            if (!cableId || !fiberNumber) return;
+            const circles = document.querySelectorAll('#fiber-connections-svg circle[id^="fiber-"]');
+            for (var i = 0; i < circles.length; i++) {
+                if (circles[i].getAttribute('data-cable-id') === cableId && circles[i].getAttribute('data-fiber-number') === fiberNumber) {
+                    circles[i].click();
+                    break;
+                }
             }
         });
     });
@@ -8352,14 +8356,39 @@ function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeO
     modal.style.display = 'block';
 }
 
-// Сброс выделения жилы
-function resetFiberSelection() {
-    selectedFiberForConnection = null;
-    document.querySelectorAll('#fiber-connections-svg circle[id^="fiber-"]').forEach(c => {
+// Обновляет панель выбора жилы и подсветку в таблице/схеме
+function updateFiberSelectionUI() {
+    const bar = document.getElementById('fiber-selection-bar');
+    if (bar) {
+        bar.style.display = selectedFiberForConnection ? 'block' : 'none';
+        bar.innerHTML = '';
+        if (selectedFiberForConnection) {
+            const sc = selectedFiberForConnection;
+            const shortId = sc.cableId.length > 10 ? sc.cableId.substring(0, 8) + '…' : sc.cableId;
+            bar.className = 'fiber-selection-bar';
+            bar.innerHTML = '<span class="fiber-selection-text">Выбрана жила: кабель ' + escapeHtml(shortId) + ', жила ' + sc.fiberNumber + '. Выберите вторую жилу в другом кабеле (в таблице или в схеме).</span> ' +
+                '<button type="button" class="fiber-selection-cancel" id="fiberSelectionCancelBtn">Отменить выбор</button>';
+            const cancelBtn = document.getElementById('fiberSelectionCancelBtn');
+            if (cancelBtn) cancelBtn.addEventListener('click', function() { resetFiberSelection(); });
+        }
+    }
+    document.querySelectorAll('.fiber-connections-container .fiber-item.fiber-selected').forEach(function(el) { el.classList.remove('fiber-selected'); });
+    if (selectedFiberForConnection) {
+        const sel = selectedFiberForConnection;
+        document.querySelectorAll('.fiber-connections-container .fiber-item').forEach(function(el) {
+            if (el.getAttribute('data-cable-id') === sel.cableId && parseInt(el.getAttribute('data-fiber-number'), 10) === sel.fiberNumber) el.classList.add('fiber-selected');
+        });
+    }
+    document.querySelectorAll('#fiber-connections-svg circle[id^="fiber-"]').forEach(function(c) {
         const isUsed = c.getAttribute('data-fiber-used') === 'true';
         const isConnected = c.getAttribute('data-fiber-connected') === 'true';
-        
-        if (isConnected) {
+        const cId = c.getAttribute('data-cable-id');
+        const fNum = c.getAttribute('data-fiber-number');
+        const isSelected = selectedFiberForConnection && selectedFiberForConnection.cableId === cId && selectedFiberForConnection.fiberNumber === parseInt(fNum, 10);
+        if (isSelected) {
+            c.setAttribute('stroke', '#f59e0b');
+            c.setAttribute('stroke-width', '3');
+        } else if (isConnected) {
             c.setAttribute('stroke', '#3b82f6');
             c.setAttribute('stroke-width', '3');
         } else if (isUsed) {
@@ -8370,10 +8399,14 @@ function resetFiberSelection() {
             c.setAttribute('stroke-width', '1');
         }
     });
-    
-    // Убираем подсказку
     const hint = document.querySelector('.connection-hint');
     if (hint) hint.remove();
+}
+
+// Сброс выделения жилы
+function resetFiberSelection() {
+    selectedFiberForConnection = null;
+    updateFiberSelectionUI();
 }
 
 function deleteCableByUniqueId(cableUniqueId, opts) {
@@ -9192,20 +9225,25 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     const svgHeight = Math.max(400, maxFibers * 35 + 100);
     const cableColumnWidth = svgWidth / (cablesData.length + 1);
     
-    // Инструкция для режима редактирования
+    // Инструкция (сворачиваемая) и панель выбора жилы
     if (isEditMode) {
-        html += '<div style="padding: 10px; background: #e0f2fe; border-radius: 6px; margin-bottom: 15px; font-size: 0.875rem; color: #0369a1;">';
+        const canConnectFibers = cablesData.length >= 2;
+        html += '<details class="cross-instruction-details" style="margin-bottom: 10px;">';
+        html += '<summary style="cursor: pointer; padding: 8px 10px; background: var(--bg-tertiary); border-radius: 6px; font-size: 0.875rem; color: var(--text-secondary); list-style: none; user-select: none;">';
+        html += '▸ Краткая инструкция';
+        html += '</summary>';
+        html += '<div style="padding: 10px 12px; background: #e0f2fe; border-radius: 6px; margin-top: 4px; font-size: 0.8125rem; color: #0369a1;">';
         if (isCross) {
-            html += '<strong>Инструкция:</strong> В оптическом кроссе можно соединять жилы между кабелями, выводить жилы на узлы сети и на OLT.<br>';
-            html += '<span style="color: #22c55e;"><strong>На узел:</strong> «Подключить к узлу» — вывод жилы на узел сети.</span> <span style="color: #0ea5e9;"><strong>На OLT:</strong> «Подключить к OLT» — вывод жилы на OLT.</span><br>';
-            if (cablesData.length >= 2) {
-                html += '<span style="color: #3b82f6;"><strong>Соединение жил:</strong> Кликните по жиле первого кабеля, затем по жиле второго для создания соединения.</span>';
-            }
-        } else if (cablesData.length >= 2) {
-            html += '<strong>Инструкция:</strong> Кликните по жиле первого кабеля, затем по жиле второго кабеля для создания соединения. Клик по существующему соединению удалит его.<br>';
-            html += '<span style="color: #dc2626;"><strong>Важно:</strong> Жила может быть соединена только с одной жилой из <u>другого</u> кабеля. Уже соединённые жилы выделены синей обводкой.</span>';
+            html += '• <strong>Соединение жил:</strong> клик по жиле в таблице или в схеме → затем по жиле в <u>другом</u> кабеле.<br>';
+            html += '• <strong>На узел / на OLT:</strong> кнопки «Узел» и «OLT» у свободной жилы.<br>';
+            if (canConnectFibers) html += '• Уже соединённые жилы — синяя обводка в схеме; занятые — красным в таблице.';
+        } else if (canConnectFibers) {
+            html += '• Клик по жиле первого кабеля, затем по жиле второго. Клик по линии соединения в схеме — удалить соединение.';
         }
-        html += '</div>';
+        html += '</div></details>';
+        if (canConnectFibers || isCross) {
+            html += '<div id="fiber-selection-bar" class="fiber-selection-bar" style="display: none;"></div>';
+        }
     }
     
     html += `<div style="overflow-x: auto; margin-bottom: 15px;">`;
