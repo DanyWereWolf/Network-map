@@ -8943,6 +8943,10 @@ function updateCrossDisplay() {
         myMap.geoObjects.add(groupPlacemark);
         crossGroupPlacemarks.push(groupPlacemark);
     });
+    // После разделения группы кроссов кабели могли остаться с устаревшей геометрией или видимостью — обновляем кабели, подключённые к кроссам
+    allCrosses.forEach(function(cross) {
+        updateConnectedCables(cross);
+    });
     if (typeof applyMapFilter === 'function') applyMapFilter();
 }
 
@@ -9116,6 +9120,10 @@ function updateNodeDisplay() {
         attachHoverEventsToObject(groupPlacemark);
         myMap.geoObjects.add(groupPlacemark);
         nodeGroupPlacemarks.push(groupPlacemark);
+    });
+    // После разделения группы узлов обновляем кабели, подключённые к узлам
+    allNodes.forEach(function(node) {
+        updateConnectedCables(node);
     });
     if (typeof applyMapFilter === 'function') applyMapFilter();
 }
