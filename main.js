@@ -1200,7 +1200,7 @@ function renderSearchResults(results, query) {
         const uniqueId = result.object.properties.get('uniqueId') || index;
         
         html += `
-            <div class="search-result-item" data-index="${index}" data-id="${uniqueId}">
+            <div class="search-result-item" data-index="${index}" data-id="${escapeHtml(String(uniqueId))}">
                 <div class="search-result-icon ${result.type}">${icon}</div>
                 <div class="search-result-info">
                     <div class="search-result-name">${escapeHtml(result.name)}</div>
@@ -8732,7 +8732,8 @@ async function openNetBoxImportModal() {
         await fetchNetBoxDevices();
         showNetBoxDevices();
     } catch (error) {
-        devicesList.innerHTML = `<div style="color: #ef4444; padding: 20px;">Ошибка загрузки устройств: ${error.message}</div>`;
+        const errMsg = (error && error.message) ? String(error.message) : 'Неизвестная ошибка';
+        devicesList.innerHTML = '<div style="color: #ef4444; padding: 20px;">Ошибка загрузки устройств: ' + escapeHtml(errMsg) + '</div>';
     }
 }
 

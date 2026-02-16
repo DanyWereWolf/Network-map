@@ -85,8 +85,9 @@ function getDb() {
                     } else if (sql.includes('INSERT OR REPLACE INTO settings')) {
                         const key = args[0], value = args[1];
                         if (!s.settings) s.settings = {};
-                        if (key === 'users') s.users = JSON.parse(value || '[]');
-                        else s.settings[key] = value;
+                        if (key === 'users') {
+                            try { s.users = JSON.parse(value || '[]'); } catch (e) { s.users = []; }
+                        } else s.settings[key] = value;
                     } else if (sql.includes('INSERT INTO sessions')) {
                         s.sessions.push({ token: args[0], user_id: args[1], expires_at: args[2] });
                     } else if (sql.includes('DELETE FROM sessions')) {
@@ -177,10 +178,18 @@ function getSettings() {
     const theme = getSetting('theme');
     const groupNames = getSetting('groupNames');
     const netboxConfig = getSetting('netboxConfig');
+    let parsedGroupNames = {};
+    let parsedNetboxConfig = { url: '', token: '', ignoreSSL: false };
+    try {
+        parsedGroupNames = groupNames ? (typeof groupNames === 'string' ? JSON.parse(groupNames) : groupNames) : {};
+    } catch (e) { /* повреждённые данные — используем по умолчанию */ }
+    try {
+        parsedNetboxConfig = netboxConfig ? (typeof netboxConfig === 'string' ? JSON.parse(netboxConfig) : netboxConfig) : { url: '', token: '', ignoreSSL: false };
+    } catch (e) { /* повреждённые данные — используем по умолчанию */ }
     return {
         theme: theme || '',
-        groupNames: groupNames ? (typeof groupNames === 'string' ? JSON.parse(groupNames) : groupNames) : {},
-        netboxConfig: netboxConfig ? (typeof netboxConfig === 'string' ? JSON.parse(netboxConfig) : netboxConfig) : { url: '', token: '', ignoreSSL: false }
+        groupNames: parsedGroupNames,
+        netboxConfig: parsedNetboxConfig
     };
 }
 

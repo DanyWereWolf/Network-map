@@ -338,15 +338,15 @@ function renderHistoryList(filter) {
         var entryDate = new Date(entry.timestamp).toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
         if (entryDate !== currentDate) {
             currentDate = entryDate;
-            html += '<div class="history-date-divider">' + entryDate + '</div>';
+            html += '<div class="history-date-divider">' + escapeHtml(entryDate) + '</div>';
         }
         var userName = entry.user ? (entry.user.fullName || entry.user.username) : 'Система';
         var detailsText = formatHistoryDetails(entry);
         html += '<div class="history-item">' +
-            '<div class="history-item-icon">' + entry.icon + '</div>' +
+            '<div class="history-item-icon">' + escapeHtml(entry.icon) + '</div>' +
             '<div class="history-item-content">' +
-            '<div class="history-item-action">' + entry.actionName + '</div>' +
-            '<div class="history-item-details">' + detailsText + '</div>' +
+            '<div class="history-item-action">' + escapeHtml(entry.actionName) + '</div>' +
+            '<div class="history-item-details">' + escapeHtml(detailsText) + '</div>' +
             '<div class="history-item-meta">' +
             '<span class="history-item-user">' + escapeHtml(userName) + '</span>' +
             '<span class="history-item-time">' + formatHistoryTime(entry.timestamp) + '</span>' +

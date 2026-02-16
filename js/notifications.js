@@ -18,15 +18,33 @@ function showToast(message, type, title, duration) {
         '<div class="toast-title"></div>' +
         '<div class="toast-message"></div>' +
         '</div>' +
-        '<button class="toast-close" onclick="this.parentElement.remove()">✕</button>';
+        '<button class="toast-close" type="button" aria-label="Закрыть">✕</button>';
     toast.querySelector('.toast-title').textContent = titleText;
     toast.querySelector('.toast-message').textContent = msg;
     container.appendChild(toast);
 
-    setTimeout(function() {
-        toast.classList.add('toast-hiding');
-        setTimeout(function() { toast.remove(); }, 300);
-    }, duration);
+    var hideTimer = null;
+    var removeTimer = null;
+    function scheduleAutoHide() {
+        hideTimer = setTimeout(function() {
+            hideTimer = null;
+            toast.classList.add('toast-hiding');
+            removeTimer = setTimeout(function() {
+                removeTimer = null;
+                toast.remove();
+            }, 300);
+        }, duration);
+    }
+    function closeToast() {
+        if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+        if (removeTimer) { clearTimeout(removeTimer); removeTimer = null; }
+        if (toast.parentElement) {
+            toast.classList.add('toast-hiding');
+            setTimeout(function() { toast.remove(); }, 300);
+        }
+    }
+    scheduleAutoHide();
+    toast.querySelector('.toast-close').addEventListener('click', closeToast);
 }
 
 function showSuccess(message, title) { showToast(message, 'success', title || null); }
