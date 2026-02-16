@@ -3213,6 +3213,12 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
             if (!skipSync) showError('Кабель GPON прокладывается только между OLT и сплиттером. К ONU подключаются через выходы сплиттера (в баллуне сплиттера — «Подключить к ONU»).', 'Недопустимое действие');
             return false;
         }
+        var oltObj = firstType === 'olt' ? points[0] : points[1];
+        var ponPorts = (oltObj.properties && oltObj.properties.get('ponPorts')) || 16;
+        if (getOltUsedPortCount(oltObj) >= ponPorts) {
+            if (!skipSync) showError('У OLT закончились свободные PON-порты. Использовано: ' + getOltUsedPortCount(oltObj) + '/' + ponPorts + '. Удалите кабель или подключение жилы к OLT либо увеличьте количество портов в настройках OLT.', 'Переполнение OLT');
+            return false;
+        }
     } else if (firstType === 'node' || lastType === 'node') {
         if (!skipSync) showError('Нельзя прокладывать кабель напрямую к узлу сети. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
         return false;
@@ -7838,6 +7844,11 @@ function updateAllNodeConnectionLines() {
 
 // Подключает жилу кросса к OLT
 function connectFiberToOlt(crossObj, cableId, fiberNumber, oltObj) {
+    var ponPorts = (oltObj.properties && oltObj.properties.get('ponPorts')) || 16;
+    if (getOltUsedPortCount(oltObj) >= ponPorts) {
+        showError('У OLT закончились свободные PON-порты. Использовано: ' + getOltUsedPortCount(oltObj) + '/' + ponPorts + '. Удалите кабель GPON или подключение жилы к OLT либо увеличьте количество портов в настройках OLT.', 'Переполнение OLT');
+        return;
+    }
     let oltConnections = crossObj.properties.get('oltConnections');
     if (!oltConnections) oltConnections = {};
     const key = `${cableId}-${fiberNumber}`;
@@ -7932,9 +7943,14 @@ function updateAllOltConnectionLines() {
 
 // Подключает выход сплиттера к ONU
 function connectSplitterOutputToOnu(splitterObj, outputPort, onuObj) {
+    const onuUniqueId = onuObj.properties.get('uniqueId') || generateUniqueId('onu');
+    const fromSplitters = getOnuConnectedSplitters(onuUniqueId);
+    if (fromSplitters.length > 0 && fromSplitters.some(function(c) { return c.splitterObj !== splitterObj; })) {
+        showError('К этому ONU уже подключён другой сплиттер. Один ONU можно подключить только к одному сплиттеру (одному выходу).', 'Недопустимое действие');
+        return;
+    }
     let splitterConnections = splitterObj.properties.get('splitterConnections');
     if (!splitterConnections) splitterConnections = {};
-    const onuUniqueId = onuObj.properties.get('uniqueId') || generateUniqueId('onu');
     const splitterUniqueId = splitterObj.properties.get('uniqueId') || generateUniqueId('splitter');
     if (!onuObj.properties.get('uniqueId')) onuObj.properties.set('uniqueId', onuUniqueId);
     if (!splitterObj.properties.get('uniqueId')) splitterObj.properties.set('uniqueId', splitterUniqueId);
@@ -8093,6 +8109,32 @@ function getOltConnectedFibers(oltUniqueId) {
         }
     });
     return connectedFibers;
+}
+
+// Количество занятых портов OLT: кабели GPON (OLT↔сплиттер) + жилы от кроссов (Подключить к OLT)
+function getOltUsedPortCount(oltObj) {
+    if (!oltObj || !oltObj.properties || oltObj.properties.get('type') !== 'olt') return 0;
+    let count = 0;
+    const oltUniqueId = oltObj.properties.get('uniqueId');
+    objects.forEach(function(o) {
+        if (o.properties && o.properties.get('type') === 'cable' && o.properties.get('cableType') === 'gpon') {
+            const from = o.properties.get('from'), to = o.properties.get('to');
+            if (from === oltObj || to === oltObj) count++;
+        }
+    });
+    if (oltUniqueId) {
+        objects.forEach(function(obj) {
+            if (obj.properties && obj.properties.get('type') === 'cross') {
+                const oltConnections = obj.properties.get('oltConnections');
+                if (oltConnections) {
+                    Object.keys(oltConnections).forEach(function(key) {
+                        if (oltConnections[key] && oltConnections[key].oltId === oltUniqueId) count++;
+                    });
+                }
+            }
+        });
+    }
+    return count;
 }
 
 // Получает все сплиттеры и выходы, подключенные к данному ONU
