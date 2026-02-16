@@ -5375,7 +5375,7 @@ function showObjectInfo(obj) {
                                 <div class="fiber-color" style="background-color: ${fiber.color}; ${isUsed ? 'opacity: 0.5; border: 2px dashed #dc2626;' : ''}"></div>
                                 <span class="fiber-label">Жила ${fiber.number}: ${fiber.name} ${isUsed ? '<span class="fiber-status">(используется)</span>' : '<span class="fiber-status fiber-free-text">(свободна)</span>'}</span>
                             </div>
-                            ${!isUsed && isEditMode && type !== 'sleeve' && type !== 'cross' ? `<button class="btn-continue-cable" data-cable-id="${cableUniqueId}" data-fiber-number="${fiber.number}" title="Продолжить кабель с этой жилой">→</button>` : ''}
+                            ${!isUsed && isEditMode && type !== 'sleeve' && type !== 'cross' && type !== 'olt' && type !== 'splitter' && type !== 'onu' ? `<button class="btn-continue-cable" data-cable-id="${cableUniqueId}" data-fiber-number="${fiber.number}" title="Продолжить кабель с этой жилой">→</button>` : ''}
                         </div>
                     `;
                 });
@@ -9154,8 +9154,8 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     if (isEditMode) {
         html += '<div style="padding: 10px; background: #e0f2fe; border-radius: 6px; margin-bottom: 15px; font-size: 0.875rem; color: #0369a1;">';
         if (isCross) {
-            html += '<strong>Инструкция:</strong> В оптическом кроссе можно соединять жилы между кабелями и выводить жилы на OLT.<br>';
-            html += '<span style="color: #0ea5e9;"><strong>На OLT:</strong> «Подключить к OLT» — вывод жилы на OLT.</span><br>';
+            html += '<strong>Инструкция:</strong> В оптическом кроссе можно соединять жилы между кабелями, выводить жилы на узлы сети и на OLT.<br>';
+            html += '<span style="color: #22c55e;"><strong>На узел:</strong> «Подключить к узлу» — вывод жилы на узел сети.</span> <span style="color: #0ea5e9;"><strong>На OLT:</strong> «Подключить к OLT» — вывод жилы на OLT.</span><br>';
             if (cablesData.length >= 2) {
                 html += '<span style="color: #3b82f6;"><strong>Соединение жил:</strong> Кликните по жиле первого кабеля, затем по жиле второго для создания соединения.</span>';
             }
@@ -9363,6 +9363,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
                     ` : ''}
                     ${isCross && !hasAnyOutConnection && !isConnected && isEditMode ? `
                         <div style="margin-left: 32px; display: flex; gap: 6px; flex-wrap: wrap;">
+                            <button class="btn-connect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к узлу" style="padding: 4px 8px; background: #22c55e; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.7rem;">🖥️ Подключить к узлу</button>
                             <button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 8px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.7rem;">📡 Подключить к OLT</button>
                         </div>
                     ` : ''}
