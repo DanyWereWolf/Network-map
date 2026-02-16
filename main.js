@@ -4284,6 +4284,11 @@ function applyRemoteStateMerged(data) {
                 ? findObjectsAtGeometry(refs, item.geometry)
                 : null;
             if (!pointsArr || pointsArr.length < 2) pointsArr = [fromObj, toObj];
+            else {
+                // При группе кроссов в одной точке findObjectsAtGeometry может вернуть другой объект — фиксируем концы по uniqueId
+                if (fromObj) pointsArr[0] = fromObj;
+                if (toObj) pointsArr[pointsArr.length - 1] = toObj;
+            }
             existingCable.properties.set('from', fromObj);
             existingCable.properties.set('to', toObj);
             existingCable.properties.set('points', pointsArr);
@@ -4303,6 +4308,9 @@ function applyRemoteStateMerged(data) {
                 ? findObjectsAtGeometry(refs, item.geometry)
                 : null;
             if (points && points.length >= 2) {
+                // При группе кроссов в одной точке концы кабеля задаём по uniqueId, иначе кабель «переезжает» на другой кросс после перезагрузки
+                if (fromObj) points[0] = fromObj;
+                if (toObj) points[points.length - 1] = toObj;
                 addCable(points[0], points, item.cableType, item.uniqueId, undefined, true, true);
             } else {
                 addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true, true);
@@ -4471,9 +4479,16 @@ function importData(data, opts) {
             var refsOnly = objectRefs.filter(function(r) { return r != null; });
             var coords = normalizeCableGeometry(item.geometry);
             var fromObj = null, toObj = null;
-            if (coords && coords.length >= 2) {
-                fromObj = findRefClosestToCoord(refsOnly, coords[0], undefined, true);
-                toObj = findRefClosestToCoord(refsOnly, coords[coords.length - 1], undefined, true);
+            // Приоритет: по uniqueId (кабель не должен «переезжать» на другой кросс при импорте после разделения группы)
+            if (item.fromUniqueId && item.toUniqueId) {
+                fromObj = refsOnly.find(function(r) { return r.properties && r.properties.get('uniqueId') === item.fromUniqueId; });
+                toObj = refsOnly.find(function(r) { return r.properties && r.properties.get('uniqueId') === item.toUniqueId; });
+            }
+            if (!fromObj || !toObj) {
+                if (coords && coords.length >= 2) {
+                    fromObj = fromObj || findRefClosestToCoord(refsOnly, coords[0], undefined, true);
+                    toObj = toObj || findRefClosestToCoord(refsOnly, coords[coords.length - 1], undefined, true);
+                }
             }
             if (!fromObj || !toObj) {
                 if (item.from === undefined || item.to === undefined || item.from >= objectRefs.length || item.to >= objectRefs.length) return;
@@ -4483,6 +4498,8 @@ function importData(data, opts) {
             if (!fromObj || !toObj) return;
             var points = (coords && coords.length > 2) ? findObjectsAtGeometry(refsOnly, item.geometry) : null;
             if (points && points.length >= 2) {
+                if (fromObj) points[0] = fromObj;
+                if (toObj) points[points.length - 1] = toObj;
                 addCable(points[0], points, item.cableType, item.uniqueId, undefined, true, true);
             } else {
                 addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true, true);
