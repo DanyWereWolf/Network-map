@@ -7923,34 +7923,24 @@ function updateAllNodeConnectionLines() {
     });
     nodeConnectionLines = [];
     
-    // Проходим по всем кроссам и создаем линии
+    // Проходим по всем кроссам и создаем линии только для реальных подключений (кабель с этой жилой подключён к кроссу)
     objects.forEach(obj => {
-        if (obj.properties && obj.properties.get('type') === 'cross') {
-            const nodeConnections = obj.properties.get('nodeConnections');
-            if (nodeConnections) {
-                Object.keys(nodeConnections).forEach(key => {
-                    const [cableId, fiberNumber] = key.split('-').slice(0, -1).join('-').split('-');
-                    const fiberNum = parseInt(key.split('-').pop());
-                    const conn = nodeConnections[key];
-                    
-                    // Находим узел по ID
-                    const nodeObj = objects.find(n => 
-                        n.properties && 
-                        n.properties.get('type') === 'node' &&
-                        n.properties.get('uniqueId') === conn.nodeId
-                    );
-                    
-                    if (nodeObj) {
-                        // Парсим ключ правильно (cableId может содержать дефисы)
-                        const parts = key.split('-');
-                        const fiberNumberParsed = parseInt(parts.pop());
-                        const cableIdParsed = parts.join('-');
-                        
-                        createNodeConnectionLine(obj, nodeObj, cableIdParsed, fiberNumberParsed);
-                    }
-                });
-            }
-        }
+        if (obj.properties && obj.properties.get('type') !== 'cross') return;
+        const nodeConnections = obj.properties.get('nodeConnections');
+        if (!nodeConnections) return;
+        Object.keys(nodeConnections).forEach(key => {
+            const conn = nodeConnections[key];
+            const parts = key.split('-');
+            const fiberNumberParsed = parseInt(parts.pop(), 10);
+            const cableIdParsed = parts.join('-');
+            if (!crossHasFiberForConnection(obj, cableIdParsed, fiberNumberParsed)) return;
+            const nodeObj = objects.find(n =>
+                n.properties &&
+                n.properties.get('type') === 'node' &&
+                n.properties.get('uniqueId') === conn.nodeId
+            );
+            if (nodeObj) createNodeConnectionLine(obj, nodeObj, cableIdParsed, fiberNumberParsed);
+        });
     });
 }
 
@@ -8167,21 +8157,19 @@ function getNodeConnectedFibers(nodeUniqueId) {
             if (nodeConnections) {
                 Object.keys(nodeConnections).forEach(key => {
                     const conn = nodeConnections[key];
-                    if (conn.nodeId === nodeUniqueId) {
-                        // Парсим ключ (cableId-fiberNumber)
-                        const parts = key.split('-');
-                        const fiberNumber = parseInt(parts.pop());
-                        const cableId = parts.join('-');
-                        
-                        connectedFibers.push({
-                            crossObj: obj,
-                            crossName: crossName,
-                            crossUniqueId: crossUniqueId,
-                            cableId: cableId,
-                            fiberNumber: fiberNumber,
-                            fiberLabel: fiberLabels[key] || ''
-                        });
-                    }
+                    if (conn.nodeId !== nodeUniqueId) return;
+                    const parts = key.split('-');
+                    const fiberNumber = parseInt(parts.pop(), 10);
+                    const cableId = parts.join('-');
+                    if (!crossHasFiberForConnection(obj, cableId, fiberNumber)) return;
+                    connectedFibers.push({
+                        crossObj: obj,
+                        crossName: crossName,
+                        crossUniqueId: crossUniqueId,
+                        cableId: cableId,
+                        fiberNumber: fiberNumber,
+                        fiberLabel: fiberLabels[key] || ''
+                    });
                 });
             }
         }
@@ -8678,6 +8666,16 @@ function getConnectedCables(obj) {
         cable.properties.get('type') === 'cable' &&
         (cable.properties.get('from') === obj || cable.properties.get('to') === obj)
     );
+}
+
+// Проверяет, что у кросса есть кабель с указанным cableId и жила fiberNumber существует в этом кабеле (для отображения линии и трассировки только при реальном подключении)
+function crossHasFiberForConnection(crossObj, cableId, fiberNumber) {
+    if (!crossObj || !cableId || fiberNumber == null) return false;
+    const cables = getConnectedCables(crossObj);
+    const cable = cables.find(c => c.properties && c.properties.get('uniqueId') === cableId);
+    if (!cable) return false;
+    const n = getFiberCount(cable.properties.get('cableType'));
+    return fiberNumber >= 1 && fiberNumber <= n;
 }
 
 // Получает общее количество использованных волокон в муфте
