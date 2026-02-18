@@ -676,8 +676,10 @@ function init() {
         center: [54.663609, 86.162243],
         zoom: 15
     });
-    // Убираем поиск Яндекса с карты (поиск по объектам — в шапке приложения)
+    // Убираем лишние элементы Яндекса: поиск (есть в шапке), пробки, геолокация
     try { myMap.controls.remove('searchControl'); } catch (e) {}
+    try { myMap.controls.remove('trafficControl'); } catch (e) {}
+    try { myMap.controls.remove('geolocationControl'); } catch (e) {}
     // Имена групп подгружаются с сервера в loadData() из /api/settings
     
     // Создаем индикатор под курсором

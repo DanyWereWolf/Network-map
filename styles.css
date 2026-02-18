@@ -106,29 +106,63 @@ body {
 .header-brand {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 0;
+    min-width: 0;
 }
 
-.header-brand-label {
-    font-size: 0.85rem;
+.header-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px 6px 8px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: white;
     font-weight: 700;
-    letter-spacing: 0.05em;
-    color: var(--text-primary);
-    opacity: 0.9;
+    font-size: 0.95rem;
+    letter-spacing: 0.04em;
+    transition: background 0.2s ease, border-color 0.2s ease;
+    cursor: default;
 }
 
-.header-brand h1 {
-    margin: 0;
-    font-size: 1.1rem;
-    font-weight: 600;
+.header-logo-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.15);
+    flex-shrink: 0;
+}
+
+.header-logo-icon svg {
+    display: block;
+    width: 18px;
+    height: 18px;
+    stroke: white;
+}
+
+.header-logo-name {
     white-space: nowrap;
 }
 
-.header-icon {
-    width: 24px;
-    height: 24px;
-    stroke: white;
+.header-divider {
+    width: 1px;
+    height: 22px;
+    background: rgba(255, 255, 255, 0.25);
+    margin: 0 14px;
     flex-shrink: 0;
+}
+
+.header-title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.95);
+    white-space: nowrap;
+    letter-spacing: 0.01em;
 }
 
 /* ==================== Поиск по карте ==================== */
@@ -2663,7 +2697,7 @@ button {
         height: 48px;
     }
     
-    .header-brand h1 {
+    .header-title {
         font-size: 1rem;
     }
     
@@ -2711,13 +2745,26 @@ button {
         height: 46px;
     }
     
-    .header-brand h1 {
+    .header-title {
         display: none;
     }
     
-    .header-icon {
-        width: 22px;
-        height: 22px;
+    .header-divider {
+        display: none;
+    }
+    
+    .header-logo {
+        padding: 5px 10px 5px 6px;
+    }
+    
+    .header-logo-icon {
+        width: 24px;
+        height: 24px;
+    }
+    
+    .header-logo-icon svg {
+        width: 16px;
+        height: 16px;
     }
     
     .header-search {
@@ -2989,17 +3036,30 @@ button {
         height: 44px;
     }
     
-    .header-brand h1 {
+    .header-title {
         font-size: 0.85rem;
     }
     
     .header-brand {
-        gap: 6px;
+        gap: 0;
     }
     
-    .header-icon {
-        width: 20px;
-        height: 20px;
+    .header-logo {
+        padding: 4px 8px 4px 6px;
+    }
+    
+    .header-logo-name {
+        font-size: 0.85rem;
+    }
+    
+    .header-logo-icon {
+        width: 22px;
+        height: 22px;
+    }
+    
+    .header-logo-icon svg {
+        width: 14px;
+        height: 14px;
     }
     
     .user-panel {
