@@ -5561,11 +5561,12 @@ function showSupportInfo(supportObj) {
     
     document.getElementById('modalInfo').innerHTML = html;
     
-    // Добавляем обработчики для редактирования и удаления
-    setupEditAndDeleteListeners();
-    
-    // Показываем модальное окно
+    // Убираем широкий режим (для кросса/муфты), чтобы панель опоры была компактной
     const modal = document.getElementById('infoModal');
+    const modalContent = modal && modal.querySelector('.modal-content');
+    if (modalContent) modalContent.classList.remove('fiber-management-modal');
+    
+    setupEditAndDeleteListeners();
     modal.style.display = 'block';
 }
 
