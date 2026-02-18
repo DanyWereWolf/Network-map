@@ -1,6 +1,3 @@
-// ==================== Система авторизации ====================
-
-// Простая хэш-функция для паролей (для демо, не для продакшена!)
 function hashPassword(password) {
     let hash = 0;
     for (let i = 0; i < password.length; i++) {
@@ -8,17 +5,15 @@ function hashPassword(password) {
         hash = ((hash << 5) - hash) + char;
         hash = hash & hash;
     }
-    // Добавляем соль и конвертируем в строку
+    
     return 'hash_' + Math.abs(hash).toString(16) + '_' + password.length;
 }
 
-// Инициализация системы пользователей (только при работе с API — пользователи с сервера)
 function initUserSystem() {
     if (!getApiBase()) return;
     refreshUsersFromApi();
 }
 
-// Получить список пользователей (кэш из sessionStorage при работе с API)
 function getUsers() {
     try {
         const usersJson = sessionStorage.getItem('networkMap_users');
@@ -26,17 +21,14 @@ function getUsers() {
     } catch (e) { return []; }
 }
 
-// Сохранить список пользователей в кэш (только при API)
 function saveUsers(users) {
     try { sessionStorage.setItem('networkMap_users', JSON.stringify(users)); } catch (e) {}
 }
 
-// Генерация уникального ID
 function generateUserId() {
     return 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 }
 
-// Найти пользователя по имени
 function findUserByUsername(username) {
     const users = getUsers();
     return users.find(u => u.username.toLowerCase() === username.toLowerCase());
@@ -80,7 +72,6 @@ function getStoredSession() {
     } catch (e) { return null; }
 }
 
-// Авторизация пользователя (только через API). rememberMe — сохранить в localStorage на 30 дней
 function loginUser(username, password, rememberMe) {
     if (!getApiBase()) {
         return Promise.resolve({ success: false, error: 'Запустите сервер: npm run api, затем откройте http://localhost:3000' });
@@ -111,7 +102,6 @@ function loginUser(username, password, rememberMe) {
     }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
 }
 
-// Регистрация нового пользователя (создание заявки, только через API)
 function registerUser(username, password, fullName) {
     if (username.length < 3) return Promise.resolve({ success: false, error: 'Имя пользователя должно быть не менее 3 символов' });
     if (password.length < 6) return Promise.resolve({ success: false, error: 'Пароль должен быть не менее 6 символов' });
@@ -125,7 +115,6 @@ function registerUser(username, password, fullName) {
     }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
 }
 
-// Одобрить заявку пользователя (только через API)
 function approveUser(userId) {
     if (!getApiBase()) return Promise.resolve({ success: false, error: 'Сервер недоступен' });
     var token = getAuthToken();
@@ -139,7 +128,6 @@ function approveUser(userId) {
     }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
 }
 
-// Отклонить заявку пользователя (только через API)
 function rejectUser(userId) {
     if (!getApiBase()) return Promise.resolve({ success: false, error: 'Сервер недоступен' });
     var token = getAuthToken();
@@ -153,7 +141,6 @@ function rejectUser(userId) {
     }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
 }
 
-// Обновить кэш пользователей с сервера
 function refreshUsersFromApi() {
     if (!getApiBase()) return Promise.resolve();
     var token = getAuthToken();
@@ -165,13 +152,11 @@ function refreshUsersFromApi() {
         .catch(function() {});
 }
 
-// Получить заявки на рассмотрении
 function getPendingUsers() {
     const users = getUsers();
     return users.filter(u => u.status === 'pending');
 }
 
-// Обновить сессию с сервера (роль и т.д. после изменений админом)
 function refreshSessionFromApi() {
     if (!getApiBase()) return Promise.resolve();
     var token = getAuthToken();
@@ -190,23 +175,19 @@ function refreshSessionFromApi() {
         .catch(function() {});
 }
 
-// Получить текущую сессию (из sessionStorage или localStorage при «запомнить меня»)
 function getCurrentSession() {
     return getStoredSession();
 }
 
-// Проверка, авторизован ли пользователь
 function isAuthenticated() {
     return getCurrentSession() !== null;
 }
 
-// Проверка, является ли пользователь администратором
 function isAdmin() {
     const session = getCurrentSession();
     return session && session.role === 'admin';
 }
 
-// Выход из системы
 function logout() {
     if (getApiBase()) {
         var token = getAuthToken();
@@ -221,9 +202,6 @@ function logout() {
     window.location.href = 'auth.html';
 }
 
-// ==================== UI функции ====================
-
-// Переключение между формами входа и регистрации
 function switchForm(formType) {
     const loginForm = document.getElementById('loginForm');
     const registerForm = document.getElementById('registerForm');
@@ -241,20 +219,16 @@ function switchForm(formType) {
     }
 }
 
-// Показать сообщение
 function showMessage(text, type) {
     const message = document.getElementById('authMessage');
     message.textContent = text;
     message.className = 'auth-message ' + type;
 }
 
-// Переключение видимости пароля
 function togglePassword(inputId) {
     const input = document.getElementById(inputId);
     input.type = input.type === 'password' ? 'text' : 'password';
 }
-
-// ==================== Инициализация ====================
 
 document.addEventListener('DOMContentLoaded', function() {
     initUserSystem();
@@ -311,7 +285,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Экспортируем функции для использования в других файлах
 window.AuthSystem = {
     getCurrentSession,
     isAuthenticated,

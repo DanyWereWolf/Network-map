@@ -1,13 +1,9 @@
-/**
- * Хранение данных в JSON-файле (без нативных модулей, работает на любой Node.js).
- * Файл: ./data/store.json
- */
 const path = require('path');
 const fs = require('fs');
 
 const STORE_PATH = process.env.DB_PATH ? process.env.DB_PATH.replace(/\.db$/i, '-store.json') : path.join(__dirname, 'data', 'store.json');
 const BACKUPS_DIR = path.join(path.dirname(STORE_PATH), 'backups');
-const BACKUP_RETENTION_DAYS = 30; // хранить бэкапы за последний месяц
+const BACKUP_RETENTION_DAYS = 30; 
 
 let store = null;
 
@@ -182,10 +178,10 @@ function getSettings() {
     let parsedNetboxConfig = { url: '', token: '', ignoreSSL: false };
     try {
         parsedGroupNames = groupNames ? (typeof groupNames === 'string' ? JSON.parse(groupNames) : groupNames) : {};
-    } catch (e) { /* повреждённые данные — используем по умолчанию */ }
+    } catch (e) {  }
     try {
         parsedNetboxConfig = netboxConfig ? (typeof netboxConfig === 'string' ? JSON.parse(netboxConfig) : netboxConfig) : { url: '', token: '', ignoreSSL: false };
-    } catch (e) { /* повреждённые данные — используем по умолчанию */ }
+    } catch (e) {  }
     return {
         theme: theme || '',
         groupNames: parsedGroupNames,
@@ -199,7 +195,6 @@ function setSettings(obj) {
     if (obj.netboxConfig !== undefined) setSetting('netboxConfig', typeof obj.netboxConfig === 'string' ? obj.netboxConfig : JSON.stringify(obj.netboxConfig));
 }
 
-// Начальная позиция карты по пользователю (центр и зум при открытии)
 function getMapStartForUser(userId) {
     const raw = getSetting('userMapStarts');
     if (!raw) return null;
@@ -229,10 +224,6 @@ function setMapStartForUser(userId, data) {
     saveStore();
 }
 
-/**
- * Создаёт резервную копию store в data/backups/backup-YYYY-MM-DD.json.
- * Затем удаляет бэкапы старше BACKUP_RETENTION_DAYS (оставляет месяц).
- */
 function createDailyBackup() {
     try {
         if (!fs.existsSync(STORE_PATH)) return;
@@ -252,9 +243,6 @@ function createDailyBackup() {
     }
 }
 
-/**
- * Удаляет старые бэкапы, оставляя только последние keepDays файлов по дате в имени.
- */
 function pruneBackupsKeepDays(keepDays) {
     try {
         if (!fs.existsSync(BACKUPS_DIR)) return;

@@ -1,6 +1,3 @@
-/**
- * Система уведомлений (toast)
- */
 function showToast(message, type, title, duration) {
     type = type || 'info';
     duration = duration !== undefined ? duration : 4000;

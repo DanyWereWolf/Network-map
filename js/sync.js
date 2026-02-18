@@ -1,7 +1,3 @@
-/**
- * Синхронизация карты между несколькими пользователями (WebSocket).
- * Отправка только при изменениях на карте (вызов saveData); короткий debounce только для объединения быстрых правок.
- */
 (function() {
     var ws = null;
     var myClientId = 'client_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);

@@ -1,7 +1,3 @@
-/**
- * Вспомогательные функции
- */
-
 function escapeHtml(text) {
     if (text == null) return '';
     const div = document.createElement('div');

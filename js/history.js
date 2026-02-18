@@ -1,7 +1,3 @@
-/**
- * Система истории изменений
- * История хранится без ограничений по количеству записей
- */
 var MAX_HISTORY_ENTRIES = Infinity;
 
 var ActionTypes = {
@@ -91,7 +87,7 @@ function setLastHistorySeenAt(date) {
         if (typeof localStorage === 'undefined') return;
         localStorage.setItem(HISTORY_SEEN_STORAGE_KEY, date.toISOString());
     } catch (e) {
-        // игнорируем ошибки localStorage
+        
     }
 }
 
@@ -178,7 +174,7 @@ function openHistoryModal() {
         modal.style.display = 'block';
         buildHistoryFilterOptions();
         renderHistoryList();
-        // При открытии считаем все события прочитанными, но сами записи не удаляем
+        
         setLastHistorySeenAt(new Date());
         updateHistoryBadge();
     }

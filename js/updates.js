@@ -1,6 +1,3 @@
-/**
- * Проверка обновлений (GitHub Releases)
- */
 function parseVersion(str) {
     var s = (str || '').replace(/^v/i, '').trim();
     var parts = s.split('.').map(function(n) { return parseInt(n, 10) || 0; });

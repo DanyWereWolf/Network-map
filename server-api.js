@@ -1,10 +1,3 @@
-/**
- * REST API и база данных для «Карта локальной сети».
- * Один сервер отдаёт и приложение (HTML/JS/CSS), и API — база всегда из проекта.
- * Слушает на всех интерфейсах (0.0.0.0): доступ по localhost и по IP в сети.
- * Запуск: node server-api.js [порт]  или  HOST=0.0.0.0 PORT=3000 node server-api.js
- * Данные: ./data/store.json
- */
 const express = require('express');
 const http = require('http');
 const path = require('path');
@@ -31,7 +24,6 @@ const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 
-// Хэш пароля (как в auth.js)
 function hashPassword(password) {
     let hash = 0;
     for (let i = 0; i < password.length; i++) {
@@ -45,7 +37,6 @@ function generateToken() {
     return 'tk_' + Date.now() + '_' + require('crypto').randomBytes(16).toString('hex');
 }
 
-// Проверка токена (Authorization: Bearer <token>)
 function getSessionUser(req) {
     const auth = req.headers.authorization;
     if (!auth || !auth.startsWith('Bearer ')) return null;
@@ -58,7 +49,6 @@ function getSessionUser(req) {
     return { userId: user.id, username: user.username, fullName: user.fullName || user.full_name, role: user.role };
 }
 
-// ————— Карта —————
 app.get('/api/map', (req, res) => {
     try {
         const data = db.getMapData();
@@ -81,7 +71,6 @@ app.post('/api/map', (req, res) => {
     }
 });
 
-// ————— Авторизация —————
 app.post('/api/auth/login', (req, res) => {
     const { username, password } = req.body || {};
     if (!username || !password) return res.status(400).json({ success: false, error: 'Укажите имя и пароль' });
@@ -137,7 +126,6 @@ app.post('/api/auth/register', (req, res) => {
     res.json({ success: true, pending: true });
 });
 
-// ————— Пользователи (админ) —————
 app.get('/api/users', (req, res) => {
     const user = getSessionUser(req);
     if (!user || user.role !== 'admin') return res.status(403).json({ error: 'Доступ только для администратора' });
@@ -225,7 +213,6 @@ app.post('/api/users', (req, res) => {
     res.json({ ok: true, user: { id: newUser.id, username: newUser.username } });
 });
 
-// ————— История —————
 app.get('/api/history', (req, res) => {
     try {
         const history = db.getHistory();
@@ -248,7 +235,6 @@ app.post('/api/history', (req, res) => {
     }
 });
 
-// ————— Настройки (тема, имена групп, NetBox) —————
 app.get('/api/settings', (req, res) => {
     try {
         const settings = db.getSettings();
@@ -278,16 +264,13 @@ app.post('/api/settings', (req, res) => {
     }
 });
 
-// Здоровье
 app.get('/api/health', (req, res) => res.json({ ok: true, db: 'sqlite' }));
 
-// Раздаём приложение с того же сервера (после маршрутов /api/*)
 app.use(express.static(path.join(__dirname)));
 
 db.getDb();
 db.initDefaultAdmin();
 
-// Ежедневное резервное копирование: первый бэкап через 1 мин, далее раз в сутки; храним месяц
 if (db.createDailyBackup) {
     const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
     setTimeout(function runBackup() {
@@ -296,15 +279,13 @@ if (db.createDailyBackup) {
     }, 60 * 1000);
 }
 
-// ————— WebSocket: одна общая карта для всех, хранится в БД —————
 const server = http.createServer(app);
 var syncCurrentState = { clientId: 'server', data: db.getMapData() || [] };
 const wss = new WebSocket.Server({ server, path: '/sync' });
-const syncClientNames = new Map(); // clientId -> displayName
+const syncClientNames = new Map(); 
 
-const syncClientUserIds = new Map(); // clientId -> userId (number or string)
+const syncClientUserIds = new Map(); 
 
-/** Слияние входящего состояния с текущим по uniqueId — правки разных пользователей не затирают друг друга. Пустой массив = очистка карты, сохраняем его. */
 function mergeMapState(current, incoming) {
     if (!Array.isArray(incoming)) return current;
     if (incoming.length === 0) return incoming;
@@ -356,7 +337,6 @@ function mergeMapState(current, incoming) {
     return mergedObjs.concat(mergedCables);
 }
 
-/** Применить одну операцию к состоянию карты (как в Эсборд — пооперационная синхронизация) */
 function applyOperationToState(state, op) {
     if (!Array.isArray(state)) return state;
     var objCount = state.filter(function(i) { return i.type !== 'cable'; }).length;
