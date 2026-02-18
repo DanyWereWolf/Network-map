@@ -29,7 +29,6 @@ let nodeGroupNames = new Map(); // ключ: "lat,lon", значение: наз
 let collaboratorCursorsPlacemarks = []; // Метки курсоров других пользователей на карте (совместная работа)
 let mapFilter = { node: true, nodeAggregationOnly: false, cross: true, sleeve: true, support: true, attachment: true, olt: true, splitter: true, onu: true }; // Фильтр отображения на карте
 let lastDraggedPlacemark = null; // Не открывать инфо по клику сразу после переноса (OLT/сплиттер/ONU)
-let usageLimits = null; // Ограничения использования (пробный период / лимиты объектов и кабелей)
 
 function groupKey(coords) {
     return coords[0].toFixed(6) + ',' + coords[1].toFixed(6);
@@ -54,65 +53,6 @@ function setNodeGroupName(coords, name) {
     saveGroupNames();
     updateNodeDisplay();
 }
-function fetchUsageLimits() {
-    if (!getApiBase()) return;
-    fetch(getApiBase() + '/api/limits').then(function(r) { return r.json(); }).then(function(l) {
-        usageLimits = l;
-        applyUsageLimits();
-    }).catch(function() {});
-}
-function applyUsageLimits() {
-    var banner = document.getElementById('usageLimitsBanner');
-    if (!usageLimits) {
-        if (banner) banner.style.display = 'none';
-        updateLicenseStatusBlock('');
-        return;
-    }
-    if (!usageLimits.canEdit) {
-        if (!banner) {
-            banner = document.createElement('div');
-            banner.id = 'usageLimitsBanner';
-            banner.className = 'usage-limits-banner';
-            var wrapper = document.getElementById('mapAreaWrapper');
-            if (wrapper) wrapper.insertBefore(banner, wrapper.firstChild);
-        }
-        if (banner) {
-            banner.textContent = usageLimits.message || 'Редактирование недоступно.';
-            banner.style.display = 'block';
-        }
-        if (isEditMode) {
-            isEditMode = false;
-            updateUIForMode();
-            updateEditControls();
-            makeObjectsNonDraggable();
-            showInfo(usageLimits.message || 'Редактирование отключено.', 'Ограничение');
-        }
-    } else {
-        if (banner) banner.style.display = 'none';
-    }
-    updateLicenseStatusBlock(usageLimits);
-}
-
-function updateLicenseStatusBlock(limits) {
-    var block = document.getElementById('licenseStatusBlock');
-    if (!block) return;
-    if (!getApiBase()) { block.innerHTML = ''; return; }
-    if (!limits) { block.innerHTML = ''; return; }
-    if (limits.hasValidLicense && limits.licenseExpiresAt) {
-        var exp = new Date(limits.licenseExpiresAt);
-        var expStr = exp.toLocaleDateString('ru-RU');
-        var days = limits.licenseDaysLeft != null ? limits.licenseDaysLeft : 0;
-        var warn = days <= 7 ? ' style="color: #f59e0b;"' : '';
-        block.innerHTML = 'Подписка до ' + expStr + ' <span' + warn + '>(осталось ' + days + ' дн.)</span><br><a href="#" class="show-license-key-link" style="color: var(--text-secondary); text-decoration: underline;">Ввести ключ</a>';
-    } else {
-        block.innerHTML = '<a href="#" class="show-license-key-link" style="color: var(--text-secondary); text-decoration: underline;">Ввести ключ подписки</a>';
-    }
-    block.querySelectorAll('.show-license-key-link').forEach(function(a) {
-        a.onclick = function(e) { e.preventDefault(); var m = document.getElementById('licenseKeyModal'); if (m) m.style.display = 'block'; };
-    });
-}
-window.fetchUsageLimits = fetchUsageLimits;
-
 function saveGroupNames() {
     if (!getApiBase()) return;
     try {
@@ -2460,10 +2400,6 @@ function switchToEditMode() {
         showWarning('Редактирование доступно только администраторам', 'Нет доступа');
         return;
     }
-    if (usageLimits && !usageLimits.canEdit) {
-        showError(usageLimits.message || 'Редактирование недоступно (ограничение пробной версии).', 'Ограничение');
-        return;
-    }
     
     isEditMode = true;
     updateUIForMode();
@@ -2513,17 +2449,6 @@ function getNodeColorByKind(nodeKind) {
 }
 
 function createObject(type, name, coords, options = {}) {
-    if (usageLimits && !usageLimits.canEdit) return;
-    if (usageLimits && usageLimits.maxObjects > 0) {
-        var objCount = objects.filter(function(o) {
-            var t = o.properties && o.properties.get('type');
-            return t && t !== 'cable' && t !== 'cableLabel';
-        }).length;
-        if (objCount >= usageLimits.maxObjects) {
-            showError('Достигнут лимит объектов (' + usageLimits.maxObjects + ').', 'Ограничение');
-            return;
-        }
-    }
     let iconSvg, color, balloonContent;
     
     switch(type) {
@@ -3273,14 +3198,7 @@ function addCable(fromObj, toObj, cableType, existingCableId = null, fiberNumber
 // Создает кабель из массива точек. Начало и конец кабеля — только муфта или кросс; промежуточные точки — опоры. GPON — только OLT ↔ Сплиттер, две точки.
 function createCableFromPoints(points, cableType, existingCableId = null, fiberNumber = null, skipHistoryLog = false, skipSync = false) {
     if (!points || points.length < 2) return false;
-    if (usageLimits && !usageLimits.canEdit) return false;
-    if (usageLimits && usageLimits.maxCables > 0) {
-        var cableCount = objects.filter(function(o) { return o.properties && o.properties.get('type') === 'cable'; }).length;
-        if (cableCount >= usageLimits.maxCables) {
-            if (!skipSync) showError('Достигнут лимит кабелей (' + usageLimits.maxCables + ').', 'Ограничение');
-            return false;
-        }
-    }
+    
     var firstType = points[0] && points[0].properties ? points[0].properties.get('type') : null;
     var lastType = points[points.length - 1] && points[points.length - 1].properties ? points[points.length - 1].properties.get('type') : null;
     
@@ -4145,7 +4063,6 @@ function loadData() {
                 try { myMap.setCenter(s.mapStart.center, s.mapStart.zoom || 15); } catch (e) {}
             }
         }).catch(function() {});
-        fetchUsageLimits();
     })();
     showSyncRequiredOverlay();
 }
@@ -4446,7 +4363,6 @@ function applyRemoteStateMerged(data) {
         var pulse = o.properties && o.properties.get('selectionPulse');
         if (!pulse && o.geometry) updateSelectionPulsePosition(o);
     });
-    fetchUsageLimits();
 }
 
 /**

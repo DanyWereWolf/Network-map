@@ -962,6 +962,15 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     transition: background var(--transition-normal);
 }
 
+.sidebar-license {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    opacity: 0.85;
+}
+
 /* ==================== Переключатель режимов ==================== */
 .control-section {
     margin-bottom: 12px;
@@ -1420,23 +1429,6 @@ button {
 }
 .sync-status.sync-disconnected {
     color: var(--text-muted);
-}
-
-/* Баннер ограничения использования (пробный период / лимиты) */
-.usage-limits-banner {
-    display: none;
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 1500;
-    padding: 10px 16px;
-    background: linear-gradient(90deg, #b91c1c 0%, #dc2626 100%);
-    color: #fff;
-    font-size: 0.875rem;
-    font-weight: 600;
-    text-align: center;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 /* ==================== Модальные окна ==================== */
