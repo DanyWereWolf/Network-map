@@ -700,6 +700,11 @@ function init() {
     loadData();
     setupEventListeners();
     if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
+    // Базовое состояние для отмены: чтобы первое изменение в сессии тоже считалось (пустая карта или до прихода sync)
+    setTimeout(function() {
+        if (lastSavedState === null && typeof getSerializedData === 'function') lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
+        if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
+    }, 0);
     switchToViewMode();
     if (getApiBase() && typeof AuthSystem !== 'undefined' && AuthSystem.refreshSessionFromApi) {
         setInterval(AuthSystem.refreshSessionFromApi, 60000);
@@ -4255,6 +4260,7 @@ function applyRemoteState(data) {
         if (data.length === 0) {
             clearMap({ skipSave: true, skipHistory: true });
             updateStats();
+            lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
             return;
         }
         applyRemoteStateMerged(data);
@@ -4429,6 +4435,8 @@ function applyRemoteStateMerged(data) {
         });
         validateAndFixCableGeometryOnLoad();
         updateCableVisualization();
+        // Базовое состояние для отмены после применения удалённого состояния
+        lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
     }, 0);
 
     // При совместной работе после применения удалённого состояния убираем из выделения объекты,
