@@ -1422,6 +1422,23 @@ button {
     color: var(--text-muted);
 }
 
+/* Баннер ограничения использования (пробный период / лимиты) */
+.usage-limits-banner {
+    display: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1500;
+    padding: 10px 16px;
+    background: linear-gradient(90deg, #b91c1c 0%, #dc2626 100%);
+    color: #fff;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
 /* ==================== Модальные окна ==================== */
 .modal {
     display: none;
