@@ -15,7 +15,7 @@ body {
     overflow-x: hidden;
 }
 
-/* Живой фон: мировая сеть */
+/* Plexus / AI-style фон */
 .auth-bg {
     position: fixed;
     inset: 0;
@@ -27,77 +27,15 @@ body {
 .auth-bg-gradient {
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, #1e3a5f 0%, #152a47 40%, #0d1b2a 100%);
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 35%, #152a47 70%, #0d1b2a 100%);
 }
 
-.auth-bg-grid {
-    position: absolute;
-    inset: -50% 0;
-    width: 200%;
-    background-image:
-        linear-gradient(rgba(59, 130, 246, 0.04) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(59, 130, 246, 0.04) 1px, transparent 1px);
-    background-size: 48px 48px;
-    animation: authBgGridMove 40s linear infinite;
-}
-
-@keyframes authBgGridMove {
-    0% { transform: translate(0, 0); }
-    100% { transform: translate(-48px, -24px); }
-}
-
-.auth-bg-nodes {
-    position: absolute;
-    inset: 0;
-}
-
-.auth-bg-node {
-    position: absolute;
-    left: var(--x);
-    top: var(--y);
-    width: 8px;
-    height: 8px;
-    margin: -4px 0 0 -4px;
-    background: rgba(59, 130, 246, 0.6);
-    border-radius: 50%;
-    box-shadow: 0 0 20px rgba(59, 130, 246, 0.5), 0 0 40px rgba(59, 130, 246, 0.2);
-    animation: authBgNodePulse 3s ease-in-out infinite;
-    animation-delay: var(--d);
-}
-
-.auth-bg-node:nth-child(odd) {
-    width: 6px;
-    height: 6px;
-    margin: -3px 0 0 -3px;
-    background: rgba(147, 197, 253, 0.5);
-    box-shadow: 0 0 15px rgba(147, 197, 253, 0.4);
-}
-
-@keyframes authBgNodePulse {
-    0%, 100% { opacity: 0.7; transform: scale(1); }
-    50% { opacity: 1; transform: scale(1.2); }
-}
-
-.auth-bg-lines {
+.auth-bg-plexus {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
-    stroke: rgba(59, 130, 246, 0.15);
-    stroke-width: 0.4;
-    fill: none;
-    stroke-dasharray: 4 6;
-    animation: authBgLinesFlow 12s linear infinite;
-}
-
-.auth-bg-line {
-    stroke: rgba(59, 130, 246, 0.2);
-    stroke-width: 0.5;
-}
-
-@keyframes authBgLinesFlow {
-    0% { stroke-dashoffset: 0; }
-    100% { stroke-dashoffset: -40; }
+    display: block;
 }
 
 .auth-container {
