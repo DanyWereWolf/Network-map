@@ -29,6 +29,11 @@ let nodeGroupNames = new Map(); // ключ: "lat,lon", значение: наз
 let collaboratorCursorsPlacemarks = []; // Метки курсоров других пользователей на карте (совместная работа)
 let mapFilter = { node: true, nodeAggregationOnly: false, cross: true, sleeve: true, support: true, attachment: true, olt: true, splitter: true, onu: true }; // Фильтр отображения на карте
 let lastDraggedPlacemark = null; // Не открывать инфо по клику сразу после переноса (OLT/сплиттер/ONU)
+var UNDO_MAX = 20;
+var undoStack = [];
+var redoStack = [];
+var lastSavedState = null;
+var inUndoRedo = false;
 
 function groupKey(coords) {
     return coords[0].toFixed(6) + ',' + coords[1].toFixed(6);
@@ -694,6 +699,7 @@ function init() {
     
     loadData();
     setupEventListeners();
+    if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
     switchToViewMode();
     if (getApiBase() && typeof AuthSystem !== 'undefined' && AuthSystem.refreshSessionFromApi) {
         setInterval(AuthSystem.refreshSessionFromApi, 60000);
@@ -770,6 +776,24 @@ function setupEventListeners() {
     if (syncConnectBtn && typeof syncConnect === 'function') {
         syncConnectBtn.addEventListener('click', function() { syncConnect(); });
     }
+
+    // Отмена / Повтор
+    var undoBtn = document.getElementById('undoBtn');
+    var redoBtn = document.getElementById('redoBtn');
+    if (undoBtn) undoBtn.addEventListener('click', function() { performUndo(); });
+    if (redoBtn) redoBtn.addEventListener('click', function() { performRedo(); });
+    document.addEventListener('keydown', function(e) {
+        var tag = e.target && e.target.tagName ? e.target.tagName.toUpperCase() : '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (e.ctrlKey && e.key === 'z') {
+            e.preventDefault();
+            performUndo();
+        }
+        if (e.ctrlKey && e.key === 'y') {
+            e.preventDefault();
+            performRedo();
+        }
+    });
 
     // Фильтр карты: при смене чекбоксов обновляем видимость объектов и перерисовываем группы узлов
     ['mapFilterNode', 'mapFilterNodeAggregationOnly', 'mapFilterCross', 'mapFilterSleeve', 'mapFilterSupport', 'mapFilterAttachment', 'mapFilterOlt', 'mapFilterSplitter', 'mapFilterOnu'].forEach(function(id) {
@@ -4033,9 +4057,56 @@ function getSerializedData() {
 }
 
 function saveData() {
-    const data = getSerializedData();
-    // Сохранение только через синхронизацию: сервер пишет в БД при получении состояния
+    if (!inUndoRedo && lastSavedState !== null) {
+        undoStack.push(JSON.parse(JSON.stringify(lastSavedState)));
+        if (undoStack.length > UNDO_MAX) undoStack.shift();
+        redoStack = [];
+    }
+    var data = getSerializedData();
+    lastSavedState = JSON.parse(JSON.stringify(data));
     if (typeof window.syncSendState === 'function') window.syncSendState(data);
+    if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
+}
+
+function performUndo() {
+    if (undoStack.length === 0) return;
+    inUndoRedo = true;
+    var stateToRestore = undoStack.pop();
+    redoStack.push(JSON.parse(JSON.stringify(getSerializedData())));
+    clearMap({ skipSave: true, skipHistory: true });
+    importData(stateToRestore, { skipHistory: true });
+    lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
+    if (typeof window.syncSendState === 'function') window.syncSendState(lastSavedState);
+    updateUndoRedoButtons();
+    inUndoRedo = false;
+    if (typeof showSuccess === 'function') showSuccess('Действие отменено', 'Отмена');
+}
+
+function performRedo() {
+    if (redoStack.length === 0) return;
+    inUndoRedo = true;
+    var stateToRestore = redoStack.pop();
+    undoStack.push(JSON.parse(JSON.stringify(getSerializedData())));
+    clearMap({ skipSave: true, skipHistory: true });
+    importData(stateToRestore, { skipHistory: true });
+    lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
+    if (typeof window.syncSendState === 'function') window.syncSendState(lastSavedState);
+    updateUndoRedoButtons();
+    inUndoRedo = false;
+    if (typeof showSuccess === 'function') showSuccess('Действие повторено', 'Повтор');
+}
+
+function updateUndoRedoButtons() {
+    var undoBtn = document.getElementById('undoBtn');
+    var redoBtn = document.getElementById('redoBtn');
+    if (undoBtn) {
+        undoBtn.disabled = undoStack.length === 0;
+        undoBtn.title = undoStack.length === 0 ? 'Отмена (Ctrl+Z)' : 'Отменить (Ctrl+Z)';
+    }
+    if (redoBtn) {
+        redoBtn.disabled = redoStack.length === 0;
+        redoBtn.title = redoStack.length === 0 ? 'Повтор (Ctrl+Y)' : 'Повторить (Ctrl+Y)';
+    }
 }
 
 function loadDataFromStorage() {
