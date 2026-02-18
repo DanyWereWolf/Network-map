@@ -4076,29 +4076,35 @@ function saveData() {
 function performUndo() {
     if (undoStack.length === 0) return;
     inUndoRedo = true;
-    var stateToRestore = undoStack.pop();
-    redoStack.push(JSON.parse(JSON.stringify(getSerializedData())));
-    clearMap({ skipSave: true, skipHistory: true });
-    importData(stateToRestore, { skipHistory: true });
-    lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
-    if (typeof window.syncSendState === 'function') window.syncSendState(lastSavedState);
-    updateUndoRedoButtons();
-    inUndoRedo = false;
-    if (typeof showSuccess === 'function') showSuccess('Действие отменено', 'Отмена');
+    try {
+        var stateToRestore = undoStack.pop();
+        redoStack.push(JSON.parse(JSON.stringify(getSerializedData())));
+        clearMap({ skipSave: true, skipHistory: true });
+        importData(stateToRestore, { skipSave: true, skipHistory: true });
+        lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
+        if (typeof window.syncSendState === 'function') window.syncSendState(lastSavedState);
+        updateUndoRedoButtons();
+        if (typeof showSuccess === 'function') showSuccess('Действие отменено', 'Отмена');
+    } finally {
+        inUndoRedo = false;
+    }
 }
 
 function performRedo() {
     if (redoStack.length === 0) return;
     inUndoRedo = true;
-    var stateToRestore = redoStack.pop();
-    undoStack.push(JSON.parse(JSON.stringify(getSerializedData())));
-    clearMap({ skipSave: true, skipHistory: true });
-    importData(stateToRestore, { skipHistory: true });
-    lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
-    if (typeof window.syncSendState === 'function') window.syncSendState(lastSavedState);
-    updateUndoRedoButtons();
-    inUndoRedo = false;
-    if (typeof showSuccess === 'function') showSuccess('Действие повторено', 'Повтор');
+    try {
+        var stateToRestore = redoStack.pop();
+        undoStack.push(JSON.parse(JSON.stringify(getSerializedData())));
+        clearMap({ skipSave: true, skipHistory: true });
+        importData(stateToRestore, { skipSave: true, skipHistory: true });
+        lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
+        if (typeof window.syncSendState === 'function') window.syncSendState(lastSavedState);
+        updateUndoRedoButtons();
+        if (typeof showSuccess === 'function') showSuccess('Действие повторено', 'Повтор');
+    } finally {
+        inUndoRedo = false;
+    }
 }
 
 function updateUndoRedoButtons() {
