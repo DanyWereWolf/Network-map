@@ -9,6 +9,7 @@ const express = require('express');
 const http = require('http');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const cors = require('cors');
 const WebSocket = require('ws');
 const db = require('./database');
@@ -74,6 +75,23 @@ app.post('/api/map', (req, res) => {
     try {
         const data = req.body && req.body.data;
         if (!Array.isArray(data)) return res.status(400).json({ error: 'Ожидается массив data' });
+        const licenseExpiresAt = db.getSetting('licenseExpiresAt');
+        const hasValidLicense = licenseExpiresAt && new Date(licenseExpiresAt).getTime() > Date.now();
+        const { trialDays, maxObjects, maxCables } = getUsageLimits();
+        const trialStartDate = db.getSetting('trialStartDate');
+        const start = trialStartDate ? new Date(trialStartDate).getTime() : 0;
+        const end = trialDays > 0 ? start + trialDays * 24 * 60 * 60 * 1000 : 0;
+        const trialValid = trialDays <= 0 || end <= 0 || Date.now() < end;
+        if (!hasValidLicense && !trialValid) {
+            return res.status(403).json({ error: 'Пробный период истёк. Введите ключ или свяжитесь с правообладателем.' });
+        }
+        const { objects: currentObjects, cables: currentCables } = countMapItems(data);
+        if (maxObjects > 0 && currentObjects > maxObjects) {
+            return res.status(403).json({ error: 'Превышен лимит объектов (' + maxObjects + ').' });
+        }
+        if (maxCables > 0 && currentCables > maxCables) {
+            return res.status(403).json({ error: 'Превышен лимит кабелей (' + maxCables + ').' });
+        }
         db.setMapData(data);
         res.json({ ok: true });
     } catch (e) {
@@ -114,6 +132,143 @@ app.get('/api/auth/session', (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ error: 'Нет сессии' });
     res.json({ user });
+});
+
+// ————— Лицензионный ключ (проверка и активация) —————
+function getLicenseSecret() {
+    return (serverConfig.licenseSecret || process.env.LICENSE_SECRET || '').toString();
+}
+
+function verifyLicenseKey(key) {
+    if (!key || typeof key !== 'string') return null;
+    const secret = getLicenseSecret();
+    if (!secret) return null;
+    const idx = key.lastIndexOf('-');
+    if (idx <= 0) return null;
+    const payloadB64 = key.slice(0, idx);
+    const sigB64 = key.slice(idx + 1);
+    let payload;
+    try {
+        payload = Buffer.from(payloadB64, 'base64url').toString('utf8');
+    } catch (e) { return null; }
+    const expectedSig = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+    if (sigB64 !== expectedSig) return null;
+    const [expiresStr, durationType] = payload.split('|');
+    if (!expiresStr) return null;
+    const expiresAt = new Date(expiresStr);
+    if (isNaN(expiresAt.getTime())) return null;
+    return { expiresAt: expiresAt.toISOString(), durationType: durationType || '' };
+}
+
+// ————— Ограничения использования (пробный период / лимиты / лицензия) —————
+function getUsageLimits() {
+    const trialDays = parseInt(serverConfig.trialDays, 10) || 0;
+    const maxObjects = parseInt(serverConfig.maxObjects, 10) || 0;
+    const maxCables = parseInt(serverConfig.maxCables, 10) || 0;
+    return { trialDays, maxObjects, maxCables };
+}
+
+function countMapItems(mapData) {
+    if (!Array.isArray(mapData)) return { objects: 0, cables: 0 };
+    let objects = 0, cables = 0;
+    mapData.forEach(item => {
+        const t = item && item.type;
+        if (t === 'cable') cables++;
+        else if (t && t !== 'cableLabel') objects++;
+    });
+    return { objects, cables };
+}
+
+app.get('/api/limits', (req, res) => {
+    try {
+        const { trialDays, maxObjects, maxCables } = getUsageLimits();
+        const licenseExpiresAt = db.getSetting('licenseExpiresAt');
+        const now = Date.now();
+        const licenseEnd = licenseExpiresAt ? new Date(licenseExpiresAt).getTime() : 0;
+        const hasValidLicense = licenseEnd > 0 && licenseEnd > now;
+        const licenseDaysLeft = hasValidLicense ? Math.max(0, Math.ceil((licenseEnd - now) / (24 * 60 * 60 * 1000))) : null;
+
+        let trialStartDate = db.getSetting('trialStartDate');
+        if (trialDays > 0 && !trialStartDate && !hasValidLicense) {
+            trialStartDate = new Date().toISOString();
+            db.setSetting('trialStartDate', trialStartDate);
+        }
+        const mapData = db.getMapData();
+        const { objects: currentObjects, cables: currentCables } = countMapItems(mapData);
+        let canEdit = true;
+        let message = '';
+
+        if (hasValidLicense) {
+            if (licenseDaysLeft <= 7) {
+                message = 'Подписка заканчивается через ' + licenseDaysLeft + ' дн. Продлите ключом.';
+            } else {
+                message = 'Подписка активна. Осталось ' + licenseDaysLeft + ' дн.';
+            }
+        }
+
+        if (!hasValidLicense) {
+            const start = trialStartDate ? new Date(trialStartDate).getTime() : 0;
+            const end = trialDays > 0 ? start + trialDays * 24 * 60 * 60 * 1000 : 0;
+            const daysLeft = end > 0 ? Math.max(0, Math.ceil((end - now) / (24 * 60 * 60 * 1000))) : null;
+            if (trialDays > 0 && end > 0 && now >= end) {
+                canEdit = false;
+                message = 'Пробный период истёк. Введите ключ продления или свяжитесь с правообладателем.';
+            } else if (trialDays > 0 && daysLeft !== null && daysLeft <= 7 && canEdit) {
+                message = 'Пробный период: осталось ' + daysLeft + ' дн. Введите ключ для продления.';
+            } else if (trialDays > 0 && daysLeft !== null) {
+                message = 'Пробный период: осталось ' + daysLeft + ' дн.';
+            }
+        }
+
+        if (maxObjects > 0 && currentObjects >= maxObjects) {
+            canEdit = false;
+            message = 'Достигнут лимит объектов (' + currentObjects + '/' + maxObjects + ').';
+        } else if (maxCables > 0 && currentCables >= maxCables) {
+            canEdit = false;
+            message = 'Достигнут лимит кабелей (' + currentCables + '/' + maxCables + ').';
+        }
+
+        if (licenseExpiresAt && !hasValidLicense) {
+            canEdit = false;
+            message = 'Подписка истекла. Введите новый ключ для продления.';
+        }
+
+        res.json({
+            trialDays,
+            trialStartDate: trialStartDate || null,
+            licenseExpiresAt: licenseExpiresAt || null,
+            licenseDaysLeft: licenseDaysLeft,
+            hasValidLicense: !!hasValidLicense,
+            maxObjects: maxObjects || null,
+            maxCables: maxCables || null,
+            currentObjects,
+            currentCables,
+            canEdit,
+            message
+        });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/license/activate', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    const key = (req.body && req.body.key) ? String(req.body.key).trim() : '';
+    if (!key) return res.status(400).json({ success: false, error: 'Укажите ключ' });
+    const parsed = verifyLicenseKey(key);
+    if (!parsed) return res.json({ success: false, error: 'Неверный или повреждённый ключ' });
+    const now = Date.now();
+    const expiresAt = new Date(parsed.expiresAt).getTime();
+    if (expiresAt <= now) return res.json({ success: false, error: 'Срок действия ключа истёк' });
+    db.setSetting('licenseExpiresAt', parsed.expiresAt);
+    const daysLeft = Math.ceil((expiresAt - now) / (24 * 60 * 60 * 1000));
+    res.json({
+        success: true,
+        expiresAt: parsed.expiresAt,
+        daysLeft,
+        message: 'Подписка активирована до ' + new Date(parsed.expiresAt).toLocaleDateString('ru-RU') + '. Осталось ' + daysLeft + ' дн.'
+    });
 });
 
 app.post('/api/auth/register', (req, res) => {
@@ -525,7 +680,19 @@ function scheduleSyncWrite() {
     syncWriteTimer = setTimeout(function() {
         syncWriteTimer = null;
         try {
-            db.setMapData(syncCurrentState.data);
+            const data = syncCurrentState.data;
+            const licenseExpiresAt = db.getSetting('licenseExpiresAt');
+            const hasValidLicense = licenseExpiresAt && new Date(licenseExpiresAt).getTime() > Date.now();
+            const { trialDays, maxObjects, maxCables } = getUsageLimits();
+            const trialStartDate = db.getSetting('trialStartDate');
+            const start = trialStartDate ? new Date(trialStartDate).getTime() : 0;
+            const end = trialDays > 0 ? start + trialDays * 24 * 60 * 60 * 1000 : 0;
+            const trialValid = trialDays <= 0 || end <= 0 || Date.now() < end;
+            if (!hasValidLicense && !trialValid) return;
+            const { objects: currentObjects, cables: currentCables } = countMapItems(data);
+            if (maxObjects > 0 && currentObjects > maxObjects) return;
+            if (maxCables > 0 && currentCables > maxCables) return;
+            db.setMapData(data);
         } catch (e) {}
     }, SYNC_WRITE_DELAY_MS);
 }
