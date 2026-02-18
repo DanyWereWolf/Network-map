@@ -142,4 +142,4 @@
 
 ## Лицензия
 
-Proprietary. Copyright (c) 2024–2026 Network-map. Подробнее см. [LICENSE](LICENSE).
+Proprietary. Copyright (c) 2024–2026 NetMap. Подробнее см. [LICENSE](LICENSE).
