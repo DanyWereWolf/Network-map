@@ -5046,6 +5046,7 @@ function duplicateObject(obj) {
     if (!obj || !obj.geometry) return;
     
     const type = obj.properties.get('type');
+    if (type === 'olt' || type === 'splitter' || type === 'onu') return;
     const name = obj.properties.get('name') || '';
     const coords = obj.geometry.getCoordinates();
 
@@ -7964,7 +7965,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         html += '<div style="padding: 10px 12px; background: #e0f2fe; border-radius: 6px; margin-top: 4px; font-size: 0.8125rem; color: #0369a1;">';
         if (isCross) {
             html += '• <strong>Соединение жил:</strong> клик по жиле в таблице или в схеме → затем по жиле в <u>другом</u> кабеле.<br>';
-            html += '• <strong>На узел / на OLT:</strong> кнопки «Узел» и «OLT» у свободной жилы.<br>';
+            html += '• <strong>На узел:</strong> кнопка «Узел» у свободной жилы.<br>';
             if (canConnectFibers) html += '• Уже соединённые жилы — синяя обводка в схеме; занятые — красным в таблице.';
         } else if (canConnectFibers) {
             html += '• Клик по жиле первого кабеля, затем по жиле второго. Клик по линии соединения в схеме — удалить соединение.';
