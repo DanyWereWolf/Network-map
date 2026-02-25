@@ -243,6 +243,44 @@ function createDailyBackup() {
     }
 }
 
+function listBackups() {
+    try {
+        if (!fs.existsSync(BACKUPS_DIR)) return [];
+        const files = fs.readdirSync(BACKUPS_DIR)
+            .filter(f => f.startsWith('backup-') && f.endsWith('.json'))
+            .map(f => {
+                const match = f.match(/backup-(\d{4})-(\d{2})-(\d{2})\.json/);
+                return match ? { filename: f, date: match.slice(1, 4).join('-') } : null;
+            })
+            .filter(Boolean)
+            .sort((a, b) => b.date.localeCompare(a.date));
+        return files;
+    } catch (e) {
+        console.error('[Backup] Ошибка списка:', e.message);
+        return [];
+    }
+}
+
+function restoreFromBackup(filename) {
+    const trimmed = typeof filename === 'string' ? filename.trim() : '';
+    if (!/^backup-\d{4}-\d{2}-\d{2}\.json$/.test(trimmed)) throw new Error('Недопустимое имя файла');
+    const backupPath = path.join(BACKUPS_DIR, trimmed);
+    if (!fs.existsSync(backupPath)) throw new Error('Файл бэкапа не найден');
+    let raw, parsed;
+    try {
+        raw = fs.readFileSync(backupPath, 'utf8');
+        parsed = JSON.parse(raw);
+    } catch (e) {
+        if (e instanceof SyntaxError) throw new Error('Неверный формат JSON в бэкапе');
+        throw e;
+    }
+    if (!parsed || typeof parsed !== 'object') throw new Error('Неверный формат бэкапа');
+    store = parsed;
+    initSchema();
+    saveStore();
+    console.log('[Backup] Восстановлено из:', trimmed);
+}
+
 function pruneBackupsKeepDays(keepDays) {
     try {
         if (!fs.existsSync(BACKUPS_DIR)) return;
@@ -305,5 +343,7 @@ module.exports = {
     getMapStartForUser,
     setMapStartForUser,
     createDailyBackup,
+    listBackups,
+    restoreFromBackup,
     initDefaultAdmin
 };
