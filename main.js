@@ -9139,12 +9139,38 @@ function getFiberCount(cableType) {
     }
 }
 
+function getCrossesAtSameLocation(cross) {
+    if (!cross || !cross.geometry || !cross.properties || cross.properties.get('type') !== 'cross') return [cross];
+    try {
+        const coords = cross.geometry.getCoordinates();
+        const k = groupKey(coords);
+        const groups = getCrossGroups();
+        const group = groups.find(g => groupKey(g.coords) === k);
+        return group ? group.crosses : [cross];
+    } catch (e) { return [cross]; }
+}
+
 function getConnectedCables(obj) {
-    return objects.filter(cable => 
+    var direct = objects.filter(cable => 
         cable.properties && 
         cable.properties.get('type') === 'cable' &&
         (cable.properties.get('from') === obj || cable.properties.get('to') === obj)
     );
+    if (obj && obj.properties && obj.properties.get('type') === 'cross') {
+        var sameLocation = getCrossesAtSameLocation(obj);
+        if (sameLocation.length > 1) {
+            sameLocation.forEach(function(other) {
+                if (other === obj) return;
+                objects.filter(function(cable) {
+                    if (!cable.properties || cable.properties.get('type') !== 'cable') return false;
+                    return cable.properties.get('from') === other || cable.properties.get('to') === other;
+                }).forEach(function(c) {
+                    if (direct.indexOf(c) === -1) direct.push(c);
+                });
+            });
+        }
+    }
+    return direct;
 }
 
 function getOtherEndOfCable(cable, oneEnd) {
