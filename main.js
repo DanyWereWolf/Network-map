@@ -25,7 +25,7 @@ let nodeGroupPlacemarks = [];
 let crossGroupNames = new Map(); 
 let nodeGroupNames = new Map(); 
 let collaboratorCursorsPlacemarks = []; 
-let mapFilter = { node: true, nodeAggregationOnly: false, cross: true, sleeve: true, support: true, attachment: true }; 
+let mapFilter = { node: true, nodeAggregationOnly: false, cross: true, sleeve: true, support: true, attachment: true, olt: true, splitter: true, onu: true }; 
 let lastDraggedPlacemark = null; 
 var UNDO_MAX = 20;
 var undoStack = [];
@@ -741,7 +741,7 @@ function setupEventListeners() {
         }
     });
 
-    ['mapFilterNode', 'mapFilterNodeAggregationOnly', 'mapFilterCross', 'mapFilterSleeve', 'mapFilterSupport', 'mapFilterAttachment'].forEach(function(id) {
+    ['mapFilterNode', 'mapFilterNodeAggregationOnly', 'mapFilterCross', 'mapFilterSleeve', 'mapFilterSupport', 'mapFilterAttachment', 'mapFilterOlt', 'mapFilterSplitter', 'mapFilterOnu'].forEach(function(id) {
         var el = document.getElementById(id);
         if (el) el.addEventListener('change', function() {
             if (typeof applyMapFilter === 'function') applyMapFilter();
@@ -779,7 +779,7 @@ function setupEventListeners() {
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             
-            var modalIds = ['infoModal', 'nodeSelectionModal', 'usersModal', 'userEditModal', 'updatesModal'];
+            var modalIds = ['infoModal', 'nodeSelectionModal', 'onuSelectionModal', 'splitterSelectionModal', 'splitterOutputOnuModal', 'splitterOutputSplitterModal', 'oltSelectionModal', 'usersModal', 'userEditModal', 'updatesModal'];
             for (var i = 0; i < modalIds.length; i++) {
                 var m = document.getElementById(modalIds[i]);
                 if (m && m.style && m.style.display === 'block') {
@@ -798,22 +798,32 @@ function setupEventListeners() {
         }
     });
 
-    document.getElementById('objectType').addEventListener('change', function() {
-        const nameInputGroup = document.getElementById('objectNameGroup');
-        const sleeveSettingsGroup = document.getElementById('sleeveSettingsGroup');
-        const crossSettingsGroup = document.getElementById('crossSettingsGroup');
-        const nodeSettingsGroup = document.getElementById('nodeSettingsGroup');
-        const type = this.value;
+    const objectTypeSelect = document.getElementById('objectType');
+    if (objectTypeSelect) {
+        objectTypeSelect.addEventListener('change', function() {
+            const nameInputGroup = document.getElementById('objectNameGroup');
+            const sleeveSettingsGroup = document.getElementById('sleeveSettingsGroup');
+            const crossSettingsGroup = document.getElementById('crossSettingsGroup');
+            const nodeSettingsGroup = document.getElementById('nodeSettingsGroup');
+            const oltSettingsGroup = document.getElementById('oltSettingsGroup');
+            const splitterSettingsGroup = document.getElementById('splitterSettingsGroup');
+            const type = this.value;
 
-        nameInputGroup.style.display = (type === 'node' || type === 'cross' || type === 'support' || type === 'attachment') ? 'block' : 'none';
-        sleeveSettingsGroup.style.display = type === 'sleeve' ? 'block' : 'none';
-        crossSettingsGroup.style.display = type === 'cross' ? 'block' : 'none';
-        nodeSettingsGroup.style.display = type === 'node' ? 'block' : 'none';
+            const showName = ['node', 'cross', 'support', 'attachment', 'olt', 'splitter', 'onu'].indexOf(type) !== -1;
+            if (nameInputGroup) nameInputGroup.style.display = showName ? 'block' : 'none';
+            if (sleeveSettingsGroup) sleeveSettingsGroup.style.display = type === 'sleeve' ? 'block' : 'none';
+            if (crossSettingsGroup) crossSettingsGroup.style.display = type === 'cross' ? 'block' : 'none';
+            if (nodeSettingsGroup) nodeSettingsGroup.style.display = type === 'node' ? 'block' : 'none';
+            if (oltSettingsGroup) oltSettingsGroup.style.display = type === 'olt' ? 'block' : 'none';
+            if (splitterSettingsGroup) splitterSettingsGroup.style.display = type === 'splitter' ? 'block' : 'none';
 
-        const nameLabel = nameInputGroup.querySelector('label');
-        if (nameLabel) {
-            nameLabel.textContent = type === 'cross' ? 'Имя кросса' : (type === 'support' ? 'Подпись опоры' : (type === 'attachment' ? 'Название' : 'Имя узла'));
-        }
+            if (nameInputGroup) {
+                const nameLabel = nameInputGroup.querySelector('label');
+                if (nameLabel) {
+                    const labels = { cross: 'Имя кросса', support: 'Подпись опоры', attachment: 'Название', node: 'Имя узла', olt: 'Имя OLT', splitter: 'Имя сплиттера', onu: 'Имя ONU' };
+                    nameLabel.textContent = labels[type] || 'Имя';
+                }
+            }
 
         if (type === 'sleeve') {
             updateSleeveMaxFibers();
@@ -823,7 +833,7 @@ function setupEventListeners() {
             const newType = this.value;
             currentPlacementType = newType;
             
-            if (newType === 'node' || newType === 'cross') {
+            if (['node', 'cross', 'olt', 'splitter', 'onu'].indexOf(newType) !== -1) {
                 const nameInput = document.getElementById('objectName');
                 currentPlacementName = nameInput ? nameInput.value.trim() : '';
             } else {
@@ -835,7 +845,9 @@ function setupEventListeners() {
                 currentPlacementNodeKind = nodeKindSelect ? nodeKindSelect.value : 'network';
             }
         }
-    });
+        });
+        if (objectTypeSelect.value) objectTypeSelect.dispatchEvent(new Event('change'));
+    }
 
     const objectNameInput = document.getElementById('objectName');
     if (objectNameInput) {
@@ -908,6 +920,11 @@ function setupEventListeners() {
     setupAccordions();
 
     initNodeSelectionModal();
+    initOnuSelectionModal();
+    initSplitterSelectionModal();
+    initSplitterOutputOnuModal();
+    initSplitterOutputSplitterModal();
+    initOltSelectionModal();
 
     myMap.events.add('click', handleMapClick);
 
@@ -1225,7 +1242,9 @@ function handleAddObject() {
         }
     }
 
-    const type = document.getElementById('objectType').value;
+    const objectTypeEl = document.getElementById('objectType');
+    if (!objectTypeEl) return;
+    const type = objectTypeEl.value;
 
     if (type === 'node' || type === 'cross') {
         const name = document.getElementById('objectName').value.trim();
@@ -1248,26 +1267,34 @@ function handleAddObject() {
         currentPlacementName = name;
         if (myMap && myMap.container) {
             const mapEl = myMap.container.getElement();
-            mapEl.style.cursor = 'crosshair';
-            mapEl.classList.add('map-crosshair-active');
+            if (mapEl) {
+                mapEl.style.cursor = 'crosshair';
+                mapEl.classList.add('map-crosshair-active');
+            }
         }
         const addBtn = document.getElementById('addObject');
-        addBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span>Завершить размещение</span>';
-        addBtn.style.background = '#e74c3c';
-        addBtn.onclick = cancelObjectPlacement;
+        if (addBtn) {
+            addBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span>Завершить размещение</span>';
+            addBtn.style.background = '#e74c3c';
+            addBtn.onclick = cancelObjectPlacement;
+        }
     } else {
         objectPlacementMode = true;
         currentPlacementType = type;
         currentPlacementName = '';
         if (myMap && myMap.container) {
             const mapEl = myMap.container.getElement();
-            mapEl.style.cursor = 'crosshair';
-            mapEl.classList.add('map-crosshair-active');
+            if (mapEl) {
+                mapEl.style.cursor = 'crosshair';
+                mapEl.classList.add('map-crosshair-active');
+            }
         }
         const addBtn = document.getElementById('addObject');
-        addBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span>Завершить размещение</span>';
-        addBtn.style.background = '#e74c3c';
-        addBtn.onclick = cancelObjectPlacement;
+        if (addBtn) {
+            addBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span>Завершить размещение</span>';
+            addBtn.style.background = '#e74c3c';
+            addBtn.onclick = cancelObjectPlacement;
+        }
     }
 }
 
@@ -1287,10 +1314,11 @@ function cancelObjectPlacement() {
     }
     
     const addBtn = document.getElementById('addObject');
-    addBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg><span>Добавить на карту</span>';
-    addBtn.style.background = '#3498db';
-    
-    addBtn.onclick = null;
+    if (addBtn) {
+        addBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg><span>Добавить на карту</span>';
+        addBtn.style.background = '#3498db';
+        addBtn.onclick = null;
+    }
 }
 
 function handleMapClick(e) {
@@ -1446,9 +1474,30 @@ function handleMapClick(e) {
         } else if (type === 'attachment') {
             const name = document.getElementById('objectName').value.trim();
             createObject(type, name || '', coords);
+        } else if (type === 'olt') {
+            const nameInput = document.getElementById('objectName');
+            const name = currentPlacementName || (nameInput ? nameInput.value.trim() : '');
+            const oltPortsEl = document.getElementById('oltPonPorts');
+            const ponPorts = oltPortsEl ? (parseInt(oltPortsEl.value, 10) || 8) : 8;
+            createObject(type, name || '', coords, { ponPorts: ponPorts });
+            currentPlacementName = name || '';
+        } else if (type === 'splitter') {
+            const nameInput = document.getElementById('objectName');
+            const name = currentPlacementName || (nameInput ? nameInput.value.trim() : '');
+            const ratioEl = document.getElementById('splitterRatio');
+            const splitRatio = ratioEl ? (parseInt(ratioEl.value, 10) || 8) : 8;
+            createObject(type, name || '', coords, { splitRatio: splitRatio });
+            currentPlacementName = name || '';
+        } else if (type === 'onu') {
+            const nameInput = document.getElementById('objectName');
+            const name = currentPlacementName || (nameInput ? nameInput.value.trim() : '');
+            createObject(type, name || '', coords);
+            currentPlacementName = name || '';
         } else {
             createObject(type, '', coords);
         }
+        removePhantomPlacemark();
+        saveData();
         return;
     }
 
@@ -1489,7 +1538,7 @@ function handleMapClick(e) {
 
         const clickedObject = findObjectAtCoords(coords);
         const cableType = document.getElementById('cableType') ? document.getElementById('cableType').value : 'fiber4';
-        var cableEndpoints = ['cross', 'sleeve', 'support', 'attachment'];
+        var cableEndpoints = ['cross', 'sleeve', 'support', 'attachment', 'olt', 'splitter', 'onu'];
         
         if (clickedObject && clickedObject.geometry) {
             var objType = clickedObject.properties ? clickedObject.properties.get('type') : null;
@@ -1532,7 +1581,7 @@ function handleMapClick(e) {
             
             if (!cableSource) {
                 if (objType !== 'sleeve' && objType !== 'cross' && objType !== 'attachment') {
-                    showError('Начало кабеля должно быть муфтой, кроссом или креплением узлов. Выберите муфту, кросс или крепление.', 'Недопустимое действие');
+                    showError('Начало кабеля должно быть муфтой, кроссом, креплением, OLT, сплиттером или ONU. Выберите один из этих объектов.', 'Недопустимое действие');
                     return;
                 }
                 cableSource = clickedObject;
@@ -1566,7 +1615,7 @@ function handleMapClick(e) {
                 }
                 return;
             }
-            showError('Кабель прокладывается от муфты/кросса/крепления до муфты/кросса/крепления. Промежуточными точками могут быть опоры или крепления.', 'Недопустимое действие');
+            showError('Кабель прокладывается между муфтой, кроссом, креплением, OLT, сплиттером или ONU. Промежуточными точками могут быть опоры или крепления.', 'Недопустимое действие');
         } else {
             
             if (cableSource) {
@@ -1574,7 +1623,7 @@ function handleMapClick(e) {
                 const autoSelectTolerance = zoom < 12 ? 0.0015 : (zoom < 15 ? 0.001 : 0.0005);
                 let nearestObject = null;
                 let minDist = Infinity;
-                var validCableEndpoints = ['cross', 'sleeve', 'support', 'attachment'];
+                var validCableEndpoints = ['cross', 'sleeve', 'support', 'attachment', 'olt', 'splitter', 'onu'];
                 objects.forEach(obj => {
                     if (obj && obj.geometry && obj.properties) {
                         const t = obj.properties.get('type');
@@ -1704,6 +1753,21 @@ function updateCursorIndicator(e, objectType, objectCoord) {
             case 'node':
                 text = 'Узел сети';
                 break;
+            case 'cross':
+                text = 'Оптический кросс';
+                break;
+            case 'attachment':
+                text = 'Крепление узлов';
+                break;
+            case 'olt':
+                text = 'OLT (GPON)';
+                break;
+            case 'splitter':
+                text = 'Сплиттер';
+                break;
+            case 'onu':
+                text = 'ONU';
+                break;
             case 'cable':
                 text = 'Кабель';
                 break;
@@ -1712,9 +1776,6 @@ function updateCursorIndicator(e, objectType, objectCoord) {
                 break;
             case 'nodeGroup':
                 text = 'Группа узлов';
-                break;
-            case 'attachment':
-                text = 'Крепление узлов';
                 break;
             default:
                 text = 'Объект';
@@ -1748,10 +1809,12 @@ function updatePhantomPlacemark(type, coords) {
         return;
     }
 
-    if (phantomPlacemark) {
+    var currentPhantomType = phantomPlacemark && phantomPlacemark.properties ? phantomPlacemark.properties.get('phantomType') : null;
+    if (phantomPlacemark && currentPhantomType === type) {
         phantomPlacemark.geometry.setCoordinates(coords);
         return;
     }
+    removePhantomPlacemark();
 
     let iconSvg, color;
     let nodeKind = 'network';
@@ -1783,6 +1846,53 @@ function updatePhantomPlacemark(type, coords) {
                 <circle cx="16" cy="16" r="3" fill="${color}" opacity="0.8"/>
             </svg>`;
             break;
+        case 'cross':
+            color = '#8b5cf6';
+            iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="4" width="28" height="24" rx="3" fill="${color}" stroke="white" stroke-width="2" opacity="0.6"/>
+                <line x1="10" y1="4" x2="10" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
+                <line x1="16" y1="4" x2="16" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
+                <line x1="22" y1="4" x2="22" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
+                <circle cx="10" cy="12" r="2" fill="white" opacity="0.7"/>
+                <circle cx="16" cy="12" r="2" fill="white" opacity="0.7"/>
+                <circle cx="22" cy="12" r="2" fill="white" opacity="0.7"/>
+            </svg>`;
+            break;
+        case 'attachment':
+            color = '#f59e0b';
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="14" cy="14" r="12" fill="${color}" stroke="white" stroke-width="2" opacity="0.6"/>
+                <path d="M10 14 L14 10 L18 14 L14 18 Z" fill="white" opacity="0.6"/>
+            </svg>`;
+            break;
+        case 'olt':
+            color = '#0ea5e9';
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="4" width="24" height="20" rx="3" fill="${color}" stroke="white" stroke-width="2" opacity="0.6"/>
+                <rect x="6" y="8" width="4" height="3" rx="1" fill="white" opacity="0.6"/>
+                <rect x="12" y="8" width="4" height="3" rx="1" fill="white" opacity="0.6"/>
+                <rect x="18" y="8" width="4" height="3" rx="1" fill="white" opacity="0.6"/>
+                <line x1="8" y1="16" x2="20" y2="16" stroke="white" stroke-width="1.5" opacity="0.7"/>
+            </svg>`;
+            break;
+        case 'splitter':
+            color = '#a855f7';
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="14" cy="8" r="5" fill="${color}" stroke="white" stroke-width="2" opacity="0.6"/>
+                <path d="M14 13 L14 20 M8 20 L20 20 M14 20 L10 24 M14 20 L18 24" stroke="white" stroke-width="1.5" fill="none" opacity="0.7"/>
+                <circle cx="10" cy="24" r="2" fill="white" opacity="0.6"/>
+                <circle cx="14" cy="24" r="2" fill="white" opacity="0.6"/>
+                <circle cx="18" cy="24" r="2" fill="white" opacity="0.6"/>
+            </svg>`;
+            break;
+        case 'onu':
+            color = '#10b981';
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="6" width="20" height="16" rx="2" fill="${color}" stroke="white" stroke-width="2" opacity="0.6"/>
+                <circle cx="14" cy="14" r="3" fill="white" opacity="0.7"/>
+                <rect x="10" y="18" width="8" height="2" rx="1" fill="white" opacity="0.6"/>
+            </svg>`;
+            break;
         default:
             color = '#94a3b8';
             iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -1791,7 +1901,7 @@ function updatePhantomPlacemark(type, coords) {
     }
     
     const clickableSize = 44;
-    const iconSize = type === 'node' ? 32 : 28;
+    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu') ? 32 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
     
     const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
@@ -1807,6 +1917,7 @@ function updatePhantomPlacemark(type, coords) {
     
     phantomPlacemark = new ymaps.Placemark(coords, {
         type: 'phantom',
+        phantomType: type,
         balloonContent: 'Предпросмотр объекта'
     }, {
         iconLayout: 'default#image',
@@ -2320,6 +2431,37 @@ function createObject(type, name, coords, options = {}) {
             </svg>`;
             balloonContent = name ? 'Крепление узлов: ' + name : 'Крепление узлов';
             break;
+        case 'olt':
+            color = '#0ea5e9';
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="4" width="24" height="20" rx="3" fill="${color}" stroke="white" stroke-width="2"/>
+                <rect x="6" y="8" width="4" height="3" rx="1" fill="white" opacity="0.9"/>
+                <rect x="12" y="8" width="4" height="3" rx="1" fill="white" opacity="0.9"/>
+                <rect x="18" y="8" width="4" height="3" rx="1" fill="white" opacity="0.9"/>
+                <line x1="8" y1="16" x2="20" y2="16" stroke="white" stroke-width="1.5" opacity="0.8"/>
+            </svg>`;
+            balloonContent = name ? 'OLT: ' + name : 'OLT (GPON)';
+            break;
+        case 'splitter':
+            color = '#a855f7';
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="14" cy="8" r="5" fill="${color}" stroke="white" stroke-width="2"/>
+                <path d="M14 13 L14 20 M8 20 L20 20 M14 20 L10 24 M14 20 L18 24" stroke="white" stroke-width="1.5" fill="none"/>
+                <circle cx="10" cy="24" r="2" fill="white" opacity="0.9"/>
+                <circle cx="14" cy="24" r="2" fill="white" opacity="0.9"/>
+                <circle cx="18" cy="24" r="2" fill="white" opacity="0.9"/>
+            </svg>`;
+            balloonContent = name ? 'Сплиттер: ' + name : 'Сплиттер';
+            break;
+        case 'onu':
+            color = '#10b981';
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="6" width="20" height="16" rx="2" fill="${color}" stroke="white" stroke-width="2"/>
+                <circle cx="14" cy="14" r="3" fill="white" opacity="0.95"/>
+                <rect x="10" y="18" width="8" height="2" rx="1" fill="white" opacity="0.7"/>
+            </svg>`;
+            balloonContent = name ? 'ONU: ' + name : 'ONU';
+            break;
         default:
             color = '#94a3b8';
             iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -2369,7 +2511,20 @@ function createObject(type, name, coords, options = {}) {
     if (type === 'cross') {
         placemarkProperties.crossPorts = options.crossPorts || 24;
     }
-    
+    if (type === 'olt') {
+        placemarkProperties.ponPorts = options.ponPorts || 8;
+        placemarkProperties.incomingFiber = null;
+        placemarkProperties.portAssignments = {};
+    }
+    if (type === 'splitter') {
+        placemarkProperties.splitRatio = options.splitRatio || 8;
+        placemarkProperties.inputFiber = null;
+        placemarkProperties.outputConnections = [];
+    }
+    if (type === 'onu') {
+        placemarkProperties.incomingFiber = null;
+    }
+
     if (!placemarkProperties.uniqueId) {
         placemarkProperties.uniqueId = 'obj-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
     }
@@ -2424,7 +2579,7 @@ function createObject(type, name, coords, options = {}) {
 
         if (currentCableTool && isEditMode) {
             var cableTypeVal = document.getElementById('cableType') ? document.getElementById('cableType').value : 'fiber4';
-            var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment'];
+            var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment', 'olt', 'splitter', 'onu'];
             if (cableEndpointsPlacemark.indexOf(type) !== -1) {
                 if (!cableSource) {
                     cableSource = placemark;
@@ -2463,7 +2618,7 @@ function createObject(type, name, coords, options = {}) {
             return;
         }
 
-        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'attachment')) {
+        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'attachment' || type === 'olt' || type === 'splitter' || type === 'onu')) {
             showObjectInfo(placemark);
             return;
         }
@@ -2573,7 +2728,41 @@ function deleteObject(obj, opts) {
             if (changed) crossObj.properties.set('nodeConnections', nodeConnections);
         });
     }
-    
+    if (objType === 'olt' && objUniqueId) {
+        objects.forEach(function(slot) {
+            if (!slot.properties) return;
+            var t = slot.properties.get('type');
+            if (t !== 'cross' && t !== 'sleeve') return;
+            var oltConn = slot.properties.get('oltConnections');
+            if (!oltConn) return;
+            var changed = false;
+            Object.keys(oltConn).forEach(function(key) {
+                if (oltConn[key] && oltConn[key].oltId === objUniqueId) {
+                    delete oltConn[key];
+                    changed = true;
+                }
+            });
+            if (changed) slot.properties.set('oltConnections', oltConn);
+        });
+    }
+    if (objType === 'onu' && objUniqueId) {
+        objects.forEach(function(slot) {
+            if (!slot.properties) return;
+            var t = slot.properties.get('type');
+            if (t !== 'cross' && t !== 'sleeve') return;
+            var onuConn = slot.properties.get('onuConnections');
+            if (!onuConn) return;
+            var changed = false;
+            Object.keys(onuConn).forEach(function(key) {
+                if (onuConn[key] && onuConn[key].onuId === objUniqueId) {
+                    delete onuConn[key];
+                    changed = true;
+                }
+            });
+            if (changed) slot.properties.set('onuConnections', onuConn);
+        });
+    }
+
     const label = obj.properties.get('label');
     if (label) {
         myMap.geoObjects.remove(label);
@@ -2603,7 +2792,8 @@ function deleteObject(obj, opts) {
     updateCableVisualization();
     if (objType === 'cross') updateCrossDisplay();
     if (objType === 'node') updateNodeDisplay();
-    
+    updateAllConnectionLines();
+
     if (!(opts && opts.skipSync)) {
         if (typeof window.syncSendOp === 'function' && objUniqueId) {
             window.syncSendOp({ type: 'delete_object', uniqueId: objUniqueId });
@@ -2848,12 +3038,13 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
         if (!skipSync) showError('Нельзя прокладывать кабель напрямую к узлу сети. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
         return false;
     }
-    if (firstType !== 'sleeve' && firstType !== 'cross' && firstType !== 'attachment') {
-        if (!skipSync) showError('Кабель можно прокладывать от муфты, кросса или крепления узлов. Начальная точка должна быть муфтой, кроссом или креплением.', 'Недопустимое действие');
+    const validEndpoints = ['sleeve', 'cross', 'attachment', 'olt', 'splitter', 'onu'];
+    if (validEndpoints.indexOf(firstType) === -1) {
+        if (!skipSync) showError('Кабель можно прокладывать от муфты, кросса, крепления, OLT, сплиттера или ONU. Начальная точка должна быть одним из этих объектов.', 'Недопустимое действие');
         return false;
     }
-    if (lastType !== 'sleeve' && lastType !== 'cross' && lastType !== 'attachment') {
-        if (!skipSync) showError('Кабель можно прокладывать до муфты, кросса или крепления узлов. Конечная точка должна быть муфтой, кроссом или креплением.', 'Недопустимое действие');
+    if (validEndpoints.indexOf(lastType) === -1) {
+        if (!skipSync) showError('Кабель можно прокладывать до муфты, кросса, крепления, OLT, сплиттера или ONU. Конечная точка должна быть одним из этих объектов.', 'Недопустимое действие');
         return false;
     }
 
@@ -2990,6 +3181,81 @@ function markFiberAsUsed(obj, cableId, fiberNumber) {
     
     obj.properties.set('usedFibers', usedFibersData);
     saveData();
+}
+
+/**
+ * Проверяет, занята ли жила (cableId + fiberNumber) где-либо: порт OLT, подключение к узлу/ONU,
+ * вход/выход сплиттера. exclude — контекст текущего назначения (чтобы не считать «занятой» ту же жилу при замене).
+ * @param {string} cableId
+ * @param {number} fiberNumber
+ * @param {{ type: string, oltId?: string, portNumber?: number, splitterId?: string, outputIndex?: number, crossId?: string, sleeveId?: string }} exclude
+ * @returns {{ used: boolean, where?: string }}
+ */
+function getFiberUsage(cableId, fiberNumber, exclude) {
+    if (!objects) return { used: false };
+    const key = cableId + '-' + fiberNumber;
+
+    for (let i = 0; i < objects.length; i++) {
+        const obj = objects[i];
+        if (!obj.properties) continue;
+        const t = obj.properties.get('type');
+        const uid = obj.properties.get('uniqueId');
+
+        if (t === 'cross' || t === 'sleeve') {
+            const nodeConn = t === 'cross' ? obj.properties.get('nodeConnections') : null;
+            if (nodeConn && nodeConn[key]) {
+                if (exclude && exclude.type === 'nodeConn' && exclude.crossId === uid) continue;
+                return { used: true, where: 'подключение к узлу (кросс)' };
+            }
+            const oltConn = obj.properties.get('oltConnections') || {};
+            if (oltConn[key]) {
+                if (exclude && exclude.type === 'splitterInput') continue;
+                return { used: true, where: 'порт OLT' };
+            }
+            const onuConn = obj.properties.get('onuConnections') || {};
+            if (onuConn[key]) {
+                if (exclude && exclude.type === 'onuConn' && exclude.sleeveId === uid) continue;
+                return { used: true, where: 'подключение к ONU' };
+            }
+        }
+        if (t === 'olt') {
+            const incomingFiber = obj.properties.get('incomingFiber');
+            if (incomingFiber && incomingFiber.cableId === cableId && incomingFiber.fiberNumber === fiberNumber) {
+                if (exclude && exclude.type === 'oltIncoming' && exclude.oltId === uid) continue;
+                return { used: true, where: 'приход OLT' };
+            }
+            const portAssignments = obj.properties.get('portAssignments') || {};
+            for (const portKey in portAssignments) {
+                const a = portAssignments[portKey];
+                if (a && a.cableId === cableId && a.fiberNumber === fiberNumber) {
+                    if (exclude && exclude.type === 'oltPort' && exclude.oltId === uid && exclude.portNumber === parseInt(portKey, 10)) continue;
+                    if (exclude && exclude.type === 'splitterInput') continue;
+                    return { used: true, where: 'порт OLT' };
+                }
+            }
+        }
+        if (t === 'splitter') {
+            const inputFiber = obj.properties.get('inputFiber');
+            if (inputFiber && inputFiber.cableId === cableId && inputFiber.fiberNumber === fiberNumber) {
+                if (exclude && (exclude.type === 'splitterInput' && exclude.splitterId === uid)) continue;
+                if (exclude && exclude.type === 'oltPort') continue;
+                return { used: true, where: 'вход сплиттера' };
+            }
+            const outputConnections = obj.properties.get('outputConnections') || [];
+            for (let oi = 0; oi < outputConnections.length; oi++) {
+                const out = outputConnections[oi];
+                if (out && out.cableId === cableId && out.fiberNumber === fiberNumber) {
+                    if (exclude && exclude.type === 'splitterOutput' && exclude.splitterId === uid && exclude.outputIndex === oi) continue;
+                    return { used: true, where: 'выход сплиттера' };
+                }
+            }
+        }
+    }
+    return { used: false };
+}
+
+function isFiberUsed(cableId, fiberNumber, exclude) {
+    return getFiberUsage(cableId, fiberNumber, exclude).used;
 }
 
 function validateAndFixCableGeometryOnLoad() {
@@ -3585,6 +3851,27 @@ function getSerializedData() {
             if (props.crossPorts) result.crossPorts = props.crossPorts;
             if (props.nodeConnections) result.nodeConnections = props.nodeConnections;
             if (props.fiberPorts) result.fiberPorts = props.fiberPorts;
+            if (props.oltConnections) result.oltConnections = props.oltConnections;
+            if (props.onuConnections) result.onuConnections = props.onuConnections;
+            if (props.splitterConnections) result.splitterConnections = props.splitterConnections;
+        }
+        if (props.type === 'sleeve') {
+            if (props.oltConnections) result.oltConnections = props.oltConnections;
+            if (props.onuConnections) result.onuConnections = props.onuConnections;
+            if (props.splitterConnections) result.splitterConnections = props.splitterConnections;
+        }
+        if (props.type === 'olt') {
+            if (props.ponPorts !== undefined) result.ponPorts = props.ponPorts;
+            if (props.incomingFiber) result.incomingFiber = props.incomingFiber;
+            if (props.portAssignments) result.portAssignments = props.portAssignments;
+        }
+        if (props.type === 'splitter') {
+            if (props.splitRatio !== undefined) result.splitRatio = props.splitRatio;
+            if (props.inputFiber) result.inputFiber = props.inputFiber;
+            if (props.outputConnections) result.outputConnections = props.outputConnections;
+        }
+        if (props.type === 'onu') {
+            if (props.incomingFiber) result.incomingFiber = props.incomingFiber;
         }
         if (props.type === 'node') {
             if (props.nodeKind) result.nodeKind = props.nodeKind;
@@ -4079,10 +4366,6 @@ function importData(data, opts) {
             objectRefs.push(null);
             return;
         }
-        if (item.type === 'olt' || item.type === 'splitter' || item.type === 'onu') {
-            objectRefs.push(null);
-            return;
-        }
         const obj = createObjectFromData(item);
         objectRefs.push(obj);
     });
@@ -4143,7 +4426,7 @@ function importData(data, opts) {
 }
 
 function createObjectFromData(data, opts) {
-    const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, fiberPorts, netboxId, netboxUrl, netboxDeviceType, netboxSite, sleeveType, maxFibers, crossPorts, nodeConnections, oltConnections, uniqueId, nodeKind, ponPorts, splitRatio, splitterConnections } = data;
+    const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, fiberPorts, netboxId, netboxUrl, netboxDeviceType, netboxSite, sleeveType, maxFibers, crossPorts, nodeConnections, oltConnections, onuConnections, uniqueId, nodeKind, ponPorts, splitRatio, splitterConnections, incomingFiber, portAssignments, inputFiber, outputConnections } = data;
     
     let iconSvg, color, balloonContent;
     
@@ -4203,6 +4486,37 @@ function createObjectFromData(data, opts) {
             </svg>`;
             balloonContent = name ? 'Крепление узлов: ' + name : 'Крепление узлов';
             break;
+        case 'olt':
+            color = '#0ea5e9';
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="4" width="24" height="20" rx="3" fill="${color}" stroke="white" stroke-width="2"/>
+                <rect x="6" y="8" width="4" height="3" rx="1" fill="white" opacity="0.9"/>
+                <rect x="12" y="8" width="4" height="3" rx="1" fill="white" opacity="0.9"/>
+                <rect x="18" y="8" width="4" height="3" rx="1" fill="white" opacity="0.9"/>
+                <line x1="8" y1="16" x2="20" y2="16" stroke="white" stroke-width="1.5" opacity="0.8"/>
+            </svg>`;
+            balloonContent = name ? 'OLT: ' + name : 'OLT (GPON)';
+            break;
+        case 'splitter':
+            color = '#a855f7';
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="14" cy="8" r="5" fill="${color}" stroke="white" stroke-width="2"/>
+                <path d="M14 13 L14 20 M8 20 L20 20 M14 20 L10 24 M14 20 L18 24" stroke="white" stroke-width="1.5" fill="none"/>
+                <circle cx="10" cy="24" r="2" fill="white" opacity="0.9"/>
+                <circle cx="14" cy="24" r="2" fill="white" opacity="0.9"/>
+                <circle cx="18" cy="24" r="2" fill="white" opacity="0.9"/>
+            </svg>`;
+            balloonContent = name ? 'Сплиттер: ' + name : 'Сплиттер';
+            break;
+        case 'onu':
+            color = '#10b981';
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="6" width="20" height="16" rx="2" fill="${color}" stroke="white" stroke-width="2"/>
+                <circle cx="14" cy="14" r="3" fill="white" opacity="0.95"/>
+                <rect x="10" y="18" width="8" height="2" rx="1" fill="white" opacity="0.7"/>
+            </svg>`;
+            balloonContent = name ? 'ONU: ' + name : 'ONU';
+            break;
         default:
             color = '#94a3b8';
             iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -4212,7 +4526,7 @@ function createObjectFromData(data, opts) {
     }
 
     const clickableSize = 44; 
-    const iconSize = (type === 'node' || type === 'cross') ? 32 : 28;
+    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu') ? 32 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
 
     const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
@@ -4308,6 +4622,39 @@ function createObjectFromData(data, opts) {
         if (fiberPorts) {
             placemark.properties.set('fiberPorts', fiberPorts);
         }
+        if (oltConnections) {
+            placemark.properties.set('oltConnections', oltConnections);
+        }
+        if (onuConnections) {
+            placemark.properties.set('onuConnections', onuConnections);
+        }
+        if (splitterConnections) {
+            placemark.properties.set('splitterConnections', splitterConnections);
+        }
+    }
+    if (type === 'sleeve') {
+        if (oltConnections) {
+            placemark.properties.set('oltConnections', oltConnections);
+        }
+        if (onuConnections) {
+            placemark.properties.set('onuConnections', onuConnections);
+        }
+        if (splitterConnections) {
+            placemark.properties.set('splitterConnections', splitterConnections);
+        }
+    }
+    if (type === 'olt') {
+        placemark.properties.set('ponPorts', ponPorts || 8);
+        placemark.properties.set('incomingFiber', incomingFiber || null);
+        placemark.properties.set('portAssignments', portAssignments || {});
+    }
+    if (type === 'splitter') {
+        placemark.properties.set('splitRatio', splitRatio || 8);
+        placemark.properties.set('inputFiber', inputFiber || null);
+        placemark.properties.set('outputConnections', outputConnections || []);
+    }
+    if (type === 'onu') {
+        placemark.properties.set('incomingFiber', incomingFiber || null);
     }
 
     if (netboxId) {
@@ -4333,7 +4680,7 @@ function createObjectFromData(data, opts) {
 
         if (currentCableTool && isEditMode) {
             var cableTypeVal = document.getElementById('cableType') ? document.getElementById('cableType').value : 'fiber4';
-            var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment'];
+            var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment', 'olt', 'splitter', 'onu'];
             if (cableEndpointsPlacemark.indexOf(type) !== -1) {
                 if (!cableSource) {
                     cableSource = placemark;
@@ -4372,7 +4719,7 @@ function createObjectFromData(data, opts) {
             return;
         }
 
-        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'attachment')) {
+        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'attachment' || type === 'olt' || type === 'splitter' || type === 'onu')) {
             showObjectInfo(placemark);
             return;
         }
@@ -4513,6 +4860,31 @@ function exportData() {
                 if (props.fiberPorts) {
                     result.fiberPorts = props.fiberPorts;
                 }
+                if (props.oltConnections) {
+                    result.oltConnections = props.oltConnections;
+                }
+                if (props.onuConnections) {
+                    result.onuConnections = props.onuConnections;
+                }
+                if (props.splitterConnections) result.splitterConnections = props.splitterConnections;
+            }
+            if (props.type === 'sleeve') {
+                if (props.oltConnections) result.oltConnections = props.oltConnections;
+                if (props.onuConnections) result.onuConnections = props.onuConnections;
+                if (props.splitterConnections) result.splitterConnections = props.splitterConnections;
+            }
+            if (props.type === 'olt') {
+                if (props.ponPorts !== undefined) result.ponPorts = props.ponPorts;
+                if (props.incomingFiber) result.incomingFiber = props.incomingFiber;
+                if (props.portAssignments) result.portAssignments = props.portAssignments;
+            }
+            if (props.type === 'splitter') {
+                if (props.splitRatio !== undefined) result.splitRatio = props.splitRatio;
+                if (props.inputFiber) result.inputFiber = props.inputFiber;
+                if (props.outputConnections) result.outputConnections = props.outputConnections;
+            }
+            if (props.type === 'onu') {
+                if (props.incomingFiber) result.incomingFiber = props.incomingFiber;
             }
             
             if (props.netboxId) {
@@ -4570,17 +4942,26 @@ function updateStats() {
     const supportCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'support').length;
     const sleeveCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'sleeve').length;
     const crossCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'cross').length;
+    const oltCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'olt').length;
+    const splitterCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'splitter').length;
+    const onuCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'onu').length;
     const cableCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'cable').length;
 
     const nodeEl = document.getElementById('nodeCount');
     const supportEl = document.getElementById('supportCount');
     const sleeveEl = document.getElementById('sleeveCount');
     const crossEl = document.getElementById('crossCount');
+    const oltEl = document.getElementById('oltCount');
+    const splitterEl = document.getElementById('splitterCount');
+    const onuEl = document.getElementById('onuCount');
     const cableEl = document.getElementById('cableCount');
     if (nodeEl) nodeEl.textContent = nodeCount;
     if (supportEl) supportEl.textContent = supportCount;
     if (sleeveEl) sleeveEl.textContent = sleeveCount;
     if (crossEl) crossEl.textContent = crossCount;
+    if (oltEl) oltEl.textContent = oltCount;
+    if (splitterEl) splitterEl.textContent = splitterCount;
+    if (onuEl) onuEl.textContent = onuCount;
     if (cableEl) cableEl.textContent = cableCount;
 }
 
@@ -4600,6 +4981,12 @@ function showObjectInfo(obj) {
         title = name ? `Оптический кросс: ${name}` : 'Оптический кросс';
     } else if (type === 'attachment') {
         title = name ? `Крепление узлов: ${name}` : 'Крепление узлов';
+    } else if (type === 'olt') {
+        title = name ? `OLT: ${name}` : 'OLT (GPON)';
+    } else if (type === 'splitter') {
+        title = name ? `Сплиттер: ${name}` : 'Сплиттер';
+    } else if (type === 'onu') {
+        title = name ? `ONU: ${name}` : 'ONU';
     } else {
         title = 'Объект';
     }
@@ -4615,6 +5002,143 @@ function showObjectInfo(obj) {
             html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Название:</strong> ' + escapeHtml(name) + '</div>';
         }
         html += '<div style="color: var(--text-secondary); font-size: 0.875rem;">Через крепление можно прокладывать кабель (как через опору).</div>';
+        html += '</div>';
+    }
+
+    if (type === 'olt') {
+        const oltId = getObjectUniqueId(obj);
+        const ponPorts = Math.max(1, parseInt(obj.properties.get('ponPorts'), 10) || 8);
+        const incomingFiber = obj.properties.get('incomingFiber') || null;
+        const portAssignments = obj.properties.get('portAssignments') || {};
+        const cables = getConnectedCables(obj);
+        const fiberOptions = [];
+        cables.forEach(cable => {
+            const cid = cable.properties.get('uniqueId') || ('cable-' + Date.now());
+            if (!cable.properties.get('uniqueId')) cable.properties.set('uniqueId', cid);
+            const cableName = cable.properties.get('cableName') || getCableDescription(cable.properties.get('cableType'));
+            const n = getFiberCount(cable.properties.get('cableType'));
+            for (let f = 1; f <= n; f++) {
+                fiberOptions.push({ cableId: cid, fiberNumber: f, label: cableName + ', жила ' + f, value: cid + '-' + f });
+            }
+        });
+        html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
+        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">GPON</h4>';
+        html += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 12px;">Приход от кросса задаётся с кросса или муфты (кнопка «OLT» у жилы). Порты задаются жилами подключённых кабелей.</p>';
+        const incomingLabel = incomingFiber ? (function() {
+            const c = cables.find(c => (c.properties.get('uniqueId') || '') === incomingFiber.cableId);
+            const desc = c ? (c.properties.get('cableName') || getCableDescription(c.properties.get('cableType'))) : incomingFiber.cableId;
+            return desc + ', жила ' + incomingFiber.fiberNumber;
+        }()) : '— не задан';
+        html += '<div style="margin-bottom: 12px;"><strong>Приход от кросса:</strong> ' + escapeHtml(incomingLabel) + '</div>';
+        html += '<h5 style="margin: 12px 0 8px 0; font-size: 0.875rem;">PON-порты</h5>';
+        html += '<div class="olt-ports-table-wrap" style="overflow-x: auto;"><table class="olt-ports-table" style="width: 100%; border-collapse: collapse; font-size: 0.8125rem;">';
+        html += '<thead><tr><th style="text-align: left; padding: 6px 8px;">Порт</th><th style="text-align: left; padding: 6px 8px;">Жила</th>' + (isEditMode ? '' : '') + '<th style="padding: 6px 8px;"></th></tr></thead><tbody>';
+        for (let p = 1; p <= ponPorts; p++) {
+            const ass = portAssignments[String(p)] || null;
+            const assVal = ass ? (ass.cableId + '-' + ass.fiberNumber) : '';
+            const assLabel = ass ? (function() {
+                const c = cables.find(c => (c.properties.get('uniqueId') || '') === ass.cableId);
+                return c ? (c.properties.get('cableName') || getCableDescription(c.properties.get('cableType'))) + ', ж.' + ass.fiberNumber : ass.cableId + '-' + ass.fiberNumber;
+            }()) : '—';
+            html += '<tr data-port="' + p + '">';
+            html += '<td style="padding: 6px 8px;">' + p + '</td>';
+            if (isEditMode && fiberOptions.length) {
+                html += '<td style="padding: 6px 8px;"><select class="olt-port-assign" data-port="' + p + '" style="min-width: 140px;">';
+                html += '<option value="">—</option>';
+                fiberOptions.forEach(opt => {
+                    const taken = Object.keys(portAssignments).some(k => {
+                        if (k === String(p)) return false;
+                        const a = portAssignments[k];
+                        return a && a.cableId != null && a.fiberNumber != null && (a.cableId + '-' + a.fiberNumber) === opt.value;
+                    });
+                    html += '<option value="' + escapeHtml(opt.value) + '"' + (opt.value === assVal ? ' selected' : '') + (taken ? ' disabled' : '') + '>' + escapeHtml(opt.label) + (taken ? ' (занято)' : '') + '</option>';
+                });
+                html += '</select></td>';
+            } else {
+                html += '<td style="padding: 6px 8px;">' + escapeHtml(assLabel) + '</td>';
+            }
+            html += '<td style="padding: 6px 8px;"><button type="button" class="btn-trace-olt-port" data-port="' + p + '" ' + (ass ? '' : 'disabled') + ' style="padding: 4px 10px; font-size: 0.75rem; background: #0ea5e9; color: white; border: none; border-radius: 4px; cursor: pointer;">Трассировка</button></td>';
+            html += '</tr>';
+        }
+        html += '</tbody></table></div></div>';
+    }
+
+    if (type === 'splitter') {
+        const splitRatio = parseInt(obj.properties.get('splitRatio'), 10) || 8;
+        const inputFiber = obj.properties.get('inputFiber') || null;
+        const outputConnections = obj.properties.get('outputConnections') || [];
+        const splitterCables = getConnectedCables(obj);
+        const splitterFiberOptions = [];
+        splitterCables.forEach(function(cable) {
+            const cid = cable.properties.get('uniqueId') || ('cable-' + Date.now());
+            if (!cable.properties.get('uniqueId')) cable.properties.set('uniqueId', cid);
+            const cableName = cable.properties.get('cableName') || getCableDescription(cable.properties.get('cableType'));
+            const n = getFiberCount(cable.properties.get('cableType'));
+            for (var fi = 1; fi <= n; fi++) {
+                splitterFiberOptions.push({ cableId: cid, fiberNumber: fi, label: cableName + ', жила ' + fi, value: cid + '-' + fi });
+            }
+        });
+        if (inputFiber && inputFiber.cableId && !splitterFiberOptions.some(function(o) { return o.value === (inputFiber.cableId + '-' + inputFiber.fiberNumber); })) {
+            var inputCable = objects.find(function(c) { return c.properties && c.properties.get('type') === 'cable' && getObjectUniqueId(c) === inputFiber.cableId; });
+            if (inputCable) {
+                var cid = getObjectUniqueId(inputCable);
+                var cableName = inputCable.properties.get('cableName') || getCableDescription(inputCable.properties.get('cableType'));
+                var n = getFiberCount(inputCable.properties.get('cableType'));
+                for (var fi = 1; fi <= n; fi++) {
+                    splitterFiberOptions.push({ cableId: cid, fiberNumber: fi, label: cableName + ', жила ' + fi + ' (вход)', value: cid + '-' + fi });
+                }
+            }
+        }
+        var effectiveInputFiber = obj.properties.get('inputFiber') || inputFiber || getSplitterRootInputFiber(obj) || null;
+        var outputsPadded = (outputConnections || []).slice();
+        while (outputsPadded.length < splitRatio) outputsPadded.push(null);
+        if (outputsPadded.length > splitRatio) outputsPadded = outputsPadded.slice(0, splitRatio);
+        html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
+        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Сплиттер</h4>';
+        html += '<div style="color: var(--text-secondary); font-size: 0.875rem;">Коэффициент деления: 1:' + splitRatio + '</div>';
+        if (effectiveInputFiber) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 6px;"><strong>Входная жила:</strong> кабель ' + escapeHtml(String(effectiveInputFiber.cableId).substring(0, 12)) + '…, жила ' + effectiveInputFiber.fiberNumber + '</div>';
+        html += '</div>';
+        if (isEditMode) {
+            html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
+            html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Вход и выходы</h4>';
+            if (effectiveInputFiber) {
+                html += '<div style="margin-bottom: 12px;"><span style="font-size: 0.8125rem; color: var(--text-secondary);">Входная жила задаётся с муфты/кросса (кнопка «Сплиттер» у жилы).</span>';
+                html += '<div style="font-size: 0.875rem; color: var(--text-primary); margin-top: 4px;">' + escapeHtml(String(effectiveInputFiber.cableId).substring(0, 12)) + '…, жила ' + effectiveInputFiber.fiberNumber + '</div></div>';
+            } else {
+                html += '<div style="margin-bottom: 12px; font-size: 0.8125rem; color: var(--text-secondary);">Вход не задан. Подключите жилу с муфты или кросса — кнопка «Сплиттер» у нужной жилы.</div>';
+            }
+            html += '<div style="margin-bottom: 8px; font-size: 0.8125rem; color: var(--text-secondary);">Одна жила делится на ' + splitRatio + ' — для каждого выхода выберите муфту/кросс и жилу, затем направьте на ONU или сплиттер.</div>';
+            html += '<div id="splitterOutputsList">';
+            for (var oi = 0; oi < splitRatio; oi++) {
+                var out = outputsPadded[oi] || null;
+                var destLabel = '';
+                if (out) {
+                    if (out.onuId) {
+                        var onuObj = objects.find(function(o) { return o.properties && o.properties.get('type') === 'onu' && getObjectUniqueId(o) === out.onuId; });
+                        destLabel = onuObj ? '→ ONU ' + escapeHtml(onuObj.properties.get('name') || 'ONU') : '';
+                    } else if (out.splitterId) {
+                        var spObj = objects.find(function(o) { return o.properties && o.properties.get('type') === 'splitter' && getObjectUniqueId(o) === out.splitterId; });
+                        destLabel = spObj ? '→ Сплиттер ' + escapeHtml(spObj.properties.get('name') || '') : '';
+                    }
+                }
+                html += '<div class="splitter-output-row" style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap;">';
+                html += '<span style="min-width: 72px; font-size: 0.8125rem; color: var(--text-primary);">Выход ' + (oi + 1) + '</span>';
+                html += '<button type="button" class="btn-splitter-output-to-onu" data-output-index="' + oi + '" title="Пустить на ONU" style="padding: 4px 8px; background: #a855f7; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">📡 ONU</button>';
+                html += '<button type="button" class="btn-splitter-output-to-splitter" data-output-index="' + oi + '" title="Пустить на сплиттер" style="padding: 4px 8px; background: #f97316; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">🔀 Сплиттер</button>';
+                if (destLabel) html += '<span style="font-size: 0.75rem; color: var(--text-secondary);">' + destLabel + '</span>';
+                html += '</div>';
+            }
+            html += '</div>';
+            html += '</div>';
+        }
+    }
+
+    if (type === 'onu') {
+        const onuIncoming = obj.properties.get('incomingFiber') || null;
+        html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
+        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">ONU</h4>';
+        if (name) html += '<div style="color: var(--text-secondary); font-size: 0.875rem;">Название: ' + escapeHtml(name) + '</div>';
+        if (onuIncoming) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 6px;">Подключена жила: кабель ' + escapeHtml(String(onuIncoming.cableId).substring(0, 12)) + '…, жила ' + onuIncoming.fiberNumber + '</div>';
         html += '</div>';
     }
 
@@ -4752,10 +5276,7 @@ function showObjectInfo(obj) {
         html += '<div class="no-cables" style="padding: 15px; text-align: center; color: var(--text-muted); font-size: 0.875rem;">' + noCablesText + '</div>';
     } else {
         
-        if ((type === 'sleeve' || type === 'cross') && connectedCables.length > 1) {
-            html += renderFiberConnectionsVisualization(obj, connectedCables);
-        } else if (type === 'cross' && connectedCables.length === 1) {
-            
+        if ((type === 'sleeve' || type === 'cross') && connectedCables.length >= 1) {
             html += renderFiberConnectionsVisualization(obj, connectedCables);
         } else {
             
@@ -5046,14 +5567,12 @@ function duplicateObject(obj) {
     if (!obj || !obj.geometry) return;
     
     const type = obj.properties.get('type');
-    if (type === 'olt' || type === 'splitter' || type === 'onu') return;
     const name = obj.properties.get('name') || '';
     const coords = obj.geometry.getCoordinates();
-
     const offset = 0.0002; 
     const newCoords = [coords[0] + offset, coords[1] + offset];
 
-    let newName = name;
+    var newName = name;
     if (type === 'node' && name) {
         newName = name + ' (копия)';
         var copyNum = 2;
@@ -5062,23 +5581,39 @@ function duplicateObject(obj) {
             copyNum++;
         }
     }
+    if (type === 'olt' || type === 'splitter' || type === 'onu') {
+        if (name) newName = name + ' (копия)';
+    }
     
     createObject(type, newName, newCoords);
 
-    const newNode = objects[objects.length - 1];
+    const newObj = objects[objects.length - 1];
+    if (!newObj) return;
+
+    if (type === 'olt') {
+        newObj.properties.set('ponPorts', obj.properties.get('ponPorts') || 8);
+        newObj.properties.set('incomingFiber', null);
+        newObj.properties.set('portAssignments', {});
+    }
+    if (type === 'splitter') {
+        newObj.properties.set('splitRatio', obj.properties.get('splitRatio') || 8);
+        newObj.properties.set('inputFiber', null);
+        newObj.properties.set('outputConnections', []);
+    }
+    if (type === 'onu') {
+        newObj.properties.set('incomingFiber', null);
+    }
+
     const netboxId = obj.properties.get('netboxId');
-    const netboxUrl = obj.properties.get('netboxUrl');
-    const netboxDeviceType = obj.properties.get('netboxDeviceType');
-    const netboxSite = obj.properties.get('netboxSite');
-    
-    if (netboxId && newNode) {
-        newNode.properties.set('netboxId', null); 
-        newNode.properties.set('netboxUrl', null);
+    if (netboxId && newObj) {
+        newObj.properties.set('netboxId', null); 
+        newObj.properties.set('netboxUrl', null);
     }
 
     const modal = document.getElementById('infoModal');
-    modal.style.display = 'none';
+    if (modal) modal.style.display = 'none';
     currentModalObject = null;
+    saveData();
 }
 
 function updateNodeLabel(placemark, name) {
@@ -5265,6 +5800,84 @@ function setupModalEventListeners() {
             traceFromNode(crossId, cableId, fiberNumber);
         });
     });
+
+    const modalInfo = document.getElementById('modalInfo');
+    if (modalInfo) {
+        modalInfo.querySelectorAll('.olt-port-assign').forEach(select => {
+            select.addEventListener('change', function() {
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
+                const portNum = parseInt(this.getAttribute('data-port'), 10);
+                const oltId = getObjectUniqueId(currentModalObject);
+                let portAssignments = currentModalObject.properties.get('portAssignments') || {};
+                const oldAss = portAssignments[String(portNum)];
+                if (oldAss && oldAss.cableId != null && oldAss.fiberNumber != null) {
+                    const oldCable = objects.find(c => c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === oldAss.cableId);
+                    if (oldCable) {
+                        const oldOther = getOtherEndOfCable(oldCable, currentModalObject);
+                        if (oldOther && (oldOther.properties.get('type') === 'cross' || oldOther.properties.get('type') === 'sleeve')) {
+                            let oltConn = oldOther.properties.get('oltConnections') || {};
+                            const oldKey = oldAss.cableId + '-' + oldAss.fiberNumber;
+                            delete oltConn[oldKey];
+                            oldOther.properties.set('oltConnections', oltConn);
+                        }
+                    }
+                }
+                const val = this.value;
+                if (!val) {
+                    delete portAssignments[String(portNum)];
+                } else {
+                    const idx = val.lastIndexOf('-');
+                    const cableId = idx >= 0 ? val.substring(0, idx) : val;
+                    const fiberNumber = parseInt(val.substring(idx + 1), 10);
+                    const usage = getFiberUsage(cableId, fiberNumber, { type: 'oltPort', oltId: oltId, portNumber: portNum });
+                    if (usage.used) {
+                        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
+                        this.value = oldAss ? (oldAss.cableId + '-' + oldAss.fiberNumber) : '';
+                        return;
+                    }
+                    portAssignments[String(portNum)] = { cableId: cableId, fiberNumber: fiberNumber };
+                    const cable = objects.find(c => c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === cableId);
+                    if (cable) {
+                        const otherEnd = getOtherEndOfCable(cable, currentModalObject);
+                        if (otherEnd && (otherEnd.properties.get('type') === 'cross' || otherEnd.properties.get('type') === 'sleeve')) {
+                            let oltConn = otherEnd.properties.get('oltConnections') || {};
+                            oltConn[cableId + '-' + fiberNumber] = { oltId: oltId, portNumber: portNum };
+                            otherEnd.properties.set('oltConnections', oltConn);
+                        }
+                    }
+                }
+                currentModalObject.properties.set('portAssignments', portAssignments);
+                saveData();
+                if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
+                updateAllConnectionLines();
+                const traceBtn = modalInfo.querySelector('.btn-trace-olt-port[data-port="' + portNum + '"]');
+                if (traceBtn) traceBtn.disabled = !val;
+            });
+        });
+        modalInfo.querySelectorAll('.btn-trace-olt-port').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const port = parseInt(this.getAttribute('data-port'), 10);
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
+                traceFromOLTPort(currentModalObject, port);
+            });
+        });
+
+        modalInfo.querySelectorAll('.btn-splitter-output-to-onu').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'splitter') return;
+                var outIdx = parseInt(this.getAttribute('data-output-index'), 10);
+                showSplitterOutputOnuDialog(currentModalObject, outIdx);
+            });
+        });
+        modalInfo.querySelectorAll('.btn-splitter-output-to-splitter').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'splitter') return;
+                var outIdx = parseInt(this.getAttribute('data-output-index'), 10);
+                showSplitterOutputSplitterDialog(currentModalObject, outIdx);
+            });
+        });
+    }
 }
 
 function setupFiberConnectionHandlers() {
@@ -5507,6 +6120,51 @@ function setupFiberConnectionHandlers() {
             const cableId = this.getAttribute('data-cable-id');
             const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
             disconnectFiberFromNode(sleeveObj, cableId, fiberNumber);
+        });
+    });
+
+    document.querySelectorAll('.btn-connect-onu').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const cableId = this.getAttribute('data-cable-id');
+            const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
+            showOnuSelectionDialog(sleeveObj, cableId, fiberNumber);
+        });
+    });
+
+    document.querySelectorAll('.btn-connect-splitter').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const cableId = this.getAttribute('data-cable-id');
+            const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
+            showSplitterSelectionDialog(sleeveObj, cableId, fiberNumber);
+        });
+    });
+
+    document.querySelectorAll('.btn-connect-olt').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const cableId = this.getAttribute('data-cable-id');
+            const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
+            showOltSelectionDialog(sleeveObj, cableId, fiberNumber);
+        });
+    });
+
+    document.querySelectorAll('.btn-disconnect-olt').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const cableId = this.getAttribute('data-cable-id');
+            const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
+            disconnectFiberFromOlt(sleeveObj, cableId, fiberNumber);
+        });
+    });
+
+    document.querySelectorAll('.btn-disconnect-onu').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const cableId = this.getAttribute('data-cable-id');
+            const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
+            disconnectFiberFromOnu(sleeveObj, cableId, fiberNumber);
         });
     });
     
@@ -5931,43 +6589,164 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
     
     const maxIterations = 100;
     let iterations = 0;
+    var afterSplitterInputBranch = false;
+    var nextObject;
     
     while (iterations < maxIterations) {
         iterations++;
 
-        const cableName = currentCable.properties.get('cableName') || getCableDescription(currentCable.properties.get('cableType'));
-        path.push({
-            type: 'cable',
-            cableId: currentCableId,
-            cableName: cableName,
-            fiberNumber: currentFiberNumber,
-            cable: currentCable
-        });
+        if (afterSplitterInputBranch) {
+            afterSplitterInputBranch = false;
+            nextObject = currentObject;
+        } else {
+            const cableName = currentCable.properties.get('cableName') || getCableDescription(currentCable.properties.get('cableType'));
+            path.push({
+                type: 'cable',
+                cableId: currentCableId,
+                cableName: cableName,
+                fiberNumber: currentFiberNumber,
+                cable: currentCable
+            });
 
-        const nextObject = getOtherEnd(currentCable, currentObject);
-        
-        if (!nextObject) break;
+            nextObject = getOtherEnd(currentCable, currentObject);
+            
+            if (!nextObject) break;
+            
+            path.push({
+                type: 'object',
+                objectType: nextObject.properties.get('type'),
+                objectName: nextObject.properties.get('name') || getObjectTypeName(nextObject.properties.get('type')),
+                object: nextObject,
+                port: (nextObject.properties.get('type') === 'cross') ? ((nextObject.properties.get('fiberPorts') || {})[currentCableId + '-' + currentFiberNumber] || null) : null
+            });
+        }
         
         const nextObjectId = getObjectUniqueId(nextObject);
-
         if (visitedObjects.has(nextObjectId)) break;
         visitedObjects.add(nextObjectId);
         
         const objType = nextObject.properties.get('type');
         const objName = nextObject.properties.get('name') || getObjectTypeName(objType);
-        const objPort = (objType === 'cross') ? ((nextObject.properties.get('fiberPorts') || {})[`${currentCableId}-${currentFiberNumber}`] || null) : null;
 
-        path.push({
-            type: 'object',
-            objectType: objType,
-            objectName: objName,
-            object: nextObject,
-            port: objPort
-        });
+        if (objType === 'splitter') {
+            const inputFiber = nextObject.properties.get('inputFiber') || getSplitterRootInputFiber(nextObject) || null;
+            const outputConnections = nextObject.properties.get('outputConnections') || [];
+            const isInputFiber = inputFiber && currentCableId === inputFiber.cableId && currentFiberNumber === inputFiber.fiberNumber;
+            const outputIndexByCable = outputConnections.findIndex(function(o) { return o && o.cableId === currentCableId && o.fiberNumber === currentFiberNumber; });
+            if (isInputFiber && outputConnections.length > 0) {
+                const firstOutWithCable = outputConnections.find(function(o) { return o && o.cableId; });
+                if (firstOutWithCable) {
+                    const outCable = findCableById(firstOutWithCable.cableId);
+                    if (outCable) {
+                        const otherEnd = getOtherEndOfCable(outCable, nextObject);
+                        if (otherEnd) {
+                            path.push({ type: 'cable', cableId: firstOutWithCable.cableId, cableName: outCable.properties.get('cableName') || getCableDescription(outCable.properties.get('cableType')), fiberNumber: firstOutWithCable.fiberNumber, cable: outCable });
+                            path.push({ type: 'object', objectType: otherEnd.properties.get('type'), objectName: otherEnd.properties.get('name') || getObjectTypeName(otherEnd.properties.get('type')), object: otherEnd, port: null });
+                            currentCableId = firstOutWithCable.cableId;
+                            currentFiberNumber = firstOutWithCable.fiberNumber;
+                            currentCable = outCable;
+                            currentObject = otherEnd;
+                            afterSplitterInputBranch = true;
+                        }
+                    }
+                } else {
+                    var inCable = findCableById(inputFiber.cableId);
+                    var inputOtherEnd = inCable ? getOtherEndOfCable(inCable, nextObject) : null;
+                    if (inputOtherEnd) {
+                        path.push({ type: 'cable', cableId: inputFiber.cableId, cableName: inCable.properties.get('cableName') || getCableDescription(inCable.properties.get('cableType')), fiberNumber: inputFiber.fiberNumber, cable: inCable });
+                        path.push({ type: 'object', objectType: inputOtherEnd.properties.get('type'), objectName: inputOtherEnd.properties.get('name') || getObjectTypeName(inputOtherEnd.properties.get('type')), object: inputOtherEnd, port: null });
+                        currentCableId = inputFiber.cableId;
+                        currentFiberNumber = inputFiber.fiberNumber;
+                        currentCable = inCable;
+                        currentObject = inputOtherEnd;
+                        afterSplitterInputBranch = true;
+                    } else {
+                        var firstOutOnu = outputConnections.find(function(o) { return o && o.onuId; });
+                        var firstOutSplitter = outputConnections.find(function(o) { return o && o.splitterId; });
+                        if (firstOutOnu) {
+                            var onuObj = objects.find(function(o) { return o.properties && o.properties.get('type') === 'onu' && getObjectUniqueId(o) === firstOutOnu.onuId; });
+                            if (onuObj) {
+                                path.push({ type: 'splitterOutputToOnu', splitter: nextObject, onuObj: onuObj, onuName: onuObj.properties.get('name') || 'ONU' });
+                                path.push({ type: 'object', objectType: 'onu', objectName: onuObj.properties.get('name') || 'ONU', object: onuObj, port: null });
+                                break;
+                            }
+                        }
+                        if (firstOutSplitter) {
+                            var childSplitter = objects.find(function(o) { return o.properties && o.properties.get('type') === 'splitter' && getObjectUniqueId(o) === firstOutSplitter.splitterId; });
+                            if (childSplitter) {
+                                var childInput = childSplitter.properties.get('inputFiber') || getSplitterRootInputFiber(childSplitter);
+                                if (childInput && childInput.cableId) {
+                                    path.push({ type: 'splitterOutputToSplitter', fromSplitter: nextObject, toSplitter: childSplitter });
+                                    path.push({ type: 'object', objectType: 'splitter', objectName: childSplitter.properties.get('name') || 'Сплиттер', object: childSplitter, port: null });
+                                    currentObject = childSplitter;
+                                    currentCableId = childInput.cableId;
+                                    currentFiberNumber = childInput.fiberNumber;
+                                    currentCable = findCableById(childInput.cableId);
+                                    afterSplitterInputBranch = true;
+                                } else {
+                                    currentObject = null;
+                                    break;
+                                }
+                            } else {
+                                currentObject = null;
+                                break;
+                            }
+                        } else {
+                            currentObject = null;
+                            break;
+                        }
+                    }
+                }
+            } else if (inputFiber && outputIndexByCable >= 0) {
+                const inCable = findCableById(inputFiber.cableId);
+                if (inCable) {
+                    const inputOtherEnd = getOtherEndOfCable(inCable, nextObject);
+                    if (inputOtherEnd) {
+                        path.push({
+                            type: 'cable',
+                            cableId: inputFiber.cableId,
+                            cableName: inCable.properties.get('cableName') || getCableDescription(inCable.properties.get('cableType')),
+                            fiberNumber: inputFiber.fiberNumber,
+                            cable: inCable
+                        });
+                        path.push({
+                            type: 'object',
+                            objectType: inputOtherEnd.properties.get('type'),
+                            objectName: inputOtherEnd.properties.get('name') || getObjectTypeName(inputOtherEnd.properties.get('type')),
+                            object: inputOtherEnd,
+                            port: null
+                        });
+                        currentCableId = inputFiber.cableId;
+                        currentFiberNumber = inputFiber.fiberNumber;
+                        currentCable = inCable;
+                        currentObject = inputOtherEnd;
+                        afterSplitterInputBranch = true;
+                    }
+                }
+            } else {
+                break;
+            }
+            continue;
+        }
 
+        if (objType === 'olt' || objType === 'onu') {
+            break;
+        }
         if (objType === 'sleeve' || objType === 'cross') {
             const nodeConnKey = `${currentCableId}-${currentFiberNumber}`;
             if (objType === 'cross') {
+                const onuConnections = nextObject.properties.get('onuConnections') || {};
+                const onuConn = onuConnections[nodeConnKey];
+                if (onuConn) {
+                    const connectedOnu = objects.find(obj =>
+                        obj.properties && obj.properties.get('type') === 'onu' && obj.properties.get('uniqueId') === onuConn.onuId
+                    );
+                    if (connectedOnu) {
+                        path.push({ type: 'onuConnection', cableId: currentCableId, fiberNumber: currentFiberNumber, onuName: onuConn.onuName || 'ONU', cross: nextObject });
+                        path.push({ type: 'object', objectType: 'onu', objectName: connectedOnu.properties.get('name') || 'ONU', object: connectedOnu });
+                    }
+                    break;
+                }
                 const nodeConnections = nextObject.properties.get('nodeConnections') || {};
                 const nodeConn = nodeConnections[nodeConnKey];
                 
@@ -5986,10 +6765,34 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
             if (visitedFibers.has(fiberKey)) break;
             visitedFibers.add(fiberKey);
 
-            const nextFiber = findFiberConnection(currentCableId, currentFiberNumber, nextObject);
-            
+            var nextFiber = findFiberConnection(currentCableId, currentFiberNumber, nextObject);
             if (!nextFiber) {
-                
+                var splitterConns = nextObject.properties.get('splitterConnections') || {};
+                var scEntry = splitterConns[nodeConnKey];
+                if (scEntry && scEntry.splitterId) {
+                    var spObj = objects.find(function(o) { return o.properties && o.properties.get('type') === 'splitter' && getObjectUniqueId(o) === scEntry.splitterId; });
+                    if (spObj) {
+                        var cableToSplitter = findCableById(currentCableId);
+                        var splitterEnd = cableToSplitter ? getOtherEnd(cableToSplitter, nextObject) : null;
+                        var isPhysicalLink = splitterEnd && getObjectUniqueId(splitterEnd) === getObjectUniqueId(spObj);
+                        if (cableToSplitter) {
+                            if (isPhysicalLink) {
+                                path.push({ type: 'cable', cableId: currentCableId, cableName: cableToSplitter.properties.get('cableName') || getCableDescription(cableToSplitter.properties.get('cableType')), fiberNumber: currentFiberNumber, cable: cableToSplitter });
+                            } else {
+                                path.push({ type: 'splitterConnection', sleeve: nextObject, splitter: spObj, cableId: currentCableId, fiberNumber: currentFiberNumber });
+                            }
+                        } else {
+                            path.push({ type: 'splitterConnection', sleeve: nextObject, splitter: spObj, cableId: currentCableId, fiberNumber: currentFiberNumber });
+                        }
+                        path.push({ type: 'object', objectType: 'splitter', objectName: spObj.properties.get('name') || 'Сплиттер', object: spObj, port: null });
+                        currentObject = spObj;
+                        currentCableId = currentCableId;
+                        currentFiberNumber = currentFiberNumber;
+                        currentCable = cableToSplitter || currentCable;
+                        afterSplitterInputBranch = true;
+                        continue;
+                    }
+                }
                 break;
             }
 
@@ -6084,6 +6887,172 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
     }
     
     return { path, error: null };
+}
+
+function traceAllFiberPathsFromObject(startObject, startCableId, startFiberNumber) {
+    const first = traceFiberPathFromObject(startObject, startCableId, startFiberNumber);
+    if (first.error) return { paths: [], error: first.error };
+    var paths = [ first.path ];
+    var startType = startObject.properties ? startObject.properties.get('type') : '';
+    if (startType === 'sleeve' || startType === 'cross') {
+        var conns = startObject.properties.get('fiberConnections') || [];
+        for (var ci = 0; ci < conns.length; ci++) {
+            var c = conns[ci];
+            var otherCable = null, otherFiber = null;
+            if (c.from && c.from.cableId === startCableId && c.from.fiberNumber === startFiberNumber) { otherCable = c.to.cableId; otherFiber = c.to.fiberNumber; }
+            else if (c.to && c.to.cableId === startCableId && c.to.fiberNumber === startFiberNumber) { otherCable = c.from.cableId; otherFiber = c.from.fiberNumber; }
+            if (otherCable && otherFiber) {
+                var alt = traceFiberPathFromObject(startObject, otherCable, otherFiber);
+                if (!alt.error && alt.path.length > 0) paths.push(alt.path);
+            }
+        }
+    }
+    const maxExpand = 100;
+    var expandedKeys = new Set();
+    function expandKey(prefix, sp) { return (prefix.length ? prefix.length + '-' : '') + getObjectUniqueId(sp); }
+    var anyExpanded = true;
+    while (anyExpanded) {
+        anyExpanded = false;
+        for (var pi = 0; pi < paths.length && paths.length < maxExpand; pi++) {
+            var path = paths[pi];
+            var splitterIdx = -1;
+            var splitterObj = null;
+            for (var i = path.length - 1; i >= 0; i--) {
+                if (path[i].type === 'object' && path[i].objectType === 'splitter') {
+                    splitterIdx = i;
+                    splitterObj = path[i].object;
+                    break;
+                }
+            }
+            if (splitterIdx < 0 || !splitterObj) continue;
+            var prefix = path.slice(0, splitterIdx + 1);
+            var key = expandKey(prefix, splitterObj);
+            if (expandedKeys.has(key)) continue;
+            expandedKeys.add(key);
+            var inputFiber = splitterObj.properties.get('inputFiber') || getSplitterRootInputFiber(splitterObj);
+            var outputConnections = splitterObj.properties.get('outputConnections') || [];
+            if (!inputFiber) continue;
+            var hasCableOutputs = outputConnections.some(function(o) { return o && o.cableId; });
+            if (hasCableOutputs) {
+                for (var oi = 1; oi < outputConnections.length; oi++) {
+                    var out = outputConnections[oi];
+                    if (!out || !out.cableId) continue;
+                    var outCable = objects.find(function(c) { return c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === out.cableId; });
+                    if (!outCable) continue;
+                    var otherEnd = getOtherEndOfCable(outCable, splitterObj);
+                    if (!otherEnd) continue;
+                    var sub = traceFiberPathFromObject(otherEnd, out.cableId, out.fiberNumber);
+                    if (sub.error || !sub.path.length) continue;
+                    paths.push(prefix.concat(sub.path.slice(1)));
+                    anyExpanded = true;
+                }
+            }
+            for (var oi2 = 0; oi2 < outputConnections.length; oi2++) {
+                var out2 = outputConnections[oi2];
+                if (!out2) continue;
+                if (out2.onuId) {
+                    var onuObj = objects.find(function(o) { return o.properties && o.properties.get('type') === 'onu' && getObjectUniqueId(o) === out2.onuId; });
+                    if (onuObj) {
+                        var suffix = [
+                            { type: 'splitterOutputToOnu', splitter: splitterObj, onuObj: onuObj, onuName: onuObj.properties.get('name') || 'ONU' },
+                            { type: 'object', objectType: 'onu', objectName: onuObj.properties.get('name') || 'ONU', object: onuObj, port: null }
+                        ];
+                        paths.push(prefix.concat(suffix));
+                        anyExpanded = true;
+                    }
+                } else if (out2.splitterId) {
+                    var targetSplitter = objects.find(function(o) { return o.properties && o.properties.get('type') === 'splitter' && getObjectUniqueId(o) === out2.splitterId; });
+                    if (targetSplitter) {
+                        var targetOutputs = targetSplitter.properties.get('outputConnections') || [];
+                        var midSuffix = [
+                            { type: 'splitterOutputToSplitter', fromSplitter: splitterObj, toSplitter: targetSplitter },
+                            { type: 'object', objectType: 'splitter', objectName: targetSplitter.properties.get('name') || 'Сплиттер', object: targetSplitter, port: null }
+                        ];
+                        paths.push(prefix.concat(midSuffix));
+                        anyExpanded = true;
+                        for (var toi = 0; toi < targetOutputs.length; toi++) {
+                            var tout = targetOutputs[toi];
+                            if (tout && tout.onuId) {
+                                var onuObj2 = objects.find(function(o) { return o.properties && o.properties.get('type') === 'onu' && getObjectUniqueId(o) === tout.onuId; });
+                                if (onuObj2) {
+                                    paths.push(prefix.concat(midSuffix, [
+                                        { type: 'splitterOutputToOnu', splitter: targetSplitter, onuObj: onuObj2, onuName: onuObj2.properties.get('name') || 'ONU' },
+                                        { type: 'object', objectType: 'onu', objectName: onuObj2.properties.get('name') || 'ONU', object: onuObj2, port: null }
+                                    ]));
+                                    anyExpanded = true;
+                                }
+                            } else if (tout && tout.splitterId) {
+                                var sp3 = objects.find(function(o) { return o.properties && o.properties.get('type') === 'splitter' && getObjectUniqueId(o) === tout.splitterId; });
+                                if (sp3) {
+                                    var mid2 = midSuffix.concat([
+                                        { type: 'splitterOutputToSplitter', fromSplitter: targetSplitter, toSplitter: sp3 },
+                                        { type: 'object', objectType: 'splitter', objectName: sp3.properties.get('name') || 'Сплиттер', object: sp3, port: null }
+                                    ]);
+                                    var out3 = sp3.properties.get('outputConnections') || [];
+                                    for (var t2 = 0; t2 < out3.length; t2++) {
+                                        if (out3[t2] && out3[t2].onuId) {
+                                            var onu3 = objects.find(function(o) { return o.properties && o.properties.get('type') === 'onu' && getObjectUniqueId(o) === out3[t2].onuId; });
+                                            if (onu3) {
+                                                paths.push(prefix.concat(mid2, [
+                                                    { type: 'splitterOutputToOnu', splitter: sp3, onuObj: onu3, onuName: onu3.properties.get('name') || 'ONU' },
+                                                    { type: 'object', objectType: 'onu', objectName: onu3.properties.get('name') || 'ONU', object: onu3, port: null }
+                                                ]));
+                                                anyExpanded = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return { paths: paths, error: null };
+}
+
+function isFiberConnectedToOlt(sleeveObj, cableId, fiberNumber) {
+    var key = cableId + '-' + fiberNumber;
+    var oltConn = sleeveObj.properties ? sleeveObj.properties.get('oltConnections') : null;
+    if (oltConn && oltConn[key]) return true;
+    var oltFiberKeys = new Set();
+    objects.forEach(function(obj) {
+        if (!obj.properties) return;
+        var t = obj.properties.get('type');
+        if (t === 'cross' || t === 'sleeve') {
+            var oc = obj.properties.get('oltConnections') || {};
+            Object.keys(oc).forEach(function(k) { oltFiberKeys.add(k); });
+        }
+        if (t === 'olt') {
+            var pa = obj.properties.get('portAssignments') || {};
+            Object.keys(pa).forEach(function(k) {
+                var a = pa[k];
+                if (a && a.cableId && a.fiberNumber != null) oltFiberKeys.add(a.cableId + '-' + a.fiberNumber);
+            });
+        }
+    });
+    if (oltFiberKeys.has(key)) return true;
+    try {
+        var res = traceAllFiberPathsFromObject(sleeveObj, cableId, fiberNumber);
+        if (res.error || !res.paths) return false;
+        return res.paths.some(function(p) {
+            if (p.some(function(item) { return item.type === 'object' && item.objectType === 'olt'; })) return true;
+            for (var i = 0; i < p.length; i++) {
+                var item = p[i];
+                if (item.type === 'object' && item.object && (item.objectType === 'cross' || item.objectType === 'sleeve')) {
+                    var cid = null, fn = null;
+                    if (i > 0 && p[i - 1].type === 'cable') { cid = p[i - 1].cableId; fn = p[i - 1].fiberNumber; }
+                    if (cid && fn != null) {
+                        var oc2 = item.object.properties.get('oltConnections') || {};
+                        if (oc2[cid + '-' + fn]) return true;
+                    }
+                }
+                if (item.type === 'cable' && item.cableId && item.fiberNumber != null && oltFiberKeys.has(item.cableId + '-' + item.fiberNumber)) return true;
+            }
+            return false;
+        });
+    } catch (e) { return false; }
 }
 
 function traceFiberPath(startCableId, startFiberNumber) {
@@ -6422,6 +7391,11 @@ function showFiberTrace(cableId, fiberNumber) {
             html += `<span style="font-size: 0.875rem;">📦 <strong>${item.cableName}</strong></span>`;
             html += `<span style="background: ${fiberColor}; color: ${fiberColor === '#FFFFFF' || fiberColor === '#FFFACD' ? '#000' : '#fff'}; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">Жила ${item.fiberNumber}: ${fiberName}</span>`;
             html += `</div>`;
+        } else if (item.type === 'splitterConnection') {
+            var spName = (item.splitter && item.splitter.properties) ? (item.splitter.properties.get('name') || 'Сплиттер') : 'Сплиттер';
+            html += `<div style="display: flex; align-items: center; gap: 8px; margin: 4px 0 4px 12px; padding: 8px 12px; background: #fffbeb; border-radius: 6px; border-left: 4px solid #f59e0b;">`;
+            html += `<span style="font-size: 0.875rem; font-weight: 600; color: #92400e;">→ Жила идёт на сплиттер «${escapeHtml(spName)}»</span><span style="color: #78716c; font-size: 0.8rem;"> (жила ${item.fiberNumber})</span>`;
+            html += `</div>`;
         } else if (item.type === 'connection') {
             
             const fromFiberColors = item.fromCableType ? getFiberColors(item.fromCableType) : [];
@@ -6502,6 +7476,19 @@ function highlightTracePath() {
             });
             traceHighlightObjects.push(highlightCircle);
             myMap.geoObjects.add(highlightCircle);
+        } else if (item.type === 'splitterConnection') {
+            if (item.sleeve && item.sleeve.geometry) {
+                const sc = item.sleeve.geometry.getCoordinates();
+                const hc = new ymaps.Circle([sc, 30], {}, { fillColor: '#f59e0b', fillOpacity: 0.5, strokeColor: '#f59e0b', strokeWidth: 3, zIndex: 1500 });
+                traceHighlightObjects.push(hc);
+                myMap.geoObjects.add(hc);
+            }
+            if (item.splitter && item.splitter.geometry) {
+                const spc = item.splitter.geometry.getCoordinates();
+                const hc2 = new ymaps.Circle([spc, 30], {}, { fillColor: '#f59e0b', fillOpacity: 0.5, strokeColor: '#f59e0b', strokeWidth: 3, zIndex: 1500 });
+                traceHighlightObjects.push(hc2);
+                myMap.geoObjects.add(hc2);
+            }
         }
     });
 
@@ -6510,6 +7497,9 @@ function highlightTracePath() {
         path.forEach(item => {
             if (item.object && item.object.geometry) {
                 bounds.push(item.object.geometry.getCoordinates());
+            } else if (item.type === 'splitterConnection') {
+                if (item.sleeve && item.sleeve.geometry) bounds.push(item.sleeve.geometry.getCoordinates());
+                if (item.splitter && item.splitter.geometry) bounds.push(item.splitter.geometry.getCoordinates());
             } else if (item.cable && item.cable.geometry) {
                 const coords = item.cable.geometry.getCoordinates();
                 if (Array.isArray(coords[0])) {
@@ -6539,9 +7529,16 @@ function clearTraceHighlight() {
 }
 
 let nodeConnectionLines = [];
-
+let onuConnectionLines = [];
+let oltConnectionLines = [];
+let splitterConnectionLines = [];
+let splitterOutputConnectionLines = [];
 
 let nodeSelectionModalData = null;
+let onuSelectionModalData = null;
+let splitterSelectionModalData = null;
+let splitterOutputOnuModalData = null;
+let splitterOutputSplitterModalData = null;
 
 function getAvailableNodes() {
     return objects.filter(obj => 
@@ -6670,6 +7667,70 @@ function closeNodeSelectionModal() {
     nodeSelectionModalData = null;
 }
 
+function getAvailableOnus() {
+    return objects.filter(obj =>
+        obj.properties && obj.properties.get('type') === 'onu'
+    );
+}
+
+function showOnuSelectionDialog(sleeveObj, cableId, fiberNumber) {
+    const onus = getAvailableOnus();
+    if (onus.length === 0) {
+        showWarning('Нет доступных ONU для подключения. Сначала создайте ONU на карте.', 'Нет ONU');
+        return;
+    }
+    onuSelectionModalData = { sleeveObj: sleeveObj, cableId: cableId, fiberNumber: fiberNumber, onus: onus };
+    const modal = document.getElementById('onuSelectionModal');
+    const fiberInfo = document.getElementById('onuSelectionFiberInfo');
+    const searchInput = document.getElementById('onuSearchInput');
+    if (fiberInfo) fiberInfo.textContent = 'Подключение жилы #' + fiberNumber + ' к ONU';
+    if (searchInput) searchInput.value = '';
+    renderOnuList(onus, '');
+    if (modal) modal.style.display = 'block';
+    setTimeout(function() { if (searchInput) searchInput.focus(); }, 100);
+}
+
+function renderOnuList(onus, searchQuery) {
+    const container = document.getElementById('onuListContainer');
+    if (!container) return;
+    if (onus.length === 0) {
+        container.innerHTML = '<div class="node-list-empty"><p>Нет доступных ONU</p></div>';
+        return;
+    }
+    const query = (searchQuery || '').toLowerCase().trim();
+    const filtered = query ? onus.filter(function(o) {
+        var name = (o.properties.get('name') || 'ONU').toLowerCase();
+        return name.indexOf(query) !== -1;
+    }) : onus;
+    if (filtered.length === 0) {
+        container.innerHTML = '<div class="node-list-no-results">ONU не найдены по запросу</div>';
+        return;
+    }
+    var html = '';
+    filtered.forEach(function(onu) {
+        var name = onu.properties.get('name') || 'ONU';
+        var idx = onus.indexOf(onu);
+        html += '<div class="node-list-item" data-onu-index="' + idx + '" onclick="selectOnuFromList(' + idx + ')">';
+        html += '<div class="node-list-item-info"><div class="node-list-item-name">' + escapeHtml(name) + '</div></div></div>';
+    });
+    container.innerHTML = html;
+}
+
+function selectOnuFromList(onuIndex) {
+    if (!onuSelectionModalData) return;
+    var data = onuSelectionModalData;
+    if (onuIndex < 0 || onuIndex >= data.onus.length) return;
+    closeOnuSelectionModal();
+    connectFiberToOnu(data.sleeveObj, data.cableId, data.fiberNumber, data.onus[onuIndex]);
+    if (currentModalObject && currentModalObject.properties.get('type') === 'splitter') showObjectInfo(currentModalObject);
+}
+
+function closeOnuSelectionModal() {
+    var modal = document.getElementById('onuSelectionModal');
+    if (modal) modal.style.display = 'none';
+    onuSelectionModalData = null;
+}
+
 function initNodeSelectionModal() {
     const modal = document.getElementById('nodeSelectionModal');
     if (!modal) return;
@@ -6707,7 +7768,521 @@ function initNodeSelectionModal() {
     });
 }
 
+function initOnuSelectionModal() {
+    var modal = document.getElementById('onuSelectionModal');
+    if (!modal) return;
+    var closeBtn = modal.querySelector('.close-onu-selection');
+    var cancelBtn = document.getElementById('cancelOnuSelection');
+    var searchInput = document.getElementById('onuSearchInput');
+    if (closeBtn) closeBtn.addEventListener('click', closeOnuSelectionModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeOnuSelectionModal);
+    modal.addEventListener('click', function(e) { if (e.target === modal) closeOnuSelectionModal(); });
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            if (onuSelectionModalData) renderOnuList(onuSelectionModalData.onus, this.value);
+        });
+    }
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.style.display === 'block') closeOnuSelectionModal();
+    });
+}
+
+function getAvailableSplitters() {
+    return objects.filter(obj =>
+        obj.properties && obj.properties.get('type') === 'splitter'
+    );
+}
+
+function showSplitterSelectionDialog(sleeveObj, cableId, fiberNumber, excludeSplitterId) {
+    const usage = getFiberUsage(cableId, fiberNumber, { type: 'splitterInput' });
+    if (usage.used) {
+        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
+        return;
+    }
+    var splitters = getAvailableSplitters();
+    if (excludeSplitterId) splitters = splitters.filter(function(s) { return getObjectUniqueId(s) !== excludeSplitterId; });
+    if (splitters.length === 0) {
+        showWarning('Нет доступных сплиттеров для выбора. Создайте ещё один сплиттер на карте.', 'Нет сплиттеров');
+        return;
+    }
+    splitterSelectionModalData = { sleeveObj: sleeveObj, cableId: cableId, fiberNumber: fiberNumber, splitters: splitters };
+    const modal = document.getElementById('splitterSelectionModal');
+    const fiberInfo = document.getElementById('splitterSelectionFiberInfo');
+    const splitterSelect = document.getElementById('splitterSelect');
+    const confirmBtn = document.getElementById('confirmSplitterSelection');
+    if (fiberInfo) fiberInfo.textContent = 'Подключение жилы #' + fiberNumber + ' к входу сплиттера';
+    if (splitterSelect) {
+        splitterSelect.innerHTML = '<option value="">— выберите сплиттер</option>';
+        splitters.forEach((sp, idx) => {
+            const name = sp.properties.get('name') || ('Сплиттер ' + (idx + 1));
+            const uid = getObjectUniqueId(sp);
+            splitterSelect.innerHTML += '<option value="' + escapeHtml(uid) + '">' + escapeHtml(name) + '</option>';
+        });
+    }
+    if (confirmBtn) confirmBtn.disabled = true;
+    if (modal) modal.style.display = 'block';
+}
+
+function closeSplitterSelectionModal() {
+    const modal = document.getElementById('splitterSelectionModal');
+    if (modal) modal.style.display = 'none';
+    splitterSelectionModalData = null;
+}
+
+function connectFiberToSplitter(sleeveObj, cableId, fiberNumber, splitterObj) {
+    const splitterId = getObjectUniqueId(splitterObj);
+    const usage = getFiberUsage(cableId, fiberNumber, { type: 'splitterInput', splitterId: splitterId });
+    if (usage.used) {
+        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
+        return;
+    }
+    const key = cableId + '-' + fiberNumber;
+    const prevInput = splitterObj.properties.get('inputFiber');
+    if (prevInput) {
+        const prevKey = prevInput.cableId + '-' + prevInput.fiberNumber;
+        objects.forEach(function(slot) {
+            if (!slot.properties) return;
+            const t = slot.properties.get('type');
+            if (t !== 'cross' && t !== 'sleeve') return;
+            let sc = slot.properties.get('splitterConnections');
+            if (sc && sc[prevKey] && sc[prevKey].splitterId === splitterId) {
+                delete sc[prevKey];
+                slot.properties.set('splitterConnections', sc);
+            }
+        });
+    }
+    splitterObj.properties.set('inputFiber', { cableId: cableId, fiberNumber: fiberNumber });
+    let splitterConnections = sleeveObj.properties.get('splitterConnections') || {};
+    splitterConnections[key] = { splitterId: splitterId };
+    sleeveObj.properties.set('splitterConnections', splitterConnections);
+    createSplitterConnectionLine(sleeveObj, splitterObj, cableId, fiberNumber);
+    saveData();
+    if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
+    showObjectInfo(sleeveObj);
+}
+
+function disconnectFiberFromSplitter(sleeveObj, cableId, fiberNumber) {
+    let splitterConnections = sleeveObj.properties.get('splitterConnections') || {};
+    const key = cableId + '-' + fiberNumber;
+    const conn = splitterConnections[key];
+    if (!conn || !conn.splitterId) {
+        delete splitterConnections[key];
+        sleeveObj.properties.set('splitterConnections', splitterConnections);
+        saveData();
+        updateSplitterConnectionLines();
+        showObjectInfo(sleeveObj);
+        return;
+    }
+    const splitterObj = objects.find(o => o.properties && o.properties.get('type') === 'splitter' && o.properties.get('uniqueId') === conn.splitterId);
+    if (splitterObj) {
+        const inputFiber = splitterObj.properties.get('inputFiber');
+        if (inputFiber && inputFiber.cableId === cableId && inputFiber.fiberNumber === fiberNumber) {
+            splitterObj.properties.set('inputFiber', null);
+        }
+    }
+    removeSplitterConnectionLine(sleeveObj, cableId, fiberNumber);
+    delete splitterConnections[key];
+    sleeveObj.properties.set('splitterConnections', splitterConnections);
+    saveData();
+    if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
+    showObjectInfo(sleeveObj);
+}
+
+function initSplitterSelectionModal() {
+    const modal = document.getElementById('splitterSelectionModal');
+    if (!modal) return;
+    const closeBtn = modal.querySelector('.close-splitter-selection');
+    const cancelBtn = document.getElementById('cancelSplitterSelection');
+    const splitterSelect = document.getElementById('splitterSelect');
+    const confirmBtn = document.getElementById('confirmSplitterSelection');
+    if (closeBtn) closeBtn.addEventListener('click', closeSplitterSelectionModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeSplitterSelectionModal);
+    modal.addEventListener('click', function(e) { if (e.target === modal) closeSplitterSelectionModal(); });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.style.display === 'block') closeSplitterSelectionModal();
+    });
+    if (splitterSelect) {
+        splitterSelect.addEventListener('change', function() {
+            if (confirmBtn) confirmBtn.disabled = !this.value;
+        });
+    }
+    if (confirmBtn) {
+        confirmBtn.addEventListener('click', function() {
+            if (!splitterSelectionModalData) return;
+            const splitterVal = splitterSelect && splitterSelect.value;
+            if (!splitterVal) return;
+            const splitterObj = objects.find(o => o.properties && o.properties.get('type') === 'splitter' && getObjectUniqueId(o) === splitterVal);
+            if (!splitterObj) return;
+            const data = splitterSelectionModalData;
+            closeSplitterSelectionModal();
+            connectFiberToSplitter(data.sleeveObj, data.cableId, data.fiberNumber, splitterObj);
+            if (currentModalObject && currentModalObject.properties.get('type') === 'splitter') showObjectInfo(currentModalObject);
+        });
+    }
+}
+
+function getOnuIdsUsedBySplitterOutputs() {
+    var used = [];
+    objects.forEach(function(obj) {
+        if (!obj.properties || obj.properties.get('type') !== 'splitter') return;
+        var outputs = obj.properties.get('outputConnections') || [];
+        outputs.forEach(function(o) {
+            if (o && o.onuId) used.push(o.onuId);
+        });
+    });
+    return used;
+}
+
+function getSplitterIdsUsedBySplitterOutputs() {
+    var used = [];
+    objects.forEach(function(obj) {
+        if (!obj.properties || obj.properties.get('type') !== 'splitter') return;
+        var outputs = obj.properties.get('outputConnections') || [];
+        outputs.forEach(function(o) {
+            if (o && o.splitterId) used.push(o.splitterId);
+        });
+    });
+    return used;
+}
+
+function getSplitterRootInputFiber(splitterObj, visited) {
+    if (!splitterObj || !splitterObj.properties) return null;
+    visited = visited || new Set();
+    var myId = getObjectUniqueId(splitterObj);
+    if (visited.has(myId)) return null;
+    visited.add(myId);
+    var input = splitterObj.properties.get('inputFiber');
+    if (input && input.cableId && input.fiberNumber != null) return input;
+    for (var i = 0; i < objects.length; i++) {
+        var o = objects[i];
+        if (!o.properties || o.properties.get('type') !== 'splitter') continue;
+        var outs = o.properties.get('outputConnections') || [];
+        for (var j = 0; j < outs.length; j++) {
+            if (outs[j] && outs[j].splitterId === myId) {
+                var parentInput = getSplitterRootInputFiber(o, visited);
+                if (parentInput) return parentInput;
+            }
+        }
+    }
+    return null;
+}
+
+function getAvailableOnusForSplitterOutput(excludeSplitterId) {
+    var usedOnuIds = getOnuIdsUsedBySplitterOutputs();
+    return objects.filter(function(o) {
+        if (!o.properties || o.properties.get('type') !== 'onu') return false;
+        var uid = getObjectUniqueId(o);
+        return usedOnuIds.indexOf(uid) === -1;
+    });
+}
+
+function getAvailableSplittersForSplitterOutput(sourceSplitterId) {
+    var usedSplitterIds = getSplitterIdsUsedBySplitterOutputs();
+    return objects.filter(function(o) {
+        if (!o.properties || o.properties.get('type') !== 'splitter') return false;
+        var uid = getObjectUniqueId(o);
+        if (uid === sourceSplitterId) return false;
+        if (usedSplitterIds.indexOf(uid) !== -1) return false;
+        var inputFiber = o.properties.get('inputFiber');
+        return !inputFiber;
+    });
+}
+
+function showSplitterOutputOnuDialog(splitterObj, outIdx) {
+    var onus = getAvailableOnusForSplitterOutput();
+    if (onus.length === 0) {
+        showWarning('Нет свободных ONU. Все ONU уже подключены к выходам сплиттеров.', 'Нет ONU');
+        return;
+    }
+    splitterOutputOnuModalData = { splitterObj: splitterObj, outIdx: outIdx, onus: onus };
+    var modal = document.getElementById('splitterOutputOnuModal');
+    var listEl = document.getElementById('splitterOutputOnuList');
+    if (listEl) {
+        listEl.innerHTML = '';
+        onus.forEach(function(onu, idx) {
+            var name = onu.properties.get('name') || ('ONU ' + (idx + 1));
+            var uid = getObjectUniqueId(onu);
+            var div = document.createElement('div');
+            div.className = 'node-list-item';
+            div.style.cssText = 'padding: 10px 12px; margin-bottom: 6px; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; background: var(--bg-tertiary);';
+            div.dataset.index = String(idx);
+            div.innerHTML = '<div class="node-list-item-info"><div class="node-list-item-name">' + escapeHtml(name) + '</div></div>';
+            div.addEventListener('click', function() { selectSplitterOutputOnu(parseInt(this.dataset.index, 10)); });
+            listEl.appendChild(div);
+        });
+    }
+    if (modal) modal.style.display = 'block';
+}
+
+function closeSplitterOutputOnuModal() {
+    var modal = document.getElementById('splitterOutputOnuModal');
+    if (modal) modal.style.display = 'none';
+    splitterOutputOnuModalData = null;
+}
+
+function selectSplitterOutputOnu(onuIndex) {
+    if (!splitterOutputOnuModalData) return;
+    var data = splitterOutputOnuModalData;
+    if (onuIndex < 0 || onuIndex >= data.onus.length) return;
+    var onuObj = data.onus[onuIndex];
+    var onuId = getObjectUniqueId(onuObj);
+    closeSplitterOutputOnuModal();
+    var sp = data.splitterObj;
+    var ratio = parseInt(sp.properties.get('splitRatio'), 10) || 8;
+    var outputs = (sp.properties.get('outputConnections') || []).slice();
+    while (outputs.length < ratio) outputs.push(null);
+    if (outputs.length > ratio) outputs = outputs.slice(0, ratio);
+    outputs[data.outIdx] = { onuId: onuId };
+    sp.properties.set('outputConnections', outputs);
+    saveData();
+    if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
+    updateSplitterOutputConnectionLines();
+    if (currentModalObject && currentModalObject.properties.get('type') === 'splitter') showObjectInfo(currentModalObject);
+}
+
+function showSplitterOutputSplitterDialog(splitterObj, outIdx) {
+    var splitters = getAvailableSplittersForSplitterOutput(getObjectUniqueId(splitterObj));
+    if (splitters.length === 0) {
+        showWarning('Нет свободных сплиттеров. Все сплиттеры уже имеют вход или подключены к выходам.', 'Нет сплиттеров');
+        return;
+    }
+    splitterOutputSplitterModalData = { splitterObj: splitterObj, outIdx: outIdx, splitters: splitters };
+    var modal = document.getElementById('splitterOutputSplitterModal');
+    var listEl = document.getElementById('splitterOutputSplitterList');
+    if (listEl) {
+        listEl.innerHTML = '';
+        splitters.forEach(function(sp, idx) {
+            var name = sp.properties.get('name') || ('Сплиттер ' + (idx + 1));
+            var uid = getObjectUniqueId(sp);
+            var div = document.createElement('div');
+            div.className = 'node-list-item';
+            div.style.cssText = 'padding: 10px 12px; margin-bottom: 6px; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; background: var(--bg-tertiary);';
+            div.dataset.index = String(idx);
+            div.innerHTML = '<div class="node-list-item-info"><div class="node-list-item-name">' + escapeHtml(name) + '</div></div>';
+            div.addEventListener('click', function() { selectSplitterOutputSplitter(parseInt(this.dataset.index, 10)); });
+            listEl.appendChild(div);
+        });
+    }
+    if (modal) modal.style.display = 'block';
+}
+
+function closeSplitterOutputSplitterModal() {
+    var modal = document.getElementById('splitterOutputSplitterModal');
+    if (modal) modal.style.display = 'none';
+    splitterOutputSplitterModalData = null;
+}
+
+function selectSplitterOutputSplitter(splitterIndex) {
+    if (!splitterOutputSplitterModalData) return;
+    var data = splitterOutputSplitterModalData;
+    if (splitterIndex < 0 || splitterIndex >= data.splitters.length) return;
+    var targetSplitter = data.splitters[splitterIndex];
+    var splitterId = getObjectUniqueId(targetSplitter);
+    closeSplitterOutputSplitterModal();
+    var sp = data.splitterObj;
+    var ratio = parseInt(sp.properties.get('splitRatio'), 10) || 8;
+    var outputs = (sp.properties.get('outputConnections') || []).slice();
+    while (outputs.length < ratio) outputs.push(null);
+    if (outputs.length > ratio) outputs = outputs.slice(0, ratio);
+    outputs[data.outIdx] = { splitterId: splitterId };
+    sp.properties.set('outputConnections', outputs);
+    var rootInput = getSplitterRootInputFiber(sp);
+    if (rootInput && rootInput.cableId && rootInput.fiberNumber != null) {
+        targetSplitter.properties.set('inputFiber', { cableId: rootInput.cableId, fiberNumber: rootInput.fiberNumber });
+    }
+    saveData();
+    if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
+    updateSplitterOutputConnectionLines();
+    if (currentModalObject && currentModalObject.properties.get('type') === 'splitter') showObjectInfo(currentModalObject);
+}
+
+function initSplitterOutputOnuModal() {
+    var modal = document.getElementById('splitterOutputOnuModal');
+    if (!modal) return;
+    var closeBtn = modal.querySelector('.close-splitter-output-onu');
+    var cancelBtn = document.getElementById('cancelSplitterOutputOnu');
+    if (closeBtn) closeBtn.addEventListener('click', closeSplitterOutputOnuModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeSplitterOutputOnuModal);
+    modal.addEventListener('click', function(e) { if (e.target === modal) closeSplitterOutputOnuModal(); });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.style.display === 'block') closeSplitterOutputOnuModal();
+    });
+}
+
+function initSplitterOutputSplitterModal() {
+    var modal = document.getElementById('splitterOutputSplitterModal');
+    if (!modal) return;
+    var closeBtn = modal.querySelector('.close-splitter-output-splitter');
+    var cancelBtn = document.getElementById('cancelSplitterOutputSplitter');
+    if (closeBtn) closeBtn.addEventListener('click', closeSplitterOutputSplitterModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeSplitterOutputSplitterModal);
+    modal.addEventListener('click', function(e) { if (e.target === modal) closeSplitterOutputSplitterModal(); });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.style.display === 'block') closeSplitterOutputSplitterModal();
+    });
+}
+
+let oltSelectionModalData = null;
+
+function getAvailableOlts() {
+    return objects.filter(obj =>
+        obj.properties && obj.properties.get('type') === 'olt'
+    );
+}
+
+function showOltSelectionDialog(sleeveObj, cableId, fiberNumber) {
+    const usage = getFiberUsage(cableId, fiberNumber);
+    if (usage.used) {
+        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
+        return;
+    }
+    const olts = getAvailableOlts();
+    if (olts.length === 0) {
+        showWarning('Нет доступных OLT. Сначала создайте OLT на карте.', 'Нет OLT');
+        return;
+    }
+    oltSelectionModalData = { sleeveObj: sleeveObj, cableId: cableId, fiberNumber: fiberNumber, olts: olts };
+    const modal = document.getElementById('oltSelectionModal');
+    const fiberInfo = document.getElementById('oltSelectionFiberInfo');
+    const oltSelect = document.getElementById('oltSelectSelect');
+    const confirmBtn = document.getElementById('confirmOltSelection');
+    if (fiberInfo) fiberInfo.textContent = 'Подключение жилы #' + fiberNumber + ' как приход от кросса к OLT';
+    if (oltSelect) {
+        oltSelect.innerHTML = '<option value="">— выберите OLT</option>';
+        olts.forEach((olt, idx) => {
+            const name = olt.properties.get('name') || ('OLT ' + (idx + 1));
+            const uid = olt.properties.get('uniqueId');
+            oltSelect.innerHTML += '<option value="' + escapeHtml(uid) + '">' + escapeHtml(name) + '</option>';
+        });
+    }
+    if (confirmBtn) confirmBtn.disabled = true;
+    if (modal) modal.style.display = 'block';
+}
+
+function closeOltSelectionModal() {
+    const modal = document.getElementById('oltSelectionModal');
+    if (modal) modal.style.display = 'none';
+    oltSelectionModalData = null;
+}
+
+function connectFiberToOlt(sleeveObj, cableId, fiberNumber, oltObj) {
+    const usage = getFiberUsage(cableId, fiberNumber, { type: 'oltIncoming', oltId: getObjectUniqueId(oltObj) });
+    if (usage.used) {
+        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
+        return;
+    }
+    var prevIncoming = oltObj.properties.get('incomingFiber');
+    var currentPlaceId = sleeveObj.properties.get('uniqueId');
+    if (prevIncoming) {
+        var prevKey = prevIncoming.cableId + '-' + prevIncoming.fiberNumber;
+        var existingPlace = null;
+        objects.forEach(function(slot) {
+            if (!slot.properties) return;
+            var t = slot.properties.get('type');
+            if (t !== 'cross' && t !== 'sleeve') return;
+            var oltConn = slot.properties.get('oltConnections');
+            if (oltConn && oltConn[prevKey] && oltConn[prevKey].incoming && oltConn[prevKey].oltId === getObjectUniqueId(oltObj)) {
+                existingPlace = slot;
+            }
+        });
+        if (existingPlace && getObjectUniqueId(existingPlace) !== currentPlaceId) {
+            var placeName = existingPlace.properties.get('name') || (existingPlace.properties.get('type') === 'cross' ? 'кросс' : 'муфта');
+            showError('Приход для этого OLT уже задан с другого места («' + escapeHtml(placeName) + '»). Подключение приходящей жилы возможно только с одного кросса или муфты.', 'OLT уже подключён');
+            return;
+        }
+    }
+    const oltId = getObjectUniqueId(oltObj);
+    const key = cableId + '-' + fiberNumber;
+    if (prevIncoming) {
+        var prevKey = prevIncoming.cableId + '-' + prevIncoming.fiberNumber;
+        objects.forEach(function(slot) {
+            if (!slot.properties) return;
+            var t = slot.properties.get('type');
+            if (t !== 'cross' && t !== 'sleeve') return;
+            var oltConn = slot.properties.get('oltConnections');
+            if (oltConn && oltConn[prevKey] && oltConn[prevKey].incoming) {
+                delete oltConn[prevKey];
+                slot.properties.set('oltConnections', oltConn);
+            }
+        });
+    }
+    oltObj.properties.set('incomingFiber', { cableId: cableId, fiberNumber: fiberNumber });
+    var oltConnections = sleeveObj.properties.get('oltConnections') || {};
+    oltConnections[key] = { oltId: oltId, incoming: true };
+    sleeveObj.properties.set('oltConnections', oltConnections);
+    createOltConnectionLine(sleeveObj, oltObj, cableId, fiberNumber);
+    saveData();
+    if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
+    showObjectInfo(sleeveObj);
+}
+
+function disconnectFiberFromOlt(sleeveObj, cableId, fiberNumber) {
+    var oltConnections = sleeveObj.properties.get('oltConnections') || {};
+    var key = cableId + '-' + fiberNumber;
+    var conn = oltConnections[key];
+    if (!conn || !conn.oltId) {
+        delete oltConnections[key];
+        sleeveObj.properties.set('oltConnections', oltConnections);
+        saveData();
+        updateOltConnectionLines();
+        showObjectInfo(sleeveObj);
+        return;
+    }
+    var oltObj = objects.find(function(o) { return o.properties && o.properties.get('type') === 'olt' && o.properties.get('uniqueId') === conn.oltId; });
+    if (conn.incoming && oltObj) {
+        oltObj.properties.set('incomingFiber', null);
+    } else if (oltObj && conn.portNumber != null) {
+        var portAssignments = oltObj.properties.get('portAssignments') || {};
+        delete portAssignments[String(conn.portNumber)];
+        oltObj.properties.set('portAssignments', portAssignments);
+    }
+    removeOltConnectionLine(sleeveObj, cableId, fiberNumber);
+    delete oltConnections[key];
+    sleeveObj.properties.set('oltConnections', oltConnections);
+    saveData();
+    if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
+    showObjectInfo(sleeveObj);
+}
+
+function initOltSelectionModal() {
+    const modal = document.getElementById('oltSelectionModal');
+    if (!modal) return;
+    const closeBtn = modal.querySelector('.close-olt-selection');
+    const cancelBtn = document.getElementById('cancelOltSelection');
+    const oltSelect = document.getElementById('oltSelectSelect');
+    const confirmBtn = document.getElementById('confirmOltSelection');
+    if (closeBtn) closeBtn.addEventListener('click', closeOltSelectionModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeOltSelectionModal);
+    modal.addEventListener('click', function(e) { if (e.target === modal) closeOltSelectionModal(); });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.style.display === 'block') closeOltSelectionModal();
+    });
+    if (oltSelect) {
+        oltSelect.addEventListener('change', function() {
+            if (confirmBtn) confirmBtn.disabled = !this.value;
+        });
+    }
+    if (confirmBtn) {
+        confirmBtn.addEventListener('click', function() {
+            if (!oltSelectionModalData) return;
+            const oltVal = oltSelect && oltSelect.value;
+            if (!oltVal) return;
+            const oltObj = objects.find(o => o.properties && o.properties.get('type') === 'olt' && o.properties.get('uniqueId') === oltVal);
+            if (!oltObj) return;
+            const data = oltSelectionModalData;
+            closeOltSelectionModal();
+            connectFiberToOlt(data.sleeveObj, data.cableId, data.fiberNumber, oltObj);
+        });
+    }
+}
+
 function connectFiberToNode(crossObj, cableId, fiberNumber, nodeObj) {
+    const crossId = crossObj.properties.get('uniqueId');
+    const usage = getFiberUsage(cableId, fiberNumber, { type: 'nodeConn', crossId: crossId });
+    if (usage.used) {
+        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
+        return;
+    }
     let nodeConnections = crossObj.properties.get('nodeConnections');
     if (!nodeConnections) {
         nodeConnections = {};
@@ -6752,6 +8327,75 @@ function disconnectFiberFromNode(crossObj, cableId, fiberNumber) {
     saveData();
 
     showObjectInfo(crossObj);
+}
+
+function connectFiberToOnu(sleeveObj, cableId, fiberNumber, onuObj) {
+    const sleeveId = sleeveObj.properties.get('uniqueId');
+    const usage = getFiberUsage(cableId, fiberNumber, { type: 'onuConn', sleeveId: sleeveId });
+    if (usage.used) {
+        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
+        return;
+    }
+    let onuConnections = sleeveObj.properties.get('onuConnections');
+    if (!onuConnections) {
+        onuConnections = {};
+    }
+    const key = cableId + '-' + fiberNumber;
+    const onuUniqueId = onuObj.properties.get('uniqueId') || generateUniqueId('onu');
+    const sleeveUniqueId = sleeveObj.properties.get('uniqueId') || generateUniqueId('cross');
+    if (!onuObj.properties.get('uniqueId')) onuObj.properties.set('uniqueId', onuUniqueId);
+    if (!sleeveObj.properties.get('uniqueId')) sleeveObj.properties.set('uniqueId', sleeveUniqueId);
+    onuConnections[key] = { onuId: onuUniqueId, onuName: onuObj.properties.get('name') || 'ONU' };
+    sleeveObj.properties.set('onuConnections', onuConnections);
+    createOnuConnectionLine(sleeveObj, onuObj, cableId, fiberNumber);
+    saveData();
+    showObjectInfo(sleeveObj);
+}
+
+function disconnectFiberFromOnu(sleeveObj, cableId, fiberNumber) {
+    let onuConnections = sleeveObj.properties.get('onuConnections');
+    if (!onuConnections) return;
+    removeOnuConnectionLine(sleeveObj, cableId, fiberNumber);
+    delete onuConnections[cableId + '-' + fiberNumber];
+    sleeveObj.properties.set('onuConnections', onuConnections);
+    saveData();
+    showObjectInfo(sleeveObj);
+}
+
+function createOnuConnectionLine(sleeveObj, onuObj, cableId, fiberNumber) {
+    const sleeveCoords = sleeveObj.geometry.getCoordinates();
+    const onuCoords = onuObj.geometry.getCoordinates();
+    const sleeveUniqueId = sleeveObj.properties.get('uniqueId');
+    const key = sleeveUniqueId + '-' + cableId + '-' + fiberNumber;
+    removeOnuConnectionLineByKey(key);
+    const onuName = onuObj.properties.get('name') || 'ONU';
+    const line = new ymaps.Polyline([sleeveCoords, onuCoords], {}, {
+        strokeColor: '#a855f7',
+        strokeWidth: 2,
+        strokeStyle: 'shortdash',
+        strokeOpacity: 0.8
+    });
+    line.properties.set('type', 'onuConnectionLine');
+    line.properties.set('connectionKey', key);
+    line.properties.set('sleeveId', sleeveUniqueId);
+    line.properties.set('cableId', cableId);
+    line.properties.set('fiberNumber', fiberNumber);
+    line.properties.set('onuName', onuName);
+    onuConnectionLines.push(line);
+    myMap.geoObjects.add(line);
+}
+
+function removeOnuConnectionLine(sleeveObj, cableId, fiberNumber) {
+    const sleeveUniqueId = sleeveObj.properties.get('uniqueId');
+    removeOnuConnectionLineByKey(sleeveUniqueId + '-' + cableId + '-' + fiberNumber);
+}
+
+function removeOnuConnectionLineByKey(key) {
+    const idx = onuConnectionLines.findIndex(function(l) { return l.properties.get('connectionKey') === key; });
+    if (idx !== -1) {
+        myMap.geoObjects.remove(onuConnectionLines[idx]);
+        onuConnectionLines.splice(idx, 1);
+    }
 }
 
 function createNodeConnectionLine(crossObj, nodeObj, cableId, fiberNumber) {
@@ -6815,6 +8459,199 @@ function removeNodeConnectionLineByKey(key) {
 
 function updateAllConnectionLines() {
     updateAllNodeConnectionLines();
+    updateOnuConnectionLines();
+    updateOltConnectionLines();
+    updateSplitterConnectionLines();
+    updateSplitterOutputConnectionLines();
+}
+
+function createSplitterOutputConnectionLine(splitterObj, targetObj, outIdx) {
+    if (!splitterObj || !targetObj || !splitterObj.geometry || !targetObj.geometry) return;
+    var splitterId = getObjectUniqueId(splitterObj);
+    var key = splitterId + '-out-' + outIdx;
+    var idx = splitterOutputConnectionLines.findIndex(function(l) { return l.properties.get('connectionKey') === key; });
+    if (idx !== -1) {
+        myMap.geoObjects.remove(splitterOutputConnectionLines[idx]);
+        splitterOutputConnectionLines.splice(idx, 1);
+    }
+    var splitterCoords = splitterObj.geometry.getCoordinates();
+    var targetCoords = targetObj.geometry.getCoordinates();
+    var targetType = targetObj.properties ? targetObj.properties.get('type') : '';
+    var line = new ymaps.Polyline([splitterCoords, targetCoords], {}, {
+        strokeColor: targetType === 'onu' ? '#a855f7' : '#f97316',
+        strokeWidth: 2,
+        strokeStyle: 'shortdash',
+        strokeOpacity: 0.8
+    });
+    line.properties.set('type', 'splitterOutputConnectionLine');
+    line.properties.set('connectionKey', key);
+    line.properties.set('splitterId', splitterId);
+    line.properties.set('outputIndex', outIdx);
+    splitterOutputConnectionLines.push(line);
+    myMap.geoObjects.add(line);
+}
+
+function updateSplitterOutputConnectionLines() {
+    splitterOutputConnectionLines.forEach(function(line) { myMap.geoObjects.remove(line); });
+    splitterOutputConnectionLines = [];
+    objects.forEach(function(obj) {
+        if (!obj.properties || obj.properties.get('type') !== 'splitter') return;
+        var outputs = obj.properties.get('outputConnections') || [];
+        for (var oi = 0; oi < outputs.length; oi++) {
+            var out = outputs[oi];
+            if (!out) continue;
+            var target = null;
+            if (out.onuId) {
+                target = objects.find(function(o) { return o.properties && o.properties.get('type') === 'onu' && getObjectUniqueId(o) === out.onuId; });
+            } else if (out.splitterId) {
+                target = objects.find(function(o) { return o.properties && o.properties.get('type') === 'splitter' && getObjectUniqueId(o) === out.splitterId; });
+            }
+            if (target) createSplitterOutputConnectionLine(obj, target, oi);
+        }
+    });
+}
+
+function updateOnuConnectionLines() {
+    onuConnectionLines.forEach(function(line) { myMap.geoObjects.remove(line); });
+    onuConnectionLines = [];
+    objects.forEach(function(obj) {
+        if (!obj.properties) return;
+        const type = obj.properties.get('type');
+        if (type !== 'cross' && type !== 'sleeve') return;
+        const onuConnections = obj.properties.get('onuConnections');
+        if (!onuConnections) return;
+        Object.keys(onuConnections).forEach(function(key) {
+            const conn = onuConnections[key];
+            const parts = key.split('-');
+            const fiberNumberParsed = parseInt(parts.pop(), 10);
+            const cableIdParsed = parts.join('-');
+            if (!crossHasFiberForConnection(obj, cableIdParsed, fiberNumberParsed)) return;
+            const onuObj = objects.find(function(n) {
+                return n.properties && n.properties.get('type') === 'onu' && n.properties.get('uniqueId') === conn.onuId;
+            });
+            if (onuObj) createOnuConnectionLine(obj, onuObj, cableIdParsed, fiberNumberParsed);
+        });
+    });
+}
+
+function createOltConnectionLine(sleeveObj, oltObj, cableId, fiberNumber) {
+    const sleeveCoords = sleeveObj.geometry.getCoordinates();
+    const oltCoords = oltObj.geometry.getCoordinates();
+    const sleeveUniqueId = sleeveObj.properties.get('uniqueId');
+    const key = sleeveUniqueId + '-' + cableId + '-' + fiberNumber;
+    removeOltConnectionLineByKey(key);
+    const oltName = oltObj.properties.get('name') || 'OLT';
+    const line = new ymaps.Polyline([sleeveCoords, oltCoords], {}, {
+        strokeColor: '#0ea5e9',
+        strokeWidth: 2,
+        strokeStyle: 'shortdash',
+        strokeOpacity: 0.8
+    });
+    line.properties.set('type', 'oltConnectionLine');
+    line.properties.set('connectionKey', key);
+    line.properties.set('sleeveId', sleeveUniqueId);
+    line.properties.set('cableId', cableId);
+    line.properties.set('fiberNumber', fiberNumber);
+    line.properties.set('oltName', oltName);
+    oltConnectionLines.push(line);
+    myMap.geoObjects.add(line);
+}
+
+function removeOltConnectionLine(sleeveObj, cableId, fiberNumber) {
+    const sleeveUniqueId = sleeveObj.properties.get('uniqueId');
+    removeOltConnectionLineByKey(sleeveUniqueId + '-' + cableId + '-' + fiberNumber);
+}
+
+function removeOltConnectionLineByKey(key) {
+    const idx = oltConnectionLines.findIndex(function(l) { return l.properties.get('connectionKey') === key; });
+    if (idx !== -1) {
+        myMap.geoObjects.remove(oltConnectionLines[idx]);
+        oltConnectionLines.splice(idx, 1);
+    }
+}
+
+function updateOltConnectionLines() {
+    oltConnectionLines.forEach(function(line) { myMap.geoObjects.remove(line); });
+    oltConnectionLines = [];
+    objects.forEach(function(obj) {
+        if (!obj.properties) return;
+        const type = obj.properties.get('type');
+        if (type !== 'cross' && type !== 'sleeve') return;
+        const oltConnections = obj.properties.get('oltConnections');
+        if (!oltConnections) return;
+        Object.keys(oltConnections).forEach(function(key) {
+            const conn = oltConnections[key];
+            if (!conn || !conn.oltId) return;
+            const parts = key.split('-');
+            const fiberNumberParsed = parseInt(parts.pop(), 10);
+            const cableIdParsed = parts.join('-');
+            if (!crossHasFiberForConnection(obj, cableIdParsed, fiberNumberParsed)) return;
+            const oltObj = objects.find(function(o) {
+                return o.properties && o.properties.get('type') === 'olt' && o.properties.get('uniqueId') === conn.oltId;
+            });
+            if (oltObj) createOltConnectionLine(obj, oltObj, cableIdParsed, fiberNumberParsed);
+        });
+    });
+}
+
+function createSplitterConnectionLine(sleeveObj, splitterObj, cableId, fiberNumber) {
+    const sleeveCoords = sleeveObj.geometry.getCoordinates();
+    const splitterCoords = splitterObj.geometry.getCoordinates();
+    const sleeveUniqueId = sleeveObj.properties.get('uniqueId');
+    const key = sleeveUniqueId + '-' + cableId + '-' + fiberNumber;
+    removeSplitterConnectionLineByKey(key);
+    const splitterName = splitterObj.properties.get('name') || 'Сплиттер';
+    const line = new ymaps.Polyline([sleeveCoords, splitterCoords], {}, {
+        strokeColor: '#f97316',
+        strokeWidth: 2,
+        strokeStyle: 'shortdash',
+        strokeOpacity: 0.8
+    });
+    line.properties.set('type', 'splitterConnectionLine');
+    line.properties.set('connectionKey', key);
+    line.properties.set('sleeveId', sleeveUniqueId);
+    line.properties.set('cableId', cableId);
+    line.properties.set('fiberNumber', fiberNumber);
+    line.properties.set('splitterName', splitterName);
+    splitterConnectionLines.push(line);
+    myMap.geoObjects.add(line);
+}
+
+function removeSplitterConnectionLine(sleeveObj, cableId, fiberNumber) {
+    const sleeveUniqueId = sleeveObj.properties.get('uniqueId');
+    removeSplitterConnectionLineByKey(sleeveUniqueId + '-' + cableId + '-' + fiberNumber);
+}
+
+function removeSplitterConnectionLineByKey(key) {
+    const idx = splitterConnectionLines.findIndex(function(l) { return l.properties.get('connectionKey') === key; });
+    if (idx !== -1) {
+        myMap.geoObjects.remove(splitterConnectionLines[idx]);
+        splitterConnectionLines.splice(idx, 1);
+    }
+}
+
+function updateSplitterConnectionLines() {
+    splitterConnectionLines.forEach(function(line) { myMap.geoObjects.remove(line); });
+    splitterConnectionLines = [];
+    objects.forEach(function(obj) {
+        if (!obj.properties) return;
+        const type = obj.properties.get('type');
+        if (type !== 'cross' && type !== 'sleeve') return;
+        const splitterConnections = obj.properties.get('splitterConnections');
+        if (!splitterConnections) return;
+        Object.keys(splitterConnections).forEach(function(key) {
+            const conn = splitterConnections[key];
+            if (!conn || !conn.splitterId) return;
+            const parts = key.split('-');
+            const fiberNumberParsed = parseInt(parts.pop(), 10);
+            const cableIdParsed = parts.join('-');
+            if (!crossHasFiberForConnection(obj, cableIdParsed, fiberNumberParsed)) return;
+            const splitterObj = objects.find(function(o) {
+                return o.properties && o.properties.get('type') === 'splitter' && o.properties.get('uniqueId') === conn.splitterId;
+            });
+            if (splitterObj) createSplitterConnectionLine(obj, splitterObj, cableIdParsed, fiberNumberParsed);
+        });
+    });
 }
 
 function updateAllNodeConnectionLines() {
@@ -6913,166 +8750,168 @@ function traceFromNode(crossUniqueId, cableId, fiberNumber) {
     showFiberTraceFromCross(crossObj, cableId, fiberNumber, nodeObj);
 }
 
+function traceFromOLTPort(oltObj, portNumber) {
+    const portAssignments = oltObj.properties.get('portAssignments') || {};
+    const ass = portAssignments[String(portNumber)];
+    if (!ass) {
+        showWarning('На этот порт не назначена жила', 'Трассировка');
+        return;
+    }
+    const cable = objects.find(c => c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === ass.cableId);
+    if (!cable) {
+        showError('Кабель не найден', 'Трассировка');
+        return;
+    }
+    const otherEnd = getOtherEndOfCable(cable, oltObj);
+    if (!otherEnd) {
+        showError('Не найден противоположный конец кабеля', 'Трассировка');
+        return;
+    }
+    const oltName = oltObj.properties.get('name') || 'OLT';
+    showFiberTraceFromOLTPort(oltObj, oltName, portNumber, oltObj, ass.cableId, ass.fiberNumber);
+}
+
+function renderOnePathToTraceHtml(path, startStepNumber) {
+    var stepNumber = startStepNumber;
+    var html = '';
+    path.forEach(function(item) {
+        if (item.type === 'start') {
+            var icon = item.objectType === 'cross' ? '📦' : (item.objectType === 'sleeve' ? '🔴' : (item.objectType === 'olt' ? '📶' : (item.objectType === 'onu' ? '📟' : (item.objectType === 'splitter' ? '🔀' : '📍'))));
+            var portBadge = (item.objectType === 'cross' && item.port) ? ' <span style="background: #ede9fe; color: #5b21b6; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">Порт ' + escapeHtml(String(item.port)) + '</span>' : '';
+            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #22c55e; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">' + stepNumber + '</span><div style="margin-left: 12px; padding: 10px 14px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0; flex: 1;"><span style="font-weight: 600; color: #166534;">' + icon + ' ' + escapeHtml(item.objectName) + '</span>' + portBadge + '<span style="color: #6b7280; font-size: 0.8rem;"> (' + getObjectTypeName(item.objectType) + ')</span></div></div>';
+            stepNumber++;
+        } else if (item.type === 'object') {
+            icon = item.objectType === 'cross' ? '📦' : (item.objectType === 'sleeve' ? '🔴' : (item.objectType === 'node' ? '🖥️' : (item.objectType === 'olt' ? '📶' : (item.objectType === 'onu' ? '📟' : (item.objectType === 'splitter' ? '🔀' : '📍')))));
+            portBadge = (item.objectType === 'cross' && item.port) ? ' <span style="background: #ede9fe; color: #5b21b6; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">Порт ' + escapeHtml(String(item.port)) + '</span>' : '';
+            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #8b5cf6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">' + stepNumber + '</span><div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1;"><span style="font-weight: 600; color: #5b21b6;">' + icon + ' ' + escapeHtml(item.objectName) + '</span>' + portBadge + '<span style="color: #6b7280; font-size: 0.8rem;"> (' + getObjectTypeName(item.objectType) + ')</span></div></div>';
+            stepNumber++;
+        } else if (item.type === 'onuConnection') {
+            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #8b5cf6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔌</span><div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1;"><span style="color: #7c3aed;">🔌 Вывод на ONU: Жила ' + item.fiberNumber + ' → ' + escapeHtml(item.onuName) + '</span></div></div>';
+            stepNumber++;
+        } else if (item.type === 'cable') {
+            var cableType = item.cable ? item.cable.properties.get('cableType') : null;
+            var fiberColors = cableType ? getFiberColors(cableType) : [];
+            var fiber = fiberColors.find(function(f) { return f.number === item.fiberNumber; });
+            var fiberColor = fiber ? fiber.color : '#3b82f6';
+            var fiberName = fiber ? fiber.name : '';
+            var fiberTextColor = (fiberColor === '#FFFFFF' || fiberColor === '#FFFACD' || fiberColor === '#FFFF00') ? '#000' : '#fff';
+            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #3b82f6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">➡</span><div style="margin-left: 12px; padding: 10px 14px; background: #eff6ff; border-radius: 6px; border-left: 4px solid ' + fiberColor + '; flex: 1;"><span style="color: #1e40af;">📡 ' + escapeHtml(item.cableName) + '</span><span style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;"><span style="width: 16px; height: 16px; border-radius: 50%; background: ' + fiberColor + '; border: 1px solid #333; display: inline-block;"></span><span style="background: ' + fiberColor + '; color: ' + fiberTextColor + '; padding: 2px 8px; border-radius: 4px; font-weight: 600;">Жила ' + item.fiberNumber + (fiberName ? ': ' + fiberName : '') + '</span></span></div></div>';
+            stepNumber++;
+        } else if (item.type === 'connection') {
+            var fromFiberColors = item.fromCableType ? getFiberColors(item.fromCableType) : [];
+            var toFiberColors = item.toCableType ? getFiberColors(item.toCableType) : [];
+            var fromFiber = fromFiberColors.find(function(f) { return f.number === item.fromFiberNumber; });
+            var toFiber = toFiberColors.find(function(f) { return f.number === item.toFiberNumber; });
+            var fromColor = fromFiber ? fromFiber.color : '#f59e0b';
+            var toColor = toFiber ? toFiber.color : '#f59e0b';
+            var fromTextColor = (fromColor === '#FFFFFF' || fromColor === '#FFFACD' || fromColor === '#FFFF00') ? '#000' : '#fff';
+            var toTextColor = (toColor === '#FFFFFF' || toColor === '#FFFACD' || toColor === '#FFFF00') ? '#000' : '#fff';
+            var fromFiberName = fromFiber ? fromFiber.name : '';
+            var toFiberName = toFiber ? toFiber.name : '';
+            var fromLabelText = item.fromLabel ? ' [' + escapeHtml(item.fromLabel) + ']' : '';
+            var toLabelText = item.toLabel ? ' [' + escapeHtml(item.toLabel) + ']' : '';
+            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #f59e0b; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">⚡</span><div style="margin-left: 12px; padding: 10px 14px; background: #fffbeb; border-radius: 6px; border: 1px solid #fde68a; flex: 1;"><div style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px;"><span style="color: #92400e;">🔗 Соединение:</span><span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 14px; height: 14px; border-radius: 50%; background: ' + fromColor + '; border: 1px solid #333;"></span><span style="background: ' + fromColor + '; color: ' + fromTextColor + '; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.8rem;">Ж' + item.fromFiberNumber + (fromFiberName ? ' (' + fromFiberName + ')' : '') + '</span></span>' + (fromLabelText ? '<span style="color: #8b5cf6; font-weight: 500; font-size: 0.8rem;">' + fromLabelText + '</span>' : '') + '<span style="font-size: 1rem;">→</span><span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 14px; height: 14px; border-radius: 50%; background: ' + toColor + '; border: 1px solid #333;"></span><span style="background: ' + toColor + '; color: ' + toTextColor + '; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.8rem;">Ж' + item.toFiberNumber + (toFiberName ? ' (' + toFiberName + ')' : '') + '</span></span>' + (toLabelText ? '<span style="color: #8b5cf6; font-weight: 500; font-size: 0.8rem;">' + toLabelText + '</span>' : '') + '</div></div></div>';
+            stepNumber++;
+        } else if (item.type === 'nodeConnection') {
+            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #8b5cf6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔌</span><div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1;"><span style="color: #7c3aed;">🔌 Вывод на узел: Жила ' + item.fiberNumber + ' → ' + escapeHtml(item.nodeName) + '</span></div></div>';
+            stepNumber++;
+        } else if (item.type === 'splitterConnection') {
+            var spName = item.splitter && item.splitter.properties ? (item.splitter.properties.get('name') || 'Сплиттер') : 'Сплиттер';
+            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #f59e0b; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔀</span><div style="margin-left: 12px; padding: 10px 14px; background: #fffbeb; border-radius: 6px; border-left: 4px solid #f59e0b; flex: 1;"><span style="color: #92400e; font-weight: 600;">→ Жила идёт на сплиттер «' + escapeHtml(spName) + '»</span><span style="color: #78716c; font-size: 0.8rem; margin-left: 6px;">(жила ' + item.fiberNumber + ')</span></div></div>';
+            stepNumber++;
+        } else if (item.type === 'splitterOutputToOnu') {
+            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #a855f7; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">📡</span><div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1;"><span style="color: #7c3aed;">🔀 Выход сплиттера → ONU ' + escapeHtml(item.onuName || 'ONU') + '</span></div></div>';
+            stepNumber++;
+        } else if (item.type === 'splitterOutputToSplitter') {
+            var toName = item.toSplitter && item.toSplitter.properties ? item.toSplitter.properties.get('name') || 'Сплиттер' : 'Сплиттер';
+            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #f97316; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔀</span><div style="margin-left: 12px; padding: 10px 14px; background: #fff7ed; border-radius: 6px; border: 1px solid #fed7aa; flex: 1;"><span style="color: #c2410c;">🔀 Выход сплиттера → ' + escapeHtml(toName) + '</span></div></div>';
+            stepNumber++;
+        }
+    });
+    var cablesCount = path.filter(function(p) { return p.type === 'cable'; }).length;
+    var connectionsCount = path.filter(function(p) { return p.type === 'connection'; }).length;
+    var oltCount = path.filter(function(p) { return p.type === 'object' && p.objectType === 'olt'; }).length;
+    var splitterCount = path.filter(function(p) { return p.type === 'object' && p.objectType === 'splitter'; }).length;
+    var onuCount = path.filter(function(p) { return p.type === 'object' && p.objectType === 'onu'; }).length;
+    html += '<div style="margin-top: 8px; font-size: 0.8rem; color: var(--text-secondary);">📡 Кабелей: ' + cablesCount + ', 🔗 соединений: ' + connectionsCount + (oltCount + splitterCount + onuCount > 0 ? ', 📶 OLT: ' + oltCount + ', 🔀 Сплиттеров: ' + splitterCount + ', 📟 ONU: ' + onuCount : '') + '</div>';
+    return { html: html, nextStepNumber: stepNumber };
+}
+
+function showFiberTraceFromOLTPort(oltObj, oltName, portNumber, startObj, cableId, fiberNumber) {
+    const res = traceAllFiberPathsFromObject(startObj, cableId, fiberNumber);
+    if (res.error) {
+        showError('Ошибка трассировки: ' + res.error, 'Трассировка');
+        return;
+    }
+    if (!res.paths.length) {
+        showWarning('Путь не найден', 'Трассировка');
+        return;
+    }
+    const modal = document.getElementById('infoModal');
+    const title = document.getElementById('modalTitle');
+    const content = document.getElementById('modalInfo');
+    if (!modal || !content) return;
+    title.textContent = 'Трассировка от OLT, порт ' + portNumber;
+    var header = '<div class="trace-path" style="padding: 10px;"><h4 style="margin: 0 0 12px 0; color: #0ea5e9; font-size: 1rem; font-weight: 600;">Трасса от OLT</h4><div style="display: flex; align-items: center; margin-bottom: 12px; padding: 10px 14px; background: #e0f2fe; border-radius: 6px; border: 1px solid #7dd3fc;"><span style="font-weight: 600; color: #0369a1;">OLT: ' + escapeHtml(oltName) + ', порт ' + portNumber + '</span></div>';
+    if (res.paths.length > 1) {
+        var stepNum = 1;
+        for (var pi = 0; pi < res.paths.length; pi++) {
+            if (pi > 0) header += '<div style="margin: 12px 0 8px 0; padding: 6px 12px; background: var(--bg-tertiary); border-radius: 4px; font-size: 0.8rem; color: var(--text-secondary); font-weight: 600;">—— Ветвь ' + (pi + 1) + ' ——</div>';
+            var pathHtml = renderOnePathToTraceHtml(res.paths[pi], stepNum);
+            header += pathHtml.html;
+            stepNum = pathHtml.nextStepNumber;
+        }
+        header += '</div>';
+    } else {
+        showFiberTraceFromCross(startObj, cableId, fiberNumber, null);
+        var wrap = content.querySelector('.trace-path');
+        if (wrap) wrap.insertAdjacentHTML('afterbegin', header);
+        return;
+    }
+    content.innerHTML = header;
+    modal.style.display = 'block';
+}
+
 function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeObj = null) {
-    const result = traceFiberPathFromObject(startCrossObj, cableId, fiberNumber);
+    var res = traceAllFiberPathsFromObject(startCrossObj, cableId, fiberNumber);
     
-    if (result.error) {
-        showError(`Ошибка трассировки: ${result.error}`, 'Трассировка');
+    if (res.error) {
+        showError('Ошибка трассировки: ' + res.error, 'Трассировка');
         return;
     }
     
-    if (result.path.length === 0) {
+    if (!res.paths || res.paths.length === 0) {
         showWarning('Путь не найден', 'Трассировка');
         return;
     }
 
-    const modal = document.getElementById('infoModal');
-    const title = document.getElementById('modalTitle');
-    const content = document.getElementById('modalInfo');
+    var modal = document.getElementById('infoModal');
+    var title = document.getElementById('modalTitle');
+    var content = document.getElementById('modalInfo');
     
-    title.textContent = `🔍 Трассировка жилы ${fiberNumber}`;
+    title.textContent = '🔍 Трассировка жилы ' + fiberNumber;
     
-    let html = '<div class="trace-path" style="padding: 10px;">';
-    html += '<h4 style="margin: 0 0 16px 0; color: #1e40af; font-size: 1rem; font-weight: 600;">📍 Путь жилы:</h4>';
-
-    let stepNumber = 1;
+    var header = '<div class="trace-path" style="padding: 10px;"><h4 style="margin: 0 0 16px 0; color: #1e40af; font-size: 1rem; font-weight: 600;">📍 Трасса жилы по всей линии</h4>';
     if (startNodeObj) {
-        const nodeName = startNodeObj.properties.get('name') || 'Узел сети';
-        html += `<div style="display: flex; align-items: center; margin-bottom: 8px;">
-            <span style="width: 32px; height: 32px; background: #22c55e; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🖥️</span>
-            <div style="margin-left: 12px; padding: 10px 14px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0; flex: 1;">
-                <span style="font-weight: 600; color: #166534;">🖥️ ${escapeHtml(nodeName)}</span>
-                <span style="color: #6b7280; font-size: 0.8rem;"> (Узел сети - начало трассы)</span>
-            </div>
-        </div>`;
-
-        html += `<div style="display: flex; align-items: center; margin-bottom: 8px;">
-            <span style="width: 32px; height: 32px; background: #8b5cf6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔌</span>
-            <div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1;">
-                <span style="color: #7c3aed;">Подключение к кроссу через жилу ${fiberNumber}</span>
-            </div>
-        </div>`;
-        stepNumber++;
+        var nodeName = startNodeObj.properties.get('name') || 'Узел сети';
+        header += '<div style="display: flex; align-items: center; margin-bottom: 8px; padding: 10px 14px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0;"><span style="font-weight: 600; color: #166534;">🖥️ ' + escapeHtml(nodeName) + '</span><span style="color: #6b7280; font-size: 0.8rem; margin-left: 8px;">(Узел сети — начало)</span></div>';
+        header += '<div style="display: flex; align-items: center; margin-bottom: 12px; padding: 8px 12px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe;"><span style="color: #7c3aed;">🔌 Подключение к кроссу через жилу ' + fiberNumber + '</span></div>';
     }
-    
-    result.path.forEach((item, index) => {
-        if (item.type === 'start') {
-            const icon = item.objectType === 'cross' ? '📦' : (item.objectType === 'sleeve' ? '🔴' : '📍');
-            const portBadge = (item.objectType === 'cross' && item.port) ? ` <span style="background: #ede9fe; color: #5b21b6; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">Порт ${escapeHtml(String(item.port))}</span>` : '';
-            html += `<div style="display: flex; align-items: center; margin-bottom: 8px;">
-                <span style="width: 32px; height: 32px; background: #22c55e; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">${stepNumber}</span>
-                <div style="margin-left: 12px; padding: 10px 14px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0; flex: 1;">
-                    <span style="font-weight: 600; color: #166534;">${icon} ${escapeHtml(item.objectName)}</span>${portBadge}
-                    <span style="color: #6b7280; font-size: 0.8rem;"> (${getObjectTypeName(item.objectType)})</span>
-                </div>
-            </div>`;
-            stepNumber++;
-        } else if (item.type === 'object') {
-            const icon = item.objectType === 'cross' ? '📦' : (item.objectType === 'sleeve' ? '🔴' : (item.objectType === 'node' ? '🖥️' : '📍'));
-            const portBadge = (item.objectType === 'cross' && item.port) ? ` <span style="background: #ede9fe; color: #5b21b6; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">Порт ${escapeHtml(String(item.port))}</span>` : '';
-            html += `<div style="display: flex; align-items: center; margin-bottom: 8px;">
-                <span style="width: 32px; height: 32px; background: #8b5cf6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">${stepNumber}</span>
-                <div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1;">
-                    <span style="font-weight: 600; color: #5b21b6;">${icon} ${escapeHtml(item.objectName)}</span>${portBadge}
-                    <span style="color: #6b7280; font-size: 0.8rem;"> (${getObjectTypeName(item.objectType)})</span>
-                </div>
-            </div>`;
-            stepNumber++;
-        } else if (item.type === 'cable') {
-            
-            const cableType = item.cable ? item.cable.properties.get('cableType') : null;
-            const fiberColors = cableType ? getFiberColors(cableType) : [];
-            const fiber = fiberColors.find(f => f.number === item.fiberNumber);
-            const fiberColor = fiber ? fiber.color : '#3b82f6';
-            const fiberName = fiber ? fiber.name : '';
-            const fiberTextColor = (fiberColor === '#FFFFFF' || fiberColor === '#FFFACD' || fiberColor === '#FFFF00') ? '#000' : '#fff';
-            
-            html += `<div style="display: flex; align-items: center; margin-bottom: 8px;">
-                <span style="width: 32px; height: 32px; background: #3b82f6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">➡</span>
-                <div style="margin-left: 12px; padding: 10px 14px; background: #eff6ff; border-radius: 6px; border-left: 4px solid ${fiberColor}; flex: 1;">
-                    <span style="color: #1e40af;">📡 ${escapeHtml(item.cableName)}</span>
-                    <span style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;">
-                        <span style="width: 16px; height: 16px; border-radius: 50%; background: ${fiberColor}; border: 1px solid #333; display: inline-block;"></span>
-                        <span style="background: ${fiberColor}; color: ${fiberTextColor}; padding: 2px 8px; border-radius: 4px; font-weight: 600;">Жила ${item.fiberNumber}${fiberName ? ': ' + fiberName : ''}</span>
-                    </span>
-                </div>
-            </div>`;
-        } else if (item.type === 'connection') {
-            
-            const fromFiberColors = item.fromCableType ? getFiberColors(item.fromCableType) : [];
-            const toFiberColors = item.toCableType ? getFiberColors(item.toCableType) : [];
-            const fromFiber = fromFiberColors.find(f => f.number === item.fromFiberNumber);
-            const toFiber = toFiberColors.find(f => f.number === item.toFiberNumber);
-            const fromColor = fromFiber ? fromFiber.color : '#f59e0b';
-            const toColor = toFiber ? toFiber.color : '#f59e0b';
-            const fromTextColor = (fromColor === '#FFFFFF' || fromColor === '#FFFACD' || fromColor === '#FFFF00') ? '#000' : '#fff';
-            const toTextColor = (toColor === '#FFFFFF' || toColor === '#FFFACD' || toColor === '#FFFF00') ? '#000' : '#fff';
-            const fromFiberName = fromFiber ? fromFiber.name : '';
-            const toFiberName = toFiber ? toFiber.name : '';
-            const fromLabelText = item.fromLabel ? ` [${escapeHtml(item.fromLabel)}]` : '';
-            const toLabelText = item.toLabel ? ` [${escapeHtml(item.toLabel)}]` : '';
-            
-            html += `<div style="display: flex; align-items: center; margin-bottom: 8px;">
-                <span style="width: 32px; height: 32px; background: #f59e0b; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">⚡</span>
-                <div style="margin-left: 12px; padding: 10px 14px; background: #fffbeb; border-radius: 6px; border: 1px solid #fde68a; flex: 1;">
-                    <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px;">
-                        <span style="color: #92400e;">🔗 Соединение:</span>
-                        <span style="display: inline-flex; align-items: center; gap: 4px;">
-                            <span style="width: 14px; height: 14px; border-radius: 50%; background: ${fromColor}; border: 1px solid #333;"></span>
-                            <span style="background: ${fromColor}; color: ${fromTextColor}; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.8rem;">Ж${item.fromFiberNumber}${fromFiberName ? ' (' + fromFiberName + ')' : ''}</span>
-                        </span>
-                        ${fromLabelText ? `<span style="color: #8b5cf6; font-weight: 500; font-size: 0.8rem;">${fromLabelText}</span>` : ''}
-                        <span style="font-size: 1rem;">→</span>
-                        <span style="display: inline-flex; align-items: center; gap: 4px;">
-                            <span style="width: 14px; height: 14px; border-radius: 50%; background: ${toColor}; border: 1px solid #333;"></span>
-                            <span style="background: ${toColor}; color: ${toTextColor}; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.8rem;">Ж${item.toFiberNumber}${toFiberName ? ' (' + toFiberName + ')' : ''}</span>
-                        </span>
-                        ${toLabelText ? `<span style="color: #8b5cf6; font-weight: 500; font-size: 0.8rem;">${toLabelText}</span>` : ''}
-                    </div>
-                </div>
-            </div>`;
-        } else if (item.type === 'nodeConnection') {
-            html += `<div style="display: flex; align-items: center; margin-bottom: 8px;">
-                <span style="width: 32px; height: 32px; background: #8b5cf6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔌</span>
-                <div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1;">
-                    <span style="color: #7c3aed;">🔌 Вывод на узел: Жила ${item.fiberNumber} → ${escapeHtml(item.nodeName)}</span>
-                </div>
-            </div>`;
-        } else if (item.type === 'object') {
-            const bgColor = item.objectType === 'sleeve' ? '#fef2f2' : (item.objectType === 'cross' ? '#f5f3ff' : (item.objectType === 'node' ? '#f0fdf4' : '#f8fafc'));
-            const borderColor = item.objectType === 'sleeve' ? '#fecaca' : (item.objectType === 'cross' ? '#ddd6fe' : (item.objectType === 'node' ? '#bbf7d0' : '#e2e8f0'));
-            const textColor = item.objectType === 'sleeve' ? '#dc2626' : (item.objectType === 'cross' ? '#7c3aed' : (item.objectType === 'node' ? '#166534' : '#475569'));
-            const icon = item.objectType === 'sleeve' ? '🔴' : (item.objectType === 'cross' ? '📦' : (item.objectType === 'node' ? '🖥️' : '📍'));
-            
-            html += `<div style="display: flex; align-items: center; margin-bottom: 8px;">
-                <span style="width: 32px; height: 32px; background: ${textColor}; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">${stepNumber}</span>
-                <div style="margin-left: 12px; padding: 10px 14px; background: ${bgColor}; border-radius: 6px; border: 1px solid ${borderColor}; flex: 1;">
-                    <span style="font-weight: 600; color: ${textColor};">${icon} ${escapeHtml(item.objectName)}</span>
-                    <span style="color: #6b7280; font-size: 0.8rem;"> (${getObjectTypeName(item.objectType)})</span>
-                </div>
-            </div>`;
-            stepNumber++;
+    if (res.paths.length > 1) {
+        var stepNum = 1;
+        for (var pi = 0; pi < res.paths.length; pi++) {
+            if (pi > 0) header += '<div style="margin: 12px 0 8px 0; padding: 6px 12px; background: var(--bg-tertiary); border-radius: 4px; font-size: 0.8rem; color: var(--text-secondary); font-weight: 600;">—— Ветвь ' + (pi + 1) + ' ——</div>';
+            var pathHtml = renderOnePathToTraceHtml(res.paths[pi], stepNum);
+            header += pathHtml.html;
+            stepNum = pathHtml.nextStepNumber;
         }
-    });
+    } else {
+        var pathHtml = renderOnePathToTraceHtml(res.paths[0], 1);
+        header += pathHtml.html;
+    }
+    header += '</div>';
     
-    html += '</div>';
-
-    const sleevesCount = result.path.filter(p => p.type === 'object' && p.objectType === 'sleeve').length;
-    const crossesCount = result.path.filter(p => p.type === 'object' && p.objectType === 'cross').length;
-    const cablesCount = result.path.filter(p => p.type === 'cable').length;
-    const connectionsCount = result.path.filter(p => p.type === 'connection').length;
-    
-    html += `<div style="margin-top: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">
-        <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">📊 Статистика трассы:</div>
-        <div style="display: flex; flex-wrap: wrap; gap: 12px; font-size: 0.875rem; color: var(--text-secondary);">
-            <span>📡 Кабелей: ${cablesCount}</span>
-            <span>🔴 Муфт: ${sleevesCount}</span>
-            <span>📦 Кроссов: ${crossesCount}</span>
-            <span>🔗 Соединений: ${connectionsCount}</span>
-        </div>
-    </div>`;
-    
-    content.innerHTML = html;
+    content.innerHTML = header;
     modal.style.display = 'block';
 }
 
@@ -7150,7 +8989,48 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
     if (toObj) {
         removeCableFromUsedFibers(toObj, cableUniqueId);
     }
-    
+    objects.forEach(function(slot) {
+        if (!slot.properties) return;
+        var t = slot.properties.get('type');
+        if (t === 'cross' || t === 'sleeve') {
+            var oltConn = slot.properties.get('oltConnections');
+            var onuConn = slot.properties.get('onuConnections');
+            var changed = false;
+            if (oltConn) {
+                Object.keys(oltConn).forEach(function(key) {
+                    if (key.indexOf(cableUniqueId + '-') === 0) {
+                        delete oltConn[key];
+                        changed = true;
+                    }
+                });
+            }
+            if (onuConn) {
+                Object.keys(onuConn).forEach(function(key) {
+                    if (key.indexOf(cableUniqueId + '-') === 0) {
+                        delete onuConn[key];
+                        changed = true;
+                    }
+                });
+            }
+            if (changed) {
+                if (oltConn) slot.properties.set('oltConnections', oltConn);
+                if (onuConn) slot.properties.set('onuConnections', onuConn);
+            }
+        }
+        if (t === 'olt') {
+            var portAssignments = slot.properties.get('portAssignments') || {};
+            var paChanged = false;
+            Object.keys(portAssignments).forEach(function(portKey) {
+                var a = portAssignments[portKey];
+                if (a && a.cableId === cableUniqueId) {
+                    delete portAssignments[portKey];
+                    paChanged = true;
+                }
+            });
+            if (paChanged) slot.properties.set('portAssignments', portAssignments);
+        }
+    });
+
     myMap.geoObjects.remove(cable);
     objects = objects.filter(o => o !== cable);
     
@@ -7168,6 +9048,7 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
     }
 
     updateCableVisualization();
+    updateAllConnectionLines();
 
     const modal = document.getElementById('infoModal');
     if (modal && currentModalObject === cable) {
@@ -7264,6 +9145,18 @@ function getConnectedCables(obj) {
         cable.properties.get('type') === 'cable' &&
         (cable.properties.get('from') === obj || cable.properties.get('to') === obj)
     );
+}
+
+function getOtherEndOfCable(cable, oneEnd) {
+    if (!cable || !oneEnd) return null;
+    const fromObj = cable.properties.get('from');
+    const toObj = cable.properties.get('to');
+    if (fromObj === oneEnd) return toObj;
+    if (toObj === oneEnd) return fromObj;
+    const oneId = getObjectUniqueId(oneEnd);
+    if (fromObj && getObjectUniqueId(fromObj) === oneId) return toObj;
+    if (toObj && getObjectUniqueId(toObj) === oneId) return fromObj;
+    return null;
 }
 
 function crossHasFiberForConnection(crossObj, cableId, fiberNumber) {
@@ -7749,13 +9642,19 @@ function getMapFilterState() {
     var sleeveEl = document.getElementById('mapFilterSleeve');
     var supportEl = document.getElementById('mapFilterSupport');
     var attachmentEl = document.getElementById('mapFilterAttachment');
+    var oltEl = document.getElementById('mapFilterOlt');
+    var splitterEl = document.getElementById('mapFilterSplitter');
+    var onuEl = document.getElementById('mapFilterOnu');
     return {
         node: nodeEl ? nodeEl.checked : true,
         nodeAggregationOnly: nodeAggEl ? nodeAggEl.checked : false,
         cross: crossEl ? crossEl.checked : true,
         sleeve: sleeveEl ? sleeveEl.checked : true,
         support: supportEl ? supportEl.checked : true,
-        attachment: attachmentEl ? attachmentEl.checked : true
+        attachment: attachmentEl ? attachmentEl.checked : true,
+        olt: oltEl ? oltEl.checked : true,
+        splitter: splitterEl ? splitterEl.checked : true,
+        onu: onuEl ? onuEl.checked : true
     };
 }
 
@@ -7772,6 +9671,7 @@ function applyMapFilter() {
             if (filter.nodeAggregationOnly) return obj.properties.get('nodeKind') === 'aggregation';
             return true;
         }
+        if (type === 'olt' || type === 'splitter' || type === 'onu') return filter[type] !== false;
         return filter[type] === true;
     }
     var visibleCables = new Set();
@@ -7797,7 +9697,7 @@ function applyMapFilter() {
             var cables = obj.properties.get('cables');
             visible = Array.isArray(cables) && cables.some(function(c) { return visibleCables.has(c); });
         } else {
-            visible = filter[type] === true;
+            visible = filter[type] === true || (['olt', 'splitter', 'onu'].indexOf(type) !== -1 && filter[type] !== false);
         }
         try {
             if (obj.options) obj.options.set('visible', visible);
@@ -7911,6 +9811,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         sleeveObj.properties.set('nodeConnections', nodeConnections);
     }
     const oltConnections = sleeveObj.properties.get('oltConnections') || {};
+    const onuConnections = sleeveObj.properties.get('onuConnections') || {};
     const crossPorts = isCross ? (sleeveObj.properties.get('crossPorts') || 24) : 24;
     let fiberPorts = isCross ? sleeveObj.properties.get('fiberPorts') : null;
     if (isCross && !fiberPorts) {
@@ -7933,6 +9834,8 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         const fromObj = cable.properties.get('from');
         const toObj = cable.properties.get('to');
         const isFromSleeve = fromObj === sleeveObj;
+        const otherEnd = getOtherEndOfCable(cable, sleeveObj);
+        const isFromOlt = otherEnd && otherEnd.properties && otherEnd.properties.get('type') === 'olt';
         
         return {
             cable,
@@ -7943,7 +9846,8 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             fibers,
             usedFibers,
             index: index + 1,
-            isFromSleeve
+            isFromSleeve,
+            isFromOlt
         };
     });
     
@@ -8116,7 +10020,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     }
     html += '</div>';
 
-    function buildFiberCell(cableData, fiber, sleeveObj, isCross, isEditMode, fiberLabels, fiberConnections, nodeConnections, oltConnections, fiberPorts, crossPorts) {
+    function buildFiberCell(cableData, fiber, sleeveObj, isCross, isEditMode, fiberLabels, fiberConnections, nodeConnections, oltConnections, onuConnections, fiberPorts, crossPorts) {
         const isUsed = cableData.usedFibers.includes(fiber.number);
         const fiberLabelKey = `${cableData.cableUniqueId}-${fiber.number}`;
         const directLabel = fiberLabels[fiberLabelKey] || '';
@@ -8128,12 +10032,23 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             (conn.to.cableId === cableData.cableUniqueId && conn.to.fiberNumber === fiber.number)
         );
         const nodeConnection = nodeConnections[fiberLabelKey];
+        const oltConnection = oltConnections[fiberLabelKey];
+        const onuConnection = onuConnections[fiberLabelKey];
         const hasNodeConnection = !!nodeConnection;
-        const hasAnyOutConnection = hasNodeConnection;
+        const hasOltConnection = !!oltConnection;
+        const hasOnuConnection = !!onuConnection;
+        const hasAnyOutConnection = hasNodeConnection || hasOltConnection || hasOnuConnection;
+        const canConnectToOnu = isFiberConnectedToOlt(sleeveObj, cableData.cableUniqueId, fiber.number);
         const fiberTextColor = (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00') ? '#000' : '#fff';
-        const statusText = isUsed ? '(исп.)' : (hasNodeConnection ? '(на узел)' : '(своб.)');
-        const statusColor = isUsed ? '#b91c1c' : (hasNodeConnection ? '#22c55e' : '#22c55e');
-        const itemBorder = isUsed ? '#dc2626' : (hasNodeConnection ? '#22c55e' : 'var(--border-color)');
+        let statusText = isUsed ? '(исп.)' : (hasNodeConnection ? '(на узел)' : (hasOnuConnection ? '(на ONU)' : (hasOltConnection ? '(от OLT)' : '(своб.)')));
+        if (hasOltConnection && oltConnection.oltId) {
+            const oltObj = objects.find(o => o.properties && o.properties.get('type') === 'olt' && o.properties.get('uniqueId') === oltConnection.oltId);
+            const oltName = oltObj ? (oltObj.properties.get('name') || 'OLT') : 'OLT';
+            statusText = oltConnection.incoming ? ('приход OLT ' + escapeHtml(oltName)) : ('OLT ' + escapeHtml(oltName) + ', порт ' + (oltConnection.portNumber || '?'));
+        }
+        if (hasOnuConnection) statusText = '→ ONU ' + escapeHtml(onuConnection.onuName || 'ONU');
+        const statusColor = isUsed ? '#b91c1c' : (hasNodeConnection ? '#22c55e' : (hasOnuConnection ? '#a855f7' : (hasOltConnection ? '#0ea5e9' : '#22c55e')));
+        const itemBorder = isUsed ? '#dc2626' : (hasNodeConnection ? '#22c55e' : (hasOnuConnection ? '#a855f7' : (hasOltConnection ? '#0ea5e9' : 'var(--border-color)')));
         const usedClass = isUsed ? ' fiber-used cross-fiber-used' : '';
         var cellTitle = '';
         if (isEditMode && !hasAnyOutConnection && !isConnected) cellTitle = 'Клик: выбрать жилу, затем клик по жиле в другом кабеле — создать соединение';
@@ -8159,8 +10074,11 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
                     <span style="font-size: 0.7rem; color: ${statusColor}; font-weight: 600; white-space: nowrap;">${statusText}</span>
                 </div>
                 ${portRow}
-                ${hasNodeConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #f0fdf4; border-radius: 3px; font-size: 0.75rem;"><span style="color: #166534;">🖥️ → ${nodeConnection.nodeName}</span>${isEditMode ? `<button class="btn-disconnect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от узла" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
-                ${!hasAnyOutConnection && !isConnected && isEditMode && isCross ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;"><button class="btn-connect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к узлу" style="padding: 4px 6px; background: #22c55e; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🖥️ Узел</button></div>` : ''}
+                ${hasNodeConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #f0fdf4; border-radius: 3px; font-size: 0.75rem;"><span style="color: #166534;">🖥️ → ${escapeHtml(nodeConnection.nodeName)}</span>${isEditMode ? `<button class="btn-disconnect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от узла" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
+                ${hasOnuConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #f5f3ff; border-radius: 3px; font-size: 0.75rem;"><span style="color: #6d28d9;">📡 → ${escapeHtml(onuConnection.onuName || 'ONU')}</span>${isEditMode ? `<button class="btn-disconnect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от ONU" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
+                ${hasOltConnection && oltConnection.oltId ? (function() { const o = objects.find(obj => obj.properties && obj.properties.get('type') === 'olt' && obj.properties.get('uniqueId') === oltConnection.oltId); const n = o ? (o.properties.get('name') || 'OLT') : 'OLT'; const label = oltConnection.incoming ? ('приход OLT ' + escapeHtml(n)) : ('OLT ' + escapeHtml(n) + ', порт ' + (oltConnection.portNumber || '?')); return `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #e0f2fe; border-radius: 3px; font-size: 0.75rem;"><span style="color: #0369a1;">📶 ${label}</span>${isEditMode ? `<button class="btn-disconnect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от OLT" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>`; }()) : ''}
+                ${((!hasAnyOutConnection || hasOltConnection) && !isConnected && isEditMode && isCross) ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;">${!hasNodeConnection ? `<button class="btn-connect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к узлу" style="padding: 4px 6px; background: #22c55e; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🖥️ Узел</button>` : ''}${!hasOltConnection ? `<button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 OLT</button>` : ''}${canConnectToOnu ? `<button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}</div>` : ''}
+                ${((!hasAnyOutConnection || hasOltConnection) && !isConnected && isEditMode && !isCross) ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;">${!hasOltConnection ? `<button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 OLT</button>` : ''}${(cableData.isFromOlt || hasOltConnection) ? `<button class="btn-connect-splitter" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к входу сплиттера" style="padding: 4px 6px; background: #f97316; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🔀 Сплиттер</button>` : ''}${canConnectToOnu ? `<button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}</div>` : ''}
                 ${isEditMode ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px;"><input type="text" class="fiber-label-input" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" value="${directLabel}" placeholder="${isInheritedLabel ? '← ' + displayLabel : 'Подпись...'}" style="flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid ${isInheritedLabel ? '#8b5cf6' : '#ced4da'}; border-radius: 3px; font-size: 0.7rem; ${isInheritedLabel ? 'background: #f5f3ff;' : ''}">${isInheritedLabel ? '<span style="font-size: 0.65rem; color: #8b5cf6;">⬅️</span>' : ''}</div>` : (displayLabel ? `<div style="margin-left: 30px; font-size: 0.7rem; color: ${isInheritedLabel ? '#8b5cf6' : '#6366f1'}; overflow: hidden; text-overflow: ellipsis;">${isInheritedLabel ? '⬅️ ' : '📝 '}${displayLabel}</div>` : '')}
             </div>`;
     }
@@ -8187,7 +10105,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             const fiber = cableData.fibers[row];
             html += '<td>';
             if (fiber) {
-                html += buildFiberCell(cableData, fiber, sleeveObj, isCross, isEditMode, fiberLabels, fiberConnections, nodeConnections, oltConnections, fiberPorts, crossPorts);
+                html += buildFiberCell(cableData, fiber, sleeveObj, isCross, isEditMode, fiberLabels, fiberConnections, nodeConnections, oltConnections, onuConnections, fiberPorts, crossPorts);
             } else {
                 html += '<div class="cross-fiber-empty">—</div>';
             }
