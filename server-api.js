@@ -264,6 +264,41 @@ app.post('/api/settings', (req, res) => {
     }
 });
 
+app.get('/api/backups', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    try {
+        const list = db.listBackups();
+        res.json({ backups: list });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/backups/restore', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (user.role !== 'admin') return res.status(403).json({ error: 'Только для администратора' });
+    const filename = req.body && req.body.filename;
+    if (!filename || typeof filename !== 'string') return res.status(400).json({ error: 'Укажите filename' });
+    try {
+        db.restoreFromBackup(filename.trim());
+        const restoredData = db.getMapData();
+        syncCurrentState.data = Array.isArray(restoredData) ? restoredData.slice() : [];
+        syncCurrentState.clientId = 'server';
+        const statePayload = JSON.stringify({ type: 'state', clientId: syncCurrentState.clientId, data: syncCurrentState.data });
+        wss.clients.forEach(function(client) {
+            if (client.readyState === WebSocket.OPEN) {
+                try { client.send(statePayload); } catch (e) {}
+            }
+        });
+        res.json({ ok: true, message: 'Данные восстановлены. Войдите снова.' });
+    } catch (e) {
+        const msg = e && e.message ? String(e.message) : 'Ошибка восстановления';
+        res.status(400).json({ error: msg });
+    }
+});
+
 app.get('/api/health', (req, res) => res.json({ ok: true, db: 'sqlite' }));
 
 app.use(express.static(path.join(__dirname)));

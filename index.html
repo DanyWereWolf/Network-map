@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="author" content="NetMap">
-    <meta name="copyright" content="Copyright (c) 2024-2026 NetMap. All Rights Reserved.">
-    <title>Карта локальной сети</title>
+    <meta name="author" content="Карта ВОЛС">
+    <meta name="copyright" content="Copyright (c) 2024–2026 Карта ВОЛС. Все права защищены.">
+    <title>Карта оптической сети</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <script src="https://api-maps.yandex.ru/2.1/?apikey=83f18c79-2970-42ba-af02-0e75c05f8829&lang=ru_RU" type="text/javascript"></script>
     <link rel="stylesheet" href="styles.css">
@@ -54,17 +54,13 @@
     <header class="top-header">
         <div class="top-header-content">
             <div class="header-brand">
-                <div class="header-logo" title="NetMap — Карта локальной сети">
-                    <span class="header-logo-icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                            <circle cx="12" cy="10" r="3"></circle>
-                        </svg>
-                    </span>
-                    <span class="header-logo-name">NetMap</span>
-                </div>
-                <span class="header-divider" aria-hidden="true"></span>
-                <h1 class="header-title">Карта локальной сети</h1>
+                <span class="header-title-icon" aria-hidden="true" title="Карта оптической сети">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                </span>
+                <h1 class="header-title">Карта оптической сети</h1>
             </div>
             <!-- Поиск по карте -->
             <div class="header-search">
@@ -94,10 +90,10 @@
                 </div>
                 <div class="user-menu">
                     <button id="infoHelpBtn" class="user-menu-btn" title="Справка по программе">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="10"></circle>
-                            <path d="M12 16v-4"></path>
-                            <path d="M12 8h.01"></path>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                            <circle cx="12" cy="16" r="1.5" fill="currentColor" stroke="none"></circle>
                         </svg>
                     </button>
                     <button id="updatesBtn" class="user-menu-btn" title="Обновления">
@@ -205,7 +201,7 @@
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterSleeve" checked> Муфты</label>
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterSupport" checked> Опоры</label>
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterAttachment" checked> Крепление узлов</label>
-                            <label class="map-filter-check"><input type="checkbox" id="mapFilterOlt" checked> OLT</label>
+                            <label class="map-filter-check"><input type="checkbox" id="mapFilterOlt" checked> OLT (GPON)</label>
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterSplitter" checked> Сплиттеры</label>
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterOnu" checked> ONU</label>
                         </div>
@@ -239,40 +235,44 @@
                                 <option value="support">📡 Опоры связи</option>
                                 <option value="sleeve">🔌 Кабельные муфты</option>
                                 <option value="cross">📦 Оптический кросс</option>
+                                <option value="olt">📶 OLT (GPON)</option>
+                                <option value="splitter">🔀 Сплиттер</option>
+                                <option value="onu">📟 ONU</option>
                                 <option value="node">🖥️ Узлы сети</option>
                                 <option value="attachment">🔗 Крепление узлов</option>
-                                <option value="olt">📶 OLT (GPON)</option>
-                                <option value="splitter">🔀 Сплиттер GPON</option>
-                                <option value="onu">📟 ONU</option>
                             </select>
                         </div>
                         <div class="form-group" id="objectNameGroup" style="display: none;">
                             <label for="objectName">Имя</label>
                             <input type="text" id="objectName" class="form-input" placeholder="Введите имя">
                         </div>
+                        <div class="form-group" id="oltSettingsGroup" style="display: none;">
+                            <label for="oltPonPorts">Количество PON-портов</label>
+                            <select id="oltPonPorts" class="form-select">
+                                <option value="4">4 порта</option>
+                                <option value="8" selected>8 портов</option>
+                                <option value="16">16 портов</option>
+                                <option value="32">32 порта</option>
+                                <option value="64">64 порта</option>
+                            </select>
+                            <p class="form-hint" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">Приход от кросса — одна жила (не входит в порты). Порты задаются жилами кабелей, подключённых к OLT.</p>
+                        </div>
+                        <div class="form-group" id="splitterSettingsGroup" style="display: none;">
+                            <label for="splitterRatio">Коэффициент деления</label>
+                            <select id="splitterRatio" class="form-select">
+                                <option value="2">1:2</option>
+                                <option value="4">1:4</option>
+                                <option value="8" selected>1:8</option>
+                                <option value="16">1:16</option>
+                                <option value="32">1:32</option>
+                                <option value="64">1:64</option>
+                            </select>
+                        </div>
                         <div class="form-group" id="nodeSettingsGroup" style="display: none;">
                             <label for="nodeKind">Тип узла</label>
                             <select id="nodeKind" class="form-select">
                                 <option value="network">Узел сети (зелёный)</option>
                                 <option value="aggregation">Узел агрегации (красный)</option>
-                            </select>
-                        </div>
-                        <div class="form-group" id="oltSettingsGroup" style="display: none;">
-                            <label for="oltPonPorts">Количество PON-портов</label>
-                            <select id="oltPonPorts" class="form-select">
-                                <option value="4">4 порта</option>
-                                <option value="8">8 портов</option>
-                                <option value="16" selected>16 портов</option>
-                            </select>
-                        </div>
-                        <div class="form-group" id="splitterSettingsGroup" style="display: none;">
-                            <label for="splitterRatio">Коэффициент деления</label>
-                            <select id="splitterRatio" class="form-select">
-                                <option value="1:4">1:4</option>
-                                <option value="1:8">1:8</option>
-                                <option value="1:16" selected>1:16</option>
-                                <option value="1:32">1:32</option>
-                                <option value="1:64">1:64</option>
                             </select>
                         </div>
                         <div class="form-group" id="crossSettingsGroup" style="display: none;">
@@ -356,7 +356,6 @@
                                 <option value="fiber8">ВОЛС 8 жил</option>
                                 <option value="fiber16">ВОЛС 16 жил</option>
                                 <option value="fiber24">ВОЛС 24 жилы</option>
-                                <option value="gpon">GPON (1 волокно)</option>
                             </select>
                         </div>
                         <button id="addCable" class="btn-primary">
@@ -366,38 +365,6 @@
                                 <line x1="2" y1="12" x2="22" y2="12"></line>
                             </svg>
                             Проложить кабель
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Аккордеон для NetBox -->
-                <div class="accordion-section">
-                    <div class="accordion-header" data-accordion="netbox">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                            <line x1="8" y1="21" x2="16" y2="21"></line>
-                            <line x1="12" y1="17" x2="12" y2="21"></line>
-                        </svg>
-                        <span>NetBox</span>
-                        <svg class="accordion-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="6 9 12 15 18 9"></polyline>
-                        </svg>
-                    </div>
-                    <div class="accordion-content" id="netbox-content">
-                        <button id="netboxConfigBtn" class="btn-secondary">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="3"></circle>
-                                <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24"></path>
-                            </svg>
-                            Настроить подключение
-                        </button>
-                        <button id="netboxImportBtn" class="btn-secondary">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                <polyline points="7 10 12 15 17 10"></polyline>
-                                <line x1="12" y1="15" x2="12" y2="3"></line>
-                            </svg>
-                            Импорт устройств
                         </button>
                     </div>
                 </div>
@@ -432,6 +399,29 @@
                             </svg>
                             Экспорт карты
                         </button>
+                    </div>
+                </div>
+
+                <!-- Резервные копии (только админ) -->
+                <div class="accordion-section backups-accordion admin-only" id="backupsAccordionSection" style="display: none;">
+                    <div class="accordion-header" data-accordion="backups">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        <span>Резервные копии</span>
+                        <svg class="accordion-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </div>
+                    <div class="accordion-content" id="backups-content">
+                        <p class="backups-hint">Восстановление из ежедневных бэкапов (хранятся 30 дней). Группы по месяцам — откройте нужный месяц и нажмите «Восстановить». После восстановления страница обновится.</p>
+                        <button type="button" id="backupsRefreshBtn" class="btn-secondary backups-refresh-btn">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg>
+                            Обновить список
+                        </button>
+                        <div id="backupsList" class="backups-list"></div>
                     </div>
                 </div>
 
@@ -497,14 +487,6 @@
                             <div class="legend-color" style="background-color: #22c55e; height: 2px; border-style: dashed;"></div>
                             <span class="legend-text">Кросс → Узел (жила)</span>
                         </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #0ea5e9; height: 2px; border-style: dashed;"></div>
-                            <span class="legend-text">Кросс → OLT (жила)</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #0ea5e9; height: 3px;"></div>
-                            <span class="legend-text">GPON (OLT ↔ Сплиттер)</span>
-                        </div>
                     </div>
                 </div>
 
@@ -558,20 +540,9 @@
                             </div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-icon" style="background: #f59e0b20; color: #f59e0b;">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-                                </svg>
-                            </div>
-                            <div class="stat-info">
-                                <div class="stat-value" id="cableCount">0</div>
-                                <div class="stat-label">Кабели</div>
-                            </div>
-                        </div>
-                        <div class="stat-item">
                             <div class="stat-icon" style="background: #0ea5e920; color: #0ea5e9;">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M12 2v4m0 12v4M2 12h4m12 0h4m-3.64-6.36l-2.83 2.83m-8.49 8.49l-2.83 2.83m18.38-14.14l-2.83-2.83M6.34 17.66l-2.83-2.83"></path>
+                                    <path d="M5 12h14"></path><path d="M12 5v14"></path><circle cx="12" cy="12" r="3"></circle>
                                 </svg>
                             </div>
                             <div class="stat-info">
@@ -580,10 +551,9 @@
                             </div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-icon" style="background: #8b5cf620; color: #8b5cf6;">
+                            <div class="stat-icon" style="background: #a855f720; color: #a855f7;">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M12 2v20M2 12h20"></path>
-                                    <circle cx="12" cy="12" r="3"></circle>
+                                    <circle cx="12" cy="6" r="2"></circle><path d="M12 8v4"></path><circle cx="8" cy="14" r="2"></circle><circle cx="16" cy="14" r="2"></circle><path d="M10 14l2-2 2 2"></path>
                                 </svg>
                             </div>
                             <div class="stat-info">
@@ -592,15 +562,25 @@
                             </div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-icon" style="background: #10b98120; color: #10b981;">
+                            <div class="stat-icon" style="background: #06b6d420; color: #06b6d4;">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <rect x="4" y="4" width="16" height="16" rx="2"></rect>
-                                    <path d="M9 9h6v6H9z"></path>
+                                    <rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6.01" y2="10"></line><line x1="10" y1="10" x2="10.01" y2="10"></line>
                                 </svg>
                             </div>
                             <div class="stat-info">
                                 <div class="stat-value" id="onuCount">0</div>
                                 <div class="stat-label">ONU</div>
+                            </div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-icon" style="background: #f59e0b20; color: #f59e0b;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="cableCount">0</div>
+                                <div class="stat-label">Кабели</div>
                             </div>
                         </div>
                     </div>
@@ -624,7 +604,7 @@
                     </div>
                 </div>
                 <div class="sidebar-license" title="Подробнее — в разделе «Справка»">
-                    © 2024–2026 NetMap. Проприетарное ПО.
+                    © 2024–2026 Карта ВОЛС. Проприетарное ПО.
                 </div>
             </div>
         </div>
@@ -652,58 +632,6 @@
             </div>
             <div class="modal-body">
                 <div id="modalInfo"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Модальное окно для настройки NetBox -->
-    <div id="netboxConfigModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Настройка подключения к NetBox</h2>
-                <span class="close-netbox">&times;</span>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label for="netboxUrl">URL сервера NetBox:</label>
-                    <input type="text" id="netboxUrl" placeholder="https://netbox.example.com" class="form-input">
-                </div>
-                <div class="form-group">
-                    <label for="netboxToken">API Token:</label>
-                    <input type="password" id="netboxToken" placeholder="Ваш токен API" class="form-input">
-                </div>
-                <div class="form-group">
-                    <label style="display: flex; align-items: center; cursor: pointer;">
-                        <input type="checkbox" id="netboxIgnoreSSL" style="margin-right: 8px; width: auto;">
-                        <span>Игнорировать ошибки SSL сертификата</span>
-                    </label>
-                    <small class="text-muted-inline" style="display: block; margin-top: 5px; font-size: 12px;">
-                        Внимание: Отключение проверки SSL снижает безопасность. Используйте только для тестирования или с самоподписанными сертификатами.
-                    </small>
-                </div>
-                <div class="form-group">
-                    <button id="testNetboxConnection" class="btn-test">Тест подключения</button>
-                    <button id="saveNetboxConfig" class="btn-save">Сохранить</button>
-                </div>
-                <div id="netboxStatus" class="status-message"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Модальное окно для выбора устройств из NetBox -->
-    <div id="netboxImportModal" class="modal">
-        <div class="modal-content" style="max-width: 800px;">
-            <div class="modal-header">
-                <h2>Импорт устройств из NetBox</h2>
-                <span class="close-import">&times;</span>
-            </div>
-            <div class="modal-body">
-                <div id="netboxDevicesList"></div>
-                <div class="import-actions">
-                    <button id="selectAllDevices">Выбрать все</button>
-                    <button id="deselectAllDevices">Снять выбор</button>
-                    <button id="importSelectedDevices" class="btn-primary">Импортировать выбранные</button>
-                </div>
             </div>
         </div>
     </div>
@@ -744,46 +672,12 @@
         </div>
     </div>
 
-    <!-- Модальное окно для выбора OLT (подключение жилы кросса к OLT) -->
-    <div id="oltSelectionModal" class="modal">
-        <div class="modal-content node-selection-modal-content">
-            <div class="network-map-balloon node-selection-balloon">
-                <div class="group-balloon-header">
-                    <span class="group-balloon-title">Подключение жилы к OLT</span>
-                    <button type="button" class="group-balloon-close close-olt-selection" title="Закрыть">&times;</button>
-                </div>
-                <div class="modal-body node-selection-body">
-                    <div class="node-selection-info">
-                        <p id="oltSelectionFiberInfo"></p>
-                    </div>
-                    <div class="form-group">
-                        <label for="oltSearchInput">Поиск OLT</label>
-                        <div class="node-search-wrapper">
-                            <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="11" cy="11" r="8"></circle>
-                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                            </svg>
-                            <input type="text" id="oltSearchInput" class="form-input node-search-input" placeholder="Введите имя OLT...">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>Выберите OLT</label>
-                        <div id="oltListContainer" class="node-list-container"></div>
-                    </div>
-                    <div class="node-selection-actions">
-                        <button id="cancelOltSelection" class="btn-secondary">Отмена</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Модальное окно для выбора ONU (подключение выхода сплиттера к ONU) -->
+    <!-- Модальное окно для выбора ONU (подключение жилы к ONU) -->
     <div id="onuSelectionModal" class="modal">
         <div class="modal-content node-selection-modal-content">
             <div class="network-map-balloon node-selection-balloon">
                 <div class="group-balloon-header">
-                    <span class="group-balloon-title">Подключение выхода к ONU</span>
+                    <span class="group-balloon-title">Подключение жилы к ONU</span>
                     <button type="button" class="group-balloon-close close-onu-selection" title="Закрыть">&times;</button>
                 </div>
                 <div class="modal-body node-selection-body">
@@ -802,10 +696,108 @@
                     </div>
                     <div class="form-group">
                         <label>Выберите ONU</label>
-                        <div id="onuListContainer" class="node-list-container"></div>
+                        <div id="onuListContainer" class="node-list-container">
+                            <!-- Список ONU генерируется динамически -->
+                        </div>
                     </div>
                     <div class="node-selection-actions">
                         <button id="cancelOnuSelection" class="btn-secondary">Отмена</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для выбора сплиттера (подключение жилы к входу сплиттера) -->
+    <div id="splitterSelectionModal" class="modal">
+        <div class="modal-content node-selection-modal-content">
+            <div class="network-map-balloon node-selection-balloon">
+                <div class="group-balloon-header">
+                    <span class="group-balloon-title">Подключение жилы к сплиттеру</span>
+                    <button type="button" class="group-balloon-close close-splitter-selection" title="Закрыть">&times;</button>
+                </div>
+                <div class="modal-body node-selection-body">
+                    <div class="node-selection-info">
+                        <p id="splitterSelectionFiberInfo"></p>
+                    </div>
+                    <div class="form-group">
+                        <label for="splitterSelect">Сплиттер</label>
+                        <select id="splitterSelect" class="form-input" style="width: 100%; padding: 8px;">
+                            <option value="">— выберите сплиттер</option>
+                        </select>
+                    </div>
+                    <p class="node-selection-info" style="font-size: 0.8125rem; color: var(--text-secondary); margin-top: 8px;">
+                        Жила будет назначена как вход сплиттера (1&nbsp;→&nbsp;N). Выходы на ONU или следующий сплиттер настраиваются в карточке сплиттера.
+                    </p>
+                    <div class="node-selection-actions">
+                        <button id="confirmSplitterSelection" class="btn-primary" disabled>Подключить</button>
+                        <button id="cancelSplitterSelection" class="btn-secondary">Отмена</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Выбор ONU для выхода сплиттера -->
+    <div id="splitterOutputOnuModal" class="modal">
+        <div class="modal-content node-selection-modal-content">
+            <div class="network-map-balloon node-selection-balloon">
+                <div class="group-balloon-header">
+                    <span class="group-balloon-title">Выбор ONU для выхода</span>
+                    <button type="button" class="group-balloon-close close-splitter-output-onu" title="Закрыть">&times;</button>
+                </div>
+                <div class="modal-body node-selection-body">
+                    <p class="node-selection-info" style="font-size: 0.8125rem; color: var(--text-secondary);">Выберите свободную ONU</p>
+                    <div id="splitterOutputOnuList" class="node-list-container"></div>
+                    <div class="node-selection-actions" style="margin-top: 12px;">
+                        <button id="cancelSplitterOutputOnu" class="btn-secondary">Отмена</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Выбор сплиттера для выхода сплиттера -->
+    <div id="splitterOutputSplitterModal" class="modal">
+        <div class="modal-content node-selection-modal-content">
+            <div class="network-map-balloon node-selection-balloon">
+                <div class="group-balloon-header">
+                    <span class="group-balloon-title">Выбор сплиттера для выхода</span>
+                    <button type="button" class="group-balloon-close close-splitter-output-splitter" title="Закрыть">&times;</button>
+                </div>
+                <div class="modal-body node-selection-body">
+                    <p class="node-selection-info" style="font-size: 0.8125rem; color: var(--text-secondary);">Выберите свободный сплиттер (без входа)</p>
+                    <div id="splitterOutputSplitterList" class="node-list-container"></div>
+                    <div class="node-selection-actions" style="margin-top: 12px;">
+                        <button id="cancelSplitterOutputSplitter" class="btn-secondary">Отмена</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для выбора OLT и порта (подключение жилы к порту OLT) -->
+    <div id="oltSelectionModal" class="modal">
+        <div class="modal-content node-selection-modal-content">
+            <div class="network-map-balloon node-selection-balloon">
+                <div class="group-balloon-header">
+                    <span class="group-balloon-title">Подключение жилы к порту OLT</span>
+                    <button type="button" class="group-balloon-close close-olt-selection" title="Закрыть">&times;</button>
+                </div>
+                <div class="modal-body node-selection-body">
+                    <div class="node-selection-info">
+                        <p id="oltSelectionFiberInfo"></p>
+                    </div>
+                    <div class="form-group">
+                        <label for="oltSelectSelect">OLT (приходящая жила)</label>
+                        <select id="oltSelectSelect" class="form-input" style="width: 100%; padding: 8px;">
+                            <option value="">— выберите OLT</option>
+                        </select>
+                    </div>
+                    <p class="node-selection-info" style="font-size: 0.8125rem; color: var(--text-secondary); margin-top: 8px;">Жила будет назначена как приход от кросса для выбранного OLT.</p>
+                    <div class="node-selection-actions">
+                        <button id="confirmOltSelection" class="btn-primary" disabled>Подключить</button>
+                        <button id="cancelOltSelection" class="btn-secondary">Отмена</button>
                     </div>
                 </div>
             </div>
