@@ -809,7 +809,7 @@ function setupEventListeners() {
             const splitterSettingsGroup = document.getElementById('splitterSettingsGroup');
             const type = this.value;
 
-            const showName = ['node', 'cross', 'support', 'attachment', 'olt', 'splitter', 'onu'].indexOf(type) !== -1;
+            const showName = ['node', 'cross', 'sleeve', 'support', 'attachment', 'olt', 'splitter', 'onu'].indexOf(type) !== -1;
             if (nameInputGroup) nameInputGroup.style.display = showName ? 'block' : 'none';
             if (sleeveSettingsGroup) sleeveSettingsGroup.style.display = type === 'sleeve' ? 'block' : 'none';
             if (crossSettingsGroup) crossSettingsGroup.style.display = type === 'cross' ? 'block' : 'none';
@@ -820,7 +820,7 @@ function setupEventListeners() {
             if (nameInputGroup) {
                 const nameLabel = nameInputGroup.querySelector('label');
                 if (nameLabel) {
-                    const labels = { cross: 'Имя кросса', support: 'Подпись опоры', attachment: 'Название', node: 'Имя узла', olt: 'Имя OLT', splitter: 'Имя сплиттера', onu: 'Имя ONU' };
+                    const labels = { cross: 'Имя кросса', sleeve: 'Название муфты', support: 'Подпись опоры', attachment: 'Название', node: 'Имя узла', olt: 'Имя OLT', splitter: 'Имя сплиттера', onu: 'Имя ONU' };
                     nameLabel.textContent = labels[type] || 'Имя';
                 }
             }
@@ -833,7 +833,7 @@ function setupEventListeners() {
             const newType = this.value;
             currentPlacementType = newType;
             
-            if (['node', 'cross', 'olt', 'splitter', 'onu'].indexOf(newType) !== -1) {
+            if (['node', 'cross', 'sleeve', 'olt', 'splitter', 'onu'].indexOf(newType) !== -1) {
                 const nameInput = document.getElementById('objectName');
                 currentPlacementName = nameInput ? nameInput.value.trim() : '';
             } else {
@@ -852,7 +852,7 @@ function setupEventListeners() {
     const objectNameInput = document.getElementById('objectName');
     if (objectNameInput) {
         objectNameInput.addEventListener('input', function() {
-            if (objectPlacementMode && currentPlacementType === 'node') {
+            if (objectPlacementMode && (currentPlacementType === 'node' || currentPlacementType === 'sleeve')) {
                 currentPlacementName = this.value.trim();
             }
         });
@@ -1459,10 +1459,10 @@ function handleMapClick(e) {
             currentPlacementName = name || '';
             currentPlacementNodeKind = nodeKind;
         } else if (type === 'sleeve') {
-            
+            const sleeveName = currentPlacementName || (document.getElementById('objectName') && document.getElementById('objectName').value.trim()) || '';
             const sleeveType = document.getElementById('sleeveType').value;
             const maxFibers = parseInt(document.getElementById('sleeveMaxFibers').value) || 0;
-            createObject(type, '', coords, { sleeveType: sleeveType, maxFibers: maxFibers });
+            createObject(type, sleeveName || '', coords, { sleeveType: sleeveType, maxFibers: maxFibers });
         } else if (type === 'cross') {
             const name = currentPlacementName || document.getElementById('objectName').value.trim();
             const crossPorts = parseInt(document.getElementById('crossPorts').value) || 24;
@@ -2391,7 +2391,7 @@ function createObject(type, name, coords, options = {}) {
                 <polygon points="14,2 24,7 24,17 14,22 4,17 4,7" fill="${color}" stroke="white" stroke-width="2"/>
                 <circle cx="14" cy="12" r="3" fill="white" opacity="0.9"/>
             </svg>`;
-            balloonContent = 'Кабельная муфта';
+            balloonContent = name ? 'Кабельная муфта: ' + name : 'Кабельная муфта';
             break;
         case 'cross':
             
@@ -3202,9 +3202,9 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
         const uid = obj.properties.get('uniqueId');
 
         if (t === 'cross' || t === 'sleeve') {
-            const nodeConn = t === 'cross' ? obj.properties.get('nodeConnections') : null;
+            const nodeConn = obj.properties.get('nodeConnections');
             if (nodeConn && nodeConn[key]) {
-                if (exclude && exclude.type === 'nodeConn' && exclude.crossId === uid) continue;
+                if (exclude && exclude.type === 'nodeConn' && (exclude.crossId === uid || exclude.sleeveId === uid)) continue;
                 return { used: true, where: 'подключение к узлу (кросс)' };
             }
             const oltConn = obj.properties.get('oltConnections') || {};
@@ -3232,6 +3232,13 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
                     if (exclude && exclude.type === 'splitterInput') continue;
                     return { used: true, where: 'порт OLT' };
                 }
+            }
+        }
+        if (t === 'onu') {
+            const onuIncoming = obj.properties.get('incomingFiber');
+            if (onuIncoming && onuIncoming.cableId === cableId && onuIncoming.fiberNumber === fiberNumber) {
+                if (exclude && exclude.type === 'onuConn' && exclude.onuId === uid) continue;
+                return { used: true, where: 'подключение к ONU' };
             }
         }
         if (t === 'splitter') {
@@ -3831,7 +3838,7 @@ function getSerializedData() {
             }
             if (props.uniqueId) result.uniqueId = props.uniqueId;
             if (props.distance !== undefined) result.distance = props.distance;
-            if (props.cableName) result.cableName = props.cableName;
+            result.cableName = props.cableName ?? null;
             return result;
         }
         const result = {
@@ -4309,6 +4316,17 @@ function applyOperationToMap(op) {
         return;
     }
     if (op.type === 'add_cable' && op.data) {
+        var existingByOp = objects.find(function(o) { return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === op.data.uniqueId; });
+        if (existingByOp) {
+            var opCoords = op.data.geometry && normalizeCableGeometry(op.data.geometry);
+            if (existingByOp.geometry && opCoords && opCoords.length >= 2) existingByOp.geometry.setCoordinates(opCoords);
+            if (op.data.distance !== undefined) existingByOp.properties.set('distance', op.data.distance);
+            if (op.data.cableName != null) existingByOp.properties.set('cableName', op.data.cableName);
+            updateCableVisualization();
+            updateAllConnectionLines();
+            updateStats();
+            return;
+        }
         var fromUid = op.data.fromUniqueId, toUid = op.data.toUniqueId;
         var fromObj = objects.find(function(o) { return o.properties && o.properties.get('type') !== 'cable' && o.properties.get('uniqueId') === fromUid; });
         var toObj = objects.find(function(o) { return o.properties && o.properties.get('type') !== 'cable' && o.properties.get('uniqueId') === toUid; });
@@ -4392,6 +4410,21 @@ function importData(data, opts) {
                 toObj = objectRefs[item.to];
             }
             if (!fromObj || !toObj) return;
+            var existingCableImport = objects.find(function(o) { return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId; });
+            if (existingCableImport) {
+                var ptsArr = (coords && coords.length > 2) ? findObjectsAtGeometry(refsOnly, item.geometry) : [fromObj, toObj];
+                if (ptsArr && ptsArr.length >= 2) {
+                    if (fromObj) ptsArr[0] = fromObj;
+                    if (toObj) ptsArr[ptsArr.length - 1] = toObj;
+                    existingCableImport.properties.set('from', ptsArr[0]);
+                    existingCableImport.properties.set('to', ptsArr[ptsArr.length - 1]);
+                    existingCableImport.properties.set('points', ptsArr);
+                    if (existingCableImport.geometry && coords && coords.length >= 2) existingCableImport.geometry.setCoordinates(coords);
+                }
+                if (item && 'cableName' in item) existingCableImport.properties.set('cableName', item.cableName);
+                if (item.distance !== undefined) existingCableImport.properties.set('distance', item.distance);
+                return;
+            }
             var points = (coords && coords.length > 2) ? findObjectsAtGeometry(refsOnly, item.geometry) : null;
             if (points && points.length >= 2) {
                 if (fromObj) points[0] = fromObj;
@@ -4413,7 +4446,7 @@ function importData(data, opts) {
                     const distance = calculateDistance(fromCoords, toCoords);
                     cable.properties.set('distance', distance);
                 }
-                if (item.cableName) cable.properties.set('cableName', item.cableName);
+                if (item && 'cableName' in item) cable.properties.set('cableName', item.cableName);
             }
     });
 
@@ -4447,7 +4480,7 @@ function createObjectFromData(data, opts) {
                 <polygon points="14,2 24,7 24,17 14,22 4,17 4,7" fill="${color}" stroke="white" stroke-width="2"/>
                 <circle cx="14" cy="12" r="3" fill="white" opacity="0.9"/>
             </svg>`;
-            balloonContent = 'Кабельная муфта';
+            balloonContent = name ? 'Кабельная муфта: ' + name : 'Кабельная муфта';
             break;
         case 'cross':
             
@@ -4814,9 +4847,7 @@ function exportData() {
                 result.distance = props.distance;
             }
             
-            if (props.cableName) {
-                result.cableName = props.cableName;
-            }
+            result.cableName = props.cableName ?? null;
             return result;
         } else {
             const result = {
@@ -4976,7 +5007,7 @@ function showObjectInfo(obj) {
     if (type === 'node') {
         title = name ? `Узел сети: ${name}` : 'Узел сети';
     } else if (type === 'sleeve') {
-        title = 'Кабельная муфта';
+        title = name ? `Кабельная муфта: ${name}` : 'Кабельная муфта';
     } else if (type === 'cross') {
         title = name ? `Оптический кросс: ${name}` : 'Оптический кросс';
     } else if (type === 'attachment') {
@@ -5149,6 +5180,7 @@ function showObjectInfo(obj) {
         
         html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
         html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Информация о муфте</h4>';
+        if (name) html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Название:</strong> ${escapeHtml(name)}</div>`;
         html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Тип муфты:</strong> ${escapeHtml(sleeveType)}</div>`;
         
         if (maxFibers !== undefined && maxFibers !== null && maxFibers > 0) {
@@ -5167,6 +5199,18 @@ function showObjectInfo(obj) {
         }
         
         html += '</div>';
+        if (isEditMode) {
+            html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
+            html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Редактирование муфты</h4>';
+            html += '<div class="form-group" style="margin-bottom: 12px;">';
+            html += '<label for="editSleeveName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название муфты</label>';
+            html += `<input type="text" id="editSleeveName" class="form-input" value="${escapeHtml(name)}" placeholder="Введите название муфты">`;
+            html += '</div>';
+            html += '<button id="saveSleeveEdit" class="btn-primary" style="width: 100%; padding: 10px 14px; margin-top: 8px;">';
+            html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline; margin-right: 8px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>';
+            html += 'Сохранить изменения</button>';
+            html += '</div>';
+        }
     }
 
     if (type === 'node') {
@@ -5505,6 +5549,20 @@ function setupEditAndDeleteListeners() {
 
                 showObjectInfo(currentModalObject);
             }
+        });
+    }
+
+    const saveSleeveBtn = document.getElementById('saveSleeveEdit');
+    if (saveSleeveBtn) {
+        saveSleeveBtn.addEventListener('click', function() {
+            if (!currentModalObject) return;
+            if (currentModalObject.properties.get('type') !== 'sleeve') return;
+            const newName = (document.getElementById('editSleeveName') && document.getElementById('editSleeveName').value) ? document.getElementById('editSleeveName').value.trim() : '';
+            currentModalObject.properties.set('name', newName);
+            currentModalObject.properties.set('balloonContent', newName ? 'Кабельная муфта: ' + newName : 'Кабельная муфта');
+            saveData();
+            if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
+            showObjectInfo(currentModalObject);
         });
     }
     
@@ -6934,7 +6992,7 @@ function traceAllFiberPathsFromObject(startObject, startCableId, startFiberNumbe
             if (!inputFiber) continue;
             var hasCableOutputs = outputConnections.some(function(o) { return o && o.cableId; });
             if (hasCableOutputs) {
-                for (var oi = 1; oi < outputConnections.length; oi++) {
+                for (var oi = 0; oi < outputConnections.length; oi++) {
                     var out = outputConnections[oi];
                     if (!out || !out.cableId) continue;
                     var outCable = objects.find(function(c) { return c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === out.cableId; });
@@ -8331,7 +8389,8 @@ function disconnectFiberFromNode(crossObj, cableId, fiberNumber) {
 
 function connectFiberToOnu(sleeveObj, cableId, fiberNumber, onuObj) {
     const sleeveId = sleeveObj.properties.get('uniqueId');
-    const usage = getFiberUsage(cableId, fiberNumber, { type: 'onuConn', sleeveId: sleeveId });
+    const onuId = getObjectUniqueId(onuObj);
+    const usage = getFiberUsage(cableId, fiberNumber, { type: 'onuConn', sleeveId: sleeveId, onuId: onuId });
     if (usage.used) {
         showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
         return;
@@ -8347,6 +8406,7 @@ function connectFiberToOnu(sleeveObj, cableId, fiberNumber, onuObj) {
     if (!sleeveObj.properties.get('uniqueId')) sleeveObj.properties.set('uniqueId', sleeveUniqueId);
     onuConnections[key] = { onuId: onuUniqueId, onuName: onuObj.properties.get('name') || 'ONU' };
     sleeveObj.properties.set('onuConnections', onuConnections);
+    onuObj.properties.set('incomingFiber', { cableId: cableId, fiberNumber: fiberNumber });
     createOnuConnectionLine(sleeveObj, onuObj, cableId, fiberNumber);
     saveData();
     showObjectInfo(sleeveObj);
@@ -8355,8 +8415,19 @@ function connectFiberToOnu(sleeveObj, cableId, fiberNumber, onuObj) {
 function disconnectFiberFromOnu(sleeveObj, cableId, fiberNumber) {
     let onuConnections = sleeveObj.properties.get('onuConnections');
     if (!onuConnections) return;
+    const key = cableId + '-' + fiberNumber;
+    const conn = onuConnections[key];
+    if (conn && conn.onuId) {
+        var onuObj = objects.find(function(o) { return o.properties && o.properties.get('type') === 'onu' && getObjectUniqueId(o) === conn.onuId; });
+        if (onuObj) {
+            var if_ = onuObj.properties.get('incomingFiber');
+            if (if_ && if_.cableId === cableId && if_.fiberNumber === fiberNumber) {
+                onuObj.properties.set('incomingFiber', null);
+            }
+        }
+    }
     removeOnuConnectionLine(sleeveObj, cableId, fiberNumber);
-    delete onuConnections[cableId + '-' + fiberNumber];
+    delete onuConnections[key];
     sleeveObj.properties.set('onuConnections', onuConnections);
     saveData();
     showObjectInfo(sleeveObj);
@@ -10077,8 +10148,8 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
                 ${hasNodeConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #f0fdf4; border-radius: 3px; font-size: 0.75rem;"><span style="color: #166534;">🖥️ → ${escapeHtml(nodeConnection.nodeName)}</span>${isEditMode ? `<button class="btn-disconnect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от узла" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
                 ${hasOnuConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #f5f3ff; border-radius: 3px; font-size: 0.75rem;"><span style="color: #6d28d9;">📡 → ${escapeHtml(onuConnection.onuName || 'ONU')}</span>${isEditMode ? `<button class="btn-disconnect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от ONU" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
                 ${hasOltConnection && oltConnection.oltId ? (function() { const o = objects.find(obj => obj.properties && obj.properties.get('type') === 'olt' && obj.properties.get('uniqueId') === oltConnection.oltId); const n = o ? (o.properties.get('name') || 'OLT') : 'OLT'; const label = oltConnection.incoming ? ('приход OLT ' + escapeHtml(n)) : ('OLT ' + escapeHtml(n) + ', порт ' + (oltConnection.portNumber || '?')); return `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #e0f2fe; border-radius: 3px; font-size: 0.75rem;"><span style="color: #0369a1;">📶 ${label}</span>${isEditMode ? `<button class="btn-disconnect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от OLT" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>`; }()) : ''}
-                ${((!hasAnyOutConnection || hasOltConnection) && !isConnected && isEditMode && isCross) ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;">${!hasNodeConnection ? `<button class="btn-connect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к узлу" style="padding: 4px 6px; background: #22c55e; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🖥️ Узел</button>` : ''}${!hasOltConnection ? `<button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 OLT</button>` : ''}${canConnectToOnu ? `<button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}</div>` : ''}
-                ${((!hasAnyOutConnection || hasOltConnection) && !isConnected && isEditMode && !isCross) ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;">${!hasOltConnection ? `<button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 OLT</button>` : ''}${(cableData.isFromOlt || hasOltConnection) ? `<button class="btn-connect-splitter" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к входу сплиттера" style="padding: 4px 6px; background: #f97316; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🔀 Сплиттер</button>` : ''}${canConnectToOnu ? `<button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}</div>` : ''}
+                ${((!hasAnyOutConnection || hasOltConnection || canConnectToOnu) && (!isConnected || canConnectToOnu) && isEditMode && isCross) ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;">${!hasNodeConnection ? `<button class="btn-connect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к узлу" style="padding: 4px 6px; background: #22c55e; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🖥️ Узел</button>` : ''}${!hasOltConnection && cableData.isFromOlt ? `<button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 OLT</button>` : ''}${canConnectToOnu ? `<button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}</div>` : ''}
+                ${((!hasAnyOutConnection || hasOltConnection || canConnectToOnu) && (!isConnected || canConnectToOnu) && isEditMode && !isCross) ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;">${!hasOltConnection && cableData.isFromOlt ? `<button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 OLT</button>` : ''}${(cableData.isFromOlt || hasOltConnection || canConnectToOnu) ? `<button class="btn-connect-splitter" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к входу сплиттера" style="padding: 4px 6px; background: #f97316; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🔀 Сплиттер</button>` : ''}${canConnectToOnu ? `<button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}</div>` : ''}
                 ${isEditMode ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px;"><input type="text" class="fiber-label-input" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" value="${directLabel}" placeholder="${isInheritedLabel ? '← ' + displayLabel : 'Подпись...'}" style="flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid ${isInheritedLabel ? '#8b5cf6' : '#ced4da'}; border-radius: 3px; font-size: 0.7rem; ${isInheritedLabel ? 'background: #f5f3ff;' : ''}">${isInheritedLabel ? '<span style="font-size: 0.65rem; color: #8b5cf6;">⬅️</span>' : ''}</div>` : (displayLabel ? `<div style="margin-left: 30px; font-size: 0.7rem; color: ${isInheritedLabel ? '#8b5cf6' : '#6366f1'}; overflow: hidden; text-overflow: ellipsis;">${isInheritedLabel ? '⬅️ ' : '📝 '}${displayLabel}</div>` : '')}
             </div>`;
     }
