@@ -6636,19 +6636,36 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
         return null;
     }
 
-    function getOtherEnd(cable, currentObj) {
+    function getOtherEnd(cable, currentObj, previousObj) {
         var pts = cable.properties.get('points');
         var fromObj = cable.properties.get('from');
         var toObj = cable.properties.get('to');
         if (pts && pts.length > 2) {
             var currentId = getObjectUniqueId(currentObj);
+            var previousId = previousObj ? getObjectUniqueId(previousObj) : null;
             var idx = -1;
             for (var i = 0; i < pts.length; i++) {
                 if (pts[i] === currentObj || (pts[i] && getObjectUniqueId(pts[i]) === currentId)) { idx = i; break; }
             }
             if (idx === -1) return null;
-            if (idx < pts.length - 1) return pts[idx + 1];
-            if (idx > 0) return pts[idx - 1];
+            
+            var nextIdx = idx + 1;
+            var prevIdx = idx - 1;
+            
+            if (previousId) {
+                var prevPtId = (prevIdx >= 0 && pts[prevIdx]) ? getObjectUniqueId(pts[prevIdx]) : null;
+                var nextPtId = (nextIdx < pts.length && pts[nextIdx]) ? getObjectUniqueId(pts[nextIdx]) : null;
+                
+                if (prevPtId === previousId && nextIdx < pts.length) {
+                    return pts[nextIdx];
+                }
+                if (nextPtId === previousId && prevIdx >= 0) {
+                    return pts[prevIdx];
+                }
+            }
+            
+            if (nextIdx < pts.length) return pts[nextIdx];
+            if (prevIdx >= 0) return pts[prevIdx];
             return null;
         }
         if (!fromObj || !toObj) return null;
@@ -6689,6 +6706,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
     let currentFiberNumber = startFiberNumber;
     let currentCable = startCable;
     let currentObject = startObject;
+    let previousObject = null;
     
     const maxIterations = 100;
     let iterations = 0;
@@ -6711,7 +6729,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
                 cable: currentCable
             });
 
-            nextObject = getOtherEnd(currentCable, currentObject);
+            nextObject = getOtherEnd(currentCable, currentObject, previousObject);
             
             if (!nextObject) break;
             
@@ -6988,6 +7006,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
             currentCableId = nextFiber.cableId;
             currentFiberNumber = nextFiber.fiberNumber;
             currentCable = nextCable;
+            previousObject = currentObject;
             currentObject = nextObject;
             
         } else if (objType === 'support' || objType === 'attachment') {
@@ -7001,9 +7020,33 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
                         break;
                     }
                 }
-                if (currentIdx !== -1 && currentIdx < pts.length - 1) {
-                    currentObject = nextObject;
-                    continue;
+                if (currentIdx !== -1) {
+                    var prevObjId = previousObject ? getObjectUniqueId(previousObject) : null;
+                    var nextPointIdx = -1;
+                    
+                    if (prevObjId) {
+                        var prevIdx = currentIdx - 1;
+                        var nextIdx = currentIdx + 1;
+                        var prevPtId = (prevIdx >= 0 && pts[prevIdx]) ? getObjectUniqueId(pts[prevIdx]) : null;
+                        var nextPtId = (nextIdx < pts.length && pts[nextIdx]) ? getObjectUniqueId(pts[nextIdx]) : null;
+                        
+                        if (prevPtId === prevObjId && nextIdx < pts.length) {
+                            nextPointIdx = nextIdx;
+                        } else if (nextPtId === prevObjId && prevIdx >= 0) {
+                            nextPointIdx = prevIdx;
+                        }
+                    }
+                    
+                    if (nextPointIdx === -1) {
+                        if (currentIdx < pts.length - 1) nextPointIdx = currentIdx + 1;
+                        else if (currentIdx > 0) nextPointIdx = currentIdx - 1;
+                    }
+                    
+                    if (nextPointIdx !== -1 && nextPointIdx >= 0 && nextPointIdx < pts.length) {
+                        previousObject = currentObject;
+                        currentObject = nextObject;
+                        continue;
+                    }
                 }
             }
             break;
@@ -7252,19 +7295,36 @@ function traceFiberPath(startCableId, startFiberNumber) {
         );
     }
 
-    function getOtherEnd(cable, currentObj) {
+    function getOtherEnd(cable, currentObj, previousObj) {
         var pts = cable.properties.get('points');
         var fromObj = cable.properties.get('from');
         var toObj = cable.properties.get('to');
         if (pts && pts.length > 2) {
             var currentId = getObjectUniqueId(currentObj);
+            var previousId = previousObj ? getObjectUniqueId(previousObj) : null;
             var idx = -1;
             for (var i = 0; i < pts.length; i++) {
                 if (pts[i] === currentObj || (pts[i] && getObjectUniqueId(pts[i]) === currentId)) { idx = i; break; }
             }
             if (idx === -1) return null;
-            if (idx < pts.length - 1) return pts[idx + 1];
-            if (idx > 0) return pts[idx - 1];
+            
+            var nextIdx = idx + 1;
+            var prevIdx = idx - 1;
+            
+            if (previousId) {
+                var prevPtId = (prevIdx >= 0 && pts[prevIdx]) ? getObjectUniqueId(pts[prevIdx]) : null;
+                var nextPtId = (nextIdx < pts.length && pts[nextIdx]) ? getObjectUniqueId(pts[nextIdx]) : null;
+                
+                if (prevPtId === previousId && nextIdx < pts.length) {
+                    return pts[nextIdx];
+                }
+                if (nextPtId === previousId && prevIdx >= 0) {
+                    return pts[prevIdx];
+                }
+            }
+            
+            if (nextIdx < pts.length) return pts[nextIdx];
+            if (prevIdx >= 0) return pts[prevIdx];
             return null;
         }
         if (!fromObj || !toObj) return null;
@@ -7289,6 +7349,7 @@ function traceFiberPath(startCableId, startFiberNumber) {
     let currentCableId = startCableId;
     let currentFiberNumber = startFiberNumber;
     let currentCable = startCable;
+    let previousObject = null;
 
     const fromObj = currentCable.properties.get('from');
     const toObj = currentCable.properties.get('to');
@@ -7442,13 +7503,14 @@ function traceFiberPath(startCableId, startFiberNumber) {
                 cable: nextCable
             });
 
-            const nextObject = getOtherEnd(nextCable, currentObject);
+            const nextObject = getOtherEnd(nextCable, currentObject, previousObject);
             
             if (!nextObject) {
                 
                 break;
             }
             
+            previousObject = currentObject;
             currentObject = nextObject;
         } else if (objType === 'support') {
             
@@ -7470,7 +7532,7 @@ function traceFiberPath(startCableId, startFiberNumber) {
                 cable: nextCableForSupport
             });
 
-            const nextObjectAfterSupport = getOtherEnd(nextCableForSupport, currentObject);
+            const nextObjectAfterSupport = getOtherEnd(nextCableForSupport, currentObject, previousObject);
             
             if (!nextObjectAfterSupport) {
                 break;
@@ -7478,6 +7540,7 @@ function traceFiberPath(startCableId, startFiberNumber) {
             
             currentCable = nextCableForSupport;
             currentCableId = supportNextCableId;
+            previousObject = currentObject;
             currentObject = nextObjectAfterSupport;
 
         } else {
