@@ -6885,7 +6885,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
                         obj.properties && obj.properties.get('type') === 'onu' && obj.properties.get('uniqueId') === onuConn.onuId
                     );
                     if (connectedOnu) {
-                        path.push({ type: 'onuConnection', cableId: currentCableId, fiberNumber: currentFiberNumber, onuName: onuConn.onuName || 'ONU', cross: nextObject });
+                        path.push({ type: 'onuConnection', cableId: currentCableId, fiberNumber: currentFiberNumber, onuName: onuConn.onuName || 'ONU', cross: nextObject, onu: connectedOnu });
                         path.push({ type: 'object', objectType: 'onu', objectName: connectedOnu.properties.get('name') || 'ONU', object: connectedOnu });
                     }
                     break;
@@ -6939,7 +6939,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
                                 sleeve: nextObject
                             });
                         }
-                        path.push({ type: 'nodeConnection', cableId: nodeConnCableId, fiberNumber: nodeConnFiberNumber, nodeName: nodeConn.nodeName, cross: nextObject });
+                        path.push({ type: 'nodeConnection', cableId: nodeConnCableId, fiberNumber: nodeConnFiberNumber, nodeName: nodeConn.nodeName, cross: nextObject, node: connectedNode });
                         path.push({ type: 'object', objectType: 'node', objectName: connectedNode.properties.get('name') || 'Узел сети', object: connectedNode });
                     }
                     break;
@@ -7450,7 +7450,7 @@ function traceFiberPath(startCableId, startFiberNumber) {
                                 sleeve: currentObject
                             });
                         }
-                        path.push({ type: 'nodeConnection', cableId: nodeConnCableId, fiberNumber: nodeConnFiberNumber, nodeName: nodeConn.nodeName, cross: currentObject });
+                        path.push({ type: 'nodeConnection', cableId: nodeConnCableId, fiberNumber: nodeConnFiberNumber, nodeName: nodeConn.nodeName, cross: currentObject, node: connectedNode });
                         path.push({ type: 'object', objectType: 'node', objectName: connectedNode.properties.get('name') || 'Узел сети', object: connectedNode });
                     }
                     break;
@@ -9095,31 +9095,97 @@ function traceFromOLTPort(oltObj, portNumber) {
     showFiberTraceFromOLTPort(oltObj, oltName, portNumber, oltObj, ass.cableId, ass.fiberNumber);
 }
 
+function showObjectOnMap(uniqueId) {
+    var obj = objects.find(function(o) {
+        return o.properties && o.properties.get('uniqueId') === uniqueId;
+    });
+    if (!obj) {
+        showWarning('Объект не найден на карте', 'Навигация');
+        return;
+    }
+    var coords = null;
+    var objType = obj.properties.get('type');
+    if (objType === 'cable') {
+        var geometry = obj.geometry;
+        if (geometry && geometry.getCoordinates) {
+            var cableCoords = geometry.getCoordinates();
+            if (cableCoords && cableCoords.length > 0) {
+                var midIdx = Math.floor(cableCoords.length / 2);
+                coords = cableCoords[midIdx];
+            }
+        }
+    } else {
+        coords = obj.geometry.getCoordinates();
+    }
+    if (!coords) {
+        showWarning('Не удалось получить координаты объекта', 'Навигация');
+        return;
+    }
+    myMap.setCenter(coords, Math.max(myMap.getZoom(), 17), { duration: 300 });
+    if (objType !== 'cable') {
+        var originalPreset = obj.options.get('preset');
+        obj.options.set('preset', 'islands#redCircleDotIcon');
+        setTimeout(function() {
+            if (originalPreset) {
+                obj.options.set('preset', originalPreset);
+            }
+        }, 2000);
+    } else {
+        var originalColor = obj.options.get('strokeColor');
+        obj.options.set('strokeColor', '#ff0000');
+        obj.options.set('strokeWidth', 5);
+        setTimeout(function() {
+            obj.options.set('strokeColor', originalColor || '#3b82f6');
+            obj.options.set('strokeWidth', 3);
+        }, 2000);
+    }
+}
+
+function attachTraceShowOnMapHandlers(container) {
+    var buttons = container.querySelectorAll('.trace-show-on-map-btn');
+    buttons.forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var objId = btn.getAttribute('data-object-id');
+            if (objId) {
+                showObjectOnMap(objId);
+            }
+        });
+    });
+}
+
 function renderOnePathToTraceHtml(path, startStepNumber) {
     var stepNumber = startStepNumber;
     var html = '';
     path.forEach(function(item) {
+        var objUniqueId = item.object ? getObjectUniqueId(item.object) : null;
+        var showOnMapBtn = objUniqueId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(objUniqueId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
+        
         if (item.type === 'start') {
             var icon = item.objectType === 'cross' ? '📦' : (item.objectType === 'sleeve' ? '🔴' : (item.objectType === 'olt' ? '📶' : (item.objectType === 'onu' ? '📟' : (item.objectType === 'splitter' ? '🔀' : '📍'))));
             var portBadge = (item.objectType === 'cross' && item.port) ? ' <span style="background: #ede9fe; color: #5b21b6; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">Порт ' + escapeHtml(String(item.port)) + '</span>' : '';
-            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #22c55e; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">' + stepNumber + '</span><div style="margin-left: 12px; padding: 10px 14px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0; flex: 1;"><span style="font-weight: 600; color: #166534;">' + icon + ' ' + escapeHtml(item.objectName) + '</span>' + portBadge + '<span style="color: #6b7280; font-size: 0.8rem;"> (' + getObjectTypeName(item.objectType) + ')</span></div></div>';
+            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #22c55e; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">' + stepNumber + '</span><div style="margin-left: 12px; padding: 10px 14px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0; flex: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;"><div><span style="font-weight: 600; color: #166534;">' + icon + ' ' + escapeHtml(item.objectName) + '</span>' + portBadge + '<span style="color: #6b7280; font-size: 0.8rem;"> (' + getObjectTypeName(item.objectType) + ')</span></div>' + showOnMapBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'object') {
             icon = item.objectType === 'cross' ? '📦' : (item.objectType === 'sleeve' ? '🔴' : (item.objectType === 'node' ? '🖥️' : (item.objectType === 'olt' ? '📶' : (item.objectType === 'onu' ? '📟' : (item.objectType === 'splitter' ? '🔀' : '📍')))));
             portBadge = (item.objectType === 'cross' && item.port) ? ' <span style="background: #ede9fe; color: #5b21b6; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">Порт ' + escapeHtml(String(item.port)) + '</span>' : '';
-            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #8b5cf6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">' + stepNumber + '</span><div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1;"><span style="font-weight: 600; color: #5b21b6;">' + icon + ' ' + escapeHtml(item.objectName) + '</span>' + portBadge + '<span style="color: #6b7280; font-size: 0.8rem;"> (' + getObjectTypeName(item.objectType) + ')</span></div></div>';
+            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #8b5cf6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">' + stepNumber + '</span><div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;"><div><span style="font-weight: 600; color: #5b21b6;">' + icon + ' ' + escapeHtml(item.objectName) + '</span>' + portBadge + '<span style="color: #6b7280; font-size: 0.8rem;"> (' + getObjectTypeName(item.objectType) + ')</span></div>' + showOnMapBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'onuConnection') {
-            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #8b5cf6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔌</span><div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1;"><span style="color: #7c3aed;">🔌 Вывод на ONU: Жила ' + item.fiberNumber + ' → ' + escapeHtml(item.onuName) + '</span></div></div>';
+            var onuConnObjId = item.onu ? getObjectUniqueId(item.onu) : null;
+            var onuConnShowBtn = onuConnObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(onuConnObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
+            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #8b5cf6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔌</span><div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;"><span style="color: #7c3aed;">🔌 Вывод на ONU: Жила ' + item.fiberNumber + ' → ' + escapeHtml(item.onuName) + '</span>' + onuConnShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'cable') {
+            var cableObjId = item.cable ? getObjectUniqueId(item.cable) : null;
+            var cableShowBtn = cableObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(cableObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
             var cableType = item.cable ? item.cable.properties.get('cableType') : null;
             var fiberColors = cableType ? getFiberColors(cableType) : [];
             var fiber = fiberColors.find(function(f) { return f.number === item.fiberNumber; });
             var fiberColor = fiber ? fiber.color : '#3b82f6';
             var fiberName = fiber ? fiber.name : '';
             var fiberTextColor = (fiberColor === '#FFFFFF' || fiberColor === '#FFFACD' || fiberColor === '#FFFF00') ? '#000' : '#fff';
-            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #3b82f6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">➡</span><div style="margin-left: 12px; padding: 10px 14px; background: #eff6ff; border-radius: 6px; border-left: 4px solid ' + fiberColor + '; flex: 1;"><span style="color: #1e40af;">📡 ' + escapeHtml(item.cableName) + '</span><span style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;"><span style="width: 16px; height: 16px; border-radius: 50%; background: ' + fiberColor + '; border: 1px solid #333; display: inline-block;"></span><span style="background: ' + fiberColor + '; color: ' + fiberTextColor + '; padding: 2px 8px; border-radius: 4px; font-weight: 600;">Жила ' + item.fiberNumber + (fiberName ? ': ' + fiberName : '') + '</span></span></div></div>';
+            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #3b82f6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">➡</span><div style="margin-left: 12px; padding: 10px 14px; background: #eff6ff; border-radius: 6px; border-left: 4px solid ' + fiberColor + '; flex: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;"><div style="display: flex; align-items: center; flex-wrap: wrap;"><span style="color: #1e40af;">📡 ' + escapeHtml(item.cableName) + '</span><span style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;"><span style="width: 16px; height: 16px; border-radius: 50%; background: ' + fiberColor + '; border: 1px solid #333; display: inline-block;"></span><span style="background: ' + fiberColor + '; color: ' + fiberTextColor + '; padding: 2px 8px; border-radius: 4px; font-weight: 600;">Жила ' + item.fiberNumber + (fiberName ? ': ' + fiberName : '') + '</span></span></div>' + cableShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'connection') {
             var fromFiberColors = item.fromCableType ? getFiberColors(item.fromCableType) : [];
@@ -9137,21 +9203,31 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
             html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #f59e0b; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">⚡</span><div style="margin-left: 12px; padding: 10px 14px; background: #fffbeb; border-radius: 6px; border: 1px solid #fde68a; flex: 1;"><div style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px;"><span style="color: #92400e;">🔗 Соединение:</span><span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 14px; height: 14px; border-radius: 50%; background: ' + fromColor + '; border: 1px solid #333;"></span><span style="background: ' + fromColor + '; color: ' + fromTextColor + '; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.8rem;">Ж' + item.fromFiberNumber + (fromFiberName ? ' (' + fromFiberName + ')' : '') + '</span></span>' + (fromLabelText ? '<span style="color: #8b5cf6; font-weight: 500; font-size: 0.8rem;">' + fromLabelText + '</span>' : '') + '<span style="font-size: 1rem;">→</span><span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 14px; height: 14px; border-radius: 50%; background: ' + toColor + '; border: 1px solid #333;"></span><span style="background: ' + toColor + '; color: ' + toTextColor + '; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.8rem;">Ж' + item.toFiberNumber + (toFiberName ? ' (' + toFiberName + ')' : '') + '</span></span>' + (toLabelText ? '<span style="color: #8b5cf6; font-weight: 500; font-size: 0.8rem;">' + toLabelText + '</span>' : '') + '</div></div></div>';
             stepNumber++;
         } else if (item.type === 'nodeConnection') {
-            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #8b5cf6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔌</span><div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1;"><span style="color: #7c3aed;">🔌 Вывод на узел: Жила ' + item.fiberNumber + ' → ' + escapeHtml(item.nodeName) + '</span></div></div>';
+            var nodeConnObjId = item.node ? getObjectUniqueId(item.node) : null;
+            var nodeConnShowBtn = nodeConnObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(nodeConnObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
+            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #8b5cf6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔌</span><div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;"><span style="color: #7c3aed;">🔌 Вывод на узел: Жила ' + item.fiberNumber + ' → ' + escapeHtml(item.nodeName) + '</span>' + nodeConnShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'splitterConnection') {
+            var spObjId = item.splitter ? getObjectUniqueId(item.splitter) : null;
+            var spShowBtn = spObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(spObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
             var spName = item.splitter && item.splitter.properties ? (item.splitter.properties.get('name') || 'Сплиттер') : 'Сплиттер';
-            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #f59e0b; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔀</span><div style="margin-left: 12px; padding: 10px 14px; background: #fffbeb; border-radius: 6px; border-left: 4px solid #f59e0b; flex: 1;"><span style="color: #92400e; font-weight: 600;">→ Жила идёт на сплиттер «' + escapeHtml(spName) + '»</span><span style="color: #78716c; font-size: 0.8rem; margin-left: 6px;">(жила ' + item.fiberNumber + ')</span></div></div>';
+            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #f59e0b; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔀</span><div style="margin-left: 12px; padding: 10px 14px; background: #fffbeb; border-radius: 6px; border-left: 4px solid #f59e0b; flex: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;"><div><span style="color: #92400e; font-weight: 600;">→ Жила идёт на сплиттер «' + escapeHtml(spName) + '»</span><span style="color: #78716c; font-size: 0.8rem; margin-left: 6px;">(жила ' + item.fiberNumber + ')</span></div>' + spShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'splitterOutputToOnu') {
-            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #a855f7; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">📡</span><div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1;"><span style="color: #7c3aed;">🔀 Выход сплиттера → ONU ' + escapeHtml(item.onuName || 'ONU') + '</span></div></div>';
+            var spOutOnuId = item.onuObj ? getObjectUniqueId(item.onuObj) : null;
+            var spOutOnuBtn = spOutOnuId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(spOutOnuId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
+            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #a855f7; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">📡</span><div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;"><span style="color: #7c3aed;">🔀 Выход сплиттера → ONU ' + escapeHtml(item.onuName || 'ONU') + '</span>' + spOutOnuBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'splitterOutputToSplitter') {
+            var toSpObjId = item.toSplitter ? getObjectUniqueId(item.toSplitter) : null;
+            var toSpShowBtn = toSpObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(toSpObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
             var toName = item.toSplitter && item.toSplitter.properties ? item.toSplitter.properties.get('name') || 'Сплиттер' : 'Сплиттер';
-            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #f97316; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔀</span><div style="margin-left: 12px; padding: 10px 14px; background: #fff7ed; border-radius: 6px; border: 1px solid #fed7aa; flex: 1;"><span style="color: #c2410c;">🔀 Выход сплиттера → ' + escapeHtml(toName) + '</span></div></div>';
+            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #f97316; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔀</span><div style="margin-left: 12px; padding: 10px 14px; background: #fff7ed; border-radius: 6px; border: 1px solid #fed7aa; flex: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;"><span style="color: #c2410c;">🔀 Выход сплиттера → ' + escapeHtml(toName) + '</span>' + toSpShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'oltPortConnection') {
-            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #0ea5e9; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔌</span><div style="margin-left: 12px; padding: 10px 14px; background: #e0f2fe; border-radius: 6px; border: 1px solid #7dd3fc; flex: 1;"><span style="color: #0369a1; font-weight: 600;">📶 Подключено к OLT «' + escapeHtml(item.oltName || 'OLT') + '», порт ' + item.portNumber + '</span><span style="color: #0c4a6e; font-size: 0.8rem; margin-left: 6px;">(жила ' + item.fiberNumber + ')</span></div></div>';
+            var oltObjId = item.olt ? getObjectUniqueId(item.olt) : null;
+            var oltShowBtn = oltObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(oltObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
+            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #0ea5e9; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔌</span><div style="margin-left: 12px; padding: 10px 14px; background: #e0f2fe; border-radius: 6px; border: 1px solid #7dd3fc; flex: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;"><div><span style="color: #0369a1; font-weight: 600;">📶 Подключено к OLT «' + escapeHtml(item.oltName || 'OLT') + '», порт ' + item.portNumber + '</span><span style="color: #0c4a6e; font-size: 0.8rem; margin-left: 6px;">(жила ' + item.fiberNumber + ')</span></div>' + oltShowBtn + '</div></div>';
             stepNumber++;
         }
     });
@@ -9196,6 +9272,7 @@ function showFiberTraceFromOLTPort(oltObj, oltName, portNumber, startObj, cableI
         return;
     }
     content.innerHTML = header;
+    attachTraceShowOnMapHandlers(content);
     modal.style.display = 'block';
 }
 
@@ -9239,6 +9316,7 @@ function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeO
     header += '</div>';
     
     content.innerHTML = header;
+    attachTraceShowOnMapHandlers(content);
     modal.style.display = 'block';
 }
 

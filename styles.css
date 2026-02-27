@@ -3567,3 +3567,15 @@ button {
     filter: invert(1) hue-rotate(180deg);
     -webkit-filter: invert(1) hue-rotate(180deg);
 }
+
+/* Кнопки "Показать на карте" в трассировке */
+.trace-show-on-map-btn {
+    transition: background-color 0.2s, transform 0.1s;
+}
+.trace-show-on-map-btn:hover {
+    background-color: #2563eb !important;
+    transform: scale(1.05);
+}
+.trace-show-on-map-btn:active {
+    transform: scale(0.95);
+}
