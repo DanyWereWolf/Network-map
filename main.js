@@ -8850,7 +8850,25 @@ function traceFromNode(crossUniqueId, cableId, fiberNumber) {
     );
     
     if (!crossObj) {
-        showError('Кросс не найден', 'Ошибка');
+        showError('Кросс был удалён. Информация обновлена.', 'Данные устарели');
+        if (currentModalObject && currentModalObject.properties) {
+            var currentType = currentModalObject.properties.get('type');
+            if (currentType === 'node') {
+                showObjectInfo(currentModalObject);
+            }
+        }
+        return;
+    }
+
+    const cable = objects.find(c => c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === cableId);
+    if (!cable) {
+        showError('Кабель был удалён. Информация обновлена.', 'Данные устарели');
+        if (currentModalObject && currentModalObject.properties) {
+            var currentType = currentModalObject.properties.get('type');
+            if (currentType === 'node') {
+                showObjectInfo(currentModalObject);
+            }
+        }
         return;
     }
 
@@ -8858,6 +8876,17 @@ function traceFromNode(crossUniqueId, cableId, fiberNumber) {
     const key = `${cableId}-${fiberNumber}`;
     const nodeConn = nodeConnections[key];
     
+    if (!nodeConn) {
+        showError('Соединение было удалено. Информация обновлена.', 'Данные устарели');
+        if (currentModalObject && currentModalObject.properties) {
+            var currentType = currentModalObject.properties.get('type');
+            if (currentType === 'node') {
+                showObjectInfo(currentModalObject);
+            }
+        }
+        return;
+    }
+
     let nodeObj = null;
     if (nodeConn) {
         nodeObj = objects.find(obj => 
@@ -8874,17 +8903,26 @@ function traceFromOLTPort(oltObj, portNumber) {
     const portAssignments = oltObj.properties.get('portAssignments') || {};
     const ass = portAssignments[String(portNumber)];
     if (!ass) {
-        showWarning('На этот порт не назначена жила', 'Трассировка');
+        showWarning('На этот порт не назначена жила. Информация обновлена.', 'Данные устарели');
+        if (currentModalObject && currentModalObject.properties && currentModalObject.properties.get('type') === 'olt') {
+            showObjectInfo(currentModalObject);
+        }
         return;
     }
     const cable = objects.find(c => c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === ass.cableId);
     if (!cable) {
-        showError('Кабель не найден', 'Трассировка');
+        showError('Кабель был удалён. Информация обновлена.', 'Данные устарели');
+        if (currentModalObject && currentModalObject.properties && currentModalObject.properties.get('type') === 'olt') {
+            showObjectInfo(currentModalObject);
+        }
         return;
     }
     const otherEnd = getOtherEndOfCable(cable, oltObj);
     if (!otherEnd) {
-        showError('Не найден противоположный конец кабеля', 'Трассировка');
+        showError('Не найден противоположный конец кабеля. Информация обновлена.', 'Данные устарели');
+        if (currentModalObject && currentModalObject.properties && currentModalObject.properties.get('type') === 'olt') {
+            showObjectInfo(currentModalObject);
+        }
         return;
     }
     const oltName = oltObj.properties.get('name') || 'OLT';
