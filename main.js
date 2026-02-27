@@ -2768,14 +2768,44 @@ function deleteObject(obj, opts) {
         myMap.geoObjects.remove(label);
     }
     
+    if (objType === 'support' || objType === 'attachment') {
+        objects.forEach(cable => {
+            if (!cable.properties || cable.properties.get('type') !== 'cable') return;
+            var points = cable.properties.get('points');
+            if (!Array.isArray(points)) return;
+            
+            var objIdx = points.indexOf(obj);
+            if (objIdx === -1) {
+                var objUid = getObjectUniqueId(obj);
+                for (var pi = 0; pi < points.length; pi++) {
+                    if (points[pi] && getObjectUniqueId(points[pi]) === objUid) {
+                        objIdx = pi;
+                        break;
+                    }
+                }
+            }
+            
+            if (objIdx !== -1 && objIdx > 0 && objIdx < points.length - 1) {
+                var newPoints = points.filter((p, idx) => idx !== objIdx);
+                cable.properties.set('points', newPoints);
+                
+                var newGeometry = newPoints.map(p => {
+                    if (p && p.geometry) {
+                        return p.geometry.getCoordinates();
+                    }
+                    return null;
+                }).filter(c => c !== null);
+                
+                if (newGeometry.length >= 2 && cable.geometry) {
+                    cable.geometry.setCoordinates(newGeometry);
+                }
+            }
+        });
+    }
+
     let cablesToRemove = objects.filter(cable => {
         if (!cable.properties || cable.properties.get('type') !== 'cable') return false;
         if (cable.properties.get('from') === obj || cable.properties.get('to') === obj) return true;
-        
-        if (objType === 'support') {
-            var points = cable.properties.get('points');
-            if (Array.isArray(points) && points.indexOf(obj) !== -1) return true;
-        }
         return false;
     });
     
@@ -6887,19 +6917,23 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
             currentCable = nextCable;
             currentObject = nextObject;
             
-        } else if (objType === 'support') {
-            
-            const nextCableForSupport = findNextCableThroughObject(nextObject, currentCable);
-            
-            if (!nextCableForSupport) {
-                
-                break;
+        } else if (objType === 'support' || objType === 'attachment') {
+            var pts = currentCable.properties.get('points');
+            if (pts && Array.isArray(pts) && pts.length > 2) {
+                var currentIdx = -1;
+                var nextObjId = getObjectUniqueId(nextObject);
+                for (var pi = 0; pi < pts.length; pi++) {
+                    if (pts[pi] === nextObject || (pts[pi] && getObjectUniqueId(pts[pi]) === nextObjId)) {
+                        currentIdx = pi;
+                        break;
+                    }
+                }
+                if (currentIdx !== -1 && currentIdx < pts.length - 1) {
+                    currentObject = nextObject;
+                    continue;
+                }
             }
-
-            currentCable = nextCableForSupport;
-            currentCableId = nextCableForSupport.properties.get('uniqueId');
-            currentObject = nextObject;
-
+            break;
         } else {
             
             break;
