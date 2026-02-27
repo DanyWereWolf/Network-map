@@ -9527,10 +9527,20 @@ function updateCrossDisplay() {
                 }
                 return;
             }
-            const names = crosses.map(c => c.properties.get('name') || 'Без имени');
-            const listHtml = crosses.map((c, i) =>
-                `<div class="cross-group-item" data-index="${i}">` +
-                `<span class="group-item-name">${escapeHtml(names[i])}</span>` +
+            const crossesWithCableCount = crosses.map((c, originalIndex) => {
+                const cableCount = objects.filter(cable => {
+                    if (!cable.properties || cable.properties.get('type') !== 'cable') return false;
+                    var from = cable.properties.get('from');
+                    var to = cable.properties.get('to');
+                    return from === c || to === c;
+                }).length;
+                return { cross: c, originalIndex, cableCount, name: c.properties.get('name') || 'Без имени' };
+            });
+            crossesWithCableCount.sort((a, b) => b.cableCount - a.cableCount);
+            const listHtml = crossesWithCableCount.map((item, displayIndex) =>
+                `<div class="cross-group-item" data-index="${item.originalIndex}" data-display-index="${displayIndex}">` +
+                `<span class="group-item-name">${escapeHtml(item.name)}</span>` +
+                `<span class="group-item-cables" style="margin-left: 8px; font-size: 0.75rem; color: ${item.cableCount > 0 ? '#22c55e' : '#9ca3af'};">(${item.cableCount} каб.)</span>` +
                 (isEditMode ? `<button type="button" class="group-item-move" title="Вынести и переместить">Переместить</button>` : '') +
                 `</div>`
             ).join('');
@@ -9561,15 +9571,18 @@ function updateCrossDisplay() {
                         }
                     });
                 }
-                document.querySelectorAll('.cross-group-item').forEach((el, i) => {
+                document.querySelectorAll('.cross-group-item').forEach((el) => {
+                    const crossIndex = parseInt(el.getAttribute('data-index'), 10);
+                    if (isNaN(crossIndex) || crossIndex < 0 || crossIndex >= crosses.length) return;
+                    const crossObj = crosses[crossIndex];
                     const moveBtn = el.querySelector('.group-item-move');
                     if (moveBtn) {
                         moveBtn.addEventListener('click', function(ev) { ev.stopPropagation(); ev.preventDefault();
                             const offsetCoords = [coords[0] + 0.00008, coords[1]];
-                            crosses[i].geometry.setCoordinates(offsetCoords);
-                            const lbl = crosses[i].properties.get('label');
+                            crossObj.geometry.setCoordinates(offsetCoords);
+                            const lbl = crossObj.properties.get('label');
                             if (lbl && lbl.geometry) lbl.geometry.setCoordinates(offsetCoords);
-                            updateConnectedCables(crosses[i]);
+                            updateConnectedCables(crossObj);
                             updateAllConnectionLines();
                             saveData();
                             myMap.balloon.close();
@@ -9580,21 +9593,21 @@ function updateCrossDisplay() {
                         if (e.target && e.target.closest('.group-item-move')) return;
                         myMap.balloon.close();
                         if (currentCableTool && isEditMode) {
-                            if (cableSource && cableSource !== crosses[i]) {
+                            if (cableSource && cableSource !== crossObj) {
                                 const cableType = document.getElementById('cableType').value;
-                                if (addCable(cableSource, crosses[i], cableType)) {
-                                    cableSource = crosses[i];
+                                if (addCable(cableSource, crossObj, cableType)) {
+                                    cableSource = crossObj;
                                     clearSelection();
                                     selectObject(cableSource);
                                     removeCablePreview();
                                 }
                             } else {
-                                cableSource = crosses[i];
+                                cableSource = crossObj;
                                 clearSelection();
                                 selectObject(cableSource);
                             }
                         } else {
-                            showObjectInfo(crosses[i]);
+                            showObjectInfo(crossObj);
                         }
                     });
                 });
