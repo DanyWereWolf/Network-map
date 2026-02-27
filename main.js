@@ -2841,6 +2841,16 @@ function deleteObject(obj, opts) {
         });
     }
     updateStats();
+    
+    var infoModal = document.getElementById('infoModal');
+    if (infoModal && infoModal.style.display === 'block') {
+        var modalTitleEl = document.getElementById('modalTitle');
+        var isTraceModal = modalTitleEl && modalTitleEl.textContent && modalTitleEl.textContent.toLowerCase().indexOf('трассировка') !== -1;
+        if (currentModalObject === obj || isTraceModal) {
+            infoModal.style.display = 'none';
+            currentModalObject = null;
+        }
+    }
 }
 
 function selectObject(obj) {
@@ -9220,9 +9230,13 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
     updateAllConnectionLines();
 
     const modal = document.getElementById('infoModal');
-    if (modal && currentModalObject === cable) {
-        modal.style.display = 'none';
-        currentModalObject = null;
+    if (modal && modal.style.display === 'block') {
+        var modalTitleEl = document.getElementById('modalTitle');
+        var isTraceModal = modalTitleEl && modalTitleEl.textContent && modalTitleEl.textContent.toLowerCase().indexOf('трассировка') !== -1;
+        if (currentModalObject === cable || isTraceModal) {
+            modal.style.display = 'none';
+            currentModalObject = null;
+        }
     }
     
     updateStats();
