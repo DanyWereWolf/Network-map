@@ -6832,7 +6832,29 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
             continue;
         }
 
-        if (objType === 'olt' || objType === 'onu') {
+        if (objType === 'olt') {
+            const portAssignments = nextObject.properties.get('portAssignments') || {};
+            let foundPort = null;
+            for (const portKey in portAssignments) {
+                const pa = portAssignments[portKey];
+                if (pa && pa.cableId === currentCableId && pa.fiberNumber === currentFiberNumber) {
+                    foundPort = parseInt(portKey, 10);
+                    break;
+                }
+            }
+            if (foundPort !== null) {
+                path.push({
+                    type: 'oltPortConnection',
+                    cableId: currentCableId,
+                    fiberNumber: currentFiberNumber,
+                    oltName: nextObject.properties.get('name') || 'OLT',
+                    portNumber: foundPort,
+                    olt: nextObject
+                });
+            }
+            break;
+        }
+        if (objType === 'onu') {
             break;
         }
         if (objType === 'sleeve' || objType === 'cross') {
@@ -6851,14 +6873,55 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
                     break;
                 }
                 const nodeConnections = nextObject.properties.get('nodeConnections') || {};
-                const nodeConn = nodeConnections[nodeConnKey];
+                let nodeConn = nodeConnections[nodeConnKey];
+                let nodeConnCableId = currentCableId;
+                let nodeConnFiberNumber = currentFiberNumber;
+                
+                if (!nodeConn) {
+                    const crossFiberConns = nextObject.properties.get('fiberConnections') || [];
+                    for (var cfi = 0; cfi < crossFiberConns.length; cfi++) {
+                        var cfc = crossFiberConns[cfi];
+                        var linkedKey = null;
+                        if (cfc.from && cfc.from.cableId === currentCableId && cfc.from.fiberNumber === currentFiberNumber) {
+                            linkedKey = cfc.to.cableId + '-' + cfc.to.fiberNumber;
+                            nodeConnCableId = cfc.to.cableId;
+                            nodeConnFiberNumber = cfc.to.fiberNumber;
+                        } else if (cfc.to && cfc.to.cableId === currentCableId && cfc.to.fiberNumber === currentFiberNumber) {
+                            linkedKey = cfc.from.cableId + '-' + cfc.from.fiberNumber;
+                            nodeConnCableId = cfc.from.cableId;
+                            nodeConnFiberNumber = cfc.from.fiberNumber;
+                        }
+                        if (linkedKey && nodeConnections[linkedKey]) {
+                            nodeConn = nodeConnections[linkedKey];
+                            break;
+                        }
+                    }
+                }
                 
                 if (nodeConn) {
                     const connectedNode = objects.find(obj => 
                         obj.properties && obj.properties.get('type') === 'node' && obj.properties.get('uniqueId') === nodeConn.nodeId
                     );
                     if (connectedNode) {
-                        path.push({ type: 'nodeConnection', cableId: currentCableId, fiberNumber: currentFiberNumber, nodeName: nodeConn.nodeName, cross: nextObject });
+                        if (nodeConnCableId !== currentCableId || nodeConnFiberNumber !== currentFiberNumber) {
+                            const crossFiberConnsForLabel = nextObject.properties.get('fiberConnections') || [];
+                            const fiberLabels = nextObject.properties.get('fiberLabels') || {};
+                            const fromLabel = fiberLabels[nodeConnKey] || '';
+                            const toLabel = fiberLabels[nodeConnCableId + '-' + nodeConnFiberNumber] || '';
+                            path.push({
+                                type: 'connection',
+                                fromCableId: currentCableId,
+                                fromFiberNumber: currentFiberNumber,
+                                fromLabel: fromLabel,
+                                fromCableType: currentCable ? currentCable.properties.get('cableType') : null,
+                                toCableId: nodeConnCableId,
+                                toFiberNumber: nodeConnFiberNumber,
+                                toLabel: toLabel,
+                                toCableType: null,
+                                sleeve: nextObject
+                            });
+                        }
+                        path.push({ type: 'nodeConnection', cableId: nodeConnCableId, fiberNumber: nodeConnFiberNumber, nodeName: nodeConn.nodeName, cross: nextObject });
                         path.push({ type: 'object', objectType: 'node', objectName: connectedNode.properties.get('name') || 'Узел сети', object: connectedNode });
                     }
                     break;
@@ -7279,14 +7342,54 @@ function traceFiberPath(startCableId, startFiberNumber) {
             const nodeConnKey = `${currentCableId}-${currentFiberNumber}`;
             if (objType === 'cross') {
                 const nodeConnections = currentObject.properties.get('nodeConnections') || {};
-                const nodeConn = nodeConnections[nodeConnKey];
+                let nodeConn = nodeConnections[nodeConnKey];
+                let nodeConnCableId = currentCableId;
+                let nodeConnFiberNumber = currentFiberNumber;
+                
+                if (!nodeConn) {
+                    const crossFiberConns = currentObject.properties.get('fiberConnections') || [];
+                    for (var cfi2 = 0; cfi2 < crossFiberConns.length; cfi2++) {
+                        var cfc2 = crossFiberConns[cfi2];
+                        var linkedKey2 = null;
+                        if (cfc2.from && cfc2.from.cableId === currentCableId && cfc2.from.fiberNumber === currentFiberNumber) {
+                            linkedKey2 = cfc2.to.cableId + '-' + cfc2.to.fiberNumber;
+                            nodeConnCableId = cfc2.to.cableId;
+                            nodeConnFiberNumber = cfc2.to.fiberNumber;
+                        } else if (cfc2.to && cfc2.to.cableId === currentCableId && cfc2.to.fiberNumber === currentFiberNumber) {
+                            linkedKey2 = cfc2.from.cableId + '-' + cfc2.from.fiberNumber;
+                            nodeConnCableId = cfc2.from.cableId;
+                            nodeConnFiberNumber = cfc2.from.fiberNumber;
+                        }
+                        if (linkedKey2 && nodeConnections[linkedKey2]) {
+                            nodeConn = nodeConnections[linkedKey2];
+                            break;
+                        }
+                    }
+                }
                 
                 if (nodeConn) {
                     const connectedNode = objects.find(obj => 
                         obj.properties && obj.properties.get('type') === 'node' && obj.properties.get('uniqueId') === nodeConn.nodeId
                     );
                     if (connectedNode) {
-                        path.push({ type: 'nodeConnection', cableId: currentCableId, fiberNumber: currentFiberNumber, nodeName: nodeConn.nodeName, cross: currentObject });
+                        if (nodeConnCableId !== currentCableId || nodeConnFiberNumber !== currentFiberNumber) {
+                            const fiberLabels2 = currentObject.properties.get('fiberLabels') || {};
+                            const fromLabel2 = fiberLabels2[nodeConnKey] || '';
+                            const toLabel2 = fiberLabels2[nodeConnCableId + '-' + nodeConnFiberNumber] || '';
+                            path.push({
+                                type: 'connection',
+                                fromCableId: currentCableId,
+                                fromFiberNumber: currentFiberNumber,
+                                fromLabel: fromLabel2,
+                                fromCableType: currentCable ? currentCable.properties.get('cableType') : null,
+                                toCableId: nodeConnCableId,
+                                toFiberNumber: nodeConnFiberNumber,
+                                toLabel: toLabel2,
+                                toCableType: null,
+                                sleeve: currentObject
+                            });
+                        }
+                        path.push({ type: 'nodeConnection', cableId: nodeConnCableId, fiberNumber: nodeConnFiberNumber, nodeName: nodeConn.nodeName, cross: currentObject });
                         path.push({ type: 'object', objectType: 'node', objectName: connectedNode.properties.get('name') || 'Узел сети', object: connectedNode });
                     }
                     break;
@@ -8983,6 +9086,9 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
         } else if (item.type === 'splitterOutputToSplitter') {
             var toName = item.toSplitter && item.toSplitter.properties ? item.toSplitter.properties.get('name') || 'Сплиттер' : 'Сплиттер';
             html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #f97316; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔀</span><div style="margin-left: 12px; padding: 10px 14px; background: #fff7ed; border-radius: 6px; border: 1px solid #fed7aa; flex: 1;"><span style="color: #c2410c;">🔀 Выход сплиттера → ' + escapeHtml(toName) + '</span></div></div>';
+            stepNumber++;
+        } else if (item.type === 'oltPortConnection') {
+            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #0ea5e9; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔌</span><div style="margin-left: 12px; padding: 10px 14px; background: #e0f2fe; border-radius: 6px; border: 1px solid #7dd3fc; flex: 1;"><span style="color: #0369a1; font-weight: 600;">📶 Подключено к OLT «' + escapeHtml(item.oltName || 'OLT') + '», порт ' + item.portNumber + '</span><span style="color: #0c4a6e; font-size: 0.8rem; margin-left: 6px;">(жила ' + item.fiberNumber + ')</span></div></div>';
             stepNumber++;
         }
     });
