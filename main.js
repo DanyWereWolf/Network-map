@@ -2780,8 +2780,13 @@ function deleteObject(obj, opts) {
     });
     
     cablesToRemove.forEach(cable => {
-        myMap.geoObjects.remove(cable);
-        objects = objects.filter(o => o !== cable);
+        var cableUniqueId = cable.properties.get('uniqueId');
+        if (cableUniqueId) {
+            deleteCableByUniqueId(cableUniqueId, { skipSync: true });
+        } else {
+            myMap.geoObjects.remove(cable);
+            objects = objects.filter(o => o !== cable);
+        }
     });
     
     myMap.geoObjects.remove(obj);
@@ -3721,7 +3726,7 @@ function findRefClosestToCoord(refs, coord, tolerance, preferCableEndpoint) {
         var d = Math.sqrt(Math.pow(c[0] - coord[0], 2) + Math.pow(c[1] - coord[1], 2));
         if (d >= tolerance) continue;
         var t = o.properties && o.properties.get('type');
-        if (preferCableEndpoint && (t === 'sleeve' || t === 'cross' || t === 'attachment')) {
+        if (preferCableEndpoint && (t === 'sleeve' || t === 'cross' || t === 'attachment' || t === 'olt' || t === 'splitter' || t === 'onu')) {
             if (d < bestEndpointDist) { bestEndpointDist = d; bestEndpoint = o; }
         }
         if (d < bestDist) { bestDist = d; best = o; }
@@ -9066,6 +9071,9 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
         if (t === 'cross' || t === 'sleeve') {
             var oltConn = slot.properties.get('oltConnections');
             var onuConn = slot.properties.get('onuConnections');
+            var splitterConn = slot.properties.get('splitterConnections');
+            var nodeConn = slot.properties.get('nodeConnections');
+            var fiberConn = slot.properties.get('fiberConnections');
             var changed = false;
             if (oltConn) {
                 Object.keys(oltConn).forEach(function(key) {
@@ -9083,13 +9091,44 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
                     }
                 });
             }
+            if (splitterConn) {
+                Object.keys(splitterConn).forEach(function(key) {
+                    if (key.indexOf(cableUniqueId + '-') === 0) {
+                        delete splitterConn[key];
+                        changed = true;
+                    }
+                });
+            }
+            if (nodeConn) {
+                Object.keys(nodeConn).forEach(function(key) {
+                    if (key.indexOf(cableUniqueId + '-') === 0) {
+                        delete nodeConn[key];
+                        changed = true;
+                    }
+                });
+            }
+            if (fiberConn && Array.isArray(fiberConn)) {
+                var newFiberConn = fiberConn.filter(function(conn) {
+                    if (!conn) return false;
+                    var fromMatch = conn.from && conn.from.cableId === cableUniqueId;
+                    var toMatch = conn.to && conn.to.cableId === cableUniqueId;
+                    return !fromMatch && !toMatch;
+                });
+                if (newFiberConn.length !== fiberConn.length) {
+                    slot.properties.set('fiberConnections', newFiberConn);
+                    changed = true;
+                }
+            }
             if (changed) {
                 if (oltConn) slot.properties.set('oltConnections', oltConn);
                 if (onuConn) slot.properties.set('onuConnections', onuConn);
+                if (splitterConn) slot.properties.set('splitterConnections', splitterConn);
+                if (nodeConn) slot.properties.set('nodeConnections', nodeConn);
             }
         }
         if (t === 'olt') {
             var portAssignments = slot.properties.get('portAssignments') || {};
+            var incomingFiber = slot.properties.get('incomingFiber');
             var paChanged = false;
             Object.keys(portAssignments).forEach(function(portKey) {
                 var a = portAssignments[portKey];
@@ -9099,6 +9138,31 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
                 }
             });
             if (paChanged) slot.properties.set('portAssignments', portAssignments);
+            if (incomingFiber && incomingFiber.cableId === cableUniqueId) {
+                slot.properties.set('incomingFiber', null);
+            }
+        }
+        if (t === 'splitter') {
+            var inputFiber = slot.properties.get('inputFiber');
+            var outputConnections = slot.properties.get('outputConnections');
+            if (inputFiber && inputFiber.cableId === cableUniqueId) {
+                slot.properties.set('inputFiber', null);
+            }
+            if (outputConnections && Array.isArray(outputConnections)) {
+                var newOutputConn = outputConnections.map(function(conn) {
+                    if (conn && conn.cableId === cableUniqueId) {
+                        return { onuId: conn.onuId, splitterId: conn.splitterId };
+                    }
+                    return conn;
+                });
+                slot.properties.set('outputConnections', newOutputConn);
+            }
+        }
+        if (t === 'onu') {
+            var onuIncoming = slot.properties.get('incomingFiber');
+            if (onuIncoming && onuIncoming.cableId === cableUniqueId) {
+                slot.properties.set('incomingFiber', null);
+            }
         }
     });
 
