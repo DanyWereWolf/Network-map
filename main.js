@@ -13,6 +13,10 @@ let cableSource = null;
 let cableWaypoints = []; 
 let cablePreviewLine = null; 
 let selectedFiberForConnection = null; 
+let splitterFiberRoutingMode = false;
+let splitterFiberRoutingData = null;
+let splitterFiberWaypoints = [];
+let splitterFiberPreviewLine = null;
 let netboxConfig = {
     url: '',
     token: '',
@@ -686,6 +690,10 @@ function setupEventListeners() {
             cancelObjectPlacement();
         }
         
+        if (splitterFiberRoutingMode) {
+            cancelSplitterFiberRouting();
+        }
+        
         currentCableTool = !currentCableTool;
         const cableBtn = this;
         
@@ -788,6 +796,7 @@ function setupEventListeners() {
                     return;
                 }
             }
+            if (splitterFiberRoutingMode) { cancelSplitterFiberRouting(); showInfo('Прокладка жилы отменена.', 'Отмена'); e.preventDefault(); return; }
             if (objectPlacementMode) { cancelObjectPlacement(); e.preventDefault(); return; }
             if (currentCableTool) {
                 var cableBtn = document.getElementById('addCable');
@@ -1242,6 +1251,10 @@ function handleAddObject() {
         }
     }
 
+    if (splitterFiberRoutingMode) {
+        cancelSplitterFiberRouting();
+    }
+
     const objectTypeEl = document.getElementById('objectType');
     if (!objectTypeEl) return;
     const type = objectTypeEl.value;
@@ -1408,6 +1421,11 @@ function handleMapClick(e) {
 
     if (clickedCable) {
         showCableInfo(clickedCable);
+        return;
+    }
+
+    if (splitterFiberRoutingMode && splitterFiberRoutingData) {
+        handleSplitterFiberRoutingClick(coords);
         return;
     }
 
@@ -1580,7 +1598,8 @@ function handleMapClick(e) {
             }
             
             if (!cableSource) {
-                if (objType !== 'sleeve' && objType !== 'cross' && objType !== 'attachment') {
+                var startEndpoints = ['sleeve', 'cross', 'attachment', 'olt', 'splitter', 'onu'];
+                if (startEndpoints.indexOf(objType) === -1) {
                     showError('Начало кабеля должно быть муфтой, кроссом, креплением, OLT, сплиттером или ONU. Выберите один из этих объектов.', 'Недопустимое действие');
                     return;
                 }
@@ -1603,7 +1622,8 @@ function handleMapClick(e) {
                 selectObject(cableSource);
                 return;
             }
-            if (objType === 'sleeve' || objType === 'cross' || objType === 'attachment') {
+            var finishEndpoints = ['sleeve', 'cross', 'attachment', 'olt', 'splitter', 'onu'];
+            if (finishEndpoints.indexOf(objType) !== -1) {
                 const points = [cableSource].concat(cableWaypoints).concat([clickedObject]);
                 const success = createCableFromPoints(points, cableType);
                 if (success) {
@@ -1711,6 +1731,23 @@ function handleMapMouseMove(e) {
                 }
             }
             updateCablePreview(cableSource, cableWaypoints, previewCoords);
+        });
+    }
+
+    if (splitterFiberRoutingMode && splitterFiberRoutingData && mapCoords) {
+        if (mapMouseMoveRafId != null) cancelAnimationFrame(mapMouseMoveRafId);
+        var coords = mapCoords;
+        mapMouseMoveRafId = requestAnimationFrame(function() {
+            mapMouseMoveRafId = null;
+            var snapObj = findObjectAtCoords(coords);
+            var previewCoords = coords;
+            if (snapObj) {
+                var t = snapObj.properties.get('type');
+                if (t === 'support' || t === 'attachment' || getObjectUniqueId(snapObj) === splitterFiberRoutingData.targetId) {
+                    previewCoords = snapObj.geometry.getCoordinates();
+                }
+            }
+            updateSplitterFiberPreviewWithCursor(previewCoords);
         });
     }
 }
@@ -2283,6 +2320,10 @@ function switchToViewMode() {
         cancelObjectPlacement();
     }
     
+    if (splitterFiberRoutingMode) {
+        cancelSplitterFiberRouting();
+    }
+    
     if (wasEditMode) {
         showInfo('Переключено в режим просмотра', 'Режим');
     }
@@ -2574,6 +2615,32 @@ function createObject(type, name, coords, options = {}) {
         e.stopPropagation(); 
 
         if (objectPlacementMode) {
+            return;
+        }
+
+        if (splitterFiberRoutingMode && splitterFiberRoutingData) {
+            var objId = getObjectUniqueId(placemark);
+            var objType = type;
+            
+            if (objId === splitterFiberRoutingData.targetId) {
+                completeSplitterFiberRouting();
+                return;
+            }
+            
+            if (objType === 'support' || objType === 'attachment') {
+                splitterFiberWaypoints.push(placemark);
+                updateSplitterFiberPreview();
+                return;
+            }
+            
+            if (objId === getObjectUniqueId(splitterFiberRoutingData.splitterObj)) {
+                splitterFiberWaypoints = [];
+                updateSplitterFiberPreview();
+                return;
+            }
+            
+            var targetName = splitterFiberRoutingData.targetObj.properties.get('name') || (splitterFiberRoutingData.targetType === 'onu' ? 'ONU' : 'Сплиттер');
+            showWarning('Кликните по опоре или креплению для добавления точки маршрута, или по целевому объекту (' + escapeHtml(targetName) + ') для завершения.', 'Режим прокладки');
             return;
         }
 
@@ -3493,6 +3560,10 @@ function pointToLineDistance(point, lineStart, lineEnd) {
 }
 
 function showCableInfo(cable) {
+    if (splitterFiberRoutingMode) {
+        cancelSplitterFiberRouting();
+    }
+    
     const cableType = cable.properties.get('cableType');
     const fromObj = cable.properties.get('from');
     const toObj = cable.properties.get('to');
@@ -4794,6 +4865,32 @@ function createObjectFromData(data, opts) {
             return;
         }
 
+        if (splitterFiberRoutingMode && splitterFiberRoutingData) {
+            var objId = getObjectUniqueId(placemark);
+            var objType = type;
+            
+            if (objId === splitterFiberRoutingData.targetId) {
+                completeSplitterFiberRouting();
+                return;
+            }
+            
+            if (objType === 'support' || objType === 'attachment') {
+                splitterFiberWaypoints.push(placemark);
+                updateSplitterFiberPreview();
+                return;
+            }
+            
+            if (objId === getObjectUniqueId(splitterFiberRoutingData.splitterObj)) {
+                splitterFiberWaypoints = [];
+                updateSplitterFiberPreview();
+                return;
+            }
+            
+            var targetName = splitterFiberRoutingData.targetObj.properties.get('name') || (splitterFiberRoutingData.targetType === 'onu' ? 'ONU' : 'Сплиттер');
+            showWarning('Кликните по опоре или креплению для добавления точки маршрута, или по целевому объекту (' + escapeHtml(targetName) + ') для завершения.', 'Режим прокладки');
+            return;
+        }
+
         if (currentCableTool && isEditMode) {
             var cableTypeVal = document.getElementById('cableType') ? document.getElementById('cableType').value : 'fiber4';
             var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment', 'olt', 'splitter', 'onu'];
@@ -5080,6 +5177,15 @@ function updateStats() {
 }
 
 function showObjectInfo(obj) {
+    if (splitterFiberRoutingMode && splitterFiberRoutingData) {
+        var objId = getObjectUniqueId(obj);
+        var isSourceOrTarget = (objId === getObjectUniqueId(splitterFiberRoutingData.splitterObj)) ||
+                               (objId === splitterFiberRoutingData.targetId);
+        if (!isSourceOrTarget) {
+            cancelSplitterFiberRouting();
+        }
+    }
+    
     currentModalObject = obj;
     const type = obj.properties.get('type');
     const name = obj.properties.get('name') || '';
@@ -5237,13 +5343,18 @@ function showObjectInfo(obj) {
                     var destLabel = '';
                     var hasConnection = false;
                     if (out) {
+                        var routeInfo = '';
+                        var routeLen = (out.routeIds && out.routeIds.length) || (out.route && out.route.length) || 0;
+                        if (routeLen > 0) {
+                            routeInfo = ' (' + routeLen + ' точ.)';
+                        }
                         if (out.onuId) {
                             var onuObj = objects.find(function(o) { return o.properties && o.properties.get('type') === 'onu' && getObjectUniqueId(o) === out.onuId; });
-                            destLabel = onuObj ? '→ ONU ' + escapeHtml(onuObj.properties.get('name') || 'ONU') : '';
+                            destLabel = onuObj ? '→ ONU ' + escapeHtml(onuObj.properties.get('name') || 'ONU') + routeInfo : '';
                             hasConnection = !!onuObj;
                         } else if (out.splitterId) {
                             var spObj = objects.find(function(o) { return o.properties && o.properties.get('type') === 'splitter' && getObjectUniqueId(o) === out.splitterId; });
-                            destLabel = spObj ? '→ Сплиттер ' + escapeHtml(spObj.properties.get('name') || '') : '';
+                            destLabel = spObj ? '→ Сплиттер ' + escapeHtml(spObj.properties.get('name') || '') + routeInfo : '';
                             hasConnection = !!spObj;
                         }
                     }
@@ -8528,17 +8639,185 @@ function selectSplitterOutputOnu(onuIndex) {
     var onuObj = data.onus[onuIndex];
     var onuId = getObjectUniqueId(onuObj);
     closeSplitterOutputOnuModal();
+    var infoModal = document.getElementById('infoModal');
+    if (infoModal) infoModal.style.display = 'none';
+    startSplitterFiberRouting(data.splitterObj, data.outIdx, 'onu', onuObj, onuId);
+}
+
+function startSplitterFiberRouting(splitterObj, outIdx, targetType, targetObj, targetId) {
+    splitterFiberRoutingMode = true;
+    splitterFiberRoutingData = {
+        splitterObj: splitterObj,
+        outIdx: outIdx,
+        targetType: targetType,
+        targetObj: targetObj,
+        targetId: targetId
+    };
+    splitterFiberWaypoints = [];
+    var splitterName = splitterObj.properties.get('name') || 'Сплиттер';
+    var targetName = targetObj.properties.get('name') || (targetType === 'onu' ? 'ONU' : 'Сплиттер');
+    showInfo('Режим прокладки жилы: ' + splitterName + ' → ' + targetName + '. Кликайте по опорам и креплениям для маршрута, затем кликните по целевому объекту для завершения. Нажмите Escape для отмены.', 'Прокладка жилы');
+    selectObject(splitterObj);
+}
+
+function cancelSplitterFiberRouting() {
+    splitterFiberRoutingMode = false;
+    splitterFiberRoutingData = null;
+    splitterFiberWaypoints = [];
+    if (splitterFiberPreviewLine) {
+        myMap.geoObjects.remove(splitterFiberPreviewLine);
+        splitterFiberPreviewLine = null;
+    }
+    clearSelection();
+}
+
+function completeSplitterFiberRouting() {
+    if (!splitterFiberRoutingMode || !splitterFiberRoutingData) return;
+    var data = splitterFiberRoutingData;
     var sp = data.splitterObj;
     var ratio = parseInt(sp.properties.get('splitRatio'), 10) || 8;
     var outputs = (sp.properties.get('outputConnections') || []).slice();
     while (outputs.length < ratio) outputs.push(null);
     if (outputs.length > ratio) outputs = outputs.slice(0, ratio);
-    outputs[data.outIdx] = { onuId: onuId };
+    
+    var routeIds = splitterFiberWaypoints.map(function(wp) {
+        if (wp.properties) {
+            var wpId = getObjectUniqueId(wp);
+            if (!wpId) {
+                wpId = generateUniqueId(wp.properties.get('type') || 'waypoint');
+                wp.properties.set('uniqueId', wpId);
+            }
+            return wpId;
+        }
+        return null;
+    }).filter(function(id) { return id !== null; });
+    
+    if (data.targetType === 'onu') {
+        outputs[data.outIdx] = { onuId: data.targetId, routeIds: routeIds };
+    } else if (data.targetType === 'splitter') {
+        outputs[data.outIdx] = { splitterId: data.targetId, routeIds: routeIds };
+        var rootInput = getSplitterRootInputFiber(sp);
+        if (rootInput && rootInput.cableId && rootInput.fiberNumber != null) {
+            data.targetObj.properties.set('inputFiber', { cableId: rootInput.cableId, fiberNumber: rootInput.fiberNumber });
+        }
+    }
+    
     sp.properties.set('outputConnections', outputs);
     saveData();
     if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
+    
+    if (splitterFiberPreviewLine) {
+        myMap.geoObjects.remove(splitterFiberPreviewLine);
+        splitterFiberPreviewLine = null;
+    }
+    
+    splitterFiberRoutingMode = false;
+    splitterFiberRoutingData = null;
+    splitterFiberWaypoints = [];
+    
     updateSplitterOutputConnectionLines();
-    if (currentModalObject && currentModalObject.properties.get('type') === 'splitter') showObjectInfo(currentModalObject);
+    clearSelection();
+    showObjectInfo(sp);
+}
+
+function handleSplitterFiberRoutingClick(coords) {
+    if (!splitterFiberRoutingMode || !splitterFiberRoutingData) return;
+    
+    var data = splitterFiberRoutingData;
+    var clickedObject = findObjectAtCoords(coords);
+    
+    if (clickedObject && clickedObject.geometry) {
+        var objType = clickedObject.properties ? clickedObject.properties.get('type') : null;
+        var objId = getObjectUniqueId(clickedObject);
+        
+        if (objId === data.targetId) {
+            completeSplitterFiberRouting();
+            return;
+        }
+        
+        if (objType === 'support' || objType === 'attachment') {
+            splitterFiberWaypoints.push(clickedObject);
+            updateSplitterFiberPreview();
+            return;
+        }
+        
+        if (objId === getObjectUniqueId(data.splitterObj)) {
+            splitterFiberWaypoints = [];
+            updateSplitterFiberPreview();
+            return;
+        }
+        
+        var targetName = data.targetObj.properties.get('name') || (data.targetType === 'onu' ? 'ONU' : 'Сплиттер');
+        showWarning('Кликните по опоре или креплению для добавления промежуточной точки, или по целевому объекту (' + escapeHtml(targetName) + ') для завершения.', 'Режим прокладки');
+    } else {
+        var targetName = data.targetObj.properties.get('name') || (data.targetType === 'onu' ? 'ONU' : 'Сплиттер');
+        showWarning('Кликните по опоре, креплению или целевому объекту (' + escapeHtml(targetName) + ').', 'Режим прокладки');
+    }
+}
+
+function updateSplitterFiberPreview() {
+    if (!splitterFiberRoutingMode || !splitterFiberRoutingData) return;
+    
+    if (splitterFiberPreviewLine) {
+        myMap.geoObjects.remove(splitterFiberPreviewLine);
+        splitterFiberPreviewLine = null;
+    }
+    
+    var data = splitterFiberRoutingData;
+    var points = [];
+    
+    var splitterCoords = data.splitterObj.geometry.getCoordinates();
+    points.push(splitterCoords);
+    
+    splitterFiberWaypoints.forEach(function(wp) {
+        if (wp.geometry) {
+            points.push(wp.geometry.getCoordinates());
+        }
+    });
+    
+    if (points.length >= 1) {
+        var targetCoords = data.targetObj.geometry.getCoordinates();
+        points.push(targetCoords);
+        
+        splitterFiberPreviewLine = new ymaps.Polyline(points, {}, {
+            strokeColor: data.targetType === 'onu' ? '#a855f7' : '#f97316',
+            strokeWidth: 2,
+            strokeStyle: 'shortdash',
+            strokeOpacity: 0.5
+        });
+        myMap.geoObjects.add(splitterFiberPreviewLine);
+    }
+}
+
+function updateSplitterFiberPreviewWithCursor(cursorCoords) {
+    if (!splitterFiberRoutingMode || !splitterFiberRoutingData) return;
+    
+    if (splitterFiberPreviewLine) {
+        myMap.geoObjects.remove(splitterFiberPreviewLine);
+        splitterFiberPreviewLine = null;
+    }
+    
+    var data = splitterFiberRoutingData;
+    var points = [];
+    
+    var splitterCoords = data.splitterObj.geometry.getCoordinates();
+    points.push(splitterCoords);
+    
+    splitterFiberWaypoints.forEach(function(wp) {
+        if (wp.geometry) {
+            points.push(wp.geometry.getCoordinates());
+        }
+    });
+    
+    points.push(cursorCoords);
+    
+    splitterFiberPreviewLine = new ymaps.Polyline(points, {}, {
+        strokeColor: data.targetType === 'onu' ? '#a855f7' : '#f97316',
+        strokeWidth: 2,
+        strokeStyle: 'shortdash',
+        strokeOpacity: 0.4
+    });
+    myMap.geoObjects.add(splitterFiberPreviewLine);
 }
 
 function showSplitterOutputSplitterDialog(splitterObj, outIdx) {
@@ -8585,21 +8864,9 @@ function selectSplitterOutputSplitter(splitterIndex) {
     var targetSplitter = data.splitters[splitterIndex];
     var splitterId = getObjectUniqueId(targetSplitter);
     closeSplitterOutputSplitterModal();
-    var sp = data.splitterObj;
-    var ratio = parseInt(sp.properties.get('splitRatio'), 10) || 8;
-    var outputs = (sp.properties.get('outputConnections') || []).slice();
-    while (outputs.length < ratio) outputs.push(null);
-    if (outputs.length > ratio) outputs = outputs.slice(0, ratio);
-    outputs[data.outIdx] = { splitterId: splitterId };
-    sp.properties.set('outputConnections', outputs);
-    var rootInput = getSplitterRootInputFiber(sp);
-    if (rootInput && rootInput.cableId && rootInput.fiberNumber != null) {
-        targetSplitter.properties.set('inputFiber', { cableId: rootInput.cableId, fiberNumber: rootInput.fiberNumber });
-    }
-    saveData();
-    if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
-    updateSplitterOutputConnectionLines();
-    if (currentModalObject && currentModalObject.properties.get('type') === 'splitter') showObjectInfo(currentModalObject);
+    var infoModal = document.getElementById('infoModal');
+    if (infoModal) infoModal.style.display = 'none';
+    startSplitterFiberRouting(data.splitterObj, data.outIdx, 'splitter', targetSplitter, splitterId);
 }
 
 function deleteSplitterOutput(splitterObj, outIdx) {
@@ -9014,7 +9281,7 @@ function updateAllConnectionLines() {
     updateSplitterOutputConnectionLines();
 }
 
-function createSplitterOutputConnectionLine(splitterObj, targetObj, outIdx) {
+function createSplitterOutputConnectionLine(splitterObj, targetObj, outIdx, routeIds) {
     if (!splitterObj || !targetObj || !splitterObj.geometry || !targetObj.geometry) return;
     var splitterId = getObjectUniqueId(splitterObj);
     var key = splitterId + '-out-' + outIdx;
@@ -9026,7 +9293,21 @@ function createSplitterOutputConnectionLine(splitterObj, targetObj, outIdx) {
     var splitterCoords = splitterObj.geometry.getCoordinates();
     var targetCoords = targetObj.geometry.getCoordinates();
     var targetType = targetObj.properties ? targetObj.properties.get('type') : '';
-    var line = new ymaps.Polyline([splitterCoords, targetCoords], {}, {
+    
+    var lineCoords = [splitterCoords];
+    if (routeIds && Array.isArray(routeIds) && routeIds.length > 0) {
+        routeIds.forEach(function(wpId) {
+            var wpObj = objects.find(function(o) { 
+                return o.properties && getObjectUniqueId(o) === wpId; 
+            });
+            if (wpObj && wpObj.geometry) {
+                lineCoords.push(wpObj.geometry.getCoordinates());
+            }
+        });
+    }
+    lineCoords.push(targetCoords);
+    
+    var line = new ymaps.Polyline(lineCoords, {}, {
         strokeColor: targetType === 'onu' ? '#a855f7' : '#f97316',
         strokeWidth: 2,
         strokeStyle: 'shortdash',
@@ -9036,6 +9317,7 @@ function createSplitterOutputConnectionLine(splitterObj, targetObj, outIdx) {
     line.properties.set('connectionKey', key);
     line.properties.set('splitterId', splitterId);
     line.properties.set('outputIndex', outIdx);
+    line.properties.set('routeIds', routeIds || []);
     splitterOutputConnectionLines.push(line);
     myMap.geoObjects.add(line);
 }
@@ -9055,7 +9337,7 @@ function updateSplitterOutputConnectionLines() {
             } else if (out.splitterId) {
                 target = objects.find(function(o) { return o.properties && o.properties.get('type') === 'splitter' && getObjectUniqueId(o) === out.splitterId; });
             }
-            if (target) createSplitterOutputConnectionLine(obj, target, oi);
+            if (target) createSplitterOutputConnectionLine(obj, target, oi, out.routeIds || out.route || []);
         }
     });
 }
