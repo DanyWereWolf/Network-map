@@ -3270,6 +3270,16 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
         const uid = obj.properties.get('uniqueId');
 
         if (t === 'cross' || t === 'sleeve') {
+            const fiberConnections = obj.properties.get('fiberConnections') || [];
+            const isConnected = fiberConnections.some(conn =>
+                (conn.from.cableId === cableId && conn.from.fiberNumber === fiberNumber) ||
+                (conn.to.cableId === cableId && conn.to.fiberNumber === fiberNumber)
+            );
+            if (isConnected) {
+                if (exclude && exclude.type === 'fiberConnection' && (exclude.crossId === uid || exclude.sleeveId === uid)) continue;
+                return { used: true, where: 'соединение жил в ' + (t === 'cross' ? 'кроссе' : 'муфте') };
+            }
+            
             const nodeConn = obj.properties.get('nodeConnections');
             if (nodeConn && nodeConn[key]) {
                 if (exclude && exclude.type === 'nodeConn' && (exclude.crossId === uid || exclude.sleeveId === uid)) continue;
@@ -3284,6 +3294,11 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
             if (onuConn[key]) {
                 if (exclude && exclude.type === 'onuConn' && exclude.sleeveId === uid) continue;
                 return { used: true, where: 'подключение к ONU' };
+            }
+            const splitterConn = obj.properties.get('splitterConnections') || {};
+            if (splitterConn[key]) {
+                if (exclude && exclude.type === 'splitterInput' && exclude.sleeveId === uid) continue;
+                return { used: true, where: 'вход сплиттера' };
             }
         }
         if (t === 'olt') {
@@ -6067,8 +6082,12 @@ function setupFiberConnectionHandlers() {
             if (!selectedFiberForConnection) {
                 
                 const nodeConnections = sleeveObj.properties.get('nodeConnections') || {};
-                const nodeConnKey = `${cableId}-${fiberNumber}`;
-                if (nodeConnections[nodeConnKey]) {
+                const oltConnections = sleeveObj.properties.get('oltConnections') || {};
+                const onuConnections = sleeveObj.properties.get('onuConnections') || {};
+                const splitterConnections = sleeveObj.properties.get('splitterConnections') || {};
+                const fiberKey = `${cableId}-${fiberNumber}`;
+                
+                if (nodeConnections[fiberKey]) {
                     const instruction = document.querySelector('.fiber-connections-container');
                     if (instruction) {
                         const existingMsg = instruction.querySelector('.connection-hint');
@@ -6076,7 +6095,46 @@ function setupFiberConnectionHandlers() {
                         const hint = document.createElement('div');
                         hint.className = 'connection-hint';
                         hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
-                        hint.textContent = `Жила ${fiberNumber} уже подключена к узлу "${nodeConnections[nodeConnKey].nodeName}". Отключите её от узла, чтобы соединить с другой жилой.`;
+                        hint.textContent = `Жила ${fiberNumber} уже подключена к узлу "${nodeConnections[fiberKey].nodeName}". Отключите её от узла, чтобы соединить с другой жилой.`;
+                        instruction.appendChild(hint);
+                    }
+                    return;
+                }
+                if (oltConnections[fiberKey]) {
+                    const instruction = document.querySelector('.fiber-connections-container');
+                    if (instruction) {
+                        const existingMsg = instruction.querySelector('.connection-hint');
+                        if (existingMsg) existingMsg.remove();
+                        const hint = document.createElement('div');
+                        hint.className = 'connection-hint';
+                        hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
+                        hint.textContent = `Жила ${fiberNumber} уже подключена к OLT. Отключите её от OLT, чтобы соединить с другой жилой.`;
+                        instruction.appendChild(hint);
+                    }
+                    return;
+                }
+                if (onuConnections[fiberKey]) {
+                    const instruction = document.querySelector('.fiber-connections-container');
+                    if (instruction) {
+                        const existingMsg = instruction.querySelector('.connection-hint');
+                        if (existingMsg) existingMsg.remove();
+                        const hint = document.createElement('div');
+                        hint.className = 'connection-hint';
+                        hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
+                        hint.textContent = `Жила ${fiberNumber} уже подключена к ONU "${onuConnections[fiberKey].onuName || 'ONU'}". Отключите её от ONU, чтобы соединить с другой жилой.`;
+                        instruction.appendChild(hint);
+                    }
+                    return;
+                }
+                if (splitterConnections[fiberKey]) {
+                    const instruction = document.querySelector('.fiber-connections-container');
+                    if (instruction) {
+                        const existingMsg = instruction.querySelector('.connection-hint');
+                        if (existingMsg) existingMsg.remove();
+                        const hint = document.createElement('div');
+                        hint.className = 'connection-hint';
+                        hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
+                        hint.textContent = `Жила ${fiberNumber} уже подключена к сплиттеру. Отключите её от сплиттера, чтобы соединить с другой жилой.`;
                         instruction.appendChild(hint);
                     }
                     return;
@@ -6139,8 +6197,13 @@ function setupFiberConnectionHandlers() {
                     );
 
                     const nodeConnections = sleeveObj.properties.get('nodeConnections') || {};
-                    const nodeConnKey = `${cableId}-${fiberNumber}`;
-                    if (nodeConnections[nodeConnKey]) {
+                    const oltConnections = sleeveObj.properties.get('oltConnections') || {};
+                    const onuConnections = sleeveObj.properties.get('onuConnections') || {};
+                    const splitterConnections = sleeveObj.properties.get('splitterConnections') || {};
+                    const secondKey = `${cableId}-${fiberNumber}`;
+                    const firstKey = `${selectedFiberForConnection.cableId}-${selectedFiberForConnection.fiberNumber}`;
+                    
+                    if (nodeConnections[secondKey]) {
                         const instruction = document.querySelector('.fiber-connections-container');
                         if (instruction) {
                             const existingMsg = instruction.querySelector('.connection-hint');
@@ -6148,13 +6211,54 @@ function setupFiberConnectionHandlers() {
                             const hint = document.createElement('div');
                             hint.className = 'connection-hint';
                             hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
-                            hint.textContent = `Жила ${fiberNumber} уже подключена к узлу "${nodeConnections[nodeConnKey].nodeName}". Отключите её от узла, чтобы соединить с другой жилой.`;
+                            hint.textContent = `Жила ${fiberNumber} уже подключена к узлу "${nodeConnections[secondKey].nodeName}". Отключите её от узла, чтобы соединить с другой жилой.`;
                             instruction.appendChild(hint);
                         }
                         resetFiberSelection();
                         return;
                     }
-                    const firstKey = `${selectedFiberForConnection.cableId}-${selectedFiberForConnection.fiberNumber}`;
+                    if (oltConnections[secondKey]) {
+                        const instruction = document.querySelector('.fiber-connections-container');
+                        if (instruction) {
+                            const existingMsg = instruction.querySelector('.connection-hint');
+                            if (existingMsg) existingMsg.remove();
+                            const hint = document.createElement('div');
+                            hint.className = 'connection-hint';
+                            hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
+                            hint.textContent = `Жила ${fiberNumber} уже подключена к OLT. Отключите её от OLT, чтобы соединить с другой жилой.`;
+                            instruction.appendChild(hint);
+                        }
+                        resetFiberSelection();
+                        return;
+                    }
+                    if (onuConnections[secondKey]) {
+                        const instruction = document.querySelector('.fiber-connections-container');
+                        if (instruction) {
+                            const existingMsg = instruction.querySelector('.connection-hint');
+                            if (existingMsg) existingMsg.remove();
+                            const hint = document.createElement('div');
+                            hint.className = 'connection-hint';
+                            hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
+                            hint.textContent = `Жила ${fiberNumber} уже подключена к ONU "${onuConnections[secondKey].onuName || 'ONU'}". Отключите её от ONU, чтобы соединить с другой жилой.`;
+                            instruction.appendChild(hint);
+                        }
+                        resetFiberSelection();
+                        return;
+                    }
+                    if (splitterConnections[secondKey]) {
+                        const instruction = document.querySelector('.fiber-connections-container');
+                        if (instruction) {
+                            const existingMsg = instruction.querySelector('.connection-hint');
+                            if (existingMsg) existingMsg.remove();
+                            const hint = document.createElement('div');
+                            hint.className = 'connection-hint';
+                            hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
+                            hint.textContent = `Жила ${fiberNumber} уже подключена к сплиттеру. Отключите её от сплиттера, чтобы соединить с другой жилой.`;
+                            instruction.appendChild(hint);
+                        }
+                        resetFiberSelection();
+                        return;
+                    }
                     if (nodeConnections[firstKey]) {
                         const instruction = document.querySelector('.fiber-connections-container');
                         if (instruction) {
@@ -6164,6 +6268,48 @@ function setupFiberConnectionHandlers() {
                             hint.className = 'connection-hint';
                             hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
                             hint.textContent = `Выбранная жила уже подключена к узлу "${nodeConnections[firstKey].nodeName}". Отключите её от узла для соединения с другой жилой.`;
+                            instruction.appendChild(hint);
+                        }
+                        resetFiberSelection();
+                        return;
+                    }
+                    if (oltConnections[firstKey]) {
+                        const instruction = document.querySelector('.fiber-connections-container');
+                        if (instruction) {
+                            const existingMsg = instruction.querySelector('.connection-hint');
+                            if (existingMsg) existingMsg.remove();
+                            const hint = document.createElement('div');
+                            hint.className = 'connection-hint';
+                            hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
+                            hint.textContent = `Выбранная жила уже подключена к OLT. Отключите её от OLT для соединения с другой жилой.`;
+                            instruction.appendChild(hint);
+                        }
+                        resetFiberSelection();
+                        return;
+                    }
+                    if (onuConnections[firstKey]) {
+                        const instruction = document.querySelector('.fiber-connections-container');
+                        if (instruction) {
+                            const existingMsg = instruction.querySelector('.connection-hint');
+                            if (existingMsg) existingMsg.remove();
+                            const hint = document.createElement('div');
+                            hint.className = 'connection-hint';
+                            hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
+                            hint.textContent = `Выбранная жила уже подключена к ONU "${onuConnections[firstKey].onuName || 'ONU'}". Отключите её от ONU для соединения с другой жилой.`;
+                            instruction.appendChild(hint);
+                        }
+                        resetFiberSelection();
+                        return;
+                    }
+                    if (splitterConnections[firstKey]) {
+                        const instruction = document.querySelector('.fiber-connections-container');
+                        if (instruction) {
+                            const existingMsg = instruction.querySelector('.connection-hint');
+                            if (existingMsg) existingMsg.remove();
+                            const hint = document.createElement('div');
+                            hint.className = 'connection-hint';
+                            hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
+                            hint.textContent = `Выбранная жила уже подключена к сплиттеру. Отключите её от сплиттера для соединения с другой жилой.`;
                             instruction.appendChild(hint);
                         }
                         resetFiberSelection();
@@ -10711,8 +10857,8 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
                 ${hasOnuConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #f5f3ff; border-radius: 3px; font-size: 0.75rem;"><span style="color: #6d28d9;">📡 → ${escapeHtml(onuConnection.onuName || 'ONU')}</span>${isEditMode ? `<button class="btn-disconnect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от ONU" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
                 ${hasSplitterConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #fff7ed; border-radius: 3px; font-size: 0.75rem;"><span style="color: #c2410c;">🔀 → ${escapeHtml(splitterName)}</span>${isEditMode ? `<button class="btn-disconnect-splitter" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от сплиттера" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
                 ${hasOltConnection && oltConnection.oltId ? (function() { const o = objects.find(obj => obj.properties && obj.properties.get('type') === 'olt' && obj.properties.get('uniqueId') === oltConnection.oltId); const n = o ? (o.properties.get('name') || 'OLT') : 'OLT'; const label = oltConnection.incoming ? ('приход OLT ' + escapeHtml(n)) : ('OLT ' + escapeHtml(n) + ', порт ' + (oltConnection.portNumber || '?')); return `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #e0f2fe; border-radius: 3px; font-size: 0.75rem;"><span style="color: #0369a1;">📶 ${label}</span>${isEditMode ? `<button class="btn-disconnect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от OLT" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>`; }()) : ''}
-                ${((!hasAnyOutConnection || hasOltConnection || canConnectToOnu || !hasOltConnection) && (!isConnected || canConnectToOnu || !hasOltConnection) && isEditMode && isCross) ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;">${!hasNodeConnection ? `<button class="btn-connect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к узлу" style="padding: 4px 6px; background: #22c55e; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🖥️ Узел</button>` : ''}${!hasOltConnection ? `<button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 OLT</button>` : ''}${canConnectToOnu ? `<button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}</div>` : ''}
-                ${((!hasAnyOutConnection || hasOltConnection || canConnectToOnu || !hasOltConnection) && (!isConnected || canConnectToOnu || !hasOltConnection) && isEditMode && !isCross) ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;">${!hasOltConnection ? `<button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 OLT</button>` : ''}${(cableData.isFromOlt || hasOltConnection || canConnectToOnu) ? `<button class="btn-connect-splitter" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к входу сплиттера" style="padding: 4px 6px; background: #f97316; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🔀 Сплиттер</button>` : ''}${canConnectToOnu ? `<button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}</div>` : ''}
+                ${(!isConnected && !hasAnyOutConnection && isEditMode && isCross) ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;"><button class="btn-connect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к узлу" style="padding: 4px 6px; background: #22c55e; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🖥️ Узел</button><button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 OLT</button>${canConnectToOnu ? `<button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}</div>` : ''}
+                ${(!isConnected && !hasAnyOutConnection && isEditMode && !isCross) ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;"><button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 OLT</button>${(cableData.isFromOlt || canConnectToOnu) ? `<button class="btn-connect-splitter" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к входу сплиттера" style="padding: 4px 6px; background: #f97316; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🔀 Сплиттер</button>` : ''}${canConnectToOnu ? `<button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}</div>` : ''}
                 ${isEditMode ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px;"><input type="text" class="fiber-label-input" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" value="${directLabel}" placeholder="${isInheritedLabel ? '← ' + displayLabel : 'Подпись...'}" style="flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid ${isInheritedLabel ? '#8b5cf6' : '#ced4da'}; border-radius: 3px; font-size: 0.7rem; ${isInheritedLabel ? 'background: #f5f3ff;' : ''}">${isInheritedLabel ? '<span style="font-size: 0.65rem; color: #8b5cf6;">⬅️</span>' : ''}</div>` : (displayLabel ? `<div style="margin-left: 30px; font-size: 0.7rem; color: ${isInheritedLabel ? '#8b5cf6' : '#6366f1'}; overflow: hidden; text-overflow: ellipsis;">${isInheritedLabel ? '⬅️ ' : '📝 '}${displayLabel}</div>` : '')}
             </div>`;
     }
