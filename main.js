@@ -2050,32 +2050,6 @@ function highlightObjectOnHover(obj, e) {
                 <circle cx="22" cy="20" r="2" fill="white"/>
             </svg>`;
             break;
-        case 'splitter':
-            iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="16" cy="9" r="6" fill="#f97316" stroke="#fdba74" stroke-width="3"/>
-                <path d="M16 15 L16 22 M10 22 L22 22 M16 22 L12 28 M16 22 L20 28" stroke="white" stroke-width="2" fill="none"/>
-                <circle cx="12" cy="28" r="2" fill="white"/>
-                <circle cx="16" cy="28" r="2" fill="white"/>
-                <circle cx="20" cy="28" r="2" fill="white"/>
-            </svg>`;
-            break;
-        case 'onu':
-            iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                <rect x="3" y="7" width="26" height="18" rx="3" fill="#a855f7" stroke="#c084fc" stroke-width="3"/>
-                <rect x="7" y="11" width="6" height="4" rx="1" fill="white" opacity="0.95"/>
-                <rect x="15" y="11" width="6" height="4" rx="1" fill="white" opacity="0.95"/>
-                <line x1="9" y1="19" x2="23" y2="19" stroke="white" stroke-width="1.5" opacity="0.9"/>
-            </svg>`;
-            break;
-        case 'olt':
-            iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="6" width="28" height="20" rx="3" fill="#0ea5e9" stroke="#38bdf8" stroke-width="3"/>
-                <rect x="6" y="10" width="5" height="4" rx="1" fill="white" opacity="0.95"/>
-                <rect x="13" y="10" width="5" height="4" rx="1" fill="white" opacity="0.95"/>
-                <rect x="20" y="10" width="5" height="4" rx="1" fill="white" opacity="0.95"/>
-                <line x1="9" y1="18" x2="23" y2="18" stroke="white" stroke-width="1.5" opacity="0.9"/>
-            </svg>`;
-            break;
         default:
             return;
     }
@@ -2962,32 +2936,6 @@ function selectObject(obj) {
                 </svg>`;
                 break;
             }
-            case 'splitter':
-                iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 34 34" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="17" cy="10" r="7" fill="#f97316" stroke="white" stroke-width="2"/>
-                    <path d="M17 17 L17 24 M11 24 L23 24 M17 24 L13 30 M17 24 L21 30" stroke="white" stroke-width="2" fill="none"/>
-                    <circle cx="13" cy="30" r="2.5" fill="white"/>
-                    <circle cx="17" cy="30" r="2.5" fill="white"/>
-                    <circle cx="21" cy="30" r="2.5" fill="white"/>
-                </svg>`;
-                break;
-            case 'onu':
-                iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 34 34" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="4" y="8" width="26" height="18" rx="3" fill="#a855f7" stroke="white" stroke-width="2"/>
-                    <rect x="8" y="12" width="6" height="4" rx="1" fill="white" opacity="0.95"/>
-                    <rect x="16" y="12" width="6" height="4" rx="1" fill="white" opacity="0.95"/>
-                    <line x1="10" y1="20" x2="24" y2="20" stroke="white" stroke-width="1.5" opacity="0.9"/>
-                </svg>`;
-                break;
-            case 'olt':
-                iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 34 34" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="3" y="6" width="28" height="22" rx="3" fill="#0ea5e9" stroke="white" stroke-width="2"/>
-                    <rect x="7" y="10" width="5" height="4" rx="1" fill="white" opacity="0.95"/>
-                    <rect x="14" y="10" width="5" height="4" rx="1" fill="white" opacity="0.95"/>
-                    <rect x="21" y="10" width="5" height="4" rx="1" fill="white" opacity="0.95"/>
-                    <line x1="10" y1="20" x2="24" y2="20" stroke="white" stroke-width="1.5" opacity="0.9"/>
-                </svg>`;
-                break;
             default:
                 iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg">
                     <circle cx="15" cy="15" r="13" fill="#94a3b8" stroke="white" stroke-width="2"/>
@@ -5266,11 +5214,9 @@ function showObjectInfo(obj) {
             } else {
                 html += '<div style="margin-bottom: 12px; font-size: 0.8125rem; color: var(--text-secondary);">Вход не задан. Подключите жилу с муфты или кросса — кнопка «Сплиттер» у нужной жилы.</div>';
             }
-            html += '<div style="margin-bottom: 8px; font-size: 0.8125rem; color: var(--text-secondary);">Одна жила делится на ' + splitRatio + ' — для каждого выхода выберите муфту/кросс и жилу, затем направьте на ONU или сплиттер.</div>';
-            html += '<div id="splitterOutputsList">';
-            if (!effectiveInputFiber) {
-                html += '<div style="padding: 12px; background: #fef3c7; border-radius: 6px; border: 1px solid #fde68a; color: #92400e; font-size: 0.8125rem;">⚠️ Сначала подключите входную жилу к сплиттеру (с муфты или кросса), затем можно будет настроить выходы.</div>';
-            } else {
+            if (effectiveInputFiber) {
+                html += '<div style="margin-bottom: 8px; font-size: 0.8125rem; color: var(--text-secondary);">Одна жила делится на ' + splitRatio + ' — для каждого выхода выберите муфту/кросс и жилу, затем направьте на ONU или сплиттер.</div>';
+                html += '<div id="splitterOutputsList">';
                 for (var oi = 0; oi < splitRatio; oi++) {
                     var out = outputsPadded[oi] || null;
                     var destLabel = '';
@@ -5293,12 +5239,14 @@ function showObjectInfo(obj) {
                         html += '<button type="button" class="btn-splitter-output-to-splitter" data-output-index="' + oi + '" title="Пустить на сплиттер" style="padding: 4px 8px; background: #f97316; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">🔀 Сплиттер</button>';
                     } else {
                         html += '<span style="font-size: 0.8rem; color: var(--text-secondary); padding: 4px 8px; background: var(--bg-tertiary); border-radius: 4px;">' + destLabel + '</span>';
-                        html += '<button type="button" class="btn-splitter-output-delete" data-output-index="' + oi + '" title="Удалить соединение" style="padding: 4px 8px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">✕ Удалить</button>';
+                        html += '<button type="button" class="btn-splitter-output-delete" data-output-index="' + oi + '" title="Удалить соединение" style="padding: 4px 8px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">✕</button>';
                     }
                     html += '</div>';
                 }
+                html += '</div>';
+            } else {
+                html += '<div style="padding: 12px; background: #fef3c7; border-radius: 6px; border: 1px solid #fde68a; color: #92400e; font-size: 0.8125rem;">⚠️ Сначала подключите входную жилу к сплиттеру с муфты или кросса, чтобы настроить выходы.</div>';
             }
-            html += '</div>';
             html += '</div>';
         }
     }
@@ -5501,7 +5449,7 @@ function showObjectInfo(obj) {
                                 <div class="fiber-color" style="background-color: ${fiber.color}; ${isUsed ? 'opacity: 0.5; border: 2px dashed #dc2626;' : ''}"></div>
                                 <span class="fiber-label">Жила ${fiber.number}: ${fiber.name} ${isUsed ? '<span class="fiber-status">(используется)</span>' : '<span class="fiber-status fiber-free-text">(свободна)</span>'}</span>
                             </div>
-                            ${!isUsed && isEditMode && type !== 'sleeve' && type !== 'cross' ? `<button class="btn-continue-cable" data-cable-id="${cableUniqueId}" data-fiber-number="${fiber.number}" title="Продолжить кабель с этой жилой">→</button>` : ''}
+                            ${!isUsed && isEditMode && type !== 'sleeve' && type !== 'cross' && type !== 'olt' && type !== 'splitter' && type !== 'onu' ? `<button class="btn-continue-cable" data-cable-id="${cableUniqueId}" data-fiber-number="${fiber.number}" title="Продолжить кабель с этой жилой">→</button>` : ''}
                         </div>
                     `;
                 });
@@ -6083,6 +6031,7 @@ function setupModalEventListeners() {
                 showSplitterOutputSplitterDialog(currentModalObject, outIdx);
             });
         });
+
         modalInfo.querySelectorAll('.btn-splitter-output-delete').forEach(function(btn) {
             btn.addEventListener('click', function() {
                 if (!currentModalObject || currentModalObject.properties.get('type') !== 'splitter') return;
@@ -8390,6 +8339,11 @@ function getAvailableSplittersForSplitterOutput(sourceSplitterId) {
 }
 
 function showSplitterOutputOnuDialog(splitterObj, outIdx) {
+    var effectiveInput = splitterObj.properties.get('inputFiber') || getSplitterRootInputFiber(splitterObj);
+    if (!effectiveInput) {
+        showWarning('Сначала подключите входную жилу к сплиттеру с муфты или кросса.', 'Нет входа');
+        return;
+    }
     var onus = getAvailableOnusForSplitterOutput();
     if (onus.length === 0) {
         showWarning('Нет свободных ONU. Все ONU уже подключены к выходам сплиттеров.', 'Нет ONU');
@@ -8442,6 +8396,11 @@ function selectSplitterOutputOnu(onuIndex) {
 }
 
 function showSplitterOutputSplitterDialog(splitterObj, outIdx) {
+    var effectiveInput = splitterObj.properties.get('inputFiber') || getSplitterRootInputFiber(splitterObj);
+    if (!effectiveInput) {
+        showWarning('Сначала подключите входную жилу к сплиттеру с муфты или кросса.', 'Нет входа');
+        return;
+    }
     var splitters = getAvailableSplittersForSplitterOutput(getObjectUniqueId(splitterObj));
     if (splitters.length === 0) {
         showWarning('Нет свободных сплиттеров. Все сплиттеры уже имеют вход или подключены к выходам.', 'Нет сплиттеров');
@@ -8502,24 +8461,23 @@ function deleteSplitterOutput(splitterObj, outIdx) {
     var ratio = parseInt(splitterObj.properties.get('splitRatio'), 10) || 8;
     var outputs = (splitterObj.properties.get('outputConnections') || []).slice();
     while (outputs.length < ratio) outputs.push(null);
-    if (outIdx < 0 || outIdx >= outputs.length) return;
-    var removedOutput = outputs[outIdx];
-    if (removedOutput && removedOutput.splitterId) {
-        var childSplitter = objects.find(function(o) {
-            return o.properties && o.properties.get('type') === 'splitter' && getObjectUniqueId(o) === removedOutput.splitterId;
-        });
-        if (childSplitter) {
-            childSplitter.properties.set('inputFiber', null);
+    if (outputs.length > ratio) outputs = outputs.slice(0, ratio);
+    
+    var oldOutput = outputs[outIdx];
+    if (!oldOutput) return;
+    
+    if (oldOutput.onuId) {
+        var onuObj = objects.find(function(o) { return o.properties && o.properties.get('type') === 'onu' && getObjectUniqueId(o) === oldOutput.onuId; });
+        if (onuObj) {
+            onuObj.properties.set('incomingFiber', null);
+        }
+    } else if (oldOutput.splitterId) {
+        var targetSplitter = objects.find(function(o) { return o.properties && o.properties.get('type') === 'splitter' && getObjectUniqueId(o) === oldOutput.splitterId; });
+        if (targetSplitter) {
+            targetSplitter.properties.set('inputFiber', null);
         }
     }
-    if (removedOutput && removedOutput.onuId) {
-        var connectedOnu = objects.find(function(o) {
-            return o.properties && o.properties.get('type') === 'onu' && getObjectUniqueId(o) === removedOutput.onuId;
-        });
-        if (connectedOnu) {
-            connectedOnu.properties.set('incomingFiber', null);
-        }
-    }
+    
     outputs[outIdx] = null;
     splitterObj.properties.set('outputConnections', outputs);
     saveData();
@@ -10753,8 +10711,8 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
                 ${hasOnuConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #f5f3ff; border-radius: 3px; font-size: 0.75rem;"><span style="color: #6d28d9;">📡 → ${escapeHtml(onuConnection.onuName || 'ONU')}</span>${isEditMode ? `<button class="btn-disconnect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от ONU" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
                 ${hasSplitterConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #fff7ed; border-radius: 3px; font-size: 0.75rem;"><span style="color: #c2410c;">🔀 → ${escapeHtml(splitterName)}</span>${isEditMode ? `<button class="btn-disconnect-splitter" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от сплиттера" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
                 ${hasOltConnection && oltConnection.oltId ? (function() { const o = objects.find(obj => obj.properties && obj.properties.get('type') === 'olt' && obj.properties.get('uniqueId') === oltConnection.oltId); const n = o ? (o.properties.get('name') || 'OLT') : 'OLT'; const label = oltConnection.incoming ? ('приход OLT ' + escapeHtml(n)) : ('OLT ' + escapeHtml(n) + ', порт ' + (oltConnection.portNumber || '?')); return `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #e0f2fe; border-radius: 3px; font-size: 0.75rem;"><span style="color: #0369a1;">📶 ${label}</span>${isEditMode ? `<button class="btn-disconnect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от OLT" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>`; }()) : ''}
-                ${((!hasAnyOutConnection || hasOltConnection || canConnectToOnu || !hasOltConnection) && (!isConnected || canConnectToOnu || !hasOltConnection) && isEditMode && isCross) ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;">${(!hasNodeConnection && !cableData.isFromOlt && !hasOltConnection) ? `<button class="btn-connect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к узлу" style="padding: 4px 6px; background: #22c55e; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🖥️ Узел</button>` : ''}${(!hasOltConnection && !cableData.isFromOlt) ? `<button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 OLT</button>` : ''}${canConnectToOnu ? `<button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}</div>` : ''}
-                ${((!hasAnyOutConnection || hasOltConnection || canConnectToOnu || !hasOltConnection) && (!isConnected || canConnectToOnu || !hasOltConnection) && isEditMode && !isCross) ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;">${(!hasOltConnection && !cableData.isFromOlt) ? `<button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 OLT</button>` : ''}${(cableData.isFromOlt || hasOltConnection || canConnectToOnu) ? `<button class="btn-connect-splitter" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к входу сплиттера" style="padding: 4px 6px; background: #f97316; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🔀 Сплиттер</button>` : ''}${canConnectToOnu ? `<button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}</div>` : ''}
+                ${((!hasAnyOutConnection || hasOltConnection || canConnectToOnu || !hasOltConnection) && (!isConnected || canConnectToOnu || !hasOltConnection) && isEditMode && isCross) ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;">${!hasNodeConnection ? `<button class="btn-connect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к узлу" style="padding: 4px 6px; background: #22c55e; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🖥️ Узел</button>` : ''}${!hasOltConnection ? `<button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 OLT</button>` : ''}${canConnectToOnu ? `<button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}</div>` : ''}
+                ${((!hasAnyOutConnection || hasOltConnection || canConnectToOnu || !hasOltConnection) && (!isConnected || canConnectToOnu || !hasOltConnection) && isEditMode && !isCross) ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;">${!hasOltConnection ? `<button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 OLT</button>` : ''}${(cableData.isFromOlt || hasOltConnection || canConnectToOnu) ? `<button class="btn-connect-splitter" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к входу сплиттера" style="padding: 4px 6px; background: #f97316; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🔀 Сплиттер</button>` : ''}${canConnectToOnu ? `<button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}</div>` : ''}
                 ${isEditMode ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px;"><input type="text" class="fiber-label-input" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" value="${directLabel}" placeholder="${isInheritedLabel ? '← ' + displayLabel : 'Подпись...'}" style="flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid ${isInheritedLabel ? '#8b5cf6' : '#ced4da'}; border-radius: 3px; font-size: 0.7rem; ${isInheritedLabel ? 'background: #f5f3ff;' : ''}">${isInheritedLabel ? '<span style="font-size: 0.65rem; color: #8b5cf6;">⬅️</span>' : ''}</div>` : (displayLabel ? `<div style="margin-left: 30px; font-size: 0.7rem; color: ${isInheritedLabel ? '#8b5cf6' : '#6366f1'}; overflow: hidden; text-overflow: ellipsis;">${isInheritedLabel ? '⬅️ ' : '📝 '}${displayLabel}</div>` : '')}
             </div>`;
     }

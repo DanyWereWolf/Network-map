@@ -3585,3 +3585,8 @@ button {
     background-color: #fff7ed !important;
     border-color: #f97316 !important;
 }
+
+.fiber-splitter-connected .fiber-name {
+    color: #c2410c !important;
+    font-weight: 600;
+}
