@@ -3579,3 +3579,9 @@ button {
 .trace-show-on-map-btn:active {
     transform: scale(0.95);
 }
+
+/* Выделение жил, подключенных к сплиттеру */
+.fiber-splitter-connected {
+    background-color: #fff7ed !important;
+    border-color: #f97316 !important;
+}

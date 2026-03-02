@@ -2762,6 +2762,29 @@ function deleteObject(obj, opts) {
             if (changed) slot.properties.set('onuConnections', onuConn);
         });
     }
+    if (objType === 'splitter' && objUniqueId) {
+        objects.forEach(function(slot) {
+            if (!slot.properties) return;
+            var t = slot.properties.get('type');
+            if (t !== 'cross' && t !== 'sleeve') return;
+            var splitterConn = slot.properties.get('splitterConnections');
+            if (!splitterConn) return;
+            var changed = false;
+            Object.keys(splitterConn).forEach(function(key) {
+                if (splitterConn[key] && splitterConn[key].splitterId === objUniqueId) {
+                    var parts = key.split('-');
+                    var fiberNum = parseInt(parts.pop(), 10);
+                    var cableId = parts.join('-');
+                    if (!isNaN(fiberNum) && cableId) {
+                        removeSplitterConnectionLine(slot, cableId, fiberNum);
+                    }
+                    delete splitterConn[key];
+                    changed = true;
+                }
+            });
+            if (changed) slot.properties.set('splitterConnections', splitterConn);
+        });
+    }
 
     const label = obj.properties.get('label');
     if (label) {
@@ -5171,6 +5194,14 @@ function showObjectInfo(obj) {
         if (outputsPadded.length > splitRatio) outputsPadded = outputsPadded.slice(0, splitRatio);
         html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
         html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Сплиттер</h4>';
+        if (isEditMode) {
+            html += '<div class="form-group" style="margin-bottom: 12px;">';
+            html += '<label for="editSplitterName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название сплиттера</label>';
+            html += '<input type="text" id="editSplitterName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Введите название сплиттера">';
+            html += '</div>';
+        } else if (name) {
+            html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Название:</strong> ' + escapeHtml(name) + '</div>';
+        }
         html += '<div style="color: var(--text-secondary); font-size: 0.875rem;">Коэффициент деления: 1:' + splitRatio + '</div>';
         if (effectiveInputFiber) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 6px;"><strong>Входная жила:</strong> кабель ' + escapeHtml(String(effectiveInputFiber.cableId).substring(0, 12)) + '…, жила ' + effectiveInputFiber.fiberNumber + '</div>';
         html += '</div>';
@@ -5213,7 +5244,14 @@ function showObjectInfo(obj) {
         const onuIncoming = obj.properties.get('incomingFiber') || null;
         html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
         html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">ONU</h4>';
-        if (name) html += '<div style="color: var(--text-secondary); font-size: 0.875rem;">Название: ' + escapeHtml(name) + '</div>';
+        if (isEditMode) {
+            html += '<div class="form-group" style="margin-bottom: 12px;">';
+            html += '<label for="editOnuName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название ONU</label>';
+            html += '<input type="text" id="editOnuName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Введите название ONU">';
+            html += '</div>';
+        } else if (name) {
+            html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;">Название: ' + escapeHtml(name) + '</div>';
+        }
         if (onuIncoming) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 6px;">Подключена жила: кабель ' + escapeHtml(String(onuIncoming.cableId).substring(0, 12)) + '…, жила ' + onuIncoming.fiberNumber + '</div>';
         html += '</div>';
     }
@@ -5251,9 +5289,6 @@ function showObjectInfo(obj) {
             html += '<label for="editSleeveName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название муфты</label>';
             html += `<input type="text" id="editSleeveName" class="form-input" value="${escapeHtml(name)}" placeholder="Введите название муфты">`;
             html += '</div>';
-            html += '<button id="saveSleeveEdit" class="btn-primary" style="width: 100%; padding: 10px 14px; margin-top: 8px;">';
-            html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline; margin-right: 8px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>';
-            html += 'Сохранить изменения</button>';
             html += '</div>';
         }
     }
@@ -5279,9 +5314,6 @@ function showObjectInfo(obj) {
             html += `<option value="aggregation"${nodeKind === 'aggregation' ? ' selected' : ''}>Узел агрегации (красный)</option>`;
             html += '</select>';
             html += '</div>';
-            html += '<button id="saveNodeEdit" class="btn-primary" style="width: 100%; padding: 10px 14px; margin-top: 8px;">';
-            html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline; margin-right: 8px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>';
-            html += 'Сохранить изменения</button>';
             html += '</div>';
         } else {
             
@@ -5342,9 +5374,6 @@ function showObjectInfo(obj) {
             html += '<label for="editCrossName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название кросса</label>';
             html += `<input type="text" id="editCrossName" class="form-input" value="${escapeHtml(name)}" placeholder="Введите название кросса">`;
             html += '</div>';
-            html += '<button id="saveCrossEdit" class="btn-primary" style="width: 100%; padding: 10px 14px; margin-top: 8px;">';
-            html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline; margin-right: 8px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>';
-            html += 'Сохранить изменения</button>';
             html += '</div>';
         }
     }
@@ -5546,68 +5575,79 @@ function showSupportInfo(supportObj) {
 
 function setupEditAndDeleteListeners() {
     
-    const saveBtn = document.getElementById('saveNodeEdit');
-    if (saveBtn) {
-        saveBtn.addEventListener('click', function() {
+    const editNodeNameInput = document.getElementById('editNodeName');
+    if (editNodeNameInput) {
+        editNodeNameInput.addEventListener('input', function() {
             if (!currentModalObject) return;
-            
-            const newName = document.getElementById('editNodeName').value.trim();
-            const nodeKindSelect = document.getElementById('editNodeKind');
-            const newNodeKind = nodeKindSelect ? (nodeKindSelect.value || 'network') : (currentModalObject.properties.get('nodeKind') || 'network');
-            
-            if (newName) {
-                if (findNodeByName(newName, currentModalObject)) {
-                    if (typeof showError === 'function') showError('Узел сети с таким названием уже существует. Задайте другое название.', 'Дубликат узла');
-                    else alert('Узел сети с таким названием уже существует. Задайте другое название.');
-                    return;
-                }
-                currentModalObject.properties.set('name', newName);
-                currentModalObject.properties.set('balloonContent', `Узел сети: ${newName}`);
-
-                updateNodeLabel(currentModalObject, newName);
+            const newName = this.value.trim();
+            if (newName && findNodeByName(newName, currentModalObject)) {
+                return;
             }
-
+            currentModalObject.properties.set('name', newName);
+            currentModalObject.properties.set('balloonContent', newName ? `Узел сети: ${newName}` : 'Узел сети');
+            updateNodeLabel(currentModalObject, newName);
+            saveData();
+        });
+    }
+    
+    const editNodeKindSelect = document.getElementById('editNodeKind');
+    if (editNodeKindSelect) {
+        editNodeKindSelect.addEventListener('change', function() {
+            if (!currentModalObject) return;
+            const newNodeKind = this.value || 'network';
             currentModalObject.properties.set('nodeKind', newNodeKind);
             updateNodeIcon(currentModalObject);
             updateNodeDisplay();
-
             saveData();
-
-            showObjectInfo(currentModalObject);
         });
     }
 
-    const saveCrossBtn = document.getElementById('saveCrossEdit');
-    if (saveCrossBtn) {
-        saveCrossBtn.addEventListener('click', function() {
+    const editCrossNameInput = document.getElementById('editCrossName');
+    if (editCrossNameInput) {
+        editCrossNameInput.addEventListener('input', function() {
             if (!currentModalObject) return;
-            
-            const newName = document.getElementById('editCrossName').value.trim();
-            if (newName) {
-                
-                currentModalObject.properties.set('name', newName);
-                currentModalObject.properties.set('balloonContent', `Оптический кросс: ${newName}`);
-
-                updateNodeLabel(currentModalObject, newName);
-
-                saveData();
-
-                showObjectInfo(currentModalObject);
-            }
+            const newName = this.value.trim();
+            currentModalObject.properties.set('name', newName);
+            currentModalObject.properties.set('balloonContent', newName ? `Оптический кросс: ${newName}` : 'Оптический кросс');
+            updateNodeLabel(currentModalObject, newName);
+            saveData();
         });
     }
 
-    const saveSleeveBtn = document.getElementById('saveSleeveEdit');
-    if (saveSleeveBtn) {
-        saveSleeveBtn.addEventListener('click', function() {
+    const editSleeveNameInput = document.getElementById('editSleeveName');
+    if (editSleeveNameInput) {
+        editSleeveNameInput.addEventListener('input', function() {
             if (!currentModalObject) return;
             if (currentModalObject.properties.get('type') !== 'sleeve') return;
-            const newName = (document.getElementById('editSleeveName') && document.getElementById('editSleeveName').value) ? document.getElementById('editSleeveName').value.trim() : '';
+            const newName = this.value.trim();
             currentModalObject.properties.set('name', newName);
             currentModalObject.properties.set('balloonContent', newName ? 'Кабельная муфта: ' + newName : 'Кабельная муфта');
             saveData();
             if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
-            showObjectInfo(currentModalObject);
+        });
+    }
+    
+    const editSplitterNameInput = document.getElementById('editSplitterName');
+    if (editSplitterNameInput) {
+        editSplitterNameInput.addEventListener('input', function() {
+            if (!currentModalObject) return;
+            if (currentModalObject.properties.get('type') !== 'splitter') return;
+            const newName = this.value.trim();
+            currentModalObject.properties.set('name', newName);
+            currentModalObject.properties.set('balloonContent', newName ? 'Сплиттер: ' + newName : 'Сплиттер');
+            saveData();
+        });
+    }
+    
+    const editOnuNameInput = document.getElementById('editOnuName');
+    if (editOnuNameInput) {
+        editOnuNameInput.addEventListener('input', function() {
+            if (!currentModalObject) return;
+            if (currentModalObject.properties.get('type') !== 'onu') return;
+            const newName = this.value.trim();
+            currentModalObject.properties.set('name', newName);
+            currentModalObject.properties.set('balloonContent', newName ? 'ONU: ' + newName : 'ONU');
+            saveData();
         });
     }
     
@@ -6045,6 +6085,15 @@ function setupFiberConnectionHandlers() {
                 selectedFiberForConnection = { cableId, fiberNumber };
                 updateFiberSelectionUI();
             } else {
+                if (selectedFiberForConnection.cableId === cableId && selectedFiberForConnection.fiberNumber === fiberNumber) {
+                    resetFiberSelection();
+                    const instruction = document.querySelector('.fiber-connections-container');
+                    if (instruction) {
+                        const existingMsg = instruction.querySelector('.connection-hint');
+                        if (existingMsg) existingMsg.remove();
+                    }
+                    return;
+                }
                 
                 if (selectedFiberForConnection.cableId !== cableId || selectedFiberForConnection.fiberNumber !== fiberNumber) {
                     
@@ -6268,6 +6317,15 @@ function setupFiberConnectionHandlers() {
             const cableId = this.getAttribute('data-cable-id');
             const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
             disconnectFiberFromOnu(sleeveObj, cableId, fiberNumber);
+        });
+    });
+    
+    document.querySelectorAll('.btn-disconnect-splitter').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const cableId = this.getAttribute('data-cable-id');
+            const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
+            disconnectFiberFromSplitter(sleeveObj, cableId, fiberNumber);
         });
     });
     
@@ -10541,22 +10599,31 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         const nodeConnection = nodeConnections[fiberLabelKey];
         const oltConnection = oltConnections[fiberLabelKey];
         const onuConnection = onuConnections[fiberLabelKey];
+        const splitterConnections = sleeveObj.properties.get('splitterConnections') || {};
+        const splitterConnection = splitterConnections[fiberLabelKey];
+        const hasSplitterConnection = !!splitterConnection && !!splitterConnection.splitterId;
+        let splitterName = '';
+        if (hasSplitterConnection) {
+            const spObj = objects.find(o => o.properties && o.properties.get('type') === 'splitter' && getObjectUniqueId(o) === splitterConnection.splitterId);
+            splitterName = spObj ? (spObj.properties.get('name') || 'Сплиттер') : 'Сплиттер';
+        }
         const hasNodeConnection = !!nodeConnection;
         const hasOltConnection = !!oltConnection;
         const hasOnuConnection = !!onuConnection;
-        const hasAnyOutConnection = hasNodeConnection || hasOltConnection || hasOnuConnection;
+        const hasAnyOutConnection = hasNodeConnection || hasOltConnection || hasOnuConnection || hasSplitterConnection;
         const canConnectToOnu = isFiberConnectedToOlt(sleeveObj, cableData.cableUniqueId, fiber.number);
         const fiberTextColor = (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00') ? '#000' : '#fff';
-        let statusText = isUsed ? '(исп.)' : (hasNodeConnection ? '(на узел)' : (hasOnuConnection ? '(на ONU)' : (hasOltConnection ? '(от OLT)' : '(своб.)')));
+        let statusText = isUsed ? '(исп.)' : (hasNodeConnection ? '(на узел)' : (hasOnuConnection ? '(на ONU)' : (hasSplitterConnection ? '(на сплит.)' : (hasOltConnection ? '(от OLT)' : '(своб.)'))));
         if (hasOltConnection && oltConnection.oltId) {
             const oltObj = objects.find(o => o.properties && o.properties.get('type') === 'olt' && o.properties.get('uniqueId') === oltConnection.oltId);
             const oltName = oltObj ? (oltObj.properties.get('name') || 'OLT') : 'OLT';
             statusText = oltConnection.incoming ? ('приход OLT ' + escapeHtml(oltName)) : ('OLT ' + escapeHtml(oltName) + ', порт ' + (oltConnection.portNumber || '?'));
         }
         if (hasOnuConnection) statusText = '→ ONU ' + escapeHtml(onuConnection.onuName || 'ONU');
-        const statusColor = isUsed ? '#b91c1c' : (hasNodeConnection ? '#22c55e' : (hasOnuConnection ? '#a855f7' : (hasOltConnection ? '#0ea5e9' : '#22c55e')));
-        const itemBorder = isUsed ? '#dc2626' : (hasNodeConnection ? '#22c55e' : (hasOnuConnection ? '#a855f7' : (hasOltConnection ? '#0ea5e9' : 'var(--border-color)')));
-        const usedClass = isUsed ? ' fiber-used cross-fiber-used' : '';
+        if (hasSplitterConnection) statusText = '→ ' + escapeHtml(splitterName);
+        const statusColor = isUsed ? '#b91c1c' : (hasNodeConnection ? '#22c55e' : (hasOnuConnection ? '#a855f7' : (hasSplitterConnection ? '#f97316' : (hasOltConnection ? '#0ea5e9' : '#22c55e'))));
+        const itemBorder = isUsed ? '#dc2626' : (hasNodeConnection ? '#22c55e' : (hasOnuConnection ? '#a855f7' : (hasSplitterConnection ? '#f97316' : (hasOltConnection ? '#0ea5e9' : 'var(--border-color)'))));
+        const usedClass = isUsed ? ' fiber-used cross-fiber-used' : (hasSplitterConnection ? ' fiber-splitter-connected' : '');
         var cellTitle = '';
         if (isEditMode && !hasAnyOutConnection && !isConnected) cellTitle = 'Клик: выбрать жилу, затем клик по жиле в другом кабеле — создать соединение';
         const currentPort = isCross && fiberPorts ? (fiberPorts[fiberLabelKey] || '') : '';
@@ -10583,6 +10650,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
                 ${portRow}
                 ${hasNodeConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #f0fdf4; border-radius: 3px; font-size: 0.75rem;"><span style="color: #166534;">🖥️ → ${escapeHtml(nodeConnection.nodeName)}</span>${isEditMode ? `<button class="btn-disconnect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от узла" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
                 ${hasOnuConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #f5f3ff; border-radius: 3px; font-size: 0.75rem;"><span style="color: #6d28d9;">📡 → ${escapeHtml(onuConnection.onuName || 'ONU')}</span>${isEditMode ? `<button class="btn-disconnect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от ONU" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
+                ${hasSplitterConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #fff7ed; border-radius: 3px; font-size: 0.75rem;"><span style="color: #c2410c;">🔀 → ${escapeHtml(splitterName)}</span>${isEditMode ? `<button class="btn-disconnect-splitter" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от сплиттера" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
                 ${hasOltConnection && oltConnection.oltId ? (function() { const o = objects.find(obj => obj.properties && obj.properties.get('type') === 'olt' && obj.properties.get('uniqueId') === oltConnection.oltId); const n = o ? (o.properties.get('name') || 'OLT') : 'OLT'; const label = oltConnection.incoming ? ('приход OLT ' + escapeHtml(n)) : ('OLT ' + escapeHtml(n) + ', порт ' + (oltConnection.portNumber || '?')); return `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #e0f2fe; border-radius: 3px; font-size: 0.75rem;"><span style="color: #0369a1;">📶 ${label}</span>${isEditMode ? `<button class="btn-disconnect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от OLT" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>`; }()) : ''}
                 ${((!hasAnyOutConnection || hasOltConnection || canConnectToOnu || !hasOltConnection) && (!isConnected || canConnectToOnu || !hasOltConnection) && isEditMode && isCross) ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;">${!hasNodeConnection ? `<button class="btn-connect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к узлу" style="padding: 4px 6px; background: #22c55e; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🖥️ Узел</button>` : ''}${!hasOltConnection ? `<button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 OLT</button>` : ''}${canConnectToOnu ? `<button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}</div>` : ''}
                 ${((!hasAnyOutConnection || hasOltConnection || canConnectToOnu || !hasOltConnection) && (!isConnected || canConnectToOnu || !hasOltConnection) && isEditMode && !isCross) ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;">${!hasOltConnection ? `<button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 OLT</button>` : ''}${(cableData.isFromOlt || hasOltConnection || canConnectToOnu) ? `<button class="btn-connect-splitter" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к входу сплиттера" style="padding: 4px 6px; background: #f97316; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🔀 Сплиттер</button>` : ''}${canConnectToOnu ? `<button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}</div>` : ''}
