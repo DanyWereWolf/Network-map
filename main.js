@@ -2610,44 +2610,16 @@ function createObject(type, name, coords, options = {}) {
     }
     const placemark = new ymaps.Placemark(coords, placemarkProperties, placemarkOptions);
 
-    if (type === 'node' || type === 'cross') {
-        updateNodeLabel(placemark, name);
-        if (type === 'cross') {
-            const labelContent = name ? escapeHtml(name) : 'Оптический кросс';
-            const label = new ymaps.Placemark(coords, {}, {
-                iconLayout: 'default#imageWithContent',
-                iconImageHref: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==',
-                iconImageSize: [1, 1],
-                iconImageOffset: [0, 0],
-                iconContent: '<div class="map-label">' + labelContent + '</div>',
-                iconContentOffset: [0, 20],
-                zIndex: 1000,
-                zIndexHover: 1000,
-                cursor: 'default',
-                hasBalloon: false,
-                hasHint: false
-            });
-            placemark.properties.set('label', label);
-        }
-        placemark.events.add('dragend', function() {
-            const coords = placemark.geometry.getCoordinates();
-            const label = placemark.properties.get('label');
-            if (label && label.geometry) {
-                label.geometry.setCoordinates(coords);
-            }
-        });
+    updateObjectLabel(placemark, name);
+    var objLabel = placemark.properties.get('label');
+    if (objLabel) {
+        myMap.geoObjects.add(objLabel);
     }
-
-    if (type === 'support' && name) {
-        updateSupportLabel(placemark, name);
-        var supportLabel = placemark.properties.get('label');
-        if (supportLabel) myMap.geoObjects.add(supportLabel);
-        placemark.events.add('dragend', function() {
-            var c = placemark.geometry.getCoordinates();
-            var lbl = placemark.properties.get('label');
-            if (lbl && lbl.geometry) lbl.geometry.setCoordinates(c);
-        });
-    }
+    placemark.events.add('dragend', function() {
+        var c = placemark.geometry.getCoordinates();
+        var lbl = placemark.properties.get('label');
+        if (lbl && lbl.geometry) lbl.geometry.setCoordinates(c);
+    });
 
     placemark.events.add('click', function(e) {
         e.preventDefault();
@@ -4585,14 +4557,16 @@ function applyOperationToMap(op) {
 window.applyOperationToMap = applyOperationToMap;
 
 function ensureNodeLabelsVisible() {
-    
     objects.forEach(obj => {
         if (obj.properties) {
             const type = obj.properties.get('type');
-            if (type === 'node' || type === 'cross') {
+            if (type && type !== 'cable' && type !== 'cableLabel') {
                 const name = obj.properties.get('name') || '';
-                
-                updateNodeLabel(obj, name);
+                updateObjectLabel(obj, name);
+                var label = obj.properties.get('label');
+                if (label && !myMap.geoObjects.indexOf || myMap.geoObjects.indexOf(label) === -1) {
+                    try { myMap.geoObjects.add(label); } catch(e) {}
+                }
             }
         }
     });
@@ -4815,25 +4789,8 @@ function createObjectFromData(data, opts) {
     }
 
     if (type === 'node' || type === 'cross') {
-        const defaultTitles = { cross: 'Оптический кросс', node: 'Узел сети' };
-        const labelContent = name ? escapeHtml(name) : (defaultTitles[type] || 'Объект');
-        const label = new ymaps.Placemark(geometry, {}, {
-            iconLayout: 'default#imageWithContent',
-            iconImageHref: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==',
-            iconImageSize: [1, 1],
-            iconImageOffset: [0, 0],
-            iconContent: '<div class="map-label">' + labelContent + '</div>',
-            iconContentOffset: [0, 20],
-            zIndex: 1000,
-            zIndexHover: 1000,
-            cursor: 'default',
-            hasBalloon: false,
-            hasHint: false
-        });
-        
-        placemark.properties.set('label', label);
-        
         placemark.events.add('dragend', function() {
+            const label = placemark.properties.get('label');
             const coords = placemark.geometry.getCoordinates();
             if (label && label.geometry) {
                 label.geometry.setCoordinates(coords);
@@ -5077,19 +5034,17 @@ function createObjectFromData(data, opts) {
         scheduleDragUpdate(placemark);
     });
 
-    if (type === 'support' && name) {
-        updateSupportLabel(placemark, name);
-    }
+    updateObjectLabel(placemark, name);
     
     attachHoverEventsToObject(placemark);
     if (!(opts && opts.skipAddToObjects)) {
         objects.push(placemark);
         if (type !== 'cross' && type !== 'node') {
             myMap.geoObjects.add(placemark);
-            if (type === 'support') {
-                var supportLbl = placemark.properties.get('label');
-                if (supportLbl) myMap.geoObjects.add(supportLbl);
-            }
+        }
+        var objLabel = placemark.properties.get('label');
+        if (objLabel) {
+            try { myMap.geoObjects.add(objLabel); } catch(e) {}
         }
         updateStats();
     }
@@ -5863,6 +5818,7 @@ function setupEditAndDeleteListeners() {
             const newName = this.value.trim();
             currentModalObject.properties.set('name', newName);
             currentModalObject.properties.set('balloonContent', newName ? 'Кабельная муфта: ' + newName : 'Кабельная муфта');
+            updateObjectLabel(currentModalObject, newName);
             saveData();
             if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
         });
@@ -5876,6 +5832,7 @@ function setupEditAndDeleteListeners() {
             const newName = this.value.trim();
             currentModalObject.properties.set('name', newName);
             currentModalObject.properties.set('balloonContent', newName ? 'Сплиттер: ' + newName : 'Сплиттер');
+            updateObjectLabel(currentModalObject, newName);
             saveData();
         });
     }
@@ -5888,6 +5845,7 @@ function setupEditAndDeleteListeners() {
             const newName = this.value.trim();
             currentModalObject.properties.set('name', newName);
             currentModalObject.properties.set('balloonContent', newName ? 'ONU: ' + newName : 'ONU');
+            updateObjectLabel(currentModalObject, newName);
             saveData();
         });
     }
@@ -6001,42 +5959,61 @@ function duplicateObject(obj) {
 }
 
 function updateNodeLabel(placemark, name) {
+    updateObjectLabel(placemark, name);
+}
+
+function getObjectDefaultName(type) {
+    switch(type) {
+        case 'node': return 'Узел сети';
+        case 'cross': return 'Кросс';
+        case 'sleeve': return 'Муфта';
+        case 'support': return 'Опора';
+        case 'attachment': return 'Крепление';
+        case 'olt': return 'OLT';
+        case 'splitter': return 'Сплиттер';
+        case 'onu': return 'ONU';
+        default: return 'Объект';
+    }
+}
+
+function updateObjectLabel(placemark, name) {
     if (!placemark || !placemark.properties) return;
     
     const type = placemark.properties.get('type');
-    if (type === 'node') {
-        let label = placemark.properties.get('label');
-
-        const displayName = name ? escapeHtml(name) : 'Узел сети';
-        const coords = placemark.geometry.getCoordinates();
-        
-        if (!label) {
-            
-            label = new ymaps.Placemark(coords, {}, {
-                iconLayout: 'default#imageWithContent',
-                iconImageHref: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==',
-                iconImageSize: [1, 1],
-                iconImageOffset: [0, 0],
-                iconContent: '<div class="map-label">' + displayName + '</div>',
-                iconContentOffset: [0, 20],
-                zIndex: 1000,
-                zIndexHover: 1000,
-                cursor: 'default',
-                hasBalloon: false,
-                hasHint: false
-            });
-            placemark.properties.set('label', label);
-        } else {
-            
-            label.properties.set({
-                iconContent: '<div class="map-label">' + displayName + '</div>'
-            });
-            label.geometry.setCoordinates(coords);
-        }
+    if (type === 'cable' || type === 'cableLabel') return;
+    
+    let label = placemark.properties.get('label');
+    const displayName = name ? escapeHtml(name) : getObjectDefaultName(type);
+    const coords = placemark.geometry.getCoordinates();
+    
+    if (!label) {
+        label = new ymaps.Placemark(coords, {}, {
+            iconLayout: 'default#imageWithContent',
+            iconImageHref: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==',
+            iconImageSize: [1, 1],
+            iconImageOffset: [0, 0],
+            iconContent: '<div class="map-label">' + displayName + '</div>',
+            iconContentOffset: [0, 18],
+            zIndex: 1000,
+            zIndexHover: 1000,
+            cursor: 'default',
+            hasBalloon: false,
+            hasHint: false
+        });
+        placemark.properties.set('label', label);
+    } else {
+        label.properties.set({
+            iconContent: '<div class="map-label">' + displayName + '</div>'
+        });
+        label.geometry.setCoordinates(coords);
     }
 }
 
 function updateSupportLabel(placemark, name) {
+    updateObjectLabel(placemark, name);
+}
+
+function updateSupportLabelLegacy(placemark, name) {
     if (!placemark || !placemark.properties) return;
     if (placemark.properties.get('type') !== 'support') return;
     
@@ -6061,7 +6038,7 @@ function updateSupportLabel(placemark, name) {
             iconImageSize: [1, 1],
             iconImageOffset: [0, 0],
             iconContent: labelContent,
-            iconContentOffset: [0, 20],
+            iconContentOffset: [0, 18],
             zIndex: 1000,
             zIndexHover: 1000,
             cursor: 'default',

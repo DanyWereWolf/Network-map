@@ -3532,7 +3532,7 @@ button {
     color: var(--accent-primary);
 }
 
-/* Подписи объектов на карте (узлы, кроссы, группы): компактно и по центру под объектом */
+/* Подписи объектов на карте (все типы): компактно и по центру под объектом */
 .map-label,
 #map .map-label {
     display: inline-block;
@@ -3543,7 +3543,7 @@ button {
     text-align: center;
     white-space: nowrap;
     padding: 2px 6px;
-    margin-top: 6px;
+    margin-top: 0;
     margin-left: 50%;
     transform: translateX(-50%);
     background: #ffffff;
