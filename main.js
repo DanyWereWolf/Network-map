@@ -1216,7 +1216,7 @@ function goToSearchResult(result) {
     
     if (!coords) return;
 
-    myMap.setCenter(coords, 17, { duration: 500 });
+    myMap.setCenter(coords, 21, { duration: 500 });
 
     setTimeout(() => {
         if (result.type === 'cable') {
@@ -3381,6 +3381,7 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
             );
             if (isConnected) {
                 if (exclude && exclude.type === 'fiberConnection' && (exclude.crossId === uid || exclude.sleeveId === uid)) continue;
+                if (exclude && exclude.type === 'oltPort') continue;
                 return { used: true, where: 'соединение жил в ' + (t === 'cross' ? 'кроссе' : 'муфте') };
             }
             
@@ -6274,7 +6275,6 @@ function setupFiberConnectionHandlers() {
             if (!selectedFiberForConnection) {
                 
                 const nodeConnections = sleeveObj.properties.get('nodeConnections') || {};
-                const oltConnections = sleeveObj.properties.get('oltConnections') || {};
                 const onuConnections = sleeveObj.properties.get('onuConnections') || {};
                 const splitterConnections = sleeveObj.properties.get('splitterConnections') || {};
                 const fiberKey = `${cableId}-${fiberNumber}`;
@@ -6288,19 +6288,6 @@ function setupFiberConnectionHandlers() {
                         hint.className = 'connection-hint';
                         hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
                         hint.textContent = `Жила ${fiberNumber} уже подключена к узлу "${nodeConnections[fiberKey].nodeName}". Отключите её от узла, чтобы соединить с другой жилой.`;
-                        instruction.appendChild(hint);
-                    }
-                    return;
-                }
-                if (oltConnections[fiberKey]) {
-                    const instruction = document.querySelector('.fiber-connections-container');
-                    if (instruction) {
-                        const existingMsg = instruction.querySelector('.connection-hint');
-                        if (existingMsg) existingMsg.remove();
-                        const hint = document.createElement('div');
-                        hint.className = 'connection-hint';
-                        hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
-                        hint.textContent = `Жила ${fiberNumber} уже подключена к OLT. Отключите её от OLT, чтобы соединить с другой жилой.`;
                         instruction.appendChild(hint);
                     }
                     return;
@@ -6389,7 +6376,6 @@ function setupFiberConnectionHandlers() {
                     );
 
                     const nodeConnections = sleeveObj.properties.get('nodeConnections') || {};
-                    const oltConnections = sleeveObj.properties.get('oltConnections') || {};
                     const onuConnections = sleeveObj.properties.get('onuConnections') || {};
                     const splitterConnections = sleeveObj.properties.get('splitterConnections') || {};
                     const secondKey = `${cableId}-${fiberNumber}`;
@@ -6404,20 +6390,6 @@ function setupFiberConnectionHandlers() {
                             hint.className = 'connection-hint';
                             hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
                             hint.textContent = `Жила ${fiberNumber} уже подключена к узлу "${nodeConnections[secondKey].nodeName}". Отключите её от узла, чтобы соединить с другой жилой.`;
-                            instruction.appendChild(hint);
-                        }
-                        resetFiberSelection();
-                        return;
-                    }
-                    if (oltConnections[secondKey]) {
-                        const instruction = document.querySelector('.fiber-connections-container');
-                        if (instruction) {
-                            const existingMsg = instruction.querySelector('.connection-hint');
-                            if (existingMsg) existingMsg.remove();
-                            const hint = document.createElement('div');
-                            hint.className = 'connection-hint';
-                            hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
-                            hint.textContent = `Жила ${fiberNumber} уже подключена к OLT. Отключите её от OLT, чтобы соединить с другой жилой.`;
                             instruction.appendChild(hint);
                         }
                         resetFiberSelection();
@@ -6460,20 +6432,6 @@ function setupFiberConnectionHandlers() {
                             hint.className = 'connection-hint';
                             hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
                             hint.textContent = `Выбранная жила уже подключена к узлу "${nodeConnections[firstKey].nodeName}". Отключите её от узла для соединения с другой жилой.`;
-                            instruction.appendChild(hint);
-                        }
-                        resetFiberSelection();
-                        return;
-                    }
-                    if (oltConnections[firstKey]) {
-                        const instruction = document.querySelector('.fiber-connections-container');
-                        if (instruction) {
-                            const existingMsg = instruction.querySelector('.connection-hint');
-                            if (existingMsg) existingMsg.remove();
-                            const hint = document.createElement('div');
-                            hint.className = 'connection-hint';
-                            hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
-                            hint.textContent = `Выбранная жила уже подключена к OLT. Отключите её от OLT для соединения с другой жилой.`;
                             instruction.appendChild(hint);
                         }
                         resetFiberSelection();
@@ -9998,7 +9956,7 @@ function showObjectOnMap(uniqueId) {
         showWarning('Не удалось получить координаты объекта', 'Навигация');
         return;
     }
-    myMap.setCenter(coords, Math.max(myMap.getZoom(), 17), { duration: 300 });
+    myMap.setCenter(coords, 21, { duration: 300 });
     if (objType !== 'cable') {
         var originalPreset = obj.options.get('preset');
         obj.options.set('preset', 'islands#redCircleDotIcon');
