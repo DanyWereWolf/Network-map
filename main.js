@@ -700,6 +700,7 @@ function init() {
     try { myMap.controls.remove('searchControl'); } catch (e) {}
     try { myMap.controls.remove('trafficControl'); } catch (e) {}
     try { myMap.controls.remove('geolocationControl'); } catch (e) {}
+    try { myMap.behaviors.disable('rightMouseButtonMagnifier'); } catch (e) {}
 
     createCursorIndicator();
 
@@ -710,6 +711,7 @@ function init() {
     
     loadData();
     setupEventListeners();
+    setupRectSelection();
     if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
     
     setTimeout(function() {
@@ -3952,6 +3954,201 @@ function geoToClient(geoCoord) {
     } catch (e) {
         return null;
     }
+}
+
+function clientToGeo(clientX, clientY) {
+    if (!myMap) return null;
+    try {
+        const bounds = myMap.getBounds();
+        if (!bounds || bounds.length < 2) return null;
+        const rect = myMap.container.getElement().getBoundingClientRect();
+        const minLat = Math.min(bounds[0][0], bounds[1][0]);
+        const maxLat = Math.max(bounds[0][0], bounds[1][0]);
+        const minLon = Math.min(bounds[0][1], bounds[1][1]);
+        const maxLon = Math.max(bounds[0][1], bounds[1][1]);
+        if (maxLat === minLat || maxLon === minLon) return null;
+        const propX = (clientX - rect.left) / rect.width;
+        const propY = (clientY - rect.top) / rect.height;
+        const lon = minLon + propX * (maxLon - minLon);
+        const lat = maxLat - propY * (maxLat - minLat);
+        return [lat, lon];
+    } catch (e) {
+        return null;
+    }
+}
+
+var rectSelectStart = null;
+var rectSelectEnd = null;
+var rectSelectOverlay = null;
+var rectSelectPanel = null;
+
+function setupRectSelection() {
+    if (!myMap || !myMap.container) return;
+    var container = myMap.container.getElement();
+    var overlay = document.createElement('div');
+    overlay.id = 'rectSelectOverlay';
+    overlay.style.cssText = 'position:absolute;pointer-events:none;border:2px solid #3b82f6;background:rgba(59,130,246,0.15);display:none;z-index:1000;';
+    container.style.position = 'relative';
+    container.appendChild(overlay);
+    rectSelectOverlay = overlay;
+
+    var panel = document.createElement('div');
+    panel.id = 'rectSelectPanel';
+    panel.style.cssText = 'position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:var(--bg-card);border:1px solid var(--border-color);border-radius:8px;padding:12px 16px;box-shadow:var(--shadow-md);z-index:1001;display:none;flex-direction:column;gap:8px;pointer-events:auto;';
+    var mapArea = document.getElementById('mapAreaWrapper') || document.getElementById('map');
+    if (mapArea) {
+        mapArea.style.position = 'relative';
+        mapArea.appendChild(panel);
+    }
+    rectSelectPanel = panel;
+
+    container.addEventListener('mousedown', function(e) {
+        if (e.button !== 2) return;
+        e.preventDefault();
+        if (objectPlacementMode || currentCableTool || splitterFiberRoutingMode || fiberRoutingMode) return;
+        var geo = clientToGeo(e.clientX, e.clientY);
+        if (!geo) return;
+        rectSelectStart = { x: e.clientX, y: e.clientY, geo: geo };
+        rectSelectEnd = null;
+        overlay.style.left = (e.clientX - container.getBoundingClientRect().left) + 'px';
+        overlay.style.top = (e.clientY - container.getBoundingClientRect().top) + 'px';
+        overlay.style.width = '0';
+        overlay.style.height = '0';
+        overlay.style.display = 'block';
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+        document.addEventListener('wheel', onRectSelectWheel, { passive: false, capture: true });
+    });
+
+    var onRectSelectWheel = function(e) {
+        if (rectSelectStart) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    };
+
+    var onMouseMove = function(e) {
+        if (!rectSelectStart) return;
+        e.preventDefault();
+        var rect = container.getBoundingClientRect();
+        var x1 = Math.min(rectSelectStart.x, e.clientX);
+        var x2 = Math.max(rectSelectStart.x, e.clientX);
+        var y1 = Math.min(rectSelectStart.y, e.clientY);
+        var y2 = Math.max(rectSelectStart.y, e.clientY);
+        overlay.style.left = (x1 - rect.left) + 'px';
+        overlay.style.top = (y1 - rect.top) + 'px';
+        overlay.style.width = (x2 - x1) + 'px';
+        overlay.style.height = (y2 - y1) + 'px';
+        rectSelectEnd = { x: e.clientX, y: e.clientY, geo: clientToGeo(e.clientX, e.clientY) };
+    };
+
+    var onMouseUp = function(e) {
+        if (e.button !== 2) return;
+        if (!rectSelectStart) return;
+        e.preventDefault();
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        document.removeEventListener('wheel', onRectSelectWheel, { passive: false, capture: true });
+        var geo2 = rectSelectEnd && rectSelectEnd.geo ? rectSelectEnd.geo : rectSelectStart.geo;
+        var minLat = Math.min(rectSelectStart.geo[0], geo2[0]);
+        var maxLat = Math.max(rectSelectStart.geo[0], geo2[0]);
+        var minLon = Math.min(rectSelectStart.geo[1], geo2[1]);
+        var maxLon = Math.max(rectSelectStart.geo[1], geo2[1]);
+        var selected = getObjectsInRect(minLat, maxLat, minLon, maxLon);
+        rectSelectStart = null;
+        rectSelectEnd = null;
+        overlay.style.display = 'none';
+
+        if (selected.placemarks.length === 0 && selected.cables.length === 0) {
+            return;
+        }
+
+        var counts = {};
+        selected.placemarks.forEach(function(obj) {
+            var t = obj.properties.get('type');
+            if (t && t !== 'cableLabel') counts[t] = (counts[t] || 0) + 1;
+        });
+        counts.cable = selected.cables.length;
+
+        var typeNames = { cross: 'Кроссов', node: 'Узлов', sleeve: 'Муфт', support: 'Опар', attachment: 'Креплений', olt: 'OLT', splitter: 'Сплиттеров', onu: 'ONU', cable: 'Кабелей' };
+        var parts = [];
+        Object.keys(counts).sort().forEach(function(k) {
+            if (counts[k] > 0) parts.push(counts[k] + ' ' + (typeNames[k] || k));
+        });
+        panel.innerHTML = '<div style="font-size:0.875rem;color:var(--text-primary);margin-bottom:8px;">В выделенной области: ' + (parts.length ? parts.join(', ') : '—') + '</div>' +
+            (isEditMode ? '<button type="button" class="btn-danger" id="rectSelectDeleteBtn" style="padding:8px 16px;font-size:0.875rem;">Удалить выделенное</button>' : '') +
+            '<button type="button" class="btn-secondary" id="rectSelectCloseBtn" style="padding:8px 16px;font-size:0.875rem;">Закрыть</button>';
+        panel.style.display = 'flex';
+        panel.style.flexDirection = 'column';
+
+        var deleteBtn = document.getElementById('rectSelectDeleteBtn');
+        if (deleteBtn && isEditMode) {
+            deleteBtn.addEventListener('click', function() {
+                var toDelete = selected.placemarks.concat(selected.cables);
+                toDelete.forEach(function(obj) {
+                    var t = obj.properties ? obj.properties.get('type') : null;
+                    if (t === 'cable') {
+                        var uid = obj.properties.get('uniqueId');
+                        if (uid) deleteCableByUniqueId(uid, { skipSync: true });
+                        else {
+                            myMap.geoObjects.remove(obj);
+                            objects = objects.filter(function(o) { return o !== obj; });
+                        }
+                    } else {
+                        deleteObject(obj, { skipSync: true });
+                    }
+                });
+                if (toDelete.length) {
+                    saveData();
+                    if (typeof window.syncForceSendState === 'function') window.syncForceSendState();
+                    if (typeof showInfo === 'function') showInfo('Удалено объектов: ' + toDelete.length, 'Удаление');
+                }
+                panel.style.display = 'none';
+            });
+        }
+
+        var closeBtn = document.getElementById('rectSelectCloseBtn');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', function() {
+                panel.style.display = 'none';
+            });
+        }
+    };
+
+    container.addEventListener('contextmenu', function(e) {
+        if (rectSelectStart) e.preventDefault();
+    });
+}
+
+function getObjectsInRect(minLat, maxLat, minLon, maxLon) {
+    var placemarks = [];
+    var cables = [];
+    if (!objects || !Array.isArray(objects)) return { placemarks: placemarks, cables: cables };
+
+    function inRect(lat, lon) {
+        return lat >= minLat && lat <= maxLat && lon >= minLon && lon <= maxLon;
+    }
+
+    objects.forEach(function(obj) {
+        if (!obj.properties) return;
+        var type = obj.properties.get('type');
+        if (type === 'cable' || type === 'cableLabel') {
+            if (type === 'cableLabel') return;
+            var geom = obj.geometry && obj.geometry.getCoordinates ? obj.geometry.getCoordinates() : null;
+            if (!geom) return;
+            var flat = normalizeCableGeometry(geom);
+            if (!flat) return;
+            var anyIn = flat.some(function(p) { return inRect(p[0], p[1]); });
+            if (anyIn) cables.push(obj);
+        } else {
+            var coords = obj.geometry && obj.geometry.getCoordinates ? obj.geometry.getCoordinates() : null;
+            if (coords && coords.length >= 2 && inRect(coords[0], coords[1])) {
+                placemarks.push(obj);
+            }
+        }
+    });
+
+    return { placemarks: placemarks, cables: cables };
 }
 
 function normalizeCableGeometry(geom) {
