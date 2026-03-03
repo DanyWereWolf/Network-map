@@ -129,6 +129,95 @@ window.applyGroupNames = function(gn) {
     } catch (e) {}
 };
 
+var DEVICE_MANUFACTURERS_PREDEFINED = ['Huawei', 'ZTE', 'Eltex', 'FiberHome', 'Nokia', 'Iskratel', 'BDCOM', 'SNR', 'B-OptiX', 'Ruijie', 'Sercomm', 'D-Link', 'Zyxel', 'Ubiquiti', 'MikroTik', 'Keenetic', 'TP-Link', 'Cisco', 'Cambium'];
+var DEVICE_MODELS_PREDEFINED = ['MA5608', 'MA5683T', 'C300', 'C320', 'AN5516', 'HG8145', 'HG8245', 'F660', 'F670', 'NTU-2', 'NTU-4', 'SNR-ONU-GPON-1G-mini', 'BO-ONU-GPON-4G-1P-DW', 'hEX', 'hAP', 'RB750', 'CCR', 'Router', 'Switch', 'SFU', 'HGU', 'WAP', 'S6750-H36C', 'S6730-H48X6C'];
+var customDeviceManufacturers = [];
+var customDeviceModels = [];
+
+function getDeviceManufacturers() {
+    var seen = {};
+    var out = [];
+    DEVICE_MANUFACTURERS_PREDEFINED.forEach(function(m) { if (!seen[m]) { seen[m] = true; out.push(m); } });
+    (customDeviceManufacturers || []).forEach(function(m) { if (m && !seen[m]) { seen[m] = true; out.push(m); } });
+    return out;
+}
+
+function getDeviceModels() {
+    var seen = {};
+    var out = [];
+    DEVICE_MODELS_PREDEFINED.forEach(function(m) { if (!seen[m]) { seen[m] = true; out.push(m); } });
+    (customDeviceModels || []).forEach(function(m) { if (m && !seen[m]) { seen[m] = true; out.push(m); } });
+    return out;
+}
+
+function addCustomManufacturer(v) {
+    v = (v || '').trim();
+    if (!v) return;
+    if (customDeviceManufacturers.indexOf(v) === -1 && DEVICE_MANUFACTURERS_PREDEFINED.indexOf(v) === -1) {
+        customDeviceManufacturers.push(v);
+        saveCustomDeviceOptions();
+    }
+}
+
+function addCustomModel(v) {
+    v = (v || '').trim();
+    if (!v) return;
+    if (customDeviceModels.indexOf(v) === -1 && DEVICE_MODELS_PREDEFINED.indexOf(v) === -1) {
+        customDeviceModels.push(v);
+        saveCustomDeviceOptions();
+    }
+}
+
+var CUSTOM_DEVICE_OPTIONS_STORAGE_KEY = 'networkmap_customDeviceOptions';
+function saveCustomDeviceOptions() {
+    var payload = { manufacturers: customDeviceManufacturers || [], models: customDeviceModels || [] };
+    try { localStorage.setItem(CUSTOM_DEVICE_OPTIONS_STORAGE_KEY, JSON.stringify(payload)); } catch (e) {}
+    if (getApiBase()) {
+        try {
+            fetch(getApiBase() + '/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
+                body: JSON.stringify({ customDeviceOptions: payload })
+            }).catch(function() {});
+        } catch (e) {}
+    }
+}
+
+function loadCustomDeviceOptions(opts) {
+    if (opts && opts.manufacturers && Array.isArray(opts.manufacturers)) customDeviceManufacturers = opts.manufacturers;
+    if (opts && opts.models && Array.isArray(opts.models)) customDeviceModels = opts.models;
+}
+
+function loadCustomDeviceOptionsFromStorage() {
+    try {
+        var raw = localStorage.getItem(CUSTOM_DEVICE_OPTIONS_STORAGE_KEY);
+        if (!raw) return;
+        var parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') loadCustomDeviceOptions(parsed);
+    } catch (e) {}
+}
+
+function populateDeviceDatalists() {
+    var dlM = document.getElementById('deviceManufacturersList');
+    var dlMod = document.getElementById('deviceModelsList');
+    if (dlM) {
+        dlM.innerHTML = '';
+        (getDeviceManufacturers() || []).forEach(function(m) {
+            var opt = document.createElement('option');
+            opt.value = m;
+            dlM.appendChild(opt);
+        });
+    }
+    if (dlMod) {
+        dlMod.innerHTML = '';
+        (getDeviceModels() || []).forEach(function(m) {
+            var opt = document.createElement('option');
+            opt.value = m;
+            dlMod.appendChild(opt);
+        });
+    }
+}
+
 function checkAuth() {
     if (typeof AuthSystem === 'undefined') {
         console.warn('AuthSystem не загружен');
@@ -890,6 +979,8 @@ function setupEventListeners() {
             if (nodeSettingsGroup) nodeSettingsGroup.style.display = type === 'node' ? 'block' : 'none';
             if (oltSettingsGroup) oltSettingsGroup.style.display = type === 'olt' ? 'block' : 'none';
             if (splitterSettingsGroup) splitterSettingsGroup.style.display = type === 'splitter' ? 'block' : 'none';
+            const onuSettingsGroup = document.getElementById('onuSettingsGroup');
+            if (onuSettingsGroup) onuSettingsGroup.style.display = type === 'onu' ? 'block' : 'none';
 
             if (nameInputGroup) {
                 const nameLabel = nameInputGroup.querySelector('label');
@@ -918,6 +1009,9 @@ function setupEventListeners() {
                 const nodeKindSelect = document.getElementById('nodeKind');
                 currentPlacementNodeKind = nodeKindSelect ? nodeKindSelect.value : 'network';
             }
+            if (['node', 'olt', 'onu'].indexOf(newType) !== -1) {
+                populateDeviceDatalists();
+            }
         }
         });
         if (objectTypeSelect.value) objectTypeSelect.dispatchEvent(new Event('change'));
@@ -940,6 +1034,32 @@ function setupEventListeners() {
             }
         });
     }
+
+    function setupDeviceFieldAddHandlers(manufacturerId, modelId, mAddId, modAddId) {
+        var mAdd = document.getElementById(mAddId);
+        var modAdd = document.getElementById(modAddId);
+        if (mAdd) mAdd.addEventListener('click', function() {
+            var inp = document.getElementById(manufacturerId);
+            if (inp && inp.value.trim()) { addCustomManufacturer(inp.value.trim()); populateDeviceDatalists(); if (typeof showSuccess === 'function') showSuccess('Производитель добавлен', ''); }
+        });
+        if (modAdd) modAdd.addEventListener('click', function() {
+            var inp = document.getElementById(modelId);
+            if (inp && inp.value.trim()) { addCustomModel(inp.value.trim()); populateDeviceDatalists(); if (typeof showSuccess === 'function') showSuccess('Модель добавлена', ''); }
+        });
+    }
+    setupDeviceFieldAddHandlers('oltManufacturer', 'oltModel', 'oltManufacturerAdd', 'oltModelAdd');
+    setupDeviceFieldAddHandlers('onuManufacturer', 'onuModel', 'onuManufacturerAdd', 'onuModelAdd');
+    setupDeviceFieldAddHandlers('nodeManufacturer', 'nodeModel', 'nodeManufacturerAdd', 'nodeModelAdd');
+
+    function setupDeviceFieldBlurHandlers(manufacturerId, modelId) {
+        var mInp = document.getElementById(manufacturerId);
+        var modInp = document.getElementById(modelId);
+        if (mInp) mInp.addEventListener('blur', function() { var v = this.value.trim(); if (v) addCustomManufacturer(v); });
+        if (modInp) modInp.addEventListener('blur', function() { var v = this.value.trim(); if (v) addCustomModel(v); });
+    }
+    setupDeviceFieldBlurHandlers('oltManufacturer', 'oltModel');
+    setupDeviceFieldBlurHandlers('onuManufacturer', 'onuModel');
+    setupDeviceFieldBlurHandlers('nodeManufacturer', 'nodeModel');
 
     const sleeveTypeSelect = document.getElementById('sleeveType');
     if (sleeveTypeSelect) {
@@ -1547,8 +1667,12 @@ function handleMapClick(e) {
                 return;
             }
             const nodeKindSelect = document.getElementById('nodeKind');
+            const nodeManufacturerInput = document.getElementById('nodeManufacturer');
+            const nodeModelInput = document.getElementById('nodeModel');
             const nodeKind = currentPlacementNodeKind || (nodeKindSelect ? nodeKindSelect.value : 'network');
-            createObject(type, name || '', coords, { nodeKind: nodeKind });
+            var manufacturer = nodeManufacturerInput ? nodeManufacturerInput.value.trim() : '';
+            var model = nodeModelInput ? nodeModelInput.value.trim() : '';
+            createObject(type, name || '', coords, { nodeKind: nodeKind, manufacturer: manufacturer, model: model });
             
             currentPlacementName = name || '';
             currentPlacementNodeKind = nodeKind;
@@ -1573,7 +1697,9 @@ function handleMapClick(e) {
             const name = currentPlacementName || (nameInput ? nameInput.value.trim() : '');
             const oltPortsEl = document.getElementById('oltPonPorts');
             const ponPorts = oltPortsEl ? (parseInt(oltPortsEl.value, 10) || 8) : 8;
-            createObject(type, name || '', coords, { ponPorts: ponPorts });
+            const manufacturer = (document.getElementById('oltManufacturer') && document.getElementById('oltManufacturer').value) ? document.getElementById('oltManufacturer').value.trim() : '';
+            const model = (document.getElementById('oltModel') && document.getElementById('oltModel').value) ? document.getElementById('oltModel').value.trim() : '';
+            createObject(type, name || '', coords, { ponPorts: ponPorts, manufacturer: manufacturer, model: model });
             currentPlacementName = name || '';
         } else if (type === 'splitter') {
             const nameInput = document.getElementById('objectName');
@@ -1585,7 +1711,9 @@ function handleMapClick(e) {
         } else if (type === 'onu') {
             const nameInput = document.getElementById('objectName');
             const name = currentPlacementName || (nameInput ? nameInput.value.trim() : '');
-            createObject(type, name || '', coords);
+            const manufacturer = (document.getElementById('onuManufacturer') && document.getElementById('onuManufacturer').value) ? document.getElementById('onuManufacturer').value.trim() : '';
+            const model = (document.getElementById('onuModel') && document.getElementById('onuModel').value) ? document.getElementById('onuModel').value.trim() : '';
+            createObject(type, name || '', coords, { manufacturer: manufacturer, model: model });
             currentPlacementName = name || '';
         } else {
             createObject(type, '', coords);
@@ -2639,6 +2767,9 @@ function createObject(type, name, coords, options = {}) {
 
     if (type === 'node') {
         placemarkProperties.nodeKind = (options.nodeKind || 'network');
+        if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
+        if (options.model) placemarkProperties.model = options.model;
+        placemarkProperties.comment = options.comment || '';
     }
 
     if (type === 'sleeve' && options.sleeveType) {
@@ -2653,6 +2784,9 @@ function createObject(type, name, coords, options = {}) {
         placemarkProperties.ponPorts = options.ponPorts || 8;
         placemarkProperties.incomingFiber = null;
         placemarkProperties.portAssignments = {};
+        if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
+        if (options.model) placemarkProperties.model = options.model;
+        placemarkProperties.comment = options.comment || '';
     }
     if (type === 'splitter') {
         placemarkProperties.splitRatio = options.splitRatio || 8;
@@ -2661,6 +2795,9 @@ function createObject(type, name, coords, options = {}) {
     }
     if (type === 'onu') {
         placemarkProperties.incomingFiber = null;
+        if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
+        if (options.model) placemarkProperties.model = options.model;
+        placemarkProperties.comment = options.comment || '';
     }
 
     if (!placemarkProperties.uniqueId) {
@@ -4332,6 +4469,9 @@ function getSerializedData() {
             if (props.ponPorts !== undefined) result.ponPorts = props.ponPorts;
             if (props.incomingFiber) result.incomingFiber = props.incomingFiber;
             if (props.portAssignments) result.portAssignments = props.portAssignments;
+            if (props.manufacturer) result.manufacturer = props.manufacturer;
+            if (props.model) result.model = props.model;
+            if (props.comment) result.comment = props.comment;
         }
         if (props.type === 'splitter') {
             if (props.splitRatio !== undefined) result.splitRatio = props.splitRatio;
@@ -4340,9 +4480,15 @@ function getSerializedData() {
         }
         if (props.type === 'onu') {
             if (props.incomingFiber) result.incomingFiber = props.incomingFiber;
+            if (props.manufacturer) result.manufacturer = props.manufacturer;
+            if (props.model) result.model = props.model;
+            if (props.comment) result.comment = props.comment;
         }
         if (props.type === 'node') {
             if (props.nodeKind) result.nodeKind = props.nodeKind;
+            if (props.manufacturer) result.manufacturer = props.manufacturer;
+            if (props.model) result.model = props.model;
+            if (props.comment) result.comment = props.comment;
         }
         if (props.netboxId) result.netboxId = props.netboxId;
         if (props.netboxUrl) result.netboxUrl = props.netboxUrl;
@@ -4417,6 +4563,7 @@ function loadDataFromStorage() {
 
 function loadData() {
     loadGroupNamesFromStorage();
+    loadCustomDeviceOptionsFromStorage();
     if (typeof updateCrossDisplay === 'function') updateCrossDisplay();
     if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
     if (!getApiBase()) {
@@ -4441,6 +4588,7 @@ function loadData() {
                     if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
                 } catch (e) {}
             }
+            if (s.customDeviceOptions && typeof loadCustomDeviceOptions === 'function') loadCustomDeviceOptions(s.customDeviceOptions);
             if (s.mapStart && typeof myMap !== 'undefined' && myMap && Array.isArray(s.mapStart.center) && s.mapStart.center.length >= 2) {
                 try { myMap.setCenter(s.mapStart.center, s.mapStart.zoom || 15); } catch (e) {}
             }
@@ -4927,7 +5075,7 @@ function importData(data, opts) {
 }
 
 function createObjectFromData(data, opts) {
-    const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, fiberPorts, netboxId, netboxUrl, netboxDeviceType, netboxSite, sleeveType, maxFibers, crossPorts, nodeConnections, oltConnections, onuConnections, uniqueId, nodeKind, ponPorts, splitRatio, splitterConnections, incomingFiber, portAssignments, inputFiber, outputConnections } = data;
+    const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, fiberPorts, netboxId, netboxUrl, netboxDeviceType, netboxSite, sleeveType, maxFibers, crossPorts, nodeConnections, oltConnections, onuConnections, uniqueId, nodeKind, manufacturer, model, comment, ponPorts, splitRatio, splitterConnections, incomingFiber, portAssignments, inputFiber, outputConnections } = data;
     
     let iconSvg, color, balloonContent;
     
@@ -5057,6 +5205,9 @@ function createObjectFromData(data, opts) {
     
     if (type === 'node') {
         placemark.properties.set('nodeKind', nodeKind || 'network');
+        if (manufacturer) placemark.properties.set('manufacturer', manufacturer);
+        if (model) placemark.properties.set('model', model);
+        if (comment) placemark.properties.set('comment', comment);
     }
 
     if (type === 'node' || type === 'cross') {
@@ -5131,6 +5282,9 @@ function createObjectFromData(data, opts) {
         placemark.properties.set('ponPorts', ponPorts || 8);
         placemark.properties.set('incomingFiber', incomingFiber || null);
         placemark.properties.set('portAssignments', portAssignments || {});
+        if (manufacturer) placemark.properties.set('manufacturer', manufacturer);
+        if (model) placemark.properties.set('model', model);
+        if (comment) placemark.properties.set('comment', comment);
     }
     if (type === 'splitter') {
         placemark.properties.set('splitRatio', splitRatio || 8);
@@ -5139,6 +5293,9 @@ function createObjectFromData(data, opts) {
     }
     if (type === 'onu') {
         placemark.properties.set('incomingFiber', incomingFiber || null);
+        if (manufacturer) placemark.properties.set('manufacturer', manufacturer);
+        if (model) placemark.properties.set('model', model);
+        if (comment) placemark.properties.set('comment', comment);
     }
 
     if (netboxId) {
@@ -5498,6 +5655,8 @@ function updateStats() {
 }
 
 function showObjectInfo(obj) {
+    var objType = obj && obj.properties ? obj.properties.get('type') : '';
+    if (['node', 'olt', 'onu'].indexOf(objType) !== -1 && typeof populateDeviceDatalists === 'function') populateDeviceDatalists();
     if (splitterFiberRoutingMode && splitterFiberRoutingData) {
         var objId = getObjectUniqueId(obj);
         var isSourceOrTarget = (objId === getObjectUniqueId(splitterFiberRoutingData.splitterObj)) ||
@@ -5560,7 +5719,27 @@ function showObjectInfo(obj) {
         const ponPorts = Math.max(1, parseInt(obj.properties.get('ponPorts'), 10) || 8);
         const incomingFiber = obj.properties.get('incomingFiber') || null;
         const portAssignments = obj.properties.get('portAssignments') || {};
+        const manufacturer = obj.properties.get('manufacturer') || '';
+        const model = obj.properties.get('model') || '';
+        const comment = obj.properties.get('comment') || '';
         const cables = getConnectedCables(obj);
+        if (isEditMode) {
+            html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
+            html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Устройство</h4>';
+            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Производитель</label>';
+            html += '<div class="device-field-row"><input type="text" id="editOltManufacturer" class="form-input" list="deviceManufacturersList" value="' + escapeHtml(manufacturer) + '" placeholder="Поиск или введите"><button type="button" id="editOltManufacturerAdd" class="device-field-add" title="Добавить">➕</button></div></div>';
+            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Модель</label>';
+            html += '<div class="device-field-row"><input type="text" id="editOltModel" class="form-input" list="deviceModelsList" value="' + escapeHtml(model) + '" placeholder="Поиск или введите"><button type="button" id="editOltModelAdd" class="device-field-add" title="Добавить">➕</button></div></div>';
+            html += '<div class="form-group"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Комментарий</label>';
+            html += '<textarea id="editOltComment" class="form-input" rows="2" placeholder="Дополнительные сведения">' + escapeHtml(comment) + '</textarea></div>';
+            html += '</div>';
+        } else if (manufacturer || model || comment) {
+            html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
+            html += '<h4 style="margin: 0 0 8px 0; color: var(--text-primary); font-size: 0.9375rem;">Устройство</h4>';
+            if (manufacturer || model) html += '<div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 6px;">' + escapeHtml([manufacturer, model].filter(Boolean).join(' ') || '—') + '</div>';
+            if (comment) html += '<div style="font-size: 0.875rem; color: var(--text-secondary); white-space: pre-wrap;">' + escapeHtml(comment) + '</div>';
+            html += '</div>';
+        }
         const fiberOptions = [];
         cables.forEach(cable => {
             const cid = cable.properties.get('uniqueId') || ('cable-' + Date.now());
@@ -5709,6 +5888,9 @@ function showObjectInfo(obj) {
 
     if (type === 'onu') {
         const onuIncoming = obj.properties.get('incomingFiber') || null;
+        const manufacturer = obj.properties.get('manufacturer') || '';
+        const model = obj.properties.get('model') || '';
+        const comment = obj.properties.get('comment') || '';
         html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
         html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">ONU</h4>';
         if (isEditMode) {
@@ -5716,9 +5898,17 @@ function showObjectInfo(obj) {
             html += '<label for="editOnuName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название ONU</label>';
             html += '<input type="text" id="editOnuName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Введите название ONU">';
             html += '</div>';
+            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Производитель</label>';
+            html += '<div class="device-field-row"><input type="text" id="editOnuManufacturer" class="form-input" list="deviceManufacturersList" value="' + escapeHtml(manufacturer) + '" placeholder="Поиск или введите"><button type="button" id="editOnuManufacturerAdd" class="device-field-add" title="Добавить">➕</button></div></div>';
+            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Модель</label>';
+            html += '<div class="device-field-row"><input type="text" id="editOnuModel" class="form-input" list="deviceModelsList" value="' + escapeHtml(model) + '" placeholder="Поиск или введите"><button type="button" id="editOnuModelAdd" class="device-field-add" title="Добавить">➕</button></div></div>';
+            html += '<div class="form-group"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Комментарий</label>';
+            html += '<textarea id="editOnuComment" class="form-input" rows="2" placeholder="Дополнительные сведения">' + escapeHtml(comment) + '</textarea></div>';
         } else if (name) {
             html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;">Название: ' + escapeHtml(name) + '</div>';
         }
+        if (manufacturer || model) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 6px;">Устройство: ' + escapeHtml([manufacturer, model].filter(Boolean).join(' ') || '—') + '</div>';
+        if (comment) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; white-space: pre-wrap; margin-top: 6px;">' + escapeHtml(comment) + '</div>';
         if (onuIncoming) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 6px;">Подключена жила: кабель ' + escapeHtml(String(onuIncoming.cableId).substring(0, 12)) + '…, жила ' + onuIncoming.fiberNumber + '</div>';
         html += '</div>';
     }
@@ -5766,6 +5956,9 @@ function showObjectInfo(obj) {
         const netboxDeviceType = obj.properties.get('netboxDeviceType');
         const netboxSite = obj.properties.get('netboxSite');
         const nodeKind = obj.properties.get('nodeKind') || 'network';
+        const manufacturer = obj.properties.get('manufacturer') || '';
+        const model = obj.properties.get('model') || '';
+        const comment = obj.properties.get('comment') || '';
 
         if (isEditMode) {
             html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
@@ -5781,12 +5974,29 @@ function showObjectInfo(obj) {
             html += `<option value="aggregation"${nodeKind === 'aggregation' ? ' selected' : ''}>Узел агрегации (красный)</option>`;
             html += '</select>';
             html += '</div>';
+            html += '<div class="form-group" style="margin-bottom: 12px;">';
+            html += '<label for="editNodeManufacturer" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Производитель</label>';
+            html += '<div class="device-field-row"><input type="text" id="editNodeManufacturer" class="form-input" list="deviceManufacturersList" value="' + escapeHtml(manufacturer) + '" placeholder="Поиск или введите"><button type="button" id="editNodeManufacturerAdd" class="device-field-add" title="Добавить в список">➕</button></div>';
+            html += '</div>';
+            html += '<div class="form-group" style="margin-bottom: 12px;">';
+            html += '<label for="editNodeModel" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Модель</label>';
+            html += '<div class="device-field-row"><input type="text" id="editNodeModel" class="form-input" list="deviceModelsList" value="' + escapeHtml(model) + '" placeholder="Поиск или введите"><button type="button" id="editNodeModelAdd" class="device-field-add" title="Добавить в список">➕</button></div>';
+            html += '</div>';
+            html += '<div class="form-group" style="margin-bottom: 12px;">';
+            html += '<label for="editNodeComment" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Комментарий</label>';
+            html += `<textarea id="editNodeComment" class="form-input" rows="3" placeholder="Дополнительные сведения...">${escapeHtml(comment)}</textarea>`;
+            html += '</div>';
             html += '</div>';
         } else {
-            
             html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
             html += '<h4 style="margin: 0 0 8px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Информация</h4>';
-            html += `<div style="color: var(--text-secondary); font-size: 0.875rem;"><strong>Название узла:</strong> ${escapeHtml(name || 'Не указано')}</div>`;
+            html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 6px;"><strong>Название узла:</strong> ${escapeHtml(name || 'Не указано')}</div>`;
+            if (manufacturer || model) {
+                html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 6px;"><strong>Устройство:</strong> ${escapeHtml([manufacturer, model].filter(Boolean).join(' ') || '—')}</div>`;
+            }
+            if (comment) {
+                html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 8px; padding: 8px; background: var(--bg-card); border-radius: 4px; white-space: pre-wrap;"><strong>Комментарий:</strong><br>${escapeHtml(comment)}</div>`;
+            }
             html += '</div>';
         }
 
@@ -6072,6 +6282,64 @@ function setupEditAndDeleteListeners() {
         });
     }
 
+    var editNodeManufacturer = document.getElementById('editNodeManufacturer');
+    if (editNodeManufacturer) {
+        editNodeManufacturer.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'node') { currentModalObject.properties.set('manufacturer', this.value || ''); saveData(); } });
+        editNodeManufacturer.addEventListener('blur', function() { if (this.value.trim()) addCustomManufacturer(this.value.trim()); });
+    }
+    var editNodeModel = document.getElementById('editNodeModel');
+    if (editNodeModel) {
+        editNodeModel.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'node') { currentModalObject.properties.set('model', this.value || ''); saveData(); } });
+        editNodeModel.addEventListener('blur', function() { if (this.value.trim()) addCustomModel(this.value.trim()); });
+    }
+    var editNodeManufacturerAdd = document.getElementById('editNodeManufacturerAdd');
+    if (editNodeManufacturerAdd) editNodeManufacturerAdd.addEventListener('click', function() { var inp = document.getElementById('editNodeManufacturer'); if (inp && inp.value.trim()) { addCustomManufacturer(inp.value.trim()); populateDeviceDatalists(); } });
+    var editNodeModelAdd = document.getElementById('editNodeModelAdd');
+    if (editNodeModelAdd) editNodeModelAdd.addEventListener('click', function() { var inp = document.getElementById('editNodeModel'); if (inp && inp.value.trim()) { addCustomModel(inp.value.trim()); populateDeviceDatalists(); } });
+
+    const editNodeCommentInput = document.getElementById('editNodeComment');
+    if (editNodeCommentInput) {
+        editNodeCommentInput.addEventListener('input', function() {
+            if (!currentModalObject || currentModalObject.properties.get('type') !== 'node') return;
+            currentModalObject.properties.set('comment', this.value || '');
+            saveData();
+        });
+    }
+
+    var editOltManufacturer = document.getElementById('editOltManufacturer');
+    if (editOltManufacturer) {
+        editOltManufacturer.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'olt') { currentModalObject.properties.set('manufacturer', this.value || ''); saveData(); } });
+        editOltManufacturer.addEventListener('blur', function() { if (this.value.trim()) addCustomManufacturer(this.value.trim()); });
+    }
+    var editOltModel = document.getElementById('editOltModel');
+    if (editOltModel) {
+        editOltModel.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'olt') { currentModalObject.properties.set('model', this.value || ''); saveData(); } });
+        editOltModel.addEventListener('blur', function() { if (this.value.trim()) addCustomModel(this.value.trim()); });
+    }
+    var editOltComment = document.getElementById('editOltComment');
+    if (editOltComment) editOltComment.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'olt') { currentModalObject.properties.set('comment', this.value || ''); saveData(); } });
+    var editOltManufacturerAdd = document.getElementById('editOltManufacturerAdd');
+    if (editOltManufacturerAdd) editOltManufacturerAdd.addEventListener('click', function() { var inp = document.getElementById('editOltManufacturer'); if (inp && inp.value.trim()) { addCustomManufacturer(inp.value.trim()); populateDeviceDatalists(); } });
+    var editOltModelAdd = document.getElementById('editOltModelAdd');
+    if (editOltModelAdd) editOltModelAdd.addEventListener('click', function() { var inp = document.getElementById('editOltModel'); if (inp && inp.value.trim()) { addCustomModel(inp.value.trim()); populateDeviceDatalists(); } });
+
+    var editOnuManufacturer = document.getElementById('editOnuManufacturer');
+    if (editOnuManufacturer) {
+        editOnuManufacturer.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'onu') { currentModalObject.properties.set('manufacturer', this.value || ''); saveData(); } });
+        editOnuManufacturer.addEventListener('blur', function() { if (this.value.trim()) addCustomManufacturer(this.value.trim()); });
+    }
+    var editOnuModel = document.getElementById('editOnuModel');
+    if (editOnuModel) {
+        editOnuModel.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'onu') { currentModalObject.properties.set('model', this.value || ''); saveData(); } });
+        editOnuModel.addEventListener('blur', function() { if (this.value.trim()) addCustomModel(this.value.trim()); });
+    }
+    var editOnuComment = document.getElementById('editOnuComment');
+    if (editOnuComment) editOnuComment.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'onu') { currentModalObject.properties.set('comment', this.value || ''); saveData(); } });
+    var editOnuManufacturerAdd = document.getElementById('editOnuManufacturerAdd');
+    if (editOnuManufacturerAdd) editOnuManufacturerAdd.addEventListener('click', function() { var inp = document.getElementById('editOnuManufacturer'); if (inp && inp.value.trim()) { addCustomManufacturer(inp.value.trim()); populateDeviceDatalists(); } });
+    var editOnuModelAdd = document.getElementById('editOnuModelAdd');
+    if (editOnuModelAdd) editOnuModelAdd.addEventListener('click', function() { var inp = document.getElementById('editOnuModel'); if (inp && inp.value.trim()) { addCustomModel(inp.value.trim()); populateDeviceDatalists(); } });
+
     const editCrossNameInput = document.getElementById('editCrossName');
     if (editCrossNameInput) {
         editCrossNameInput.addEventListener('input', function() {
@@ -6210,7 +6478,14 @@ function duplicateObject(obj) {
         if (name) newName = name + ' (копия)';
     }
     
-    createObject(type, newName, newCoords);
+    var opts = {};
+    if (type === 'node') {
+        opts.nodeKind = obj.properties.get('nodeKind') || 'network';
+        opts.manufacturer = obj.properties.get('manufacturer') || '';
+        opts.model = obj.properties.get('model') || '';
+        opts.comment = obj.properties.get('comment') || '';
+    }
+    createObject(type, newName, newCoords, Object.keys(opts).length ? opts : undefined);
 
     const newObj = objects[objects.length - 1];
     if (!newObj) return;

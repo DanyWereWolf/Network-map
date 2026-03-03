@@ -1083,38 +1083,34 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
 
 /* ==================== Аккордеон ==================== */
 .accordion-section {
-    margin-bottom: 8px;
+    margin-bottom: 10px;
     background: var(--bg-card);
     border: 1px solid var(--border-color);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     overflow: hidden;
-    transition: all var(--transition-fast);
+    transition: border-color var(--transition-fast);
 }
 
 .accordion-section:hover {
-    border-color: var(--accent-primary);
-    box-shadow: var(--shadow-sm);
+    border-color: var(--text-muted);
 }
 
 .accordion-header {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 14px 16px;
+    padding: 12px 16px;
     cursor: pointer;
     user-select: none;
     font-weight: 600;
     color: var(--text-primary);
     font-size: 0.875rem;
-    transition: all var(--transition-fast);
+    transition: background var(--transition-fast);
     background: var(--bg-card);
-    border-radius: var(--radius-md);
-    margin-bottom: 4px;
 }
 
 .accordion-header:hover {
     background: var(--bg-hover);
-    transform: translateX(4px);
 }
 
 .accordion-header svg:first-child {
@@ -1145,13 +1141,13 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     overflow: hidden;
     transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), padding 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     padding: 0 16px;
-    background: var(--bg-card);
-    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    background: var(--bg-tertiary);
+    border-top: 1px solid var(--border-color);
 }
 
 .accordion-section.active .accordion-content {
-    max-height: 1000px;
-    padding: 16px;
+    max-height: 1200px;
+    padding: 14px 16px 16px;
 }
 
 /* Фильтр карты */
@@ -1218,6 +1214,48 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     letter-spacing: 0.5px;
 }
 
+/* Поле производитель/модель: input + кнопка «добавить» */
+.device-field-row {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.device-field-row .form-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.device-field-add {
+    flex-shrink: 0;
+    width: 38px;
+    min-width: 38px;
+    padding: 0;
+    margin: 0;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    line-height: 1;
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+    align-self: stretch;
+}
+
+.device-field-add:hover {
+    background: var(--bg-accent);
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+}
+
+.form-group label.form-group-sub {
+    margin-top: 12px;
+}
+
 .form-select,
 .form-input {
     width: 100%;
@@ -1258,15 +1296,19 @@ button {
     width: 100%;
     padding: 10px 14px;
     border: none;
-    border-radius: 4px;
-    font-size: 0.875rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.8125rem;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
     margin-bottom: 8px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    font-size: 0.75rem;
+}
+
+.accordion-content > .btn-primary:first-of-type,
+.accordion-content > .btn-secondary:first-of-type {
+    margin-top: 12px;
 }
 
 .btn-primary:last-child,

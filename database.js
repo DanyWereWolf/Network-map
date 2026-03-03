@@ -174,18 +174,26 @@ function getSettings() {
     const theme = getSetting('theme');
     const groupNames = getSetting('groupNames');
     const netboxConfig = getSetting('netboxConfig');
+    const customDeviceOptions = getSetting('customDeviceOptions');
     let parsedGroupNames = {};
     let parsedNetboxConfig = { url: '', token: '', ignoreSSL: false };
+    let parsedCustomDevice = { manufacturers: [], models: [] };
     try {
         parsedGroupNames = groupNames ? (typeof groupNames === 'string' ? JSON.parse(groupNames) : groupNames) : {};
     } catch (e) {  }
     try {
         parsedNetboxConfig = netboxConfig ? (typeof netboxConfig === 'string' ? JSON.parse(netboxConfig) : netboxConfig) : { url: '', token: '', ignoreSSL: false };
     } catch (e) {  }
+    try {
+        parsedCustomDevice = customDeviceOptions ? (typeof customDeviceOptions === 'string' ? JSON.parse(customDeviceOptions) : customDeviceOptions) : { manufacturers: [], models: [] };
+        if (!Array.isArray(parsedCustomDevice.manufacturers)) parsedCustomDevice.manufacturers = [];
+        if (!Array.isArray(parsedCustomDevice.models)) parsedCustomDevice.models = [];
+    } catch (e) {  }
     return {
         theme: theme || '',
         groupNames: parsedGroupNames,
-        netboxConfig: parsedNetboxConfig
+        netboxConfig: parsedNetboxConfig,
+        customDeviceOptions: parsedCustomDevice
     };
 }
 
@@ -193,6 +201,7 @@ function setSettings(obj) {
     if (obj.theme !== undefined) setSetting('theme', obj.theme);
     if (obj.groupNames !== undefined) setSetting('groupNames', typeof obj.groupNames === 'string' ? obj.groupNames : JSON.stringify(obj.groupNames));
     if (obj.netboxConfig !== undefined) setSetting('netboxConfig', typeof obj.netboxConfig === 'string' ? obj.netboxConfig : JSON.stringify(obj.netboxConfig));
+    if (obj.customDeviceOptions !== undefined) setSetting('customDeviceOptions', typeof obj.customDeviceOptions === 'string' ? obj.customDeviceOptions : JSON.stringify(obj.customDeviceOptions));
 }
 
 function getMapStartForUser(userId) {

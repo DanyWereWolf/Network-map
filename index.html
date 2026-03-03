@@ -255,7 +255,31 @@
                                 <option value="32">32 порта</option>
                                 <option value="64">64 порта</option>
                             </select>
+                            <label for="oltManufacturer" class="form-group-sub">Производитель</label>
+                            <div class="device-field-row">
+                                <input type="text" id="oltManufacturer" class="form-input" list="deviceManufacturersList" placeholder="Поиск или введите новый" autocomplete="off">
+                                <button type="button" id="oltManufacturerAdd" class="device-field-add" title="Добавить в список">➕</button>
+                            </div>
+                            <label for="oltModel" class="form-group-sub">Модель</label>
+                            <div class="device-field-row">
+                                <input type="text" id="oltModel" class="form-input" list="deviceModelsList" placeholder="Поиск или введите новую" autocomplete="off">
+                                <button type="button" id="oltModelAdd" class="device-field-add" title="Добавить в список">➕</button>
+                            </div>
+                            <datalist id="deviceManufacturersList"></datalist>
+                            <datalist id="deviceModelsList"></datalist>
                             <p class="form-hint" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">Приход от кросса — одна жила (не входит в порты). Порты задаются жилами кабелей, подключённых к OLT.</p>
+                        </div>
+                        <div class="form-group" id="onuSettingsGroup" style="display: none;">
+                            <label for="onuManufacturer">Производитель</label>
+                            <div class="device-field-row">
+                                <input type="text" id="onuManufacturer" class="form-input" list="deviceManufacturersList" placeholder="Поиск или введите новый" autocomplete="off">
+                                <button type="button" id="onuManufacturerAdd" class="device-field-add" title="Добавить в список">➕</button>
+                            </div>
+                            <label for="onuModel" class="form-group-sub">Модель</label>
+                            <div class="device-field-row">
+                                <input type="text" id="onuModel" class="form-input" list="deviceModelsList" placeholder="Поиск или введите новую" autocomplete="off">
+                                <button type="button" id="onuModelAdd" class="device-field-add" title="Добавить в список">➕</button>
+                            </div>
                         </div>
                         <div class="form-group" id="splitterSettingsGroup" style="display: none;">
                             <label for="splitterRatio">Коэффициент деления</label>
@@ -274,6 +298,16 @@
                                 <option value="network">Узел сети (зелёный)</option>
                                 <option value="aggregation">Узел агрегации (красный)</option>
                             </select>
+                            <label for="nodeManufacturer" class="form-group-sub">Производитель</label>
+                            <div class="device-field-row">
+                                <input type="text" id="nodeManufacturer" class="form-input" list="deviceManufacturersList" placeholder="Поиск или введите новый" autocomplete="off">
+                                <button type="button" id="nodeManufacturerAdd" class="device-field-add" title="Добавить в список">➕</button>
+                            </div>
+                            <label for="nodeModel" class="form-group-sub">Модель</label>
+                            <div class="device-field-row">
+                                <input type="text" id="nodeModel" class="form-input" list="deviceModelsList" placeholder="Поиск или введите новую" autocomplete="off">
+                                <button type="button" id="nodeModelAdd" class="device-field-add" title="Добавить в список">➕</button>
+                            </div>
                         </div>
                         <div class="form-group" id="crossSettingsGroup" style="display: none;">
                             <label for="crossPorts">Количество портов</label>
