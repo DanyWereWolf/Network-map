@@ -3534,9 +3534,10 @@ button {
 
 /* Подписи объектов на карте (все типы): компактно и по центру под объектом */
 .map-label,
-#map .map-label {
+#map .map-label,
+[class*="ymaps"] .map-label {
     display: inline-block;
-    color: #1e293b;
+    color: var(--text-primary);
     font-size: 11px;
     font-weight: 600;
     line-height: 1.2;
@@ -3546,12 +3547,24 @@ button {
     margin-top: 0;
     margin-left: 50%;
     transform: translateX(-50%);
-    background: #ffffff;
-    border: 1px solid rgba(0, 0, 0, 0.1);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
     border-radius: 4px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.5);
-    text-shadow: 0 0 1px #fff, 0 1px 1px rgba(255, 255, 255, 0.9);
+    box-shadow: var(--shadow-md);
     letter-spacing: 0.01em;
+}
+
+/* Подпись на карте: лёгкая обводка для читаемости на любом фоне */
+[data-theme="light"] .map-label,
+[data-theme="light"] #map .map-label,
+[data-theme="light"] [class*="ymaps"] .map-label {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.8);
+}
+
+[data-theme="dark"] .map-label,
+[data-theme="dark"] #map .map-label,
+[data-theme="dark"] [class*="ymaps"] .map-label {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
 }
 
 /* Курсор-прицел на карте: хорошо виден в светлой и тёмной теме */
@@ -3568,12 +3581,64 @@ button {
     -webkit-filter: invert(1) hue-rotate(180deg);
 }
 
+/* Трассировка: совместимость со светлой и тёмной темой */
+.trace-path-title {
+    margin: 0 0 12px 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--accent-primary);
+}
+.trace-path-block {
+    margin-bottom: 8px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+.trace-path-block.trace-path-olt { margin-bottom: 12px; }
+.trace-path-block.trace-path-info { margin-bottom: 12px; padding: 8px 12px; }
+.trace-path-block span { color: var(--text-primary); font-weight: 600; }
+.trace-path-muted { color: var(--text-secondary) !important; font-weight: 400 !important; font-size: 0.8rem; margin-left: 8px; }
+.trace-path-block.trace-path-cable { border-left: 4px solid var(--accent-primary); }
+.trace-path-block.trace-path-connection { border-left: 4px solid var(--accent-warning); }
+.trace-step-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+}
+.trace-step-num {
+    width: 32px;
+    height: 32px;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 0.875rem;
+    flex-shrink: 0;
+    margin-right: 12px;
+}
+.trace-step-num-start { background: #22c55e; }
+.trace-step-num-object { background: #8b5cf6; }
+.trace-step-num-cable { background: #3b82f6; }
+.trace-step-num-connection { background: #f59e0b; }
+.trace-step-num-olt { background: #0ea5e9; }
+.trace-step-num-onu { background: #a855f7; }
+.trace-step-num-splitter { background: #f97316; }
+.trace-path-block { flex: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px; }
+.trace-path-block > div { display: flex; align-items: center; flex-wrap: wrap; }
+.trace-path-block .trace-path-muted { margin-left: 6px; }
+.trace-port-badge { background: var(--bg-accent); color: var(--text-primary); padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
+
 /* Кнопки "Показать на карте" в трассировке */
 .trace-show-on-map-btn {
     transition: background-color 0.2s, transform 0.1s;
 }
 .trace-show-on-map-btn:hover {
-    background-color: #2563eb !important;
+    background-color: var(--accent-primary) !important;
+    filter: brightness(1.1);
     transform: scale(1.05);
 }
 .trace-show-on-map-btn:active {
@@ -3582,11 +3647,11 @@ button {
 
 /* Выделение жил, подключенных к сплиттеру */
 .fiber-splitter-connected {
-    background-color: #fff7ed !important;
-    border-color: #f97316 !important;
+    background-color: var(--bg-accent) !important;
+    border-color: var(--accent-warning) !important;
 }
 
 .fiber-splitter-connected .fiber-name {
-    color: #c2410c !important;
+    color: var(--accent-warning) !important;
     font-weight: 600;
 }

@@ -257,6 +257,9 @@ app.post('/api/settings', (req, res) => {
         if (body.mapStart !== undefined && db.setMapStartForUser) {
             db.setMapStartForUser(user.userId, body.mapStart);
         }
+        if (body.groupNames !== undefined && typeof body.groupNames === 'object') {
+            syncGroupNames = body.groupNames;
+        }
         db.setSettings(body);
         res.json({ ok: true });
     } catch (e) {
@@ -315,6 +318,11 @@ if (db.createDailyBackup) {
 }
 
 const server = http.createServer(app);
+var syncGroupNames = null;
+try {
+    var s = db.getSettings();
+    if (s && s.groupNames && typeof s.groupNames === 'object') syncGroupNames = s.groupNames;
+} catch (e) {}
 var syncCurrentState = { clientId: 'server', data: db.getMapData() || [] };
 const wss = new WebSocket.Server({ server, path: '/sync' });
 const syncClientNames = new Map(); 
@@ -460,7 +468,9 @@ wss.on('connection', (ws, req) => {
     syncClientNames.set(clientId, 'Участник');
     broadcastSyncClients();
     try {
-        ws.send(JSON.stringify({ type: 'state', clientId: syncCurrentState.clientId, data: syncCurrentState.data }));
+        var statePayload = { type: 'state', clientId: syncCurrentState.clientId, data: syncCurrentState.data };
+        if (syncGroupNames && (syncGroupNames.cross || syncGroupNames.node)) statePayload.groupNames = syncGroupNames;
+        ws.send(JSON.stringify(statePayload));
         ws.send(JSON.stringify({ type: 'yourId', clientId: clientId }));
         var list = [];
         wss.clients.forEach(function(c) {
@@ -498,6 +508,16 @@ wss.on('connection', (ws, req) => {
                 }
                 return;
             }
+            if (msg.type === 'groupNames' && msg.groupNames && typeof msg.groupNames === 'object') {
+                syncGroupNames = msg.groupNames;
+                try { db.setSettings({ groupNames: syncGroupNames }); } catch (e) {}
+                wss.clients.forEach(client => {
+                    if (client.readyState === WebSocket.OPEN) {
+                        try { client.send(JSON.stringify({ type: 'groupNames', groupNames: syncGroupNames })); } catch (e) {}
+                    }
+                });
+                return;
+            }
             if (msg.type === 'op' && msg.op) {
                 syncCurrentState.data = applyOperationToState(syncCurrentState.data, msg.op);
                 syncCurrentState.clientId = msg.clientId || clientId;
@@ -509,14 +529,19 @@ wss.on('connection', (ws, req) => {
                 scheduleSyncWrite();
                 return;
             }
-            if (msg.type !== 'state' || !Array.isArray(msg.data)) return;
             var justConnected = (Date.now() - (ws.connectedAt || 0)) < 4000;
             if (!justConnected) {
                 syncCurrentState.data = mergeMapState(syncCurrentState.data, msg.data);
                 syncCurrentState.clientId = msg.clientId || clientId;
+                if (msg.groupNames && typeof msg.groupNames === 'object') {
+                    syncGroupNames = msg.groupNames;
+                    try { db.setSettings({ groupNames: syncGroupNames }); } catch (e) {}
+                }
+                var statePayload = { type: 'state', clientId: syncCurrentState.clientId, data: syncCurrentState.data };
+                if (syncGroupNames && (syncGroupNames.cross || syncGroupNames.node)) statePayload.groupNames = syncGroupNames;
                 wss.clients.forEach(client => {
                     if (client !== ws && client.readyState === WebSocket.OPEN) {
-                        client.send(JSON.stringify({ type: 'state', clientId: syncCurrentState.clientId, data: syncCurrentState.data }));
+                        try { client.send(JSON.stringify(statePayload)); } catch (e) {}
                     }
                 });
                 scheduleSyncWrite();

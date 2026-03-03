@@ -40,6 +40,24 @@ var undoStack = [];
 var redoStack = [];
 var lastSavedState = null;
 var inUndoRedo = false;
+var showOnMapHighlightState = null;
+
+function clearShowOnMapHighlight() {
+    if (!showOnMapHighlightState) return;
+    var s = showOnMapHighlightState;
+    showOnMapHighlightState = null;
+    if (s.timeoutId) clearTimeout(s.timeoutId);
+    if (s.obj && s.obj.options) {
+        try {
+            if (s.isCable) {
+                s.obj.options.set('strokeColor', s.originalOptions.strokeColor || '#3b82f6');
+                s.obj.options.set('strokeWidth', s.originalOptions.strokeWidth != null ? s.originalOptions.strokeWidth : 3);
+            } else {
+                if (s.originalOptions.preset) s.obj.options.set('preset', s.originalOptions.preset);
+            }
+        } catch (e) {}
+    }
+}
 
 function groupKey(coords) {
     return coords[0].toFixed(5) + ',' + coords[1].toFixed(5);
@@ -64,17 +82,52 @@ function setNodeGroupName(coords, name) {
     saveGroupNames();
     updateNodeDisplay();
 }
+var GROUP_NAMES_STORAGE_KEY = 'networkmap_groupNames';
 function saveGroupNames() {
-    if (!getApiBase()) return;
+    var payload = { cross: Object.fromEntries(crossGroupNames), node: Object.fromEntries(nodeGroupNames) };
     try {
-        var payload = { cross: Object.fromEntries(crossGroupNames), node: Object.fromEntries(nodeGroupNames) };
-        fetch(getApiBase() + '/api/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
-            body: JSON.stringify({ groupNames: payload })
-        }).catch(function() {});
+        localStorage.setItem(GROUP_NAMES_STORAGE_KEY, JSON.stringify(payload));
+    } catch (e) {}
+    if (getApiBase()) {
+        try {
+            fetch(getApiBase() + '/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
+                body: JSON.stringify({ groupNames: payload })
+            }).catch(function() {});
+        } catch (e) {}
+    }
+    if (typeof window.syncSendGroupNames === 'function' && window.syncIsConnected) {
+        try { window.syncSendGroupNames(payload); } catch (e) {}
+    }
+}
+function loadGroupNamesFromStorage() {
+    try {
+        var raw = localStorage.getItem(GROUP_NAMES_STORAGE_KEY);
+        if (!raw) return;
+        var parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+            if (parsed.cross && typeof parsed.cross === 'object') Object.keys(parsed.cross).forEach(function(k) { crossGroupNames.set(k, parsed.cross[k]); });
+            if (parsed.node && typeof parsed.node === 'object') Object.keys(parsed.node).forEach(function(k) { nodeGroupNames.set(k, parsed.node[k]); });
+        }
     } catch (e) {}
 }
+window.getGroupNamesForSync = function() {
+    if (typeof crossGroupNames === 'undefined' || typeof nodeGroupNames === 'undefined') return null;
+    var cross = Object.fromEntries(crossGroupNames);
+    var node = Object.fromEntries(nodeGroupNames);
+    if (!Object.keys(cross).length && !Object.keys(node).length) return null;
+    return { cross: cross, node: node };
+};
+window.applyGroupNames = function(gn) {
+    if (!gn || typeof crossGroupNames === 'undefined' || typeof nodeGroupNames === 'undefined') return;
+    try {
+        if (gn.cross && typeof gn.cross === 'object') Object.keys(gn.cross).forEach(function(k) { crossGroupNames.set(k, gn.cross[k]); });
+        if (gn.node && typeof gn.node === 'object') Object.keys(gn.node).forEach(function(k) { nodeGroupNames.set(k, gn.node[k]); });
+        if (typeof updateCrossDisplay === 'function') updateCrossDisplay();
+        if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
+    } catch (e) {}
+};
 
 function checkAuth() {
     if (typeof AuthSystem === 'undefined') {
@@ -708,6 +761,7 @@ function setupEventListeners() {
         if (currentCableTool) {
             cableBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span>Завершить прокладку</span>';
             cableBtn.style.background = '#e74c3c';
+            clearShowOnMapHighlight();
             clearSelection();
             removeCablePreview();
             cableSource = null;
@@ -1241,6 +1295,7 @@ function handleAddObject() {
     if (!isEditMode) {
         return;
     }
+    clearShowOnMapHighlight();
 
     if (currentCableTool) {
         currentCableTool = false;
@@ -1348,6 +1403,7 @@ function cancelObjectPlacement() {
 }
 
 function handleMapClick(e) {
+    clearShowOnMapHighlight();
     const coords = e.get('coords');
 
     const target = e.get('target');
@@ -2981,6 +3037,7 @@ function deleteObject(obj, opts) {
 }
 
 function selectObject(obj) {
+    clearShowOnMapHighlight();
     if (!selectedObjects.includes(obj)) {
         selectedObjects.push(obj);
         
@@ -3185,6 +3242,7 @@ function deselectObject(obj) {
 }
 
 function clearSelection() {
+    clearShowOnMapHighlight();
     while (selectedObjects.length > 0) {
         deselectObject(selectedObjects[0]);
     }
@@ -3778,8 +3836,10 @@ function showCableInfo(cable) {
     html += '</div></div>';
 
     if (isEditMode) {
-        html += '<div style="padding-top: 16px; border-top: 1px solid var(--border-color);">';
-        html += `<button class="btn-danger" onclick="deleteCableByUniqueId('${uniqueId}')" style="width: 100%;">`;
+        html += '<div style="padding-top: 16px; border-top: 1px solid var(--border-color); display: flex; flex-wrap: wrap; gap: 8px;">';
+        html += '<button id="saveCableChangesBtn" class="btn-primary" style="flex: 1; min-width: 140px;">';
+        html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg> Сохранить</button>';
+        html += `<button class="btn-danger" onclick="deleteCableByUniqueId('${uniqueId}')" style="flex: 1; min-width: 120px;">`;
         html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">';
         html += '<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>';
         html += '</svg>Удалить кабель</button>';
@@ -3789,6 +3849,14 @@ function showCableInfo(cable) {
     html += '</div>';
     
     modalContent.innerHTML = html;
+    var saveCableBtn = modalContent.querySelector('#saveCableChangesBtn');
+    if (saveCableBtn) {
+        saveCableBtn.addEventListener('click', function() {
+            saveData();
+            if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
+            showInfo('Изменения сохранены', 'Сохранено');
+        });
+    }
     modal.style.display = 'block';
     currentModalObject = cable;
 }
@@ -4151,6 +4219,9 @@ function loadDataFromStorage() {
 }
 
 function loadData() {
+    loadGroupNamesFromStorage();
+    if (typeof updateCrossDisplay === 'function') updateCrossDisplay();
+    if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
     if (!getApiBase()) {
         showNoApiMessage();
         return;
@@ -4169,6 +4240,8 @@ function loadData() {
                 try {
                     if (s.groupNames.cross && typeof s.groupNames.cross === 'object') Object.keys(s.groupNames.cross).forEach(function(k) { crossGroupNames.set(k, s.groupNames.cross[k]); });
                     if (s.groupNames.node && typeof s.groupNames.node === 'object') Object.keys(s.groupNames.node).forEach(function(k) { nodeGroupNames.set(k, s.groupNames.node[k]); });
+                    if (typeof updateCrossDisplay === 'function') updateCrossDisplay();
+                    if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
                 } catch (e) {}
             }
             if (s.mapStart && typeof myMap !== 'undefined' && myMap && Array.isArray(s.mapStart.center) && s.mapStart.center.length >= 2) {
@@ -5576,11 +5649,14 @@ function showObjectInfo(obj) {
     }
 
     if (isEditMode) {
-        html += '<div class="object-actions-section" style="margin-bottom: 20px; display: flex; gap: 8px;">';
-        html += '<button id="duplicateCurrentObject" class="btn-secondary" style="flex: 1;">';
+        html += '<div class="object-actions-section" style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 8px;">';
+        html += '<button id="saveChangesBtn" class="btn-primary" style="flex: 1; min-width: 140px;">';
+        html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>';
+        html += ' Сохранить</button>';
+        html += '<button id="duplicateCurrentObject" class="btn-secondary" style="flex: 1; min-width: 120px;">';
         html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
         html += ' Дублировать</button>';
-        html += '<button id="deleteCurrentObject" class="btn-danger" style="flex: 1;">';
+        html += '<button id="deleteCurrentObject" class="btn-danger" style="flex: 1; min-width: 120px;">';
         html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
         html += ' Удалить</button>';
         html += '</div>';
@@ -5696,11 +5772,11 @@ function showSupportInfo(supportObj) {
     }
 
     if (isEditMode) {
-        html += '<div class="object-actions-section" style="margin-bottom: 20px; display: flex; gap: 8px;">';
-        html += '<button id="duplicateCurrentObject" class="btn-secondary" style="flex: 1;">';
+        html += '<div class="object-actions-section" style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 8px;">';
+        html += '<button id="duplicateCurrentObject" class="btn-secondary" style="flex: 1; min-width: 120px;">';
         html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
         html += ' Дублировать</button>';
-        html += '<button id="deleteCurrentObject" class="btn-danger" style="flex: 1;">';
+        html += '<button id="deleteCurrentObject" class="btn-danger" style="flex: 1; min-width: 120px;">';
         html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
         html += ' Удалить</button>';
         html += '</div>';
@@ -5868,6 +5944,15 @@ function setupEditAndDeleteListeners() {
             }
             saveData();
             showSupportInfo(currentModalObject);
+        });
+    }
+
+    const saveChangesBtn = document.getElementById('saveChangesBtn');
+    if (saveChangesBtn) {
+        saveChangesBtn.addEventListener('click', function() {
+            saveData();
+            if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
+            showInfo('Изменения сохранены', 'Сохранено');
         });
     }
 
@@ -9931,6 +10016,7 @@ function traceFromOLTPort(oltObj, portNumber) {
 }
 
 function showObjectOnMap(uniqueId) {
+    clearShowOnMapHighlight();
     var obj = objects.find(function(o) {
         return o.properties && o.properties.get('uniqueId') === uniqueId;
     });
@@ -9960,19 +10046,19 @@ function showObjectOnMap(uniqueId) {
     if (objType !== 'cable') {
         var originalPreset = obj.options.get('preset');
         obj.options.set('preset', 'islands#redCircleDotIcon');
-        setTimeout(function() {
-            if (originalPreset) {
-                obj.options.set('preset', originalPreset);
-            }
+        var tid = setTimeout(function() {
+            clearShowOnMapHighlight();
         }, 2000);
+        showOnMapHighlightState = { obj: obj, originalOptions: { preset: originalPreset }, timeoutId: tid, isCable: false };
     } else {
         var originalColor = obj.options.get('strokeColor');
+        var originalWidth = obj.options.get('strokeWidth');
         obj.options.set('strokeColor', '#ff0000');
         obj.options.set('strokeWidth', 5);
-        setTimeout(function() {
-            obj.options.set('strokeColor', originalColor || '#3b82f6');
-            obj.options.set('strokeWidth', 3);
+        var tid = setTimeout(function() {
+            clearShowOnMapHighlight();
         }, 2000);
+        showOnMapHighlightState = { obj: obj, originalOptions: { strokeColor: originalColor, strokeWidth: originalWidth }, timeoutId: tid, isCable: true };
     }
 }
 
@@ -9998,18 +10084,18 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
         
         if (item.type === 'start') {
             var icon = item.objectType === 'cross' ? '📦' : (item.objectType === 'sleeve' ? '🔴' : (item.objectType === 'olt' ? '📶' : (item.objectType === 'onu' ? '📟' : (item.objectType === 'splitter' ? '🔀' : '📍'))));
-            var portBadge = (item.objectType === 'cross' && item.port) ? ' <span style="background: #ede9fe; color: #5b21b6; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">Порт ' + escapeHtml(String(item.port)) + '</span>' : '';
-            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #22c55e; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">' + stepNumber + '</span><div style="margin-left: 12px; padding: 10px 14px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0; flex: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;"><div><span style="font-weight: 600; color: #166534;">' + icon + ' ' + escapeHtml(item.objectName) + '</span>' + portBadge + '<span style="color: #6b7280; font-size: 0.8rem;"> (' + getObjectTypeName(item.objectType) + ')</span></div>' + showOnMapBtn + '</div></div>';
+            var portBadge = (item.objectType === 'cross' && item.port) ? ' <span class="trace-port-badge">Порт ' + escapeHtml(String(item.port)) + '</span>' : '';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-start">' + stepNumber + '</span><div class="trace-path-block trace-path-start"><div><span>' + icon + ' ' + escapeHtml(item.objectName) + '</span>' + portBadge + '<span class="trace-path-muted"> (' + getObjectTypeName(item.objectType) + ')</span></div>' + showOnMapBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'object') {
             icon = item.objectType === 'cross' ? '📦' : (item.objectType === 'sleeve' ? '🔴' : (item.objectType === 'node' ? '🖥️' : (item.objectType === 'olt' ? '📶' : (item.objectType === 'onu' ? '📟' : (item.objectType === 'splitter' ? '🔀' : '📍')))));
-            portBadge = (item.objectType === 'cross' && item.port) ? ' <span style="background: #ede9fe; color: #5b21b6; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">Порт ' + escapeHtml(String(item.port)) + '</span>' : '';
-            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #8b5cf6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">' + stepNumber + '</span><div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;"><div><span style="font-weight: 600; color: #5b21b6;">' + icon + ' ' + escapeHtml(item.objectName) + '</span>' + portBadge + '<span style="color: #6b7280; font-size: 0.8rem;"> (' + getObjectTypeName(item.objectType) + ')</span></div>' + showOnMapBtn + '</div></div>';
+            portBadge = (item.objectType === 'cross' && item.port) ? ' <span class="trace-port-badge">Порт ' + escapeHtml(String(item.port)) + '</span>' : '';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">' + stepNumber + '</span><div class="trace-path-block trace-path-object"><div><span>' + icon + ' ' + escapeHtml(item.objectName) + '</span>' + portBadge + '<span class="trace-path-muted"> (' + getObjectTypeName(item.objectType) + ')</span></div>' + showOnMapBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'onuConnection') {
             var onuConnObjId = item.onu ? getObjectUniqueId(item.onu) : null;
             var onuConnShowBtn = onuConnObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(onuConnObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
-            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #8b5cf6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔌</span><div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;"><span style="color: #7c3aed;">🔌 Вывод на ONU: Жила ' + item.fiberNumber + ' → ' + escapeHtml(item.onuName) + '</span>' + onuConnShowBtn + '</div></div>';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">🔌</span><div class="trace-path-block trace-path-object"><span>🔌 Вывод на ONU: Жила ' + item.fiberNumber + ' → ' + escapeHtml(item.onuName) + '</span>' + onuConnShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'cable') {
             var cableObjId = item.cable ? getObjectUniqueId(item.cable) : null;
@@ -10020,7 +10106,7 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
             var fiberColor = fiber ? fiber.color : '#3b82f6';
             var fiberName = fiber ? fiber.name : '';
             var fiberTextColor = (fiberColor === '#FFFFFF' || fiberColor === '#FFFACD' || fiberColor === '#FFFF00') ? '#000' : '#fff';
-            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #3b82f6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">➡</span><div style="margin-left: 12px; padding: 10px 14px; background: #eff6ff; border-radius: 6px; border-left: 4px solid ' + fiberColor + '; flex: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;"><div style="display: flex; align-items: center; flex-wrap: wrap;"><span style="color: #1e40af;">📡 ' + escapeHtml(item.cableName) + '</span><span style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;"><span style="width: 16px; height: 16px; border-radius: 50%; background: ' + fiberColor + '; border: 1px solid #333; display: inline-block;"></span><span style="background: ' + fiberColor + '; color: ' + fiberTextColor + '; padding: 2px 8px; border-radius: 4px; font-weight: 600;">Жила ' + item.fiberNumber + (fiberName ? ': ' + fiberName : '') + '</span></span></div>' + cableShowBtn + '</div></div>';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-cable">➡</span><div class="trace-path-block trace-path-cable" style="border-left-color: ' + fiberColor + ';"><div style="display: flex; align-items: center; flex-wrap: wrap;"><span>📡 ' + escapeHtml(item.cableName) + '</span><span style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;"><span style="width: 16px; height: 16px; border-radius: 50%; background: ' + fiberColor + '; border: 1px solid #333; display: inline-block;"></span><span style="background: ' + fiberColor + '; color: ' + fiberTextColor + '; padding: 2px 8px; border-radius: 4px; font-weight: 600;">Жила ' + item.fiberNumber + (fiberName ? ': ' + fiberName : '') + '</span></span></div>' + cableShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'connection') {
             var fromFiberColors = item.fromCableType ? getFiberColors(item.fromCableType) : [];
@@ -10035,34 +10121,34 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
             var toFiberName = toFiber ? toFiber.name : '';
             var fromLabelText = item.fromLabel ? ' [' + escapeHtml(item.fromLabel) + ']' : '';
             var toLabelText = item.toLabel ? ' [' + escapeHtml(item.toLabel) + ']' : '';
-            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #f59e0b; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">⚡</span><div style="margin-left: 12px; padding: 10px 14px; background: #fffbeb; border-radius: 6px; border: 1px solid #fde68a; flex: 1;"><div style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px;"><span style="color: #92400e;">🔗 Соединение:</span><span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 14px; height: 14px; border-radius: 50%; background: ' + fromColor + '; border: 1px solid #333;"></span><span style="background: ' + fromColor + '; color: ' + fromTextColor + '; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.8rem;">Ж' + item.fromFiberNumber + (fromFiberName ? ' (' + fromFiberName + ')' : '') + '</span></span>' + (fromLabelText ? '<span style="color: #8b5cf6; font-weight: 500; font-size: 0.8rem;">' + fromLabelText + '</span>' : '') + '<span style="font-size: 1rem;">→</span><span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 14px; height: 14px; border-radius: 50%; background: ' + toColor + '; border: 1px solid #333;"></span><span style="background: ' + toColor + '; color: ' + toTextColor + '; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.8rem;">Ж' + item.toFiberNumber + (toFiberName ? ' (' + toFiberName + ')' : '') + '</span></span>' + (toLabelText ? '<span style="color: #8b5cf6; font-weight: 500; font-size: 0.8rem;">' + toLabelText + '</span>' : '') + '</div></div></div>';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-connection">⚡</span><div class="trace-path-block trace-path-connection"><div style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px;"><span>🔗 Соединение:</span><span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 14px; height: 14px; border-radius: 50%; background: ' + fromColor + '; border: 1px solid #333;"></span><span style="background: ' + fromColor + '; color: ' + fromTextColor + '; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.8rem;">Ж' + item.fromFiberNumber + (fromFiberName ? ' (' + fromFiberName + ')' : '') + '</span></span>' + (fromLabelText ? '<span style="color: var(--accent-primary); font-weight: 500; font-size: 0.8rem;">' + fromLabelText + '</span>' : '') + '<span style="font-size: 1rem;">→</span><span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 14px; height: 14px; border-radius: 50%; background: ' + toColor + '; border: 1px solid #333;"></span><span style="background: ' + toColor + '; color: ' + toTextColor + '; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.8rem;">Ж' + item.toFiberNumber + (toFiberName ? ' (' + toFiberName + ')' : '') + '</span></span>' + (toLabelText ? '<span style="color: var(--accent-primary); font-weight: 500; font-size: 0.8rem;">' + toLabelText + '</span>' : '') + '</div></div></div>';
             stepNumber++;
         } else if (item.type === 'nodeConnection') {
             var nodeConnObjId = item.node ? getObjectUniqueId(item.node) : null;
             var nodeConnShowBtn = nodeConnObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(nodeConnObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
-            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #8b5cf6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔌</span><div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;"><span style="color: #7c3aed;">🔌 Вывод на узел: Жила ' + item.fiberNumber + ' → ' + escapeHtml(item.nodeName) + '</span>' + nodeConnShowBtn + '</div></div>';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">🔌</span><div class="trace-path-block trace-path-object"><span>🔌 Вывод на узел: Жила ' + item.fiberNumber + ' → ' + escapeHtml(item.nodeName) + '</span>' + nodeConnShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'splitterConnection') {
             var spObjId = item.splitter ? getObjectUniqueId(item.splitter) : null;
             var spShowBtn = spObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(spObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
             var spName = item.splitter && item.splitter.properties ? (item.splitter.properties.get('name') || 'Сплиттер') : 'Сплиттер';
-            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #f59e0b; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔀</span><div style="margin-left: 12px; padding: 10px 14px; background: #fffbeb; border-radius: 6px; border-left: 4px solid #f59e0b; flex: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;"><div><span style="color: #92400e; font-weight: 600;">→ Жила идёт на сплиттер «' + escapeHtml(spName) + '»</span><span style="color: #78716c; font-size: 0.8rem; margin-left: 6px;">(жила ' + item.fiberNumber + ')</span></div>' + spShowBtn + '</div></div>';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-connection">🔀</span><div class="trace-path-block trace-path-connection"><div><span>→ Жила идёт на сплиттер «' + escapeHtml(spName) + '»</span><span class="trace-path-muted">(жила ' + item.fiberNumber + ')</span></div>' + spShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'splitterOutputToOnu') {
             var spOutOnuId = item.onuObj ? getObjectUniqueId(item.onuObj) : null;
             var spOutOnuBtn = spOutOnuId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(spOutOnuId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
-            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #a855f7; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">📡</span><div style="margin-left: 12px; padding: 10px 14px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe; flex: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;"><span style="color: #7c3aed;">🔀 Выход сплиттера → ONU ' + escapeHtml(item.onuName || 'ONU') + '</span>' + spOutOnuBtn + '</div></div>';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-onu">📡</span><div class="trace-path-block trace-path-object"><span>🔀 Выход сплиттера → ONU ' + escapeHtml(item.onuName || 'ONU') + '</span>' + spOutOnuBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'splitterOutputToSplitter') {
             var toSpObjId = item.toSplitter ? getObjectUniqueId(item.toSplitter) : null;
             var toSpShowBtn = toSpObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(toSpObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
             var toName = item.toSplitter && item.toSplitter.properties ? item.toSplitter.properties.get('name') || 'Сплиттер' : 'Сплиттер';
-            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #f97316; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔀</span><div style="margin-left: 12px; padding: 10px 14px; background: #fff7ed; border-radius: 6px; border: 1px solid #fed7aa; flex: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;"><span style="color: #c2410c;">🔀 Выход сплиттера → ' + escapeHtml(toName) + '</span>' + toSpShowBtn + '</div></div>';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-splitter">🔀</span><div class="trace-path-block trace-path-splitter"><span>🔀 Выход сплиттера → ' + escapeHtml(toName) + '</span>' + toSpShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'oltPortConnection') {
             var oltObjId = item.olt ? getObjectUniqueId(item.olt) : null;
             var oltShowBtn = oltObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(oltObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
-            html += '<div style="display: flex; align-items: center; margin-bottom: 8px;"><span style="width: 32px; height: 32px; background: #0ea5e9; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.875rem; flex-shrink: 0;">🔌</span><div style="margin-left: 12px; padding: 10px 14px; background: #e0f2fe; border-radius: 6px; border: 1px solid #7dd3fc; flex: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;"><div><span style="color: #0369a1; font-weight: 600;">📶 Подключено к OLT «' + escapeHtml(item.oltName || 'OLT') + '», порт ' + item.portNumber + '</span><span style="color: #0c4a6e; font-size: 0.8rem; margin-left: 6px;">(жила ' + item.fiberNumber + ')</span></div>' + oltShowBtn + '</div></div>';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-olt">🔌</span><div class="trace-path-block trace-path-olt"><div><span>📶 Подключено к OLT «' + escapeHtml(item.oltName || 'OLT') + '», порт ' + item.portNumber + '</span><span class="trace-path-muted">(жила ' + item.fiberNumber + ')</span></div>' + oltShowBtn + '</div></div>';
             stepNumber++;
         }
     });
@@ -10090,7 +10176,7 @@ function showFiberTraceFromOLTPort(oltObj, oltName, portNumber, startObj, cableI
     const content = document.getElementById('modalInfo');
     if (!modal || !content) return;
     title.textContent = 'Трассировка от OLT, порт ' + portNumber;
-    var header = '<div class="trace-path" style="padding: 10px;"><h4 style="margin: 0 0 12px 0; color: #0ea5e9; font-size: 1rem; font-weight: 600;">Трасса от OLT</h4><div style="display: flex; align-items: center; margin-bottom: 12px; padding: 10px 14px; background: #e0f2fe; border-radius: 6px; border: 1px solid #7dd3fc;"><span style="font-weight: 600; color: #0369a1;">OLT: ' + escapeHtml(oltName) + ', порт ' + portNumber + '</span></div>';
+    var header = '<div class="trace-path" style="padding: 10px;"><h4 class="trace-path-title">Трасса от OLT</h4><div class="trace-path-block trace-path-olt"><span>OLT: ' + escapeHtml(oltName) + ', порт ' + portNumber + '</span></div>';
     if (res.paths.length > 1) {
         var stepNum = 1;
         for (var pi = 0; pi < res.paths.length; pi++) {
@@ -10130,11 +10216,11 @@ function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeO
     
     title.textContent = '🔍 Трассировка жилы ' + fiberNumber;
     
-    var header = '<div class="trace-path" style="padding: 10px;"><h4 style="margin: 0 0 16px 0; color: #1e40af; font-size: 1rem; font-weight: 600;">📍 Трасса жилы по всей линии</h4>';
+    var header = '<div class="trace-path" style="padding: 10px;"><h4 class="trace-path-title">📍 Трасса жилы по всей линии</h4>';
     if (startNodeObj) {
         var nodeName = startNodeObj.properties.get('name') || 'Узел сети';
-        header += '<div style="display: flex; align-items: center; margin-bottom: 8px; padding: 10px 14px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0;"><span style="font-weight: 600; color: #166534;">🖥️ ' + escapeHtml(nodeName) + '</span><span style="color: #6b7280; font-size: 0.8rem; margin-left: 8px;">(Узел сети — начало)</span></div>';
-        header += '<div style="display: flex; align-items: center; margin-bottom: 12px; padding: 8px 12px; background: #f5f3ff; border-radius: 6px; border: 1px solid #ddd6fe;"><span style="color: #7c3aed;">🔌 Подключение к кроссу через жилу ' + fiberNumber + '</span></div>';
+        header += '<div class="trace-path-block trace-path-start"><span>🖥️ ' + escapeHtml(nodeName) + '</span><span class="trace-path-muted">(Узел сети — начало)</span></div>';
+        header += '<div class="trace-path-block trace-path-info"><span>🔌 Подключение к кроссу через жилу ' + fiberNumber + '</span></div>';
     }
     if (res.paths.length > 1) {
         var stepNum = 1;
@@ -10591,6 +10677,8 @@ function getCrossGroups() {
 
 function updateCrossDisplay() {
     crossGroupPlacemarks.forEach(pm => {
+        const lbl = pm.properties && pm.properties.get('crossGroupLabel');
+        if (lbl) try { myMap.geoObjects.remove(lbl); } catch (e) {}
         try { myMap.geoObjects.remove(pm); } catch (e) {}
     });
     crossGroupPlacemarks = [];
@@ -10612,14 +10700,29 @@ function updateCrossDisplay() {
         const coords = group.coords;
         const n = group.crosses.length;
         const crossGroupName = getCrossGroupName(coords);
+        const crossLabelText = crossGroupName || (group.crosses.length + ' кр.');
         const iconSvg = `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
             <rect x="2" y="4" width="32" height="28" rx="4" fill="#8b5cf6" stroke="#a78bfa" stroke-width="2"/>
             <text x="18" y="22" text-anchor="middle" fill="white" font-size="14" font-weight="bold">${n}</text>
         </svg>`;
         const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(iconSvg)));
+        const crossLabelHtml = '<div class="map-label map-label-group">' + escapeHtml(crossLabelText) + '</div>';
+        const crossLabel = new ymaps.Placemark(coords, { iconContent: crossLabelHtml }, {
+            iconLayout: 'default#imageWithContent',
+            iconImageHref: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==',
+            iconImageSize: [1, 1],
+            iconImageOffset: [0, 0],
+            iconContent: crossLabelHtml,
+            iconContentOffset: [0, 22],
+            zIndex: 1999,
+            hasBalloon: false,
+            hasHint: false,
+            cursor: 'default'
+        });
         const groupPlacemark = new ymaps.Placemark(coords, {
             type: 'crossGroup',
             crossGroup: group.crosses,
+            crossGroupLabel: crossLabel,
             balloonContent: ''
         }, {
             iconLayout: 'default#image',
@@ -10635,7 +10738,7 @@ function updateCrossDisplay() {
             syncOverlayInit: true,
             cursor: 'pointer'
         });
-        groupPlacemark.properties.set('labelContent', crossGroupName || (group.crosses.length + ' кр.'));
+        groupPlacemark.properties.set('labelContent', crossLabelText);
         groupPlacemark.events.add('click', function(e) {
             e.preventDefault();
             e.stopPropagation();
@@ -10700,7 +10803,10 @@ function updateCrossDisplay() {
                         if (c) {
                             const lat = parseFloat(c.getAttribute('data-lat')), lon = parseFloat(c.getAttribute('data-lon'));
                             const inp = c.querySelector('.group-name-input');
-                            if (!isNaN(lat) && !isNaN(lon) && inp) setCrossGroupName([lat, lon], inp.value);
+                            if (!isNaN(lat) && !isNaN(lon) && inp) {
+                                setCrossGroupName([lat, lon], inp.value);
+                                if (typeof showInfo === 'function') showInfo('Название группы сохранено', 'Сохранено');
+                            }
                             myMap.balloon.close();
                         }
                     });
@@ -10749,11 +10855,15 @@ function updateCrossDisplay() {
         });
         groupPlacemark.events.add('drag', function() {
             if (!window.syncDragInProgress) window.syncDragInProgress = true;
+            const crossLbl = groupPlacemark.properties.get('crossGroupLabel');
+            if (crossLbl && crossLbl.geometry) crossLbl.geometry.setCoordinates(groupPlacemark.geometry.getCoordinates());
         });
         groupPlacemark.events.add('dragend', function() {
             window.syncDragInProgress = false;
             if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
             const newCoords = groupPlacemark.geometry.getCoordinates();
+            const crossLbl = groupPlacemark.properties.get('crossGroupLabel');
+            if (crossLbl && crossLbl.geometry) crossLbl.geometry.setCoordinates(newCoords);
             const crosses = groupPlacemark.properties.get('crossGroup');
             const oldCoords = crosses[0].geometry.getCoordinates();
             const oldKey = groupKey(oldCoords);
@@ -10774,6 +10884,7 @@ function updateCrossDisplay() {
             updateCrossDisplay();
         });
         attachHoverEventsToObject(groupPlacemark);
+        myMap.geoObjects.add(crossLabel);
         myMap.geoObjects.add(groupPlacemark);
         crossGroupPlacemarks.push(groupPlacemark);
     });
@@ -10799,6 +10910,8 @@ function getNodeGroups() {
 
 function updateNodeDisplay() {
     nodeGroupPlacemarks.forEach(pm => {
+        const lbl = pm.properties && pm.properties.get('nodeGroupLabel');
+        if (lbl) try { myMap.geoObjects.remove(lbl); } catch (e) {}
         try { myMap.geoObjects.remove(pm); } catch (e) {}
     });
     nodeGroupPlacemarks = [];
@@ -10830,36 +10943,35 @@ function updateNodeDisplay() {
         const groupStroke = hasAggregation ? '#f87171' : '#4ade80';
         const nodeGroupName = getNodeGroupName(coords);
         const displayName = nodeGroupName || (n + ' уз.');
-        var labelEscaped = String(displayName).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-        var textW = Math.ceil(labelEscaped.length * 6.5) + 12;
-        if (textW > 180) {
-            var maxCh = Math.max(1, Math.floor((180 - 12) / 6.5) - 1);
-            labelEscaped = labelEscaped.slice(0, maxCh) + '…';
-            textW = 180;
-        }
-        var rectW = Math.max(40, Math.min(180, textW));
-        var svgW = Math.max(80, rectW + 24);
-        var cx = svgW / 2;
-        var rectX = (svgW - rectW) / 2;
-        var svgH = 64;
-        const iconSvg = '<svg width="' + svgW + '" height="' + svgH + '" viewBox="0 0 ' + svgW + ' ' + svgH + '" xmlns="http://www.w3.org/2000/svg">' +
-            '<defs><filter id="glbl" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.1"/></filter></defs>' +
-            '<circle cx="' + cx + '" cy="18" r="16" fill="' + groupColor + '" stroke="' + groupStroke + '" stroke-width="2"/>' +
-            '<text x="' + cx + '" y="23" text-anchor="middle" fill="white" font-size="14" font-weight="bold">' + n + '</text>' +
-            '<rect x="' + rectX + '" y="40" width="' + rectW + '" height="18" rx="4" ry="4" fill="#ffffff" stroke="rgba(0,0,0,0.1)" stroke-width="1" filter="url(#glbl)"/>' +
-            '<text x="' + cx + '" y="52" text-anchor="middle" fill="#1e293b" font-size="11" font-weight="600" style="letter-spacing:0.01em">' + labelEscaped + '</text>' +
+        const nodeLabelHtml = '<div class="map-label map-label-group">' + escapeHtml(displayName) + '</div>';
+        const nodeLabel = new ymaps.Placemark(coords, { iconContent: nodeLabelHtml }, {
+            iconLayout: 'default#imageWithContent',
+            iconImageHref: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==',
+            iconImageSize: [1, 1],
+            iconImageOffset: [0, 0],
+            iconContent: nodeLabelHtml,
+            iconContentOffset: [0, 22],
+            zIndex: 1999,
+            hasBalloon: false,
+            hasHint: false,
+            cursor: 'default'
+        });
+        const iconSvg = '<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">' +
+            '<circle cx="18" cy="18" r="16" fill="' + groupColor + '" stroke="' + groupStroke + '" stroke-width="2"/>' +
+            '<text x="18" y="23" text-anchor="middle" fill="white" font-size="14" font-weight="bold">' + n + '</text>' +
             '</svg>';
         const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(iconSvg)));
         const groupPlacemark = new ymaps.Placemark(coords, {
             type: 'nodeGroup',
             nodeGroup: group.nodes,
             displayNodes: displayNodes,
+            nodeGroupLabel: nodeLabel,
             balloonContent: ''
         }, {
             iconLayout: 'default#image',
             iconImageHref: svgDataUrl,
-            iconImageSize: [svgW, svgH],
-            iconImageOffset: [-cx, -18],
+            iconImageSize: [36, 36],
+            iconImageOffset: [-18, -18],
             zIndex: 2000,
             zIndexHover: 2000,
             hasBalloon: false,
@@ -10911,7 +11023,10 @@ function updateNodeDisplay() {
                         if (c) {
                             const lat = parseFloat(c.getAttribute('data-lat')), lon = parseFloat(c.getAttribute('data-lon'));
                             const inp = c.querySelector('.group-name-input');
-                            if (!isNaN(lat) && !isNaN(lon) && inp) setNodeGroupName([lat, lon], inp.value);
+                            if (!isNaN(lat) && !isNaN(lon) && inp) {
+                                setNodeGroupName([lat, lon], inp.value);
+                                if (typeof showInfo === 'function') showInfo('Название группы сохранено', 'Сохранено');
+                            }
                             myMap.balloon.close();
                             updateNodeDisplay();
                         }
@@ -10942,11 +11057,15 @@ function updateNodeDisplay() {
         });
         groupPlacemark.events.add('drag', function() {
             if (!window.syncDragInProgress) window.syncDragInProgress = true;
+            const nodeLbl = groupPlacemark.properties.get('nodeGroupLabel');
+            if (nodeLbl && nodeLbl.geometry) nodeLbl.geometry.setCoordinates(groupPlacemark.geometry.getCoordinates());
         });
         groupPlacemark.events.add('dragend', function() {
             window.syncDragInProgress = false;
             if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
             const newCoords = groupPlacemark.geometry.getCoordinates();
+            const nodeLbl = groupPlacemark.properties.get('nodeGroupLabel');
+            if (nodeLbl && nodeLbl.geometry) nodeLbl.geometry.setCoordinates(newCoords);
             const nodes = groupPlacemark.properties.get('nodeGroup');
             const oldCoords = nodes[0].geometry.getCoordinates();
             const oldKey = groupKey(oldCoords);
@@ -10967,6 +11086,7 @@ function updateNodeDisplay() {
             updateNodeDisplay();
         });
         attachHoverEventsToObject(groupPlacemark);
+        myMap.geoObjects.add(nodeLabel);
         myMap.geoObjects.add(groupPlacemark);
         nodeGroupPlacemarks.push(groupPlacemark);
     });
@@ -11048,7 +11168,10 @@ function applyMapFilter() {
         } catch (e) {}
     });
     crossGroupPlacemarks.forEach(function(pm) {
-        try { if (pm.options) pm.options.set('visible', filter.cross); } catch (e) {}
+        var v = filter.cross;
+        try { if (pm.options) pm.options.set('visible', v); } catch (e) {}
+        var lbl = pm.properties && pm.properties.get('crossGroupLabel');
+        try { if (lbl && lbl.options) lbl.options.set('visible', v); } catch (e) {}
     });
     nodeGroupPlacemarks.forEach(function(pm) {
         var visible = filter.node;
@@ -11057,6 +11180,8 @@ function applyMapFilter() {
             visible = Array.isArray(group) && group.some(function(nd) { return nd.properties && nd.properties.get('nodeKind') === 'aggregation'; });
         }
         try { if (pm.options) pm.options.set('visible', visible); } catch (e) {}
+        var lbl = pm.properties && pm.properties.get('nodeGroupLabel');
+        try { if (lbl && lbl.options) lbl.options.set('visible', visible); } catch (e) {}
     });
 }
 

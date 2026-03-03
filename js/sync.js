@@ -129,7 +129,12 @@
             if (typeof window.hideSyncRequiredOverlay === 'function') window.hideSyncRequiredOverlay();
             if (typeof getSerializedData === 'function') {
                 var data = getSerializedData();
-                ws.send(JSON.stringify({ type: 'state', clientId: myClientId, data: data }));
+                var initPayload = { type: 'state', clientId: myClientId, data: data };
+                if (typeof window.getGroupNamesForSync === 'function') {
+                    var gn = window.getGroupNamesForSync();
+                    if (gn && (gn.cross || gn.node)) initPayload.groupNames = gn;
+                }
+                ws.send(JSON.stringify(initPayload));
             }
             var displayName = 'Участник';
             var userId = null;
@@ -199,6 +204,10 @@
                     } catch (e) {}
                     return;
                 }
+                if (msg.type === 'groupNames' && msg.groupNames && typeof window.applyGroupNames === 'function') {
+                    try { window.applyGroupNames(msg.groupNames); } catch (e) {}
+                    return;
+                }
                 if (msg.type === 'state' && Array.isArray(msg.data) && typeof applyRemoteState === 'function') {
                     var data = msg.data;
                     if (sendTimer) { clearTimeout(sendTimer); sendTimer = null; }
@@ -209,6 +218,9 @@
                         applyStateTimer = null;
                         doApplyPendingState();
                     }, APPLY_STATE_DEBOUNCE_MS);
+                    if (msg.groupNames && typeof window.applyGroupNames === 'function') {
+                        try { window.applyGroupNames(msg.groupNames); } catch (e) {}
+                    }
                 }
             } catch (e) {}
         };
@@ -248,10 +260,22 @@
             pendingState = null;
             if (ws && ws.readyState === WebSocket.OPEN && toSend) {
                 try {
-                    ws.send(JSON.stringify({ type: 'state', clientId: myClientId, data: toSend }));
+                    var payload = { type: 'state', clientId: myClientId, data: toSend };
+                    if (typeof window.getGroupNamesForSync === 'function') {
+                        var gn = window.getGroupNamesForSync();
+                        if (gn && (gn.cross || gn.node)) payload.groupNames = gn;
+                    }
+                    ws.send(JSON.stringify(payload));
                 } catch (e) {}
             }
         }, SEND_DEBOUNCE_MS);
+    }
+
+    function sendGroupNames(groupNames) {
+        if (!ws || ws.readyState !== WebSocket.OPEN || !groupNames) return;
+        try {
+            ws.send(JSON.stringify({ type: 'groupNames', groupNames: groupNames }));
+        } catch (e) {}
     }
 
     function autoConnectIfSaved() {
@@ -317,6 +341,7 @@
     }
 
     window.syncSendState = sendState;
+    window.syncSendGroupNames = sendGroupNames;
     window.syncSendOp = sendOp;
     window.syncSendCursor = sendCursorPosition;
     window.syncConnect = connect;
