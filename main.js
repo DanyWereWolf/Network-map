@@ -4089,13 +4089,13 @@ function setupRectSelection() {
                     var t = obj.properties ? obj.properties.get('type') : null;
                     if (t === 'cable') {
                         var uid = obj.properties.get('uniqueId');
-                        if (uid) deleteCableByUniqueId(uid, { skipSync: true });
+                        if (uid) deleteCableByUniqueId(uid);
                         else {
                             myMap.geoObjects.remove(obj);
                             objects = objects.filter(function(o) { return o !== obj; });
                         }
                     } else {
-                        deleteObject(obj, { skipSync: true });
+                        deleteObject(obj);
                     }
                 });
                 if (toDelete.length) {
