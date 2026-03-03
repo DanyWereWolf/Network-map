@@ -3555,14 +3555,19 @@ function markFiberAsUsed(obj, cableId, fiberNumber) {
 /**
  * Проверяет, занята ли жила (cableId + fiberNumber) где-либо: порт OLT, подключение к узлу/ONU,
  * вход/выход сплиттера. exclude — контекст текущего назначения (чтобы не считать «занятой» ту же жилу при замене).
+ * atCrossId/atSleeveId — проверять использование только в этом кроссе/муфте (жила имеет два конца,
+ * подключение на одном конце не блокирует использование другого).
  * @param {string} cableId
  * @param {number} fiberNumber
- * @param {{ type: string, oltId?: string, portNumber?: number, splitterId?: string, outputIndex?: number, crossId?: string, sleeveId?: string }} exclude
+ * @param {{ type?: string, oltId?: string, portNumber?: number, splitterId?: string, outputIndex?: number, crossId?: string, sleeveId?: string, atCrossId?: string, atSleeveId?: string }} exclude
  * @returns {{ used: boolean, where?: string }}
  */
 function getFiberUsage(cableId, fiberNumber, exclude) {
     if (!objects) return { used: false };
     const key = cableId + '-' + fiberNumber;
+    const atCrossId = exclude && exclude.atCrossId;
+    const atSleeveId = exclude && exclude.atSleeveId;
+    const onlyAtLocation = atCrossId || atSleeveId;
 
     for (let i = 0; i < objects.length; i++) {
         const obj = objects[i];
@@ -3571,6 +3576,7 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
         const uid = obj.properties.get('uniqueId');
 
         if (t === 'cross' || t === 'sleeve') {
+            if (onlyAtLocation && uid !== atCrossId && uid !== atSleeveId) continue;
             const fiberConnections = obj.properties.get('fiberConnections') || [];
             const isConnected = fiberConnections.some(conn =>
                 (conn.from.cableId === cableId && conn.from.fiberNumber === fiberNumber) ||
@@ -3585,7 +3591,7 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
             const nodeConn = obj.properties.get('nodeConnections');
             if (nodeConn && nodeConn[key]) {
                 if (exclude && exclude.type === 'nodeConn' && (exclude.crossId === uid || exclude.sleeveId === uid)) continue;
-                return { used: true, where: 'подключение к узлу (кросс)' };
+                return { used: true, where: 'подключение к узлу' };
             }
             const oltConn = obj.properties.get('oltConnections') || {};
             if (oltConn[key]) {
@@ -8998,7 +9004,10 @@ function getAvailableSplitters() {
 }
 
 function showSplitterSelectionDialog(sleeveObj, cableId, fiberNumber, excludeSplitterId) {
-    const usage = getFiberUsage(cableId, fiberNumber, { type: 'splitterInput' });
+    const t = sleeveObj.properties.get('type');
+    const placeId = sleeveObj.properties.get('uniqueId');
+    const opts = t === 'cross' ? { type: 'splitterInput', atCrossId: placeId } : { type: 'splitterInput', atSleeveId: placeId };
+    const usage = getFiberUsage(cableId, fiberNumber, opts);
     if (usage.used) {
         showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
         return;
@@ -9035,7 +9044,11 @@ function closeSplitterSelectionModal() {
 
 function connectFiberToSplitter(sleeveObj, cableId, fiberNumber, splitterObj) {
     const splitterId = getObjectUniqueId(splitterObj);
-    const usage = getFiberUsage(cableId, fiberNumber, { type: 'splitterInput', splitterId: splitterId });
+    const t = sleeveObj.properties.get('type');
+    const placeId = sleeveObj.properties.get('uniqueId');
+    const opts = { type: 'splitterInput', splitterId: splitterId };
+    if (t === 'cross') opts.atCrossId = placeId; else opts.atSleeveId = placeId;
+    const usage = getFiberUsage(cableId, fiberNumber, opts);
     if (usage.used) {
         showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
         return;
@@ -9094,7 +9107,11 @@ function disconnectFiberFromSplitter(sleeveObj, cableId, fiberNumber) {
 
 function connectFiberToSplitterWithRoute(sleeveObj, cableId, fiberNumber, splitterObj, routeIds) {
     const splitterId = getObjectUniqueId(splitterObj);
-    const usage = getFiberUsage(cableId, fiberNumber, { type: 'splitterInput', splitterId: splitterId });
+    const t = sleeveObj.properties.get('type');
+    const placeId = sleeveObj.properties.get('uniqueId');
+    const opts = { type: 'splitterInput', splitterId: splitterId };
+    if (t === 'cross') opts.atCrossId = placeId; else opts.atSleeveId = placeId;
+    const usage = getFiberUsage(cableId, fiberNumber, opts);
     if (usage.used) {
         showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
         return;
@@ -9731,7 +9748,10 @@ function getAvailableOlts() {
 }
 
 function showOltSelectionDialog(sleeveObj, cableId, fiberNumber) {
-    const usage = getFiberUsage(cableId, fiberNumber);
+    const t = sleeveObj.properties.get('type');
+    const placeId = sleeveObj.properties.get('uniqueId');
+    const opts = t === 'cross' ? { atCrossId: placeId } : { atSleeveId: placeId };
+    const usage = getFiberUsage(cableId, fiberNumber, opts);
     if (usage.used) {
         showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
         return;
@@ -9766,7 +9786,11 @@ function closeOltSelectionModal() {
 }
 
 function connectFiberToOlt(sleeveObj, cableId, fiberNumber, oltObj) {
-    const usage = getFiberUsage(cableId, fiberNumber, { type: 'oltIncoming', oltId: getObjectUniqueId(oltObj) });
+    const t = sleeveObj.properties.get('type');
+    const placeId = sleeveObj.properties.get('uniqueId');
+    const opts = { type: 'oltIncoming', oltId: getObjectUniqueId(oltObj) };
+    if (t === 'cross') opts.atCrossId = placeId; else opts.atSleeveId = placeId;
+    const usage = getFiberUsage(cableId, fiberNumber, opts);
     if (usage.used) {
         showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
         return;
@@ -9878,7 +9902,7 @@ function initOltSelectionModal() {
 
 function connectFiberToNode(crossObj, cableId, fiberNumber, nodeObj) {
     const crossId = crossObj.properties.get('uniqueId');
-    const usage = getFiberUsage(cableId, fiberNumber, { type: 'nodeConn', crossId: crossId });
+    const usage = getFiberUsage(cableId, fiberNumber, { type: 'nodeConn', crossId: crossId, atCrossId: crossId });
     if (usage.used) {
         showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
         return;
@@ -9932,7 +9956,7 @@ function disconnectFiberFromNode(crossObj, cableId, fiberNumber) {
 function connectFiberToOnu(sleeveObj, cableId, fiberNumber, onuObj) {
     const sleeveId = sleeveObj.properties.get('uniqueId');
     const onuId = getObjectUniqueId(onuObj);
-    const usage = getFiberUsage(cableId, fiberNumber, { type: 'onuConn', sleeveId: sleeveId, onuId: onuId });
+    const usage = getFiberUsage(cableId, fiberNumber, { type: 'onuConn', sleeveId: sleeveId, onuId: onuId, atSleeveId: sleeveId });
     if (usage.used) {
         showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
         return;
@@ -9978,7 +10002,7 @@ function disconnectFiberFromOnu(sleeveObj, cableId, fiberNumber) {
 function connectFiberToOnuWithRoute(sleeveObj, cableId, fiberNumber, onuObj, routeIds) {
     const sleeveId = sleeveObj.properties.get('uniqueId');
     const onuId = getObjectUniqueId(onuObj);
-    const usage = getFiberUsage(cableId, fiberNumber, { type: 'onuConn', sleeveId: sleeveId, onuId: onuId });
+    const usage = getFiberUsage(cableId, fiberNumber, { type: 'onuConn', sleeveId: sleeveId, onuId: onuId, atSleeveId: sleeveId });
     if (usage.used) {
         showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
         return;
