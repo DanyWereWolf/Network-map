@@ -144,10 +144,11 @@ function rejectUser(userId) {
 function refreshUsersFromApi() {
     if (!getApiBase()) return Promise.resolve();
     var token = getAuthToken();
+    if (!token) return Promise.resolve();
     return fetch(getApiBase() + '/api/users', { headers: { 'Authorization': 'Bearer ' + token } })
         .then(function(r) { return r.json(); })
         .then(function(body) {
-            if (body.users) sessionStorage.setItem('networkMap_users', JSON.stringify(body.users));
+            if (body && body.users) sessionStorage.setItem('networkMap_users', JSON.stringify(body.users));
         })
         .catch(function() {});
 }

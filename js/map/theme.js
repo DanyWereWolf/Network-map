@@ -16,7 +16,7 @@ function initTheme() {
 
 function setTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
-    if (getApiBase()) {
+    if (getApiBase() && getAuthToken()) {
         fetch(getApiBase() + '/api/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },

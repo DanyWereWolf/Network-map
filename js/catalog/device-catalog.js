@@ -121,7 +121,7 @@ var CUSTOM_DEVICE_OPTIONS_STORAGE_KEY = 'networkmap_customDeviceOptions';
 function saveDeviceCatalog() {
     var payload = { deviceCatalog: getDeviceCatalog() };
     try { localStorage.setItem(CUSTOM_DEVICE_OPTIONS_STORAGE_KEY, JSON.stringify(payload)); } catch (e) {}
-    if (getApiBase()) {
+    if (getApiBase() && getAuthToken()) {
         try {
             fetch(getApiBase() + '/api/settings', {
                 method: 'POST',
