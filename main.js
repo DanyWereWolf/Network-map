@@ -1,47 +1,3 @@
-let myMap;
-let objects = [];
-let selectedObjects = [];
-let isEditMode = false;
-let currentModalObject = null; 
-let hoveredObject = null; 
-let hoveredObjectOriginalIcon = null; 
-let hoverCircle = null; 
-let cursorIndicator = null; 
-let phantomPlacemark = null; 
-let currentCableTool = false; 
-let cableSource = null; 
-let cableWaypoints = []; 
-let cablePreviewLine = null; 
-let selectedFiberForConnection = null; 
-let splitterFiberRoutingMode = false;
-let splitterFiberRoutingData = null;
-let splitterFiberWaypoints = [];
-let splitterFiberPreviewLine = null;
-let fiberRoutingMode = false;
-let fiberRoutingData = null;
-let fiberRoutingWaypoints = [];
-let fiberRoutingPreviewLine = null;
-let netboxConfig = {
-    url: '',
-    token: '',
-    ignoreSSL: false
-};
-let netboxDevices = []; 
-let currentUser = null; 
-let crossGroupPlacemarks = []; 
-let nodeGroupPlacemarks = []; 
-let crossGroupNames = new Map(); 
-let nodeGroupNames = new Map(); 
-let collaboratorCursorsPlacemarks = []; 
-let mapFilter = { node: true, nodeAggregationOnly: false, cross: true, sleeve: true, support: true, attachment: true, olt: true, splitter: true, onu: true }; 
-let lastDraggedPlacemark = null; 
-var UNDO_MAX = 20;
-var undoStack = [];
-var redoStack = [];
-var lastSavedState = null;
-var inUndoRedo = false;
-var showOnMapHighlightState = null;
-
 function clearShowOnMapHighlight() {
     if (!showOnMapHighlightState) return;
     var s = showOnMapHighlightState;
@@ -57,424 +13,6 @@ function clearShowOnMapHighlight() {
             }
         } catch (e) {}
     }
-}
-
-function groupKey(coords) {
-    return coords[0].toFixed(5) + ',' + coords[1].toFixed(5);
-}
-function getCrossGroupName(coords) {
-    return crossGroupNames.get(groupKey(coords)) || '';
-}
-function setCrossGroupName(coords, name) {
-    const key = groupKey(coords);
-    if (name && name.trim()) crossGroupNames.set(key, name.trim());
-    else crossGroupNames.delete(key);
-    saveGroupNames();
-    updateCrossDisplay();
-}
-function getNodeGroupName(coords) {
-    return nodeGroupNames.get(groupKey(coords)) || '';
-}
-function setNodeGroupName(coords, name) {
-    const key = groupKey(coords);
-    if (name && name.trim()) nodeGroupNames.set(key, name.trim());
-    else nodeGroupNames.delete(key);
-    saveGroupNames();
-    updateNodeDisplay();
-}
-var GROUP_NAMES_STORAGE_KEY = 'networkmap_groupNames';
-function saveGroupNames() {
-    var payload = { cross: Object.fromEntries(crossGroupNames), node: Object.fromEntries(nodeGroupNames) };
-    try {
-        localStorage.setItem(GROUP_NAMES_STORAGE_KEY, JSON.stringify(payload));
-    } catch (e) {}
-    if (getApiBase()) {
-        try {
-            fetch(getApiBase() + '/api/settings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
-                body: JSON.stringify({ groupNames: payload })
-            }).catch(function() {});
-        } catch (e) {}
-    }
-    if (typeof window.syncSendGroupNames === 'function' && window.syncIsConnected) {
-        try { window.syncSendGroupNames(payload); } catch (e) {}
-    }
-}
-function loadGroupNamesFromStorage() {
-    try {
-        var raw = localStorage.getItem(GROUP_NAMES_STORAGE_KEY);
-        if (!raw) return;
-        var parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object') {
-            if (parsed.cross && typeof parsed.cross === 'object') Object.keys(parsed.cross).forEach(function(k) { crossGroupNames.set(k, parsed.cross[k]); });
-            if (parsed.node && typeof parsed.node === 'object') Object.keys(parsed.node).forEach(function(k) { nodeGroupNames.set(k, parsed.node[k]); });
-        }
-    } catch (e) {}
-}
-window.getGroupNamesForSync = function() {
-    if (typeof crossGroupNames === 'undefined' || typeof nodeGroupNames === 'undefined') return null;
-    var cross = Object.fromEntries(crossGroupNames);
-    var node = Object.fromEntries(nodeGroupNames);
-    if (!Object.keys(cross).length && !Object.keys(node).length) return null;
-    return { cross: cross, node: node };
-};
-window.applyGroupNames = function(gn) {
-    if (!gn || typeof crossGroupNames === 'undefined' || typeof nodeGroupNames === 'undefined') return;
-    try {
-        if (gn.cross && typeof gn.cross === 'object') Object.keys(gn.cross).forEach(function(k) { crossGroupNames.set(k, gn.cross[k]); });
-        if (gn.node && typeof gn.node === 'object') Object.keys(gn.node).forEach(function(k) { nodeGroupNames.set(k, gn.node[k]); });
-        if (typeof updateCrossDisplay === 'function') updateCrossDisplay();
-        if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
-    } catch (e) {}
-};
-
-var DEVICE_CATALOG_DEFAULT = {
-    'Huawei': ['MA5608', 'MA5683T', 'HG8145', 'HG8245'],
-    'ZTE': ['C300', 'C320', 'F660', 'F670'],
-    'FiberHome': ['AN5516'],
-    'SNR': ['SNR-ONU-GPON-1G-mini'],
-    'B-OptiX': ['BO-ONU-GPON-4G-1P-DW'],
-    'MikroTik': ['hEX', 'hAP', 'RB750', 'CCR'],
-    'Ruijie': ['S6750-H36C', 'S6730-H48X6C'],
-    'Eltex': ['NTU-2', 'NTU-4', 'Router', 'Switch'],
-    'Nokia': ['Router', 'Switch', 'SFU', 'HGU'],
-    'Iskratel': ['Router', 'Switch', 'SFU', 'HGU'],
-    'BDCOM': ['Router', 'Switch', 'SFU', 'HGU'],
-    'Sercomm': ['SFU', 'HGU', 'WAP'],
-    'D-Link': ['Router', 'Switch', 'WAP'],
-    'Zyxel': ['Router', 'Switch', 'SFU', 'HGU', 'WAP'],
-    'Ubiquiti': ['WAP', 'Router', 'Switch'],
-    'Keenetic': ['Router', 'WAP'],
-    'TP-Link': ['Router', 'Switch', 'WAP'],
-    'Cisco': ['Router', 'Switch'],
-    'Cambium': ['WAP']
-};
-
-var deviceCatalog = {};
-
-function getDeviceCatalog() {
-    var out = {};
-    Object.keys(deviceCatalog || {}).forEach(function(m) {
-        if (!m) return;
-        var arr = (deviceCatalog[m] || []).slice();
-        out[m] = arr;
-    });
-    return out;
-}
-
-function setDeviceCatalog(catalog) {
-    deviceCatalog = {};
-    if (catalog && typeof catalog === 'object') {
-        Object.keys(catalog).forEach(function(m) {
-            if (m && Array.isArray(catalog[m])) deviceCatalog[m] = catalog[m].filter(Boolean);
-        });
-    }
-    saveDeviceCatalog();
-}
-
-function resetDeviceCatalogToDefault() {
-    deviceCatalog = JSON.parse(JSON.stringify(DEVICE_CATALOG_DEFAULT));
-    saveDeviceCatalog();
-}
-
-function addDeviceManufacturer(name) {
-    name = (name || '').trim();
-    if (!name || deviceCatalog[name]) return false;
-    deviceCatalog[name] = [];
-    saveDeviceCatalog();
-    return true;
-}
-
-function removeDeviceManufacturer(name) {
-    if (!deviceCatalog[name]) return false;
-    delete deviceCatalog[name];
-    saveDeviceCatalog();
-    return true;
-}
-
-function addDeviceModel(manufacturer, model) {
-    manufacturer = (manufacturer || '').trim();
-    model = (model || '').trim();
-    if (!manufacturer || !model) return false;
-    if (!deviceCatalog[manufacturer]) deviceCatalog[manufacturer] = [];
-    if (deviceCatalog[manufacturer].indexOf(model) !== -1) return false;
-    deviceCatalog[manufacturer].push(model);
-    deviceCatalog[manufacturer].sort();
-    saveDeviceCatalog();
-    return true;
-}
-
-function removeDeviceModel(manufacturer, model) {
-    if (!deviceCatalog[manufacturer]) return false;
-    var idx = deviceCatalog[manufacturer].indexOf(model);
-    if (idx === -1) return false;
-    deviceCatalog[manufacturer].splice(idx, 1);
-    saveDeviceCatalog();
-    return true;
-}
-
-function getDeviceManufacturers() {
-    return Object.keys(deviceCatalog || {}).filter(Boolean).sort();
-}
-
-function getDeviceModels(manufacturer) {
-    var mfr = (manufacturer || '').trim();
-    if (!mfr) {
-        var all = [];
-        Object.keys(deviceCatalog || {}).forEach(function(m) {
-            (deviceCatalog[m] || []).forEach(function(mod) { if (mod && all.indexOf(mod) === -1) all.push(mod); });
-        });
-        return all.sort();
-    }
-    return (deviceCatalog[mfr] || []).slice();
-}
-
-function addCustomManufacturer(v) {
-    v = (v || '').trim();
-    if (!v) return;
-    addDeviceManufacturer(v);
-}
-
-function addCustomModel(v, manufacturer) {
-    v = (v || '').trim();
-    if (!v) return;
-    var mfr = (manufacturer || '').trim();
-    if (mfr) {
-        addDeviceModel(mfr, v);
-    } else {
-        addDeviceManufacturer('Другое');
-        addDeviceModel('Другое', v);
-    }
-}
-
-var CUSTOM_DEVICE_OPTIONS_STORAGE_KEY = 'networkmap_customDeviceOptions';
-function saveDeviceCatalog() {
-    var payload = { deviceCatalog: getDeviceCatalog() };
-    try { localStorage.setItem(CUSTOM_DEVICE_OPTIONS_STORAGE_KEY, JSON.stringify(payload)); } catch (e) {}
-    if (getApiBase()) {
-        try {
-            fetch(getApiBase() + '/api/settings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
-                body: JSON.stringify({ customDeviceOptions: payload })
-            }).catch(function() {});
-        } catch (e) {}
-    }
-}
-
-function loadDeviceCatalog(opts) {
-    if (opts && opts.deviceCatalog && typeof opts.deviceCatalog === 'object' && Object.keys(opts.deviceCatalog).length > 0) {
-        setDeviceCatalog(opts.deviceCatalog);
-        return;
-    }
-    if (opts && (opts.manufacturers || opts.modelsByManufacturer)) {
-        var merged = JSON.parse(JSON.stringify(DEVICE_CATALOG_DEFAULT));
-        (opts.manufacturers || []).forEach(function(m) { if (m && !merged[m]) merged[m] = []; });
-        if (opts.modelsByManufacturer && typeof opts.modelsByManufacturer === 'object') {
-            Object.keys(opts.modelsByManufacturer).forEach(function(m) {
-                if (!merged[m]) merged[m] = [];
-                (opts.modelsByManufacturer[m] || []).forEach(function(mod) {
-                    if (mod && merged[m].indexOf(mod) === -1) merged[m].push(mod);
-                });
-            });
-        }
-        setDeviceCatalog(merged);
-        return;
-    }
-    if (Object.keys(deviceCatalog || {}).length === 0) {
-        resetDeviceCatalogToDefault();
-    }
-}
-
-function loadCustomDeviceOptions(opts) {
-    loadDeviceCatalog(opts || {});
-}
-
-function loadCustomDeviceOptionsFromStorage() {
-    try {
-        var raw = localStorage.getItem(CUSTOM_DEVICE_OPTIONS_STORAGE_KEY);
-        if (!raw) return;
-        var parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object') loadDeviceCatalog(parsed);
-    } catch (e) {}
-}
-
-function populateDeviceDatalists() {
-    var dlM = document.getElementById('deviceManufacturersList');
-    if (dlM) {
-        dlM.innerHTML = '';
-        (getDeviceManufacturers() || []).forEach(function(m) {
-            var opt = document.createElement('option');
-            opt.value = m;
-            dlM.appendChild(opt);
-        });
-    }
-}
-
-function populateModelDatalistForManufacturer(manufacturer, datalistId) {
-    datalistId = datalistId || 'deviceModelsList';
-    var dlMod = document.getElementById(datalistId);
-    if (dlMod) {
-        dlMod.innerHTML = '';
-        (getDeviceModels(manufacturer) || []).forEach(function(m) {
-            var opt = document.createElement('option');
-            opt.value = m;
-            dlMod.appendChild(opt);
-        });
-    }
-}
-
-function initDeviceComboboxes(container) {
-    container = container || document;
-
-    function resetComboboxPanelPosition(pnl) {
-        if (!pnl || !pnl.style) return;
-        if (pnl.style.position === 'fixed') {
-            pnl.style.position = '';
-            pnl.style.top = '';
-            pnl.style.left = '';
-            pnl.style.width = '';
-            pnl.style.minWidth = '';
-        }
-    }
-
-    var comboboxes = container.querySelectorAll('.device-combobox');
-    comboboxes.forEach(function(wrapper) {
-        if (wrapper.dataset.initialized) return;
-        wrapper.dataset.initialized = '1';
-        var type = wrapper.dataset.type;
-        var valueId = wrapper.dataset.valueId;
-        var manufacturerId = wrapper.dataset.manufacturerId;
-        var valueInput = document.getElementById(valueId) || wrapper.querySelector('input[type="hidden"]');
-        var trigger = wrapper.querySelector('.device-combobox-trigger');
-        var panel = wrapper.querySelector('.device-combobox-panel');
-        var searchInput = wrapper.querySelector('.device-combobox-search');
-        var listEl = wrapper.querySelector('.device-combobox-list');
-        if (!trigger || !panel || !listEl || !valueInput) return;
-
-        var placeholderMod = 'Выберите модель';
-        var placeholderMfr = 'Выберите производителя';
-        var placeholder = type === 'model' ? placeholderMod : placeholderMfr;
-
-        function getOptions() {
-            if (type === 'manufacturer') return getDeviceManufacturers() || [];
-            var mfrInput = manufacturerId ? document.getElementById(manufacturerId) : null;
-            var mfr = mfrInput ? (mfrInput.value || '').trim() : '';
-            return getDeviceModels(mfr) || [];
-        }
-
-        function renderList(filter) {
-            var opts = getOptions();
-            filter = (filter || '').toLowerCase().trim();
-            if (filter) opts = opts.filter(function(o) { return String(o).toLowerCase().indexOf(filter) !== -1; });
-            listEl.innerHTML = '';
-            if (opts.length === 0) {
-                var li = document.createElement('li');
-                li.className = 'empty';
-                li.textContent = type === 'model' && manufacturerId && !(document.getElementById(manufacturerId) || {}).value ? 'Сначала выберите производителя' : 'Нет вариантов';
-                listEl.appendChild(li);
-            } else {
-                opts.forEach(function(opt) {
-                    var li = document.createElement('li');
-                    li.textContent = opt;
-                    li.setAttribute('data-value', opt);
-                    li.addEventListener('click', function() {
-                        if (li.classList.contains('empty')) return;
-                        valueInput.value = opt;
-                        trigger.textContent = opt;
-                        trigger.setAttribute('aria-expanded', 'false');
-                        panel.classList.remove('is-open');
-                        resetComboboxPanelPosition(panel);
-                        if (searchInput) searchInput.value = '';
-                        renderList('');
-                        var ev = new Event('change', { bubbles: true });
-                        valueInput.dispatchEvent(ev);
-                        var evInput = new Event('input', { bubbles: true });
-                        valueInput.dispatchEvent(evInput);
-                        if (type === 'manufacturer' && manufacturerId) {
-                            var modelCombobox = container.querySelector('.device-combobox[data-manufacturer-id="' + manufacturerId + '"]');
-                            if (modelCombobox) {
-                                var mValInp = document.getElementById(modelCombobox.dataset.valueId) || modelCombobox.querySelector('input[type="hidden"]');
-                                var mTrigger = modelCombobox.querySelector('.device-combobox-trigger');
-                                if (mValInp) mValInp.value = '';
-                                if (mTrigger) mTrigger.textContent = placeholderMod;
-                                var mList = modelCombobox.querySelector('.device-combobox-list');
-                                if (mList) mList.innerHTML = '';
-                            }
-                        }
-                    });
-                    listEl.appendChild(li);
-                });
-            }
-        }
-
-        trigger.addEventListener('click', function(e) {
-            e.stopPropagation();
-            var isOpen = panel.classList.contains('is-open');
-            document.querySelectorAll('.device-combobox-panel.is-open').forEach(function(p) {
-                if (p !== panel) { p.classList.remove('is-open'); var t = p.closest('.device-combobox').querySelector('.device-combobox-trigger'); if (t) t.setAttribute('aria-expanded', 'false'); resetComboboxPanelPosition(p); }
-            });
-            if (isOpen) {
-                panel.classList.remove('is-open');
-                trigger.setAttribute('aria-expanded', 'false');
-                resetComboboxPanelPosition(panel);
-            } else {
-                panel.classList.add('is-open');
-                trigger.setAttribute('aria-expanded', 'true');
-                if (wrapper.closest('.sidebar')) {
-                    var rect = trigger.getBoundingClientRect();
-                    panel.style.position = 'fixed';
-                    panel.style.top = (rect.bottom + 4) + 'px';
-                    panel.style.left = rect.left + 'px';
-                    panel.style.width = rect.width + 'px';
-                    panel.style.minWidth = rect.width + 'px';
-                    panel.style.right = 'auto';
-                }
-                renderList('');
-                if (searchInput) { searchInput.value = ''; searchInput.focus(); }
-            }
-        });
-
-        if (searchInput) {
-            searchInput.addEventListener('input', function() { renderList(this.value); });
-            searchInput.addEventListener('click', function(e) { e.stopPropagation(); });
-        }
-        listEl.addEventListener('click', function(e) { e.stopPropagation(); });
-    });
-
-    if (!window._deviceComboboxCloseBound) {
-        window._deviceComboboxCloseBound = true;
-        document.addEventListener('click', function closeComboboxOnOutside(e) {
-            if (!e.target.closest('.device-combobox')) {
-                document.querySelectorAll('.device-combobox-panel.is-open').forEach(function(p) {
-                    p.classList.remove('is-open');
-                    var t = p.closest('.device-combobox').querySelector('.device-combobox-trigger');
-                    if (t) t.setAttribute('aria-expanded', 'false');
-                    if (initDeviceComboboxes.resetPanelPosition) initDeviceComboboxes.resetPanelPosition(p);
-                });
-            }
-        }, true);
-    }
-}
-initDeviceComboboxes.resetPanelPosition = function(pnl) {
-    if (!pnl || !pnl.style) return;
-    if (pnl.style.position === 'fixed') {
-        pnl.style.position = '';
-        pnl.style.top = '';
-        pnl.style.left = '';
-        pnl.style.width = '';
-        pnl.style.minWidth = '';
-    }
-};
-
-function setDeviceComboboxValue(valueId, value) {
-    var wrapper = document.querySelector('.device-combobox[data-value-id="' + valueId + '"]');
-    if (!wrapper) return;
-    var valueInput = document.getElementById(valueId) || wrapper.querySelector('input[type="hidden"]');
-    var trigger = wrapper.querySelector('.device-combobox-trigger');
-    if (valueInput) valueInput.value = value || '';
-    if (trigger) trigger.textContent = value || (wrapper.dataset.type === 'model' ? 'Выберите модель' : 'Выберите производителя');
 }
 
 function checkAuth() {
@@ -511,7 +49,22 @@ document.addEventListener('DOMContentLoaded', function() {
 
     initUserUI();
     
-    ymaps.ready(init);
+    if (currentUser && currentUser.role === 'user') {
+        try {
+            if (!localStorage.getItem('networkMap_viewModeHintShown')) {
+                localStorage.setItem('networkMap_viewModeHintShown', '1');
+                if (typeof showInfo === 'function') showInfo('Включён режим просмотра. Редактирование карты доступно только администраторам.', 'Режим просмотра');
+            }
+        } catch (e) {}
+    }
+    
+    function whenYmapsReady(cb) {
+        if (window.ymaps) { window.ymaps.ready(cb); return; }
+        var t = setInterval(function() {
+            if (window.ymaps) { clearInterval(t); window.ymaps.ready(cb); }
+        }, 50);
+    }
+    whenYmapsReady(init);
     
     (async function() {
         await new Promise(function(r) { setTimeout(r, 1500); });
@@ -804,20 +357,22 @@ function approveUserRequest(userId) {
 }
 
 function rejectUserRequest(userId) {
-    if (!confirm('Вы уверены, что хотите отклонить эту заявку?')) return;
-    if (typeof AuthSystem === 'undefined') return;
-    var users = AuthSystem.getUsers();
-    var user = users.find(function(u) { return u.id === userId; });
-    var username = user ? user.username : '';
-    Promise.resolve(AuthSystem.rejectUser(userId)).then(function(result) {
-        if (result.success) {
-            showWarning('Заявка отклонена.', 'Заявка');
-            renderUsersList();
-            logAction(ActionTypes.USER_REJECTED, { username: username });
-        } else {
-            showError(result.error, 'Ошибка');
-        }
-    });
+    (async function() {
+        if (!(await showConfirm('Вы уверены, что хотите отклонить эту заявку?', 'Отклонить заявку', { confirmText: 'Отклонить' }))) return;
+        if (typeof AuthSystem === 'undefined') return;
+        var users = AuthSystem.getUsers();
+        var user = users.find(function(u) { return u.id === userId; });
+        var username = user ? user.username : '';
+        Promise.resolve(AuthSystem.rejectUser(userId)).then(function(result) {
+            if (result.success) {
+                showWarning('Заявка отклонена.', 'Заявка');
+                renderUsersList();
+                logAction(ActionTypes.USER_REJECTED, { username: username });
+            } else {
+                showError(result.error, 'Ошибка');
+            }
+        });
+    })();
 }
 
 function openUserEditModal(userId = null) {
@@ -956,7 +511,8 @@ function editUser(userId) {
 }
 
 function deleteUser(userId) {
-    if (!confirm('Вы уверены, что хотите удалить этого пользователя?')) return;
+    (async function() {
+        if (!(await showConfirm('Вы уверены, что хотите удалить этого пользователя?', 'Удалить пользователя', { confirmText: 'Удалить' }))) return;
     
     const users = AuthSystem.getUsers();
     const userIndex = users.findIndex(u => u.id === userId);
@@ -1000,6 +556,7 @@ function deleteUser(userId) {
     showSuccess('Пользователь удалён');
     renderUsersList();
     logAction(ActionTypes.USER_DELETED, { username: username });
+    })();
 }
 
 function setupUsersModalHandlers() {
@@ -1206,7 +763,7 @@ function setupEventListeners() {
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             
-            var modalIds = ['infoModal', 'nodeSelectionModal', 'onuSelectionModal', 'splitterSelectionModal', 'splitterOutputOnuModal', 'splitterOutputSplitterModal', 'oltSelectionModal', 'usersModal', 'userEditModal', 'updatesModal', 'deviceCatalogModal'];
+            var modalIds = ['infoModal', 'nodeSelectionModal', 'onuSelectionModal', 'splitterSelectionModal', 'splitterOutputOnuModal', 'splitterOutputSplitterModal', 'oltSelectionModal', 'usersModal', 'userEditModal', 'updatesModal', 'deviceCatalogModal', 'confirmModal'];
             for (var i = 0; i < modalIds.length; i++) {
                 var m = document.getElementById(modalIds[i]);
                 if (m && m.style && m.style.display === 'block') {
@@ -1413,265 +970,6 @@ function setupEventListeners() {
     setupMapSearch();
 
     initTheme();
-}
-
-function initTheme() {
-    const themeToggle = document.getElementById('themeToggle');
-    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
-    if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
-        if (!getApiBase()) document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
-    });
-    window.addEventListener('blur', function() {
-        window.syncDragInProgress = false;
-    });
-}
-
-function setTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    if (getApiBase()) {
-        fetch(getApiBase() + '/api/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
-            body: JSON.stringify({ theme: theme })
-        }).catch(function() {});
-    }
-    var lightIcon = document.querySelector('.theme-icon-light');
-    var darkIcon = document.querySelector('.theme-icon-dark');
-    if (theme === 'dark') {
-        if (lightIcon) lightIcon.style.display = 'none';
-        if (darkIcon) darkIcon.style.display = 'block';
-    } else {
-        if (lightIcon) lightIcon.style.display = 'block';
-        if (darkIcon) darkIcon.style.display = 'none';
-    }
-}
-
-function toggleTheme() {
-    const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
-    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    setTheme(newTheme);
-}
-
-function setupMapSearch() {
-    const searchInput = document.getElementById('mapSearch');
-    const searchResults = document.getElementById('searchResults');
-    const clearBtn = document.getElementById('clearSearch');
-    
-    if (!searchInput || !searchResults) return;
-    
-    let searchTimeout = null;
-
-    searchInput.addEventListener('input', function() {
-        const query = this.value.trim();
-
-        clearBtn.style.display = query ? 'flex' : 'none';
-
-        if (searchTimeout) clearTimeout(searchTimeout);
-        
-        if (query.length < 2) {
-            searchResults.style.display = 'none';
-            return;
-        }
-
-        searchTimeout = setTimeout(() => {
-            const results = searchObjects(query);
-            renderSearchResults(results, query);
-        }, 200);
-    });
-
-    clearBtn.addEventListener('click', function() {
-        searchInput.value = '';
-        searchResults.style.display = 'none';
-        clearBtn.style.display = 'none';
-        searchInput.focus();
-    });
-
-    document.addEventListener('click', function(e) {
-        if (!e.target.closest('.header-search')) {
-            searchResults.style.display = 'none';
-        }
-    });
-
-    searchInput.addEventListener('focus', function() {
-        if (this.value.trim().length >= 2) {
-            const results = searchObjects(this.value.trim());
-            renderSearchResults(results, this.value.trim());
-        }
-    });
-
-    searchInput.addEventListener('keydown', function(e) {
-        const items = searchResults.querySelectorAll('.search-result-item');
-        const activeItem = searchResults.querySelector('.search-result-item.active');
-        let activeIndex = Array.from(items).indexOf(activeItem);
-        
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            if (activeIndex < items.length - 1) {
-                items[activeIndex]?.classList.remove('active');
-                items[activeIndex + 1]?.classList.add('active');
-                items[activeIndex + 1]?.scrollIntoView({ block: 'nearest' });
-            } else if (activeIndex === -1 && items.length > 0) {
-                items[0].classList.add('active');
-            }
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            if (activeIndex > 0) {
-                items[activeIndex]?.classList.remove('active');
-                items[activeIndex - 1]?.classList.add('active');
-                items[activeIndex - 1]?.scrollIntoView({ block: 'nearest' });
-            }
-        } else if (e.key === 'Enter') {
-            e.preventDefault();
-            if (activeItem) {
-                activeItem.click();
-            } else if (items.length > 0) {
-                items[0].click();
-            }
-        } else if (e.key === 'Escape') {
-            searchResults.style.display = 'none';
-            searchInput.blur();
-        }
-    });
-}
-
-function searchObjects(query) {
-    const lowerQuery = query.toLowerCase();
-    const results = [];
-    
-    objects.forEach(obj => {
-        if (!obj.properties) return;
-        
-        const type = obj.properties.get('type');
-        const name = obj.properties.get('name') || '';
-        const cableName = obj.properties.get('cableName') || '';
-
-        const searchName = type === 'cable' ? cableName : name;
-        if (searchName && searchName.toLowerCase().includes(lowerQuery)) {
-            results.push({
-                object: obj,
-                type: type,
-                name: searchName,
-                matchType: 'name'
-            });
-            return;
-        }
-
-        const typeName = getObjectTypeName(type);
-        if (typeName.toLowerCase().includes(lowerQuery)) {
-            results.push({
-                object: obj,
-                type: type,
-                name: searchName || typeName,
-                matchType: 'type'
-            });
-        }
-    });
-
-    results.sort((a, b) => {
-        if (a.matchType === 'name' && b.matchType !== 'name') return -1;
-        if (a.matchType !== 'name' && b.matchType === 'name') return 1;
-        return a.name.localeCompare(b.name);
-    });
-    
-    return results.slice(0, 20); 
-}
-
-function renderSearchResults(results, query) {
-    const searchResults = document.getElementById('searchResults');
-    
-    if (results.length === 0) {
-        searchResults.innerHTML = `
-            <div class="search-no-results">
-                <div style="font-size: 24px; margin-bottom: 8px;">🔍</div>
-                Ничего не найдено по запросу "${escapeHtml(query)}"
-            </div>
-        `;
-        searchResults.style.display = 'block';
-        return;
-    }
-    
-    const getIcon = (type) => {
-        switch(type) {
-            case 'node': return '🖥️';
-            case 'cross': return '📦';
-            case 'sleeve': return '🔴';
-            case 'support': return '📍';
-            case 'attachment': return '🔗';
-            case 'cable': return '🔌';
-            default: return '📍';
-        }
-    };
-    
-    let html = `<div class="search-results-header">Найдено: ${results.length}</div>`;
-    
-    results.forEach((result, index) => {
-        const typeName = getObjectTypeName(result.type);
-        const icon = getIcon(result.type);
-        const uniqueId = result.object.properties.get('uniqueId') || index;
-        
-        html += `
-            <div class="search-result-item" data-index="${index}" data-id="${escapeHtml(String(uniqueId))}">
-                <div class="search-result-icon ${result.type}">${icon}</div>
-                <div class="search-result-info">
-                    <div class="search-result-name">${escapeHtml(result.name)}</div>
-                    <div class="search-result-type">${typeName}</div>
-                </div>
-            </div>
-        `;
-    });
-    
-    searchResults.innerHTML = html;
-    searchResults.style.display = 'block';
-
-    searchResults.querySelectorAll('.search-result-item').forEach((item, index) => {
-        item.addEventListener('click', () => {
-            goToSearchResult(results[index]);
-        });
-        
-        item.addEventListener('mouseenter', () => {
-            searchResults.querySelector('.search-result-item.active')?.classList.remove('active');
-            item.classList.add('active');
-        });
-    });
-}
-
-function goToSearchResult(result) {
-    const obj = result.object;
-    const searchResults = document.getElementById('searchResults');
-    const searchInput = document.getElementById('mapSearch');
-
-    searchResults.style.display = 'none';
-
-    let coords;
-    if (result.type === 'cable') {
-        
-        const geometry = obj.geometry.getCoordinates();
-        if (geometry && geometry.length >= 2) {
-            const midIndex = Math.floor(geometry.length / 2);
-            coords = geometry[midIndex];
-        }
-    } else {
-        coords = obj.geometry.getCoordinates();
-    }
-    
-    if (!coords) return;
-
-    myMap.setCenter(coords, 21, { duration: 500 });
-
-    setTimeout(() => {
-        if (result.type === 'cable') {
-            showCableInfo(obj);
-        } else if (result.type === 'support') {
-            showSupportInfo(obj);
-        } else if (result.type === 'node' || result.type === 'cross' || result.type === 'sleeve') {
-            showObjectInfo(obj);
-        }
-    }, 600);
-
-    searchInput.value = '';
-    document.getElementById('clearSearch').style.display = 'none';
 }
 
 let objectPlacementMode = false;
@@ -2767,10 +2065,11 @@ function clearHoverHighlight() {
 function handleDeleteSelected() {
     if (!isEditMode) return;
     if (selectedObjects.length === 0) return;
-    if (confirm(`Удалить ${selectedObjects.length} объектов?`)) {
+    (async function() {
+        if (!(await showConfirm('Удалить ' + selectedObjects.length + ' объектов?', 'Удаление', { confirmText: 'Удалить' }))) return;
         selectedObjects.slice().forEach(obj => deleteObject(obj, { fromBatch: true }));
         clearSelection();
-    }
+    })();
 }
 
 function handleFileImport(e) {
@@ -2779,6 +2078,7 @@ function handleFileImport(e) {
     const fileInput = e.target;
     const reader = new FileReader();
     reader.onload = function(ev) {
+        (async function() {
         try {
             const raw = ev.target.result;
             const data = JSON.parse(raw);
@@ -2788,19 +2088,20 @@ function handleFileImport(e) {
                 return;
             }
             
-            if (objects.length > 0 && !confirm('Текущая карта будет полностью заменена импортируемыми данными. Продолжить?')) {
+            if (objects.length > 0 && !(await showConfirm('Текущая карта будет полностью заменена импортируемыми данными. Продолжить?', 'Импорт', { confirmText: 'Продолжить' }))) {
                 fileInput.value = '';
                 return;
             }
             clearMap();
             importData(data);
-            showSuccess(`Карта импортирована (${data.length} объектов)`, 'Импорт');
+            showSuccess('Карта импортирована (' + data.length + ' объектов)', 'Импорт');
             logAction(ActionTypes.IMPORT_DATA, { count: data.length });
         } catch (error) {
             console.error('Ошибка при импорте файла:', error);
             showError('Ошибка при чтении файла. Проверьте, что выбран корректный JSON-файл экспорта карты.', 'Импорт');
         }
         fileInput.value = '';
+        })();
     };
     reader.readAsText(file);
 }
@@ -6740,13 +6041,13 @@ function setupEditAndDeleteListeners() {
                         : 'На этой опоре проложено кабелей: ' + cablesOnSupport.length + '. Удалить опору и все эти кабели?';
                 }
             }
-            if (confirm(msg)) {
+            (async function() {
+                if (!(await showConfirm(msg, 'Удаление объекта', { confirmText: 'Удалить' }))) return;
                 deleteObject(currentModalObject);
-
-                const modal = document.getElementById('infoModal');
+                var modal = document.getElementById('infoModal');
                 modal.style.display = 'none';
                 currentModalObject = null;
-            }
+            })();
         });
     }
 
@@ -12425,11 +11726,10 @@ function showMergeCablesDialog(sleeveObj) {
     }
 
     const cablesList = cablesInfo.map(c => `- ${c.cableDescription} (${c.fiberCount} жил)`).join('\n');
-    const confirmMsg = `Объединить кабели в один?\n\n${cablesList}\n\nИтого: ${totalFibers} жил → ${getCableDescription(newCableType)}`;
+    const confirmMsg = 'Объединить кабели в один?\n\n' + cablesList + '\n\nИтого: ' + totalFibers + ' жил → ' + getCableDescription(newCableType);
     
-    if (!confirm(confirmMsg)) {
-        return;
-    }
+    (async function() {
+        if (!(await showConfirm(confirmMsg, 'Объединить кабели', { confirmText: 'Объединить' }))) return;
 
     const targetObjects = new Set();
     cablesInfo.forEach(info => {
@@ -12470,7 +11770,8 @@ function showMergeCablesDialog(sleeveObj) {
     document.getElementById('infoModal').style.display = 'none';
     showObjectInfo(sleeveObj);
     
-    showSuccess(`Кабели успешно объединены в ${getCableDescription(newCableType)}`, 'Объединение кабелей');
+    showSuccess('Кабели успешно объединены в ' + getCableDescription(newCableType), 'Объединение кабелей');
+    })();
 }
 
 function toggleFiberUsage(cableUniqueId, fiberNumber) {
@@ -12972,7 +12273,8 @@ function handleBackupListClick(e) {
     if (!filename || !getApiBase() || !getAuthToken()) return;
     e.preventDefault();
     var dateLabel = filename.replace(/backup-|\.json/g, '');
-    if (!confirm('Восстановить данные от ' + dateLabel + '? Текущие данные будут заменены. После восстановления обновите страницу.')) return;
+    (async function() {
+        if (!(await showConfirm('Восстановить данные от ' + dateLabel + '? Текущие данные будут заменены. После восстановления обновите страницу.', 'Восстановление бэкапа', { confirmText: 'Восстановить' }))) return;
     btn.disabled = true;
     fetch(getApiBase() + '/api/backups/restore', {
         method: 'POST',
@@ -13002,171 +12304,7 @@ function handleBackupListClick(e) {
         if (typeof showError === 'function') showError(msg);
         else alert(msg);
     });
-}
-
-function renderDeviceCatalogList() {
-    var container = document.getElementById('deviceCatalogList');
-    if (!container) return;
-    var catalog = getDeviceCatalog();
-    var mfrs = Object.keys(catalog).sort();
-    if (mfrs.length === 0) {
-        container.innerHTML = '<p class="text-muted-inline" style="font-size: 0.8125rem; margin: 0;">Справочник пуст. Добавьте производителя или сбросьте к значениям по умолчанию.</p>';
-        return;
-    }
-    var html = '';
-    mfrs.forEach(function(mfr) {
-        var models = (catalog[mfr] || []).slice();
-        html += '<div class="device-catalog-mfr" data-mfr="' + escapeHtml(mfr) + '" style="margin-bottom: 12px; padding: 10px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-        html += '<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">';
-        html += '<strong style="font-size: 0.875rem;">' + escapeHtml(mfr) + '</strong>';
-        html += '<div style="display: flex; gap: 6px;">';
-        html += '<input type="text" class="form-input device-catalog-new-model" data-mfr="' + escapeHtml(mfr) + '" placeholder="Модель" style="width: 120px; padding: 4px 8px; font-size: 0.8125rem;">';
-        html += '<button type="button" class="device-catalog-add-model" data-mfr="' + escapeHtml(mfr) + '" title="Добавить модель" style="padding: 4px 10px; font-size: 0.75rem; background: var(--accent-primary); color: white; border: none; border-radius: 4px; cursor: pointer;">+</button>';
-        html += '<button type="button" class="device-catalog-remove-mfr" data-mfr="' + escapeHtml(mfr) + '" title="Удалить производителя" style="padding: 4px 8px; font-size: 0.75rem; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer;">✕</button>';
-        html += '</div></div>';
-        html += '<div class="device-catalog-models" style="display: flex; flex-wrap: wrap; gap: 4px;">';
-        models.forEach(function(mod) {
-            html += '<span class="device-catalog-model-tag" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 0.75rem; background: var(--bg-card); border-radius: 4px; border: 1px solid var(--border-color);">';
-            html += escapeHtml(mod);
-            html += '<button type="button" class="device-catalog-remove-model" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" title="Удалить" style="padding: 0; margin: 0; background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 0.9em; line-height: 1;">×</button>';
-            html += '</span>';
-        });
-        html += '</div></div>';
-    });
-    container.innerHTML = html;
-
-    container.querySelectorAll('.device-catalog-add-model').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            var mfr = btn.getAttribute('data-mfr');
-            var inp = container.querySelector('.device-catalog-new-model[data-mfr="' + mfr + '"]');
-            var val = inp ? inp.value.trim() : '';
-            if (!val) { if (typeof showError === 'function') showError('Введите модель', ''); return; }
-            if (addDeviceModel(mfr, val)) {
-                inp.value = '';
-                renderDeviceCatalogList();
-                populateDeviceDatalists();
-                populateModelDatalistForManufacturer(mfr);
-                if (typeof showInfo === 'function') showInfo('Модель добавлена', '');
-            }
-        });
-    });
-    container.querySelectorAll('.device-catalog-new-model').forEach(function(inp) {
-        inp.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                var mfr = inp.getAttribute('data-mfr');
-                var val = inp.value.trim();
-                if (val && addDeviceModel(mfr, val)) {
-                    inp.value = '';
-                    renderDeviceCatalogList();
-                    populateDeviceDatalists();
-                    populateModelDatalistForManufacturer(mfr);
-                    if (typeof showInfo === 'function') showInfo('Модель добавлена', '');
-                }
-            }
-        });
-    });
-    container.querySelectorAll('.device-catalog-remove-mfr').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            var mfr = btn.getAttribute('data-mfr');
-            if (!confirm('Удалить производителя «' + mfr + '» и все его модели?')) return;
-            if (removeDeviceManufacturer(mfr)) {
-                renderDeviceCatalogList();
-                populateDeviceDatalists();
-                if (typeof showInfo === 'function') showInfo('Производитель удалён', '');
-            }
-        });
-    });
-    container.querySelectorAll('.device-catalog-remove-model').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            var mfr = btn.getAttribute('data-mfr');
-            var mod = btn.getAttribute('data-model');
-            if (removeDeviceModel(mfr, mod)) {
-                renderDeviceCatalogList();
-                populateDeviceDatalists();
-                populateModelDatalistForManufacturer(mfr);
-                if (typeof showInfo === 'function') showInfo('Модель удалена', '');
-            }
-        });
-    });
-}
-
-function setupDeviceCatalogHandlers() {
-    var addMfrBtn = document.getElementById('deviceCatalogAddMfr');
-    var resetBtn = document.getElementById('deviceCatalogReset');
-    if (addMfrBtn) {
-        addMfrBtn.addEventListener('click', function() {
-            var name = prompt('Название производителя:');
-            if (!name || !(name = name.trim())) return;
-            if (addDeviceManufacturer(name)) {
-                renderDeviceCatalogList();
-                populateDeviceDatalists();
-                if (typeof showInfo === 'function') showInfo('Производитель добавлен', '');
-            } else {
-                if (typeof showError === 'function') showError('Производитель уже существует', '');
-            }
-        });
-    }
-    if (resetBtn) {
-        resetBtn.addEventListener('click', function() {
-            if (!confirm('Сбросить справочник к значениям по умолчанию? Текущие данные будут заменены.')) return;
-            resetDeviceCatalogToDefault();
-            renderDeviceCatalogList();
-            populateDeviceDatalists();
-            if (typeof showInfo === 'function') showInfo('Справочник сброшен', '');
-        });
-    }
-}
-
-function setupAccordions() {
-    const accordionHeaders = document.querySelectorAll('.accordion-header');
-    
-    accordionHeaders.forEach(header => {
-        header.addEventListener('click', function() {
-            const accordionSection = this.parentElement;
-            const isActive = accordionSection.classList.contains('active');
-
-            document.querySelectorAll('.accordion-section').forEach(section => {
-                section.classList.remove('active');
-            });
-
-            if (!isActive) {
-                accordionSection.classList.add('active');
-            }
-        });
-    });
-
-    const firstAccordion = document.querySelector('.accordion-section');
-    if (firstAccordion) {
-        firstAccordion.classList.add('active');
-    }
-
-    setupDeviceCatalogHandlers();
-}
-
-function openDeviceCatalogModal() {
-    if (typeof requireAdmin === 'function' && !requireAdmin()) return;
-    var modal = document.getElementById('deviceCatalogModal');
-    if (modal) {
-        modal.style.display = 'block';
-        renderDeviceCatalogList();
-    }
-}
-
-function closeDeviceCatalogModal() {
-    var modal = document.getElementById('deviceCatalogModal');
-    if (modal) modal.style.display = 'none';
-}
-
-function setupDeviceCatalogModalHandlers() {
-    var closeBtn = document.querySelector('.close-device-catalog');
-    if (closeBtn) closeBtn.addEventListener('click', closeDeviceCatalogModal);
-    var modal = document.getElementById('deviceCatalogModal');
-    if (modal) {
-        modal.addEventListener('click', function(e) {
-            if (e.target === modal) closeDeviceCatalogModal();
-        });
-    }
+    })();
 }
 
 setTimeout(() => {

@@ -120,6 +120,7 @@
         }
         ws.onopen = function() {
             reconnectAttempts = 0;
+            if (typeof window.hideNetworkError === 'function') window.hideNetworkError();
             try { sessionStorage.setItem(SYNC_URL_KEY, url); } catch (e) {}
             window.syncIsConnected = true;
             if (!cursorFlushIntervalId) {
@@ -163,7 +164,12 @@
             updateSyncOnlineList([]);
             if (btn) btn.disabled = false;
             if (typeof window.showSyncRequiredOverlay === 'function') window.showSyncRequiredOverlay();
-            if (!userRequestedDisconnect) scheduleReconnect();
+            if (!userRequestedDisconnect) {
+                setTimeout(function() {
+                    if (typeof window.showNetworkError === 'function') window.showNetworkError('Нет связи с сервером');
+                }, 600);
+                scheduleReconnect();
+            }
         };
         ws.onerror = function() {
             updateSyncUIStatus(false, 'Ошибка соединения');

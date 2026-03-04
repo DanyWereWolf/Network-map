@@ -1343,7 +1343,8 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     color: var(--text-primary);
 }
 .device-combobox-list li:hover,
-.device-combobox-list li[aria-selected="true"] {
+.device-combobox-list li[aria-selected="true"],
+.device-combobox-list li.device-combobox-item-highlight {
     background: var(--bg-accent);
     color: var(--accent-primary);
 }

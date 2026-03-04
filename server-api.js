@@ -313,6 +313,11 @@ app.post('/api/backups/restore', (req, res) => {
 
 app.get('/api/health', (req, res) => res.json({ ok: true, db: 'sqlite' }));
 
+app.get('/api/public-config', (req, res) => {
+    const key = serverConfig.yandexMapsApiKey || process.env.YANDEX_MAPS_API_KEY || '';
+    res.json({ yandexMapsApiKey: key });
+});
+
 app.use(express.static(path.join(__dirname)));
 
 db.getDb();

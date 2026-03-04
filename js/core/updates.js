@@ -3,7 +3,6 @@ function parseVersion(str) {
     var parts = s.split('.').map(function(n) { return parseInt(n, 10) || 0; });
     return [parts[0] || 0, parts[1] || 0, parts[2] || 0];
 }
-
 function compareVersions(a, b) {
     var va = parseVersion(a);
     var vb = parseVersion(b);
@@ -13,7 +12,6 @@ function compareVersions(a, b) {
     }
     return 0;
 }
-
 function checkForUpdates(silent) {
     silent = silent === true;
     if (!GITHUB_REPO.owner || !GITHUB_REPO.repo) return Promise.resolve({ checked: false });
@@ -47,7 +45,6 @@ function checkForUpdates(silent) {
             return { checked: true, error: e };
         });
 }
-
 function openUpdatesModal() {
     var modal = document.getElementById('updatesModal');
     if (!modal) return;
@@ -67,12 +64,10 @@ function openUpdatesModal() {
     }
     modal.style.display = 'block';
 }
-
 function closeUpdatesModal() {
     var modal = document.getElementById('updatesModal');
     if (modal) modal.style.display = 'none';
 }
-
 function renderUpdatesModalContent(result) {
     var versionEl = document.getElementById('updatesVersionDisplay');
     var statusEl = document.getElementById('updatesStatus');
@@ -104,7 +99,6 @@ function renderUpdatesModalContent(result) {
     if (versionEl) versionEl.className = 'version-current version-latest';
     statusEl.innerHTML = 'У вас установлена последняя версия.';
 }
-
 function setupUpdatesModalHandlers() {
     var closeBtn = document.querySelector('.close-updates');
     if (closeBtn) closeBtn.addEventListener('click', closeUpdatesModal);
