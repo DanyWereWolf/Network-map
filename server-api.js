@@ -61,6 +61,7 @@ app.get('/api/map', (req, res) => {
 app.post('/api/map', (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (user.role !== 'admin') return res.status(403).json({ error: 'Только администратор может сохранять карту' });
     try {
         const data = req.body && req.body.data;
         if (!Array.isArray(data)) return res.status(400).json({ error: 'Ожидается массив data' });
@@ -225,6 +226,7 @@ app.get('/api/history', (req, res) => {
 app.post('/api/history', (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (user.role !== 'admin') return res.status(403).json({ error: 'Только администратор может изменять историю' });
     try {
         const history = req.body && req.body.history;
         if (!Array.isArray(history)) return res.status(400).json({ error: 'Ожидается массив history' });
@@ -257,10 +259,16 @@ app.post('/api/settings', (req, res) => {
         if (body.mapStart !== undefined && db.setMapStartForUser) {
             db.setMapStartForUser(user.userId, body.mapStart);
         }
-        if (body.groupNames !== undefined && typeof body.groupNames === 'object') {
-            syncGroupNames = body.groupNames;
+        var toSave = {};
+        if (user.role === 'admin') {
+            if (body.groupNames !== undefined && typeof body.groupNames === 'object') {
+                syncGroupNames = body.groupNames;
+            }
+            toSave = body;
+        } else {
+            if (body.theme !== undefined) toSave.theme = body.theme;
         }
-        db.setSettings(body);
+        if (Object.keys(toSave).length > 0) db.setSettings(toSave);
         res.json({ ok: true });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
@@ -270,6 +278,7 @@ app.post('/api/settings', (req, res) => {
 app.get('/api/backups', (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (user.role !== 'admin') return res.status(403).json({ error: 'Только для администратора' });
     try {
         const list = db.listBackups();
         res.json({ backups: list });
@@ -328,6 +337,14 @@ const wss = new WebSocket.Server({ server, path: '/sync' });
 const syncClientNames = new Map(); 
 
 const syncClientUserIds = new Map(); 
+
+function isSyncClientAdmin(clientId) {
+    const userId = syncClientUserIds.get(clientId);
+    if (!userId) return false;
+    const users = db.getUsers();
+    const user = users.find(function(u) { return u.id === userId; });
+    return user && user.role === 'admin';
+}
 
 function mergeMapState(current, incoming) {
     if (!Array.isArray(incoming)) return current;
@@ -509,6 +526,7 @@ wss.on('connection', (ws, req) => {
                 return;
             }
             if (msg.type === 'groupNames' && msg.groupNames && typeof msg.groupNames === 'object') {
+                if (!isSyncClientAdmin(clientId)) return;
                 syncGroupNames = msg.groupNames;
                 try { db.setSettings({ groupNames: syncGroupNames }); } catch (e) {}
                 wss.clients.forEach(client => {
@@ -519,6 +537,7 @@ wss.on('connection', (ws, req) => {
                 return;
             }
             if (msg.type === 'op' && msg.op) {
+                if (!isSyncClientAdmin(clientId)) return;
                 syncCurrentState.data = applyOperationToState(syncCurrentState.data, msg.op);
                 syncCurrentState.clientId = msg.clientId || clientId;
                 wss.clients.forEach(client => {
@@ -530,7 +549,7 @@ wss.on('connection', (ws, req) => {
                 return;
             }
             var justConnected = (Date.now() - (ws.connectedAt || 0)) < 4000;
-            if (!justConnected) {
+            if (!justConnected && msg.data && isSyncClientAdmin(clientId)) {
                 syncCurrentState.data = mergeMapState(syncCurrentState.data, msg.data);
                 syncCurrentState.clientId = msg.clientId || clientId;
                 if (msg.groupNames && typeof msg.groupNames === 'object') {

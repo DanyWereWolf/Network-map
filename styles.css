@@ -1252,6 +1252,110 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     color: var(--accent-primary);
 }
 
+/* Выпадающий список с поиском (производитель / модель) */
+.device-combobox {
+    position: relative;
+    width: 100%;
+}
+.device-combobox-trigger {
+    width: 100%;
+    padding: 10px 14px 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: inherit;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.device-combobox-trigger:hover {
+    border-color: var(--accent-primary);
+}
+.device-combobox-trigger:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+.device-combobox-trigger::after {
+    content: '';
+    width: 0;
+    height: 0;
+    margin-left: 8px;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 5px solid var(--text-secondary);
+    flex-shrink: 0;
+}
+.device-combobox-trigger[aria-expanded="true"]::after {
+    border-top: none;
+    border-bottom: 5px solid var(--text-secondary);
+}
+.device-combobox-panel {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 4px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    max-height: 220px;
+    flex-direction: column;
+}
+.device-combobox-panel.is-open {
+    display: flex;
+}
+.device-combobox-search {
+    padding: 8px 10px;
+    border: none;
+    border-bottom: 1px solid var(--border-color);
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    font-size: 0.875rem;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-family: inherit;
+}
+.device-combobox-search:focus {
+    outline: none;
+}
+.device-combobox-search::placeholder {
+    color: var(--text-muted);
+}
+.device-combobox-list {
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+    max-height: 180px;
+    overflow-y: auto;
+}
+.device-combobox-list li {
+    padding: 8px 12px;
+    font-size: 0.875rem;
+    cursor: pointer;
+    color: var(--text-primary);
+}
+.device-combobox-list li:hover,
+.device-combobox-list li[aria-selected="true"] {
+    background: var(--bg-accent);
+    color: var(--accent-primary);
+}
+.device-combobox-list li.empty {
+    color: var(--text-muted);
+    cursor: default;
+}
+.device-combobox-list li.empty:hover {
+    background: transparent;
+    color: var(--text-muted);
+}
+
 .form-group label.form-group-sub {
     margin-top: 12px;
 }
@@ -1366,6 +1470,48 @@ button {
     width: 16px;
     height: 16px;
     flex-shrink: 0;
+}
+
+/* Кнопки в панелях Файлы, Резервные копии, Фильтр карты — чуть заметнее */
+#files-content .btn-secondary,
+#backups-content .btn-secondary,
+#backups-content .backups-refresh-btn,
+.map-filter-save-start .btn-secondary {
+    border-color: #cbd5e1;
+    background: var(--bg-secondary);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+#files-content .btn-secondary:hover,
+#backups-content .btn-secondary:hover,
+#backups-content .backups-refresh-btn:hover,
+.map-filter-save-start .btn-secondary:hover {
+    border-color: var(--accent-primary);
+    box-shadow: 0 1px 4px rgba(59, 130, 246, 0.2);
+}
+[data-theme="dark"] #files-content .btn-secondary,
+[data-theme="dark"] #backups-content .btn-secondary,
+[data-theme="dark"] #backups-content .backups-refresh-btn,
+[data-theme="dark"] .map-filter-save-start .btn-secondary {
+    border-color: #475569;
+    background: var(--bg-tertiary);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+[data-theme="dark"] #files-content .btn-secondary:hover,
+[data-theme="dark"] #backups-content .btn-secondary:hover,
+[data-theme="dark"] #backups-content .backups-refresh-btn:hover,
+[data-theme="dark"] .map-filter-save-start .btn-secondary:hover {
+    border-color: var(--accent-primary);
+    box-shadow: 0 1px 4px rgba(59, 130, 246, 0.25);
+}
+#backups-content .btn-restore-backup {
+    border-color: #cbd5e1;
+    background: var(--bg-secondary);
+}
+#backups-content .btn-restore-backup:hover:not(:disabled) {
+    box-shadow: 0 1px 4px rgba(59, 130, 246, 0.2);
+}
+[data-theme="dark"] #backups-content .btn-restore-backup {
+    border-color: #475569;
 }
 
 /* ==================== Легенда ==================== */
@@ -1895,7 +2041,8 @@ button {
 .close-updates,
 .close-netbox,
 .close-import,
-.close-node-selection {
+.close-node-selection,
+.close-device-catalog {
     color: #fff;
     font-size: 26px;
     font-weight: bold;
@@ -1931,7 +2078,9 @@ button {
 .close-import:hover,
 .close-import:focus,
 .close-node-selection:hover,
-.close-node-selection:focus {
+.close-node-selection:focus,
+.close-device-catalog:hover,
+.close-device-catalog:focus {
     background: rgba(255, 255, 255, 0.5);
     border-color: rgba(255, 255, 255, 0.9);
     color: #fff;
@@ -3350,7 +3499,7 @@ button {
         font-size: 0.95rem;
     }
     
-    .close, .close-users, .close-history, .close-user-edit, .close-help, .close-updates, .close-netbox, .close-import, .close-node-selection {
+    .close, .close-users, .close-history, .close-user-edit, .close-help, .close-updates, .close-netbox, .close-import, .close-node-selection, .close-device-catalog {
         font-size: 22px;
         width: 32px;
         height: 32px;
@@ -3542,6 +3691,10 @@ button {
 }
 .group-name-save:active {
     transform: scale(0.98);
+}
+.group-name-readonly {
+    font-size: 0.875rem;
+    color: var(--text-primary);
 }
 
 /* Элемент группы: название + кнопка «Переместить» */

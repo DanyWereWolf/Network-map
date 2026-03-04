@@ -129,48 +129,128 @@ window.applyGroupNames = function(gn) {
     } catch (e) {}
 };
 
-var DEVICE_MANUFACTURERS_PREDEFINED = ['Huawei', 'ZTE', 'Eltex', 'FiberHome', 'Nokia', 'Iskratel', 'BDCOM', 'SNR', 'B-OptiX', 'Ruijie', 'Sercomm', 'D-Link', 'Zyxel', 'Ubiquiti', 'MikroTik', 'Keenetic', 'TP-Link', 'Cisco', 'Cambium'];
-var DEVICE_MODELS_PREDEFINED = ['MA5608', 'MA5683T', 'C300', 'C320', 'AN5516', 'HG8145', 'HG8245', 'F660', 'F670', 'NTU-2', 'NTU-4', 'SNR-ONU-GPON-1G-mini', 'BO-ONU-GPON-4G-1P-DW', 'hEX', 'hAP', 'RB750', 'CCR', 'Router', 'Switch', 'SFU', 'HGU', 'WAP', 'S6750-H36C', 'S6730-H48X6C'];
-var customDeviceManufacturers = [];
-var customDeviceModels = [];
+var DEVICE_CATALOG_DEFAULT = {
+    'Huawei': ['MA5608', 'MA5683T', 'HG8145', 'HG8245'],
+    'ZTE': ['C300', 'C320', 'F660', 'F670'],
+    'FiberHome': ['AN5516'],
+    'SNR': ['SNR-ONU-GPON-1G-mini'],
+    'B-OptiX': ['BO-ONU-GPON-4G-1P-DW'],
+    'MikroTik': ['hEX', 'hAP', 'RB750', 'CCR'],
+    'Ruijie': ['S6750-H36C', 'S6730-H48X6C'],
+    'Eltex': ['NTU-2', 'NTU-4', 'Router', 'Switch'],
+    'Nokia': ['Router', 'Switch', 'SFU', 'HGU'],
+    'Iskratel': ['Router', 'Switch', 'SFU', 'HGU'],
+    'BDCOM': ['Router', 'Switch', 'SFU', 'HGU'],
+    'Sercomm': ['SFU', 'HGU', 'WAP'],
+    'D-Link': ['Router', 'Switch', 'WAP'],
+    'Zyxel': ['Router', 'Switch', 'SFU', 'HGU', 'WAP'],
+    'Ubiquiti': ['WAP', 'Router', 'Switch'],
+    'Keenetic': ['Router', 'WAP'],
+    'TP-Link': ['Router', 'Switch', 'WAP'],
+    'Cisco': ['Router', 'Switch'],
+    'Cambium': ['WAP']
+};
 
-function getDeviceManufacturers() {
-    var seen = {};
-    var out = [];
-    DEVICE_MANUFACTURERS_PREDEFINED.forEach(function(m) { if (!seen[m]) { seen[m] = true; out.push(m); } });
-    (customDeviceManufacturers || []).forEach(function(m) { if (m && !seen[m]) { seen[m] = true; out.push(m); } });
+var deviceCatalog = {};
+
+function getDeviceCatalog() {
+    var out = {};
+    Object.keys(deviceCatalog || {}).forEach(function(m) {
+        if (!m) return;
+        var arr = (deviceCatalog[m] || []).slice();
+        out[m] = arr;
+    });
     return out;
 }
 
-function getDeviceModels() {
-    var seen = {};
-    var out = [];
-    DEVICE_MODELS_PREDEFINED.forEach(function(m) { if (!seen[m]) { seen[m] = true; out.push(m); } });
-    (customDeviceModels || []).forEach(function(m) { if (m && !seen[m]) { seen[m] = true; out.push(m); } });
-    return out;
+function setDeviceCatalog(catalog) {
+    deviceCatalog = {};
+    if (catalog && typeof catalog === 'object') {
+        Object.keys(catalog).forEach(function(m) {
+            if (m && Array.isArray(catalog[m])) deviceCatalog[m] = catalog[m].filter(Boolean);
+        });
+    }
+    saveDeviceCatalog();
+}
+
+function resetDeviceCatalogToDefault() {
+    deviceCatalog = JSON.parse(JSON.stringify(DEVICE_CATALOG_DEFAULT));
+    saveDeviceCatalog();
+}
+
+function addDeviceManufacturer(name) {
+    name = (name || '').trim();
+    if (!name || deviceCatalog[name]) return false;
+    deviceCatalog[name] = [];
+    saveDeviceCatalog();
+    return true;
+}
+
+function removeDeviceManufacturer(name) {
+    if (!deviceCatalog[name]) return false;
+    delete deviceCatalog[name];
+    saveDeviceCatalog();
+    return true;
+}
+
+function addDeviceModel(manufacturer, model) {
+    manufacturer = (manufacturer || '').trim();
+    model = (model || '').trim();
+    if (!manufacturer || !model) return false;
+    if (!deviceCatalog[manufacturer]) deviceCatalog[manufacturer] = [];
+    if (deviceCatalog[manufacturer].indexOf(model) !== -1) return false;
+    deviceCatalog[manufacturer].push(model);
+    deviceCatalog[manufacturer].sort();
+    saveDeviceCatalog();
+    return true;
+}
+
+function removeDeviceModel(manufacturer, model) {
+    if (!deviceCatalog[manufacturer]) return false;
+    var idx = deviceCatalog[manufacturer].indexOf(model);
+    if (idx === -1) return false;
+    deviceCatalog[manufacturer].splice(idx, 1);
+    saveDeviceCatalog();
+    return true;
+}
+
+function getDeviceManufacturers() {
+    return Object.keys(deviceCatalog || {}).filter(Boolean).sort();
+}
+
+function getDeviceModels(manufacturer) {
+    var mfr = (manufacturer || '').trim();
+    if (!mfr) {
+        var all = [];
+        Object.keys(deviceCatalog || {}).forEach(function(m) {
+            (deviceCatalog[m] || []).forEach(function(mod) { if (mod && all.indexOf(mod) === -1) all.push(mod); });
+        });
+        return all.sort();
+    }
+    return (deviceCatalog[mfr] || []).slice();
 }
 
 function addCustomManufacturer(v) {
     v = (v || '').trim();
     if (!v) return;
-    if (customDeviceManufacturers.indexOf(v) === -1 && DEVICE_MANUFACTURERS_PREDEFINED.indexOf(v) === -1) {
-        customDeviceManufacturers.push(v);
-        saveCustomDeviceOptions();
-    }
+    addDeviceManufacturer(v);
 }
 
-function addCustomModel(v) {
+function addCustomModel(v, manufacturer) {
     v = (v || '').trim();
     if (!v) return;
-    if (customDeviceModels.indexOf(v) === -1 && DEVICE_MODELS_PREDEFINED.indexOf(v) === -1) {
-        customDeviceModels.push(v);
-        saveCustomDeviceOptions();
+    var mfr = (manufacturer || '').trim();
+    if (mfr) {
+        addDeviceModel(mfr, v);
+    } else {
+        addDeviceManufacturer('Другое');
+        addDeviceModel('Другое', v);
     }
 }
 
 var CUSTOM_DEVICE_OPTIONS_STORAGE_KEY = 'networkmap_customDeviceOptions';
-function saveCustomDeviceOptions() {
-    var payload = { manufacturers: customDeviceManufacturers || [], models: customDeviceModels || [] };
+function saveDeviceCatalog() {
+    var payload = { deviceCatalog: getDeviceCatalog() };
     try { localStorage.setItem(CUSTOM_DEVICE_OPTIONS_STORAGE_KEY, JSON.stringify(payload)); } catch (e) {}
     if (getApiBase()) {
         try {
@@ -183,9 +263,32 @@ function saveCustomDeviceOptions() {
     }
 }
 
+function loadDeviceCatalog(opts) {
+    if (opts && opts.deviceCatalog && typeof opts.deviceCatalog === 'object' && Object.keys(opts.deviceCatalog).length > 0) {
+        setDeviceCatalog(opts.deviceCatalog);
+        return;
+    }
+    if (opts && (opts.manufacturers || opts.modelsByManufacturer)) {
+        var merged = JSON.parse(JSON.stringify(DEVICE_CATALOG_DEFAULT));
+        (opts.manufacturers || []).forEach(function(m) { if (m && !merged[m]) merged[m] = []; });
+        if (opts.modelsByManufacturer && typeof opts.modelsByManufacturer === 'object') {
+            Object.keys(opts.modelsByManufacturer).forEach(function(m) {
+                if (!merged[m]) merged[m] = [];
+                (opts.modelsByManufacturer[m] || []).forEach(function(mod) {
+                    if (mod && merged[m].indexOf(mod) === -1) merged[m].push(mod);
+                });
+            });
+        }
+        setDeviceCatalog(merged);
+        return;
+    }
+    if (Object.keys(deviceCatalog || {}).length === 0) {
+        resetDeviceCatalogToDefault();
+    }
+}
+
 function loadCustomDeviceOptions(opts) {
-    if (opts && opts.manufacturers && Array.isArray(opts.manufacturers)) customDeviceManufacturers = opts.manufacturers;
-    if (opts && opts.models && Array.isArray(opts.models)) customDeviceModels = opts.models;
+    loadDeviceCatalog(opts || {});
 }
 
 function loadCustomDeviceOptionsFromStorage() {
@@ -193,13 +296,12 @@ function loadCustomDeviceOptionsFromStorage() {
         var raw = localStorage.getItem(CUSTOM_DEVICE_OPTIONS_STORAGE_KEY);
         if (!raw) return;
         var parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object') loadCustomDeviceOptions(parsed);
+        if (parsed && typeof parsed === 'object') loadDeviceCatalog(parsed);
     } catch (e) {}
 }
 
 function populateDeviceDatalists() {
     var dlM = document.getElementById('deviceManufacturersList');
-    var dlMod = document.getElementById('deviceModelsList');
     if (dlM) {
         dlM.innerHTML = '';
         (getDeviceManufacturers() || []).forEach(function(m) {
@@ -208,14 +310,171 @@ function populateDeviceDatalists() {
             dlM.appendChild(opt);
         });
     }
+}
+
+function populateModelDatalistForManufacturer(manufacturer, datalistId) {
+    datalistId = datalistId || 'deviceModelsList';
+    var dlMod = document.getElementById(datalistId);
     if (dlMod) {
         dlMod.innerHTML = '';
-        (getDeviceModels() || []).forEach(function(m) {
+        (getDeviceModels(manufacturer) || []).forEach(function(m) {
             var opt = document.createElement('option');
             opt.value = m;
             dlMod.appendChild(opt);
         });
     }
+}
+
+function initDeviceComboboxes(container) {
+    container = container || document;
+
+    function resetComboboxPanelPosition(pnl) {
+        if (!pnl || !pnl.style) return;
+        if (pnl.style.position === 'fixed') {
+            pnl.style.position = '';
+            pnl.style.top = '';
+            pnl.style.left = '';
+            pnl.style.width = '';
+            pnl.style.minWidth = '';
+        }
+    }
+
+    var comboboxes = container.querySelectorAll('.device-combobox');
+    comboboxes.forEach(function(wrapper) {
+        if (wrapper.dataset.initialized) return;
+        wrapper.dataset.initialized = '1';
+        var type = wrapper.dataset.type;
+        var valueId = wrapper.dataset.valueId;
+        var manufacturerId = wrapper.dataset.manufacturerId;
+        var valueInput = document.getElementById(valueId) || wrapper.querySelector('input[type="hidden"]');
+        var trigger = wrapper.querySelector('.device-combobox-trigger');
+        var panel = wrapper.querySelector('.device-combobox-panel');
+        var searchInput = wrapper.querySelector('.device-combobox-search');
+        var listEl = wrapper.querySelector('.device-combobox-list');
+        if (!trigger || !panel || !listEl || !valueInput) return;
+
+        var placeholderMod = 'Выберите модель';
+        var placeholderMfr = 'Выберите производителя';
+        var placeholder = type === 'model' ? placeholderMod : placeholderMfr;
+
+        function getOptions() {
+            if (type === 'manufacturer') return getDeviceManufacturers() || [];
+            var mfrInput = manufacturerId ? document.getElementById(manufacturerId) : null;
+            var mfr = mfrInput ? (mfrInput.value || '').trim() : '';
+            return getDeviceModels(mfr) || [];
+        }
+
+        function renderList(filter) {
+            var opts = getOptions();
+            filter = (filter || '').toLowerCase().trim();
+            if (filter) opts = opts.filter(function(o) { return String(o).toLowerCase().indexOf(filter) !== -1; });
+            listEl.innerHTML = '';
+            if (opts.length === 0) {
+                var li = document.createElement('li');
+                li.className = 'empty';
+                li.textContent = type === 'model' && manufacturerId && !(document.getElementById(manufacturerId) || {}).value ? 'Сначала выберите производителя' : 'Нет вариантов';
+                listEl.appendChild(li);
+            } else {
+                opts.forEach(function(opt) {
+                    var li = document.createElement('li');
+                    li.textContent = opt;
+                    li.setAttribute('data-value', opt);
+                    li.addEventListener('click', function() {
+                        if (li.classList.contains('empty')) return;
+                        valueInput.value = opt;
+                        trigger.textContent = opt;
+                        trigger.setAttribute('aria-expanded', 'false');
+                        panel.classList.remove('is-open');
+                        resetComboboxPanelPosition(panel);
+                        if (searchInput) searchInput.value = '';
+                        renderList('');
+                        var ev = new Event('change', { bubbles: true });
+                        valueInput.dispatchEvent(ev);
+                        var evInput = new Event('input', { bubbles: true });
+                        valueInput.dispatchEvent(evInput);
+                        if (type === 'manufacturer' && manufacturerId) {
+                            var modelCombobox = container.querySelector('.device-combobox[data-manufacturer-id="' + manufacturerId + '"]');
+                            if (modelCombobox) {
+                                var mValInp = document.getElementById(modelCombobox.dataset.valueId) || modelCombobox.querySelector('input[type="hidden"]');
+                                var mTrigger = modelCombobox.querySelector('.device-combobox-trigger');
+                                if (mValInp) mValInp.value = '';
+                                if (mTrigger) mTrigger.textContent = placeholderMod;
+                                var mList = modelCombobox.querySelector('.device-combobox-list');
+                                if (mList) mList.innerHTML = '';
+                            }
+                        }
+                    });
+                    listEl.appendChild(li);
+                });
+            }
+        }
+
+        trigger.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var isOpen = panel.classList.contains('is-open');
+            document.querySelectorAll('.device-combobox-panel.is-open').forEach(function(p) {
+                if (p !== panel) { p.classList.remove('is-open'); var t = p.closest('.device-combobox').querySelector('.device-combobox-trigger'); if (t) t.setAttribute('aria-expanded', 'false'); resetComboboxPanelPosition(p); }
+            });
+            if (isOpen) {
+                panel.classList.remove('is-open');
+                trigger.setAttribute('aria-expanded', 'false');
+                resetComboboxPanelPosition(panel);
+            } else {
+                panel.classList.add('is-open');
+                trigger.setAttribute('aria-expanded', 'true');
+                if (wrapper.closest('.sidebar')) {
+                    var rect = trigger.getBoundingClientRect();
+                    panel.style.position = 'fixed';
+                    panel.style.top = (rect.bottom + 4) + 'px';
+                    panel.style.left = rect.left + 'px';
+                    panel.style.width = rect.width + 'px';
+                    panel.style.minWidth = rect.width + 'px';
+                    panel.style.right = 'auto';
+                }
+                renderList('');
+                if (searchInput) { searchInput.value = ''; searchInput.focus(); }
+            }
+        });
+
+        if (searchInput) {
+            searchInput.addEventListener('input', function() { renderList(this.value); });
+            searchInput.addEventListener('click', function(e) { e.stopPropagation(); });
+        }
+        listEl.addEventListener('click', function(e) { e.stopPropagation(); });
+    });
+
+    if (!window._deviceComboboxCloseBound) {
+        window._deviceComboboxCloseBound = true;
+        document.addEventListener('click', function closeComboboxOnOutside(e) {
+            if (!e.target.closest('.device-combobox')) {
+                document.querySelectorAll('.device-combobox-panel.is-open').forEach(function(p) {
+                    p.classList.remove('is-open');
+                    var t = p.closest('.device-combobox').querySelector('.device-combobox-trigger');
+                    if (t) t.setAttribute('aria-expanded', 'false');
+                    if (initDeviceComboboxes.resetPanelPosition) initDeviceComboboxes.resetPanelPosition(p);
+                });
+            }
+        }, true);
+    }
+}
+initDeviceComboboxes.resetPanelPosition = function(pnl) {
+    if (!pnl || !pnl.style) return;
+    if (pnl.style.position === 'fixed') {
+        pnl.style.position = '';
+        pnl.style.top = '';
+        pnl.style.left = '';
+        pnl.style.width = '';
+        pnl.style.minWidth = '';
+    }
+};
+
+function setDeviceComboboxValue(valueId, value) {
+    var wrapper = document.querySelector('.device-combobox[data-value-id="' + valueId + '"]');
+    if (!wrapper) return;
+    var valueInput = document.getElementById(valueId) || wrapper.querySelector('input[type="hidden"]');
+    var trigger = wrapper.querySelector('.device-combobox-trigger');
+    if (valueInput) valueInput.value = value || '';
+    if (trigger) trigger.textContent = value || (wrapper.dataset.type === 'model' ? 'Выберите модель' : 'Выберите производителя');
 }
 
 function checkAuth() {
@@ -292,6 +551,11 @@ function initUserUI() {
     if (backupsSection) {
         backupsSection.style.display = currentUser.role === 'admin' ? 'block' : 'none';
     }
+    const deviceCatalogBtn = document.getElementById('deviceCatalogBtn');
+    if (deviceCatalogBtn) {
+        deviceCatalogBtn.style.display = currentUser.role === 'admin' ? 'flex' : 'none';
+        deviceCatalogBtn.addEventListener('click', openDeviceCatalogModal);
+    }
 
     const editModeBtn = document.getElementById('editMode');
     if (editModeBtn && currentUser.role !== 'admin') {
@@ -300,6 +564,7 @@ function initUserUI() {
     
     if (currentUser.role !== 'admin') {
         hideAdminOnlyElements();
+        if (typeof switchToViewMode === 'function') switchToViewMode();
     }
 
     const logoutBtn = document.getElementById('logoutBtn');
@@ -332,6 +597,7 @@ function initUserUI() {
     setupHelpModalHandlers();
     setupUpdatesModalHandlers();
     setupBackupsSection();
+    setupDeviceCatalogModalHandlers();
 
     setupSidebarToggle();
 
@@ -940,7 +1206,7 @@ function setupEventListeners() {
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             
-            var modalIds = ['infoModal', 'nodeSelectionModal', 'onuSelectionModal', 'splitterSelectionModal', 'splitterOutputOnuModal', 'splitterOutputSplitterModal', 'oltSelectionModal', 'usersModal', 'userEditModal', 'updatesModal'];
+            var modalIds = ['infoModal', 'nodeSelectionModal', 'onuSelectionModal', 'splitterSelectionModal', 'splitterOutputOnuModal', 'splitterOutputSplitterModal', 'oltSelectionModal', 'usersModal', 'userEditModal', 'updatesModal', 'deviceCatalogModal'];
             for (var i = 0; i < modalIds.length; i++) {
                 var m = document.getElementById(modalIds[i]);
                 if (m && m.style && m.style.display === 'block') {
@@ -1011,6 +1277,8 @@ function setupEventListeners() {
             }
             if (['node', 'olt', 'onu'].indexOf(newType) !== -1) {
                 populateDeviceDatalists();
+                var mInp = newType === 'olt' ? document.getElementById('oltManufacturer') : (newType === 'onu' ? document.getElementById('onuManufacturer') : document.getElementById('nodeManufacturer'));
+                populateModelDatalistForManufacturer(mInp ? mInp.value.trim() : '');
             }
         }
         });
@@ -1035,31 +1303,27 @@ function setupEventListeners() {
         });
     }
 
-    function setupDeviceFieldAddHandlers(manufacturerId, modelId, mAddId, modAddId) {
-        var mAdd = document.getElementById(mAddId);
-        var modAdd = document.getElementById(modAddId);
-        if (mAdd) mAdd.addEventListener('click', function() {
-            var inp = document.getElementById(manufacturerId);
-            if (inp && inp.value.trim()) { addCustomManufacturer(inp.value.trim()); populateDeviceDatalists(); if (typeof showSuccess === 'function') showSuccess('Производитель добавлен', ''); }
-        });
-        if (modAdd) modAdd.addEventListener('click', function() {
-            var inp = document.getElementById(modelId);
-            if (inp && inp.value.trim()) { addCustomModel(inp.value.trim()); populateDeviceDatalists(); if (typeof showSuccess === 'function') showSuccess('Модель добавлена', ''); }
-        });
-    }
-    setupDeviceFieldAddHandlers('oltManufacturer', 'oltModel', 'oltManufacturerAdd', 'oltModelAdd');
-    setupDeviceFieldAddHandlers('onuManufacturer', 'onuModel', 'onuManufacturerAdd', 'onuModelAdd');
-    setupDeviceFieldAddHandlers('nodeManufacturer', 'nodeModel', 'nodeManufacturerAdd', 'nodeModelAdd');
-
-    function setupDeviceFieldBlurHandlers(manufacturerId, modelId) {
+    function setupDeviceManufacturerChangeHandlers(manufacturerId) {
         var mInp = document.getElementById(manufacturerId);
-        var modInp = document.getElementById(modelId);
-        if (mInp) mInp.addEventListener('blur', function() { var v = this.value.trim(); if (v) addCustomManufacturer(v); });
-        if (modInp) modInp.addEventListener('blur', function() { var v = this.value.trim(); if (v) addCustomModel(v); });
+        if (mInp) {
+            mInp.addEventListener('change', function() {
+                if (typeof populateModelDatalistForManufacturer === 'function') populateModelDatalistForManufacturer(this.value.trim());
+            });
+        }
     }
-    setupDeviceFieldBlurHandlers('oltManufacturer', 'oltModel');
-    setupDeviceFieldBlurHandlers('onuManufacturer', 'onuModel');
-    setupDeviceFieldBlurHandlers('nodeManufacturer', 'nodeModel');
+    setupDeviceManufacturerChangeHandlers('oltManufacturer');
+    setupDeviceManufacturerChangeHandlers('onuManufacturer');
+    setupDeviceManufacturerChangeHandlers('nodeManufacturer');
+
+    function preventPasswordSuggestions(inputEl) {
+        if (!inputEl || inputEl.tagName !== 'INPUT') return;
+        inputEl.readOnly = true;
+        inputEl.addEventListener('focus', function() { this.readOnly = false; }, { once: true });
+    }
+    function setupDeviceFieldsNoPasswordSuggestions() {
+        return;
+    }
+    setupDeviceFieldsNoPasswordSuggestions();
 
     const sleeveTypeSelect = document.getElementById('sleeveType');
     if (sleeveTypeSelect) {
@@ -1112,6 +1376,8 @@ function setupEventListeners() {
     }
 
     setupAccordions();
+
+    initDeviceComboboxes(document);
 
     initNodeSelectionModal();
     initOnuSelectionModal();
@@ -1760,13 +2026,22 @@ function handleMapClick(e) {
 
         const clickedObject = findObjectAtCoords(coords);
         const cableType = document.getElementById('cableType') ? document.getElementById('cableType').value : 'fiber4';
-        var cableEndpoints = ['cross', 'sleeve', 'support', 'attachment', 'olt', 'splitter', 'onu'];
+        var cableEndpoints = ['cross', 'sleeve', 'support', 'attachment', 'olt'];
         
         if (clickedObject && clickedObject.geometry) {
             var objType = clickedObject.properties ? clickedObject.properties.get('type') : null;
+
+            if (objType === 'splitter' || objType === 'onu') {
+                showError('Нельзя прокладывать кабель ВОЛС от сплиттера или ONU. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
+                return;
+            }
             
             if (cableEndpoints.indexOf(objType) !== -1) {
                 if (!cableSource) {
+                    if (objType === 'support' || objType === 'attachment') {
+                        showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
+                        return;
+                    }
                     cableSource = clickedObject;
                     cableWaypoints = [];
                     clearSelection();
@@ -1802,9 +2077,9 @@ function handleMapClick(e) {
             }
             
             if (!cableSource) {
-                var startEndpoints = ['sleeve', 'cross', 'attachment', 'olt', 'splitter', 'onu'];
+                var startEndpoints = ['sleeve', 'cross', 'olt'];
                 if (startEndpoints.indexOf(objType) === -1) {
-                    showError('Начало кабеля должно быть муфтой, кроссом, креплением, OLT, сплиттером или ONU. Выберите один из этих объектов.', 'Недопустимое действие');
+                    showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
                     return;
                 }
                 cableSource = clickedObject;
@@ -1826,7 +2101,7 @@ function handleMapClick(e) {
                 selectObject(cableSource);
                 return;
             }
-            var finishEndpoints = ['sleeve', 'cross', 'attachment', 'olt', 'splitter', 'onu'];
+            var finishEndpoints = ['sleeve', 'cross', 'olt'];
             if (finishEndpoints.indexOf(objType) !== -1) {
                 const points = [cableSource].concat(cableWaypoints).concat([clickedObject]);
                 const success = createCableFromPoints(points, cableType);
@@ -1839,7 +2114,7 @@ function handleMapClick(e) {
                 }
                 return;
             }
-            showError('Кабель прокладывается между муфтой, кроссом, креплением, OLT, сплиттером или ONU. Промежуточными точками могут быть опоры или крепления.', 'Недопустимое действие');
+            showError('Кабель прокладывается между муфтой, кроссом или OLT. Промежуточными точками могут быть опоры и крепления.', 'Недопустимое действие');
         } else {
             
             if (cableSource) {
@@ -1847,7 +2122,7 @@ function handleMapClick(e) {
                 const autoSelectTolerance = zoom < 12 ? 0.0015 : (zoom < 15 ? 0.001 : 0.0005);
                 let nearestObject = null;
                 let minDist = Infinity;
-                var validCableEndpoints = ['cross', 'sleeve', 'support', 'attachment', 'olt', 'splitter', 'onu'];
+                var validCableEndpoints = ['cross', 'sleeve', 'support', 'attachment', 'olt'];
                 objects.forEach(obj => {
                     if (obj && obj.geometry && obj.properties) {
                         const t = obj.properties.get('type');
@@ -2877,10 +3152,18 @@ function createObject(type, name, coords, options = {}) {
         }
 
         if (currentCableTool && isEditMode) {
+            if (type === 'splitter' || type === 'onu') {
+                showError('Нельзя прокладывать кабель ВОЛС от сплиттера или ONU. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
+                return;
+            }
             var cableTypeVal = document.getElementById('cableType') ? document.getElementById('cableType').value : 'fiber4';
-            var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment', 'olt', 'splitter', 'onu'];
+            var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment', 'olt'];
             if (cableEndpointsPlacemark.indexOf(type) !== -1) {
                 if (!cableSource) {
+                    if (type === 'support' || type === 'attachment') {
+                        showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
+                        return;
+                    }
                     cableSource = placemark;
                     cableWaypoints = [];
                     clearSelection();
@@ -3407,20 +3690,25 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
         if (!skipSync) showError('Нельзя прокладывать кабель напрямую к узлу сети. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
         return false;
     }
-    const validEndpoints = ['sleeve', 'cross', 'attachment', 'olt', 'splitter', 'onu'];
+    const validEndpoints = ['sleeve', 'cross', 'olt'];
     if (validEndpoints.indexOf(firstType) === -1) {
-        if (!skipSync) showError('Кабель можно прокладывать от муфты, кросса, крепления, OLT, сплиттера или ONU. Начальная точка должна быть одним из этих объектов.', 'Недопустимое действие');
+        if (!skipSync) showError('Кабель можно прокладывать от муфты, кросса или OLT. Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
         return false;
     }
     if (validEndpoints.indexOf(lastType) === -1) {
-        if (!skipSync) showError('Кабель можно прокладывать до муфты, кросса, крепления, OLT, сплиттера или ONU. Конечная точка должна быть одним из этих объектов.', 'Недопустимое действие');
+        if (!skipSync) showError('Кабель можно прокладывать до муфты, кросса или OLT. Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
         return false;
     }
 
     for (var idx = 0; idx < points.length; idx++) {
         var obj = points[idx];
-        if (obj && obj.properties && obj.properties.get('type') === 'node') {
+        var pt = obj && obj.properties ? obj.properties.get('type') : null;
+        if (pt === 'node') {
             if (!skipSync) showError('Узел сети не может быть промежуточной точкой кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
+            return false;
+        }
+        if (pt === 'splitter' || pt === 'onu') {
+            if (!skipSync) showError('Сплиттер и ONU не могут быть началом, концом или промежуточной точкой кабеля ВОЛС. Кабель прокладывается между муфтой, кроссом или OLT.', 'Недопустимое действие');
             return false;
         }
     }
@@ -4325,7 +4613,7 @@ function findRefClosestToCoord(refs, coord, tolerance, preferCableEndpoint) {
         var d = Math.sqrt(Math.pow(c[0] - coord[0], 2) + Math.pow(c[1] - coord[1], 2));
         if (d >= tolerance) continue;
         var t = o.properties && o.properties.get('type');
-        if (preferCableEndpoint && (t === 'sleeve' || t === 'cross' || t === 'attachment' || t === 'olt' || t === 'splitter' || t === 'onu')) {
+        if (preferCableEndpoint && (t === 'sleeve' || t === 'cross' || t === 'olt')) {
             if (d < bestEndpointDist) { bestEndpointDist = d; bestEndpoint = o; }
         }
         if (d < bestDist) { bestDist = d; best = o; }
@@ -4517,6 +4805,7 @@ function saveData() {
 }
 
 function performUndo() {
+    if (!canEdit()) return;
     if (undoStack.length === 0) return;
     inUndoRedo = true;
     try {
@@ -4534,6 +4823,7 @@ function performUndo() {
 }
 
 function performRedo() {
+    if (!canEdit()) return;
     if (redoStack.length === 0) return;
     inUndoRedo = true;
     try {
@@ -5378,10 +5668,18 @@ function createObjectFromData(data, opts) {
         }
 
         if (currentCableTool && isEditMode) {
+            if (type === 'splitter' || type === 'onu') {
+                showError('Нельзя прокладывать кабель ВОЛС от сплиттера или ONU. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
+                return;
+            }
             var cableTypeVal = document.getElementById('cableType') ? document.getElementById('cableType').value : 'fiber4';
-            var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment', 'olt', 'splitter', 'onu'];
+            var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment', 'olt'];
             if (cableEndpointsPlacemark.indexOf(type) !== -1) {
                 if (!cableSource) {
+                    if (type === 'support' || type === 'attachment') {
+                        showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
+                        return;
+                    }
                     cableSource = placemark;
                     cableWaypoints = [];
                     clearSelection();
@@ -5662,7 +5960,11 @@ function updateStats() {
 
 function showObjectInfo(obj) {
     var objType = obj && obj.properties ? obj.properties.get('type') : '';
-    if (['node', 'olt', 'onu'].indexOf(objType) !== -1 && typeof populateDeviceDatalists === 'function') populateDeviceDatalists();
+    if (['node', 'olt', 'onu'].indexOf(objType) !== -1) {
+        if (typeof populateDeviceDatalists === 'function') populateDeviceDatalists();
+        var mfr = obj.properties.get('manufacturer') || '';
+        if (typeof populateModelDatalistForManufacturer === 'function') populateModelDatalistForManufacturer(mfr);
+    }
     if (splitterFiberRoutingMode && splitterFiberRoutingData) {
         var objId = getObjectUniqueId(obj);
         var isSourceOrTarget = (objId === getObjectUniqueId(splitterFiberRoutingData.splitterObj)) ||
@@ -5732,10 +6034,8 @@ function showObjectInfo(obj) {
         if (isEditMode) {
             html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
             html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Устройство</h4>';
-            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Производитель</label>';
-            html += '<div class="device-field-row"><input type="text" id="editOltManufacturer" class="form-input" list="deviceManufacturersList" value="' + escapeHtml(manufacturer) + '" placeholder="Поиск или введите"><button type="button" id="editOltManufacturerAdd" class="device-field-add" title="Добавить">➕</button></div></div>';
-            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Модель</label>';
-            html += '<div class="device-field-row"><input type="text" id="editOltModel" class="form-input" list="deviceModelsList" value="' + escapeHtml(model) + '" placeholder="Поиск или введите"><button type="button" id="editOltModelAdd" class="device-field-add" title="Добавить">➕</button></div></div>';
+            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Производитель</label><div class="device-combobox" data-type="manufacturer" data-value-id="editOltManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturer ? escapeHtml(manufacturer) : 'Выберите производителя') + '</button><input type="hidden" id="editOltManufacturer" value="' + escapeHtml(manufacturer) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Модель</label><div class="device-combobox" data-type="model" data-value-id="editOltModel" data-manufacturer-id="editOltManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editOltModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
             html += '<div class="form-group"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Комментарий</label>';
             html += '<textarea id="editOltComment" class="form-input" rows="2" placeholder="Дополнительные сведения">' + escapeHtml(comment) + '</textarea></div>';
             html += '</div>';
@@ -5904,10 +6204,8 @@ function showObjectInfo(obj) {
             html += '<label for="editOnuName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название ONU</label>';
             html += '<input type="text" id="editOnuName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Введите название ONU">';
             html += '</div>';
-            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Производитель</label>';
-            html += '<div class="device-field-row"><input type="text" id="editOnuManufacturer" class="form-input" list="deviceManufacturersList" value="' + escapeHtml(manufacturer) + '" placeholder="Поиск или введите"><button type="button" id="editOnuManufacturerAdd" class="device-field-add" title="Добавить">➕</button></div></div>';
-            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Модель</label>';
-            html += '<div class="device-field-row"><input type="text" id="editOnuModel" class="form-input" list="deviceModelsList" value="' + escapeHtml(model) + '" placeholder="Поиск или введите"><button type="button" id="editOnuModelAdd" class="device-field-add" title="Добавить">➕</button></div></div>';
+            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Производитель</label><div class="device-combobox" data-type="manufacturer" data-value-id="editOnuManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturer ? escapeHtml(manufacturer) : 'Выберите производителя') + '</button><input type="hidden" id="editOnuManufacturer" value="' + escapeHtml(manufacturer) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Модель</label><div class="device-combobox" data-type="model" data-value-id="editOnuModel" data-manufacturer-id="editOnuManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editOnuModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
             html += '<div class="form-group"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Комментарий</label>';
             html += '<textarea id="editOnuComment" class="form-input" rows="2" placeholder="Дополнительные сведения">' + escapeHtml(comment) + '</textarea></div>';
         } else if (name) {
@@ -5982,11 +6280,11 @@ function showObjectInfo(obj) {
             html += '</div>';
             html += '<div class="form-group" style="margin-bottom: 12px;">';
             html += '<label for="editNodeManufacturer" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Производитель</label>';
-            html += '<div class="device-field-row"><input type="text" id="editNodeManufacturer" class="form-input" list="deviceManufacturersList" value="' + escapeHtml(manufacturer) + '" placeholder="Поиск или введите"><button type="button" id="editNodeManufacturerAdd" class="device-field-add" title="Добавить в список">➕</button></div>';
+            html += '<div class="device-combobox" data-type="manufacturer" data-value-id="editNodeManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturer ? escapeHtml(manufacturer) : 'Выберите производителя') + '</button><input type="hidden" id="editNodeManufacturer" value="' + escapeHtml(manufacturer) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div>';
             html += '</div>';
             html += '<div class="form-group" style="margin-bottom: 12px;">';
             html += '<label for="editNodeModel" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Модель</label>';
-            html += '<div class="device-field-row"><input type="text" id="editNodeModel" class="form-input" list="deviceModelsList" value="' + escapeHtml(model) + '" placeholder="Поиск или введите"><button type="button" id="editNodeModelAdd" class="device-field-add" title="Добавить в список">➕</button></div>';
+            html += '<div class="device-combobox" data-type="model" data-value-id="editNodeModel" data-manufacturer-id="editNodeManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editNodeModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div>';
             html += '</div>';
             html += '<div class="form-group" style="margin-bottom: 12px;">';
             html += '<label for="editNodeComment" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Комментарий</label>';
@@ -6148,6 +6446,8 @@ function showObjectInfo(obj) {
     
     setupModalEventListeners();
     setupEditAndDeleteListeners();
+    var modalInfo = document.getElementById('modalInfo');
+    if (modalInfo) initDeviceComboboxes(modalInfo);
     modal.style.display = 'block';
 }
 
@@ -6290,18 +6590,15 @@ function setupEditAndDeleteListeners() {
 
     var editNodeManufacturer = document.getElementById('editNodeManufacturer');
     if (editNodeManufacturer) {
-        editNodeManufacturer.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'node') { currentModalObject.properties.set('manufacturer', this.value || ''); saveData(); } });
-        editNodeManufacturer.addEventListener('blur', function() { if (this.value.trim()) addCustomManufacturer(this.value.trim()); });
+        if (typeof preventPasswordSuggestions === 'function') preventPasswordSuggestions(editNodeManufacturer);
+        editNodeManufacturer.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'node') { currentModalObject.properties.set('manufacturer', this.value || ''); saveData(); } populateModelDatalistForManufacturer(this.value.trim()); });
+        editNodeManufacturer.addEventListener('change', function() { populateModelDatalistForManufacturer(this.value.trim()); });
     }
     var editNodeModel = document.getElementById('editNodeModel');
     if (editNodeModel) {
+        if (typeof preventPasswordSuggestions === 'function') preventPasswordSuggestions(editNodeModel);
         editNodeModel.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'node') { currentModalObject.properties.set('model', this.value || ''); saveData(); } });
-        editNodeModel.addEventListener('blur', function() { if (this.value.trim()) addCustomModel(this.value.trim()); });
     }
-    var editNodeManufacturerAdd = document.getElementById('editNodeManufacturerAdd');
-    if (editNodeManufacturerAdd) editNodeManufacturerAdd.addEventListener('click', function() { var inp = document.getElementById('editNodeManufacturer'); if (inp && inp.value.trim()) { addCustomManufacturer(inp.value.trim()); populateDeviceDatalists(); } });
-    var editNodeModelAdd = document.getElementById('editNodeModelAdd');
-    if (editNodeModelAdd) editNodeModelAdd.addEventListener('click', function() { var inp = document.getElementById('editNodeModel'); if (inp && inp.value.trim()) { addCustomModel(inp.value.trim()); populateDeviceDatalists(); } });
 
     const editNodeCommentInput = document.getElementById('editNodeComment');
     if (editNodeCommentInput) {
@@ -6314,37 +6611,30 @@ function setupEditAndDeleteListeners() {
 
     var editOltManufacturer = document.getElementById('editOltManufacturer');
     if (editOltManufacturer) {
-        editOltManufacturer.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'olt') { currentModalObject.properties.set('manufacturer', this.value || ''); saveData(); } });
-        editOltManufacturer.addEventListener('blur', function() { if (this.value.trim()) addCustomManufacturer(this.value.trim()); });
+        if (typeof preventPasswordSuggestions === 'function') preventPasswordSuggestions(editOltManufacturer);
+        editOltManufacturer.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'olt') { currentModalObject.properties.set('manufacturer', this.value || ''); saveData(); } populateModelDatalistForManufacturer(this.value.trim()); });
+        editOltManufacturer.addEventListener('change', function() { populateModelDatalistForManufacturer(this.value.trim()); });
     }
     var editOltModel = document.getElementById('editOltModel');
     if (editOltModel) {
+        if (typeof preventPasswordSuggestions === 'function') preventPasswordSuggestions(editOltModel);
         editOltModel.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'olt') { currentModalObject.properties.set('model', this.value || ''); saveData(); } });
-        editOltModel.addEventListener('blur', function() { if (this.value.trim()) addCustomModel(this.value.trim()); });
     }
     var editOltComment = document.getElementById('editOltComment');
     if (editOltComment) editOltComment.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'olt') { currentModalObject.properties.set('comment', this.value || ''); saveData(); } });
-    var editOltManufacturerAdd = document.getElementById('editOltManufacturerAdd');
-    if (editOltManufacturerAdd) editOltManufacturerAdd.addEventListener('click', function() { var inp = document.getElementById('editOltManufacturer'); if (inp && inp.value.trim()) { addCustomManufacturer(inp.value.trim()); populateDeviceDatalists(); } });
-    var editOltModelAdd = document.getElementById('editOltModelAdd');
-    if (editOltModelAdd) editOltModelAdd.addEventListener('click', function() { var inp = document.getElementById('editOltModel'); if (inp && inp.value.trim()) { addCustomModel(inp.value.trim()); populateDeviceDatalists(); } });
-
     var editOnuManufacturer = document.getElementById('editOnuManufacturer');
     if (editOnuManufacturer) {
-        editOnuManufacturer.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'onu') { currentModalObject.properties.set('manufacturer', this.value || ''); saveData(); } });
-        editOnuManufacturer.addEventListener('blur', function() { if (this.value.trim()) addCustomManufacturer(this.value.trim()); });
+        if (typeof preventPasswordSuggestions === 'function') preventPasswordSuggestions(editOnuManufacturer);
+        editOnuManufacturer.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'onu') { currentModalObject.properties.set('manufacturer', this.value || ''); saveData(); } populateModelDatalistForManufacturer(this.value.trim()); });
+        editOnuManufacturer.addEventListener('change', function() { populateModelDatalistForManufacturer(this.value.trim()); });
     }
     var editOnuModel = document.getElementById('editOnuModel');
     if (editOnuModel) {
+        if (typeof preventPasswordSuggestions === 'function') preventPasswordSuggestions(editOnuModel);
         editOnuModel.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'onu') { currentModalObject.properties.set('model', this.value || ''); saveData(); } });
-        editOnuModel.addEventListener('blur', function() { if (this.value.trim()) addCustomModel(this.value.trim()); });
     }
     var editOnuComment = document.getElementById('editOnuComment');
     if (editOnuComment) editOnuComment.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'onu') { currentModalObject.properties.set('comment', this.value || ''); saveData(); } });
-    var editOnuManufacturerAdd = document.getElementById('editOnuManufacturerAdd');
-    if (editOnuManufacturerAdd) editOnuManufacturerAdd.addEventListener('click', function() { var inp = document.getElementById('editOnuManufacturer'); if (inp && inp.value.trim()) { addCustomManufacturer(inp.value.trim()); populateDeviceDatalists(); } });
-    var editOnuModelAdd = document.getElementById('editOnuModelAdd');
-    if (editOnuModelAdd) editOnuModelAdd.addEventListener('click', function() { var inp = document.getElementById('editOnuModel'); if (inp && inp.value.trim()) { addCustomModel(inp.value.trim()); populateDeviceDatalists(); } });
 
     const editCrossNameInput = document.getElementById('editCrossName');
     if (editCrossNameInput) {
@@ -11277,12 +11567,14 @@ function updateCrossDisplay() {
                 (isEditMode ? `<button type="button" class="group-item-move" title="Вынести и переместить">Переместить</button>` : '') +
                 `</div>`
             ).join('');
-            const groupNameRow = '<div class="group-name-row">' +
-                '<label class="group-name-label">Название группы</label>' +
-                '<div class="group-name-controls">' +
-                '<input type="text" class="group-name-input" value="' + escapeHtml(crossGroupName) + '" placeholder="' + escapeHtml(n + ' кр.') + '">' +
-                '<button type="button" class="group-name-save">Сохранить</button>' +
-                '</div></div>';
+            const groupNameRow = isEditMode
+                ? ('<div class="group-name-row">' +
+                    '<label class="group-name-label">Название группы</label>' +
+                    '<div class="group-name-controls">' +
+                    '<input type="text" class="group-name-input" value="' + escapeHtml(crossGroupName) + '" placeholder="' + escapeHtml(n + ' кр.') + '">' +
+                    '<button type="button" class="group-name-save">Сохранить</button>' +
+                    '</div></div>')
+                : (crossGroupName ? '<div class="group-name-row"><label class="group-name-label">Название группы</label><div class="group-name-controls"><span class="group-name-readonly">' + escapeHtml(crossGroupName) + '</span></div></div>' : '');
             const balloonHtml = '<div class="cross-group-list network-map-balloon" data-lat="' + coords[0] + '" data-lon="' + coords[1] + '" data-group-type="cross">' +
                 '<div class="group-balloon-header">' +
                 '<span class="group-balloon-title">' + escapeHtml(crossGroupName || 'Выберите кросс') + '</span>' +
@@ -11497,12 +11789,14 @@ function updateNodeDisplay() {
                 (isEditMode ? `<button type="button" class="group-item-move" title="Вынести и переместить">Переместить</button>` : '') +
                 `</div>`;
             }).join('');
-            const nodeGroupNameRow = '<div class="group-name-row">' +
-                '<label class="group-name-label">Название группы</label>' +
-                '<div class="group-name-controls">' +
-                '<input type="text" class="group-name-input" value="' + escapeHtml(nodeGroupName) + '" placeholder="' + escapeHtml(n + ' уз.') + '">' +
-                '<button type="button" class="group-name-save">Сохранить</button>' +
-                '</div></div>';
+            const nodeGroupNameRow = isEditMode
+                ? ('<div class="group-name-row">' +
+                    '<label class="group-name-label">Название группы</label>' +
+                    '<div class="group-name-controls">' +
+                    '<input type="text" class="group-name-input" value="' + escapeHtml(nodeGroupName) + '" placeholder="' + escapeHtml(n + ' уз.') + '">' +
+                    '<button type="button" class="group-name-save">Сохранить</button>' +
+                    '</div></div>')
+                : (nodeGroupName ? '<div class="group-name-row"><label class="group-name-label">Название группы</label><div class="group-name-controls"><span class="group-name-readonly">' + escapeHtml(nodeGroupName) + '</span></div></div>' : '');
             const balloonHtml = '<div class="node-group-list network-map-balloon" data-lat="' + coords[0] + '" data-lon="' + coords[1] + '" data-group-type="node">' +
                 '<div class="group-balloon-header">' +
                 '<span class="group-balloon-title">' + escapeHtml(nodeGroupName || 'Выберите узел') + '</span>' +
@@ -12710,6 +13004,120 @@ function handleBackupListClick(e) {
     });
 }
 
+function renderDeviceCatalogList() {
+    var container = document.getElementById('deviceCatalogList');
+    if (!container) return;
+    var catalog = getDeviceCatalog();
+    var mfrs = Object.keys(catalog).sort();
+    if (mfrs.length === 0) {
+        container.innerHTML = '<p class="text-muted-inline" style="font-size: 0.8125rem; margin: 0;">Справочник пуст. Добавьте производителя или сбросьте к значениям по умолчанию.</p>';
+        return;
+    }
+    var html = '';
+    mfrs.forEach(function(mfr) {
+        var models = (catalog[mfr] || []).slice();
+        html += '<div class="device-catalog-mfr" data-mfr="' + escapeHtml(mfr) + '" style="margin-bottom: 12px; padding: 10px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
+        html += '<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">';
+        html += '<strong style="font-size: 0.875rem;">' + escapeHtml(mfr) + '</strong>';
+        html += '<div style="display: flex; gap: 6px;">';
+        html += '<input type="text" class="form-input device-catalog-new-model" data-mfr="' + escapeHtml(mfr) + '" placeholder="Модель" style="width: 120px; padding: 4px 8px; font-size: 0.8125rem;">';
+        html += '<button type="button" class="device-catalog-add-model" data-mfr="' + escapeHtml(mfr) + '" title="Добавить модель" style="padding: 4px 10px; font-size: 0.75rem; background: var(--accent-primary); color: white; border: none; border-radius: 4px; cursor: pointer;">+</button>';
+        html += '<button type="button" class="device-catalog-remove-mfr" data-mfr="' + escapeHtml(mfr) + '" title="Удалить производителя" style="padding: 4px 8px; font-size: 0.75rem; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer;">✕</button>';
+        html += '</div></div>';
+        html += '<div class="device-catalog-models" style="display: flex; flex-wrap: wrap; gap: 4px;">';
+        models.forEach(function(mod) {
+            html += '<span class="device-catalog-model-tag" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 0.75rem; background: var(--bg-card); border-radius: 4px; border: 1px solid var(--border-color);">';
+            html += escapeHtml(mod);
+            html += '<button type="button" class="device-catalog-remove-model" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" title="Удалить" style="padding: 0; margin: 0; background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 0.9em; line-height: 1;">×</button>';
+            html += '</span>';
+        });
+        html += '</div></div>';
+    });
+    container.innerHTML = html;
+
+    container.querySelectorAll('.device-catalog-add-model').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var mfr = btn.getAttribute('data-mfr');
+            var inp = container.querySelector('.device-catalog-new-model[data-mfr="' + mfr + '"]');
+            var val = inp ? inp.value.trim() : '';
+            if (!val) { if (typeof showError === 'function') showError('Введите модель', ''); return; }
+            if (addDeviceModel(mfr, val)) {
+                inp.value = '';
+                renderDeviceCatalogList();
+                populateDeviceDatalists();
+                populateModelDatalistForManufacturer(mfr);
+                if (typeof showInfo === 'function') showInfo('Модель добавлена', '');
+            }
+        });
+    });
+    container.querySelectorAll('.device-catalog-new-model').forEach(function(inp) {
+        inp.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                var mfr = inp.getAttribute('data-mfr');
+                var val = inp.value.trim();
+                if (val && addDeviceModel(mfr, val)) {
+                    inp.value = '';
+                    renderDeviceCatalogList();
+                    populateDeviceDatalists();
+                    populateModelDatalistForManufacturer(mfr);
+                    if (typeof showInfo === 'function') showInfo('Модель добавлена', '');
+                }
+            }
+        });
+    });
+    container.querySelectorAll('.device-catalog-remove-mfr').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var mfr = btn.getAttribute('data-mfr');
+            if (!confirm('Удалить производителя «' + mfr + '» и все его модели?')) return;
+            if (removeDeviceManufacturer(mfr)) {
+                renderDeviceCatalogList();
+                populateDeviceDatalists();
+                if (typeof showInfo === 'function') showInfo('Производитель удалён', '');
+            }
+        });
+    });
+    container.querySelectorAll('.device-catalog-remove-model').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var mfr = btn.getAttribute('data-mfr');
+            var mod = btn.getAttribute('data-model');
+            if (removeDeviceModel(mfr, mod)) {
+                renderDeviceCatalogList();
+                populateDeviceDatalists();
+                populateModelDatalistForManufacturer(mfr);
+                if (typeof showInfo === 'function') showInfo('Модель удалена', '');
+            }
+        });
+    });
+}
+
+function setupDeviceCatalogHandlers() {
+    var addMfrBtn = document.getElementById('deviceCatalogAddMfr');
+    var resetBtn = document.getElementById('deviceCatalogReset');
+    if (addMfrBtn) {
+        addMfrBtn.addEventListener('click', function() {
+            var name = prompt('Название производителя:');
+            if (!name || !(name = name.trim())) return;
+            if (addDeviceManufacturer(name)) {
+                renderDeviceCatalogList();
+                populateDeviceDatalists();
+                if (typeof showInfo === 'function') showInfo('Производитель добавлен', '');
+            } else {
+                if (typeof showError === 'function') showError('Производитель уже существует', '');
+            }
+        });
+    }
+    if (resetBtn) {
+        resetBtn.addEventListener('click', function() {
+            if (!confirm('Сбросить справочник к значениям по умолчанию? Текущие данные будут заменены.')) return;
+            resetDeviceCatalogToDefault();
+            renderDeviceCatalogList();
+            populateDeviceDatalists();
+            if (typeof showInfo === 'function') showInfo('Справочник сброшен', '');
+        });
+    }
+}
+
 function setupAccordions() {
     const accordionHeaders = document.querySelectorAll('.accordion-header');
     
@@ -12731,6 +13139,33 @@ function setupAccordions() {
     const firstAccordion = document.querySelector('.accordion-section');
     if (firstAccordion) {
         firstAccordion.classList.add('active');
+    }
+
+    setupDeviceCatalogHandlers();
+}
+
+function openDeviceCatalogModal() {
+    if (typeof requireAdmin === 'function' && !requireAdmin()) return;
+    var modal = document.getElementById('deviceCatalogModal');
+    if (modal) {
+        modal.style.display = 'block';
+        renderDeviceCatalogList();
+    }
+}
+
+function closeDeviceCatalogModal() {
+    var modal = document.getElementById('deviceCatalogModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function setupDeviceCatalogModalHandlers() {
+    var closeBtn = document.querySelector('.close-device-catalog');
+    if (closeBtn) closeBtn.addEventListener('click', closeDeviceCatalogModal);
+    var modal = document.getElementById('deviceCatalogModal');
+    if (modal) {
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) closeDeviceCatalogModal();
+        });
     }
 }
 

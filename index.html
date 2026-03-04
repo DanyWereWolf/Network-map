@@ -146,6 +146,12 @@
                             <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                         </svg>
                     </button>
+                    <button id="deviceCatalogBtn" class="user-menu-btn admin-only" title="Справочник устройств" style="display: none;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                            <path d="M2 17l10 5 10-5"></path>
+                        </svg>
+                    </button>
                     <button id="logoutBtn" class="user-menu-btn" title="Выйти">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
@@ -256,29 +262,43 @@
                                 <option value="64">64 порта</option>
                             </select>
                             <label for="oltManufacturer" class="form-group-sub">Производитель</label>
-                            <div class="device-field-row">
-                                <input type="text" id="oltManufacturer" class="form-input" list="deviceManufacturersList" placeholder="Поиск или введите новый" autocomplete="off">
-                                <button type="button" id="oltManufacturerAdd" class="device-field-add" title="Добавить в список">➕</button>
+                            <div class="device-combobox" data-type="manufacturer" data-value-id="oltManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="oltManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button>
+                                <input type="hidden" id="oltManufacturer" name="oltManufacturer" value="">
+                                <div class="device-combobox-panel" role="listbox" id="oltManufacturerPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
                             </div>
                             <label for="oltModel" class="form-group-sub">Модель</label>
-                            <div class="device-field-row">
-                                <input type="text" id="oltModel" class="form-input" list="deviceModelsList" placeholder="Поиск или введите новую" autocomplete="off">
-                                <button type="button" id="oltModelAdd" class="device-field-add" title="Добавить в список">➕</button>
+                            <div class="device-combobox" data-type="model" data-value-id="oltModel" data-manufacturer-id="oltManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="oltModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
+                                <input type="hidden" id="oltModel" name="oltModel" value="">
+                                <div class="device-combobox-panel" role="listbox" id="oltModelPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
                             </div>
-                            <datalist id="deviceManufacturersList"></datalist>
-                            <datalist id="deviceModelsList"></datalist>
                             <p class="form-hint" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">Приход от кросса — одна жила (не входит в порты). Порты задаются жилами кабелей, подключённых к OLT.</p>
                         </div>
                         <div class="form-group" id="onuSettingsGroup" style="display: none;">
                             <label for="onuManufacturer">Производитель</label>
-                            <div class="device-field-row">
-                                <input type="text" id="onuManufacturer" class="form-input" list="deviceManufacturersList" placeholder="Поиск или введите новый" autocomplete="off">
-                                <button type="button" id="onuManufacturerAdd" class="device-field-add" title="Добавить в список">➕</button>
+                            <div class="device-combobox" data-type="manufacturer" data-value-id="onuManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="onuManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button>
+                                <input type="hidden" id="onuManufacturer" name="onuManufacturer" value="">
+                                <div class="device-combobox-panel" role="listbox" id="onuManufacturerPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
                             </div>
                             <label for="onuModel" class="form-group-sub">Модель</label>
-                            <div class="device-field-row">
-                                <input type="text" id="onuModel" class="form-input" list="deviceModelsList" placeholder="Поиск или введите новую" autocomplete="off">
-                                <button type="button" id="onuModelAdd" class="device-field-add" title="Добавить в список">➕</button>
+                            <div class="device-combobox" data-type="model" data-value-id="onuModel" data-manufacturer-id="onuManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="onuModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
+                                <input type="hidden" id="onuModel" name="onuModel" value="">
+                                <div class="device-combobox-panel" role="listbox" id="onuModelPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
                             </div>
                         </div>
                         <div class="form-group" id="splitterSettingsGroup" style="display: none;">
@@ -299,14 +319,22 @@
                                 <option value="aggregation">Узел агрегации (красный)</option>
                             </select>
                             <label for="nodeManufacturer" class="form-group-sub">Производитель</label>
-                            <div class="device-field-row">
-                                <input type="text" id="nodeManufacturer" class="form-input" list="deviceManufacturersList" placeholder="Поиск или введите новый" autocomplete="off">
-                                <button type="button" id="nodeManufacturerAdd" class="device-field-add" title="Добавить в список">➕</button>
+                            <div class="device-combobox" data-type="manufacturer" data-value-id="nodeManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="nodeManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button>
+                                <input type="hidden" id="nodeManufacturer" name="nodeManufacturer" value="">
+                                <div class="device-combobox-panel" role="listbox" id="nodeManufacturerPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
                             </div>
                             <label for="nodeModel" class="form-group-sub">Модель</label>
-                            <div class="device-field-row">
-                                <input type="text" id="nodeModel" class="form-input" list="deviceModelsList" placeholder="Поиск или введите новую" autocomplete="off">
-                                <button type="button" id="nodeModelAdd" class="device-field-add" title="Добавить в список">➕</button>
+                            <div class="device-combobox" data-type="model" data-value-id="nodeModel" data-manufacturer-id="nodeManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="nodeModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
+                                <input type="hidden" id="nodeModel" name="nodeModel" value="">
+                                <div class="device-combobox-panel" role="listbox" id="nodeModelPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
                             </div>
                         </div>
                         <div class="form-group" id="crossSettingsGroup" style="display: none;">
@@ -1007,6 +1035,24 @@
                 </div>
                 <div id="historyList" class="history-list">
                     <!-- История будет генерироваться динамически -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно справочника устройств (только админ) -->
+    <div id="deviceCatalogModal" class="modal">
+        <div class="modal-content" style="max-width: 560px;">
+            <div class="modal-header">
+                <h2>Справочник устройств</h2>
+                <span class="close-device-catalog">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p class="backups-hint" style="margin-bottom: 12px;">Производители и модели для полей устройств (OLT, ONU, узел). Добавляйте и удаляйте по необходимости.</p>
+                <div id="deviceCatalogList" class="device-catalog-list"></div>
+                <div class="device-catalog-actions" style="margin-top: 12px;">
+                    <button type="button" id="deviceCatalogAddMfr" class="btn-secondary" style="margin-bottom: 8px;">+ Добавить производителя</button>
+                    <button type="button" id="deviceCatalogReset" class="btn-secondary" style="background: transparent; border-color: var(--accent-warning); color: var(--accent-warning);">Сбросить к значениям по умолчанию</button>
                 </div>
             </div>
         </div>

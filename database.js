@@ -185,9 +185,11 @@ function getSettings() {
         parsedNetboxConfig = netboxConfig ? (typeof netboxConfig === 'string' ? JSON.parse(netboxConfig) : netboxConfig) : { url: '', token: '', ignoreSSL: false };
     } catch (e) {  }
     try {
-        parsedCustomDevice = customDeviceOptions ? (typeof customDeviceOptions === 'string' ? JSON.parse(customDeviceOptions) : customDeviceOptions) : { manufacturers: [], models: [] };
+        parsedCustomDevice = customDeviceOptions ? (typeof customDeviceOptions === 'string' ? JSON.parse(customDeviceOptions) : customDeviceOptions) : { deviceCatalog: {}, manufacturers: [], models: [], modelsByManufacturer: {} };
+        if (typeof parsedCustomDevice.deviceCatalog !== 'object') parsedCustomDevice.deviceCatalog = {};
         if (!Array.isArray(parsedCustomDevice.manufacturers)) parsedCustomDevice.manufacturers = [];
         if (!Array.isArray(parsedCustomDevice.models)) parsedCustomDevice.models = [];
+        if (typeof parsedCustomDevice.modelsByManufacturer !== 'object') parsedCustomDevice.modelsByManufacturer = {};
     } catch (e) {  }
     return {
         theme: theme || '',
