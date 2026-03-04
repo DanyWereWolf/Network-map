@@ -1,15 +1,24 @@
 # Модули приложения (js/)
 
-Скрипты подключаются в `index.html` в указанном порядке.
+Скрипты подключаются в `index.html` и `auth.html` в указанном порядке.
 
-| Файл | Назначение |
+| Путь | Назначение |
 |------|------------|
-| **config.js** | Версия (`APP_VERSION`), репозиторий (`GITHUB_REPO`), результат проверки обновлений |
-| **utils.js** | `escapeHtml()`, `getObjectTypeName()` |
-| **notifications.js** | `showToast()`, `showSuccess()`, `showError()`, `showWarning()`, `showInfo()` |
-| **updates.js** | Проверка обновлений: `checkForUpdates()`, `openUpdatesModal()`, `setupUpdatesModalHandlers()` |
-| **help.js** | Справка: `openHelpModal()`, `getHelpContentHtml()`, `setupHelpModalHandlers()` |
-| **history.js** | История изменений: `ActionTypes`, `logAction()`, `getHistory()`, `openHistoryModal()`, `setupHistoryModalHandlers()` и др. |
-| **sync.js** | Синхронизация карты: WebSocket, `syncSendState` / `syncSendOp`, приём состояния и операций, курсоры участников, `updateCollaboratorCursors` |
+| **core/state.js** | Глобальные переменные: myMap, objects, selectedObjects, isEditMode и др. |
+| **core/config.js** | Версия (APP_VERSION), репозиторий (GITHUB_REPO), getApiBase() |
+| **core/utils.js** | escapeHtml(), getObjectTypeName() |
+| **core/notifications.js** | showToast(), showSuccess(), showError(), showInfo() |
+| **core/confirm-dialog.js** | showConfirm() |
+| **core/network-status.js** | showNetworkError(), hideNetworkError() |
+| **core/updates.js** | checkForUpdates(), openUpdatesModal(), setupUpdatesModalHandlers() |
+| **groups.js** | Группы кроссов/узлов: groupKey, getCrossGroupName, setCrossGroupName |
+| **catalog/device-catalog.js** | Справочник устройств: getDeviceCatalog, комбобоксы, модалка |
+| **map/theme.js** | initTheme(), setTheme(), toggleTheme() |
+| **map/search.js** | setupMapSearch(), searchObjects(), goToSearchResult() |
+| **ui/help.js** | openHelpModal(), getHelpContentHtml(), setupHelpModalHandlers() |
+| **history.js** | ActionTypes, logAction(), getHistory(), openHistoryModal(), setupHistoryModalHandlers(), updateHistoryBadge() |
+| **sync.js** | WebSocket-синхронизация карты, курсоры участников |
 
-Версию перед релизом меняют в **config.js** (`APP_VERSION`).
+Версию перед релизом меняют в **core/config.js** (`APP_VERSION`).
+
+**auth.html** подключает: js/core/config.js, auth.js
