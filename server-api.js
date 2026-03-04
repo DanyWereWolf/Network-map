@@ -318,6 +318,15 @@ app.get('/api/public-config', (req, res) => {
     res.json({ yandexMapsApiKey: key });
 });
 
+// Раздача JS с явным Content-Type (избегаем text/html от прокси/404)
+app.use('/js', express.static(path.join(__dirname, 'js'), {
+    setHeaders: function (res, filePath) {
+        if (filePath && String(filePath).endsWith('.js')) {
+            res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+        }
+    }
+}));
+
 app.use(express.static(path.join(__dirname)));
 
 db.getDb();
