@@ -154,7 +154,7 @@ function initUserUI() {
 
     setupSidebarToggle();
 
-    updateHistoryBadge();
+    if (typeof updateHistoryBadge === 'function') updateHistoryBadge();
 }
 
 function hideAdminOnlyElements() {

@@ -121,8 +121,8 @@
 │   ├── ui/             # help (справка)
 │   ├── map/            # theme, search
 │   ├── catalog/        # device-catalog (справочник устройств)
-│   ├── data/           # history (история изменений)
 │   ├── groups.js       # Группы кроссов/узлов
+│   ├── history.js      # История изменений
 │   └── sync.js         # WebSocket-синхронизация карты
 ├── server-api.js        # REST API + WebSocket /sync + раздача статики
 ├── server.js            # Отдельный WebSocket-сервер (npm run sync)
