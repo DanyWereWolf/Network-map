@@ -134,7 +134,7 @@ function initUserUI() {
     }
 
     const historyBtn = document.getElementById('historyBtn');
-    if (historyBtn) {
+    if (historyBtn && typeof openHistoryModal === 'function') {
         historyBtn.addEventListener('click', openHistoryModal);
     }
 
@@ -145,7 +145,7 @@ function initUserUI() {
 
     setupUsersModalHandlers();
 
-    setupHistoryModalHandlers();
+    if (typeof setupHistoryModalHandlers === 'function') setupHistoryModalHandlers();
 
     setupHelpModalHandlers();
     setupUpdatesModalHandlers();
