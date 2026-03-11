@@ -19,7 +19,7 @@
     var CURSORS_UI_THROTTLE_MS = 100;
     var applyStateTimer = null;
     var pendingApplyState = null;
-    var APPLY_STATE_DEBOUNCE_MS = 280;
+    var APPLY_STATE_DEBOUNCE_MS = 350;
 
     function getDefaultSyncUrl() {
         if (typeof window !== 'undefined' && window.location && window.location.host) {
@@ -72,13 +72,22 @@
     function doApplyPendingState() {
         if (!pendingApplyState || !Array.isArray(pendingApplyState)) return;
         if (typeof window.syncDragInProgress !== 'undefined' && window.syncDragInProgress) return;
+        if (window.syncMapIsApplying) {
+            applyStateTimer = setTimeout(doApplyPendingState, 80);
+            return;
+        }
         var data = pendingApplyState;
         pendingApplyState = null;
-        try {
-            if (typeof applyRemoteState === 'function') applyRemoteState(data);
-            updateSyncUIStatus(true);
-            if (typeof window.hideSyncRequiredOverlay === 'function') window.hideSyncRequiredOverlay();
-        } catch (e) { updateSyncUIStatus(true); }
+        var raf = typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame : function(fn) { setTimeout(fn, 0); };
+        raf(function() {
+            window.syncMapIsApplying = true;
+            try {
+                if (typeof applyRemoteState === 'function') applyRemoteState(data);
+                updateSyncUIStatus(true);
+                if (typeof window.hideSyncRequiredOverlay === 'function') window.hideSyncRequiredOverlay();
+            } catch (e) { updateSyncUIStatus(true); }
+            window.syncMapIsApplying = false;
+        });
     }
 
     function applyPendingStateAfterDrag() {
@@ -204,10 +213,13 @@
                     return;
                 }
                 if (msg.type === 'op' && msg.op && typeof window.applyOperationToMap === 'function') {
-                    try {
-                        window.applyOperationToMap(msg.op);
-                        updateSyncUIStatus(true);
-                    } catch (e) {}
+                    var op = msg.op;
+                    setTimeout(function() {
+                        try {
+                            window.applyOperationToMap(op);
+                            updateSyncUIStatus(true);
+                        } catch (e) {}
+                    }, 0);
                     return;
                 }
                 if (msg.type === 'groupNames' && msg.groupNames && typeof window.applyGroupNames === 'function') {
