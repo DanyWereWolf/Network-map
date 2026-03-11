@@ -140,15 +140,6 @@
             }
             updateSyncUIStatus(true);
             if (typeof window.hideSyncRequiredOverlay === 'function') window.hideSyncRequiredOverlay();
-            if (typeof getSerializedData === 'function') {
-                var data = getSerializedData();
-                var initPayload = { type: 'state', clientId: myClientId, data: data };
-                if (typeof window.getGroupNamesForSync === 'function') {
-                    var gn = window.getGroupNamesForSync();
-                    if (gn && (gn.cross || gn.node)) initPayload.groupNames = gn;
-                }
-                ws.send(JSON.stringify(initPayload));
-            }
             var displayName = 'Участник';
             var userId = null;
             if (typeof currentUser !== 'undefined' && currentUser) {
@@ -159,6 +150,20 @@
                 ws.send(JSON.stringify({ type: 'hello', displayName: displayName, userId: userId }));
             } catch (e) {}
             if (btn) btn.disabled = false;
+            setTimeout(function() {
+                if (!ws || ws.readyState !== 1) return;
+                if (typeof getSerializedData === 'function') {
+                    try {
+                        var data = getSerializedData();
+                        var initPayload = { type: 'state', clientId: myClientId, data: data };
+                        if (typeof window.getGroupNamesForSync === 'function') {
+                            var gn = window.getGroupNamesForSync();
+                            if (gn && (gn.cross || gn.node)) initPayload.groupNames = gn;
+                        }
+                        ws.send(JSON.stringify(initPayload));
+                    } catch (e) {}
+                }
+            }, 0);
         };
         ws.onclose = function() {
             ws = null;
@@ -200,7 +205,9 @@
                     });
                     window.syncOnlineUserIds = userIds;
                     updateSyncOnlineList(msg.clients);
-                    if (typeof window.renderUsersList === 'function') window.renderUsersList();
+                    setTimeout(function() {
+                        if (typeof window.renderUsersList === 'function') window.renderUsersList();
+                    }, 0);
                     return;
                 }
                 if (msg.type === 'cursors' && Array.isArray(msg.cursors)) {

@@ -498,23 +498,26 @@ wss.on('connection', (ws, req) => {
     ws.connectedAt = Date.now();
     syncClientNames.set(clientId, 'Участник');
     broadcastSyncClients();
-    try {
-        var statePayload = { type: 'state', clientId: syncCurrentState.clientId, data: syncCurrentState.data };
-        if (syncGroupNames && (syncGroupNames.cross || syncGroupNames.node)) statePayload.groupNames = syncGroupNames;
-        ws.send(JSON.stringify(statePayload));
-        ws.send(JSON.stringify({ type: 'yourId', clientId: clientId }));
-        var list = [];
-        wss.clients.forEach(function(c) {
-            if (c.readyState === WebSocket.OPEN && c.clientId) {
-                list.push({
-                    id: c.clientId,
-                    displayName: syncClientNames.get(c.clientId) || 'Участник',
-                    userId: syncClientUserIds.get(c.clientId) || null
-                });
-            }
-        });
-        ws.send(JSON.stringify({ type: 'clients', clients: list }));
-    } catch (e) {}
+    ws.send(JSON.stringify({ type: 'yourId', clientId: clientId }));
+    var list = [];
+    wss.clients.forEach(function(c) {
+        if (c.readyState === WebSocket.OPEN && c.clientId) {
+            list.push({
+                id: c.clientId,
+                displayName: syncClientNames.get(c.clientId) || 'Участник',
+                userId: syncClientUserIds.get(c.clientId) || null
+            });
+        }
+    });
+    ws.send(JSON.stringify({ type: 'clients', clients: list }));
+    setImmediate(function() {
+        try {
+            if (ws.readyState !== 1) return;
+            var statePayload = { type: 'state', clientId: syncCurrentState.clientId, data: syncCurrentState.data };
+            if (syncGroupNames && (syncGroupNames.cross || syncGroupNames.node)) statePayload.groupNames = syncGroupNames;
+            ws.send(JSON.stringify(statePayload));
+        } catch (e) {}
+    });
     ws.on('message', (raw) => {
         try {
             const str = raw.toString();
