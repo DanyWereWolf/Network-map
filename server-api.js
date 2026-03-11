@@ -497,7 +497,7 @@ wss.on('connection', (ws, req) => {
     ws.clientId = clientId;
     ws.connectedAt = Date.now();
     syncClientNames.set(clientId, 'Участник');
-    broadcastSyncClients();
+    setImmediate(broadcastSyncClients);
     ws.send(JSON.stringify({ type: 'yourId', clientId: clientId }));
     var list = [];
     wss.clients.forEach(function(c) {
@@ -519,15 +519,16 @@ wss.on('connection', (ws, req) => {
         } catch (e) {}
     });
     ws.on('message', (raw) => {
+        const str = raw.toString();
+        if (str.length > 15 * 1024 * 1024) return;
+        setImmediate(function() {
         try {
-            const str = raw.toString();
-            if (str.length > 15 * 1024 * 1024) return;
             const msg = JSON.parse(str);
             if (msg.type === 'hello') {
                 const name = (msg.displayName && String(msg.displayName).trim()) || 'Участник';
                 syncClientNames.set(clientId, name.slice(0, 100));
                 if (msg.userId !== undefined && msg.userId !== null) syncClientUserIds.set(clientId, msg.userId);
-                broadcastSyncClients();
+                setImmediate(broadcastSyncClients);
                 return;
             }
             if (msg.type === 'cursor') {
@@ -583,13 +584,16 @@ wss.on('connection', (ws, req) => {
                 scheduleSyncWrite();
             }
         } catch (e) {}
+        });
     });
     ws.on('close', function() {
         syncClientNames.delete(clientId);
         syncClientUserIds.delete(clientId);
         ws.cursor = null;
-        broadcastSyncClients();
-        broadcastCursors();
+        setImmediate(function() {
+            broadcastSyncClients();
+            broadcastCursors();
+        });
     });
 });
 

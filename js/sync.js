@@ -19,9 +19,11 @@
     var CURSORS_UI_THROTTLE_MS = 100;
     var applyStateTimer = null;
     var pendingApplyState = null;
-    var APPLY_STATE_DEBOUNCE_MS = 350;
+    var APPLY_STATE_DEBOUNCE_MS = 120;
     var lastOpSendTime = 0;
     var SUPPRESS_STATE_AFTER_OP_MS = 1200;
+    var renderUsersListTimer = null;
+    var RENDER_USERS_DEBOUNCE_MS = 80;
 
     function getDefaultSyncUrl() {
         if (typeof window !== 'undefined' && window.location && window.location.host) {
@@ -81,8 +83,7 @@
         }
         var data = pendingApplyState;
         pendingApplyState = null;
-        var raf = typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame : function(fn) { setTimeout(fn, 0); };
-        raf(function() {
+        var runApply = function() {
             window.syncMapIsApplying = true;
             try {
                 if (typeof applyRemoteState === 'function') applyRemoteState(data);
@@ -90,7 +91,12 @@
                 if (typeof window.hideSyncRequiredOverlay === 'function') window.hideSyncRequiredOverlay();
             } catch (e) { updateSyncUIStatus(true); }
             window.syncMapIsApplying = false;
-        });
+        };
+        if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(runApply, { timeout: 50 });
+        } else {
+            (typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame : function(f) { setTimeout(f, 0); })(runApply);
+        }
     }
 
     function applyPendingStateAfterDrag() {
@@ -163,7 +169,7 @@
                         ws.send(JSON.stringify(initPayload));
                     } catch (e) {}
                 }
-            }, 0);
+            }, 50);
         };
         ws.onclose = function() {
             ws = null;
@@ -192,8 +198,11 @@
             updateSyncUIStatus(false, 'Ошибка соединения');
         };
         ws.onmessage = function(event) {
+            var raw = event.data;
+            var tick = typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame : function(f) { setTimeout(f, 0); };
+            tick(function() {
             try {
-                var msg = JSON.parse(event.data);
+                var msg = JSON.parse(raw);
                 if (msg.type === 'yourId' && msg.clientId) {
                     myClientId = msg.clientId;
                     return;
@@ -205,9 +214,11 @@
                     });
                     window.syncOnlineUserIds = userIds;
                     updateSyncOnlineList(msg.clients);
-                    setTimeout(function() {
+                    if (renderUsersListTimer) clearTimeout(renderUsersListTimer);
+                    renderUsersListTimer = setTimeout(function() {
+                        renderUsersListTimer = null;
                         if (typeof window.renderUsersList === 'function') window.renderUsersList();
-                    }, 0);
+                    }, RENDER_USERS_DEBOUNCE_MS);
                     return;
                 }
                 if (msg.type === 'cursors' && Array.isArray(msg.cursors)) {
@@ -251,6 +262,7 @@
                     }
                 }
             } catch (e) {}
+            });
         };
     }
 
