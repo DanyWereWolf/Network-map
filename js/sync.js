@@ -20,6 +20,8 @@
     var applyStateTimer = null;
     var pendingApplyState = null;
     var APPLY_STATE_DEBOUNCE_MS = 350;
+    var lastOpSendTime = 0;
+    var SUPPRESS_STATE_AFTER_OP_MS = 1200;
 
     function getDefaultSyncUrl() {
         if (typeof window !== 'undefined' && window.location && window.location.host) {
@@ -60,6 +62,7 @@
     function forceSendState() {
         if (sendTimer) clearTimeout(sendTimer);
         sendTimer = null;
+        lastOpSendTime = 0;
         var toSend = pendingState;
         pendingState = null;
         if (ws && ws.readyState === WebSocket.OPEN && toSend) {
@@ -276,6 +279,7 @@
             sendTimer = null;
             var toSend = pendingState;
             pendingState = null;
+            if (lastOpSendTime && (Date.now() - lastOpSendTime) < SUPPRESS_STATE_AFTER_OP_MS) return;
             if (ws && ws.readyState === WebSocket.OPEN && toSend) {
                 try {
                     var payload = { type: 'state', clientId: myClientId, data: toSend };
@@ -351,6 +355,7 @@
 
     function sendOp(op) {
         if (!op || !op.type) return;
+        lastOpSendTime = Date.now();
         if (ws && ws.readyState === WebSocket.OPEN) {
             try {
                 ws.send(JSON.stringify({ type: 'op', op: op, clientId: myClientId }));
