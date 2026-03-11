@@ -2565,7 +2565,6 @@ function createObject(type, name, coords, options = {}) {
         if (data) window.syncSendOp({ type: 'add_object', data: data });
     }
     saveData();
-    if (typeof window.syncForceSendState === 'function') window.syncForceSendState();
     updateStats();
     logAction(ActionTypes.CREATE_OBJECT, {
         objectType: type,
@@ -2740,7 +2739,6 @@ function deleteObject(obj, opts) {
             window.syncSendOp({ type: 'delete_object', uniqueId: objUniqueId });
         }
         saveData();
-        if (typeof window.syncForceSendState === 'function') window.syncForceSendState();
         logAction(ActionTypes.DELETE_OBJECT, {
             objectType: objType,
             name: objName
@@ -3092,7 +3090,6 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     
     if (!skipSync) {
         saveData();
-        if (typeof window.syncForceSendState === 'function') window.syncForceSendState();
         if (typeof window.syncSendOp === 'function') {
             const fromUid = points[0].properties.get('uniqueId');
             const toUid = points[points.length - 1].properties.get('uniqueId');
@@ -3832,7 +3829,6 @@ function setupRectSelection() {
                 });
                 if (toDelete.length) {
                     saveData();
-                    if (typeof window.syncForceSendState === 'function') window.syncForceSendState();
                     if (typeof showInfo === 'function') showInfo('Удалено объектов: ' + toDelete.length, 'Удаление');
                 }
                 panel.style.display = 'none';
@@ -4302,7 +4298,11 @@ function applyRemoteState(data) {
             lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
             return;
         }
-        importData(data, opts);
+        if (objects.length > 0) {
+            applyRemoteStateMerged(data);
+        } else {
+            importData(data, opts);
+        }
         lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
         updateStats();
     } catch (e) {
@@ -5253,7 +5253,6 @@ function clearMap(opts) {
     nodeGroupPlacemarks = [];
     if (!opts.skipSave) {
         saveData();
-        if (typeof window.syncForceSendState === 'function') window.syncForceSendState();
     }
     updateStats();
     
@@ -10735,7 +10734,6 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
             window.syncSendOp({ type: 'delete_cable', uniqueId: cableUniqueId });
         }
         saveData();
-        if (typeof window.syncForceSendState === 'function') window.syncForceSendState();
         logAction(ActionTypes.DELETE_CABLE, {
             cableType: cableType,
             from: fromName,
