@@ -4542,9 +4542,25 @@ function applyOperationToMap(op) {
         var fromObj = objects.find(function(o) { return o.properties && o.properties.get('type') !== 'cable' && o.properties.get('uniqueId') === fromUid; });
         var toObj = objects.find(function(o) { return o.properties && o.properties.get('type') !== 'cable' && o.properties.get('uniqueId') === toUid; });
         if (fromObj && toObj) {
-            addCable(fromObj, toObj, op.data.cableType, op.data.uniqueId, undefined, true, true);
+            var refs = objects.filter(function(o) {
+                var t = o.properties && o.properties.get('type');
+                return t && t !== 'cable' && t !== 'cableLabel';
+            });
+            var opCoords = op.data.geometry && normalizeCableGeometry(op.data.geometry);
+            var pointsArr = null;
+            if (opCoords && opCoords.length > 2) {
+                pointsArr = findObjectsAtGeometry(refs, op.data.geometry);
+            }
+            if (pointsArr && pointsArr.length >= 2) {
+                if (fromObj) pointsArr[0] = fromObj;
+                if (toObj) pointsArr[pointsArr.length - 1] = toObj;
+                addCable(pointsArr[0], pointsArr, op.data.cableType, op.data.uniqueId, undefined, true, true);
+            } else {
+                addCable(fromObj, toObj, op.data.cableType, op.data.uniqueId, undefined, true, true);
+            }
             var cable = objects.find(function(o) { return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === op.data.uniqueId; });
             if (cable) {
+                if (opCoords && opCoords.length >= 2 && cable.geometry) cable.geometry.setCoordinates(opCoords);
                 if (op.data.distance !== undefined) cable.properties.set('distance', op.data.distance);
                 if (op.data.cableName != null) cable.properties.set('cableName', op.data.cableName);
             }
@@ -4558,9 +4574,24 @@ function applyOperationToMap(op) {
         var cable = objects.find(function(o) { return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === op.uniqueId; });
         if (cable) {
             var opCoords = normalizeCableGeometry(op.data.geometry);
-            if (cable.geometry && opCoords && opCoords.length >= 2) cable.geometry.setCoordinates(opCoords);
+            if (cable.geometry && opCoords && opCoords.length >= 2) {
+                cable.geometry.setCoordinates(opCoords);
+                if (opCoords.length > 2) {
+                    var refs = objects.filter(function(o) {
+                        var t = o.properties && o.properties.get('type');
+                        return t && t !== 'cable' && t !== 'cableLabel';
+                    });
+                    var pointsArr = findObjectsAtGeometry(refs, op.data.geometry);
+                    if (pointsArr && pointsArr.length >= 2) {
+                        cable.properties.set('from', pointsArr[0]);
+                        cable.properties.set('to', pointsArr[pointsArr.length - 1]);
+                        cable.properties.set('points', pointsArr);
+                    }
+                }
+            }
             if (op.data.distance !== undefined) cable.properties.set('distance', op.data.distance);
             if (op.data.cableName != null) cable.properties.set('cableName', op.data.cableName);
+            updateCableVisualization();
             updateAllConnectionLines();
             updateStats();
         }

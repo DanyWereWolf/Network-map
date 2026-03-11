@@ -2,7 +2,7 @@
     var ws = null;
     var myClientId = 'client_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
     var SYNC_URL_KEY = 'networkMap_syncUrl';
-    var SEND_DEBOUNCE_MS = 400;
+    var SEND_DEBOUNCE_MS = 200;
     var sendTimer = null;
     var pendingState = null;
     var reconnectTimer = null;
@@ -19,7 +19,7 @@
     var CURSORS_UI_THROTTLE_MS = 100;
     var applyStateTimer = null;
     var pendingApplyState = null;
-    var APPLY_STATE_DEBOUNCE_MS = 280;
+    var APPLY_STATE_DEBOUNCE_MS = 150;
 
     function getDefaultSyncUrl() {
         if (typeof window !== 'undefined' && window.location && window.location.host) {
@@ -74,11 +74,18 @@
         if (typeof window.syncDragInProgress !== 'undefined' && window.syncDragInProgress) return;
         var data = pendingApplyState;
         pendingApplyState = null;
-        try {
-            if (typeof applyRemoteState === 'function') applyRemoteState(data);
-            updateSyncUIStatus(true);
-            if (typeof window.hideSyncRequiredOverlay === 'function') window.hideSyncRequiredOverlay();
-        } catch (e) { updateSyncUIStatus(true); }
+        function run() {
+            try {
+                if (typeof applyRemoteState === 'function') applyRemoteState(data);
+                updateSyncUIStatus(true);
+                if (typeof window.hideSyncRequiredOverlay === 'function') window.hideSyncRequiredOverlay();
+            } catch (e) { updateSyncUIStatus(true); }
+        }
+        if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(run, { timeout: 100 });
+        } else {
+            setTimeout(run, 0);
+        }
     }
 
     function applyPendingStateAfterDrag() {
