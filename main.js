@@ -5747,12 +5747,25 @@ function showObjectInfo(obj) {
     var modalInfo = document.getElementById('modalInfo');
     if (modalInfo) initDeviceComboboxes(modalInfo);
     modal.style.display = 'block';
+
+    if ((type === 'sleeve' || type === 'cross') && savedFiberConnectionsScrollPos) {
+        var saved = savedFiberConnectionsScrollPos;
+        savedFiberConnectionsScrollPos = null;
+        requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+                var schemeWrap = document.querySelector('.fiber-scheme-wrap');
+                var tableWrap = document.querySelector('.cross-fiber-table-wrap');
+                if (schemeWrap && saved.scheme != null) schemeWrap.scrollTop = saved.scheme;
+                if (tableWrap && saved.table != null) tableWrap.scrollTop = saved.table;
+            });
+        });
+    }
 }
 
 function showSupportInfo(supportObj) {
     currentModalObject = supportObj;
     
-    const connectedCables = getConnectedCables(supportObj);
+    const connectedCables = getCablesThroughSupport(supportObj);
     const supportName = supportObj.properties.get('name') || '';
     
     document.getElementById('modalTitle').textContent = supportName ? '📡 Опора связи: ' + supportName : '📡 Опора связи';
@@ -6031,7 +6044,7 @@ function setupEditAndDeleteListeners() {
             var obj = currentModalObject;
             var msg = 'Вы уверены, что хотите удалить этот объект?';
             if (obj.properties && obj.properties.get('type') === 'support') {
-                var cablesOnSupport = getCablesThroughObject(obj);
+                var cablesOnSupport = getCablesThroughSupport(obj);
                 if (cablesOnSupport.length > 0) {
                     msg = cablesOnSupport.length === 1
                         ? 'На этой опоре проложен кабель. Удалить опору и кабель?'
@@ -6670,6 +6683,12 @@ function setupFiberConnectionHandlers() {
                         
                         saveData();
 
+                        var schemeWrap = document.querySelector('.fiber-scheme-wrap');
+                        var tableWrap = document.querySelector('.cross-fiber-table-wrap');
+                        savedFiberConnectionsScrollPos = {
+                            scheme: schemeWrap ? schemeWrap.scrollTop : 0,
+                            table: tableWrap ? tableWrap.scrollTop : 0
+                        };
                         showObjectInfo(sleeveObj);
                         return;
                     }
@@ -6706,6 +6725,12 @@ function setupFiberConnectionHandlers() {
                 fiberConnections.splice(connIndex, 1);
                 sleeveObj.properties.set('fiberConnections', fiberConnections);
                 saveData();
+                var schemeWrap = document.querySelector('.fiber-scheme-wrap');
+                var tableWrap = document.querySelector('.cross-fiber-table-wrap');
+                savedFiberConnectionsScrollPos = {
+                    scheme: schemeWrap ? schemeWrap.scrollTop : 0,
+                    table: tableWrap ? tableWrap.scrollTop : 0
+                };
                 showObjectInfo(sleeveObj);
             }
         });
@@ -8336,6 +8361,8 @@ let onuSelectionModalData = null;
 let splitterSelectionModalData = null;
 let splitterOutputOnuModalData = null;
 let splitterOutputSplitterModalData = null;
+var scrollToFiberAfterSleeveRender = null;
+var savedFiberConnectionsScrollPos = null;
 
 function getAvailableNodes() {
     return objects.filter(obj => 
@@ -10620,6 +10647,38 @@ function getCrossesAtSameLocation(cross) {
         const group = groups.find(g => groupKey(g.coords) === k);
         return group ? group.crosses : [cross];
     } catch (e) { return [cross]; }
+}
+
+/** Возвращает кабели, проходящие через опору: как концы маршрута (from/to) или как промежуточная точка (в geometry или в points). */
+function getCablesThroughSupport(supportObj) {
+    if (!supportObj || !supportObj.geometry) return [];
+    var supportCoords = supportObj.geometry.getCoordinates();
+    if (!supportCoords || supportCoords.length < 2) return [];
+    var supportId = getObjectUniqueId(supportObj);
+    var tol = 1e-6;
+    function coordsMatch(a, b) {
+        if (!a || !b || a.length < 2 || b.length < 2) return false;
+        return Math.abs(a[0] - b[0]) < tol && Math.abs(a[1] - b[1]) < tol;
+    }
+    var direct = objects.filter(function(cable) {
+        if (!cable.properties || cable.properties.get('type') !== 'cable') return false;
+        var from = cable.properties.get('from');
+        var to = cable.properties.get('to');
+        if (from === supportObj || to === supportObj) return true;
+        if (from && getObjectUniqueId(from) === supportId) return true;
+        if (to && getObjectUniqueId(to) === supportId) return true;
+        var points = cable.properties.get('points');
+        if (Array.isArray(points) && points.some(function(p) { return p === supportObj || (p && getObjectUniqueId(p) === supportId); })) return true;
+        var geom = cable.geometry && cable.geometry.getCoordinates && cable.geometry.getCoordinates();
+        if (!geom || !Array.isArray(geom)) return false;
+        return geom.some(function(c) { return coordsMatch(c, supportCoords); });
+    });
+    direct = direct.slice().sort(function(a, b) {
+        var idA = a.properties && a.properties.get('uniqueId');
+        var idB = b.properties && b.properties.get('uniqueId');
+        return (idA || '').localeCompare(idB || '', undefined, { numeric: true });
+    });
+    return direct;
 }
 
 function getConnectedCables(obj) {
