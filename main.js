@@ -3559,7 +3559,7 @@ function showCableInfo(cable) {
     html += '<div style="display: flex; flex-wrap: wrap; gap: 6px;">';
     fibers.forEach(fiber => {
         html += `<div style="display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: var(--bg-card); border-radius: 6px; border: 1px solid var(--border-color); font-size: 0.8rem;">`;
-        html += `<div style="width: 14px; height: 14px; border-radius: 50%; background: ${fiber.color}; border: 1px solid rgba(0,0,0,0.2);"></div>`;
+        html += `<div style="width: 14px; height: 14px; border-radius: 50%; background: ${fiber.color}; border: ${fiber.hasBlackRing ? '2px solid #000' : '1px solid rgba(0,0,0,0.2)'};"></div>`;
         html += `<span style="color: var(--text-primary); font-weight: 500;">${fiber.number}</span>`;
         html += `<span style="color: var(--text-muted); font-size: 0.7rem;">${fiber.name}</span>`;
         html += `</div>`;
@@ -5717,7 +5717,7 @@ function showObjectInfo(obj) {
                              data-cable-id="${cableUniqueId}" 
                              data-fiber-number="${fiber.number}">
                             <div class="fiber-item-content">
-                                <div class="fiber-color" style="background-color: ${fiber.color}; ${isUsed ? 'opacity: 0.5; border: 2px dashed #dc2626;' : ''}"></div>
+                                <div class="fiber-color" style="background-color: ${fiber.color}; ${isUsed ? 'opacity: 0.5; border: 2px dashed #dc2626;' : (fiber.hasBlackRing ? 'border: 2px solid #000;' : '')}"></div>
                                 <span class="fiber-label">Жила ${fiber.number}: ${fiber.name} ${isUsed ? '<span class="fiber-status">(используется)</span>' : '<span class="fiber-status fiber-free-text">(свободна)</span>'}</span>
                             </div>
                             ${!isUsed && isEditMode && type !== 'sleeve' && type !== 'cross' && type !== 'olt' && type !== 'splitter' && type !== 'onu' ? `<button class="btn-continue-cable" data-cable-id="${cableUniqueId}" data-fiber-number="${fiber.number}" title="Продолжить кабель с этой жилой">→</button>` : ''}
@@ -5833,9 +5833,9 @@ function showSupportInfo(supportObj) {
 
             html += `<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;">`;
             fibers.forEach(fiber => {
-                const textColor = (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00') ? '#000' : '#fff';
+                const textColor = (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00' || fiber.color === '#FFC0CB') ? '#000' : '#fff';
                 html += `<div style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: var(--bg-card); border-radius: 4px; border: 1px solid var(--border-color);">`;
-                html += `<div style="width: 12px; height: 12px; border-radius: 50%; background: ${fiber.color}; border: 1px solid #333;"></div>`;
+                html += `<div style="width: 12px; height: 12px; border-radius: 50%; background: ${fiber.color}; border: ${fiber.hasBlackRing ? '2px solid #000' : '1px solid #333'};"></div>`;
                 html += `<span style="font-size: 0.75rem; color: var(--text-primary);">${fiber.number}</span>`;
                 html += `</div>`;
             });
@@ -10642,6 +10642,14 @@ function getConnectedCables(obj) {
             });
         }
     }
+    // Стабильная сортировка по uniqueId кабеля, чтобы порядок не «прыгал» при обновлении (опоры, муфта, кросс)
+    direct = direct.slice().sort(function(a, b) {
+        var idA = a.properties && a.properties.get('uniqueId');
+        var idB = b.properties && b.properties.get('uniqueId');
+        if (!idA) idA = '';
+        if (!idB) idB = '';
+        return (idA || '').localeCompare(idB || '', undefined, { numeric: true });
+    });
     return direct;
 }
 
@@ -11485,7 +11493,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             let opacity = '1';
             
             if (isConnected) {
-                strokeColor = '#3b82f6'; 
+                strokeColor = '#3b82f6';
                 strokeWidth = '3';
                 strokeDasharray = 'none';
             } else if (isUsed) {
@@ -11493,6 +11501,9 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
                 strokeWidth = '2';
                 strokeDasharray = '3,3';
                 opacity = '0.7';
+            } else if (fiber.hasBlackRing) {
+                strokeColor = '#000';
+                strokeWidth = '2';
             }
 
             const portW = 26;
@@ -11500,7 +11511,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             const portX = x - portW / 2;
             const portY = y - portH / 2;
             const clickable = isEditMode ? 'cursor: pointer;' : '';
-            const textFill = (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00') ? '#000' : '#fff';
+            const textFill = (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00' || fiber.color === '#FFC0CB') ? '#000' : '#fff';
             html += `<g id="fiber-${fiberKey}" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" data-fiber-connected="${isConnected}" data-fiber-used="${isUsed}" style="${clickable}">`;
             html += `<rect x="${portX}" y="${portY}" width="${portW}" height="${portH}" rx="4" fill="${fiber.color}" stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-dasharray="${strokeDasharray}" opacity="${opacity}" style="pointer-events: inherit;"/>`;
             html += `<text x="${x}" y="${y + 3}" text-anchor="middle" style="font-size: 10px; font-weight: 600; fill: ${textFill}; pointer-events: none;">${fiber.number}</text>`;
@@ -11601,7 +11612,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         const hasOnuConnection = !!onuConnection;
         const hasAnyOutConnection = hasNodeConnection || hasOltConnection || hasOnuConnection || hasSplitterConnection;
         const canConnectToOnu = isFiberConnectedToOlt(sleeveObj, cableData.cableUniqueId, fiber.number);
-        const fiberTextColor = (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00') ? '#000' : '#fff';
+        const fiberTextColor = (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00' || fiber.color === '#FFC0CB') ? '#000' : '#fff';
         let statusText = isUsed ? '(исп.)' : (hasNodeConnection ? '(на узел)' : (hasOnuConnection ? '(на ONU)' : (hasSplitterConnection ? '(на сплит.)' : (hasOltConnection ? '(от OLT)' : '(своб.)'))));
         if (hasOltConnection && oltConnection.oltId) {
             const oltObj = objects.find(o => o.properties && o.properties.get('type') === 'olt' && o.properties.get('uniqueId') === oltConnection.oltId);
@@ -11630,7 +11641,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             <div class="fiber-item${usedClass}" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}"${cellTitle ? ' title="' + cellTitle.replace(/"/g, '&quot;') + '"' : ''}
                  style="display: flex; flex-direction: column; gap: 4px; padding: 8px; border-radius: 4px; border: 1px solid ${itemBorder}; min-width: 0;">
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <div class="fiber-color" style="width: 22px; height: 22px; border-radius: 50%; background-color: ${fiber.color}; border: 2px solid #333; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
+                    <div class="fiber-color" style="width: 22px; height: 22px; border-radius: 50%; background-color: ${fiber.color}; border: 2px solid ${fiber.hasBlackRing ? '#000' : '#333'}; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
                         <span style="font-size: 9px; font-weight: 700; color: ${fiberTextColor};">${fiber.number}</span>
                     </div>
                     <span class="fiber-name" style="font-size: 0.8125rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;"><strong>${fiber.name}</strong></span>
@@ -11790,33 +11801,34 @@ function toggleFiberUsage(cableUniqueId, fiberNumber) {
 }
 
 function getFiberColors(cableType) {
-    const fiberColors = [
-        { number: 1, name: 'Синий', color: '#0000FF' },
-        { number: 2, name: 'Оранжевый', color: '#FF8C00' },
-        { number: 3, name: 'Зеленый', color: '#00FF00' },
-        { number: 4, name: 'Коричневый', color: '#8B4513' },
-        { number: 5, name: 'Серый', color: '#808080' },
-        { number: 6, name: 'Белый', color: '#FFFFFF' },
-        { number: 7, name: 'Красный', color: '#FF0000' },
-        { number: 8, name: 'Черный', color: '#000000' },
-        { number: 9, name: 'Желтый', color: '#FFFF00' },
-        { number: 10, name: 'Фиолетовый', color: '#800080' },
-        { number: 11, name: 'Розовый', color: '#FFC0CB' },
-        { number: 12, name: 'Голубой', color: '#00CED1' },
-        { number: 13, name: 'Оливковый', color: '#808000' },
-        { number: 14, name: 'Темно-синий', color: '#00008B' },
-        { number: 15, name: 'Бирюзовый', color: '#40E0D0' },
-        { number: 16, name: 'Темно-зеленый', color: '#006400' },
-        { number: 17, name: 'Малиновый', color: '#DC143C' },
-        { number: 18, name: 'Коричневый', color: '#A52A2A' },
-        { number: 19, name: 'Лимонный', color: '#FFFACD' },
-        { number: 20, name: 'Темно-красный', color: '#8B0000' },
-        { number: 21, name: 'Лазурный', color: '#007FFF' },
-        { number: 22, name: 'Золотой', color: '#FFD700' },
-        { number: 23, name: 'Медный', color: '#B87333' },
-        { number: 24, name: 'Серебряный', color: '#C0C0C0' }
+    // Цветовая кодировка оптического волокна по стандарту Инкаб (https://incab.ru/useful-information/optic-cable-and-fiber/color/)
+    // 1–12: основные цвета; 13–24: те же цвета с черным кольцом (hasBlackRing для отрисовки обводки)
+    const baseColors = [
+        { name: 'Синий', color: '#0000FF' },
+        { name: 'Оранжевый', color: '#FF8C00' },
+        { name: 'Зеленый', color: '#00FF00' },
+        { name: 'Коричневый', color: '#8B4513' },
+        { name: 'Серый', color: '#808080' },
+        { name: 'Белый', color: '#FFFFFF' },
+        { name: 'Красный', color: '#FF0000' },
+        { name: 'Черный', color: '#000000' },
+        { name: 'Желтый', color: '#FFFF00' },
+        { name: 'Фиолетовый', color: '#800080' },
+        { name: 'Розовый', color: '#FFC0CB' },
+        { name: 'Бирюзовый', color: '#00CED1' }
     ];
-    
+    const fiberColors = [];
+    for (let i = 0; i < 24; i++) {
+        const base = baseColors[i % 12];
+        const withRing = i >= 12;
+        fiberColors.push({
+            number: i + 1,
+            name: withRing ? (base.name + ' (с черн. кольцом)') : base.name,
+            color: base.color,
+            hasBlackRing: withRing
+        });
+    }
+
     let fiberCount = 0;
     switch(cableType) {
         case 'fiber4': fiberCount = 4; break;
@@ -11825,7 +11837,7 @@ function getFiberColors(cableType) {
         case 'fiber24': fiberCount = 24; break;
         default: return [];
     }
-    
+
     return fiberColors.slice(0, fiberCount);
 }
 
