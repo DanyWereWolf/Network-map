@@ -3177,7 +3177,7 @@ button {
         width: 100%;
         max-width: 100%;
         height: auto;
-        max-height: 45vh;
+        max-height: 80vh;
         border-right: none;
         border-bottom: 1px solid var(--border-color);
     }
@@ -3238,6 +3238,12 @@ button {
     
     .stat-label {
         font-size: 0.65rem;
+    }
+    
+    /* На мобильных убираем блок статистики из панели,
+       чтобы инструменты и фильтры были ближе к верху */
+    .stats-section {
+        display: none;
     }
     
     .mode-switcher {

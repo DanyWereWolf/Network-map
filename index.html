@@ -944,6 +944,66 @@
         </div>
     </div>
 
+    <!-- Модальное окно управления организациями -->
+    <div id="organizationsModal" class="modal">
+        <div class="modal-content" style="max-width: 720px;">
+            <div class="modal-header">
+                <h2>Организации и подписки</h2>
+                <span class="close-organizations">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="users-actions" style="margin-bottom: 12px;">
+                    <button id="addOrganizationBtn" class="btn-primary">Добавить организацию</button>
+                </div>
+                <div id="organizationsList" class="users-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно редактирования организации -->
+    <div id="organizationEditModal" class="modal">
+        <div class="modal-content" style="max-width: 420px;">
+            <div class="modal-header">
+                <h2 id="organizationEditTitle">Редактировать организацию</h2>
+                <span class="close-organization-edit">&times;</span>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editOrgId">
+                <div class="form-group">
+                    <label for="editOrgName">Название</label>
+                    <input type="text" id="editOrgName" class="form-input" placeholder="Название организации">
+                </div>
+                <div class="form-group">
+                    <label for="editOrgPlanId">Тариф</label>
+                    <select id="editOrgPlanId" class="form-select">
+                        <option value="basic">Базовый (3 пользователя)</option>
+                        <option value="pro">Про (10 пользователей)</option>
+                        <option value="enterprise">Корпоративный (без ограничений)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editOrgMaxUsers">Макс. одновременных пользователей (0 = по тарифу)</label>
+                    <input type="number" id="editOrgMaxUsers" class="form-input" min="0" placeholder="По тарифу">
+                </div>
+                <div class="form-group">
+                    <label for="editOrgSubscriptionEndsAt">Окончание подписки (пусто = без ограничения)</label>
+                    <input type="date" id="editOrgSubscriptionEndsAt" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label for="editOrgStatus">Статус</label>
+                    <select id="editOrgStatus" class="form-select">
+                        <option value="active">Активна</option>
+                        <option value="suspended">Приостановлена</option>
+                    </select>
+                </div>
+                <div class="form-group" style="display: flex; gap: 10px;">
+                    <button id="saveOrganizationBtn" class="btn-primary" style="flex: 1;">Сохранить</button>
+                    <button id="cancelOrganizationEditBtn" class="btn-secondary" style="flex: 1;">Отмена</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Модальное окно добавления/редактирования пользователя -->
     <div id="userEditModal" class="modal">
         <div class="modal-content" style="max-width: 450px;">
@@ -971,6 +1031,12 @@
                     <select id="editRole" class="form-select">
                         <option value="user">Пользователь</option>
                         <option value="admin">Администратор</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editOrganizationId">Организация</label>
+                    <select id="editOrganizationId" class="form-select">
+                        <option value="">— Без организации —</option>
                     </select>
                 </div>
                 <div class="form-group" style="display: flex; gap: 10px;">
@@ -1093,6 +1159,18 @@
     </div>
 
     <script src="auth.js"></script>
+    <script>
+    (function() {
+        try {
+            if (window.AuthSystem && typeof AuthSystem.getCurrentSession === 'function') {
+                var s = AuthSystem.getCurrentSession();
+                if (s && s.role === 'admin' && (s.organizationId == null)) {
+                    window.location.href = 'site-admin.html';
+                }
+            }
+        } catch (e) {}
+    })();
+    </script>
     <script src="js/core/state.js"></script>
     <script src="js/core/config.js"></script>
     <script src="js/core/utils.js"></script>

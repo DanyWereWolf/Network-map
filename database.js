@@ -17,7 +17,12 @@ function loadStore() {
             users: [],
             history: [],
             settings: {},
-            sessions: []
+            sessions: [],
+            organizations: [],
+            mapDataByOrg: {},
+            historyByOrg: {},
+            settingsByOrg: {},
+            pricingPlans: []
         };
         saveStore();
         return store;
@@ -25,12 +30,55 @@ function loadStore() {
     try {
         store = JSON.parse(fs.readFileSync(STORE_PATH, 'utf8'));
     } catch (e) {
-        store = { mapData: [], users: [], history: [], settings: {}, sessions: [] };
+        store = { mapData: [], users: [], history: [], settings: {}, sessions: [], organizations: [], mapDataByOrg: {}, historyByOrg: {}, settingsByOrg: {}, pricingPlans: [] };
         saveStore();
     }
     if (!store.sessions) store.sessions = [];
     if (!store.settings) store.settings = {};
+    if (!Array.isArray(store.organizations)) store.organizations = [];
+    if (typeof store.mapDataByOrg !== 'object') store.mapDataByOrg = {};
+    if (typeof store.historyByOrg !== 'object') store.historyByOrg = {};
+    if (typeof store.settingsByOrg !== 'object') store.settingsByOrg = {};
+    if (!Array.isArray(store.pricingPlans)) store.pricingPlans = [];
+    migrateToOrganizations();
     return store;
+}
+
+function migrateToOrganizations() {
+    const s = store;
+    if (s.organizations && s.organizations.length > 0) return;
+    const hasLegacyData = (Array.isArray(s.mapData) && s.mapData.length > 0) || (Array.isArray(s.history) && s.history.length > 0);
+    const defaultOrgId = 'org_default_' + Date.now();
+    s.organizations = [{
+        id: defaultOrgId,
+        name: 'По умолчанию',
+        planId: 'basic',
+        maxConcurrentUsers: 3,
+        subscriptionEndsAt: null,
+        status: 'active',
+        createdAt: new Date().toISOString()
+    }];
+    s.mapDataByOrg = {};
+    s.historyByOrg = {};
+    s.settingsByOrg = s.settingsByOrg || {};
+    if (hasLegacyData) {
+        s.mapDataByOrg[defaultOrgId] = Array.isArray(s.mapData) ? s.mapData : [];
+        s.historyByOrg[defaultOrgId] = Array.isArray(s.history) ? s.history : [];
+    }
+    const users = Array.isArray(s.users) ? s.users : [];
+    users.forEach(function(u) {
+        if (u.organizationId === undefined && u.role !== 'admin') u.organizationId = defaultOrgId;
+    });
+    s.users = users;
+    const sessions = Array.isArray(s.sessions) ? s.sessions : [];
+    sessions.forEach(function(ses) {
+        if (ses.organization_id === undefined) {
+            const u = users.find(function(usr) { return usr.id === ses.user_id; });
+            ses.organization_id = u && u.organizationId ? u.organizationId : null;
+        }
+    });
+    s.sessions = sessions;
+    saveStore();
 }
 
 function saveStore() {
@@ -85,7 +133,12 @@ function getDb() {
                             try { s.users = JSON.parse(value || '[]'); } catch (e) { s.users = []; }
                         } else s.settings[key] = value;
                     } else if (sql.includes('INSERT INTO sessions')) {
-                        s.sessions.push({ token: args[0], user_id: args[1], expires_at: args[2] });
+                        s.sessions.push({
+                            token: args[0],
+                            user_id: args[1],
+                            expires_at: args[2],
+                            organization_id: args[3] !== undefined ? args[3] : null
+                        });
                     } else if (sql.includes('DELETE FROM sessions')) {
                         s.sessions = s.sessions.filter(ses => ses.token !== args[0]);
                     }
@@ -95,7 +148,7 @@ function getDb() {
                     const s = loadStore();
                     const now = new Date().toISOString();
                     const found = (s.sessions || []).filter(ses => ses.token === token && ses.expires_at > now);
-                    return found.map(ses => ({ user_id: ses.user_id }));
+                    return found.map(ses => ({ user_id: ses.user_id, organization_id: ses.organization_id != null ? ses.organization_id : null }));
                 }
             };
         },
@@ -119,15 +172,36 @@ function initSchema() {
     if (!Array.isArray(s.history)) s.history = [];
     if (!s.settings || typeof s.settings !== 'object') s.settings = {};
     if (!Array.isArray(s.sessions)) s.sessions = [];
+    if (!Array.isArray(s.organizations)) s.organizations = [];
+    if (typeof s.mapDataByOrg !== 'object') s.mapDataByOrg = {};
+    if (typeof s.historyByOrg !== 'object') s.historyByOrg = {};
+    if (typeof s.settingsByOrg !== 'object') s.settingsByOrg = {};
+    if (!Array.isArray(s.pricingPlans)) s.pricingPlans = [];
     saveStore();
 }
 
-function getMapData() {
+function getMapData(orgId) {
+    if (!orgId) return [];
+    const s = loadStore();
+    const byOrg = s.mapDataByOrg || {};
+    return Array.isArray(byOrg[orgId]) ? byOrg[orgId] : [];
+}
+
+function setMapData(orgId, data) {
+    if (!orgId) throw new Error('orgId required');
+    if (!Array.isArray(data)) throw new Error('data must be array');
+    const s = loadStore();
+    if (!s.mapDataByOrg) s.mapDataByOrg = {};
+    s.mapDataByOrg[orgId] = data;
+    saveStore();
+}
+
+function getMapDataLegacy() {
     const s = loadStore();
     return Array.isArray(s.mapData) ? s.mapData : [];
 }
 
-function setMapData(data) {
+function setMapDataLegacy(data) {
     if (!Array.isArray(data)) throw new Error('data must be array');
     const s = loadStore();
     s.mapData = data;
@@ -145,15 +219,19 @@ function setUsers(users) {
     saveStore();
 }
 
-function getHistory() {
+function getHistory(orgId) {
+    if (!orgId) return [];
     const s = loadStore();
-    return Array.isArray(s.history) ? s.history : [];
+    const byOrg = s.historyByOrg || {};
+    return Array.isArray(byOrg[orgId]) ? byOrg[orgId] : [];
 }
 
-function setHistory(history) {
+function setHistory(orgId, history) {
+    if (!orgId) throw new Error('orgId required');
     if (!Array.isArray(history)) throw new Error('history must be array');
     const s = loadStore();
-    s.history = history;
+    if (!s.historyByOrg) s.historyByOrg = {};
+    s.historyByOrg[orgId] = history;
     saveStore();
 }
 
@@ -170,11 +248,180 @@ function setSetting(key, value) {
     saveStore();
 }
 
-function getSettings() {
-    const theme = getSetting('theme');
-    const groupNames = getSetting('groupNames');
-    const netboxConfig = getSetting('netboxConfig');
-    const customDeviceOptions = getSetting('customDeviceOptions');
+function getOrganizations() {
+    const s = loadStore();
+    return Array.isArray(s.organizations) ? s.organizations : [];
+}
+
+function getOrganization(orgId) {
+    if (!orgId) return null;
+    const orgs = getOrganizations();
+    return orgs.find(function(o) { return o.id === orgId; }) || null;
+}
+
+function addOrganization(org) {
+    const s = loadStore();
+    if (!s.organizations) s.organizations = [];
+    const id = org.id || ('org_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9));
+    s.organizations.push({
+        id: id,
+        name: org.name || 'Организация',
+        planId: org.planId || 'basic',
+        maxConcurrentUsers: org.maxConcurrentUsers != null ? org.maxConcurrentUsers : 3,
+        subscriptionEndsAt: org.subscriptionEndsAt || null,
+        status: org.status || 'active',
+        discountPercent: typeof org.discountPercent === 'number' ? org.discountPercent : 0,
+        customMonthlyPrice: typeof org.customMonthlyPrice === 'number' ? org.customMonthlyPrice : null,
+        createdAt: org.createdAt || new Date().toISOString()
+    });
+    saveStore();
+    return id;
+}
+
+function updateOrganization(orgId, updates) {
+    const s = loadStore();
+    const idx = (s.organizations || []).findIndex(function(o) { return o.id === orgId; });
+    if (idx === -1) return false;
+    if (updates.name !== undefined) s.organizations[idx].name = updates.name;
+    if (updates.planId !== undefined) s.organizations[idx].planId = updates.planId;
+    if (updates.maxConcurrentUsers !== undefined) s.organizations[idx].maxConcurrentUsers = updates.maxConcurrentUsers;
+    if (updates.subscriptionEndsAt !== undefined) s.organizations[idx].subscriptionEndsAt = updates.subscriptionEndsAt;
+    if (updates.status !== undefined) s.organizations[idx].status = updates.status;
+    if (updates.discountPercent !== undefined) s.organizations[idx].discountPercent = updates.discountPercent;
+    if (updates.customMonthlyPrice !== undefined) s.organizations[idx].customMonthlyPrice = updates.customMonthlyPrice;
+    saveStore();
+    return true;
+}
+
+function deleteOrganization(orgId) {
+    const s = loadStore();
+    s.organizations = (s.organizations || []).filter(function(o) { return o.id !== orgId; });
+    if (s.mapDataByOrg && s.mapDataByOrg[orgId]) delete s.mapDataByOrg[orgId];
+    if (s.historyByOrg && s.historyByOrg[orgId]) delete s.historyByOrg[orgId];
+    if (s.settingsByOrg && s.settingsByOrg[orgId]) delete s.settingsByOrg[orgId];
+    // Удаляем всех пользователей этой организации (кроме глобального админа без organizationId)
+    if (Array.isArray(s.users)) {
+        s.users = s.users.filter(function(u) {
+            // Пользователь относится к удаляемой организации?
+            if (u.organizationId === orgId) return false;
+            return true;
+        });
+    }
+    // Удаляем все сессии этой организации
+    if (Array.isArray(s.sessions)) {
+        s.sessions = s.sessions.filter(function(ses) { return ses.organization_id !== orgId; });
+    }
+    saveStore();
+}
+
+function getSessions() {
+    const s = loadStore();
+    return Array.isArray(s.sessions) ? s.sessions : [];
+}
+
+function getPricingPlans() {
+    const s = loadStore();
+    if (!Array.isArray(s.pricingPlans) || !s.pricingPlans.length) {
+        // Значения по умолчанию для тарифов на главной
+        s.pricingPlans = [
+            {
+                id: 'trial',
+                title: 'Пробный',
+                short: 'Для знакомства с системой',
+                price: '0 ₽',
+                period: '/ 14 дней',
+                maxUsersText: '1 организация, до 1 одновременного пользователя',
+                order: 0,
+                highlighted: false,
+                ctaText: 'Запустить пробный период',
+                kind: 'trial'
+            },
+            {
+                id: 'basic',
+                title: 'Базовый',
+                short: 'Для небольших команд и пилотов',
+                price: '1 490 ₽',
+                period: '/ месяц',
+                maxUsersText: 'До 3 одновременных пользователей в организации',
+                order: 1,
+                highlighted: false,
+                ctaText: 'Выбрать «Базовый»',
+                kind: 'paid'
+            },
+            {
+                id: 'pro',
+                title: 'Про',
+                short: 'Оптимально для провайдера с несколькими инженерами',
+                price: '3 490 ₽',
+                period: '/ месяц',
+                maxUsersText: 'До 10 одновременных пользователей; можно усилить лимит в настройках',
+                order: 2,
+                highlighted: true,
+                ctaText: 'Выбрать «Про»',
+                kind: 'paid'
+            },
+            {
+                id: 'enterprise',
+                title: 'Корпоративный',
+                short: 'Под ваши процессы, SLA и инфраструктуру',
+                price: 'по запросу',
+                period: '',
+                maxUsersText: 'Неограниченное число одновременных пользователей и гибкие условия',
+                order: 3,
+                highlighted: false,
+                ctaText: 'Обсудить корпоративный тариф',
+                kind: 'contact'
+            }
+        ];
+        saveStore();
+    }
+    return s.pricingPlans.slice().sort(function(a, b) {
+        var ao = typeof a.order === 'number' ? a.order : 0;
+        var bo = typeof b.order === 'number' ? b.order : 0;
+        return ao - bo;
+    });
+}
+
+function setPricingPlans(plans) {
+    const s = loadStore();
+    s.pricingPlans = Array.isArray(plans) ? plans : [];
+    saveStore();
+}
+
+function countActiveSessionsForOrganization(orgId) {
+    if (!orgId) return 0;
+    const now = new Date().toISOString();
+    const sessions = getSessions();
+    return sessions.filter(function(ses) {
+        return ses.organization_id === orgId && ses.expires_at > now;
+    }).length;
+}
+
+function deleteSessionsForOrganization(orgId) {
+    if (!orgId) return;
+    const s = loadStore();
+    if (!Array.isArray(s.sessions)) s.sessions = [];
+    s.sessions = s.sessions.filter(function(ses) {
+        return ses.organization_id !== orgId;
+    });
+    saveStore();
+}
+
+function getSettings(orgId) {
+    let theme = getSetting('theme');
+    let groupNames = getSetting('groupNames');
+    let netboxConfig = getSetting('netboxConfig');
+    let customDeviceOptions = getSetting('customDeviceOptions');
+    if (orgId) {
+        const s = loadStore();
+        const byOrg = (s.settingsByOrg || {})[orgId];
+        if (byOrg && typeof byOrg === 'object') {
+            if (byOrg.theme !== undefined) theme = byOrg.theme;
+            if (byOrg.groupNames !== undefined) groupNames = byOrg.groupNames;
+            if (byOrg.netboxConfig !== undefined) netboxConfig = byOrg.netboxConfig;
+            if (byOrg.customDeviceOptions !== undefined) customDeviceOptions = byOrg.customDeviceOptions;
+        }
+    }
     let parsedGroupNames = {};
     let parsedNetboxConfig = { url: '', token: '', ignoreSSL: false };
     let parsedCustomDevice = { manufacturers: [], models: [] };
@@ -199,7 +446,19 @@ function getSettings() {
     };
 }
 
-function setSettings(obj) {
+function setSettings(obj, orgId) {
+    if (orgId) {
+        const s = loadStore();
+        if (!s.settingsByOrg) s.settingsByOrg = {};
+        if (!s.settingsByOrg[orgId]) s.settingsByOrg[orgId] = {};
+        const o = s.settingsByOrg[orgId];
+        if (obj.theme !== undefined) o.theme = obj.theme;
+        if (obj.groupNames !== undefined) o.groupNames = typeof obj.groupNames === 'string' ? obj.groupNames : JSON.stringify(obj.groupNames);
+        if (obj.netboxConfig !== undefined) o.netboxConfig = typeof obj.netboxConfig === 'string' ? obj.netboxConfig : JSON.stringify(obj.netboxConfig);
+        if (obj.customDeviceOptions !== undefined) o.customDeviceOptions = typeof obj.customDeviceOptions === 'string' ? obj.customDeviceOptions : JSON.stringify(obj.customDeviceOptions);
+        saveStore();
+        return;
+    }
     if (obj.theme !== undefined) setSetting('theme', obj.theme);
     if (obj.groupNames !== undefined) setSetting('groupNames', typeof obj.groupNames === 'string' ? obj.groupNames : JSON.stringify(obj.groupNames));
     if (obj.netboxConfig !== undefined) setSetting('netboxConfig', typeof obj.netboxConfig === 'string' ? obj.netboxConfig : JSON.stringify(obj.netboxConfig));
@@ -287,6 +546,7 @@ function restoreFromBackup(filename) {
     }
     if (!parsed || typeof parsed !== 'object') throw new Error('Неверный формат бэкапа');
     store = parsed;
+    migrateToOrganizations();
     initSchema();
     saveStore();
     console.log('[Backup] Восстановлено из:', trimmed);
@@ -343,6 +603,8 @@ module.exports = {
     getDb,
     getMapData,
     setMapData,
+    getMapDataLegacy,
+    setMapDataLegacy,
     getUsers,
     setUsers,
     getHistory,
@@ -356,5 +618,15 @@ module.exports = {
     createDailyBackup,
     listBackups,
     restoreFromBackup,
-    initDefaultAdmin
+    initDefaultAdmin,
+    getOrganizations,
+    getOrganization,
+    addOrganization,
+    updateOrganization,
+    deleteOrganization,
+    getSessions,
+    countActiveSessionsForOrganization,
+    deleteSessionsForOrganization,
+    getPricingPlans,
+    setPricingPlans
 };

@@ -148,12 +148,13 @@
             if (typeof window.hideSyncRequiredOverlay === 'function') window.hideSyncRequiredOverlay();
             var displayName = 'Участник';
             var userId = null;
+            var token = (typeof getAuthToken === 'function' ? getAuthToken() : null) || null;
             if (typeof currentUser !== 'undefined' && currentUser) {
                 displayName = (currentUser.fullName || currentUser.username || displayName).toString().trim().slice(0, 100) || displayName;
                 userId = currentUser.userId != null ? currentUser.userId : null;
             }
             try {
-                ws.send(JSON.stringify({ type: 'hello', displayName: displayName, userId: userId }));
+                ws.send(JSON.stringify({ type: 'hello', displayName: displayName, userId: userId, token: token }));
             } catch (e) {}
             if (btn) btn.disabled = false;
             setTimeout(function() {

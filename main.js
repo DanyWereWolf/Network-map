@@ -65,6 +65,22 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 50);
     }
     whenYmapsReady(init);
+
+    // Авто‑подключение к синхронизации для организации при входе на карту,
+    // только если ещё нет сохранённого адреса sync-сервера
+    try {
+        var hasSavedSyncUrl = false;
+        try {
+            hasSavedSyncUrl = !!sessionStorage.getItem('networkMap_syncUrl');
+        } catch (e) {}
+        if (!hasSavedSyncUrl && typeof window.syncConnect === 'function') {
+            setTimeout(function() {
+                try {
+                    window.syncConnect();
+                } catch (e) {}
+            }, 2000);
+        }
+    } catch (e) {}
     
     (async function() {
         await new Promise(function(r) { setTimeout(r, 1500); });
@@ -154,6 +170,14 @@ function initUserUI() {
 
     setupSidebarToggle();
 
+    // На телефонах по умолчанию сворачиваем боковую панель,
+    // чтобы карта занимала максимум места по высоте.
+    try {
+        if (window.innerWidth <= 768) {
+            document.body.classList.add('sidebar-collapsed');
+        }
+    } catch (e) {}
+
     if (typeof updateHistoryBadge === 'function') updateHistoryBadge();
 }
 
@@ -201,6 +225,116 @@ function openUsersModal() {
 function closeUsersModal() {
     const modal = document.getElementById('usersModal');
     modal.style.display = 'none';
+}
+
+var cachedOrganizationsList = null;
+function openOrganizationsModal() {
+    if (!requireAdmin()) return;
+    var modal = document.getElementById('organizationsModal');
+    if (modal) modal.style.display = 'block';
+    fetchOrganizationsAndRender();
+}
+function closeOrganizationsModal() {
+    var modal = document.getElementById('organizationsModal');
+    if (modal) modal.style.display = 'none';
+}
+function fetchOrganizationsAndRender() {
+    if (!getApiBase()) return;
+    fetch(getApiBase() + '/api/organizations', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } })
+        .then(function(r) { return r.json(); })
+        .then(function(body) {
+            if (body && body.organizations) {
+                cachedOrganizationsList = body.organizations;
+                renderOrganizationsList(body.organizations, body.plans || {});
+            }
+        })
+        .catch(function() {});
+}
+function renderOrganizationsList(organizations, plans) {
+    var container = document.getElementById('organizationsList');
+    if (!container) return;
+    if (!organizations || organizations.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 16px;">Нет организаций. Создайте первую.</div>';
+        return;
+    }
+    var planNames = { basic: 'Базовый', pro: 'Про', enterprise: 'Корпоративный' };
+    if (plans && typeof plans === 'object') {
+        Object.keys(plans).forEach(function(k) { if (plans[k].name) planNames[k] = plans[k].name; });
+    }
+    var html = '';
+    organizations.forEach(function(org) {
+        var maxU = org.maxConcurrentUsers != null ? org.maxConcurrentUsers : (plans[org.planId] && plans[org.planId].maxConcurrentUsers >= 0 ? plans[org.planId].maxConcurrentUsers : '∞');
+        if (maxU === -1) maxU = '∞';
+        var end = org.subscriptionEndsAt ? new Date(org.subscriptionEndsAt).toLocaleDateString('ru-RU') : '—';
+        var statusClass = org.status === 'suspended' ? 'rejected' : 'approved';
+        html += '<div class="user-item">';
+        html += '<div class="user-item-info" style="flex: 1;">';
+        html += '<div class="user-item-name">' + escapeHtml(org.name) + '</div>';
+        html += '<div class="user-item-username">Тариф: ' + escapeHtml(planNames[org.planId] || org.planId) + ' · Макс. пользователей: ' + maxU + ' · Активных сессий: ' + (org.activeSessions != null ? org.activeSessions : '—') + '</div>';
+        html += '<div class="user-item-date">Подписка до: ' + end + '</div>';
+        html += '</div>';
+        html += '<span class="user-item-role ' + statusClass + '">' + (org.status === 'suspended' ? 'Приостановлена' : 'Активна') + '</span>';
+        html += '<div class="user-item-actions"><button class="user-item-btn" title="Редактировать" onclick="editOrganization(\'' + escapeHtml(org.id) + '\')">Изменить</button></div>';
+        html += '</div>';
+    });
+    container.innerHTML = html;
+}
+function editOrganization(orgId) {
+    var org = (cachedOrganizationsList || []).find(function(o) { return o.id === orgId; });
+    if (!org) return;
+    document.getElementById('editOrgId').value = org.id;
+    document.getElementById('organizationEditTitle').textContent = 'Редактировать организацию';
+    document.getElementById('editOrgName').value = org.name || '';
+    document.getElementById('editOrgPlanId').value = org.planId || 'basic';
+    document.getElementById('editOrgMaxUsers').value = (org.maxConcurrentUsers != null && org.maxConcurrentUsers >= 0) ? org.maxConcurrentUsers : '';
+    document.getElementById('editOrgSubscriptionEndsAt').value = org.subscriptionEndsAt ? org.subscriptionEndsAt.slice(0, 10) : '';
+    document.getElementById('editOrgStatus').value = org.status || 'active';
+    document.getElementById('organizationEditModal').style.display = 'block';
+}
+function openAddOrganizationForm() {
+    document.getElementById('editOrgId').value = '';
+    document.getElementById('organizationEditTitle').textContent = 'Добавить организацию';
+    document.getElementById('editOrgName').value = '';
+    document.getElementById('editOrgPlanId').value = 'basic';
+    document.getElementById('editOrgMaxUsers').value = '';
+    document.getElementById('editOrgSubscriptionEndsAt').value = '';
+    document.getElementById('editOrgStatus').value = 'active';
+    document.getElementById('organizationEditModal').style.display = 'block';
+}
+function saveOrganizationFromModal() {
+    var id = document.getElementById('editOrgId').value;
+    var name = document.getElementById('editOrgName').value.trim() || 'Организация';
+    var planId = document.getElementById('editOrgPlanId').value;
+    var maxUsersRaw = document.getElementById('editOrgMaxUsers').value.trim();
+    var maxUsers = maxUsersRaw === '' ? undefined : parseInt(maxUsersRaw, 10);
+    var endsAt = document.getElementById('editOrgSubscriptionEndsAt').value || null;
+    if (endsAt) endsAt = endsAt + 'T23:59:59.000Z';
+    var status = document.getElementById('editOrgStatus').value;
+    if (id) {
+        fetch(getApiBase() + '/api/organizations/' + encodeURIComponent(id), {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
+            body: JSON.stringify({ name: name, planId: planId, maxConcurrentUsers: maxUsers, subscriptionEndsAt: endsAt, status: status })
+        }).then(function(r) {
+            if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+            return fetchOrganizationsAndRender();
+        }).then(function() {
+            if (typeof showSuccess === 'function') showSuccess('Организация обновлена');
+            document.getElementById('organizationEditModal').style.display = 'none';
+        }).catch(function(e) { if (typeof showError === 'function') showError(e.message || 'Не удалось обновить'); });
+    } else {
+        fetch(getApiBase() + '/api/organizations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
+            body: JSON.stringify({ name: name, planId: planId, maxConcurrentUsers: maxUsers, subscriptionEndsAt: endsAt, status: status })
+        }).then(function(r) {
+            if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+            return fetchOrganizationsAndRender();
+        }).then(function() {
+            if (typeof showSuccess === 'function') showSuccess('Организация создана');
+            document.getElementById('organizationEditModal').style.display = 'none';
+        }).catch(function(e) { if (typeof showError === 'function') showError(e.message || 'Не удалось создать'); });
+    }
 }
 
 function renderUsersList() {
@@ -277,12 +411,13 @@ function renderUsersList() {
         const isCurrentUser = user.id === currentUser.userId;
         const isOnline = onlineIds.some(id => id == user.id);
         
+        var orgLine = (user.organizationName ? ' · ' + escapeHtml(user.organizationName) : '');
         html += `
             <div class="user-item">
                 <div class="user-item-avatar ${roleClass}">${initial}</div>
                 <div class="user-item-info">
                     <div class="user-item-name">${escapeHtml(user.fullName || user.username)}${isCurrentUser ? ' (вы)' : ''}${isOnline ? ' <span class="user-item-online">В сети</span>' : ''}</div>
-                    <div class="user-item-username">@${escapeHtml(user.username)}</div>
+                    <div class="user-item-username">@${escapeHtml(user.username)}${orgLine}</div>
                     <div class="user-item-date">Создан: ${createdDate}</div>
                 </div>
                 <span class="user-item-role ${roleClass}">${roleText}</span>
@@ -383,13 +518,21 @@ function openUserEditModal(userId = null) {
     const fullNameInput = document.getElementById('editFullName');
     const passwordInput = document.getElementById('editPassword');
     const roleSelect = document.getElementById('editRole');
-    
+    const orgSelect = document.getElementById('editOrganizationId');
+    var orgs = (typeof AuthSystem !== 'undefined' && AuthSystem.getOrganizations) ? AuthSystem.getOrganizations() : [];
+    if (orgSelect) {
+        orgSelect.innerHTML = '<option value="">— Без организации —</option>';
+        orgs.forEach(function(o) {
+            var opt = document.createElement('option');
+            opt.value = o.id;
+            opt.textContent = o.name || o.id;
+            orgSelect.appendChild(opt);
+        });
+    }
     if (userId) {
-        
         const users = AuthSystem.getUsers();
         const user = users.find(u => u.id === userId);
         if (!user) return;
-        
         title.textContent = 'Редактировать пользователя';
         userIdInput.value = user.id;
         usernameInput.value = user.username;
@@ -397,8 +540,8 @@ function openUserEditModal(userId = null) {
         fullNameInput.value = user.fullName || '';
         passwordInput.value = '';
         roleSelect.value = user.role;
+        if (orgSelect && user.organizationId) orgSelect.value = user.organizationId || '';
     } else {
-        
         title.textContent = 'Добавить пользователя';
         userIdInput.value = '';
         usernameInput.value = '';
@@ -406,8 +549,8 @@ function openUserEditModal(userId = null) {
         fullNameInput.value = '';
         passwordInput.value = '';
         roleSelect.value = 'user';
+        if (orgSelect) orgSelect.value = '';
     }
-    
     modal.style.display = 'block';
 }
 
@@ -442,7 +585,9 @@ function saveUser() {
             showError('Нельзя снять роль администратора с главного администратора');
             return;
         }
-        var payload = { fullName: fullName || users[userIndex].username, role: role };
+        var orgSelect = document.getElementById('editOrganizationId');
+        var organizationId = (orgSelect && orgSelect.value) ? orgSelect.value : null;
+        var payload = { fullName: fullName || users[userIndex].username, role: role, organizationId: organizationId };
         if (password && password.length >= 6) payload.password = password;
         if (getApiBase()) {
             fetch(getApiBase() + '/api/users/' + encodeURIComponent(userId), {
@@ -472,11 +617,13 @@ function saveUser() {
         if (!password) { showError('Введите пароль'); return; }
         if (password.length < 6) { showError('Пароль должен быть не менее 6 символов'); return; }
         if (AuthSystem.findUserByUsername(username)) { showError('Пользователь с таким именем уже существует'); return; }
+        var orgSelect = document.getElementById('editOrganizationId');
+        var organizationId = (orgSelect && orgSelect.value) ? orgSelect.value : null;
         if (getApiBase()) {
             fetch(getApiBase() + '/api/users', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
-                body: JSON.stringify({ username: username, password: password, fullName: fullName || username, role: role || 'user' })
+                body: JSON.stringify({ username: username, password: password, fullName: fullName || username, role: role || 'user', organizationId: organizationId })
             }).then(function(r) {
                 if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
                 return (typeof AuthSystem !== 'undefined' && AuthSystem.refreshUsersFromApi) ? AuthSystem.refreshUsersFromApi() : Promise.resolve();
@@ -601,6 +748,21 @@ function setupUsersModalHandlers() {
     if (cancelUserEditBtn) {
         cancelUserEditBtn.addEventListener('click', closeUserEditModal);
     }
+
+    var closeOrganizationsBtn = document.querySelector('.close-organizations');
+    if (closeOrganizationsBtn) closeOrganizationsBtn.addEventListener('click', closeOrganizationsModal);
+    var organizationsModalEl = document.getElementById('organizationsModal');
+    if (organizationsModalEl) organizationsModalEl.addEventListener('click', function(e) { if (e.target === organizationsModalEl) closeOrganizationsModal(); });
+    var addOrganizationBtn = document.getElementById('addOrganizationBtn');
+    if (addOrganizationBtn) addOrganizationBtn.addEventListener('click', openAddOrganizationForm);
+    var closeOrganizationEditBtn = document.querySelector('.close-organization-edit');
+    if (closeOrganizationEditBtn) closeOrganizationEditBtn.addEventListener('click', function() { document.getElementById('organizationEditModal').style.display = 'none'; });
+    var organizationEditModalEl = document.getElementById('organizationEditModal');
+    if (organizationEditModalEl) organizationEditModalEl.addEventListener('click', function(e) { if (e.target === organizationEditModalEl) organizationEditModalEl.style.display = 'none'; });
+    var saveOrganizationBtn = document.getElementById('saveOrganizationBtn');
+    if (saveOrganizationBtn) saveOrganizationBtn.addEventListener('click', saveOrganizationFromModal);
+    var cancelOrganizationEditBtn = document.getElementById('cancelOrganizationEditBtn');
+    if (cancelOrganizationEditBtn) cancelOrganizationEditBtn.addEventListener('click', function() { document.getElementById('organizationEditModal').style.display = 'none'; });
 }
 
 function init() {
@@ -763,7 +925,7 @@ function setupEventListeners() {
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             
-            var modalIds = ['infoModal', 'nodeSelectionModal', 'onuSelectionModal', 'splitterSelectionModal', 'splitterOutputOnuModal', 'splitterOutputSplitterModal', 'oltSelectionModal', 'usersModal', 'userEditModal', 'updatesModal', 'deviceCatalogModal', 'confirmModal'];
+            var modalIds = ['infoModal', 'nodeSelectionModal', 'onuSelectionModal', 'splitterSelectionModal', 'splitterOutputOnuModal', 'splitterOutputSplitterModal', 'oltSelectionModal', 'usersModal', 'userEditModal', 'organizationsModal', 'organizationEditModal', 'updatesModal', 'deviceCatalogModal', 'confirmModal'];
             for (var i = 0; i < modalIds.length; i++) {
                 var m = document.getElementById(modalIds[i]);
                 if (m && m.style && m.style.display === 'block') {

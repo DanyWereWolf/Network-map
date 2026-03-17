@@ -102,16 +102,19 @@ function loginUser(username, password, rememberMe) {
     }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
 }
 
-function registerUser(username, password, fullName) {
+function registerUser(username, password, fullName, organizationName) {
     if (username.length < 3) return Promise.resolve({ success: false, error: 'Имя пользователя должно быть не менее 3 символов' });
+    if (!organizationName || organizationName.trim().length < 3) return Promise.resolve({ success: false, error: 'Укажите название организации (не менее 3 символов)' });
     if (password.length < 6) return Promise.resolve({ success: false, error: 'Пароль должен быть не менее 6 символов' });
     if (!getApiBase()) return Promise.resolve({ success: false, error: 'Запустите сервер: npm run api, затем откройте http://localhost:3000' });
+    var body = { username: username, password: password, fullName: fullName || username, organizationName: String(organizationName).trim() };
     return fetch(getApiBase() + '/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username, password: password, fullName: fullName || username })
-    }).then(function(r) { return r.json(); }).then(function(body) {
-        return body.success ? { success: true, pending: true } : { success: false, error: body.error || 'Ошибка' };
+        body: JSON.stringify(body)
+    }).then(function(r) { return r.json(); }).then(function(res) {
+        if (!res.success) return { success: false, error: res.error || 'Ошибка' };
+        return { success: true, pending: res.pending, organizationId: res.organizationId };
     }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
 }
 
@@ -149,8 +152,16 @@ function refreshUsersFromApi() {
         .then(function(r) { return r.json(); })
         .then(function(body) {
             if (body && body.users) sessionStorage.setItem('networkMap_users', JSON.stringify(body.users));
+            if (body && body.organizations) try { sessionStorage.setItem('networkMap_organizations', JSON.stringify(body.organizations)); } catch (e) {}
         })
         .catch(function() {});
+}
+
+function getOrganizations() {
+    try {
+        var raw = sessionStorage.getItem('networkMap_organizations');
+        return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
 }
 
 function getPendingUsers() {
@@ -248,6 +259,22 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
     }
     
+    // Обработка параметров URL (например, trial=1)
+    if (isAuthPage) {
+        try {
+            var search = window.location.search.replace(/^\?/, '').split('&').reduce(function(acc, part) {
+                if (!part) return acc;
+                var kv = part.split('=');
+                acc[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || '');
+                return acc;
+            }, {});
+            if (search.trial === '1') {
+                switchForm('register');
+                showMessage('Пробный доступ: 14 дней, до 1 одновременного пользователя для вашей организации. После окончания потребуется выбрать тариф.', 'info');
+            }
+        } catch (e) {}
+    }
+
     const loginForm = document.getElementById('loginForm');
     if (loginForm) {
         loginForm.addEventListener('submit', function(e) {
@@ -258,7 +285,14 @@ document.addEventListener('DOMContentLoaded', function() {
             Promise.resolve(loginUser(username, password, rememberMe)).then(function(result) {
                 if (result.success) {
                     showMessage('Вход выполнен успешно! Перенаправление...', 'success');
-                    setTimeout(function() { window.location.href = 'index.html'; }, 1000);
+                    setTimeout(function() {
+                        var u = result.user || {};
+                        if (u.role === 'admin' && (u.username || '').toLowerCase() === 'admin') {
+                            window.location.href = 'site-admin.html';
+                        } else {
+                            window.location.href = 'index.html';
+                        }
+                    }, 1000);
                 } else {
                     showMessage(result.error, 'error');
                 }
@@ -271,12 +305,17 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             var username = document.getElementById('regUsername').value.trim();
             var fullName = document.getElementById('regFullName').value.trim();
+            var organizationName = document.getElementById('regOrganizationName') ? document.getElementById('regOrganizationName').value.trim() : '';
             var password = document.getElementById('regPassword').value;
             var passwordConfirm = document.getElementById('regPasswordConfirm').value;
             if (password !== passwordConfirm) { showMessage('Пароли не совпадают', 'error'); return; }
-            Promise.resolve(registerUser(username, password, fullName)).then(function(result) {
+            Promise.resolve(registerUser(username, password, fullName, organizationName)).then(function(result) {
                 if (result.success) {
-                    showMessage('Заявка на регистрацию отправлена! Ожидайте одобрения администратором.', 'success');
+                    if (result.organizationId) {
+                        showMessage('Организация создана. Вы можете войти.', 'success');
+                    } else {
+                        showMessage('Заявка на регистрацию отправлена! Ожидайте одобрения администратором.', 'success');
+                    }
                     setTimeout(function() { switchForm('login'); }, 2500);
                 } else {
                     showMessage(result.error, 'error');
@@ -296,6 +335,7 @@ window.AuthSystem = {
     getPendingUsers,
     getUsers,
     saveUsers,
+    getOrganizations,
     hashPassword,
     findUserByUsername,
     refreshUsersFromApi,

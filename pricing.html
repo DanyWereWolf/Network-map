@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Карта оптической сети — платформа для управления ВОЛС</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="stylesheet" href="auth.css">
+    <style>
+        body {
+            color: #0f172a;
+        }
+        .landing-root {
+            max-width: 1120px;
+            width: 100%;
+        }
+        .landing-shell {
+            width: 100%;
+            min-height: 88vh;
+            display: block;
+        }
+        .landing-nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+        .landing-nav-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .landing-brand-title {
+            font-weight: 600;
+            font-size: 1.05rem;
+            color: #111827;
+        }
+        .landing-brand-sub {
+            font-size: 0.75rem;
+            color: #6b7280;
+        }
+        .landing-nav-menu {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 0.9rem;
+        }
+        .landing-nav-menu a {
+            color: #4b5563;
+            text-decoration: none;
+            padding: 4px 0;
+        }
+        .landing-nav-menu a:hover {
+            color: #111827;
+        }
+        .landing-nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .btn-outline {
+            border-radius: 999px;
+            padding: 6px 14px;
+            border: 1px solid rgba(15,23,42,0.14);
+            background: rgba(255,255,255,0.9);
+            font-size: 0.85rem;
+            cursor: pointer;
+            color: #111827;
+        }
+        .btn-outline:hover {
+            background: #f3f4f6;
+        }
+        .btn-primary-hero {
+            border-radius: 999px;
+            padding: 8px 18px;
+            border: none;
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            color: #fff;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            box-shadow: 0 16px 40px rgba(37,99,235,0.42);
+        }
+        .btn-primary-hero:hover {
+            filter: brightness(1.03);
+        }
+        .landing-hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.3fr);
+            gap: 40px;
+            align-items: center;
+            margin: 28px 0 36px;
+        }
+        .landing-hero-title {
+            font-size: 2.1rem;
+            line-height: 1.15;
+            margin-bottom: 12px;
+        }
+        .landing-hero-subtitle {
+            font-size: 0.95rem;
+            color: #4b5563;
+            margin-bottom: 18px;
+        }
+        .landing-hero-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .badge-pill {
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            border: 1px solid rgba(59,130,246,0.25);
+        }
+        .landing-hero-meta {
+            font-size: 0.75rem;
+            color: #9ca3af;
+        }
+        .landing-hero-visual {
+            border-radius: 18px;
+            padding: 18px 18px 16px;
+            background: radial-gradient(circle at 0 0, rgba(96,165,250,0.22), transparent 60%), #020617;
+            color: #e5e7eb;
+            box-shadow: 0 20px 80px rgba(15,23,42,0.9);
+            font-size: 0.8rem;
+        }
+        .hero-metric-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .hero-metric {
+            text-align: left;
+        }
+        .hero-metric-label {
+            font-size: 0.7rem;
+            color: #9ca3af;
+        }
+        .hero-metric-value {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #f9fafb;
+        }
+        .hero-mini-map {
+            border-radius: 14px;
+            background: rgba(15,23,42,0.9);
+            padding: 10px;
+            border: 1px solid rgba(148,163,184,0.4);
+            margin-top: 8px;
+        }
+        .hero-mini-map-grid {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 4px;
+            margin-bottom: 8px;
+        }
+        .hero-mini-node {
+            height: 18px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            opacity: 0.15;
+        }
+        .hero-mini-node.active {
+            opacity: 1;
+        }
+        .hero-mini-caption {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            color: #9ca3af;
+        }
+        .landing-sections {
+            display: grid;
+            grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.4fr);
+            gap: 36px;
+            margin: 10px 0 26px;
+        }
+        .landing-section {
+            margin-bottom: 10px;
+        }
+        .section-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #111827;
+        }
+        .section-title span.icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            border-radius: 999px;
+            background: #eff6ff;
+            color: #2563eb;
+        }
+        .section-body {
+            font-size: 0.86rem;
+            color: #4b5563;
+        }
+        .feature-list {
+            list-style: none;
+            padding: 0;
+            margin: 6px 0 0;
+        }
+        .feature-list li {
+            display: flex;
+            gap: 6px;
+            align-items: flex-start;
+            margin-bottom: 4px;
+        }
+        .feature-list li svg {
+            margin-top: 1px;
+            color: #059669;
+        }
+        .landing-pricing {
+            margin-top: 8px;
+        }
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 20px;
+            margin-top: 10px;
+        }
+        .pricing-card {
+            border-radius: 18px;
+            border: 1px solid rgba(15,23,42,0.06);
+            background: #ffffff;
+            box-shadow: 0 18px 40px rgba(15,23,42,0.18);
+            padding: 18px 18px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .pricing-card.pro {
+            border-color: rgba(59,130,246,0.5);
+            box-shadow: 0 22px 60px rgba(37,99,235,0.45);
+            position: relative;
+        }
+        .pricing-card.pro::before {
+            content: "Рекомендуем";
+            position: absolute;
+            top: 10px;
+            right: 14px;
+            font-size: 0.7rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            padding: 3px 8px;
+            border-radius: 999px;
+            background: #1d4ed8;
+            color: white;
+        }
+        .pricing-name {
+            font-weight: 600;
+            font-size: 1.02rem;
+        }
+        .pricing-short {
+            font-size: 0.8rem;
+            color: #6b7280;
+        }
+        .pricing-price-row {
+            display: flex;
+            align-items: baseline;
+            gap: 4px;
+        }
+        .pricing-price {
+            font-size: 1.4rem;
+            font-weight: 700;
+        }
+        .pricing-period {
+            font-size: 0.8rem;
+            color: #6b7280;
+        }
+        .pricing-meta {
+            font-size: 0.76rem;
+            color: #9ca3af;
+        }
+        .pricing-cta-btn {
+            margin-top: 10px;
+            width: 100%;
+            border-radius: 999px;
+            padding: 8px 14px;
+            border: none;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: #111827;
+            color: white;
+            transition: transform 0.12s ease-out, box-shadow 0.12s ease-out, background 0.12s ease-out;
+        }
+        .pricing-card.pro .pricing-cta-btn {
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+        }
+        .pricing-cta-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 24px rgba(15,23,42,0.3);
+        }
+        .landing-footer {
+            margin-top: 16px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 8px;
+            font-size: 0.75rem;
+            color: #9ca3af;
+        }
+        .landing-footer a {
+            color: #6b7280;
+            text-decoration: none;
+        }
+        .landing-footer a:hover {
+            text-decoration: underline;
+        }
+        @media (max-width: 900px) {
+            .landing-hero {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
+        @media (max-width: 640px) {
+            .landing-shell {
+                padding: 26px 18px;
+            }
+            .auth-card {
+                padding: 26px 18px;
+            }
+            .landing-nav-menu {
+                display: none;
+            }
+            .landing-hero-title {
+                font-size: 1.7rem;
+            }
+            .landing-sections {
+                grid-template-columns: minmax(0, 1fr);
+                gap: 20px;
+            }
+            .landing-nav {
+                align-items: flex-start;
+            }
+            .landing-nav-actions {
+                margin-left: auto;
+            }
+        }
+        @media (max-width: 480px) {
+            .landing-nav {
+                flex-wrap: wrap;
+            }
+            .landing-nav-actions {
+                width: 100%;
+                justify-content: stretch;
+            }
+            .landing-nav-actions .btn-outline,
+            .landing-nav-actions .btn-primary-hero {
+                flex: 1;
+                justify-content: center;
+                text-align: center;
+            }
+            .landing-hero {
+                margin: 18px 0 26px;
+                gap: 18px;
+            }
+            .landing-hero-title {
+                font-size: 1.5rem;
+            }
+            .landing-hero-visual {
+                margin-top: 4px;
+                padding: 14px 14px 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-bg" aria-hidden="true">
+        <div class="auth-bg-gradient"></div>
+        <canvas id="authPlexusCanvas" class="auth-bg-plexus"></canvas>
+    </div>
+    <div class="auth-container landing-root">
+        <div class="auth-card landing-shell">
+            <!-- Навигация -->
+            <header class="landing-nav">
+                <div class="landing-nav-left">
+                    <div class="auth-logo" style="width:52px;height:52px;margin:0;">
+                        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                            <circle cx="12" cy="10" r="3"></circle>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="landing-brand-title">Карта оптической сети</div>
+                        <div class="landing-brand-sub">Платформа управления ВОЛС и активами сети</div>
+                    </div>
+                </div>
+                <nav class="landing-nav-menu">
+                    <a href="#home">Главная</a>
+                    <a href="#about">О продукте</a>
+                    <a href="#pricing">Тарифы</a>
+                    <a href="#contacts">Контакты</a>
+                </nav>
+                <div class="landing-nav-actions">
+                    <button class="btn-outline" onclick="window.location.href='auth.html'">Войти</button>
+                    <button class="btn-primary-hero" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">
+                        Попробовать сейчас
+                    </button>
+                </div>
+            </header>
+
+            <!-- Главная / hero -->
+            <section id="home" class="landing-hero">
+                <div>
+                    <h1 class="landing-hero-title">
+                        Вся ваша сеть на одной карте. С подпиской под ваш рост.
+                    </h1>
+                    <p class="landing-hero-subtitle">
+                        «Карта оптической сети» позволяет хранить топологию ВОЛС, оборудование и историю изменений в единой системе,
+                        с разграничением по организациям и контролем числа одновременных пользователей по подписке.
+                    </p>
+                    <div class="landing-hero-badges">
+                        <span class="badge-pill">Изоляция данных организаций</span>
+                        <span class="badge-pill">Онлайн‑совместное редактирование</span>
+                        <span class="badge-pill">История и резервные копии</span>
+                    </div>
+                    <div style="display:flex;gap:10px;margin-bottom:8px;">
+                        <button class="btn-primary-hero" onclick="window.location.href='auth.html?trial=1'">
+                            Попробовать 14 дней бесплатно
+                        </button>
+                        <button class="btn-outline" onclick="document.getElementById('about').scrollIntoView({behavior:'smooth'})">
+                            Выбрать тариф
+                        </button>
+                    </div>
+                    <div class="landing-hero-meta">
+                        Подходит для провайдеров, интеграторов и внутренних IT‑отделов. Данные хранятся локально на вашем сервере.
+                    </div>
+                </div>
+                <aside class="landing-hero-visual" aria-hidden="true">
+                    <div class="hero-metric-row">
+                        <div class="hero-metric">
+                            <div class="hero-metric-label">Организаций</div>
+                            <div class="hero-metric-value">12</div>
+                        </div>
+                        <div class="hero-metric">
+                            <div class="hero-metric-label">Активных пользователей</div>
+                            <div class="hero-metric-value">37</div>
+                        </div>
+                        <div class="hero-metric">
+                            <div class="hero-metric-label">Узлов сети</div>
+                            <div class="hero-metric-value">2 430</div>
+                        </div>
+                    </div>
+                    <div class="hero-mini-map">
+                        <div class="hero-mini-map-grid">
+                            <div class="hero-mini-node active"></div>
+                            <div class="hero-mini-node"></div>
+                            <div class="hero-mini-node active"></div>
+                            <div class="hero-mini-node"></div>
+                            <div class="hero-mini-node"></div>
+
+                            <div class="hero-mini-node"></div>
+                            <div class="hero-mini-node active"></div>
+                            <div class="hero-mini-node"></div>
+                            <div class="hero-mini-node active"></div>
+                            <div class="hero-mini-node"></div>
+
+                            <div class="hero-mini-node"></div>
+                            <div class="hero-mini-node"></div>
+                            <div class="hero-mini-node active"></div>
+                            <div class="hero-mini-node"></div>
+                            <div class="hero-mini-node active"></div>
+
+                            <div class="hero-mini-node active"></div>
+                            <div class="hero-mini-node"></div>
+                            <div class="hero-mini-node"></div>
+                            <div class="hero-mini-node active"></div>
+                            <div class="hero-mini-node"></div>
+
+                            <div class="hero-mini-node"></div>
+                            <div class="hero-mini-node active"></div>
+                            <div class="hero-mini-node"></div>
+                            <div class="hero-mini-node"></div>
+                            <div class="hero-mini-node active"></div>
+                        </div>
+                        <div class="hero-mini-caption">
+                            <span>Живая карта ваших линков и узлов</span>
+                            <span>Обновления в реальном времени</span>
+                        </div>
+                    </div>
+                </aside>
+            </section>
+
+            <!-- О продукте и управление организациями/подписками -->
+            <section id="about" class="landing-sections">
+                <div class="landing-section">
+                    <h2 class="section-title">
+                        <span class="icon">i</span>
+                        О продукте
+                    </h2>
+                    <div class="section-body">
+                        «Карта оптической сети» — это веб‑интерфейс для проектирования и сопровождения ВОЛС.
+                        Отображение на Яндекс.Картах, инвентаризация узлов и оборудования, поиск, история изменений и удобные бэкапы —
+                        всё в одном инструменте, который запускается на вашем сервере.
+                        <ul class="feature-list">
+                            <li>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                                <span>Поддержка узлов, кабелей, сплиттеров, ONU/OLT и другого оборудования.</span>
+                            </li>
+                            <li>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                                <span>История операций и резервные копии на 30 дней с восстановлением в пару кликов.</span>
+                            </li>
+                            <li>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                                <span>Режим совместного редактирования карты через WebSocket‑синхронизацию.</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="landing-section">
+                    <h2 class="section-title">
+                        <span class="icon">⚙</span>
+                        Что даёт карта инженеру
+                    </h2>
+                    <div class="section-body">
+                        Всё, что нужно для ежедневной работы с сетью в одном окне:
+                        <ul class="feature-list">
+                            <li>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                                <span>Быстрый поиск узлов, муфт, сплиттеров и абонентов прямо на карте.</span>
+                            </li>
+                            <li>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                                <span>Понимание, по каким жилам и через какие элементы идёт сигнал до клиента.</span>
+                            </li>
+                            <li>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                                <span>История изменений и бэкапы, чтобы всегда можно было вернуться к прошлому состоянию сети.</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Тарифы -->
+            <section id="pricing" class="landing-pricing">
+                <h2 class="section-title">
+                    <span class="icon">₽</span>
+                    Тарифы и контроль стоимости
+                </h2>
+                <div class="section-body">
+                    Начните с <strong>бесплатного пробного периода 14 дней</strong>, а затем выберите подходящий тариф для вашей команды.
+                </div>
+                <div id="pricingCards" class="pricing-grid" style="margin-top:10px;">
+                    <!-- Карточки тарифов подставляются с сервера -->
+                </div>
+            </section>
+
+            <!-- Контакты -->
+            <section id="contacts" style="margin-top:18px;">
+                <h2 class="section-title">
+                    <span class="icon">@</span>
+                    Как с нами связаться
+                </h2>
+                <div class="section-body">
+                    Напишите нам, если хотите настроить систему под вашу инфраструктуру, обсудить корпоративный тариф или задать технические вопросы.
+                    <ul class="feature-list" style="margin-top:6px;">
+                        <li>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                            <span>E‑mail для связи: <strong>danilsecin@gmail.com</strong></span>
+                        </li>
+                        <li>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                            <span>WhatsApp: <strong>+7 (951)165-91-97</strong></span>
+                           
+                        </li>
+                        <li>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        <span>Telegram: <strong>@Wulfgard1</strong></span>
+                        </svg>
+                    </li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- Футер -->
+            <footer class="landing-footer">
+                <div>© 2024–2026 «Карта оптической сети». Все права защищены.</div>
+                <div>
+                    <a href="#about">О продукте</a> ·
+                    <a href="#pricing">Тарифы</a> ·
+                    <a href="#contacts">Контакты</a> ·
+                    <a href="auth.html">Войти</a>
+                </div>
+            </footer>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        function attachHandlers() {
+            document.querySelectorAll('.pricing-cta-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var plan = this.getAttribute('data-plan') || 'basic';
+                    var kind = this.getAttribute('data-kind') || 'paid';
+                    if (kind === 'trial') {
+                        window.location.href = 'auth.html?trial=1';
+                        return;
+                    }
+                    if (kind === 'contact') {
+                        window.location.hash = '#contacts';
+                        document.getElementById('contacts').scrollIntoView({ behavior: 'smooth' });
+                        return;
+                    }
+                    window.location.href = 'checkout.html?plan=' + encodeURIComponent(plan);
+                });
+            });
+        }
+
+        fetch('api/pricing')
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(body) {
+                var container = document.getElementById('pricingCards');
+                if (!container) return;
+                container.innerHTML = '';
+                var plans = body && Array.isArray(body.plans) ? body.plans : [];
+                if (!plans.length) {
+                    container.innerHTML = '<div class="section-body">Тарифы пока не настроены администратором.</div>';
+                    return;
+                }
+                plans.forEach(function(p) {
+                    var card = document.createElement('div');
+                    card.className = 'pricing-card' + (p.highlighted ? ' pro' : '');
+                    card.innerHTML =
+                        '<div>' +
+                            '<div class="pricing-name">' + (p.title || p.id || 'Тариф') + '</div>' +
+                            '<div class="pricing-short">' + (p.short || '') + '</div>' +
+                        '</div>' +
+                        '<div class="pricing-price-row">' +
+                            '<div class="pricing-price">' + (p.price || '') + '</div>' +
+                            '<div class="pricing-period">' + (p.period || '') + '</div>' +
+                        '</div>' +
+                        '<div class="pricing-meta">' + (p.maxUsersText || '') + '</div>' +
+                        '<button class="pricing-cta-btn" data-plan="' + (p.id || '') + '" data-kind="' + (p.kind || 'paid') + '">' +
+                            (p.ctaText || 'Выбрать') +
+                            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+                                '<line x1="5" y1="12" x2="19" y2="12"></line>' +
+                                '<polyline points="12 5 19 12 12 19"></polyline>' +
+                            '</svg>' +
+                        '</button>';
+                    container.appendChild(card);
+                });
+                attachHandlers();
+            })
+            .catch(function() {});
+    })();
+    </script>
+    <script>
+    (function() {
+        var canvas = document.getElementById('authPlexusCanvas');
+        if (!canvas) return;
+        var ctx = canvas.getContext('2d');
+        var nodes = [];
+        var nodeCount = 80;
+        var maxDist = 170;
+        var lineOpacity = 0.12;
+        var nodeRadius = 1.6;
+        var resize = function() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            if (nodes.length === 0) {
+                for (var i = 0; i < nodeCount; i++) {
+                    nodes.push({
+                        x: Math.random() * canvas.width,
+                        y: Math.random() * canvas.height,
+                        vx: (Math.random() - 0.5) * 0.16,
+                        vy: (Math.random() - 0.5) * 0.16
+                    });
+                }
+            }
+        };
+        var draw = function() {
+            if (!ctx || !canvas.width || !canvas.height) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            var i, j, dx, dy, d, op;
+            for (i = 0; i < nodes.length; i++) {
+                for (j = i + 1; j < nodes.length; j++) {
+                    dx = nodes[j].x - nodes[i].x;
+                    dy = nodes[j].y - nodes[i].y;
+                    d = Math.sqrt(dx * dx + dy * dy);
+                    if (d < maxDist) {
+                        op = (1 - d / maxDist) * lineOpacity;
+                        ctx.beginPath();
+                        ctx.moveTo(nodes[i].x, nodes[i].y);
+                        ctx.lineTo(nodes[j].x, nodes[j].y);
+                        ctx.strokeStyle = 'rgba(59, 130, 246, ' + op + ')';
+                        ctx.lineWidth = 0.8;
+                        ctx.stroke();
+                    }
+                }
+            }
+            for (i = 0; i < nodes.length; i++) {
+                var n = nodes[i];
+                var g = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, nodeRadius * 4);
+                g.addColorStop(0, 'rgba(147, 197, 253, 0.9)');
+                g.addColorStop(0.4, 'rgba(59, 130, 246, 0.4)');
+                g.addColorStop(1, 'rgba(59, 130, 246, 0)');
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, nodeRadius * 4, 0, Math.PI * 2);
+                ctx.fillStyle = g;
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, nodeRadius, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+                ctx.fill();
+            }
+        };
+        var tick = function() {
+            var i, n;
+            for (i = 0; i < nodes.length; i++) {
+                n = nodes[i];
+                n.x += n.vx;
+                n.y += n.vy;
+                if (n.x < 0 || n.x > canvas.width) n.vx *= -1;
+                if (n.y < 0 || n.y > canvas.height) n.vy *= -1;
+                n.x = Math.max(0, Math.min(canvas.width, n.x));
+                n.y = Math.max(0, Math.min(canvas.height, n.y));
+            }
+            draw();
+            requestAnimationFrame(tick);
+        };
+        resize();
+        window.addEventListener('resize', function() {
+            resize();
+            draw();
+        });
+        tick();
+    })();
+    </script>
+</body>
+</html>
+
+

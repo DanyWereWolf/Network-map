@@ -21,6 +21,18 @@ const PORT = parseInt(process.env.PORT || process.argv[2] || serverConfig.port |
 const HOST = process.env.HOST || serverConfig.host || '0.0.0.0';
 const app = express();
 
+var SUBSCRIPTION_PLANS = {
+    basic: { maxConcurrentUsers: 3, name: 'Базовый' },
+    pro: { maxConcurrentUsers: 10, name: 'Про' },
+    enterprise: { maxConcurrentUsers: -1, name: 'Корпоративный' }
+};
+function getMaxConcurrentForOrg(org) {
+    if (!org) return 1;
+    if (org.maxConcurrentUsers != null && org.maxConcurrentUsers >= 0) return org.maxConcurrentUsers;
+    var plan = SUBSCRIPTION_PLANS[org.planId || 'basic'];
+    return plan ? (plan.maxConcurrentUsers === -1 ? 999 : plan.maxConcurrentUsers) : 3;
+}
+
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 
@@ -37,22 +49,54 @@ function generateToken() {
     return 'tk_' + Date.now() + '_' + require('crypto').randomBytes(16).toString('hex');
 }
 
+function getSessionByToken(token) {
+    if (!token) return null;
+    var sessions = db.getSessions();
+    var now = new Date().toISOString();
+    var ses = sessions.find(function(s) { return s.token === token && s.expires_at > now; });
+    if (!ses) return null;
+    var users = db.getUsers();
+    var user = users.find(function(u) { return u.id === ses.user_id; });
+    return user ? { userId: user.id, organizationId: user.organizationId != null ? user.organizationId : (ses.organization_id || null) } : null;
+}
+
 function getSessionUser(req) {
     const auth = req.headers.authorization;
     if (!auth || !auth.startsWith('Bearer ')) return null;
     const token = auth.slice(7);
-    const sessions = db.getDb().prepare('SELECT user_id FROM sessions WHERE token = ? AND expires_at > datetime(\'now\')').all(token);
+    const sessions = db.getDb().prepare('SELECT user_id, organization_id FROM sessions WHERE token = ? AND expires_at > datetime(\'now\')').all(token);
     if (sessions.length === 0) return null;
     const users = db.getUsers();
     const user = users.find(u => u.id === sessions[0].user_id);
     if (!user) return null;
-    return { userId: user.id, username: user.username, fullName: user.fullName || user.full_name, role: user.role };
+    const organizationId = user.organizationId != null ? user.organizationId : (sessions[0].organization_id || null);
+    const organization = organizationId ? db.getOrganization(organizationId) : null;
+    const maxConcurrent = organization ? getMaxConcurrentForOrg(organization) : null;
+    return {
+        userId: user.id,
+        username: user.username,
+        fullName: user.fullName || user.full_name,
+        role: user.role,
+        organizationId: organizationId,
+        organization: organization ? { id: organization.id, name: organization.name, planId: organization.planId, maxConcurrentUsers: maxConcurrent } : null
+    };
+}
+
+function isGlobalAdmin(user) {
+    // Глобальный админ панели: роль admin и нет привязки к организации
+    return !!(user && user.role === 'admin' && (user.organizationId == null));
 }
 
 app.get('/api/map', (req, res) => {
     try {
-        const data = db.getMapData();
-        res.json({ data });
+        var user = getSessionUser(req);
+        if (isGlobalAdmin(user)) {
+            return res.status(403).json({ error: 'Главному администратору недоступен интерфейс карты. Используйте панель администратора.' });
+        }
+        var orgId = (user && user.organizationId) ? user.organizationId : null;
+        if (!orgId && user) return res.status(403).json({ error: 'Выберите организацию или привяжите учётную запись к организации' });
+        var data = orgId ? db.getMapData(orgId) : [];
+        res.json({ data: data });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
     }
@@ -61,11 +105,14 @@ app.get('/api/map', (req, res) => {
 app.post('/api/map', (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (isGlobalAdmin(user)) return res.status(403).json({ error: 'Главному администратору недоступно сохранение карты.' });
+    var orgId = user.organizationId;
+    if (!orgId) return res.status(403).json({ error: 'Укажите организацию для сохранения карты' });
     if (user.role !== 'admin') return res.status(403).json({ error: 'Только администратор может сохранять карту' });
     try {
         const data = req.body && req.body.data;
         if (!Array.isArray(data)) return res.status(400).json({ error: 'Ожидается массив data' });
-        db.setMapData(data);
+        db.setMapData(orgId, data);
         res.json({ ok: true });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
@@ -81,13 +128,46 @@ app.post('/api/auth/login', (req, res) => {
     if (user.password !== hashPassword(password)) return res.json({ success: false, error: 'Неверный пароль' });
     if (user.status === 'pending') return res.json({ success: false, error: 'Заявка ожидает одобрения' });
     if (user.status === 'rejected') return res.json({ success: false, error: 'Заявка отклонена' });
+    var organizationId = user.organizationId || null;
+    var organization = organizationId ? db.getOrganization(organizationId) : null;
+    if (user.role !== 'admin' && !organizationId) return res.json({ success: false, error: 'Учётная запись не привязана к организации. Обратитесь к администратору.' });
+    if (organization) {
+        if (organization.status !== 'active') return res.json({ success: false, error: 'Подписка организации приостановлена или заблокирована.' });
+        if (organization.subscriptionEndsAt && new Date(organization.subscriptionEndsAt) < new Date()) return res.json({ success: false, error: 'Срок действия подписки истёк. Продлите подписку.' });
+        var maxConcurrent = getMaxConcurrentForOrg(organization);
+        if (maxConcurrent >= 0) {
+            // Считаем только другие сессии этой организации (не текущего пользователя),
+            // чтобы повторный вход тем же пользователем не блокировался.
+            var sessions = db.getSessions();
+            var nowIso = new Date().toISOString();
+            var activeCount = sessions.filter(function (ses) {
+                return ses.organization_id === organizationId &&
+                    ses.expires_at > nowIso &&
+                    ses.user_id !== user.id;
+            }).length;
+            if (activeCount >= maxConcurrent) {
+                return res.json({
+                    success: false,
+                    error: 'Достигнут лимит одновременных пользователей (' + maxConcurrent + '). Попробуйте позже или увеличьте тариф.'
+                });
+            }
+        }
+    }
     const token = generateToken();
     const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    db.getDb().prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, user.id, expires);
+    var stmt = db.getDb().prepare('INSERT INTO sessions (token, user_id, expires_at, organization_id) VALUES (?, ?, ?, ?)');
+    stmt.run(token, user.id, expires, organizationId);
     res.json({
         success: true,
         token,
-        user: { userId: user.id, username: user.username, fullName: user.fullName || user.full_name, role: user.role }
+        user: {
+            userId: user.id,
+            username: user.username,
+            fullName: user.fullName || user.full_name,
+            role: user.role,
+            organizationId: organizationId,
+            organization: organization ? { id: organization.id, name: organization.name, planId: organization.planId, maxConcurrentUsers: getMaxConcurrentForOrg(organization) } : null
+        }
     });
 });
 
@@ -103,36 +183,214 @@ app.post('/api/auth/logout', (req, res) => {
 app.get('/api/auth/session', (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ error: 'Нет сессии' });
-    res.json({ user });
+    res.json({ user: user });
+});
+
+app.get('/api/organizations/me', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!user.organizationId) return res.json({ organization: null });
+    var org = db.getOrganization(user.organizationId);
+    if (!org) return res.json({ organization: null });
+    res.json({
+        organization: {
+            id: org.id,
+            name: org.name,
+            planId: org.planId,
+            maxConcurrentUsers: getMaxConcurrentForOrg(org),
+            subscriptionEndsAt: org.subscriptionEndsAt,
+            status: org.status
+        }
+    });
+});
+
+app.get('/api/organizations', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    try {
+        var list = db.getOrganizations().map(function(o) {
+            var activeSessions = db.countActiveSessionsForOrganization(o.id);
+            return {
+                id: o.id,
+                name: o.name,
+                planId: o.planId,
+                maxConcurrentUsers: o.maxConcurrentUsers != null ? o.maxConcurrentUsers : (SUBSCRIPTION_PLANS[o.planId] && SUBSCRIPTION_PLANS[o.planId].maxConcurrentUsers >= 0 ? SUBSCRIPTION_PLANS[o.planId].maxConcurrentUsers : -1),
+                subscriptionEndsAt: o.subscriptionEndsAt,
+                status: o.status,
+                discountPercent: typeof o.discountPercent === 'number' ? o.discountPercent : 0,
+                customMonthlyPrice: typeof o.customMonthlyPrice === 'number' ? o.customMonthlyPrice : null,
+                createdAt: o.createdAt,
+                activeSessions: activeSessions
+            };
+        });
+        res.json({ organizations: list, plans: SUBSCRIPTION_PLANS });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.get('/api/pricing', (req, res) => {
+    try {
+        const plans = db.getPricingPlans();
+        res.json({ plans: plans });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.put('/api/pricing', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Только администратор' });
+    const body = req.body || {};
+    if (!Array.isArray(body.plans)) return res.status(400).json({ error: 'Ожидается массив plans' });
+    const cleaned = body.plans.map(function(p, idx) {
+        return {
+            id: String(p.id || ('plan_' + idx)),
+            title: String(p.title || 'Тариф'),
+            short: String(p.short || ''),
+            price: String(p.price || ''),
+            period: String(p.period || ''),
+            maxUsersText: String(p.maxUsersText || ''),
+            order: typeof p.order === 'number' ? p.order : idx,
+            highlighted: !!p.highlighted,
+            ctaText: String(p.ctaText || ''),
+            kind: p.kind === 'trial' || p.kind === 'contact' ? p.kind : 'paid'
+        };
+    });
+    try {
+        db.setPricingPlans(cleaned);
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/organizations', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Только администратор' });
+    var body = req.body || {};
+    var name = (body.name && String(body.name).trim()) || 'Организация';
+    var planId = body.planId || 'basic';
+    var maxConcurrentUsers = body.maxConcurrentUsers;
+    if (maxConcurrentUsers === undefined && SUBSCRIPTION_PLANS[planId]) maxConcurrentUsers = SUBSCRIPTION_PLANS[planId].maxConcurrentUsers === -1 ? 999 : SUBSCRIPTION_PLANS[planId].maxConcurrentUsers;
+    var id = db.addOrganization({
+        name: name,
+        planId: planId,
+        maxConcurrentUsers: maxConcurrentUsers,
+        subscriptionEndsAt: body.subscriptionEndsAt || null,
+        status: body.status || 'active',
+        discountPercent: typeof body.discountPercent === 'number' ? body.discountPercent : 0,
+        customMonthlyPrice: typeof body.customMonthlyPrice === 'number' ? body.customMonthlyPrice : null
+    });
+    res.json({ ok: true, organizationId: id });
+});
+
+app.patch('/api/organizations/:id', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Только администратор' });
+    var orgId = req.params.id;
+    var body = req.body || {};
+    var updates = {};
+    if (body.name !== undefined) updates.name = body.name;
+    if (body.planId !== undefined) updates.planId = body.planId;
+    if (body.maxConcurrentUsers !== undefined) updates.maxConcurrentUsers = body.maxConcurrentUsers;
+    if (body.subscriptionEndsAt !== undefined) updates.subscriptionEndsAt = body.subscriptionEndsAt;
+    if (body.status !== undefined) updates.status = body.status;
+    if (body.discountPercent !== undefined) updates.discountPercent = body.discountPercent;
+    if (body.customMonthlyPrice !== undefined) updates.customMonthlyPrice = body.customMonthlyPrice;
+    var ok = db.updateOrganization(orgId, updates);
+    if (!ok) return res.status(404).json({ error: 'Организация не найдена' });
+
+    // При приостановке организации принудительно завершаем все её активные сессии
+    if (updates.status === 'suspended') {
+        try { db.deleteSessionsForOrganization(orgId); } catch (e) {}
+        // Отключаем всех WebSocket‑клиентов этой организации от синхронизации
+        try {
+            wss.clients.forEach(function(client) {
+                if (client.readyState === WebSocket.OPEN && client.orgId === orgId) {
+                    try { client.close(4001, 'Организация приостановлена'); } catch (e) {}
+                }
+            });
+        } catch (e) {}
+    }
+
+    res.json({ ok: true });
+});
+
+app.delete('/api/organizations/:id', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Только администратор' });
+    var orgId = req.params.id;
+    var org = db.getOrganization(orgId);
+    if (!org) return res.status(404).json({ error: 'Организация не найдена' });
+    try {
+        db.deleteOrganization(orgId);
+        // Отключаем WebSocket‑клиентов удалённой организации
+        try {
+            wss.clients.forEach(function(client) {
+                if (client.readyState === WebSocket.OPEN && client.orgId === orgId) {
+                    try { client.close(4002, 'Организация удалена'); } catch (e) {}
+                }
+            });
+        } catch (e) {}
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
 });
 
 app.post('/api/auth/register', (req, res) => {
-    const { username, password, fullName } = req.body || {};
+    const { username, password, fullName, organizationName } = req.body || {};
     if (!username || username.length < 3) return res.status(400).json({ success: false, error: 'Имя не менее 3 символов' });
+    if (!organizationName || String(organizationName).trim().length < 3) return res.status(400).json({ success: false, error: 'Укажите название организации (не менее 3 символов)' });
     if (!password || password.length < 6) return res.status(400).json({ success: false, error: 'Пароль не менее 6 символов' });
     const users = db.getUsers();
     if (users.find(u => u.username.toLowerCase() === username.toLowerCase())) return res.json({ success: false, error: 'Пользователь уже существует' });
+    var organizationId = db.addOrganization({
+        name: String(organizationName).trim(),
+        planId: 'basic',
+        maxConcurrentUsers: 1,
+        subscriptionEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+        status: 'active'
+    });
     const newUser = {
         id: 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-        username,
+        username: username,
         password: hashPassword(password),
         fullName: fullName || username,
         full_name: fullName || username,
-        role: 'user',
-        status: 'pending',
+        // Администратор карты для своей организации (но не глобальный админ панели)
+        role: 'admin',
+        status: organizationId ? 'approved' : 'pending',
+        organizationId: organizationId,
         createdAt: new Date().toISOString()
     };
     users.push(newUser);
     db.setUsers(users);
-    res.json({ success: true, pending: true });
+    res.json({ success: true, pending: !organizationId, organizationId: organizationId });
 });
 
 app.get('/api/users', (req, res) => {
     const user = getSessionUser(req);
     if (!user || user.role !== 'admin') return res.status(403).json({ error: 'Доступ только для администратора' });
-    const users = db.getUsers();
-    const safe = users.map(u => ({ id: u.id, username: u.username, fullName: u.fullName || u.full_name, role: u.role, status: u.status || 'approved', createdAt: u.createdAt }));
-    res.json({ users: safe });
+    const isGlobal = isGlobalAdmin(user);
+    const users = db.getUsers().filter(u => {
+        if (isGlobal) return true;
+        // Администратор организации видит только пользователей своей организации
+        return u.organizationId && u.organizationId === user.organizationId;
+    });
+    const allOrgs = db.getOrganizations();
+    const orgs = isGlobal ? allOrgs : allOrgs.filter(o => o.id === user.organizationId);
+    const safe = users.map(u => {
+        var o = { id: u.id, username: u.username, fullName: u.fullName || u.full_name, role: u.role, status: u.status || 'approved', createdAt: u.createdAt };
+        if (u.organizationId) {
+            o.organizationId = u.organizationId;
+            var org = orgs.find(function(x) { return x.id === u.organizationId; });
+            o.organizationName = org ? org.name : null;
+        }
+        return o;
+    });
+    res.json({ users: safe, organizations: orgs });
 });
 
 app.post('/api/users/approve', (req, res) => {
@@ -164,7 +422,7 @@ app.put('/api/users/:userId', (req, res) => {
     const admin = getSessionUser(req);
     if (!admin || admin.role !== 'admin') return res.status(403).json({ error: 'Только администратор' });
     const userId = req.params.userId;
-    const { fullName, role, password } = req.body || {};
+    const { fullName, role, password, organizationId } = req.body || {};
     const users = db.getUsers();
     const i = users.findIndex(u => u.id === userId);
     if (i === -1) return res.status(404).json({ error: 'Пользователь не найден' });
@@ -172,6 +430,7 @@ app.put('/api/users/:userId', (req, res) => {
     if (fullName !== undefined) { users[i].fullName = fullName; users[i].full_name = fullName; }
     if (role !== undefined) users[i].role = role;
     if (password && String(password).length >= 6) users[i].password = hashPassword(password);
+    if (organizationId !== undefined) users[i].organizationId = organizationId || null;
     db.setUsers(users);
     res.json({ ok: true });
 });
@@ -194,7 +453,7 @@ app.delete('/api/users/:userId', (req, res) => {
 app.post('/api/users', (req, res) => {
     const admin = getSessionUser(req);
     if (!admin || admin.role !== 'admin') return res.status(403).json({ error: 'Только администратор' });
-    const { username, password, fullName, role } = req.body || {};
+    const { username, password, fullName, role, organizationId } = req.body || {};
     if (!username || username.length < 3) return res.status(400).json({ error: 'Имя не менее 3 символов' });
     if (!password || password.length < 6) return res.status(400).json({ error: 'Пароль не менее 6 символов' });
     const users = db.getUsers();
@@ -207,6 +466,7 @@ app.post('/api/users', (req, res) => {
         full_name: fullName || username,
         role: role || 'user',
         status: 'approved',
+        organizationId: organizationId || null,
         createdAt: new Date().toISOString()
     };
     users.push(newUser);
@@ -216,8 +476,11 @@ app.post('/api/users', (req, res) => {
 
 app.get('/api/history', (req, res) => {
     try {
-        const history = db.getHistory();
-        res.json({ history });
+        var user = getSessionUser(req);
+        var orgId = (user && user.organizationId) ? user.organizationId : (user && user.role === 'admin' ? (req.query.orgId || (db.getOrganizations().length ? db.getOrganizations()[0].id : null)) : null);
+        if (!orgId && user) return res.status(403).json({ error: 'Выберите организацию' });
+        var history = orgId ? db.getHistory(orgId) : [];
+        res.json({ history: history });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
     }
@@ -226,11 +489,13 @@ app.get('/api/history', (req, res) => {
 app.post('/api/history', (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    var orgId = user.organizationId || (user.role === 'admin' && req.body && req.body.organizationId ? req.body.organizationId : null);
+    if (!orgId) return res.status(403).json({ error: 'Укажите организацию' });
     if (user.role !== 'admin') return res.status(403).json({ error: 'Только администратор может изменять историю' });
     try {
         const history = req.body && req.body.history;
         if (!Array.isArray(history)) return res.status(400).json({ error: 'Ожидается массив history' });
-        db.setHistory(history);
+        db.setHistory(orgId, history);
         res.json({ ok: true });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
@@ -239,8 +504,9 @@ app.post('/api/history', (req, res) => {
 
 app.get('/api/settings', (req, res) => {
     try {
-        const settings = db.getSettings();
-        const user = getSessionUser(req);
+        var user = getSessionUser(req);
+        var orgId = (user && user.organizationId) ? user.organizationId : (user && user.role === 'admin' ? (req.query.orgId || (db.getOrganizations().length ? db.getOrganizations()[0].id : null)) : null);
+        var settings = db.getSettings(orgId || undefined);
         if (user && db.getMapStartForUser) {
             const mapStart = db.getMapStartForUser(user.userId);
             if (mapStart) settings.mapStart = mapStart;
@@ -255,6 +521,7 @@ app.post('/api/settings', (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
     const body = req.body || {};
+    var orgId = user.organizationId || (user.role === 'admin' && body.organizationId ? body.organizationId : null);
     try {
         if (body.mapStart !== undefined && db.setMapStartForUser) {
             db.setMapStartForUser(user.userId, body.mapStart);
@@ -268,7 +535,7 @@ app.post('/api/settings', (req, res) => {
         } else {
             if (body.theme !== undefined) toSave.theme = body.theme;
         }
-        if (Object.keys(toSave).length > 0) db.setSettings(toSave);
+        if (Object.keys(toSave).length > 0) db.setSettings(toSave, orgId || undefined);
         res.json({ ok: true });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
@@ -295,13 +562,11 @@ app.post('/api/backups/restore', (req, res) => {
     if (!filename || typeof filename !== 'string') return res.status(400).json({ error: 'Укажите filename' });
     try {
         db.restoreFromBackup(filename.trim());
-        const restoredData = db.getMapData();
-        syncCurrentState.data = Array.isArray(restoredData) ? restoredData.slice() : [];
-        syncCurrentState.clientId = 'server';
-        const statePayload = JSON.stringify({ type: 'state', clientId: syncCurrentState.clientId, data: syncCurrentState.data });
+        Object.keys(syncCurrentStateByOrg).forEach(function(oid) { delete syncCurrentStateByOrg[oid]; });
         wss.clients.forEach(function(client) {
-            if (client.readyState === WebSocket.OPEN) {
-                try { client.send(statePayload); } catch (e) {}
+            if (client.readyState === WebSocket.OPEN && client.orgId) {
+                var state = getSyncStateForOrg(client.orgId);
+                try { client.send(JSON.stringify({ type: 'state', clientId: state.clientId, data: state.data })); } catch (e) {}
             }
         });
         res.json({ ok: true, message: 'Данные восстановлены. Войдите снова.' });
@@ -318,6 +583,11 @@ app.get('/api/public-config', (req, res) => {
     res.json({ yandexMapsApiKey: key });
 });
 
+// Лицевая страница по умолчанию — тарифы
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'pricing.html'));
+});
+
 // Раздача JS с явным Content-Type (избегаем text/html от прокси/404)
 app.use('/js', express.static(path.join(__dirname, 'js'), {
     setHeaders: function (res, filePath) {
@@ -332,6 +602,17 @@ app.use(express.static(path.join(__dirname)));
 db.getDb();
 db.initDefaultAdmin();
 
+function getSyncStateForOrg(orgId) {
+    if (!syncCurrentStateByOrg[orgId]) {
+        syncCurrentStateByOrg[orgId] = { clientId: 'server', data: db.getMapData(orgId) || [] };
+        try {
+            var sett = db.getSettings(orgId);
+            if (sett && sett.groupNames && (sett.groupNames.cross || sett.groupNames.node)) syncGroupNamesByOrg[orgId] = sett.groupNames;
+        } catch (e) {}
+    }
+    return syncCurrentStateByOrg[orgId];
+}
+
 if (db.createDailyBackup) {
     const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
     setTimeout(function runBackup() {
@@ -342,15 +623,21 @@ if (db.createDailyBackup) {
 
 const server = http.createServer(app);
 var syncGroupNames = null;
+var syncGroupNamesByOrg = {};
 try {
     var s = db.getSettings();
     if (s && s.groupNames && typeof s.groupNames === 'object') syncGroupNames = s.groupNames;
 } catch (e) {}
-var syncCurrentState = { clientId: 'server', data: db.getMapData() || [] };
+var syncCurrentStateByOrg = {};
+var defaultOrgIdForSync = (function() {
+    var orgs = db.getOrganizations();
+    return orgs.length ? orgs[0].id : null;
+})();
 const wss = new WebSocket.Server({ server, path: '/sync' });
-const syncClientNames = new Map(); 
-
-const syncClientUserIds = new Map(); 
+const syncClientNames = new Map();
+const syncClientUserIds = new Map();
+const syncClientOrgIds = new Map();
+var syncDirtyOrgs = {};
 
 function isSyncClientAdmin(clientId) {
     const userId = syncClientUserIds.get(clientId);
@@ -473,51 +760,33 @@ function applyOperationToState(state, op) {
     return state;
 }
 
-function broadcastSyncClients() {
-    const list = [];
-    wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN && client.clientId) {
-            list.push({
-                id: client.clientId,
-                displayName: syncClientNames.get(client.clientId) || 'Участник',
-                userId: syncClientUserIds.get(client.clientId) || null
-            });
-        }
-    });
-    const payload = JSON.stringify({ type: 'clients', clients: list });
-    wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            try { client.send(payload); } catch (e) {}
-        }
+function broadcastSyncClients(onlyOrgId) {
+    wss.clients.forEach(function(targetClient) {
+        if (targetClient.readyState !== WebSocket.OPEN) return;
+        var targetOrg = targetClient.orgId != null ? targetClient.orgId : onlyOrgId;
+        var list = [];
+        wss.clients.forEach(function(c) {
+            if (c.readyState === WebSocket.OPEN && c.clientId && (onlyOrgId != null ? c.orgId === onlyOrgId : (targetOrg == null || c.orgId === targetOrg))) {
+                list.push({
+                    id: c.clientId,
+                    displayName: syncClientNames.get(c.clientId) || 'Участник',
+                    userId: syncClientUserIds.get(c.clientId) || null
+                });
+            }
+        });
+        try { targetClient.send(JSON.stringify({ type: 'clients', clients: list })); } catch (e) {}
     });
 }
 
 wss.on('connection', (ws, req) => {
     const clientId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
     ws.clientId = clientId;
+    ws.orgId = null;
     ws.connectedAt = Date.now();
     syncClientNames.set(clientId, 'Участник');
-    setImmediate(broadcastSyncClients);
+    setImmediate(function() { broadcastSyncClients(); });
     ws.send(JSON.stringify({ type: 'yourId', clientId: clientId }));
-    var list = [];
-    wss.clients.forEach(function(c) {
-        if (c.readyState === WebSocket.OPEN && c.clientId) {
-            list.push({
-                id: c.clientId,
-                displayName: syncClientNames.get(c.clientId) || 'Участник',
-                userId: syncClientUserIds.get(c.clientId) || null
-            });
-        }
-    });
-    ws.send(JSON.stringify({ type: 'clients', clients: list }));
-    setImmediate(function() {
-        try {
-            if (ws.readyState !== 1) return;
-            var statePayload = { type: 'state', clientId: syncCurrentState.clientId, data: syncCurrentState.data };
-            if (syncGroupNames && (syncGroupNames.cross || syncGroupNames.node)) statePayload.groupNames = syncGroupNames;
-            ws.send(JSON.stringify(statePayload));
-        } catch (e) {}
-    });
+    ws.send(JSON.stringify({ type: 'clients', clients: [] }));
     ws.on('message', (raw) => {
         const str = raw.toString();
         if (str.length > 15 * 1024 * 1024) return;
@@ -528,7 +797,25 @@ wss.on('connection', (ws, req) => {
                 const name = (msg.displayName && String(msg.displayName).trim()) || 'Участник';
                 syncClientNames.set(clientId, name.slice(0, 100));
                 if (msg.userId !== undefined && msg.userId !== null) syncClientUserIds.set(clientId, msg.userId);
-                setImmediate(broadcastSyncClients);
+                var orgId = null;
+                if (msg.token) {
+                    var session = getSessionByToken(msg.token);
+                    if (session) {
+                        ws.userId = session.userId;
+                        orgId = session.organizationId || defaultOrgIdForSync;
+                        ws.orgId = orgId;
+                        syncClientUserIds.set(clientId, session.userId);
+                        syncClientOrgIds.set(clientId, orgId);
+                    }
+                }
+                if (orgId) {
+                    var state = getSyncStateForOrg(orgId);
+                    var groupNames = syncGroupNamesByOrg[orgId] || syncGroupNames;
+                    var statePayload = { type: 'state', clientId: state.clientId, data: state.data };
+                    if (groupNames && (groupNames.cross || groupNames.node)) statePayload.groupNames = groupNames;
+                    try { ws.send(JSON.stringify(statePayload)); } catch (e) {}
+                }
+                setImmediate(function() { broadcastSyncClients(orgId); });
                 return;
             }
             if (msg.type === 'cursor') {
@@ -543,23 +830,26 @@ wss.on('connection', (ws, req) => {
                 }
                 return;
             }
+            var orgId = ws.orgId || defaultOrgIdForSync;
             if (msg.type === 'groupNames' && msg.groupNames && typeof msg.groupNames === 'object') {
                 if (!isSyncClientAdmin(clientId)) return;
-                syncGroupNames = msg.groupNames;
-                try { db.setSettings({ groupNames: syncGroupNames }); } catch (e) {}
-                wss.clients.forEach(client => {
-                    if (client.readyState === WebSocket.OPEN) {
-                        try { client.send(JSON.stringify({ type: 'groupNames', groupNames: syncGroupNames })); } catch (e) {}
+                if (orgId) syncGroupNamesByOrg[orgId] = msg.groupNames; else syncGroupNames = msg.groupNames;
+                try { db.setSettings({ groupNames: msg.groupNames }, orgId || undefined); } catch (e) {}
+                wss.clients.forEach(function(client) {
+                    if (client.readyState === WebSocket.OPEN && client.orgId === orgId) {
+                        try { client.send(JSON.stringify({ type: 'groupNames', groupNames: msg.groupNames })); } catch (e) {}
                     }
                 });
                 return;
             }
-            if (msg.type === 'op' && msg.op) {
+            if (msg.type === 'op' && msg.op && orgId) {
                 if (!isSyncClientAdmin(clientId)) return;
-                syncCurrentState.data = applyOperationToState(syncCurrentState.data, msg.op);
-                syncCurrentState.clientId = msg.clientId || clientId;
-                wss.clients.forEach(client => {
-                    if (client !== ws && client.readyState === WebSocket.OPEN) {
+                var state = getSyncStateForOrg(orgId);
+                state.data = applyOperationToState(state.data, msg.op);
+                state.clientId = msg.clientId || clientId;
+                syncDirtyOrgs[orgId] = true;
+                wss.clients.forEach(function(client) {
+                    if (client !== ws && client.readyState === WebSocket.OPEN && client.orgId === orgId) {
                         try { client.send(JSON.stringify({ type: 'op', op: msg.op })); } catch (e) {}
                     }
                 });
@@ -567,17 +857,20 @@ wss.on('connection', (ws, req) => {
                 return;
             }
             var justConnected = (Date.now() - (ws.connectedAt || 0)) < 4000;
-            if (!justConnected && msg.data && isSyncClientAdmin(clientId)) {
-                syncCurrentState.data = mergeMapState(syncCurrentState.data, msg.data);
-                syncCurrentState.clientId = msg.clientId || clientId;
+            if (!justConnected && msg.data && isSyncClientAdmin(clientId) && orgId) {
+                var state = getSyncStateForOrg(orgId);
+                state.data = mergeMapState(state.data, msg.data);
+                state.clientId = msg.clientId || clientId;
                 if (msg.groupNames && typeof msg.groupNames === 'object') {
-                    syncGroupNames = msg.groupNames;
-                    try { db.setSettings({ groupNames: syncGroupNames }); } catch (e) {}
+                    syncGroupNamesByOrg[orgId] = msg.groupNames;
+                    try { db.setSettings({ groupNames: msg.groupNames }, orgId); } catch (e) {}
                 }
-                var statePayload = { type: 'state', clientId: syncCurrentState.clientId, data: syncCurrentState.data };
-                if (syncGroupNames && (syncGroupNames.cross || syncGroupNames.node)) statePayload.groupNames = syncGroupNames;
-                wss.clients.forEach(client => {
-                    if (client !== ws && client.readyState === WebSocket.OPEN) {
+                syncDirtyOrgs[orgId] = true;
+                var statePayload = { type: 'state', clientId: state.clientId, data: state.data };
+                var gn = syncGroupNamesByOrg[orgId] || syncGroupNames;
+                if (gn && (gn.cross || gn.node)) statePayload.groupNames = gn;
+                wss.clients.forEach(function(client) {
+                    if (client !== ws && client.readyState === WebSocket.OPEN && client.orgId === orgId) {
                         try { client.send(JSON.stringify(statePayload)); } catch (e) {}
                     }
                 });
@@ -589,6 +882,7 @@ wss.on('connection', (ws, req) => {
     ws.on('close', function() {
         syncClientNames.delete(clientId);
         syncClientUserIds.delete(clientId);
+        syncClientOrgIds.delete(clientId);
         ws.cursor = null;
         setImmediate(function() {
             broadcastSyncClients();
@@ -605,7 +899,11 @@ function scheduleSyncWrite() {
     syncWriteTimer = setTimeout(function() {
         syncWriteTimer = null;
         try {
-            db.setMapData(syncCurrentState.data);
+            Object.keys(syncDirtyOrgs).forEach(function(orgId) {
+                var state = syncCurrentStateByOrg[orgId];
+                if (state && orgId) db.setMapData(orgId, state.data);
+            });
+            syncDirtyOrgs = {};
         } catch (e) {}
     }, SYNC_WRITE_DELAY_MS);
 }
