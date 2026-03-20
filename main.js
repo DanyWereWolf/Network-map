@@ -530,6 +530,10 @@ function openUserEditModal(userId = null) {
         });
     }
     if (userId) {
+        if (orgSelect) {
+            var orgGroup = orgSelect.closest('.form-group');
+            if (orgGroup) orgGroup.style.display = '';
+        }
         const users = AuthSystem.getUsers();
         const user = users.find(u => u.id === userId);
         if (!user) return;
@@ -549,7 +553,18 @@ function openUserEditModal(userId = null) {
         fullNameInput.value = '';
         passwordInput.value = '';
         roleSelect.value = 'user';
-        if (orgSelect) orgSelect.value = '';
+        // При добавлении пользователь "наследует" организацию текущего админа.
+        // Поэтому выпадающий список организации не нужен (скрываем), кроме случая глобального админа.
+        if (orgSelect) {
+            var orgGroup = orgSelect.closest('.form-group');
+            if (currentUser && currentUser.organizationId != null) {
+                if (orgGroup) orgGroup.style.display = 'none';
+                orgSelect.value = currentUser.organizationId;
+            } else {
+                if (orgGroup) orgGroup.style.display = '';
+                orgSelect.value = '';
+            }
+        }
     }
     modal.style.display = 'block';
 }
@@ -618,7 +633,11 @@ function saveUser() {
         if (password.length < 6) { showError('Пароль должен быть не менее 6 символов'); return; }
         if (AuthSystem.findUserByUsername(username)) { showError('Пользователь с таким именем уже существует'); return; }
         var orgSelect = document.getElementById('editOrganizationId');
-        var organizationId = (orgSelect && orgSelect.value) ? orgSelect.value : null;
+        // В режиме добавления организация наследуется текущим админом.
+        // Для глобального админа (organizationId === null) оставляем поведение с select.
+        var organizationId = (currentUser && currentUser.organizationId != null)
+            ? currentUser.organizationId
+            : ((orgSelect && orgSelect.value) ? orgSelect.value : null);
         if (getApiBase()) {
             fetch(getApiBase() + '/api/users', {
                 method: 'POST',
@@ -1108,6 +1127,27 @@ function setupEventListeners() {
     myMap.events.add('click', handleMapClick);
 
     myMap.events.add('mousemove', handleMapMouseMove);
+
+    // Обновляем видимость "как в vols expert" при изменении зума.
+    // Событие `boundschange` срабатывает на панорамирование тоже, поэтому ограничиваемся изменением zoom.
+    let expertLastZoom = (typeof myMap.getZoom === 'function') ? myMap.getZoom() : null;
+    let expertZoomTimer = null;
+    myMap.events.add('boundschange', function() {
+        try {
+            if (!myMap || typeof myMap.getZoom !== 'function') return;
+            const z = myMap.getZoom();
+            if (typeof z !== 'number') return;
+
+            if (expertLastZoom != null && Math.abs(z - expertLastZoom) < 0.01) return;
+            expertLastZoom = z;
+
+            if (expertZoomTimer) return;
+            expertZoomTimer = setTimeout(function() {
+                expertZoomTimer = null;
+                if (typeof applyMapFilter === 'function') applyMapFilter();
+            }, 80);
+        } catch (e) {}
+    });
 
     document.addEventListener('mousemove', function(e) {
         window.lastMouseX = e.clientX;
@@ -2256,6 +2296,9 @@ function handleFileImport(e) {
             }
             clearMap();
             importData(data);
+            // После импорта фиксируем состояние, чтобы оно не терялось при перезагрузке.
+            saveData();
+            if (typeof window.syncForceSendState === 'function') window.syncForceSendState();
             showSuccess('Карта импортирована (' + data.length + ' объектов)', 'Импорт');
             logAction(ActionTypes.IMPORT_DATA, { count: data.length });
         } catch (error) {
@@ -11436,6 +11479,83 @@ function getMapFilterState() {
     };
 }
 
+// "Vols expert" style: при отдалении сначала скрываются подписи, потом сами объекты.
+// Настройка порогов: при уменьшении зума значение растет к "ближе" и скрытие уходит обратно.
+const EXPERT_ZOOM_HIDE_LABELS_BELOW = 15;
+const EXPERT_ZOOM_HIDE_OBJECTS_BELOW = 12;
+
+function applyExpertZoomVisibility() {
+    if (!myMap || typeof myMap.getZoom !== 'function') return;
+    if (!Array.isArray(objects)) return;
+
+    const zoom = myMap.getZoom();
+    if (typeof zoom !== 'number') return;
+
+    const hideLabels = zoom < EXPERT_ZOOM_HIDE_LABELS_BELOW;
+    const hideObjects = zoom < EXPERT_ZOOM_HIDE_OBJECTS_BELOW;
+    if (!hideLabels && !hideObjects) return;
+
+    // Скрываем "подписи":
+    // - отдельные label-placemark'и, хранящиеся в obj.properties.get('label')
+    // - отдельные cableLabel-объекты (тип 'cableLabel')
+    if (hideLabels) {
+        objects.forEach(function(obj) {
+            if (!obj || !obj.properties || !obj.options) return;
+            const type = obj.properties.get('type');
+
+            if (type === 'cableLabel') {
+                try { obj.options.set('visible', false); } catch (e) {}
+            }
+
+            const label = obj.properties.get('label');
+            if (label && label.options) {
+                try { label.options.set('visible', false); } catch (e) {}
+            }
+        });
+    }
+
+    // Скрываем "объекты":
+    // - все placemark'и из массива objects (включая кабели)
+    // - group-placemark'и (nodeGroup/crossGroup)
+    if (hideObjects) {
+        objects.forEach(function(obj) {
+            if (!obj || !obj.options) return;
+            try { obj.options.set('visible', false); } catch (e) {}
+        });
+    }
+
+    const crossPlacemarks = (typeof crossGroupPlacemarks !== 'undefined' && Array.isArray(crossGroupPlacemarks))
+        ? crossGroupPlacemarks
+        : [];
+    const nodePlacemarks = (typeof nodeGroupPlacemarks !== 'undefined' && Array.isArray(nodeGroupPlacemarks))
+        ? nodeGroupPlacemarks
+        : [];
+
+    if (hideLabels) {
+        crossPlacemarks.forEach(function(pm) {
+            try {
+                const lbl = pm && pm.properties && pm.properties.get('crossGroupLabel');
+                if (lbl && lbl.options) lbl.options.set('visible', false);
+            } catch (e) {}
+        });
+        nodePlacemarks.forEach(function(pm) {
+            try {
+                const lbl = pm && pm.properties && pm.properties.get('nodeGroupLabel');
+                if (lbl && lbl.options) lbl.options.set('visible', false);
+            } catch (e) {}
+        });
+    }
+
+    if (hideObjects) {
+        crossPlacemarks.forEach(function(pm) {
+            try { if (pm && pm.options) pm.options.set('visible', false); } catch (e) {}
+        });
+        nodePlacemarks.forEach(function(pm) {
+            try { if (pm && pm.options) pm.options.set('visible', false); } catch (e) {}
+        });
+    }
+}
+
 function applyMapFilter() {
     if (!myMap || !objects) return;
     var filter = getMapFilterState();
@@ -11499,6 +11619,9 @@ function applyMapFilter() {
         var lbl = pm.properties && pm.properties.get('nodeGroupLabel');
         try { if (lbl && lbl.options) lbl.options.set('visible', visible); } catch (e) {}
     });
+
+    // Доп. скрытие по зуму (поверх фильтра).
+    try { applyExpertZoomVisibility(); } catch (e) {}
 }
 
 function updateCableVisualization() {

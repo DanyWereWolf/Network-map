@@ -268,6 +268,7 @@
     </style>
 </head>
 <body>
+    <script src="js/core/config.js"></script>
     <script src="auth.js"></script>
     <div class="auth-bg" aria-hidden="true">
         <div class="auth-bg-gradient"></div>
@@ -429,7 +430,7 @@
                                             <th>Цена</th>
                                             <th>Порядок</th>
                                             <th>Тип</th>
-                                            <th></th>
+                                            <th>Действия</th>
                                         </tr>
                                     </thead>
                                     <tbody id="landingPricingTableBody">
@@ -594,7 +595,20 @@
             var opts = { credentials: 'include', headers: {} };
             if (token) opts.headers['Authorization'] = 'Bearer ' + token;
             return fetch('api/auth/session', opts)
-                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(r) {
+                    // Сервер хранит сессии с меньшим сроком, чем "remember me" на клиенте,
+                    // поэтому токен может быть уже невалидным. Очищаем хранилище при 401.
+                    if (r.status === 401) {
+                        try {
+                            sessionStorage.removeItem('networkMap_session');
+                            sessionStorage.removeItem('networkMap_token');
+                            localStorage.removeItem('networkMap_token');
+                            localStorage.removeItem('networkMap_session');
+                            localStorage.removeItem('networkMap_tokenExpiry');
+                        } catch (e) {}
+                    }
+                    return r.ok ? r.json() : null;
+                })
                 .catch(function() { return null; });
         }
 
@@ -776,7 +790,10 @@
                             '<td>' + (p.price || '—') + (p.period ? ' ' + p.period : '') + '</td>' +
                             '<td>' + (typeof p.order === 'number' ? p.order : idx) + '</td>' +
                             '<td>' + (p.kind || 'paid') + '</td>' +
-                            '<td class="actions-cell"><button data-idx="' + idx + '" data-action="editLandingPlan">Редактировать</button></td>';
+                            '<td class="actions-cell">' +
+                                '<button data-idx="' + idx + '" data-action="editLandingPlan">Редактировать</button>' +
+                                '<button data-idx="' + idx + '" data-action="deleteLandingPlan" style="margin-left:6px;color:#b91c1c;border-color:#fecaca;">Удалить</button>' +
+                            '</td>';
                         tbody.appendChild(tr);
                     });
                     document.getElementById('landingPricingTableBody').dataset.plans = JSON.stringify(plans);
@@ -920,23 +937,49 @@
 
         document.getElementById('landingPricingTableBody').addEventListener('click', function(e) {
             var btn = e.target.closest('button');
-            if (!btn || btn.getAttribute('data-action') !== 'editLandingPlan') return;
+            if (!btn) return;
+            var action = btn.getAttribute('data-action');
             var idx = parseInt(btn.getAttribute('data-idx') || '0', 10);
             var raw = this.dataset.plans || '[]';
             var plans;
             try { plans = JSON.parse(raw); } catch (e) { plans = []; }
             var p = plans[idx];
             if (!p) return;
-            document.getElementById('landingPricingId').value = p.id || '';
-            document.getElementById('landingPricingTitle').value = p.title || '';
-            document.getElementById('landingPricingShort').value = p.short || '';
-            document.getElementById('landingPricingPrice').value = p.price || '';
-            document.getElementById('landingPricingPeriod').value = p.period || '';
-            document.getElementById('landingPricingOrder').value = typeof p.order === 'number' ? p.order : idx;
-            document.getElementById('landingPricingMaxUsersText').value = p.maxUsersText || '';
-            document.getElementById('landingPricingKind').value = p.kind || 'paid';
-            document.getElementById('landingPricingHighlighted').value = p.highlighted ? 'true' : 'false';
-            document.getElementById('landingPricingCtaText').value = p.ctaText || '';
+
+            if (action === 'editLandingPlan') {
+                document.getElementById('landingPricingId').value = p.id || '';
+                document.getElementById('landingPricingTitle').value = p.title || '';
+                document.getElementById('landingPricingShort').value = p.short || '';
+                document.getElementById('landingPricingPrice').value = p.price || '';
+                document.getElementById('landingPricingPeriod').value = p.period || '';
+                document.getElementById('landingPricingOrder').value = typeof p.order === 'number' ? p.order : idx;
+                document.getElementById('landingPricingMaxUsersText').value = p.maxUsersText || '';
+                document.getElementById('landingPricingKind').value = p.kind || 'paid';
+                document.getElementById('landingPricingHighlighted').value = p.highlighted ? 'true' : 'false';
+                document.getElementById('landingPricingCtaText').value = p.ctaText || '';
+                return;
+            }
+
+            if (action === 'deleteLandingPlan') {
+                if (!confirm('Удалить тариф «' + (p.title || p.id || '—') + '»?')) return;
+                // Удаляем по индексу текущего списка (как отображается на странице).
+                plans.splice(idx, 1);
+                var token = getAuthToken && getAuthToken();
+                var headers = { 'Content-Type': 'application/json' };
+                if (token) headers['Authorization'] = 'Bearer ' + token;
+                fetch('api/pricing', {
+                    method: 'PUT',
+                    headers: headers,
+                    credentials: 'include',
+                    body: JSON.stringify({ plans: plans })
+                }).then(function(r) {
+                    if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+                    alert('Тариф удалён');
+                    loadLandingPricing();
+                }).catch(function(err) {
+                    alert('Ошибка: ' + (err.message || err));
+                });
+            }
         });
 
         document.getElementById('landingPricingSaveBtn').addEventListener('click', function() {

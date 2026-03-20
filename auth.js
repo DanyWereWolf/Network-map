@@ -10,7 +10,11 @@ function hashPassword(password) {
 }
 
 function initUserSystem() {
-    if (!getApiBase()) return;
+    if (typeof getApiBase !== 'function' || !getApiBase()) return;
+    // Панель главного администратора (`site-admin.html`) управляет организациями/тарифами,
+    // а эндпоинт `/api/users` может давать 403 в случаях, когда пользователь не является глобальным админом.
+    // Чтобы не спамить запросами и ошибками, отключаем загрузку пользователей на этой странице.
+    if (document.getElementById('adminContent')) return;
     refreshUsersFromApi();
 }
 
@@ -174,7 +178,20 @@ function refreshSessionFromApi() {
     var token = getAuthToken();
     if (!token) return Promise.resolve();
     return fetch(getApiBase() + '/api/auth/session', { headers: { 'Authorization': 'Bearer ' + token } })
-        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(r) {
+            if (r.status === 401) {
+                // Clear invalid token so we don't keep spamming /api/auth/session in background.
+                try {
+                    sessionStorage.removeItem('networkMap_session');
+                    sessionStorage.removeItem('networkMap_token');
+                    localStorage.removeItem('networkMap_token');
+                    localStorage.removeItem('networkMap_session');
+                    localStorage.removeItem('networkMap_tokenExpiry');
+                } catch (e) {}
+                return null;
+            }
+            return r.ok ? r.json() : null;
+        })
         .then(function(body) {
             if (body && body.user) {
                 var session = body.user;
