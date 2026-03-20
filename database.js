@@ -7,6 +7,17 @@ const BACKUP_RETENTION_DAYS = 30;
 
 let store = null;
 
+function getOrgBackupsDir(orgId) {
+    if (!orgId) throw new Error('orgId required');
+    return path.join(BACKUPS_DIR, String(orgId));
+}
+
+function ensureOrgBackupsDir(orgId) {
+    const dir = getOrgBackupsDir(orgId);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    return dir;
+}
+
 function loadStore() {
     if (store) return store;
     const dir = path.dirname(STORE_PATH);
@@ -274,6 +285,7 @@ function addOrganization(org) {
         customMonthlyPrice: typeof org.customMonthlyPrice === 'number' ? org.customMonthlyPrice : null,
         createdAt: org.createdAt || new Date().toISOString()
     });
+    ensureOrgBackupsDir(id);
     saveStore();
     return id;
 }
@@ -497,26 +509,42 @@ function setMapStartForUser(userId, data) {
 function createDailyBackup() {
     try {
         if (!fs.existsSync(STORE_PATH)) return;
-        const dir = BACKUPS_DIR;
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        const s = loadStore();
+        const orgs = Array.isArray(s.organizations) ? s.organizations : [];
+        if (!orgs.length) return;
+        if (!fs.existsSync(BACKUPS_DIR)) fs.mkdirSync(BACKUPS_DIR, { recursive: true });
         const now = new Date();
         const dateStr = now.getFullYear() + '-' +
             String(now.getMonth() + 1).padStart(2, '0') + '-' +
             String(now.getDate()).padStart(2, '0');
-        const backupPath = path.join(dir, 'backup-' + dateStr + '.json');
-        const data = fs.readFileSync(STORE_PATH, 'utf8');
-        fs.writeFileSync(backupPath, data, 'utf8');
-        pruneBackupsKeepDays(BACKUP_RETENTION_DAYS);
-        console.log('[Backup] Сохранён: backup-' + dateStr + '.json');
+
+        orgs.forEach(function(org) {
+            if (!org || !org.id) return;
+            const orgId = org.id;
+            const dir = ensureOrgBackupsDir(orgId);
+            const backupPath = path.join(dir, 'backup-' + dateStr + '.json');
+            const payload = {
+                version: 1,
+                organizationId: orgId,
+                createdAt: new Date().toISOString(),
+                mapData: getMapData(orgId),
+                history: getHistory(orgId),
+                settings: getSettings(orgId)
+            };
+            fs.writeFileSync(backupPath, JSON.stringify(payload), 'utf8');
+            pruneBackupsKeepDays(orgId, BACKUP_RETENTION_DAYS);
+            console.log('[Backup] Сохранён: ' + orgId + '/backup-' + dateStr + '.json');
+        });
     } catch (e) {
         console.error('[Backup] Ошибка:', e.message);
     }
 }
 
-function listBackups() {
+function listBackups(orgId) {
     try {
-        if (!fs.existsSync(BACKUPS_DIR)) return [];
-        const files = fs.readdirSync(BACKUPS_DIR)
+        const dir = getOrgBackupsDir(orgId);
+        if (!fs.existsSync(dir)) return [];
+        const files = fs.readdirSync(dir)
             .filter(f => f.startsWith('backup-') && f.endsWith('.json'))
             .map(f => {
                 const match = f.match(/backup-(\d{4})-(\d{2})-(\d{2})\.json/);
@@ -531,10 +559,11 @@ function listBackups() {
     }
 }
 
-function restoreFromBackup(filename) {
+function restoreFromBackup(orgId, filename) {
+    if (!orgId) throw new Error('orgId required');
     const trimmed = typeof filename === 'string' ? filename.trim() : '';
     if (!/^backup-\d{4}-\d{2}-\d{2}\.json$/.test(trimmed)) throw new Error('Недопустимое имя файла');
-    const backupPath = path.join(BACKUPS_DIR, trimmed);
+    const backupPath = path.join(getOrgBackupsDir(orgId), trimmed);
     if (!fs.existsSync(backupPath)) throw new Error('Файл бэкапа не найден');
     let raw, parsed;
     try {
@@ -545,17 +574,26 @@ function restoreFromBackup(filename) {
         throw e;
     }
     if (!parsed || typeof parsed !== 'object') throw new Error('Неверный формат бэкапа');
-    store = parsed;
-    migrateToOrganizations();
-    initSchema();
+    const payloadOrgId = parsed.organizationId || orgId;
+    if (payloadOrgId !== orgId) throw new Error('Бэкап принадлежит другой организации');
+    const s = loadStore();
+    if (!s.mapDataByOrg || typeof s.mapDataByOrg !== 'object') s.mapDataByOrg = {};
+    if (!s.historyByOrg || typeof s.historyByOrg !== 'object') s.historyByOrg = {};
+    if (!s.settingsByOrg || typeof s.settingsByOrg !== 'object') s.settingsByOrg = {};
+
+    s.mapDataByOrg[orgId] = Array.isArray(parsed.mapData) ? parsed.mapData : [];
+    s.historyByOrg[orgId] = Array.isArray(parsed.history) ? parsed.history : [];
+    s.settingsByOrg[orgId] = (parsed.settings && typeof parsed.settings === 'object') ? parsed.settings : {};
+
     saveStore();
-    console.log('[Backup] Восстановлено из:', trimmed);
+    console.log('[Backup] Восстановлено из:', orgId + '/' + trimmed);
 }
 
-function pruneBackupsKeepDays(keepDays) {
+function pruneBackupsKeepDays(orgId, keepDays) {
     try {
-        if (!fs.existsSync(BACKUPS_DIR)) return;
-        const files = fs.readdirSync(BACKUPS_DIR)
+        const dir = getOrgBackupsDir(orgId);
+        if (!fs.existsSync(dir)) return;
+        const files = fs.readdirSync(dir)
             .filter(f => f.startsWith('backup-') && f.endsWith('.json'))
             .map(f => {
                 const match = f.match(/backup-(\d{4})-(\d{2})-(\d{2})\.json/);
@@ -565,7 +603,7 @@ function pruneBackupsKeepDays(keepDays) {
             .sort((a, b) => b.date.localeCompare(a.date));
         if (files.length <= keepDays) return;
         for (let i = keepDays; i < files.length; i++) {
-            const filePath = path.join(BACKUPS_DIR, files[i].name);
+            const filePath = path.join(dir, files[i].name);
             try { fs.unlinkSync(filePath); console.log('[Backup] Удалён старый:', files[i].name); } catch (e) {}
         }
     } catch (e) {

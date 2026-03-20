@@ -546,8 +546,10 @@ app.get('/api/backups', (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
     if (user.role !== 'admin') return res.status(403).json({ error: 'Только для администратора' });
+    const orgId = user.organizationId || null;
+    if (!orgId) return res.status(403).json({ error: 'Бэкапы доступны только для привязанной организации' });
     try {
-        const list = db.listBackups();
+        const list = db.listBackups(orgId);
         res.json({ backups: list });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
@@ -558,10 +560,12 @@ app.post('/api/backups/restore', (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
     if (user.role !== 'admin') return res.status(403).json({ error: 'Только для администратора' });
+    const orgId = user.organizationId || null;
+    if (!orgId) return res.status(403).json({ error: 'Восстановление доступно только для привязанной организации' });
     const filename = req.body && req.body.filename;
     if (!filename || typeof filename !== 'string') return res.status(400).json({ error: 'Укажите filename' });
     try {
-        db.restoreFromBackup(filename.trim());
+        db.restoreFromBackup(orgId, filename.trim());
         Object.keys(syncCurrentStateByOrg).forEach(function(oid) { delete syncCurrentStateByOrg[oid]; });
         wss.clients.forEach(function(client) {
             if (client.readyState === WebSocket.OPEN && client.orgId) {
