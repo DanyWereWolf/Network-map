@@ -43,11 +43,57 @@ function canEdit() {
     return currentUser && currentUser.role === 'admin';
 }
 
+var WELCOME_DISMISSED_KEY = 'networkMap_welcomeDismissed';
+
+function closeWelcomeModal() {
+    var wm = document.getElementById('welcomeModal');
+    if (!wm) return;
+    wm.style.display = 'none';
+    wm.setAttribute('aria-hidden', 'true');
+    try { localStorage.setItem(WELCOME_DISMISSED_KEY, '1'); } catch (e) {}
+}
+
+function initWelcomeModal() {
+    var wm = document.getElementById('welcomeModal');
+    if (!wm) return;
+    try {
+        if (localStorage.getItem(WELCOME_DISMISSED_KEY)) return;
+    } catch (e) {}
+    wm.style.display = 'block';
+    wm.setAttribute('aria-hidden', 'false');
+    function onClose() {
+        closeWelcomeModal();
+    }
+    wm.addEventListener('click', function(e) {
+        if (e.target === wm) onClose();
+    });
+    var closeBtn = document.getElementById('welcomeModalCloseBtn');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', onClose);
+        closeBtn.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onClose();
+            }
+        });
+    }
+    var okBtn = document.getElementById('welcomeModalOk');
+    if (okBtn) okBtn.addEventListener('click', onClose);
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     
     if (!checkAuth()) return;
 
     initUserUI();
+    initWelcomeModal();
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Escape') return;
+        var wm = document.getElementById('welcomeModal');
+        if (!wm || wm.style.display !== 'block') return;
+        closeWelcomeModal();
+        e.preventDefault();
+    });
     
     if (currentUser && currentUser.role === 'user') {
         try {
@@ -943,7 +989,6 @@ function setupEventListeners() {
 
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
-            
             var modalIds = ['infoModal', 'nodeSelectionModal', 'onuSelectionModal', 'splitterSelectionModal', 'splitterOutputOnuModal', 'splitterOutputSplitterModal', 'oltSelectionModal', 'usersModal', 'userEditModal', 'organizationsModal', 'organizationEditModal', 'updatesModal', 'deviceCatalogModal', 'confirmModal'];
             for (var i = 0; i < modalIds.length; i++) {
                 var m = document.getElementById(modalIds[i]);
@@ -1155,16 +1200,16 @@ function setupEventListeners() {
     });
 
     const modal = document.getElementById('infoModal');
-    const closeBtn = document.querySelector('.close');
+    const closeBtn = modal ? modal.querySelector('.close') : null;
     
-    if (closeBtn) {
+    if (closeBtn && modal) {
         closeBtn.onclick = function() {
             modal.style.display = 'none';
         };
     }
     
     window.onclick = function(event) {
-        if (event.target === modal) {
+        if (modal && event.target === modal) {
             modal.style.display = 'none';
         }
     };
