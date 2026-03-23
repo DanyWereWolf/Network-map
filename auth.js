@@ -106,12 +106,14 @@ function loginUser(username, password, rememberMe) {
     }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
 }
 
-function registerUser(username, password, fullName, organizationName) {
+function registerUser(username, password, fullName, organizationName, contactEmail) {
     if (username.length < 3) return Promise.resolve({ success: false, error: 'Имя пользователя должно быть не менее 3 символов' });
     if (!organizationName || organizationName.trim().length < 3) return Promise.resolve({ success: false, error: 'Укажите название организации (не менее 3 символов)' });
     if (password.length < 6) return Promise.resolve({ success: false, error: 'Пароль должен быть не менее 6 символов' });
+    var email = (contactEmail && String(contactEmail).trim()) || '';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return Promise.resolve({ success: false, error: 'Укажите корректный e-mail для связи' });
     if (!getApiBase()) return Promise.resolve({ success: false, error: 'Запустите сервер: npm run api, затем откройте http://localhost:3000' });
-    var body = { username: username, password: password, fullName: fullName || username, organizationName: String(organizationName).trim() };
+    var body = { username: username, password: password, fullName: fullName || username, organizationName: String(organizationName).trim(), contactEmail: email };
     return fetch(getApiBase() + '/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -323,10 +325,11 @@ document.addEventListener('DOMContentLoaded', function() {
             var username = document.getElementById('regUsername').value.trim();
             var fullName = document.getElementById('regFullName').value.trim();
             var organizationName = document.getElementById('regOrganizationName') ? document.getElementById('regOrganizationName').value.trim() : '';
+            var contactEmail = document.getElementById('regContactEmail') ? document.getElementById('regContactEmail').value.trim() : '';
             var password = document.getElementById('regPassword').value;
             var passwordConfirm = document.getElementById('regPasswordConfirm').value;
             if (password !== passwordConfirm) { showMessage('Пароли не совпадают', 'error'); return; }
-            Promise.resolve(registerUser(username, password, fullName, organizationName)).then(function(result) {
+            Promise.resolve(registerUser(username, password, fullName, organizationName, contactEmail)).then(function(result) {
                 if (result.success) {
                     if (result.organizationId) {
                         showMessage('Организация создана. Вы можете войти.', 'success');

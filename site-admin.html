@@ -11,8 +11,12 @@
             color: #0f172a;
         }
         .admin-root {
-            max-width: 1160px;
+            max-width: 1200px;
             width: 100%;
+        }
+        .auth-card.admin-shell {
+            border-radius: 18px;
+            box-shadow: 0 24px 60px rgba(15,23,42,0.12);
         }
         .admin-shell {
             width: 100%;
@@ -23,7 +27,9 @@
             align-items: center;
             justify-content: space-between;
             gap: 16px;
-            margin-bottom: 16px;
+            margin-bottom: 8px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid rgba(15,23,42,0.08);
         }
         .admin-header-left {
             display: flex;
@@ -71,32 +77,122 @@
         }
         .tabs {
             display: flex;
-            gap: 8px;
+            gap: 6px;
             border-bottom: 1px solid #e5e7eb;
-            margin-bottom: 14px;
-            flex-wrap: wrap;
+            margin-bottom: 6px;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 2px;
+            scrollbar-width: thin;
+        }
+        .tabs::-webkit-scrollbar {
+            height: 4px;
+        }
+        .tabs::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
         }
         .tab {
-            padding: 6px 12px;
-            border-radius: 999px 999px 0 0;
-            font-size: 0.82rem;
+            padding: 8px 14px;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            font-weight: 500;
             cursor: pointer;
-            color: #6b7280;
+            color: #64748b;
+            white-space: nowrap;
+            flex-shrink: 0;
+            border: 1px solid transparent;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
         }
         .tab.active {
-            background: #111827;
-            color: #f9fafb;
+            background: #0f172a;
+            color: #f8fafc;
+            border-color: #0f172a;
+            box-shadow: 0 4px 14px rgba(15,23,42,0.2);
         }
         .tab:not(.active):hover {
-            background: #f3f4f6;
-            color: #111827;
+            background: #f1f5f9;
+            color: #0f172a;
+            border-color: #e2e8f0;
         }
         .tab-content {
             display: none;
             font-size: 0.85rem;
+            animation: panelIn 0.2s ease-out;
+        }
+        @keyframes panelIn {
+            from { opacity: 0.85; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         .tab-content.active {
             display: block;
+        }
+        .panel-head {
+            margin-bottom: 16px;
+        }
+        .panel-title {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: #0f172a;
+            margin: 0 0 10px;
+            letter-spacing: -0.02em;
+        }
+        .fact-list {
+            margin: 0;
+            padding-left: 1.15em;
+            color: #64748b;
+            font-size: 0.8rem;
+            line-height: 1.5;
+        }
+        .fact-list li {
+            margin-bottom: 4px;
+        }
+        .fact-list li:last-child {
+            margin-bottom: 0;
+        }
+        .org-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .search-field {
+            flex: 1 1 240px;
+            min-width: 0;
+        }
+        .search-field input[type="search"],
+        .search-field input[type="text"] {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 9px 12px 9px 38px;
+            border-radius: 10px;
+            border: 1px solid #e2e8f0;
+            font-size: 0.84rem;
+            background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='M11 11l3.5 3.5'/%3E%3C/svg%3E") no-repeat 12px center;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .search-field input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+        }
+        .org-toolbar-meta {
+            font-size: 0.78rem;
+            color: #64748b;
+            white-space: nowrap;
+        }
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0,0,0,0);
+            border: 0;
         }
         .cards-row {
             display: grid;
@@ -106,9 +202,9 @@
         }
         .stat-card {
             border-radius: 12px;
-            border: 1px solid rgba(148,163,184,0.35);
-            background: #f9fafb;
-            padding: 10px 12px;
+            border: 1px solid rgba(148,163,184,0.28);
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            padding: 12px 14px;
         }
         .stat-label {
             font-size: 0.74rem;
@@ -287,7 +383,7 @@
                         </div>
                         <div>
                             <div class="admin-title">Панель главного администратора</div>
-                            <div class="admin-subtitle">Управление организациями, тарифами и подписками</div>
+                            <div class="admin-subtitle">Единая точка для организаций, лимитов, витрины тарифов и подписок</div>
                         </div>
                     </div>
                     <div class="admin-header-actions">
@@ -296,16 +392,25 @@
                     </div>
                 </header>
 
-                <nav class="tabs">
-                    <div class="tab active" data-tab="overview">Обзор</div>
-                    <div class="tab" data-tab="organizations">Организации</div>
-                    <div class="tab" data-tab="pricing">Тарифы и лимиты</div>
-                    <div class="tab" data-tab="landing-pricing">Тарифы на главной</div>
-                    <div class="tab" data-tab="subscriptions">Подписки</div>
+                <nav class="tabs" role="tablist" aria-label="Разделы панели">
+                    <div class="tab active" role="tab" data-tab="overview">Обзор</div>
+                    <div class="tab" role="tab" data-tab="organizations">Организации</div>
+                    <div class="tab" role="tab" data-tab="pricing">Тарифы и лимиты</div>
+                    <div class="tab" role="tab" data-tab="subscriptions">Подписки</div>
+                    <div class="tab" role="tab" data-tab="landing-pricing">Витрина</div>
+                    <div class="tab" role="tab" data-tab="account">Аккаунт</div>
                 </nav>
 
                 <!-- Обзор -->
                 <section id="tab-overview" class="tab-content active">
+                    <div class="panel-head">
+                        <h2 class="panel-title">Обзор</h2>
+                        <ul class="fact-list">
+                            <li>Сводка по данным API <code style="font-size:0.76em;">/api/organizations</code> на момент загрузки.</li>
+                            <li>Счётчики подписок «скоро истекут» зависят от поля «Граница дней» во вкладке «Подписки» (по умолчанию 14).</li>
+                            <li>Здесь нельзя ничего изменить — только просмотр для быстрой оценки состояния.</li>
+                        </ul>
+                    </div>
                     <div class="cards-row">
                         <div class="stat-card">
                             <div class="stat-label">Всего организаций</div>
@@ -328,23 +433,32 @@
                             <div class="stat-extra">Нужны действия администратора</div>
                         </div>
                     </div>
-                    <div class="info-box">
-                        Здесь отображаются только агрегированные данные. Для детального управления организациями, лимитами и продлением
-                        подписок используйте соответствующие вкладки «Организации», «Тарифы и лимиты» и «Подписки».
-                    </div>
                 </section>
 
                 <!-- Организации -->
                 <section id="tab-organizations" class="tab-content">
-                    <div class="info-box">
-                        Список организаций из сервера. Вы можете менять название, тариф, лимиты и статус организации.
-                        Пользователи и их роль по‑прежнему управляются из основной карты в интерфейсе «Пользователи».
+                    <div class="panel-head">
+                        <h2 class="panel-title">Организации</h2>
+                        <ul class="fact-list">
+                            <li>Полный список организаций из хранилища сервера: тариф (planId), лимит сессий, дата подписки, контактная почта.</li>
+                            <li>«Настроить» переключает на вкладку «Тарифы и лимиты» с уже выбранной организацией.</li>
+                            <li>«Удалить» безвозвратно удаляет организацию, карту, историю и пользователей этой организации.</li>
+                            <li>Роли и список пользователей по-прежнему ведутся в приложении карты (модальное окно «Пользователи»).</li>
+                        </ul>
+                    </div>
+                    <div class="org-toolbar">
+                        <div class="search-field">
+                            <label for="orgsSearchInput" class="sr-only">Поиск организаций</label>
+                            <input type="search" id="orgsSearchInput" placeholder="Поиск: название, e-mail, тариф, ID…" autocomplete="off">
+                        </div>
+                        <span class="org-toolbar-meta" id="orgsSearchMeta">—</span>
                     </div>
                     <div class="table-wrap" style="margin-bottom:10px;">
                         <table>
                             <thead>
                                 <tr>
                                     <th>Организация</th>
+                                    <th>Почта</th>
                                     <th>Тариф</th>
                                     <th>Лимит пользователей</th>
                                     <th>Подписка до</th>
@@ -357,14 +471,18 @@
                             </tbody>
                         </table>
                     </div>
-                    <div class="hint">Изменения сохраняются по кнопке «Сохранить изменения по организации» во вкладке «Тарифы и лимиты».</div>
+                    <div class="hint">Изменения лимитов и подписки сохраняются во вкладке «Тарифы и лимиты».</div>
                 </section>
 
                 <!-- Тарифы и лимиты -->
                 <section id="tab-pricing" class="tab-content">
-                    <div class="info-box">
-                        Базовые планы (basic/pro/enterprise) зашиты в сервере. Здесь вы можете задать индивидуальные лимиты и срок
-                        действия подписки для конкретной организации, фактически управляющие стоимостью её доступа.
+                    <div class="panel-head">
+                        <h2 class="panel-title">Тарифы и лимиты</h2>
+                        <ul class="fact-list">
+                            <li>Справочник basic / pro / enterprise задан на сервере; у организации можно переопределить лимит одновременных сессий и дату окончания подписки.</li>
+                            <li>Приостановка (<strong>приостановлена</strong>) сбрасывает сессии и блокирует вход для всех пользователей организации.</li>
+                            <li>Ниже — сброс пароля пользователя организации (завершает его активные сессии).</li>
+                        </ul>
                     </div>
                     <div class="field-row">
                         <div class="field-col">
@@ -400,24 +518,56 @@
                     </div>
                     <div class="field-row">
                         <div class="field-col">
-                            <label for="pricingDiscount">Скидка, %</label>
-                            <input id="pricingDiscount" type="number" min="0" max="100" placeholder="0 — без скидки">
-                            <div class="hint">Используется для учёта договорённостей по цене (информативно и для биллинга).</div>
-                        </div>
-                        <div class="field-col">
-                            <label for="pricingCustomPrice">Фиксированная цена, ₽ в месяц</label>
-                            <input id="pricingCustomPrice" type="number" min="0" placeholder="0 — по стандартному тарифу">
-                            <div class="hint">Если указано, может использоваться как индивидуальная цена при продлении.</div>
+                            <label for="pricingContactEmail">E-mail для связи (организация)</label>
+                            <input id="pricingContactEmail" type="email" placeholder="name@company.ru">
+                            <div class="hint">Указывается при регистрации; можно изменить здесь.</div>
                         </div>
                     </div>
                     <button class="btn-sm-primary" id="pricingSaveBtn">Сохранить изменения по организации</button>
+
+                    <div style="margin-top:22px;padding-top:18px;border-top:1px solid rgba(15,23,42,0.08);">
+                        <div class="panel-head" style="margin-bottom:12px;">
+                            <h3 class="panel-title" style="font-size:0.95rem;">Сброс пароля пользователя</h3>
+                            <ul class="fact-list">
+                                <li>Выберите организацию и учётную запись; новый пароль действует сразу, старые сессии этого пользователя завершаются.</li>
+                            </ul>
+                        </div>
+                        <div class="field-row">
+                            <div class="field-col" style="flex:1;min-width:220px;">
+                                <label for="orgPasswordResetSelect">Организация</label>
+                                <select id="orgPasswordResetSelect">
+                                    <option value="">Выберите организацию…</option>
+                                </select>
+                            </div>
+                            <div class="field-col" style="flex:1;min-width:200px;">
+                                <label for="orgPasswordResetUserSelect">Пользователь</label>
+                                <select id="orgPasswordResetUserSelect">
+                                    <option value="">— Сначала выберите организацию —</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <div class="field-col">
+                                <label for="orgPasswordResetNew">Новый пароль</label>
+                                <input id="orgPasswordResetNew" type="password" minlength="6" autocomplete="new-password" placeholder="Не менее 6 символов">
+                            </div>
+                            <div class="field-col" style="align-self:flex-end;">
+                                <button class="btn-sm-primary" type="button" id="orgPasswordResetBtn">Установить пароль</button>
+                            </div>
+                        </div>
+                        <div class="hint" id="orgPasswordResetMsg" style="margin-top:6px;"></div>
+                    </div>
                 </section>
 
                 <!-- Тарифы на главной странице -->
                 <section id="tab-landing-pricing" class="tab-content">
-                    <div class="info-box">
-                        Здесь вы управляете тарифами, которые отображаются на публичной странице тарифов (pricing.html). Эти настройки влияют
-                        только на отображение и сценарии выбора тарифа, но не меняют технические лимиты в организациях.
+                    <div class="panel-head">
+                        <h2 class="panel-title">Витрина тарифов (pricing.html)</h2>
+                        <ul class="fact-list">
+                            <li>Карточки на публичной странице <strong>pricing.html</strong> и на корне сайта (если открыт лендинг) — только отображение и кнопки.</li>
+                            <li>Числовой лимит в карточке подхватывается для организаций без ручного лимита, если <strong>ID тарифа</strong> совпадает с <strong>planId</strong> организации.</li>
+                            <li>Акции и скидки: процент и даты; опционально «цена до скидки» для зачёркивания.</li>
+                        </ul>
                     </div>
                     <div class="field-row">
                         <div class="field-col">
@@ -428,6 +578,8 @@
                                         <tr>
                                             <th>Название</th>
                                             <th>Цена</th>
+                                            <th>Лимит</th>
+                                            <th>Скидка</th>
                                             <th>Порядок</th>
                                             <th>Тип</th>
                                             <th>Действия</th>
@@ -474,8 +626,13 @@
                     </div>
                     <div class="field-row">
                         <div class="field-col">
-                            <label for="landingPricingMaxUsersText">Описание лимита пользователей</label>
+                            <label for="landingPricingMaxUsersText">Описание лимита (текст на сайте)</label>
                             <input id="landingPricingMaxUsersText" type="text" placeholder="До 3 одновременных пользователей...">
+                        </div>
+                        <div class="field-col">
+                            <label for="landingPricingMaxConcurrentUsers">Лимит одновременных пользователей (число)</label>
+                            <input id="landingPricingMaxConcurrentUsers" type="number" min="-1" step="1" placeholder="Пусто — по встроенному плану">
+                            <div class="hint">Целое ≥ 1 или −1 (без ограничения). Пусто — брать лимит из встроенных basic/pro/enterprise по ID.</div>
                         </div>
                         <div class="field-col">
                             <label for="landingPricingKind">Тип тарифа</label>
@@ -499,14 +656,39 @@
                             <input id="landingPricingCtaText" type="text" placeholder="Например: Выбрать «Базовый»">
                         </div>
                     </div>
+                    <div class="field-row">
+                        <div class="field-col">
+                            <label for="landingPricingPromoPercent">Скидка на время, %</label>
+                            <input id="landingPricingPromoPercent" type="number" min="0" max="100" placeholder="0 — без акции">
+                        </div>
+                        <div class="field-col">
+                            <label for="landingPricingPromoStarts">Начало акции</label>
+                            <input id="landingPricingPromoStarts" type="date">
+                        </div>
+                        <div class="field-col">
+                            <label for="landingPricingPromoEnds">Конец акции</label>
+                            <input id="landingPricingPromoEnds" type="date">
+                        </div>
+                    </div>
+                    <div class="field-row">
+                        <div class="field-col">
+                            <label for="landingPricingPriceBeforePromo">Цена до скидки (текст, необязательно)</label>
+                            <input id="landingPricingPriceBeforePromo" type="text" placeholder="Например: 1 490 ₽ — зачёркнуть при акции">
+                        </div>
+                    </div>
+                    <div class="hint" style="margin-bottom:10px;">Пока даты действуют и указан процент скидки, на странице тарифов показывается бейдж и при необходимости зачёркнутая «старая» цена.</div>
                     <button class="btn-sm-primary" id="landingPricingSaveBtn">Сохранить тарифы для главной</button>
                 </section>
 
                 <!-- Подписки -->
                 <section id="tab-subscriptions" class="tab-content">
-                    <div class="info-box">
-                        Список организаций с истекающими или уже истёкшими подписками. Продлевайте подписки здесь, это сразу повлияет
-                        на доступ пользователей.
+                    <div class="panel-head">
+                        <h2 class="panel-title">Подписки</h2>
+                        <ul class="fact-list">
+                            <li>Показаны только организации с датой окончания подписки в пределах выбранного горизонта (дней) или уже с истёкшей датой.</li>
+                            <li>Кнопки <strong>+30 дней</strong> и <strong>+1 год</strong> сдвигают дату окончания от текущей даты окончания (или от сегодня, если истекла).</li>
+                            <li>После продления пользователи снова смогут входить, если организация не приостановлена.</li>
+                        </ul>
                     </div>
                     <div class="field-row">
                         <div class="field-col">
@@ -533,7 +715,34 @@
                             </tbody>
                         </table>
                     </div>
-                    <div class="hint">Кнопки продления просто сдвигают дату окончания подписки на указанный период.</div>
+                    <div class="hint">Кнопки продления сдвигают дату окончания подписки на указанный период.</div>
+                </section>
+
+                <!-- Аккаунт -->
+                <section id="tab-account" class="tab-content">
+                    <div class="panel-head">
+                        <h2 class="panel-title">Аккаунт главного администратора</h2>
+                        <ul class="fact-list">
+                            <li>Смена пароля только для учётной записи <strong>admin</strong> (глобальный доступ к этой панели).</li>
+                            <li>Минимум 6 символов; после смены используйте новый пароль при следующем входе.</li>
+                        </ul>
+                    </div>
+                    <div class="field-row">
+                        <div class="field-col">
+                            <label for="adminNewPassword">Новый пароль</label>
+                            <input id="adminNewPassword" type="password" class="form-input" placeholder="Введите новый пароль (мин. 6 символов)" minlength="6">
+                        </div>
+                        <div class="field-col">
+                            <label for="adminNewPasswordConfirm">Повторите пароль</label>
+                            <input id="adminNewPasswordConfirm" type="password" class="form-input" placeholder="Повторите пароль" minlength="6">
+                        </div>
+                    </div>
+                    <div class="field-row">
+                        <div class="field-col">
+                            <button class="btn-sm-primary" id="adminChangePasswordBtn">Сменить пароль</button>
+                            <div class="hint" id="adminPasswordMsg" style="margin-top: 8px;"></div>
+                        </div>
+                    </div>
                 </section>
             </div>
 
@@ -578,6 +787,8 @@
     <script>
     (function() {
         var orgs = [];
+        var adminUserId = null;
+        var cachedUsers = [];
 
         function getAuthToken() {
             try {
@@ -646,15 +857,39 @@
             document.getElementById('statExpired').textContent = expired || '0';
         }
 
+        function getFilteredOrgs() {
+            var inp = document.getElementById('orgsSearchInput');
+            var q = (inp && inp.value) ? String(inp.value).trim().toLowerCase() : '';
+            if (!q) return orgs;
+            return orgs.filter(function(o) {
+                var name = (o.name || '').toLowerCase();
+                var mail = (o.contactEmail || '').toLowerCase();
+                var plan = (o.planId || '').toLowerCase();
+                var id = (o.id || '').toLowerCase();
+                return name.indexOf(q) >= 0 || mail.indexOf(q) >= 0 || plan.indexOf(q) >= 0 || id.indexOf(q) >= 0;
+            });
+        }
+
         function renderOrganizationsTable() {
             var tbody = document.getElementById('orgsTableBody');
+            var list = getFilteredOrgs();
+            var meta = document.getElementById('orgsSearchMeta');
+            if (meta) {
+                if (!orgs.length) meta.textContent = 'Нет организаций';
+                else if (!list.length) meta.textContent = 'Ничего не найдено · всего ' + orgs.length;
+                else meta.textContent = 'Показано ' + list.length + ' из ' + orgs.length;
+            }
             tbody.innerHTML = '';
             if (!orgs.length) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-muted">Организаций пока нет</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="text-muted">Организаций пока нет</td></tr>';
+                return;
+            }
+            if (!list.length) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-muted">По запросу ничего не найдено — уточните поиск.</td></tr>';
                 return;
             }
             var now = new Date();
-            orgs.forEach(function(o) {
+            list.forEach(function(o) {
                 var tr = document.createElement('tr');
                 var end = o.subscriptionEndsAt ? new Date(o.subscriptionEndsAt) : null;
                 var endStr = end ? end.toLocaleDateString('ru-RU') : '—';
@@ -668,11 +903,11 @@
                     pillClass = 'pill-expired';
                     pillText = 'Подписка истекла';
                 }
-                var discount = typeof o.discountPercent === 'number' && o.discountPercent > 0 ? ('-' + o.discountPercent + '%') : '';
-                var price = (typeof o.customMonthlyPrice === 'number' && o.customMonthlyPrice > 0) ? (o.customMonthlyPrice + ' ₽') : 'по тарифу';
+                var mail = (o.contactEmail && String(o.contactEmail).trim()) ? String(o.contactEmail).trim() : '—';
                 tr.innerHTML =
                     '<td>' + (o.name || '—') + '</td>' +
-                    '<td>' + (o.planId || 'basic') + (discount ? ' (' + discount + ')' : '') + '<br><span class="text-muted">' + price + '</span></td>' +
+                    '<td class="text-muted" style="max-width:160px;word-break:break-all;">' + mail + '</td>' +
+                    '<td>' + (o.planId || 'basic') + '</td>' +
                     '<td>' + (o.maxConcurrentUsers != null ? o.maxConcurrentUsers : 'по плану') + '</td>' +
                     '<td>' + endStr + '</td>' +
                     '<td><span class="pill ' + pillClass + '">' + pillText + '</span></td>' +
@@ -688,11 +923,44 @@
         function renderPricingSelector() {
             var select = document.getElementById('pricingOrgSelect');
             select.innerHTML = '<option value="">Выберите организацию…</option>';
+            var orgPwd = document.getElementById('orgPasswordResetSelect');
+            if (orgPwd) {
+                orgPwd.innerHTML = '<option value="">Выберите организацию…</option>';
+            }
             orgs.forEach(function(o) {
                 var opt = document.createElement('option');
                 opt.value = o.id;
                 opt.textContent = o.name || o.id;
                 select.appendChild(opt);
+                if (orgPwd) {
+                    var opt2 = document.createElement('option');
+                    opt2.value = o.id;
+                    opt2.textContent = o.name || o.id;
+                    orgPwd.appendChild(opt2);
+                }
+            });
+        }
+
+        function renderOrgPasswordUserSelect(orgId) {
+            var sel = document.getElementById('orgPasswordResetUserSelect');
+            if (!sel) return;
+            sel.innerHTML = '';
+            if (!orgId) {
+                sel.innerHTML = '<option value="">— Сначала выберите организацию —</option>';
+                return;
+            }
+            var list = (cachedUsers || []).filter(function(u) {
+                return u.organizationId === orgId && u.status !== 'rejected';
+            });
+            if (!list.length) {
+                sel.innerHTML = '<option value="">Нет пользователей</option>';
+                return;
+            }
+            list.forEach(function(u) {
+                var opt = document.createElement('option');
+                opt.value = u.id;
+                opt.textContent = (u.username || u.id) + (u.role === 'admin' ? ' (админ)' : '');
+                sel.appendChild(opt);
             });
         }
 
@@ -748,10 +1016,8 @@
             document.getElementById('pricingSubscriptionEndsAt').value =
                 o.subscriptionEndsAt ? o.subscriptionEndsAt.slice(0, 10) : '';
             document.getElementById('pricingStatus').value = o.status || 'active';
-            document.getElementById('pricingDiscount').value =
-                (typeof o.discountPercent === 'number' && o.discountPercent > 0) ? o.discountPercent : '';
-            document.getElementById('pricingCustomPrice').value =
-                (typeof o.customMonthlyPrice === 'number' && o.customMonthlyPrice > 0) ? o.customMonthlyPrice : '';
+            var pe = document.getElementById('pricingContactEmail');
+            if (pe) pe.value = (o.contactEmail != null) ? String(o.contactEmail) : '';
         }
 
         function patchOrganization(orgId, data) {
@@ -780,14 +1046,24 @@
                     if (!tbody) return;
                     tbody.innerHTML = '';
                     if (!plans.length) {
-                        tbody.innerHTML = '<tr><td colspan="5" class="text-muted">Тарифов пока нет</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="7" class="text-muted">Тарифов пока нет</td></tr>';
                         return;
                     }
                     plans.forEach(function(p, idx) {
                         var tr = document.createElement('tr');
+                        var pct = typeof p.promoPercent === 'number' ? p.promoPercent : 0;
+                        var promoCell = (pct > 0) ? ('-' + pct + '%') : '—';
+                        var mcu = p.maxConcurrentUsers;
+                        var limitCell = '—';
+                        if (mcu !== undefined && mcu !== null && mcu !== '') {
+                            var n = typeof mcu === 'number' ? mcu : parseInt(mcu, 10);
+                            if (!isNaN(n)) limitCell = (n === -1) ? '∞' : String(n);
+                        }
                         tr.innerHTML =
                             '<td>' + (p.title || p.id || '—') + '</td>' +
                             '<td>' + (p.price || '—') + (p.period ? ' ' + p.period : '') + '</td>' +
+                            '<td>' + limitCell + '</td>' +
+                            '<td>' + promoCell + '</td>' +
                             '<td>' + (typeof p.order === 'number' ? p.order : idx) + '</td>' +
                             '<td>' + (p.kind || 'paid') + '</td>' +
                             '<td class="actions-cell">' +
@@ -800,6 +1076,17 @@
                 });
         }
 
+        function fetchUsersCached() {
+            var token = getAuthToken && getAuthToken();
+            var headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            return fetch('api/users', { credentials: 'include', headers: headers })
+                .then(function(r) { return r.ok ? r.json() : { users: [] }; })
+                .then(function(body) {
+                    cachedUsers = (body && Array.isArray(body.users)) ? body.users : [];
+                });
+        }
+
         function loadAll() {
             fetchOrganizations().then(function(body) {
                 if (!body || !body.organizations) return;
@@ -809,6 +1096,14 @@
                 renderPricingSelector();
                 renderSubscriptionsTable();
                 loadLandingPricing();
+                return fetchUsersCached();
+            });
+        }
+
+        var orgsSearchInputEl = document.getElementById('orgsSearchInput');
+        if (orgsSearchInputEl) {
+            orgsSearchInputEl.addEventListener('input', function() {
+                renderOrganizationsTable();
             });
         }
 
@@ -819,6 +1114,8 @@
                 document.getElementById('pricingMaxUsers').value = '';
                 document.getElementById('pricingSubscriptionEndsAt').value = '';
                 document.getElementById('pricingStatus').value = 'active';
+                var pce = document.getElementById('pricingContactEmail');
+                if (pce) pce.value = '';
                 return;
             }
             fillPricingFormForOrg(id);
@@ -835,16 +1132,12 @@
             var dateRaw = document.getElementById('pricingSubscriptionEndsAt').value;
             var endsAt = dateRaw ? (dateRaw + 'T23:59:59.000Z') : null;
             var status = document.getElementById('pricingStatus').value;
-            var discRaw = document.getElementById('pricingDiscount').value.trim();
-            var disc = discRaw === '' ? undefined : parseInt(discRaw, 10);
-            var priceRaw = document.getElementById('pricingCustomPrice').value.trim();
-            var customPrice = priceRaw === '' ? undefined : parseInt(priceRaw, 10);
+            var contactEmail = (document.getElementById('pricingContactEmail') || {}).value;
             var payload = {
                 maxConcurrentUsers: maxUsers,
                 subscriptionEndsAt: endsAt,
                 status: status,
-                discountPercent: disc,
-                customMonthlyPrice: customPrice
+                contactEmail: contactEmail != null ? String(contactEmail).trim() : ''
             };
             patchOrganization(id, payload).then(function() {
                 alert('Изменения сохранены');
@@ -919,7 +1212,48 @@
                 return;
             }
             document.getElementById('adminContent').style.display = 'block';
+            adminUserId = user.userId || null;
             loadAll();
+
+            var btn = document.getElementById('adminChangePasswordBtn');
+            if (btn) btn.addEventListener('click', function() {
+                var msgEl = document.getElementById('adminPasswordMsg');
+                if (msgEl) msgEl.textContent = '';
+                if (!adminUserId) {
+                    if (msgEl) msgEl.textContent = 'Не удалось определить id админа.';
+                    return;
+                }
+                var p1 = (document.getElementById('adminNewPassword') || {}).value || '';
+                var p2 = (document.getElementById('adminNewPasswordConfirm') || {}).value || '';
+                if (!p1 || p1.length < 6) {
+                    if (msgEl) msgEl.textContent = 'Пароль должен быть не менее 6 символов.';
+                    return;
+                }
+                if (p1 !== p2) {
+                    if (msgEl) msgEl.textContent = 'Пароли не совпадают.';
+                    return;
+                }
+
+                var token = getAuthToken && getAuthToken();
+                var headers = { 'Content-Type': 'application/json' };
+                if (token) headers['Authorization'] = 'Bearer ' + token;
+
+                fetch('api/users/' + encodeURIComponent(adminUserId), {
+                    method: 'PUT',
+                    headers: headers,
+                    credentials: 'include',
+                    body: JSON.stringify({ password: p1 })
+                }).then(function(r) {
+                    if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+                    if (msgEl) {
+                        msgEl.textContent = 'Пароль изменён.';
+                    }
+                    if (document.getElementById('adminNewPassword')) document.getElementById('adminNewPassword').value = '';
+                    if (document.getElementById('adminNewPasswordConfirm')) document.getElementById('adminNewPasswordConfirm').value = '';
+                }).catch(function(e) {
+                    if (msgEl) msgEl.textContent = 'Ошибка: ' + (e.message || e);
+                });
+            });
         });
 
         document.getElementById('landingPricingAddBtn').addEventListener('click', function() {
@@ -930,9 +1264,59 @@
             document.getElementById('landingPricingPeriod').value = '';
             document.getElementById('landingPricingOrder').value = '';
             document.getElementById('landingPricingMaxUsersText').value = '';
+            document.getElementById('landingPricingMaxConcurrentUsers').value = '';
             document.getElementById('landingPricingKind').value = 'paid';
             document.getElementById('landingPricingHighlighted').value = 'false';
             document.getElementById('landingPricingCtaText').value = '';
+            document.getElementById('landingPricingPromoPercent').value = '';
+            document.getElementById('landingPricingPromoStarts').value = '';
+            document.getElementById('landingPricingPromoEnds').value = '';
+            document.getElementById('landingPricingPriceBeforePromo').value = '';
+        });
+
+        var orgPwdSelect = document.getElementById('orgPasswordResetSelect');
+        if (orgPwdSelect) {
+            orgPwdSelect.addEventListener('change', function() {
+                renderOrgPasswordUserSelect(this.value);
+            });
+        }
+        document.getElementById('orgPasswordResetBtn').addEventListener('click', function() {
+            var msgEl = document.getElementById('orgPasswordResetMsg');
+            if (msgEl) msgEl.textContent = '';
+            var orgId = (document.getElementById('orgPasswordResetSelect') || {}).value;
+            var userId = (document.getElementById('orgPasswordResetUserSelect') || {}).value;
+            var pwd = (document.getElementById('orgPasswordResetNew') || {}).value || '';
+            if (!orgId) {
+                if (msgEl) msgEl.textContent = 'Выберите организацию.';
+                return;
+            }
+            if (!userId) {
+                if (msgEl) msgEl.textContent = 'Выберите пользователя.';
+                return;
+            }
+            if (!pwd || pwd.length < 6) {
+                if (msgEl) msgEl.textContent = 'Пароль не менее 6 символов.';
+                return;
+            }
+            var token = getAuthToken && getAuthToken();
+            var headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            fetch('api/organizations/' + encodeURIComponent(orgId) + '/reset-password', {
+                method: 'POST',
+                headers: headers,
+                credentials: 'include',
+                body: JSON.stringify({ password: pwd, userId: userId })
+            }).then(function(r) {
+                return r.json().then(function(b) {
+                    if (!r.ok) throw new Error(b.error || 'Ошибка');
+                    return b;
+                });
+            }).then(function(b) {
+                if (msgEl) msgEl.textContent = 'Пароль для «' + (b.username || '') + '» обновлён.';
+                document.getElementById('orgPasswordResetNew').value = '';
+            }).catch(function(e) {
+                if (msgEl) msgEl.textContent = 'Ошибка: ' + (e.message || e);
+            });
         });
 
         document.getElementById('landingPricingTableBody').addEventListener('click', function(e) {
@@ -954,9 +1338,17 @@
                 document.getElementById('landingPricingPeriod').value = p.period || '';
                 document.getElementById('landingPricingOrder').value = typeof p.order === 'number' ? p.order : idx;
                 document.getElementById('landingPricingMaxUsersText').value = p.maxUsersText || '';
+                document.getElementById('landingPricingMaxConcurrentUsers').value =
+                    (p.maxConcurrentUsers !== undefined && p.maxConcurrentUsers !== null && p.maxConcurrentUsers !== '')
+                        ? String(p.maxConcurrentUsers) : '';
                 document.getElementById('landingPricingKind').value = p.kind || 'paid';
                 document.getElementById('landingPricingHighlighted').value = p.highlighted ? 'true' : 'false';
                 document.getElementById('landingPricingCtaText').value = p.ctaText || '';
+                document.getElementById('landingPricingPromoPercent').value =
+                    (typeof p.promoPercent === 'number' && p.promoPercent > 0) ? p.promoPercent : '';
+                document.getElementById('landingPricingPromoStarts').value = p.promoStartsAt ? String(p.promoStartsAt).slice(0, 10) : '';
+                document.getElementById('landingPricingPromoEnds').value = p.promoEndsAt ? String(p.promoEndsAt).slice(0, 10) : '';
+                document.getElementById('landingPricingPriceBeforePromo').value = p.priceBeforePromo || '';
                 return;
             }
 
@@ -989,6 +1381,28 @@
             try { plans = JSON.parse(raw); } catch (e) { plans = []; }
             var currentId = document.getElementById('landingPricingId').value.trim() || 'plan_' + Date.now();
             var existingIdx = plans.findIndex(function(p) { return p.id === currentId; });
+            var promoRaw = document.getElementById('landingPricingPromoPercent').value.trim();
+            var promoPct = promoRaw === '' ? 0 : parseInt(promoRaw, 10);
+            if (isNaN(promoPct) || promoPct < 0) promoPct = 0;
+            if (promoPct > 100) promoPct = 100;
+            var mcuRaw = (document.getElementById('landingPricingMaxConcurrentUsers') || {}).value;
+            var mcuVal = null;
+            if (mcuRaw != null && String(mcuRaw).trim() !== '') {
+                var mn = parseInt(String(mcuRaw).trim(), 10);
+                if (!isNaN(mn) && mn !== 0) mcuVal = mn;
+            }
+            if (promoPct > 0) {
+                var ds = document.getElementById('landingPricingPromoStarts').value;
+                var de = document.getElementById('landingPricingPromoEnds').value;
+                if (!ds || !de) {
+                    alert('Для скидки укажите дату начала и окончания акции.');
+                    return;
+                }
+                if (de < ds) {
+                    alert('Дата окончания акции не может быть раньше даты начала.');
+                    return;
+                }
+            }
             var plan = {
                 id: currentId,
                 title: document.getElementById('landingPricingTitle').value.trim() || currentId,
@@ -996,10 +1410,15 @@
                 price: document.getElementById('landingPricingPrice').value.trim(),
                 period: document.getElementById('landingPricingPeriod').value.trim(),
                 maxUsersText: document.getElementById('landingPricingMaxUsersText').value.trim(),
+                maxConcurrentUsers: mcuVal,
                 order: parseInt(document.getElementById('landingPricingOrder').value || '0', 10) || 0,
                 highlighted: document.getElementById('landingPricingHighlighted').value === 'true',
                 kind: document.getElementById('landingPricingKind').value || 'paid',
-                ctaText: document.getElementById('landingPricingCtaText').value.trim()
+                ctaText: document.getElementById('landingPricingCtaText').value.trim(),
+                promoPercent: promoPct,
+                promoStartsAt: document.getElementById('landingPricingPromoStarts').value || '',
+                promoEndsAt: document.getElementById('landingPricingPromoEnds').value || '',
+                priceBeforePromo: document.getElementById('landingPricingPriceBeforePromo').value.trim()
             };
             if (existingIdx >= 0) plans[existingIdx] = plan; else plans.push(plan);
             var token = getAuthToken && getAuthToken();

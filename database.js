@@ -270,6 +270,31 @@ function getOrganization(orgId) {
     return orgs.find(function(o) { return o.id === orgId; }) || null;
 }
 
+/** Агрегаты для публичного лендинга (без авторизации). */
+function getPublicStats() {
+    const s = loadStore();
+    const orgs = Array.isArray(s.organizations) ? s.organizations : [];
+    const users = Array.isArray(s.users) ? s.users : [];
+    let mapObjectCount = 0;
+    const byOrg = s.mapDataByOrg && typeof s.mapDataByOrg === 'object' ? s.mapDataByOrg : {};
+    Object.keys(byOrg).forEach(function(oid) {
+        const arr = byOrg[oid];
+        if (Array.isArray(arr)) mapObjectCount += arr.length;
+    });
+    let userAccountCount = 0;
+    users.forEach(function(u) {
+        if (!u) return;
+        if (String(u.username || '').toLowerCase() === 'admin') return;
+        if (u.status === 'rejected') return;
+        userAccountCount++;
+    });
+    return {
+        organizationCount: orgs.length,
+        userAccountCount: userAccountCount,
+        mapObjectCount: mapObjectCount
+    };
+}
+
 function addOrganization(org) {
     const s = loadStore();
     if (!s.organizations) s.organizations = [];
@@ -281,6 +306,7 @@ function addOrganization(org) {
         maxConcurrentUsers: org.maxConcurrentUsers != null ? org.maxConcurrentUsers : 3,
         subscriptionEndsAt: org.subscriptionEndsAt || null,
         status: org.status || 'active',
+        contactEmail: org.contactEmail != null ? String(org.contactEmail).trim() : '',
         discountPercent: typeof org.discountPercent === 'number' ? org.discountPercent : 0,
         customMonthlyPrice: typeof org.customMonthlyPrice === 'number' ? org.customMonthlyPrice : null,
         createdAt: org.createdAt || new Date().toISOString()
@@ -299,6 +325,7 @@ function updateOrganization(orgId, updates) {
     if (updates.maxConcurrentUsers !== undefined) s.organizations[idx].maxConcurrentUsers = updates.maxConcurrentUsers;
     if (updates.subscriptionEndsAt !== undefined) s.organizations[idx].subscriptionEndsAt = updates.subscriptionEndsAt;
     if (updates.status !== undefined) s.organizations[idx].status = updates.status;
+    if (updates.contactEmail !== undefined) s.organizations[idx].contactEmail = String(updates.contactEmail).trim();
     if (updates.discountPercent !== undefined) s.organizations[idx].discountPercent = updates.discountPercent;
     if (updates.customMonthlyPrice !== undefined) s.organizations[idx].customMonthlyPrice = updates.customMonthlyPrice;
     saveStore();
@@ -346,7 +373,8 @@ function getPricingPlans() {
                 order: 0,
                 highlighted: false,
                 ctaText: 'Запустить пробный период',
-                kind: 'trial'
+                kind: 'trial',
+                maxConcurrentUsers: 1
             },
             {
                 id: 'basic',
@@ -355,6 +383,7 @@ function getPricingPlans() {
                 price: '1 490 ₽',
                 period: '/ месяц',
                 maxUsersText: 'До 3 одновременных пользователей в организации',
+                maxConcurrentUsers: 3,
                 order: 1,
                 highlighted: false,
                 ctaText: 'Выбрать «Базовый»',
@@ -367,6 +396,7 @@ function getPricingPlans() {
                 price: '3 490 ₽',
                 period: '/ месяц',
                 maxUsersText: 'До 10 одновременных пользователей; можно усилить лимит в настройках',
+                maxConcurrentUsers: 10,
                 order: 2,
                 highlighted: true,
                 ctaText: 'Выбрать «Про»',
@@ -379,6 +409,7 @@ function getPricingPlans() {
                 price: 'по запросу',
                 period: '',
                 maxUsersText: 'Неограниченное число одновременных пользователей и гибкие условия',
+                maxConcurrentUsers: -1,
                 order: 3,
                 highlighted: false,
                 ctaText: 'Обсудить корпоративный тариф',
@@ -415,6 +446,18 @@ function deleteSessionsForOrganization(orgId) {
     if (!Array.isArray(s.sessions)) s.sessions = [];
     s.sessions = s.sessions.filter(function(ses) {
         return ses.organization_id !== orgId;
+    });
+    saveStore();
+}
+
+/** Удаляет все сессии пользователя (перед новым входом или при принудительном сбросе). */
+function deleteSessionsForUser(userId) {
+    if (userId == null) return;
+    const s = loadStore();
+    if (!Array.isArray(s.sessions)) s.sessions = [];
+    var id = String(userId);
+    s.sessions = s.sessions.filter(function(ses) {
+        return String(ses.user_id) !== id;
     });
     saveStore();
 }
@@ -665,6 +708,8 @@ module.exports = {
     getSessions,
     countActiveSessionsForOrganization,
     deleteSessionsForOrganization,
+    deleteSessionsForUser,
     getPricingPlans,
-    setPricingPlans
+    setPricingPlans,
+    getPublicStats
 };

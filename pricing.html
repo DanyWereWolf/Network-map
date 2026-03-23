@@ -230,6 +230,7 @@
             margin-top: 10px;
         }
         .pricing-card {
+            position: relative;
             border-radius: 18px;
             border: 1px solid rgba(15,23,42,0.06);
             background: #ffffff;
@@ -243,12 +244,16 @@
             border-color: rgba(59,130,246,0.5);
             box-shadow: 0 22px 60px rgba(37,99,235,0.45);
             position: relative;
+            /* Чтобы бейдж «Рекомендуем» не накрывал заголовок */
+            padding-top: 38px;
         }
+        /* «Рекомендуем» слева — справа диагональная лента скидки */
         .pricing-card.pro::before {
             content: "Рекомендуем";
             position: absolute;
             top: 10px;
-            right: 14px;
+            left: 14px;
+            right: auto;
             font-size: 0.7rem;
             letter-spacing: 0.05em;
             text-transform: uppercase;
@@ -265,10 +270,58 @@
             font-size: 0.8rem;
             color: #6b7280;
         }
+        .pricing-card-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 8px;
+        }
+        /* Ленточка скидки в правом верхнем углу карточки */
+        .pricing-ribbon-wrap {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 108px;
+            height: 108px;
+            overflow: hidden;
+            z-index: 6;
+            pointer-events: none;
+        }
+        .pricing-ribbon-wrap span {
+            position: absolute;
+            display: block;
+            width: 170px;
+            padding: 8px 0;
+            top: 24px;
+            right: -42px;
+            background: linear-gradient(90deg, #059669 0%, #047857 45%, #065f46 100%);
+            color: #fff;
+            font-weight: 800;
+            font-size: 0.72rem;
+            letter-spacing: 0.1em;
+            text-align: center;
+            text-transform: uppercase;
+            box-shadow: 0 2px 10px rgba(5, 80, 60, 0.35);
+            transform: rotate(45deg);
+            transform-origin: center;
+        }
+        .pricing-promo-caption {
+            font-size: 0.72rem;
+            color: #059669;
+            font-weight: 600;
+            margin-top: 4px;
+        }
         .pricing-price-row {
             display: flex;
+            flex-wrap: wrap;
             align-items: baseline;
-            gap: 4px;
+            gap: 6px 8px;
+        }
+        .pricing-price-old {
+            text-decoration: line-through;
+            color: #9ca3af;
+            font-size: 1.05rem;
+            font-weight: 600;
         }
         .pricing-price {
             font-size: 1.4rem;
@@ -445,15 +498,15 @@
                     <div class="hero-metric-row">
                         <div class="hero-metric">
                             <div class="hero-metric-label">Организаций</div>
-                            <div class="hero-metric-value">12</div>
+                            <div class="hero-metric-value" id="heroStatOrgs">—</div>
                         </div>
                         <div class="hero-metric">
-                            <div class="hero-metric-label">Активных пользователей</div>
-                            <div class="hero-metric-value">37</div>
+                            <div class="hero-metric-label">Пользователей</div>
+                            <div class="hero-metric-value" id="heroStatUsers">—</div>
                         </div>
                         <div class="hero-metric">
-                            <div class="hero-metric-label">Узлов сети</div>
-                            <div class="hero-metric-value">2 430</div>
+                            <div class="hero-metric-label">Объектов на картах</div>
+                            <div class="hero-metric-value" id="heroStatNodes">—</div>
                         </div>
                     </div>
                     <div class="hero-mini-map">
@@ -623,6 +676,76 @@
 
     <script>
     (function() {
+        function formatHeroStat(n) {
+            var x = Math.max(0, Math.floor(Number(n) || 0));
+            return String(x).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+        }
+        var base = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : '';
+        fetch(base + '/api/public-stats')
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(d) {
+                if (!d) return;
+                var o = document.getElementById('heroStatOrgs');
+                var u = document.getElementById('heroStatUsers');
+                var m = document.getElementById('heroStatNodes');
+                if (o) o.textContent = formatHeroStat(d.organizationCount);
+                if (u) u.textContent = formatHeroStat(d.userAccountCount);
+                if (m) m.textContent = formatHeroStat(d.mapObjectCount);
+            })
+            .catch(function() {});
+    })();
+    </script>
+    <script>
+    (function() {
+        function parseLocalDateStart(s) {
+            if (!s) return NaN;
+            var p = String(s).slice(0, 10).split('-');
+            if (p.length !== 3) return new Date(s).getTime();
+            return new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10), 0, 0, 0, 0).getTime();
+        }
+        function parseLocalDateEnd(s) {
+            if (!s) return NaN;
+            var p = String(s).slice(0, 10).split('-');
+            if (p.length !== 3) return new Date(s).getTime();
+            return new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10), 23, 59, 59, 999).getTime();
+        }
+        function promoPercentValue(p) {
+            var v = p && p.promoPercent;
+            if (typeof v === 'number' && !isNaN(v)) return v;
+            var f = parseFloat(v, 10);
+            return isNaN(f) ? 0 : f;
+        }
+        function trimDatePart(v) {
+            if (v == null || v === '') return '';
+            var s = String(v).trim();
+            if (!s) return '';
+            return s.length >= 10 ? s.slice(0, 10) : s;
+        }
+        function formatPricingMetaLine(p) {
+            var text = (p.maxUsersText && String(p.maxUsersText).trim()) ? String(p.maxUsersText).trim() : '';
+            if (text) return text;
+            var mcu = p.maxConcurrentUsers;
+            if (mcu === undefined || mcu === null || mcu === '') return '';
+            var n = typeof mcu === 'number' ? mcu : parseFloat(mcu);
+            if (isNaN(n)) return '';
+            if (n === -1) return 'Неограниченное число одновременных пользователей';
+            return 'До ' + n + ' одновременных пользователей';
+        }
+        function isLandingPromoActive(p) {
+            var pct = promoPercentValue(p);
+            if (pct <= 0) return false;
+            var rs = trimDatePart(p.promoStartsAt);
+            var re = trimDatePart(p.promoEndsAt);
+            var now = Date.now();
+            // Только процент без дат — показываем акцию (данные из админки до введения дат и т.п.)
+            if (!rs && !re) return true;
+            var st = rs ? parseLocalDateStart(rs) : -Infinity;
+            var en = re ? parseLocalDateEnd(re) : Infinity;
+            if (isNaN(st)) st = -Infinity;
+            if (isNaN(en)) en = Infinity;
+            return now >= st && now <= en;
+        }
+
         function attachHandlers() {
             document.querySelectorAll('.pricing-cta-btn').forEach(function(btn) {
                 btn.addEventListener('click', function() {
@@ -642,7 +765,7 @@
             });
         }
 
-        fetch('api/pricing')
+        fetch((typeof window !== 'undefined' && window.location && window.location.origin ? window.location.origin : '') + '/api/pricing')
             .then(function(r) { return r.ok ? r.json() : null; })
             .then(function(body) {
                 var container = document.getElementById('pricingCards');
@@ -654,18 +777,43 @@
                     return;
                 }
                 plans.forEach(function(p) {
+                    var promoOn = isLandingPromoActive(p);
+                    var pct = promoPercentValue(p);
+                    var endCaption = '';
+                    if (promoOn && p.promoEndsAt) {
+                        var endT = parseLocalDateEnd(p.promoEndsAt);
+                        if (!isNaN(endT)) {
+                            endCaption = 'Акция до ' + new Date(endT).toLocaleDateString('ru-RU');
+                        }
+                    }
+                    var oldPrice = (p.priceBeforePromo && String(p.priceBeforePromo).trim()) ? String(p.priceBeforePromo).trim() : '';
+                    var priceRowHtml = '';
+                    if (promoOn && oldPrice) {
+                        priceRowHtml =
+                            '<span class="pricing-price-old">' + oldPrice + '</span>' +
+                            '<div class="pricing-price">' + (p.price || '') + '</div>' +
+                            '<div class="pricing-period">' + (p.period || '') + '</div>';
+                    } else {
+                        priceRowHtml =
+                            '<div class="pricing-price">' + (p.price || '') + '</div>' +
+                            '<div class="pricing-period">' + (p.period || '') + '</div>';
+                    }
                     var card = document.createElement('div');
                     card.className = 'pricing-card' + (p.highlighted ? ' pro' : '');
+                    var ribbonHtml = (promoOn && pct > 0)
+                        ? '<div class="pricing-ribbon-wrap" aria-hidden="true"><span>−' + Math.round(pct) + '%</span></div>'
+                        : '';
                     card.innerHTML =
-                        '<div>' +
-                            '<div class="pricing-name">' + (p.title || p.id || 'Тариф') + '</div>' +
-                            '<div class="pricing-short">' + (p.short || '') + '</div>' +
+                        ribbonHtml +
+                        '<div class="pricing-card-head">' +
+                            '<div>' +
+                                '<div class="pricing-name">' + (p.title || p.id || 'Тариф') + '</div>' +
+                                '<div class="pricing-short">' + (p.short || '') + '</div>' +
+                            '</div>' +
                         '</div>' +
-                        '<div class="pricing-price-row">' +
-                            '<div class="pricing-price">' + (p.price || '') + '</div>' +
-                            '<div class="pricing-period">' + (p.period || '') + '</div>' +
-                        '</div>' +
-                        '<div class="pricing-meta">' + (p.maxUsersText || '') + '</div>' +
+                        (promoOn && endCaption ? '<div class="pricing-promo-caption">' + endCaption + '</div>' : '') +
+                        '<div class="pricing-price-row">' + priceRowHtml + '</div>' +
+                        '<div class="pricing-meta">' + formatPricingMetaLine(p) + '</div>' +
                         '<button class="pricing-cta-btn" data-plan="' + (p.id || '') + '" data-kind="' + (p.kind || 'paid') + '">' +
                             (p.ctaText || 'Выбрать') +
                             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +

@@ -160,7 +160,7 @@ function goToSearchResult(result) {
     myMap.setCenter(coords, 21, { duration: 500 });
     setTimeout(function() {
         if (result.type === 'cable') showCableInfo(obj);
-        else if (result.type === 'support') showSupportInfo(obj);
+        else if (result.type === 'support' || result.type === 'attachment') showSupportInfo(obj);
         else if (result.type === 'node' || result.type === 'cross' || result.type === 'sleeve') showObjectInfo(obj);
     }, 600);
     searchInput.value = '';

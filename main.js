@@ -2706,12 +2706,12 @@ function createObject(type, name, coords, options = {}) {
             return;
         }
 
-        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'attachment' || type === 'olt' || type === 'splitter' || type === 'onu')) {
+        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu')) {
             showObjectInfo(placemark);
             return;
         }
 
-        if (type === 'support') {
+        if (type === 'support' || type === 'attachment') {
             if (isEditMode) {
                 clearSelection();
                 selectObject(placemark);
@@ -5219,12 +5219,12 @@ function createObjectFromData(data, opts) {
             return;
         }
 
-        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'attachment' || type === 'olt' || type === 'splitter' || type === 'onu')) {
+        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu')) {
             showObjectInfo(placemark);
             return;
         }
 
-        if (type === 'support') {
+        if (type === 'support' || type === 'attachment') {
             if (isEditMode) {
                 clearSelection();
                 selectObject(placemark);
@@ -5499,8 +5499,6 @@ function showObjectInfo(obj) {
         title = name ? `Кабельная муфта: ${name}` : 'Кабельная муфта';
     } else if (type === 'cross') {
         title = name ? `Оптический кросс: ${name}` : 'Оптический кросс';
-    } else if (type === 'attachment') {
-        title = name ? `Крепление узлов: ${name}` : 'Крепление узлов';
     } else if (type === 'olt') {
         title = name ? `OLT: ${name}` : 'OLT (GPON)';
     } else if (type === 'splitter') {
@@ -5514,16 +5512,6 @@ function showObjectInfo(obj) {
     document.getElementById('modalTitle').textContent = title;
 
     let html = '';
-
-    if (type === 'attachment') {
-        html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Информация о креплении</h4>';
-        if (name) {
-            html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Название:</strong> ' + escapeHtml(name) + '</div>';
-        }
-        html += '<div style="color: var(--text-secondary); font-size: 0.875rem;">Через крепление можно прокладывать кабель (как через опору).</div>';
-        html += '</div>';
-    }
 
     if (type === 'olt') {
         const oltId = getObjectUniqueId(obj);
@@ -5877,7 +5865,7 @@ function showObjectInfo(obj) {
     }
 
     if (connectedCables.length === 0) {
-        const noCablesText = (type === 'attachment') ? 'К этому креплению не подключено кабелей' : 'К этому объекту не подключено кабелей';
+        const noCablesText = 'К этому объекту не подключено кабелей';
         html += '<div class="no-cables" style="padding: 15px; text-align: center; color: var(--text-muted); font-size: 0.875rem;">' + noCablesText + '</div>';
     } else {
         
@@ -5972,16 +5960,26 @@ function showSupportInfo(supportObj) {
     
     const connectedCables = getCablesThroughSupport(supportObj);
     const supportName = supportObj.properties.get('name') || '';
+    const waypointType = supportObj.properties && supportObj.properties.get('type');
+    const isAttachment = waypointType === 'attachment';
+    const titleIcon = isAttachment ? '🔗' : '📡';
+    const titleKind = isAttachment ? 'Крепление узлов' : 'Опора связи';
+    const infoHeading = isAttachment ? 'Информация о креплении' : 'Информация об опоре';
+    const nameLabelStrong = isAttachment ? 'Название:' : 'Подпись:';
+    const editHeading = isAttachment ? 'Редактирование крепления' : 'Редактирование опоры';
+    const editFieldLabel = isAttachment ? 'Название крепления' : 'Подпись опоры';
+    const editPlaceholder = isAttachment ? 'Например: стена А' : 'Например: № 15';
+    const noCablesMsg = isAttachment ? 'Через это крепление не проходит ни один кабель' : 'Через эту опору не проходит ни один кабель';
     
-    document.getElementById('modalTitle').textContent = supportName ? '📡 Опора связи: ' + supportName : '📡 Опора связи';
+    document.getElementById('modalTitle').textContent = supportName ? titleIcon + ' ' + titleKind + ': ' + supportName : titleIcon + ' ' + titleKind;
     
     let html = '';
     
     html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-    html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Информация об опоре</h4>';
+    html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">' + infoHeading + '</h4>';
     
     if (supportName) {
-        html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Подпись:</strong> ' + escapeHtml(supportName) + '</div>';
+        html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>' + nameLabelStrong + '</strong> ' + escapeHtml(supportName) + '</div>';
     }
     
     const coords = supportObj.geometry.getCoordinates();
@@ -5991,10 +5989,10 @@ function showSupportInfo(supportObj) {
     
     if (isEditMode) {
         html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Редактирование опоры</h4>';
+        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">' + editHeading + '</h4>';
         html += '<div class="form-group" style="margin-bottom: 12px;">';
-        html += '<label for="editSupportName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Подпись опоры</label>';
-        html += '<input type="text" id="editSupportName" class="form-input" value="' + escapeHtml(supportName) + '" placeholder="Например: № 15">';
+        html += '<label for="editSupportName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">' + editFieldLabel + '</label>';
+        html += '<input type="text" id="editSupportName" class="form-input" value="' + escapeHtml(supportName) + '" placeholder="' + escapeHtml(editPlaceholder) + '">';
         html += '</div>';
         html += '<button id="saveSupportEdit" class="btn-primary" style="width: 100%; padding: 10px 14px; margin-top: 8px;">Сохранить</button>';
         html += '</div>';
@@ -6012,7 +6010,7 @@ function showSupportInfo(supportObj) {
     }
 
     if (connectedCables.length === 0) {
-        html += '<div class="no-cables" style="padding: 15px; text-align: center; color: var(--text-muted); font-size: 0.875rem;">Через эту опору не проходит ни один кабель</div>';
+        html += '<div class="no-cables" style="padding: 15px; text-align: center; color: var(--text-muted); font-size: 0.875rem;">' + noCablesMsg + '</div>';
     } else {
         html += '<div class="cables-section">';
         html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">📦 Проходящие кабели</h4>';
@@ -6073,6 +6071,14 @@ function showSupportInfo(supportObj) {
     
     setupEditAndDeleteListeners();
     modal.style.display = 'block';
+}
+
+/** Обновить карточку объекта: опора и крепление — через showSupportInfo, остальные — showObjectInfo. */
+function refreshObjectModal(obj) {
+    if (!obj || !obj.properties) return;
+    var t = obj.properties.get('type');
+    if (t === 'support' || t === 'attachment') showSupportInfo(obj);
+    else showObjectInfo(obj);
 }
 
 function setupEditAndDeleteListeners() {
@@ -6208,10 +6214,15 @@ function setupEditAndDeleteListeners() {
     if (saveSupportBtn) {
         saveSupportBtn.addEventListener('click', function() {
             if (!currentModalObject) return;
-            if (currentModalObject.properties.get('type') !== 'support') return;
+            var wt = currentModalObject.properties.get('type');
+            if (wt !== 'support' && wt !== 'attachment') return;
             var newName = (document.getElementById('editSupportName') && document.getElementById('editSupportName').value) ? document.getElementById('editSupportName').value.trim() : '';
             currentModalObject.properties.set('name', newName);
-            currentModalObject.properties.set('balloonContent', newName ? 'Опора связи: ' + newName : 'Опора связи');
+            if (wt === 'attachment') {
+                currentModalObject.properties.set('balloonContent', newName ? 'Крепление узлов: ' + newName : 'Крепление узлов');
+            } else {
+                currentModalObject.properties.set('balloonContent', newName ? 'Опора связи: ' + newName : 'Опора связи');
+            }
             updateSupportLabel(currentModalObject, newName);
             var lbl = currentModalObject.properties.get('label');
             if (lbl && newName) {
@@ -6254,6 +6265,14 @@ function setupEditAndDeleteListeners() {
                     msg = cablesOnSupport.length === 1
                         ? 'На этой опоре проложен кабель. Удалить опору и кабель?'
                         : 'На этой опоре проложено кабелей: ' + cablesOnSupport.length + '. Удалить опору и все эти кабели?';
+                }
+            }
+            if (obj.properties && obj.properties.get('type') === 'attachment') {
+                var cablesOnAttachment = getCablesThroughSupport(obj);
+                if (cablesOnAttachment.length > 0) {
+                    msg = cablesOnAttachment.length === 1
+                        ? 'Через это крепление проходит кабель. Удалить крепление и кабель?'
+                        : 'Через это крепление проходит кабелей: ' + cablesOnAttachment.length + '. Удалить крепление и все эти кабели?';
                 }
             }
             (async function() {
@@ -10766,7 +10785,7 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
         if (currentModalObject.properties) {
             const objType = currentModalObject.properties.get('type');
             if (objType !== 'cable') {
-                showObjectInfo(currentModalObject);
+                refreshObjectModal(currentModalObject);
             }
         }
     }
@@ -10829,7 +10848,7 @@ function changeCableType(cableUniqueId, newCableType) {
     saveData();
 
     if (currentModalObject) {
-        showObjectInfo(currentModalObject);
+        refreshObjectModal(currentModalObject);
     }
 }
 
@@ -10854,7 +10873,7 @@ function getCrossesAtSameLocation(cross) {
     } catch (e) { return [cross]; }
 }
 
-/** Возвращает кабели, проходящие через опору: как концы маршрута (from/to) или как промежуточная точка (в geometry или в points). */
+/** Кабели через опору или крепление: концы маршрута (from/to) или промежуточная точка (points / геометрия). */
 function getCablesThroughSupport(supportObj) {
     if (!supportObj || !supportObj.geometry) return [];
     var supportCoords = supportObj.geometry.getCoordinates();
@@ -12141,7 +12160,7 @@ function toggleFiberUsage(cableUniqueId, fiberNumber) {
     
     setUsedFibers(currentModalObject, cableUniqueId, usedFibers);
 
-    showObjectInfo(currentModalObject);
+    refreshObjectModal(currentModalObject);
 }
 
 function getFiberColors(cableType) {

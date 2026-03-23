@@ -26,9 +26,20 @@ var SUBSCRIPTION_PLANS = {
     pro: { maxConcurrentUsers: 10, name: 'Про' },
     enterprise: { maxConcurrentUsers: -1, name: 'Корпоративный' }
 };
+function getMaxConcurrentFromPricingPlan(planId) {
+    if (!planId) return null;
+    const plans = db.getPricingPlans();
+    const p = plans.find(function(x) { return x.id === planId; });
+    if (!p || p.maxConcurrentUsers === undefined || p.maxConcurrentUsers === null || p.maxConcurrentUsers === '') return null;
+    const n = typeof p.maxConcurrentUsers === 'number' ? p.maxConcurrentUsers : parseInt(p.maxConcurrentUsers, 10);
+    if (isNaN(n) || n === 0) return null;
+    return n;
+}
 function getMaxConcurrentForOrg(org) {
     if (!org) return 1;
     if (org.maxConcurrentUsers != null && org.maxConcurrentUsers >= 0) return org.maxConcurrentUsers;
+    const fromPricing = getMaxConcurrentFromPricingPlan(org.planId);
+    if (fromPricing != null) return fromPricing === -1 ? 999 : fromPricing;
     var plan = SUBSCRIPTION_PLANS[org.planId || 'basic'];
     return plan ? (plan.maxConcurrentUsers === -1 ? 999 : plan.maxConcurrentUsers) : 3;
 }
@@ -131,19 +142,22 @@ app.post('/api/auth/login', (req, res) => {
     var organizationId = user.organizationId || null;
     var organization = organizationId ? db.getOrganization(organizationId) : null;
     if (user.role !== 'admin' && !organizationId) return res.json({ success: false, error: 'Учётная запись не привязана к организации. Обратитесь к администратору.' });
+
+    // Одна активная сессия на учётную запись: старые токены снимаем при новом входе
+    // (иначе «зависшая» сессия — особенно у глобального админа без organization_id —
+    // не видна в счётчиках по организациям и блокирует вход).
+    db.deleteSessionsForUser(user.id);
+    var sessions = db.getSessions();
+    var nowIso = new Date().toISOString();
+
     if (organization) {
         if (organization.status !== 'active') return res.json({ success: false, error: 'Подписка организации приостановлена или заблокирована.' });
         if (organization.subscriptionEndsAt && new Date(organization.subscriptionEndsAt) < new Date()) return res.json({ success: false, error: 'Срок действия подписки истёк. Продлите подписку.' });
         var maxConcurrent = getMaxConcurrentForOrg(organization);
         if (maxConcurrent >= 0) {
-            // Считаем только другие сессии этой организации (не текущего пользователя),
-            // чтобы повторный вход тем же пользователем не блокировался.
-            var sessions = db.getSessions();
-            var nowIso = new Date().toISOString();
             var activeCount = sessions.filter(function (ses) {
                 return ses.organization_id === organizationId &&
-                    ses.expires_at > nowIso &&
-                    ses.user_id !== user.id;
+                    ses.expires_at > nowIso;
             }).length;
             if (activeCount >= maxConcurrent) {
                 return res.json({
@@ -217,8 +231,7 @@ app.get('/api/organizations', (req, res) => {
                 maxConcurrentUsers: o.maxConcurrentUsers != null ? o.maxConcurrentUsers : (SUBSCRIPTION_PLANS[o.planId] && SUBSCRIPTION_PLANS[o.planId].maxConcurrentUsers >= 0 ? SUBSCRIPTION_PLANS[o.planId].maxConcurrentUsers : -1),
                 subscriptionEndsAt: o.subscriptionEndsAt,
                 status: o.status,
-                discountPercent: typeof o.discountPercent === 'number' ? o.discountPercent : 0,
-                customMonthlyPrice: typeof o.customMonthlyPrice === 'number' ? o.customMonthlyPrice : null,
+                contactEmail: o.contactEmail != null ? String(o.contactEmail) : '',
                 createdAt: o.createdAt,
                 activeSessions: activeSessions
             };
@@ -231,7 +244,36 @@ app.get('/api/organizations', (req, res) => {
 
 app.get('/api/pricing', (req, res) => {
     try {
-        const plans = db.getPricingPlans();
+        const raw = db.getPricingPlans();
+        const plans = raw.map(function(p, idx) {
+            var promoPct = typeof p.promoPercent === 'number' ? p.promoPercent : parseFloat(p.promoPercent);
+            if (isNaN(promoPct) || promoPct < 0) promoPct = 0;
+            if (promoPct > 100) promoPct = 100;
+            var mcu = p.maxConcurrentUsers;
+            if (mcu !== undefined && mcu !== null && mcu !== '') {
+                mcu = typeof mcu === 'number' ? mcu : parseInt(mcu, 10);
+                if (isNaN(mcu)) mcu = null;
+            } else {
+                mcu = null;
+            }
+            return {
+                id: String(p.id || ('plan_' + idx)),
+                title: p.title,
+                short: p.short,
+                price: p.price,
+                period: p.period,
+                maxUsersText: p.maxUsersText,
+                maxConcurrentUsers: mcu,
+                order: typeof p.order === 'number' ? p.order : idx,
+                highlighted: !!p.highlighted,
+                ctaText: p.ctaText,
+                kind: p.kind,
+                promoPercent: promoPct,
+                promoStartsAt: p.promoStartsAt ? String(p.promoStartsAt).slice(0, 10) : '',
+                promoEndsAt: p.promoEndsAt ? String(p.promoEndsAt).slice(0, 10) : '',
+                priceBeforePromo: p.priceBeforePromo != null ? String(p.priceBeforePromo) : ''
+            };
+        });
         res.json({ plans: plans });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
@@ -244,6 +286,17 @@ app.put('/api/pricing', (req, res) => {
     const body = req.body || {};
     if (!Array.isArray(body.plans)) return res.status(400).json({ error: 'Ожидается массив plans' });
     const cleaned = body.plans.map(function(p, idx) {
+        var promoPct = typeof p.promoPercent === 'number' ? p.promoPercent : parseFloat(p.promoPercent);
+        if (isNaN(promoPct) || promoPct < 0) promoPct = 0;
+        if (promoPct > 100) promoPct = 100;
+        var mcuRaw = p.maxConcurrentUsers;
+        var mcu = null;
+        if (mcuRaw !== undefined && mcuRaw !== null && mcuRaw !== '') {
+            mcu = typeof mcuRaw === 'number' ? mcuRaw : parseInt(mcuRaw, 10);
+            if (isNaN(mcu)) mcu = null;
+            else if (mcu === 0) mcu = null;
+            else if (mcu < -1) mcu = null;
+        }
         return {
             id: String(p.id || ('plan_' + idx)),
             title: String(p.title || 'Тариф'),
@@ -251,10 +304,15 @@ app.put('/api/pricing', (req, res) => {
             price: String(p.price || ''),
             period: String(p.period || ''),
             maxUsersText: String(p.maxUsersText || ''),
+            maxConcurrentUsers: mcu,
             order: typeof p.order === 'number' ? p.order : idx,
             highlighted: !!p.highlighted,
             ctaText: String(p.ctaText || ''),
-            kind: p.kind === 'trial' || p.kind === 'contact' ? p.kind : 'paid'
+            kind: p.kind === 'trial' || p.kind === 'contact' ? p.kind : 'paid',
+            promoPercent: promoPct,
+            promoStartsAt: p.promoStartsAt ? String(p.promoStartsAt).slice(0, 10) : '',
+            promoEndsAt: p.promoEndsAt ? String(p.promoEndsAt).slice(0, 10) : '',
+            priceBeforePromo: p.priceBeforePromo != null ? String(p.priceBeforePromo) : ''
         };
     });
     try {
@@ -279,8 +337,7 @@ app.post('/api/organizations', (req, res) => {
         maxConcurrentUsers: maxConcurrentUsers,
         subscriptionEndsAt: body.subscriptionEndsAt || null,
         status: body.status || 'active',
-        discountPercent: typeof body.discountPercent === 'number' ? body.discountPercent : 0,
-        customMonthlyPrice: typeof body.customMonthlyPrice === 'number' ? body.customMonthlyPrice : null
+        contactEmail: body.contactEmail != null ? String(body.contactEmail).trim() : ''
     });
     res.json({ ok: true, organizationId: id });
 });
@@ -296,8 +353,7 @@ app.patch('/api/organizations/:id', (req, res) => {
     if (body.maxConcurrentUsers !== undefined) updates.maxConcurrentUsers = body.maxConcurrentUsers;
     if (body.subscriptionEndsAt !== undefined) updates.subscriptionEndsAt = body.subscriptionEndsAt;
     if (body.status !== undefined) updates.status = body.status;
-    if (body.discountPercent !== undefined) updates.discountPercent = body.discountPercent;
-    if (body.customMonthlyPrice !== undefined) updates.customMonthlyPrice = body.customMonthlyPrice;
+    if (body.contactEmail !== undefined) updates.contactEmail = body.contactEmail;
     var ok = db.updateOrganization(orgId, updates);
     if (!ok) return res.status(404).json({ error: 'Организация не найдена' });
 
@@ -315,6 +371,39 @@ app.patch('/api/organizations/:id', (req, res) => {
     }
 
     res.json({ ok: true });
+});
+
+app.post('/api/organizations/:orgId/reset-password', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Только главный администратор' });
+    const orgId = req.params.orgId;
+    const { password, userId } = req.body || {};
+    if (!password || String(password).length < 6) return res.status(400).json({ error: 'Пароль не менее 6 символов' });
+    if (!db.getOrganization(orgId)) return res.status(404).json({ error: 'Организация не найдена' });
+    const users = db.getUsers();
+    const orgUsers = users.filter(u => u.organizationId === orgId);
+    let target;
+    if (userId) {
+        target = orgUsers.find(u => u.id === userId);
+        if (!target) return res.status(404).json({ error: 'Пользователь не найден в этой организации' });
+    } else {
+        const admins = orgUsers.filter(u => u.role === 'admin');
+        if (admins.length === 0) return res.status(404).json({ error: 'В организации нет администратора' });
+        if (admins.length > 1) {
+            return res.status(400).json({
+                error: 'Несколько администраторов — укажите userId',
+                userIds: admins.map(a => a.id)
+            });
+        }
+        target = admins[0];
+    }
+    if (target.username === 'admin') return res.status(400).json({ error: 'Нельзя сбросить пароль главного администратора панели здесь' });
+    const i = users.findIndex(u => u.id === target.id);
+    if (i === -1) return res.status(404).json({ error: 'Пользователь не найден' });
+    users[i].password = hashPassword(String(password));
+    db.setUsers(users);
+    try { db.deleteSessionsForUser(target.id); } catch (e) {}
+    res.json({ ok: true, username: users[i].username, userId: users[i].id });
 });
 
 app.delete('/api/organizations/:id', (req, res) => {
@@ -339,11 +428,18 @@ app.delete('/api/organizations/:id', (req, res) => {
     }
 });
 
+function isValidContactEmail(email) {
+    if (!email || typeof email !== 'string') return false;
+    const t = email.trim();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t);
+}
+
 app.post('/api/auth/register', (req, res) => {
-    const { username, password, fullName, organizationName } = req.body || {};
+    const { username, password, fullName, organizationName, contactEmail } = req.body || {};
     if (!username || username.length < 3) return res.status(400).json({ success: false, error: 'Имя не менее 3 символов' });
     if (!organizationName || String(organizationName).trim().length < 3) return res.status(400).json({ success: false, error: 'Укажите название организации (не менее 3 символов)' });
     if (!password || password.length < 6) return res.status(400).json({ success: false, error: 'Пароль не менее 6 символов' });
+    if (!contactEmail || !isValidContactEmail(String(contactEmail))) return res.status(400).json({ success: false, error: 'Укажите корректный e-mail для связи' });
     const users = db.getUsers();
     if (users.find(u => u.username.toLowerCase() === username.toLowerCase())) return res.json({ success: false, error: 'Пользователь уже существует' });
     var organizationId = db.addOrganization({
@@ -351,7 +447,8 @@ app.post('/api/auth/register', (req, res) => {
         planId: 'basic',
         maxConcurrentUsers: 1,
         subscriptionEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-        status: 'active'
+        status: 'active',
+        contactEmail: String(contactEmail).trim()
     });
     const newUser = {
         id: 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
@@ -426,11 +523,22 @@ app.put('/api/users/:userId', (req, res) => {
     const users = db.getUsers();
     const i = users.findIndex(u => u.id === userId);
     if (i === -1) return res.status(404).json({ error: 'Пользователь не найден' });
-    if (users[i].username === 'admin' && role !== undefined && role !== 'admin') return res.status(400).json({ error: 'Нельзя снять роль администратора с главного администратора' });
+
+    const targetIsMainAdmin = users[i].username === 'admin';
+    if (targetIsMainAdmin) {
+        // Только сам главный администратор может менять параметры своей учётки.
+        if (!isGlobalAdmin(admin) || admin.userId !== userId) {
+            return res.status(403).json({ error: 'Только главный администратор может менять параметры главного администратора' });
+        }
+        // Главный админ всегда должен оставаться глобальным (без привязки к организации).
+        users[i].organizationId = null;
+    }
+
+    if (targetIsMainAdmin && role !== undefined && role !== 'admin') return res.status(400).json({ error: 'Нельзя снять роль администратора с главного администратора' });
     if (fullName !== undefined) { users[i].fullName = fullName; users[i].full_name = fullName; }
     if (role !== undefined) users[i].role = role;
     if (password && String(password).length >= 6) users[i].password = hashPassword(password);
-    if (organizationId !== undefined) users[i].organizationId = organizationId || null;
+    if (organizationId !== undefined) users[i].organizationId = targetIsMainAdmin ? null : (organizationId || null);
     db.setUsers(users);
     res.json({ ok: true });
 });
@@ -585,6 +693,14 @@ app.get('/api/health', (req, res) => res.json({ ok: true, db: 'sqlite' }));
 app.get('/api/public-config', (req, res) => {
     const key = serverConfig.yandexMapsApiKey || process.env.YANDEX_MAPS_API_KEY || '';
     res.json({ yandexMapsApiKey: key });
+});
+
+app.get('/api/public-stats', (req, res) => {
+    try {
+        res.json(db.getPublicStats());
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
 });
 
 // Лицевая страница по умолчанию — тарифы
@@ -767,10 +883,11 @@ function applyOperationToState(state, op) {
 function broadcastSyncClients(onlyOrgId) {
     wss.clients.forEach(function(targetClient) {
         if (targetClient.readyState !== WebSocket.OPEN) return;
-        var targetOrg = targetClient.orgId != null ? targetClient.orgId : onlyOrgId;
+        var targetOrg = targetClient.orgId != null ? targetClient.orgId : null;
+        if (onlyOrgId != null && targetOrg !== onlyOrgId) return;
         var list = [];
         wss.clients.forEach(function(c) {
-            if (c.readyState === WebSocket.OPEN && c.clientId && (onlyOrgId != null ? c.orgId === onlyOrgId : (targetOrg == null || c.orgId === targetOrg))) {
+            if (c.readyState === WebSocket.OPEN && c.clientId && c.orgId === targetOrg) {
                 list.push({
                     id: c.clientId,
                     displayName: syncClientNames.get(c.clientId) || 'Участник',
@@ -932,22 +1049,29 @@ function scheduleCursorsBroadcast() {
 }
 
 function broadcastCursors() {
-    const list = [];
+    // Формируем курсоры отдельно по организациям и отправляем только соответствующим клиентам.
+    const byOrg = {};
     wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN && client.clientId && client.cursor && client.cursor.position) {
-            list.push({
-                id: client.clientId,
-                displayName: client.cursor.displayName,
-                userId: client.cursor.userId,
-                position: client.cursor.position
-            });
-        }
+        if (client.readyState !== WebSocket.OPEN) return;
+        if (!client.clientId || !client.cursor || !client.cursor.position) return;
+        const orgId = client.orgId != null ? client.orgId : null;
+        const key = orgId == null ? '__null' : String(orgId);
+        if (!byOrg[key]) byOrg[key] = [];
+        byOrg[key].push({
+            id: client.clientId,
+            displayName: client.cursor.displayName,
+            userId: client.cursor.userId,
+            position: client.cursor.position
+        });
     });
-    const payload = JSON.stringify({ type: 'cursors', cursors: list });
+
     wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            try { client.send(payload); } catch (e) {}
-        }
+        if (client.readyState !== WebSocket.OPEN) return;
+        const orgId = client.orgId != null ? client.orgId : null;
+        const key = orgId == null ? '__null' : String(orgId);
+        const list = byOrg[key] || [];
+        const payload = JSON.stringify({ type: 'cursors', cursors: list });
+        try { client.send(payload); } catch (e) {}
     });
 }
 
