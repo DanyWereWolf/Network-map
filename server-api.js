@@ -63,11 +63,10 @@ function generateToken() {
 function getSessionByToken(token) {
     if (!token) return null;
     var sessions = db.getSessions();
-    var now = new Date().toISOString();
-    var ses = sessions.find(function(s) { return s.token === token && s.expires_at > now; });
+    var ses = sessions.find(function(s) { return s.token === token && db.sessionIsActive(s); });
     if (!ses) return null;
     var users = db.getUsers();
-    var user = users.find(function(u) { return u.id === ses.user_id; });
+    var user = users.find(function(u) { return String(u.id) === String(ses.user_id); });
     return user ? { userId: user.id, organizationId: user.organizationId != null ? user.organizationId : (ses.organization_id || null) } : null;
 }
 
@@ -78,7 +77,7 @@ function getSessionUser(req) {
     const sessions = db.getDb().prepare('SELECT user_id, organization_id FROM sessions WHERE token = ? AND expires_at > datetime(\'now\')').all(token);
     if (sessions.length === 0) return null;
     const users = db.getUsers();
-    const user = users.find(u => u.id === sessions[0].user_id);
+    const user = users.find(u => String(u.id) === String(sessions[0].user_id));
     if (!user) return null;
     const organizationId = user.organizationId != null ? user.organizationId : (sessions[0].organization_id || null);
     const organization = organizationId ? db.getOrganization(organizationId) : null;
@@ -143,22 +142,28 @@ app.post('/api/auth/login', (req, res) => {
     var organization = organizationId ? db.getOrganization(organizationId) : null;
     if (user.role !== 'admin' && !organizationId) return res.json({ success: false, error: 'Учётная запись не привязана к организации. Обратитесь к администратору.' });
 
-    // Одна активная сессия на учётную запись: старые токены снимаем при новом входе
-    // (иначе «зависшая» сессия — особенно у глобального админа без organization_id —
-    // не видна в счётчиках по организациям и блокирует вход).
-    db.deleteSessionsForUser(user.id);
-    var sessions = db.getSessions();
-    var nowIso = new Date().toISOString();
+    var isMainAdminAccount = isGlobalAdmin({ role: user.role, organizationId: user.organizationId });
+
+    // Главный админ панели: новый вход с другого места завершает предыдущую сессию.
+    // Остальные: одна активная сессия — иначе отказ («сессия занята»).
+    if (isMainAdminAccount) {
+        db.deleteSessionsForUser(user.id);
+    } else {
+        if (db.countActiveSessionsForUser(user.id) > 0) {
+            return res.json({
+                success: false,
+                error: 'Сессия занята: эта учётная запись уже используется. Завершите работу в другом окне или нажмите «Выйти» там.'
+            });
+        }
+        db.deleteExpiredSessionsForUser(user.id);
+    }
 
     if (organization) {
         if (organization.status !== 'active') return res.json({ success: false, error: 'Подписка организации приостановлена или заблокирована.' });
         if (organization.subscriptionEndsAt && new Date(organization.subscriptionEndsAt) < new Date()) return res.json({ success: false, error: 'Срок действия подписки истёк. Продлите подписку.' });
         var maxConcurrent = getMaxConcurrentForOrg(organization);
         if (maxConcurrent >= 0) {
-            var activeCount = sessions.filter(function (ses) {
-                return ses.organization_id === organizationId &&
-                    ses.expires_at > nowIso;
-            }).length;
+            var activeCount = db.countActiveSessionsForOrganization(organizationId);
             if (activeCount >= maxConcurrent) {
                 return res.json({
                     success: false,
@@ -171,6 +176,14 @@ app.post('/api/auth/login', (req, res) => {
     const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     var stmt = db.getDb().prepare('INSERT INTO sessions (token, user_id, expires_at, organization_id) VALUES (?, ?, ?, ?)');
     stmt.run(token, user.id, expires, organizationId);
+    // Два параллельных входа (не главный админ): оставляем первого, второго откатываем
+    if (!isMainAdminAccount && db.countActiveSessionsForUser(user.id) > 1) {
+        db.getDb().prepare('DELETE FROM sessions WHERE token = ?').run(token);
+        return res.json({
+            success: false,
+            error: 'Сессия занята: эта учётная запись уже используется. Завершите работу в другом окне или нажмите «Выйти» там.'
+        });
+    }
     res.json({
         success: true,
         token,

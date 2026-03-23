@@ -7,6 +7,26 @@ const BACKUP_RETENTION_DAYS = 30;
 
 let store = null;
 
+/** Сравнение id организации без учёта типа (строка/число), чтобы лимиты и данные не «терялись». */
+function organizationIdsMatch(a, b) {
+    if (a == null || b == null) return false;
+    return String(a) === String(b);
+}
+
+/** Активна ли сессия по expires_at (строка ISO, число ms/s, без поля = нет). */
+function sessionIsActive(ses) {
+    if (!ses || ses.expires_at == null || ses.expires_at === '') return false;
+    var raw = ses.expires_at;
+    var expMs;
+    if (typeof raw === 'number') {
+        expMs = raw < 1e12 ? raw * 1000 : raw;
+    } else {
+        expMs = new Date(raw).getTime();
+    }
+    if (isNaN(expMs)) return false;
+    return expMs > Date.now();
+}
+
 function getOrgBackupsDir(orgId) {
     if (!orgId) throw new Error('orgId required');
     return path.join(BACKUPS_DIR, String(orgId));
@@ -157,8 +177,7 @@ function getDb() {
                 },
                 all: function (token) {
                     const s = loadStore();
-                    const now = new Date().toISOString();
-                    const found = (s.sessions || []).filter(ses => ses.token === token && ses.expires_at > now);
+                    const found = (s.sessions || []).filter(ses => ses.token === token && sessionIsActive(ses));
                     return found.map(ses => ({ user_id: ses.user_id, organization_id: ses.organization_id != null ? ses.organization_id : null }));
                 }
             };
@@ -195,7 +214,9 @@ function getMapData(orgId) {
     if (!orgId) return [];
     const s = loadStore();
     const byOrg = s.mapDataByOrg || {};
-    return Array.isArray(byOrg[orgId]) ? byOrg[orgId] : [];
+    if (Array.isArray(byOrg[orgId])) return byOrg[orgId];
+    var k = Object.keys(byOrg).find(function(key) { return organizationIdsMatch(key, orgId); });
+    return k && Array.isArray(byOrg[k]) ? byOrg[k] : [];
 }
 
 function setMapData(orgId, data) {
@@ -203,7 +224,9 @@ function setMapData(orgId, data) {
     if (!Array.isArray(data)) throw new Error('data must be array');
     const s = loadStore();
     if (!s.mapDataByOrg) s.mapDataByOrg = {};
-    s.mapDataByOrg[orgId] = data;
+    var org = getOrganization(orgId);
+    var key = org ? org.id : orgId;
+    s.mapDataByOrg[key] = data;
     saveStore();
 }
 
@@ -265,9 +288,9 @@ function getOrganizations() {
 }
 
 function getOrganization(orgId) {
-    if (!orgId) return null;
+    if (orgId == null || orgId === '') return null;
     const orgs = getOrganizations();
-    return orgs.find(function(o) { return o.id === orgId; }) || null;
+    return orgs.find(function(o) { return organizationIdsMatch(o.id, orgId); }) || null;
 }
 
 /** Агрегаты для публичного лендинга (без авторизации). */
@@ -318,7 +341,7 @@ function addOrganization(org) {
 
 function updateOrganization(orgId, updates) {
     const s = loadStore();
-    const idx = (s.organizations || []).findIndex(function(o) { return o.id === orgId; });
+    const idx = (s.organizations || []).findIndex(function(o) { return organizationIdsMatch(o.id, orgId); });
     if (idx === -1) return false;
     if (updates.name !== undefined) s.organizations[idx].name = updates.name;
     if (updates.planId !== undefined) s.organizations[idx].planId = updates.planId;
@@ -334,21 +357,33 @@ function updateOrganization(orgId, updates) {
 
 function deleteOrganization(orgId) {
     const s = loadStore();
-    s.organizations = (s.organizations || []).filter(function(o) { return o.id !== orgId; });
-    if (s.mapDataByOrg && s.mapDataByOrg[orgId]) delete s.mapDataByOrg[orgId];
-    if (s.historyByOrg && s.historyByOrg[orgId]) delete s.historyByOrg[orgId];
-    if (s.settingsByOrg && s.settingsByOrg[orgId]) delete s.settingsByOrg[orgId];
+    s.organizations = (s.organizations || []).filter(function(o) { return !organizationIdsMatch(o.id, orgId); });
+    if (s.mapDataByOrg && typeof s.mapDataByOrg === 'object') {
+        Object.keys(s.mapDataByOrg).forEach(function(k) {
+            if (organizationIdsMatch(k, orgId)) delete s.mapDataByOrg[k];
+        });
+    }
+    if (s.historyByOrg && typeof s.historyByOrg === 'object') {
+        Object.keys(s.historyByOrg).forEach(function(k) {
+            if (organizationIdsMatch(k, orgId)) delete s.historyByOrg[k];
+        });
+    }
+    if (s.settingsByOrg && typeof s.settingsByOrg === 'object') {
+        Object.keys(s.settingsByOrg).forEach(function(k) {
+            if (organizationIdsMatch(k, orgId)) delete s.settingsByOrg[k];
+        });
+    }
     // Удаляем всех пользователей этой организации (кроме глобального админа без organizationId)
     if (Array.isArray(s.users)) {
         s.users = s.users.filter(function(u) {
             // Пользователь относится к удаляемой организации?
-            if (u.organizationId === orgId) return false;
+            if (organizationIdsMatch(u.organizationId, orgId)) return false;
             return true;
         });
     }
     // Удаляем все сессии этой организации
     if (Array.isArray(s.sessions)) {
-        s.sessions = s.sessions.filter(function(ses) { return ses.organization_id !== orgId; });
+        s.sessions = s.sessions.filter(function(ses) { return !organizationIdsMatch(ses.organization_id, orgId); });
     }
     saveStore();
 }
@@ -433,11 +468,32 @@ function setPricingPlans(plans) {
 
 function countActiveSessionsForOrganization(orgId) {
     if (!orgId) return 0;
-    const now = new Date().toISOString();
     const sessions = getSessions();
     return sessions.filter(function(ses) {
-        return ses.organization_id === orgId && ses.expires_at > now;
+        return organizationIdsMatch(ses.organization_id, orgId) && sessionIsActive(ses);
     }).length;
+}
+
+function countActiveSessionsForUser(userId) {
+    if (userId == null) return 0;
+    const id = String(userId);
+    const sessions = getSessions();
+    return sessions.filter(function(ses) {
+        return String(ses.user_id) === id && sessionIsActive(ses);
+    }).length;
+}
+
+/** Удаляет только просроченные сессии пользователя (не трогает активные — важно для «сессия занята»). */
+function deleteExpiredSessionsForUser(userId) {
+    if (userId == null) return;
+    const s = loadStore();
+    if (!Array.isArray(s.sessions)) s.sessions = [];
+    var id = String(userId);
+    s.sessions = s.sessions.filter(function(ses) {
+        if (String(ses.user_id) !== id) return true;
+        return sessionIsActive(ses);
+    });
+    saveStore();
 }
 
 function deleteSessionsForOrganization(orgId) {
@@ -445,7 +501,7 @@ function deleteSessionsForOrganization(orgId) {
     const s = loadStore();
     if (!Array.isArray(s.sessions)) s.sessions = [];
     s.sessions = s.sessions.filter(function(ses) {
-        return ses.organization_id !== orgId;
+        return !organizationIdsMatch(ses.organization_id, orgId);
     });
     saveStore();
 }
@@ -618,15 +674,17 @@ function restoreFromBackup(orgId, filename) {
     }
     if (!parsed || typeof parsed !== 'object') throw new Error('Неверный формат бэкапа');
     const payloadOrgId = parsed.organizationId || orgId;
-    if (payloadOrgId !== orgId) throw new Error('Бэкап принадлежит другой организации');
+    if (!organizationIdsMatch(payloadOrgId, orgId)) throw new Error('Бэкап принадлежит другой организации');
     const s = loadStore();
     if (!s.mapDataByOrg || typeof s.mapDataByOrg !== 'object') s.mapDataByOrg = {};
     if (!s.historyByOrg || typeof s.historyByOrg !== 'object') s.historyByOrg = {};
     if (!s.settingsByOrg || typeof s.settingsByOrg !== 'object') s.settingsByOrg = {};
+    var org = getOrganization(orgId);
+    var key = org ? org.id : orgId;
 
-    s.mapDataByOrg[orgId] = Array.isArray(parsed.mapData) ? parsed.mapData : [];
-    s.historyByOrg[orgId] = Array.isArray(parsed.history) ? parsed.history : [];
-    s.settingsByOrg[orgId] = (parsed.settings && typeof parsed.settings === 'object') ? parsed.settings : {};
+    s.mapDataByOrg[key] = Array.isArray(parsed.mapData) ? parsed.mapData : [];
+    s.historyByOrg[key] = Array.isArray(parsed.history) ? parsed.history : [];
+    s.settingsByOrg[key] = (parsed.settings && typeof parsed.settings === 'object') ? parsed.settings : {};
 
     saveStore();
     console.log('[Backup] Восстановлено из:', orgId + '/' + trimmed);
@@ -706,7 +764,10 @@ module.exports = {
     updateOrganization,
     deleteOrganization,
     getSessions,
+    sessionIsActive,
     countActiveSessionsForOrganization,
+    countActiveSessionsForUser,
+    deleteExpiredSessionsForUser,
     deleteSessionsForOrganization,
     deleteSessionsForUser,
     getPricingPlans,
