@@ -8,31 +8,79 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="stylesheet" href="auth.css">
     <link rel="stylesheet" href="cookie-consent.css">
+    <script>
+        (function() {
+            try {
+                var saved = localStorage.getItem('networkMap_landingTheme');
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var theme = (saved === 'dark' || saved === 'light') ? saved : (prefersDark ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch (e) {}
+        })();
+    </script>
     <style>
+        html {
+            scroll-behavior: smooth;
+        }
         body {
             color: #0f172a;
+            background: #e5e7eb;
+            padding: 0;
+            align-items: stretch;
+        }
+        [data-theme="light"] .auth-bg-gradient {
+            background:
+                radial-gradient(circle at 12% 18%, rgba(59, 130, 246, 0.18) 0%, rgba(59, 130, 246, 0) 34%),
+                radial-gradient(circle at 84% 22%, rgba(16, 185, 129, 0.13) 0%, rgba(16, 185, 129, 0) 32%),
+                linear-gradient(145deg, #dbe3ee 0%, #cfd9e6 48%, #d8e1ec 100%);
+        }
+        [data-theme="light"] .auth-bg-plexus {
+            opacity: 0.75;
+        }
+        body,
+        .auth-card,
+        .landing-nav,
+        .btn-outline,
+        .landing-brand-title,
+        .landing-brand-sub,
+        .landing-nav-menu a,
+        .landing-hero-title,
+        .landing-hero-subtitle,
+        .section-title,
+        .section-body,
+        .pricing-card,
+        .capability-card,
+        .about-card,
+        .contact-card,
+        .landing-faq,
+        .trust-strip {
+            transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
         }
         .landing-root {
-            max-width: 1160px;
+            max-width: 1320px;
             width: 100%;
+            min-height: 100vh;
         }
         .landing-shell {
             width: 100%;
-            min-height: 88vh;
+            min-height: 100vh;
             display: block;
+            padding: 0 42px 36px;
+            margin: 0;
+            border-radius: 0;
         }
         .landing-nav {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 16px;
+            gap: 12px;
             margin-bottom: 18px;
             position: sticky;
             top: 0;
             z-index: 20;
-            margin-left: -8px;
-            margin-right: -8px;
-            padding: 10px 8px 12px;
+            margin-left: -42px;
+            margin-right: -42px;
+            padding: 10px 42px 12px;
             background: linear-gradient(to bottom, rgba(255,255,255,0.97) 70%, rgba(255,255,255,0));
             backdrop-filter: blur(8px);
         }
@@ -40,26 +88,38 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            min-width: 0;
+            flex-shrink: 0;
         }
         .landing-brand-title {
             font-weight: 600;
-            font-size: 1.05rem;
+            font-size: clamp(0.95rem, 1vw, 1.05rem);
             color: #111827;
+            line-height: 1.2;
         }
         .landing-brand-sub {
-            font-size: 0.75rem;
+            font-size: 0.74rem;
             color: #6b7280;
+            line-height: 1.2;
+            white-space: nowrap;
         }
         .landing-nav-menu {
             display: flex;
             align-items: center;
-            gap: 16px;
-            font-size: 0.9rem;
+            gap: 12px;
+            font-size: 0.86rem;
+            flex-wrap: nowrap;
+            flex: 1 1 auto;
+            min-width: 0;
+            justify-content: center;
         }
         .landing-nav-menu a {
             color: #4b5563;
             text-decoration: none;
-            padding: 4px 0;
+            padding: 6px 0;
+            line-height: 1.2;
+            white-space: nowrap;
+            flex-shrink: 0;
         }
         .landing-nav-menu a:hover {
             color: #111827;
@@ -67,30 +127,40 @@
         .landing-nav-actions {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
+            flex-shrink: 0;
         }
         .btn-outline {
             border-radius: 999px;
-            padding: 6px 14px;
+            padding: 6px 12px;
             border: 1px solid rgba(15,23,42,0.14);
             background: rgba(255,255,255,0.9);
-            font-size: 0.85rem;
+            font-size: 0.82rem;
             cursor: pointer;
             color: #111827;
+            white-space: nowrap;
         }
         .btn-outline:hover {
             background: #f3f4f6;
         }
+        .theme-toggle-btn {
+            min-width: 108px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
         .btn-primary-hero {
             border-radius: 999px;
-            padding: 8px 18px;
+            padding: 8px 14px;
             border: none;
             background: linear-gradient(135deg, #2563eb, #1d4ed8);
             color: #fff;
-            font-size: 0.9rem;
+            font-size: 0.84rem;
             font-weight: 500;
             cursor: pointer;
             box-shadow: 0 16px 40px rgba(37,99,235,0.42);
+            white-space: nowrap;
         }
         .btn-primary-hero:hover {
             filter: brightness(1.03);
@@ -99,13 +169,14 @@
             display: grid;
             grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.3fr);
             gap: 40px;
-            align-items: center;
+            align-items: start;
             margin: 28px 0 36px;
         }
         .landing-hero-title {
             font-size: 2.1rem;
             line-height: 1.15;
             margin-bottom: 12px;
+            color: #0f172a;
         }
         .landing-hero-subtitle {
             font-size: 0.95rem;
@@ -133,10 +204,14 @@
         .landing-hero-visual {
             border-radius: 18px;
             padding: 18px 18px 16px;
-            background: radial-gradient(circle at 0 0, rgba(96,165,250,0.22), transparent 60%), #020617;
-            color: #e5e7eb;
-            box-shadow: 0 20px 80px rgba(15,23,42,0.9);
+            background: radial-gradient(circle at 0 0, rgba(59,130,246,0.18), transparent 60%), #f8fbff;
+            color: #1e293b;
+            border: 1px solid rgba(148,163,184,0.26);
+            box-shadow: 0 14px 40px rgba(15,23,42,0.14);
             font-size: 0.8rem;
+            min-height: 300px;
+            display: flex;
+            flex-direction: column;
         }
         .hero-metric-row {
             display: flex;
@@ -148,40 +223,61 @@
         }
         .hero-metric-label {
             font-size: 0.7rem;
-            color: #9ca3af;
+            color: #64748b;
         }
         .hero-metric-value {
             font-size: 1.2rem;
             font-weight: 600;
-            color: #f9fafb;
+            color: #0f172a;
         }
         .hero-mini-map {
             border-radius: 14px;
-            background: rgba(15,23,42,0.9);
+            background: rgba(241,245,249,0.95);
             padding: 10px;
-            border: 1px solid rgba(148,163,184,0.4);
+            border: 1px solid rgba(148,163,184,0.35);
             margin-top: 8px;
+            flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
         }
-        .hero-mini-map-grid {
-            display: grid;
-            grid-template-columns: repeat(5, minmax(0, 1fr));
-            gap: 4px;
-            margin-bottom: 8px;
+        .hero-mini-histogram {
+            height: clamp(125px, 22vh, 180px);
+            display: flex;
+            align-items: flex-end;
+            gap: 6px;
+            margin-bottom: 0;
+            padding: 10px 6px 6px;
+            border-radius: 10px;
+            background: linear-gradient(180deg, rgba(59,130,246,0.08), rgba(59,130,246,0.02));
+            overflow: hidden;
         }
-        .hero-mini-node {
-            height: 18px;
-            border-radius: 999px;
-            background: linear-gradient(135deg, #22c55e, #16a34a);
-            opacity: 0.15;
+        .hero-mini-bar {
+            flex: 1 1 0;
+            min-width: 0;
+            height: 42px;
+            border-radius: 8px 8px 4px 4px;
+            background: linear-gradient(180deg, #60a5fa 0%, #2563eb 100%);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+            transform-origin: bottom;
+            animation: heroMiniBarPulse 2.8s ease-in-out infinite;
         }
-        .hero-mini-node.active {
-            opacity: 1;
+        .hero-mini-bar:nth-child(1) { height: 38px; animation-delay: -1.2s; }
+        .hero-mini-bar:nth-child(2) { height: 74px; animation-delay: -2.1s; }
+        .hero-mini-bar:nth-child(3) { height: 58px; animation-delay: -0.4s; }
+        .hero-mini-bar:nth-child(4) { height: 98px; animation-delay: -1.7s; }
+        .hero-mini-bar:nth-child(5) { height: 50px; animation-delay: -0.9s; }
+        .hero-mini-bar:nth-child(6) { height: 106px; animation-delay: -2.4s; }
+        .hero-mini-bar:nth-child(7) { height: 66px; animation-delay: -1.5s; }
+        .hero-mini-bar:nth-child(8) { height: 86px; animation-delay: -0.2s; }
+        @keyframes heroMiniBarPulse {
+            0%, 100% { transform: scaleY(0.82); opacity: 0.78; }
+            50% { transform: scaleY(1.08); opacity: 1; }
         }
         .hero-mini-caption {
             display: flex;
             justify-content: space-between;
             font-size: 0.7rem;
-            color: #9ca3af;
+            color: #64748b;
         }
         .landing-sections {
             display: grid;
@@ -243,12 +339,27 @@
             position: relative;
             border-radius: 18px;
             border: 1px solid rgba(15,23,42,0.06);
-            background: #ffffff;
+            background: rgba(255, 255, 255, 0.78);
+            backdrop-filter: blur(2px);
             box-shadow: 0 18px 40px rgba(15,23,42,0.18);
             padding: 18px 18px 16px;
             display: flex;
             flex-direction: column;
             gap: 10px;
+            overflow: hidden;
+        }
+        .pricing-card-network {
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            opacity: 0.85;
+        }
+        .pricing-card > *:not(.pricing-card-network):not(.pricing-ribbon-wrap) {
+            position: relative;
+            z-index: 1;
         }
         .pricing-card.pro {
             border-color: rgba(59,130,246,0.5);
@@ -271,6 +382,7 @@
             border-radius: 999px;
             background: #1d4ed8;
             color: white;
+            z-index: 3;
         }
         .pricing-name {
             font-weight: 600;
@@ -360,6 +472,7 @@
             gap: 8px;
             background: #111827;
             color: white;
+            border: 1px solid transparent;
             transition: transform 0.12s ease-out, box-shadow 0.12s ease-out, background 0.12s ease-out;
         }
         .pricing-card.pro .pricing-cta-btn {
@@ -596,6 +709,7 @@
             display: flex;
             flex-wrap: wrap;
             gap: 8px 16px;
+            margin-top: 18px;
             margin-bottom: 18px;
             padding: 12px 14px;
             border-radius: 12px;
@@ -612,6 +726,19 @@
         .pricing-section-intro svg {
             flex-shrink: 0;
             color: #059669;
+        }
+        @media (max-width: 1240px) {
+            .landing-brand-sub {
+                display: none;
+            }
+            .landing-nav-menu {
+                display: none;
+            }
+            .landing-nav-actions .btn-outline,
+            .landing-nav-actions .btn-primary-hero {
+                padding-left: 10px;
+                padding-right: 10px;
+            }
         }
         @media (max-width: 900px) {
             .landing-hero {
@@ -634,9 +761,6 @@
             .auth-card {
                 padding: 26px 18px;
             }
-            .landing-nav-menu {
-                display: none;
-            }
             .landing-hero-title {
                 font-size: 1.7rem;
             }
@@ -656,6 +780,12 @@
             .capability-grid {
                 grid-template-columns: 1fr;
             }
+            .landing-nav {
+                margin-left: -18px;
+                margin-right: -18px;
+                padding-left: 18px;
+                padding-right: 18px;
+            }
         }
         @media (max-width: 480px) {
             .landing-nav {
@@ -671,6 +801,9 @@
                 justify-content: center;
                 text-align: center;
             }
+            .landing-nav-actions .theme-toggle-btn {
+                flex: 1;
+            }
             .landing-hero {
                 margin: 18px 0 26px;
                 gap: 18px;
@@ -682,6 +815,146 @@
                 margin-top: 4px;
                 padding: 14px 14px 12px;
             }
+        }
+
+        /* Темная тема лендинга продаж */
+        [data-theme="dark"] body {
+            color: #e2e8f0;
+            background: #020617;
+        }
+        [data-theme="dark"] .auth-card {
+            background: rgba(7, 12, 24, 0.86);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            box-shadow: 0 24px 70px rgba(2, 6, 23, 0.75);
+        }
+        [data-theme="dark"] .landing-nav {
+            background: linear-gradient(to bottom, rgba(2,6,23,0.95) 70%, rgba(2,6,23,0));
+        }
+        [data-theme="dark"] .landing-hero-visual {
+            background: radial-gradient(circle at 0 0, rgba(96,165,250,0.22), transparent 60%), #020617;
+            color: #e5e7eb;
+            border-color: rgba(148,163,184,0.4);
+            box-shadow: 0 20px 80px rgba(15,23,42,0.9);
+        }
+        [data-theme="dark"] .hero-metric-label,
+        [data-theme="dark"] .hero-mini-caption {
+            color: #9ca3af;
+        }
+        [data-theme="dark"] .hero-metric-value {
+            color: #f9fafb;
+        }
+        [data-theme="dark"] .hero-mini-map {
+            background: rgba(15,23,42,0.9);
+            border-color: rgba(148,163,184,0.4);
+        }
+        [data-theme="dark"] .hero-mini-histogram {
+            background: linear-gradient(180deg, rgba(125,211,252,0.12), rgba(125,211,252,0.03));
+        }
+        [data-theme="dark"] .hero-mini-bar {
+            background: linear-gradient(180deg, #7dd3fc 0%, #3b82f6 100%);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
+        }
+        [data-theme="dark"] .landing-brand-title,
+        [data-theme="dark"] .landing-hero-title,
+        [data-theme="dark"] .section-title,
+        [data-theme="dark"] .capability-section-title,
+        [data-theme="dark"] .capability-card h3,
+        [data-theme="dark"] .contact-card-value,
+        [data-theme="dark"] .pricing-name,
+        [data-theme="dark"] .faq-item summary {
+            color: #f8fafc;
+        }
+        [data-theme="dark"] .landing-brand-sub,
+        [data-theme="dark"] .landing-nav-menu a,
+        [data-theme="dark"] .landing-hero-subtitle,
+        [data-theme="dark"] .section-body,
+        [data-theme="dark"] .capability-section-lead,
+        [data-theme="dark"] .capability-card p,
+        [data-theme="dark"] .trust-item p,
+        [data-theme="dark"] .pricing-short,
+        [data-theme="dark"] .pricing-period,
+        [data-theme="dark"] .faq-item p,
+        [data-theme="dark"] .contact-card-label,
+        [data-theme="dark"] .contact-card-hint,
+        [data-theme="dark"] .landing-footer,
+        [data-theme="dark"] .landing-footer a {
+            color: #94a3b8;
+        }
+        [data-theme="dark"] .landing-nav-menu a:hover {
+            color: #f8fafc;
+        }
+        [data-theme="dark"] .btn-outline {
+            background: rgba(15, 23, 42, 0.75);
+            border-color: rgba(148, 163, 184, 0.25);
+            color: #e2e8f0;
+        }
+        [data-theme="dark"] .btn-outline:hover {
+            background: rgba(30, 41, 59, 0.9);
+        }
+        [data-theme="dark"] .pricing-cta-btn {
+            background: #1e293b;
+            border-color: rgba(148, 163, 184, 0.25);
+            color: #e2e8f0;
+        }
+        [data-theme="dark"] .pricing-cta-btn:hover {
+            box-shadow: 0 12px 28px rgba(2, 6, 23, 0.7);
+        }
+        [data-theme="dark"] .pricing-card.pro .pricing-cta-btn {
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            border-color: rgba(147, 197, 253, 0.35);
+            color: #fff;
+        }
+        [data-theme="dark"] .badge-pill {
+            background: rgba(30, 64, 175, 0.25);
+            color: #bfdbfe;
+            border-color: rgba(96, 165, 250, 0.4);
+        }
+        [data-theme="dark"] .pricing-card,
+        [data-theme="dark"] .capability-card,
+        [data-theme="dark"] .about-card,
+        [data-theme="dark"] .contact-card {
+            background: #0f172a;
+            border-color: rgba(148, 163, 184, 0.22);
+            box-shadow: 0 12px 34px rgba(2, 6, 23, 0.6);
+        }
+        [data-theme="dark"] .pricing-card {
+            background: rgba(15, 23, 42, 0.72);
+            backdrop-filter: blur(2px);
+        }
+        [data-theme="dark"] .pricing-card.pro {
+            border-color: rgba(96, 165, 250, 0.65);
+            box-shadow: 0 20px 52px rgba(29, 78, 216, 0.45);
+        }
+        [data-theme="dark"] .landing-faq,
+        [data-theme="dark"] .trust-strip,
+        [data-theme="dark"] .pricing-section-intro {
+            background: linear-gradient(180deg, #0b1220 0%, #0f172a 100%);
+            border-color: rgba(148, 163, 184, 0.25);
+            color: #94a3b8;
+        }
+        [data-theme="dark"] .trust-item-icon {
+            background: #0b1220;
+            border-color: rgba(96, 165, 250, 0.35);
+            color: #60a5fa;
+        }
+        [data-theme="dark"] .trust-item h3 {
+            color: #f8fafc;
+        }
+        [data-theme="dark"] .section-title span.icon,
+        [data-theme="dark"] .capability-card-icon {
+            background: rgba(37, 99, 235, 0.18);
+            color: #93c5fd;
+        }
+        [data-theme="dark"] .faq-item {
+            border-bottom-color: rgba(148, 163, 184, 0.2);
+        }
+        [data-theme="dark"] .faq-item summary::after {
+            border-top-color: #64748b;
+        }
+        [data-theme="dark"] .landing-hero-meta,
+        [data-theme="dark"] .pricing-meta,
+        [data-theme="dark"] .pricing-price-old {
+            color: #64748b;
         }
     </style>
 </head>
@@ -715,6 +988,10 @@
                     <a href="#contacts">Контакты</a>
                 </nav>
                 <div class="landing-nav-actions">
+                    <button id="landingThemeToggle" type="button" class="btn-outline theme-toggle-btn" title="Сменить тему">
+                        <span aria-hidden="true">🌙</span>
+                        <span>Тёмная</span>
+                    </button>
                     <button class="btn-outline" onclick="window.location.href='auth.html'">Войти</button>
                     <button class="btn-primary-hero" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">
                         Попробовать сейчас
@@ -766,40 +1043,15 @@
                         </div>
                     </div>
                     <div class="hero-mini-map">
-                        <div class="hero-mini-map-grid">
-                            <div class="hero-mini-node active"></div>
-                            <div class="hero-mini-node"></div>
-                            <div class="hero-mini-node active"></div>
-                            <div class="hero-mini-node"></div>
-                            <div class="hero-mini-node"></div>
-
-                            <div class="hero-mini-node"></div>
-                            <div class="hero-mini-node active"></div>
-                            <div class="hero-mini-node"></div>
-                            <div class="hero-mini-node active"></div>
-                            <div class="hero-mini-node"></div>
-
-                            <div class="hero-mini-node"></div>
-                            <div class="hero-mini-node"></div>
-                            <div class="hero-mini-node active"></div>
-                            <div class="hero-mini-node"></div>
-                            <div class="hero-mini-node active"></div>
-
-                            <div class="hero-mini-node active"></div>
-                            <div class="hero-mini-node"></div>
-                            <div class="hero-mini-node"></div>
-                            <div class="hero-mini-node active"></div>
-                            <div class="hero-mini-node"></div>
-
-                            <div class="hero-mini-node"></div>
-                            <div class="hero-mini-node active"></div>
-                            <div class="hero-mini-node"></div>
-                            <div class="hero-mini-node"></div>
-                            <div class="hero-mini-node active"></div>
-                        </div>
-                        <div class="hero-mini-caption">
-                            <span>Живая карта ваших линков и узлов</span>
-                            <span>Обновления в реальном времени</span>
+                        <div class="hero-mini-histogram">
+                            <div class="hero-mini-bar"></div>
+                            <div class="hero-mini-bar"></div>
+                            <div class="hero-mini-bar"></div>
+                            <div class="hero-mini-bar"></div>
+                            <div class="hero-mini-bar"></div>
+                            <div class="hero-mini-bar"></div>
+                            <div class="hero-mini-bar"></div>
+                            <div class="hero-mini-bar"></div>
                         </div>
                     </div>
                 </aside>
@@ -958,7 +1210,7 @@
                 </h2>
                 <div class="section-body">
                     Начните с <strong>бесплатного пробного периода 14 дней</strong> (ограничения по числу одновременных пользователей — как у лёгкого тарифа),
-                    затем перейдите на платный план под размер команды. Тарифы и акции настраиваются на стороне сервера.
+                    затем перейдите на платный план под размер команды.
                 </div>
                 <div class="pricing-section-intro" aria-label="Кратко о подписке">
                     <span>
@@ -1050,6 +1302,35 @@
 
     <script>
     (function() {
+        var toggleBtn = document.getElementById('landingThemeToggle');
+        function setTheme(theme) {
+            var t = (theme === 'dark') ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', t);
+            try {
+                localStorage.setItem('networkMap_landingTheme', t);
+                localStorage.setItem('networkMap_theme', t);
+            } catch (e) {}
+            if (!toggleBtn) return;
+            if (t === 'dark') {
+                toggleBtn.innerHTML = '<span aria-hidden="true">☀️</span><span>Светлая</span>';
+                toggleBtn.setAttribute('aria-label', 'Включить светлую тему');
+            } else {
+                toggleBtn.innerHTML = '<span aria-hidden="true">🌙</span><span>Тёмная</span>';
+                toggleBtn.setAttribute('aria-label', 'Включить тёмную тему');
+            }
+        }
+        var initialTheme = document.documentElement.getAttribute('data-theme') || 'light';
+        setTheme(initialTheme);
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', function() {
+                var current = document.documentElement.getAttribute('data-theme') || 'light';
+                setTheme(current === 'dark' ? 'light' : 'dark');
+            });
+        }
+    })();
+    </script>
+    <script>
+    (function() {
         function formatHeroStat(n) {
             var x = Math.max(0, Math.floor(Number(n) || 0));
             return String(x).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
@@ -1139,6 +1420,92 @@
             });
         }
 
+        function initPricingCardsNetwork() {
+            var cards = document.querySelectorAll('.pricing-card');
+            if (!cards.length) return;
+            cards.forEach(function(card, idx) {
+                var old = card.querySelector('.pricing-card-network');
+                if (old) old.remove();
+                var canvas = document.createElement('canvas');
+                canvas.className = 'pricing-card-network';
+                card.insertBefore(canvas, card.firstChild);
+                var ctx = canvas.getContext('2d');
+                if (!ctx) return;
+                var nodes = [];
+                var nodeCount = 10 + (idx % 3);
+                var maxDistBase = 92 + (idx % 2) * 12;
+                var phase = Math.random() * Math.PI * 2;
+
+                function resize() {
+                    var rect = card.getBoundingClientRect();
+                    var w = Math.max(10, Math.floor(rect.width));
+                    var h = Math.max(10, Math.floor(rect.height));
+                    if (canvas.width !== w || canvas.height !== h) {
+                        canvas.width = w;
+                        canvas.height = h;
+                        if (!nodes.length) {
+                            for (var i = 0; i < nodeCount; i++) {
+                                nodes.push({
+                                    x: Math.random() * w,
+                                    y: Math.random() * h,
+                                    vx: (Math.random() - 0.5) * 0.35,
+                                    vy: (Math.random() - 0.5) * 0.35,
+                                    r: 1.3 + Math.random() * 1.1
+                                });
+                            }
+                        }
+                    }
+                }
+
+                function frame(now) {
+                    resize();
+                    var w = canvas.width, h = canvas.height;
+                    ctx.clearRect(0, 0, w, h);
+                    var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+                    var lineBase = dark ? '125,211,252' : '37,99,235';
+                    var dotBase = dark ? '186,230,253' : '59,130,246';
+                    var maxDist = maxDistBase + Math.sin((now / 1000) + phase) * 14;
+
+                    for (var i = 0; i < nodes.length; i++) {
+                        var a = nodes[i];
+                        a.x += a.vx;
+                        a.y += a.vy;
+                        if (a.x < 0 || a.x > w) a.vx *= -1;
+                        if (a.y < 0 || a.y > h) a.vy *= -1;
+                        a.x = Math.max(0, Math.min(w, a.x));
+                        a.y = Math.max(0, Math.min(h, a.y));
+                    }
+
+                    for (var ii = 0; ii < nodes.length; ii++) {
+                        for (var jj = ii + 1; jj < nodes.length; jj++) {
+                            var n1 = nodes[ii], n2 = nodes[jj];
+                            var dx = n2.x - n1.x, dy = n2.y - n1.y;
+                            var d = Math.sqrt(dx * dx + dy * dy);
+                            if (d < maxDist) {
+                                var alpha = (1 - d / maxDist) * (dark ? 0.33 : 0.26);
+                                ctx.beginPath();
+                                ctx.moveTo(n1.x, n1.y);
+                                ctx.lineTo(n2.x, n2.y);
+                                ctx.strokeStyle = 'rgba(' + lineBase + ',' + alpha.toFixed(3) + ')';
+                                ctx.lineWidth = 0.85;
+                                ctx.stroke();
+                            }
+                        }
+                    }
+
+                    for (var k = 0; k < nodes.length; k++) {
+                        var n = nodes[k];
+                        ctx.beginPath();
+                        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+                        ctx.fillStyle = 'rgba(' + dotBase + ',' + (dark ? 0.75 : 0.65) + ')';
+                        ctx.fill();
+                    }
+                    requestAnimationFrame(frame);
+                }
+                requestAnimationFrame(frame);
+            });
+        }
+
         fetch((typeof window !== 'undefined' && window.location && window.location.origin ? window.location.origin : '') + '/api/pricing')
             .then(function(r) { return r.ok ? r.json() : null; })
             .then(function(body) {
@@ -1198,6 +1565,7 @@
                     container.appendChild(card);
                 });
                 attachHandlers();
+                initPricingCardsNetwork();
             })
             .catch(function() {});
     })();

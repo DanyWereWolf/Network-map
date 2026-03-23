@@ -7,8 +7,21 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="stylesheet" href="auth.css">
     <link rel="stylesheet" href="cookie-consent.css">
+    <script>
+        (function() {
+            try {
+                var saved = localStorage.getItem('networkMap_theme') || localStorage.getItem('networkMap_landingTheme');
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var theme = (saved === 'dark' || saved === 'light') ? saved : (prefersDark ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch (e) {}
+        })();
+    </script>
     <script src="https://widget.cloudpayments.ru/bundles/cloudpayments.js"></script>
     <style>
+        body {
+            color: #0f172a;
+        }
         .checkout-layout {
             max-width: 1040px;
             width: 100%;
@@ -157,6 +170,65 @@
             .checkout-card {
                 padding: 16px 14px 14px;
             }
+        }
+
+        [data-theme="dark"] body {
+            color: #e2e8f0;
+        }
+        [data-theme="dark"] .auth-card {
+            background: rgba(7, 12, 24, 0.9);
+            border: 1px solid rgba(148, 163, 184, 0.22);
+            box-shadow: 0 24px 70px rgba(2, 6, 23, 0.78);
+        }
+        [data-theme="dark"] .auth-header h1,
+        [data-theme="dark"] .checkout-card h2,
+        [data-theme="dark"] .checkout-plan-price,
+        [data-theme="dark"] #checkoutForm h2 {
+            color: #f8fafc !important;
+        }
+        [data-theme="dark"] .auth-subtitle,
+        [data-theme="dark"] .checkout-header-links,
+        [data-theme="dark"] .checkout-plan-extra,
+        [data-theme="dark"] .checkout-note,
+        [data-theme="dark"] .checkout-legal,
+        [data-theme="dark"] .checkout-form small {
+            color: #94a3b8;
+        }
+        [data-theme="dark"] .checkout-header-links a,
+        [data-theme="dark"] .checkout-legal a {
+            color: #93c5fd;
+        }
+        [data-theme="dark"] .checkout-card {
+            background: rgba(15, 23, 42, 0.9);
+            border-color: rgba(148, 163, 184, 0.25);
+        }
+        [data-theme="dark"] .checkout-summary-list li {
+            color: #cbd5e1;
+        }
+        [data-theme="dark"] .checkout-summary-list svg {
+            color: #34d399;
+        }
+        [data-theme="dark"] .checkout-chip {
+            background: rgba(6, 78, 59, 0.35);
+            color: #6ee7b7;
+            border-color: rgba(110, 231, 183, 0.35);
+        }
+        [data-theme="dark"] .input-wrapper {
+            background: #0f172a;
+            border-color: #334155;
+        }
+        [data-theme="dark"] .input-wrapper svg {
+            color: #64748b;
+        }
+        [data-theme="dark"] .input-wrapper input {
+            color: #e2e8f0;
+            background: transparent;
+        }
+        [data-theme="dark"] .input-wrapper input::placeholder {
+            color: #64748b;
+        }
+        [data-theme="dark"] .checkout-submit {
+            box-shadow: 0 12px 30px rgba(22, 163, 74, 0.25);
         }
     </style>
 </head>

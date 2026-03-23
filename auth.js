@@ -39,6 +39,11 @@ function findUserByUsername(username) {
 }
 
 var REMEMBER_EXPIRY_DAYS = 30;
+var INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000;
+var ACTIVITY_EVENT_THROTTLE_MS = 1000;
+var inactivityLogoutTimerId = null;
+var lastUserActivityAt = 0;
+var lastActivityEventAt = 0;
 
 function clearExpiredRememberAuth() {
     try {
@@ -220,6 +225,7 @@ function isAdmin() {
 }
 
 function logout() {
+    stopInactivityLogoutWatcher();
     if (getApiBase()) {
         var token = getAuthToken();
         if (token) fetch(getApiBase() + '/api/auth/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } }).catch(function() {});
@@ -231,6 +237,46 @@ function logout() {
     localStorage.removeItem('networkMap_session');
     localStorage.removeItem('networkMap_tokenExpiry');
     window.location.href = 'auth.html';
+}
+
+function stopInactivityLogoutWatcher() {
+    if (inactivityLogoutTimerId) {
+        clearTimeout(inactivityLogoutTimerId);
+        inactivityLogoutTimerId = null;
+    }
+}
+
+function scheduleInactivityLogoutCheck() {
+    stopInactivityLogoutWatcher();
+    inactivityLogoutTimerId = setTimeout(function() {
+        if (!isAuthenticated()) return;
+        var now = Date.now();
+        if (now - lastUserActivityAt >= INACTIVITY_TIMEOUT_MS) {
+            logout();
+            return;
+        }
+        scheduleInactivityLogoutCheck();
+    }, INACTIVITY_TIMEOUT_MS);
+}
+
+function registerUserActivity() {
+    if (!isAuthenticated()) return;
+    var now = Date.now();
+    if (now - lastActivityEventAt < ACTIVITY_EVENT_THROTTLE_MS) return;
+    lastActivityEventAt = now;
+    lastUserActivityAt = now;
+    scheduleInactivityLogoutCheck();
+}
+
+function initInactivityLogoutWatcher() {
+    var isAuthPage = document.getElementById('loginForm') !== null;
+    if (isAuthPage || !isAuthenticated()) return;
+    lastUserActivityAt = Date.now();
+    lastActivityEventAt = 0;
+    scheduleInactivityLogoutCheck();
+    ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach(function(eventName) {
+        document.addEventListener(eventName, registerUserActivity, { passive: true });
+    });
 }
 
 function switchForm(formType) {
@@ -264,6 +310,7 @@ function togglePassword(inputId) {
 document.addEventListener('DOMContentLoaded', function() {
     initUserSystem();
     const isAuthPage = document.getElementById('loginForm') !== null;
+    initInactivityLogoutWatcher();
 
     if (isAuthPage && !getApiBase()) {
         var msg = document.getElementById('authMessage');

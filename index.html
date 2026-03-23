@@ -98,7 +98,7 @@
             <!-- Панель пользователя -->
             <div class="user-panel">
                 <div class="user-info" id="userInfo">
-                    <div class="user-avatar" id="userAvatar">А</div>
+                    <div class="user-avatar" id="userAvatar" role="button" tabindex="0" title="Открыть личный кабинет">А</div>
                     <div class="user-details">
                         <span class="user-name" id="userName">Пользователь</span>
                         <span class="user-role" id="userRole">Роль</span>
@@ -1117,6 +1117,41 @@
                 <div id="updatesStatus" class="updates-status"></div>
                 <div class="updates-actions">
                     <button type="button" id="updatesCheckBtn" class="btn-primary">Проверить обновления</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Личный кабинет -->
+    <div id="profileModal" class="modal">
+        <div class="modal-content profile-modal-content">
+            <div class="modal-header">
+                <h2>Личный кабинет</h2>
+                <span class="close close-profile">&times;</span>
+            </div>
+            <div class="modal-body profile-modal-body">
+                <div class="profile-org-title" id="profileOrgName">Организация: —</div>
+                <div class="profile-grid">
+                    <div class="profile-item">
+                        <div class="profile-label">Тариф</div>
+                        <div class="profile-value" id="profilePlan">—</div>
+                    </div>
+                    <div class="profile-item">
+                        <div class="profile-label">Статус</div>
+                        <div class="profile-value" id="profileStatus">—</div>
+                    </div>
+                    <div class="profile-item">
+                        <div class="profile-label">Подписка до</div>
+                        <div class="profile-value" id="profileSubscriptionEndsAt">—</div>
+                    </div>
+                    <div class="profile-item">
+                        <div class="profile-label">Осталось</div>
+                        <div class="profile-value" id="profileSubscriptionLeft">—</div>
+                    </div>
+                    <div class="profile-item">
+                        <div class="profile-label">Лимит пользователей</div>
+                        <div class="profile-value" id="profileMaxConcurrentUsers">—</div>
+                    </div>
                 </div>
             </div>
         </div>

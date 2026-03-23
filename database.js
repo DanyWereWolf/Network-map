@@ -53,7 +53,8 @@ function loadStore() {
             mapDataByOrg: {},
             historyByOrg: {},
             settingsByOrg: {},
-            pricingPlans: []
+            pricingPlans: [],
+            visitLogs: []
         };
         saveStore();
         return store;
@@ -61,7 +62,7 @@ function loadStore() {
     try {
         store = JSON.parse(fs.readFileSync(STORE_PATH, 'utf8'));
     } catch (e) {
-        store = { mapData: [], users: [], history: [], settings: {}, sessions: [], organizations: [], mapDataByOrg: {}, historyByOrg: {}, settingsByOrg: {}, pricingPlans: [] };
+        store = { mapData: [], users: [], history: [], settings: {}, sessions: [], organizations: [], mapDataByOrg: {}, historyByOrg: {}, settingsByOrg: {}, pricingPlans: [], visitLogs: [] };
         saveStore();
     }
     if (!store.sessions) store.sessions = [];
@@ -71,6 +72,7 @@ function loadStore() {
     if (typeof store.historyByOrg !== 'object') store.historyByOrg = {};
     if (typeof store.settingsByOrg !== 'object') store.settingsByOrg = {};
     if (!Array.isArray(store.pricingPlans)) store.pricingPlans = [];
+    if (!Array.isArray(store.visitLogs)) store.visitLogs = [];
     migrateToOrganizations();
     return store;
 }
@@ -207,6 +209,7 @@ function initSchema() {
     if (typeof s.historyByOrg !== 'object') s.historyByOrg = {};
     if (typeof s.settingsByOrg !== 'object') s.settingsByOrg = {};
     if (!Array.isArray(s.pricingPlans)) s.pricingPlans = [];
+    if (!Array.isArray(s.visitLogs)) s.visitLogs = [];
     saveStore();
 }
 
@@ -738,6 +741,32 @@ function initDefaultAdmin() {
     }
 }
 
+function addVisitLog(entry) {
+    const s = loadStore();
+    if (!Array.isArray(s.visitLogs)) s.visitLogs = [];
+    var item = {
+        at: entry && entry.at ? String(entry.at) : new Date().toISOString(),
+        username: entry && entry.username ? String(entry.username) : '',
+        userId: entry && entry.userId ? String(entry.userId) : '',
+        organizationId: entry && entry.organizationId ? String(entry.organizationId) : '',
+        ip: entry && entry.ip ? String(entry.ip) : '',
+        source: entry && entry.source ? String(entry.source) : '',
+        userAgent: entry && entry.userAgent ? String(entry.userAgent) : ''
+    };
+    s.visitLogs.push(item);
+    // Ограничиваем размер журнала, чтобы store.json не разрастался бесконечно.
+    var MAX_VISIT_LOGS = 5000;
+    if (s.visitLogs.length > MAX_VISIT_LOGS) {
+        s.visitLogs = s.visitLogs.slice(s.visitLogs.length - MAX_VISIT_LOGS);
+    }
+    saveStore();
+}
+
+function getVisitLogs() {
+    const s = loadStore();
+    return Array.isArray(s.visitLogs) ? s.visitLogs : [];
+}
+
 module.exports = {
     getDb,
     getMapData,
@@ -772,5 +801,7 @@ module.exports = {
     deleteSessionsForUser,
     getPricingPlans,
     setPricingPlans,
-    getPublicStats
+    getPublicStats,
+    addVisitLog,
+    getVisitLogs
 };

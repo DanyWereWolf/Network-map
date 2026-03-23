@@ -97,6 +97,16 @@ function isGlobalAdmin(user) {
     return !!(user && user.role === 'admin' && (user.organizationId == null));
 }
 
+function getClientIp(req) {
+    var xff = req.headers['x-forwarded-for'];
+    if (typeof xff === 'string' && xff.trim()) {
+        return xff.split(',')[0].trim();
+    }
+    var xrip = req.headers['x-real-ip'];
+    if (typeof xrip === 'string' && xrip.trim()) return xrip.trim();
+    return String(req.ip || req.socket && req.socket.remoteAddress || '');
+}
+
 app.get('/api/map', (req, res) => {
     try {
         var user = getSessionUser(req);
@@ -184,6 +194,19 @@ app.post('/api/auth/login', (req, res) => {
             error: 'Сессия занята: эта учётная запись уже используется. Завершите работу в другом окне или нажмите «Выйти» там.'
         });
     }
+    try {
+        var ip = getClientIp(req);
+        var userAgent = String(req.headers['user-agent'] || '');
+        db.addVisitLog({
+            at: new Date().toISOString(),
+            username: user.username,
+            userId: user.id,
+            organizationId: organizationId || '',
+            ip: ip,
+            source: ip || 'unknown',
+            userAgent: userAgent
+        });
+    } catch (e) {}
     res.json({
         success: true,
         token,
@@ -196,6 +219,64 @@ app.post('/api/auth/login', (req, res) => {
             organization: organization ? { id: organization.id, name: organization.name, planId: organization.planId, maxConcurrentUsers: getMaxConcurrentForOrg(organization) } : null
         }
     });
+});
+
+app.get('/api/admin/visits', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    try {
+        var logs = db.getVisitLogs();
+        var now = Date.now();
+        var dayMs = 24 * 60 * 60 * 1000;
+        var weekMs = 7 * dayMs;
+        var uniqueByDay = Object.create(null);
+        var topSourcesMap = Object.create(null);
+        var recent = [];
+        var total = logs.length;
+        var last24h = 0;
+        var last7d = 0;
+        for (var i = 0; i < logs.length; i++) {
+            var item = logs[i] || {};
+            var atMs = new Date(item.at).getTime();
+            var source = String(item.source || item.ip || 'unknown');
+            var ua = String(item.userAgent || '');
+            if (!isNaN(atMs)) {
+                if (now - atMs <= dayMs) last24h++;
+                if (now - atMs <= weekMs) last7d++;
+            }
+            topSourcesMap[source] = (topSourcesMap[source] || 0) + 1;
+            var dayKey = !isNaN(atMs) ? new Date(atMs).toISOString().slice(0, 10) : 'unknown';
+            if (!uniqueByDay[dayKey]) uniqueByDay[dayKey] = Object.create(null);
+            uniqueByDay[dayKey][source] = true;
+        }
+        Object.keys(uniqueByDay).forEach(function(day) {
+            uniqueByDay[day] = Object.keys(uniqueByDay[day]).length;
+        });
+        var topSources = Object.keys(topSourcesMap)
+            .map(function(k) { return { source: k, count: topSourcesMap[k] || 0 }; })
+            .sort(function(a, b) { return b.count - a.count; })
+            .slice(0, 5);
+        for (var j = logs.length - 1; j >= 0 && recent.length < 8; j--) {
+            var r = logs[j] || {};
+            recent.push({
+                at: r.at || '',
+                username: r.username || '',
+                organizationId: r.organizationId || '',
+                source: r.source || r.ip || 'unknown',
+                userAgent: String(r.userAgent || '').slice(0, 140)
+            });
+        }
+        res.json({
+            totalVisits: total,
+            visitsLast24h: last24h,
+            visitsLast7d: last7d,
+            topSources: topSources,
+            uniqueSourcesByDay: uniqueByDay,
+            recentVisits: recent
+        });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
 });
 
 app.post('/api/auth/logout', (req, res) => {

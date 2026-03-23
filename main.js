@@ -45,19 +45,31 @@ function canEdit() {
 
 var WELCOME_DISMISSED_KEY = 'networkMap_welcomeDismissed';
 
+function getWelcomeDismissedKeyForCurrentUser() {
+    var suffix = 'guest';
+    if (currentUser) {
+        if (currentUser.userId != null && String(currentUser.userId).trim() !== '') {
+            suffix = String(currentUser.userId).trim();
+        } else if (currentUser.username) {
+            suffix = String(currentUser.username).trim().toLowerCase();
+        }
+    }
+    return WELCOME_DISMISSED_KEY + '_' + suffix;
+}
+
 function closeWelcomeModal() {
     var wm = document.getElementById('welcomeModal');
     if (!wm) return;
     wm.style.display = 'none';
     wm.setAttribute('aria-hidden', 'true');
-    try { localStorage.setItem(WELCOME_DISMISSED_KEY, '1'); } catch (e) {}
+    try { localStorage.setItem(getWelcomeDismissedKeyForCurrentUser(), '1'); } catch (e) {}
 }
 
 function initWelcomeModal() {
     var wm = document.getElementById('welcomeModal');
     if (!wm) return;
     try {
-        if (localStorage.getItem(WELCOME_DISMISSED_KEY)) return;
+        if (localStorage.getItem(getWelcomeDismissedKeyForCurrentUser())) return;
     } catch (e) {}
     wm.style.display = 'block';
     wm.setAttribute('aria-hidden', 'false');
@@ -148,6 +160,13 @@ function initUserUI() {
     
     if (userAvatar) {
         userAvatar.textContent = (currentUser.fullName || currentUser.username).charAt(0).toUpperCase();
+        userAvatar.addEventListener('click', openProfileModal);
+        userAvatar.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openProfileModal();
+            }
+        });
     }
     if (userName) {
         userName.textContent = currentUser.fullName || currentUser.username;
@@ -225,6 +244,87 @@ function initUserUI() {
     } catch (e) {}
 
     if (typeof updateHistoryBadge === 'function') updateHistoryBadge();
+}
+
+function getPlanDisplayName(planId) {
+    var names = {
+        basic: 'Базовый',
+        pro: 'Про',
+        enterprise: 'Корпоративный'
+    };
+    return names[planId] || (planId ? String(planId) : '—');
+}
+
+function getSubscriptionRemainingText(isoDate) {
+    if (!isoDate) return 'Без ограничения';
+    var end = new Date(isoDate);
+    if (isNaN(end.getTime())) return '—';
+    var now = new Date();
+    var msPerDay = 24 * 60 * 60 * 1000;
+    var diffDays = Math.ceil((end.getTime() - now.getTime()) / msPerDay);
+    if (diffDays < 0) return 'Истекла';
+    if (diffDays === 0) return 'Меньше 1 дня';
+    return diffDays + ' дн.';
+}
+
+function setProfileModalField(id, value) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = value != null && value !== '' ? String(value) : '—';
+}
+
+function renderProfileOrganizationInfo(org) {
+    if (!org) {
+        setProfileModalField('profileOrgName', 'Организация: не привязана');
+        setProfileModalField('profilePlan', '—');
+        setProfileModalField('profileStatus', '—');
+        setProfileModalField('profileSubscriptionEndsAt', '—');
+        setProfileModalField('profileSubscriptionLeft', '—');
+        setProfileModalField('profileMaxConcurrentUsers', '—');
+        return;
+    }
+    var statusText = org.status === 'suspended' ? 'Приостановлена' : 'Активна';
+    var endText = org.subscriptionEndsAt ? new Date(org.subscriptionEndsAt).toLocaleDateString('ru-RU') : 'Без ограничения';
+    var maxConcurrent = org.maxConcurrentUsers;
+    if (maxConcurrent === -1) maxConcurrent = 'Без ограничений';
+    setProfileModalField('profileOrgName', 'Организация: ' + (org.name || '—'));
+    setProfileModalField('profilePlan', getPlanDisplayName(org.planId));
+    setProfileModalField('profileStatus', statusText);
+    setProfileModalField('profileSubscriptionEndsAt', endText);
+    setProfileModalField('profileSubscriptionLeft', getSubscriptionRemainingText(org.subscriptionEndsAt));
+    setProfileModalField('profileMaxConcurrentUsers', maxConcurrent != null ? maxConcurrent : '—');
+}
+
+function openProfileModal() {
+    var modal = document.getElementById('profileModal');
+    if (!modal) return;
+    modal.style.display = 'block';
+    setProfileModalField('profileOrgName', 'Организация: загрузка...');
+    setProfileModalField('profilePlan', 'Загрузка...');
+    setProfileModalField('profileStatus', 'Загрузка...');
+    setProfileModalField('profileSubscriptionEndsAt', 'Загрузка...');
+    setProfileModalField('profileSubscriptionLeft', 'Загрузка...');
+    setProfileModalField('profileMaxConcurrentUsers', 'Загрузка...');
+
+    if (!getApiBase() || !getAuthToken()) {
+        renderProfileOrganizationInfo(currentUser && currentUser.organization ? currentUser.organization : null);
+        return;
+    }
+    fetch(getApiBase() + '/api/organizations/me', {
+        headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+    }).then(function(r) {
+        return r.ok ? r.json() : null;
+    }).then(function(body) {
+        var org = body && body.organization ? body.organization : (currentUser && currentUser.organization ? currentUser.organization : null);
+        renderProfileOrganizationInfo(org);
+    }).catch(function() {
+        renderProfileOrganizationInfo(currentUser && currentUser.organization ? currentUser.organization : null);
+        if (typeof showWarning === 'function') showWarning('Не удалось загрузить актуальные данные организации.', 'Личный кабинет');
+    });
+}
+
+function closeProfileModal() {
+    var modal = document.getElementById('profileModal');
+    if (modal) modal.style.display = 'none';
 }
 
 function hideAdminOnlyElements() {
@@ -828,6 +928,11 @@ function setupUsersModalHandlers() {
     if (saveOrganizationBtn) saveOrganizationBtn.addEventListener('click', saveOrganizationFromModal);
     var cancelOrganizationEditBtn = document.getElementById('cancelOrganizationEditBtn');
     if (cancelOrganizationEditBtn) cancelOrganizationEditBtn.addEventListener('click', function() { document.getElementById('organizationEditModal').style.display = 'none'; });
+
+    var closeProfileBtn = document.querySelector('.close-profile');
+    if (closeProfileBtn) closeProfileBtn.addEventListener('click', closeProfileModal);
+    var profileModalEl = document.getElementById('profileModal');
+    if (profileModalEl) profileModalEl.addEventListener('click', function(e) { if (e.target === profileModalEl) closeProfileModal(); });
 }
 
 function init() {
@@ -989,7 +1094,7 @@ function setupEventListeners() {
 
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
-            var modalIds = ['infoModal', 'nodeSelectionModal', 'onuSelectionModal', 'splitterSelectionModal', 'splitterOutputOnuModal', 'splitterOutputSplitterModal', 'oltSelectionModal', 'usersModal', 'userEditModal', 'organizationsModal', 'organizationEditModal', 'updatesModal', 'deviceCatalogModal', 'confirmModal'];
+            var modalIds = ['infoModal', 'nodeSelectionModal', 'onuSelectionModal', 'splitterSelectionModal', 'splitterOutputOnuModal', 'splitterOutputSplitterModal', 'oltSelectionModal', 'usersModal', 'userEditModal', 'organizationsModal', 'organizationEditModal', 'updatesModal', 'profileModal', 'deviceCatalogModal', 'confirmModal'];
             for (var i = 0; i < modalIds.length; i++) {
                 var m = document.getElementById(modalIds[i]);
                 if (m && m.style && m.style.display === 'block') {

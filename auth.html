@@ -7,6 +7,16 @@
     <meta name="copyright" content="Copyright (c) 2024–2026 Карта ВОЛС. Все права защищены.">
     <title>Вход — Карта оптической сети</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <script>
+        (function() {
+            try {
+                var saved = localStorage.getItem('networkMap_landingTheme') || localStorage.getItem('networkMap_theme');
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var theme = (saved === 'dark' || saved === 'light') ? saved : (prefersDark ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch (e) {}
+        })();
+    </script>
     <link rel="stylesheet" href="auth.css">
     <link rel="stylesheet" href="cookie-consent.css">
     <!-- Защита от копирования -->
@@ -41,6 +51,14 @@
         }
         .auth-main-link svg {
             flex-shrink: 0;
+        }
+        [data-theme="dark"] .auth-main-link {
+            color: #e2e8f0;
+            background: rgba(15,23,42,0.86);
+            border-color: rgba(148,163,184,0.35);
+        }
+        [data-theme="dark"] .auth-main-link:hover {
+            background: rgba(30,41,59,0.92);
         }
     </style>
 </head>
@@ -112,7 +130,6 @@
                 </button>
 
                 <div class="auth-footer">
-                    <p>Нет аккаунта? <a href="#" onclick="switchForm('register')">Зарегистрироваться</a></p>
                     <a href="pricing.html" class="auth-main-link">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="15 18 9 12 15 6"></polyline>

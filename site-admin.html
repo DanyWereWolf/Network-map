@@ -5,29 +5,50 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Панель главного администратора — Карта сети</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <script>
+        (function() {
+            try {
+                var saved = localStorage.getItem('networkMap_theme') || localStorage.getItem('networkMap_landingTheme');
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var theme = (saved === 'dark' || saved === 'light') ? saved : (prefersDark ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch (e) {}
+        })();
+    </script>
     <link rel="stylesheet" href="auth.css">
     <link rel="stylesheet" href="cookie-consent.css">
     <style>
         body {
             color: #0f172a;
+            padding: 0;
+            align-items: center;
+            justify-content: center;
         }
         .admin-root {
-            max-width: 1200px;
+            max-width: 1320px;
             width: 100%;
+            min-height: 100vh;
         }
         .auth-card.admin-shell {
-            border-radius: 18px;
-            box-shadow: 0 24px 60px rgba(15,23,42,0.12);
+            border-radius: 0;
+            border: none;
+            border-top: none !important;
+            border-bottom: none !important;
+            box-shadow: none;
+            animation: none;
         }
         .admin-shell {
             width: 100%;
-            min-height: 88vh;
+            min-height: 100vh;
+            padding: 0 42px 36px;
+            margin: 0;
         }
         .admin-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 16px;
+            margin-top: 10px;
             margin-bottom: 8px;
             padding-bottom: 16px;
             border-bottom: 1px solid rgba(15,23,42,0.08);
@@ -75,6 +96,13 @@
         }
         .btn-sm-primary:hover {
             filter: brightness(1.03);
+        }
+        .theme-toggle-btn {
+            min-width: 104px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
         }
         .tabs {
             display: flex;
@@ -200,28 +228,177 @@
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
             gap: 12px;
             margin-bottom: 16px;
+            align-items: stretch;
         }
         .stat-card {
             border-radius: 12px;
             border: 1px solid rgba(148,163,184,0.28);
             background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
             padding: 12px 14px;
+            min-width: 0;
+            overflow: hidden;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
         }
         .stat-label {
             font-size: 0.74rem;
             color: #6b7280;
             margin-bottom: 4px;
+            line-height: 1.3;
+            word-break: break-word;
         }
         .stat-value {
-            font-size: 1.05rem;
+            font-size: clamp(0.98rem, 1.8vw, 1.12rem);
             font-weight: 600;
             color: #111827;
+            line-height: 1.2;
+            word-break: break-word;
+            font-variant-numeric: tabular-nums;
         }
         .stat-extra {
             font-size: 0.72rem;
             color: #9ca3af;
             margin-top: 2px;
+            line-height: 1.3;
+            word-break: break-word;
         }
+        .overview-analytics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+        .analytics-card {
+            border-radius: 12px;
+            border: 1px solid rgba(148,163,184,0.28);
+            background: #fff;
+            padding: 12px;
+            min-width: 0;
+            overflow: hidden;
+            box-sizing: border-box;
+            box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+        }
+        .analytics-title {
+            font-size: 0.78rem;
+            color: #475569;
+            margin-bottom: 10px;
+            font-weight: 600;
+            line-height: 1.3;
+            padding-bottom: 7px;
+            border-bottom: 1px dashed #e2e8f0;
+        }
+        .bar-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 9px;
+            min-width: 0;
+        }
+        .bar-row {
+            display: grid;
+            grid-template-columns: minmax(0, 112px) minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.74rem;
+            color: #64748b;
+            min-width: 0;
+        }
+        .bar-row > span:first-child {
+            min-width: 0;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            line-height: 1.2;
+            word-break: break-word;
+        }
+        .bar-row > strong {
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+            color: #334155;
+        }
+        .bar-track {
+            position: relative;
+            height: 8px;
+            border-radius: 999px;
+            background: #e2e8f0;
+            overflow: hidden;
+        }
+        .bar-fill {
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 0;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #2563eb, #1d4ed8);
+        }
+        .bar-row.warn .bar-fill {
+            background: linear-gradient(90deg, #f59e0b, #d97706);
+        }
+        .bar-row.danger .bar-fill {
+            background: linear-gradient(90deg, #ef4444, #dc2626);
+        }
+        .donut-wrap {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            min-width: 0;
+        }
+        .donut-chart {
+            --donut-a: 0deg;
+            --donut-b: 0deg;
+            width: 88px;
+            height: 88px;
+            border-radius: 50%;
+            background:
+                radial-gradient(circle at center, #ffffff 0 52%, transparent 53% 100%),
+                conic-gradient(
+                    #16a34a 0 var(--donut-a),
+                    #f59e0b var(--donut-a) var(--donut-b),
+                    #ef4444 var(--donut-b) 360deg
+                );
+            border: 1px solid #e2e8f0;
+            flex: 0 0 auto;
+        }
+        .legend-list {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 0.75rem;
+            color: #64748b;
+            min-width: 0;
+        }
+        .legend-item {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            align-items: start;
+            gap: 8px;
+            min-width: 0;
+            line-height: 1.25;
+        }
+        .legend-item strong {
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+        .legend-item-label {
+            min-width: 0;
+            word-break: break-word;
+        }
+        .legend-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            flex: 0 0 auto;
+        }
+        .legend-dot.active { background: #16a34a; }
+        .legend-dot.suspended { background: #f59e0b; }
+        .legend-dot.expired { background: #ef4444; }
+        .legend-dot.warn { background: #f97316; }
+        .legend-dot.info { background: #2563eb; }
         .table-wrap {
             border-radius: 12px;
             border: 1px solid #e5e7eb;
@@ -357,10 +534,155 @@
             .cards-row {
                 grid-template-columns: minmax(0, 1fr);
             }
+            .overview-analytics-grid {
+                grid-template-columns: minmax(0, 1fr);
+            }
+            .bar-row {
+                grid-template-columns: minmax(0, 86px) minmax(0, 1fr) auto;
+                gap: 6px;
+            }
+            .bar-row > span:first-child {
+                -webkit-line-clamp: 1;
+            }
+            .donut-wrap {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .legend-item {
+                grid-template-columns: auto minmax(0, 1fr);
+            }
+            .legend-item strong {
+                grid-column: 2;
+            }
+            .donut-chart {
+                width: 82px;
+                height: 82px;
+            }
             .table-wrap {
                 overflow-x: auto;
                 -webkit-overflow-scrolling: touch;
             }
+        }
+
+        /* Тёмная тема админ-панели */
+        [data-theme="dark"] body {
+            color: #e2e8f0;
+        }
+        [data-theme="dark"] .auth-card.admin-shell {
+            background: rgba(7, 12, 24, 0.9);
+            border: none;
+            box-shadow: none;
+        }
+        [data-theme="dark"] .admin-header {
+            border-bottom-color: rgba(148, 163, 184, 0.24);
+        }
+        [data-theme="dark"] .admin-title,
+        [data-theme="dark"] .panel-title,
+        [data-theme="dark"] .stat-value,
+        [data-theme="dark"] .analytics-title,
+        [data-theme="dark"] .bar-row > strong,
+        [data-theme="dark"] .faq-item summary {
+            color: #f8fafc;
+        }
+        [data-theme="dark"] .admin-subtitle,
+        [data-theme="dark"] .fact-list,
+        [data-theme="dark"] .org-toolbar-meta,
+        [data-theme="dark"] .stat-label,
+        [data-theme="dark"] .stat-extra,
+        [data-theme="dark"] .legend-list,
+        [data-theme="dark"] .text-muted,
+        [data-theme="dark"] .hint,
+        [data-theme="dark"] th {
+            color: #94a3b8;
+        }
+        [data-theme="dark"] .btn-sm {
+            background: rgba(15, 23, 42, 0.8);
+            border-color: rgba(148, 163, 184, 0.24);
+            color: #e2e8f0;
+        }
+        [data-theme="dark"] .btn-sm:hover,
+        [data-theme="dark"] .actions-cell button:hover {
+            background: rgba(30, 41, 59, 0.9);
+        }
+        [data-theme="dark"] .tabs {
+            border-bottom-color: #334155;
+        }
+        [data-theme="dark"] .tabs::-webkit-scrollbar-thumb {
+            background: #334155;
+        }
+        [data-theme="dark"] .tab {
+            color: #94a3b8;
+        }
+        [data-theme="dark"] .tab.active {
+            background: #1e293b;
+            color: #f8fafc;
+            border-color: #334155;
+            box-shadow: 0 4px 14px rgba(2, 6, 23, 0.5);
+        }
+        [data-theme="dark"] .tab:not(.active):hover {
+            background: #1e293b;
+            color: #e2e8f0;
+            border-color: #334155;
+        }
+        [data-theme="dark"] .stat-card,
+        [data-theme="dark"] .analytics-card,
+        [data-theme="dark"] .table-wrap {
+            background: #0f172a;
+            border-color: rgba(148, 163, 184, 0.24);
+            box-shadow: 0 6px 18px rgba(2, 6, 23, 0.35);
+        }
+        [data-theme="dark"] .analytics-title {
+            border-bottom-color: #334155;
+        }
+        [data-theme="dark"] .bar-track {
+            background: #334155;
+        }
+        [data-theme="dark"] .donut-chart {
+            background:
+                radial-gradient(circle at center, #0f172a 0 52%, transparent 53% 100%),
+                conic-gradient(
+                    #16a34a 0 var(--donut-a),
+                    #f59e0b var(--donut-a) var(--donut-b),
+                    #ef4444 var(--donut-b) 360deg
+                );
+            border-color: #334155;
+        }
+        [data-theme="dark"] .search-field input[type="search"],
+        [data-theme="dark"] .search-field input[type="text"],
+        [data-theme="dark"] .field-col input,
+        [data-theme="dark"] .field-col select {
+            background-color: #0f172a;
+            border-color: #334155;
+            color: #e2e8f0;
+        }
+        [data-theme="dark"] .search-field input[type="search"],
+        [data-theme="dark"] .search-field input[type="text"] {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='M11 11l3.5 3.5'/%3E%3C/svg%3E");
+        }
+        [data-theme="dark"] .search-field input::placeholder,
+        [data-theme="dark"] .field-col input::placeholder {
+            color: #64748b;
+        }
+        [data-theme="dark"] .search-field input:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+        [data-theme="dark"] thead {
+            background: #1e293b;
+        }
+        [data-theme="dark"] th,
+        [data-theme="dark"] td {
+            border-bottom-color: #334155;
+        }
+        [data-theme="dark"] .actions-cell button {
+            background: #0f172a;
+            border-color: #334155;
+            color: #cbd5e1;
+        }
+        [data-theme="dark"] .info-box {
+            color: #93c5fd;
+            background: rgba(30, 64, 175, 0.15);
+            border-color: rgba(96, 165, 250, 0.35);
         }
     </style>
 </head>
@@ -388,6 +710,7 @@
                         </div>
                     </div>
                     <div class="admin-header-actions">
+                        <button class="btn-sm theme-toggle-btn" id="adminThemeToggle">🌙 Тёмная</button>
                         <button class="btn-sm" id="backToLandingBtn">На главную</button>
                         <button class="btn-sm-primary" id="logoutBtn">Выйти</button>
                     </div>
@@ -432,6 +755,89 @@
                             <div class="stat-label">Просроченные подписки</div>
                             <div class="stat-value danger-text" id="statExpired">—</div>
                             <div class="stat-extra">Нужны действия администратора</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Покрытие лимитов</div>
+                            <div class="stat-value" id="statCapacityCoverage">—</div>
+                            <div class="stat-extra">Суммарно: сессии / лимиты <span id="statCapacitySplit" class="text-muted">—</span></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Средняя нагрузка</div>
+                            <div class="stat-value" id="statAvgSessions">—</div>
+                            <div class="stat-extra">Среднее активных сессий на организацию</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Организации с риском по лимиту</div>
+                            <div class="stat-value danger-text" id="statHighLoadOrgs">—</div>
+                            <div class="stat-extra">С загрузкой лимита 80% и выше</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Организации без лимита</div>
+                            <div class="stat-value" id="statWithoutLimit">—</div>
+                            <div class="stat-extra">Лимит не задан/невалидный</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Организации без даты подписки</div>
+                            <div class="stat-value" id="statNoSubscriptionDate">—</div>
+                            <div class="stat-extra">Требует проверки условий обслуживания</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Медиана активных сессий</div>
+                            <div class="stat-value" id="statMedianSessions">—</div>
+                            <div class="stat-extra">По всем организациям</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Всего входов в систему</div>
+                            <div class="stat-value" id="statVisitsTotal">—</div>
+                            <div class="stat-extra">Все успешные авторизации</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Входы за 24 часа</div>
+                            <div class="stat-value" id="statVisits24h">—</div>
+                            <div class="stat-extra">С учётом всех учётных записей</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Входы за 7 дней</div>
+                            <div class="stat-value" id="statVisits7d">—</div>
+                            <div class="stat-extra">Суммарно по всем источникам</div>
+                        </div>
+                    </div>
+                    <div class="overview-analytics-grid">
+                        <div class="analytics-card">
+                            <div class="analytics-title">Статусы организаций</div>
+                            <div class="donut-wrap">
+                                <div class="donut-chart" id="statusDonutChart"></div>
+                                <ul class="legend-list">
+                                    <li class="legend-item"><span class="legend-dot active"></span><span class="legend-item-label">Активные</span><strong id="statusLegendActive">0</strong></li>
+                                    <li class="legend-item"><span class="legend-dot suspended"></span><span class="legend-item-label">Приостановленные</span><strong id="statusLegendSuspended">0</strong></li>
+                                    <li class="legend-item"><span class="legend-dot expired"></span><span class="legend-item-label">Просроченная подписка</span><strong id="statusLegendExpired">0</strong></li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-title">Распределение по тарифам</div>
+                            <div class="bar-chart" id="plansBarChart"></div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-title">Топ организаций по загрузке лимита</div>
+                            <div class="bar-chart" id="capacityBarChart"></div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-title">Качество данных и риски</div>
+                            <ul class="legend-list">
+                                <li class="legend-item"><span class="legend-dot warn"></span><span class="legend-item-label">Скоро истекают (до 14 дн.)</span><strong id="riskLegendExpiring">0</strong></li>
+                                <li class="legend-item"><span class="legend-dot expired"></span><span class="legend-item-label">Просроченные подписки</span><strong id="riskLegendExpired">0</strong></li>
+                                <li class="legend-item"><span class="legend-dot info"></span><span class="legend-item-label">Без даты подписки</span><strong id="riskLegendNoDate">0</strong></li>
+                                <li class="legend-item"><span class="legend-dot suspended"></span><span class="legend-item-label">Приостановленные</span><strong id="riskLegendSuspended">0</strong></li>
+                            </ul>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-title">Топ источников входа</div>
+                            <div class="bar-chart" id="visitSourcesChart"></div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-title">Последние входы</div>
+                            <div class="bar-chart" id="recentVisitsList"></div>
                         </div>
                     </div>
                 </section>
@@ -757,6 +1163,31 @@
 
     <script>
     (function() {
+        var themeBtn = document.getElementById('adminThemeToggle');
+        function setTheme(theme) {
+            var t = (theme === 'dark') ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', t);
+            try {
+                localStorage.setItem('networkMap_theme', t);
+                localStorage.setItem('networkMap_landingTheme', t);
+            } catch (e) {}
+            if (!themeBtn) return;
+            if (t === 'dark') {
+                themeBtn.textContent = '☀️ Светлая';
+                themeBtn.setAttribute('aria-label', 'Включить светлую тему');
+            } else {
+                themeBtn.textContent = '🌙 Тёмная';
+                themeBtn.setAttribute('aria-label', 'Включить тёмную тему');
+            }
+        }
+        setTheme(document.documentElement.getAttribute('data-theme') || 'light');
+        if (themeBtn) {
+            themeBtn.addEventListener('click', function() {
+                var current = document.documentElement.getAttribute('data-theme') || 'light';
+                setTheme(current === 'dark' ? 'light' : 'dark');
+            });
+        }
+
         // Переключение табов
         document.addEventListener('click', function(e) {
             var tab = e.target.closest('.tab');
@@ -833,6 +1264,31 @@
                 .catch(function() { return null; });
         }
 
+        function fetchVisitStats() {
+            var token = getAuthToken && getAuthToken();
+            var opts = { credentials: 'include', headers: {} };
+            if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+            return fetch('api/admin/visits', opts)
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .catch(function() { return null; });
+        }
+
+        function escapeHtml(text) {
+            return String(text == null ? '' : text)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function compactLabel(text, max) {
+            var value = String(text == null ? '' : text).trim();
+            if (!value) return '—';
+            if (value.length <= max) return value;
+            return value.slice(0, Math.max(1, max - 1)) + '…';
+        }
+
         function renderOverview() {
             var total = orgs.length;
             var active = orgs.filter(function(o) { return o.status === 'active'; }).length;
@@ -842,13 +1298,45 @@
             var soonMs = soonDays * 24 * 60 * 60 * 1000;
             var expiring = 0, expired = 0;
             var sessions = 0;
+            var totalLimit = 0;
+            var expiredSubscriptions = 0;
+            var planCounts = {};
+            var orgsWithoutLimit = 0;
+            var orgsNoSubscriptionDate = 0;
+            var highLoadOrgs = 0;
+            var sessionsArray = [];
+            var orgCapacityList = [];
             orgs.forEach(function(o) {
-                sessions += o.activeSessions || 0;
+                var activeSessions = parseInt(o.activeSessions, 10);
+                if (isNaN(activeSessions) || activeSessions < 0) activeSessions = 0;
+                sessions += activeSessions;
+                sessionsArray.push(activeSessions);
+                var planKey = (o.planId || 'basic').toLowerCase();
+                planCounts[planKey] = (planCounts[planKey] || 0) + 1;
+                var rawLimit = parseInt(o.maxConcurrentUsers, 10);
+                if (!isNaN(rawLimit) && rawLimit > 0) {
+                    totalLimit += rawLimit;
+                    var loadPct = (activeSessions / rawLimit) * 100;
+                    if (loadPct >= 80) highLoadOrgs++;
+                    orgCapacityList.push({
+                        name: o.name || o.id || 'Организация',
+                        loadPct: loadPct,
+                        sessions: activeSessions,
+                        limit: rawLimit
+                    });
+                } else {
+                    orgsWithoutLimit++;
+                }
                 if (o.subscriptionEndsAt) {
                     var end = new Date(o.subscriptionEndsAt);
                     var diff = end - now;
-                    if (diff < 0) expired++;
+                    if (diff < 0) {
+                        expired++;
+                        expiredSubscriptions++;
+                    }
                     else if (diff <= soonMs) expiring++;
+                } else {
+                    orgsNoSubscriptionDate++;
                 }
             });
             document.getElementById('statOrgsTotal').textContent = total || '0';
@@ -856,6 +1344,141 @@
             document.getElementById('statSessionsActive').textContent = sessions || '0';
             document.getElementById('statExpiringSoon').textContent = expiring || '0';
             document.getElementById('statExpired').textContent = expired || '0';
+            var coverage = (totalLimit > 0) ? ((sessions / totalLimit) * 100) : 0;
+            document.getElementById('statCapacityCoverage').textContent = (coverage || 0).toFixed(1) + '%';
+            document.getElementById('statCapacitySplit').textContent = sessions + ' / ' + totalLimit;
+            document.getElementById('statAvgSessions').textContent = total ? (sessions / total).toFixed(1) : '0.0';
+            document.getElementById('statHighLoadOrgs').textContent = String(highLoadOrgs);
+            document.getElementById('statWithoutLimit').textContent = String(orgsWithoutLimit);
+            document.getElementById('statNoSubscriptionDate').textContent = String(orgsNoSubscriptionDate);
+
+            var median = 0;
+            if (sessionsArray.length) {
+                sessionsArray.sort(function(a, b) { return a - b; });
+                var mid = Math.floor(sessionsArray.length / 2);
+                median = (sessionsArray.length % 2 === 0)
+                    ? ((sessionsArray[mid - 1] + sessionsArray[mid]) / 2)
+                    : sessionsArray[mid];
+            }
+            document.getElementById('statMedianSessions').textContent = median.toFixed(1);
+
+            var donutEl = document.getElementById('statusDonutChart');
+            var statusTotal = Math.max(total, 1);
+            var activeDeg = Math.round((active / statusTotal) * 360);
+            var suspendedDeg = Math.round((suspended / statusTotal) * 360);
+            donutEl.style.setProperty('--donut-a', activeDeg + 'deg');
+            donutEl.style.setProperty('--donut-b', (activeDeg + suspendedDeg) + 'deg');
+            document.getElementById('statusLegendActive').textContent = String(active);
+            document.getElementById('statusLegendSuspended').textContent = String(suspended);
+            document.getElementById('statusLegendExpired').textContent = String(expiredSubscriptions);
+
+            var plansContainer = document.getElementById('plansBarChart');
+            var planEntries = Object.keys(planCounts)
+                .sort(function(a, b) { return planCounts[b] - planCounts[a]; })
+                .slice(0, 5);
+            plansContainer.innerHTML = '';
+            if (!planEntries.length) {
+                plansContainer.innerHTML = '<div class="hint">Нет данных по тарифам</div>';
+            } else {
+                var maxCount = planCounts[planEntries[0]] || 1;
+                planEntries.forEach(function(plan) {
+                    var value = planCounts[plan] || 0;
+                    var pct = Math.round((value / maxCount) * 100);
+                    var planLabel = compactLabel(plan, 18);
+                    var row = document.createElement('div');
+                    row.className = 'bar-row';
+                    row.innerHTML =
+                        '<span title="' + escapeHtml(plan) + '">' + escapeHtml(planLabel) + '</span>' +
+                        '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>' +
+                        '<strong>' + value + '</strong>';
+                    plansContainer.appendChild(row);
+                });
+            }
+
+            var capacityContainer = document.getElementById('capacityBarChart');
+            capacityContainer.innerHTML = '';
+            var topCapacity = orgCapacityList
+                .sort(function(a, b) { return b.loadPct - a.loadPct; })
+                .slice(0, 5);
+            if (!topCapacity.length) {
+                capacityContainer.innerHTML = '<div class="hint">Нет организаций с валидным лимитом</div>';
+            } else {
+                topCapacity.forEach(function(item) {
+                    var pctSafe = Math.max(0, Math.min(100, Math.round(item.loadPct)));
+                    var safeFullName = escapeHtml(item.name);
+                    var safeShortName = escapeHtml(compactLabel(item.name, 20));
+                    var row = document.createElement('div');
+                    var rowClass = 'bar-row';
+                    if (pctSafe >= 95) rowClass += ' danger';
+                    else if (pctSafe >= 80) rowClass += ' warn';
+                    row.className = rowClass;
+                    row.innerHTML =
+                        '<span title="' + safeFullName + '">' + safeShortName + '</span>' +
+                        '<span class="bar-track"><span class="bar-fill" style="width:' + pctSafe + '%"></span></span>' +
+                        '<strong>' + pctSafe + '%</strong>';
+                    capacityContainer.appendChild(row);
+                });
+            }
+
+            document.getElementById('riskLegendExpiring').textContent = String(expiring);
+            document.getElementById('riskLegendExpired').textContent = String(expiredSubscriptions);
+            document.getElementById('riskLegendNoDate').textContent = String(orgsNoSubscriptionDate);
+            document.getElementById('riskLegendSuspended').textContent = String(suspended);
+        }
+
+        function renderVisitOverview(data) {
+            var totalEl = document.getElementById('statVisitsTotal');
+            var dayEl = document.getElementById('statVisits24h');
+            var weekEl = document.getElementById('statVisits7d');
+            if (totalEl) totalEl.textContent = String((data && data.totalVisits) || 0);
+            if (dayEl) dayEl.textContent = String((data && data.visitsLast24h) || 0);
+            if (weekEl) weekEl.textContent = String((data && data.visitsLast7d) || 0);
+
+            var sourceChart = document.getElementById('visitSourcesChart');
+            if (sourceChart) {
+                sourceChart.innerHTML = '';
+                var sources = (data && Array.isArray(data.topSources)) ? data.topSources : [];
+                if (!sources.length) {
+                    sourceChart.innerHTML = '<div class="hint">Пока нет данных по источникам</div>';
+                } else {
+                    var max = sources[0].count || 1;
+                    sources.forEach(function(item) {
+                        var count = item.count || 0;
+                        var pct = Math.round((count / max) * 100);
+                        var label = compactLabel(item.source || 'unknown', 24);
+                        var row = document.createElement('div');
+                        row.className = 'bar-row';
+                        row.innerHTML =
+                            '<span title="' + escapeHtml(item.source || 'unknown') + '">' + escapeHtml(label) + '</span>' +
+                            '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>' +
+                            '<strong>' + count + '</strong>';
+                        sourceChart.appendChild(row);
+                    });
+                }
+            }
+
+            var recentEl = document.getElementById('recentVisitsList');
+            if (recentEl) {
+                recentEl.innerHTML = '';
+                var recent = (data && Array.isArray(data.recentVisits)) ? data.recentVisits : [];
+                if (!recent.length) {
+                    recentEl.innerHTML = '<div class="hint">Пока нет входов</div>';
+                } else {
+                    recent.forEach(function(item) {
+                        var at = item.at ? new Date(item.at) : null;
+                        var when = at && !isNaN(at.getTime()) ? at.toLocaleString('ru-RU') : '—';
+                        var who = item.username || '—';
+                        var src = compactLabel(item.source || 'unknown', 30);
+                        var row = document.createElement('div');
+                        row.className = 'bar-row';
+                        row.innerHTML =
+                            '<span title="' + escapeHtml(item.source || 'unknown') + '">' + escapeHtml(who + ' · ' + src) + '</span>' +
+                            '<span class="bar-track"><span class="bar-fill" style="width:100%"></span></span>' +
+                            '<strong>' + escapeHtml(when) + '</strong>';
+                        recentEl.appendChild(row);
+                    });
+                }
+            }
         }
 
         function getFilteredOrgs() {
@@ -1093,6 +1716,7 @@
                 if (!body || !body.organizations) return;
                 orgs = body.organizations;
                 renderOverview();
+                fetchVisitStats().then(renderVisitOverview);
                 renderOrganizationsTable();
                 renderPricingSelector();
                 renderSubscriptionsTable();
