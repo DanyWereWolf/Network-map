@@ -39,8 +39,8 @@ function findUserByUsername(username) {
 }
 
 var REMEMBER_EXPIRY_DAYS = 30;
-// Для теста авто-выхода: 1 мин. Для продакшена: 60 * 60 * 1000 (1 ч)
-var INACTIVITY_TIMEOUT_MS = 60 * 1000;
+// Авто-выход при отсутствии активности (1 ч)
+var INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000;
 var ACTIVITY_EVENT_THROTTLE_MS = 1000;
 var inactivityLogoutTimerId = null;
 var lastUserActivityAt = 0;
