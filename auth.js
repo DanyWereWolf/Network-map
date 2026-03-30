@@ -39,7 +39,8 @@ function findUserByUsername(username) {
 }
 
 var REMEMBER_EXPIRY_DAYS = 30;
-var INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000;
+// Для теста авто-выхода: 1 мин. Для продакшена: 60 * 60 * 1000 (1 ч)
+var INACTIVITY_TIMEOUT_MS = 60 * 1000;
 var ACTIVITY_EVENT_THROTTLE_MS = 1000;
 var inactivityLogoutTimerId = null;
 var lastUserActivityAt = 0;
@@ -226,17 +227,34 @@ function isAdmin() {
 
 function logout() {
     stopInactivityLogoutWatcher();
-    if (getApiBase()) {
-        var token = getAuthToken();
-        if (token) fetch(getApiBase() + '/api/auth/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } }).catch(function() {});
+    function clearClientAndRedirect() {
+        try {
+            sessionStorage.removeItem('networkMap_session');
+            sessionStorage.removeItem('networkMap_token');
+            sessionStorage.removeItem('networkMap_users');
+            localStorage.removeItem('networkMap_token');
+            localStorage.removeItem('networkMap_session');
+            localStorage.removeItem('networkMap_tokenExpiry');
+        } catch (e) {}
+        window.location.href = 'auth.html';
     }
-    sessionStorage.removeItem('networkMap_session');
-    sessionStorage.removeItem('networkMap_token');
-    sessionStorage.removeItem('networkMap_users');
-    localStorage.removeItem('networkMap_token');
-    localStorage.removeItem('networkMap_session');
-    localStorage.removeItem('networkMap_tokenExpiry');
-    window.location.href = 'auth.html';
+    var api = typeof getApiBase === 'function' ? getApiBase() : '';
+    var token = getAuthToken();
+    if (api && token) {
+        // Раньше редирект сразу после fetch — запрос обрывался, сессия на сервере не удалялась.
+        // keepalive + ожидание (с таймаутом) гарантируют вызов DELETE на сервере до очистки клиента.
+        var logoutUrl = api + '/api/auth/logout';
+        var timeoutMs = 2500;
+        var serverLogout = fetch(logoutUrl, {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token },
+            keepalive: true
+        }).catch(function() {});
+        var timeout = new Promise(function(resolve) { setTimeout(resolve, timeoutMs); });
+        Promise.race([serverLogout, timeout]).finally(clearClientAndRedirect);
+        return;
+    }
+    clearClientAndRedirect();
 }
 
 function stopInactivityLogoutWatcher() {

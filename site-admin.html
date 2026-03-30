@@ -1205,7 +1205,25 @@
             window.location.href = 'pricing.html';
         });
         document.getElementById('logoutBtn').addEventListener('click', function() {
-            fetch('api/auth/logout', { method: 'POST', credentials: 'include' }).finally(function() {
+            function getToken() {
+                try {
+                    var exp = localStorage.getItem('networkMap_tokenExpiry');
+                    if (exp && Date.now() <= parseInt(exp, 10)) {
+                        var t = localStorage.getItem('networkMap_token');
+                        if (t) return t;
+                    }
+                    return sessionStorage.getItem('networkMap_token') || '';
+                } catch (e) { return ''; }
+            }
+            var token = getToken();
+            var headers = {};
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            fetch('api/auth/logout', {
+                method: 'POST',
+                credentials: 'include',
+                headers: headers,
+                keepalive: true
+            }).catch(function() {}).finally(function() {
                 localStorage.removeItem('networkMap_token');
                 localStorage.removeItem('networkMap_session');
                 localStorage.removeItem('networkMap_tokenExpiry');
