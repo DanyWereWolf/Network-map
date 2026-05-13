@@ -61,11 +61,11 @@
         el.style.display = 'block';
     }
 
-    function forceSendState() {
+    function forceSendState(optionalData) {
         if (sendTimer) clearTimeout(sendTimer);
         sendTimer = null;
         lastOpSendTime = 0;
-        var toSend = pendingState;
+        var toSend = optionalData !== undefined && optionalData !== null ? optionalData : pendingState;
         pendingState = null;
         if (ws && ws.readyState === WebSocket.OPEN && toSend) {
             try {

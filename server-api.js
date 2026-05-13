@@ -861,6 +861,27 @@ function isSyncClientAdmin(clientId) {
     return user && user.role === 'admin';
 }
 
+/** Resolve cable endpoints from serialized map data (client uses full-array indices + optional uniqueIds). */
+function cableEndpointUniqueIdsFromSerialized(fullState, cable) {
+    var fu = cable.fromUniqueId;
+    var tu = cable.toUniqueId;
+    if (fu != null && fu !== '' && tu != null && tu !== '') {
+        return { fromUid: fu, toUid: tu };
+    }
+    if (!Array.isArray(fullState)) return { fromUid: fu, toUid: tu };
+    var fi = cable.from;
+    var ti = cable.to;
+    if ((fu == null || fu === '') && fi != null && fi >= 0 && fi < fullState.length) {
+        var a = fullState[fi];
+        if (a && a.type !== 'cable' && a.uniqueId != null) fu = a.uniqueId;
+    }
+    if ((tu == null || tu === '') && ti != null && ti >= 0 && ti < fullState.length) {
+        var b = fullState[ti];
+        if (b && b.type !== 'cable' && b.uniqueId != null) tu = b.uniqueId;
+    }
+    return { fromUid: fu, toUid: tu };
+}
+
 function mergeMapState(current, incoming) {
     if (!Array.isArray(incoming)) return current;
     if (incoming.length === 0) return incoming;
@@ -870,7 +891,7 @@ function mergeMapState(current, incoming) {
     var incomingObjs = incoming.filter(function(i) { return i.type !== 'cable'; });
     var incomingCables = incoming.filter(function(i) { return i.type === 'cable'; });
     var mergedObjs = [];
-    var i, j, o, inc, uid, idx, fromUid, toUid, fromIdx, toIdx, c, cableData, existing;
+    var i, j, o, inc, uid, idx, fromUid, toUid, fromIdx, toIdx, c, cableData, existing, ends;
     for (i = 0; i < currentObjs.length; i++) mergedObjs.push(currentObjs[i]);
     for (j = 0; j < incomingObjs.length; j++) {
         inc = incomingObjs[j];
@@ -881,8 +902,9 @@ function mergeMapState(current, incoming) {
     var mergedCables = [];
     for (i = 0; i < currentCables.length; i++) {
         c = currentCables[i];
-        fromUid = currentObjs[c.from] && currentObjs[c.from].uniqueId;
-        toUid = currentObjs[c.to] && currentObjs[c.to].uniqueId;
+        ends = cableEndpointUniqueIdsFromSerialized(current, c);
+        fromUid = ends.fromUid;
+        toUid = ends.toUid;
         if (fromUid == null || toUid == null) continue;
         fromIdx = mergedObjs.findIndex(function(o) { return o.uniqueId === fromUid; });
         toIdx = mergedObjs.findIndex(function(o) { return o.uniqueId === toUid; });
@@ -891,13 +913,15 @@ function mergeMapState(current, incoming) {
             if (c.uniqueId != null) cableData.uniqueId = c.uniqueId;
             if (c.distance !== undefined) cableData.distance = c.distance;
             if (c.cableName != null) cableData.cableName = c.cableName;
+            if (Array.isArray(c.routeUniqueIds) && c.routeUniqueIds.length >= 2) cableData.routeUniqueIds = c.routeUniqueIds.slice();
             mergedCables.push(cableData);
         }
     }
     for (j = 0; j < incomingCables.length; j++) {
         c = incomingCables[j];
-        fromUid = incomingObjs[c.from] && incomingObjs[c.from].uniqueId;
-        toUid = incomingObjs[c.to] && incomingObjs[c.to].uniqueId;
+        ends = cableEndpointUniqueIdsFromSerialized(incoming, c);
+        fromUid = ends.fromUid;
+        toUid = ends.toUid;
         if (fromUid == null || toUid == null) continue;
         fromIdx = mergedObjs.findIndex(function(o) { return o.uniqueId === fromUid; });
         toIdx = mergedObjs.findIndex(function(o) { return o.uniqueId === toUid; });
@@ -906,6 +930,7 @@ function mergeMapState(current, incoming) {
         if (c.uniqueId != null) cableData.uniqueId = c.uniqueId;
         if (c.distance !== undefined) cableData.distance = c.distance;
         if (c.cableName != null) cableData.cableName = c.cableName;
+        if (Array.isArray(c.routeUniqueIds) && c.routeUniqueIds.length >= 2) cableData.routeUniqueIds = c.routeUniqueIds.slice();
         existing = mergedCables.findIndex(function(x) { return x.uniqueId === c.uniqueId; });
         if (existing >= 0) mergedCables[existing] = cableData; else mergedCables.push(cableData);
     }
@@ -956,6 +981,7 @@ function applyOperationToState(state, op) {
             if (op.data.uniqueId != null) c.uniqueId = op.data.uniqueId;
             if (op.data.distance !== undefined) c.distance = op.data.distance;
             if (op.data.cableName != null) c.cableName = op.data.cableName;
+            if (Array.isArray(op.data.routeUniqueIds) && op.data.routeUniqueIds.length >= 2) c.routeUniqueIds = op.data.routeUniqueIds.slice();
             return state.concat([c]);
         }
         return state;
