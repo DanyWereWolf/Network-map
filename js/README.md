@@ -19,6 +19,6 @@
 | **history.js** | ActionTypes, logAction(), getHistory(), openHistoryModal(), setupHistoryModalHandlers(), updateHistoryBadge() |
 | **sync.js** | WebSocket-синхронизация карты, курсоры участников |
 
-Версию перед релизом меняют в **core/config.js** (`APP_VERSION`).
+Версию перед релизом синхронно меняют в **core/config.js** (`APP_VERSION`), в **package.json** / **package-lock.json** (поле `version`) и в **README.md** (раздел «История изменений»).
 
 **auth.html** подключает: js/core/config.js, auth.js

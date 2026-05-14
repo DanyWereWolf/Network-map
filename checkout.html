@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Оформление подписки — Карта сети</title>
+    <title>Оформление подписки — Карта оптической сети</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="stylesheet" href="auth.css">
     <link rel="stylesheet" href="cookie-consent.css">
@@ -434,7 +434,7 @@
             var widget = new cp.CloudPayments();
             widget.pay('charge', {
                 publicId: 'YOUR_CLOUDPAYMENTS_PUBLIC_ID',
-                description: 'Подписка «Карта сети» — ' + (cfg.name || ''),
+                description: 'Подписка «Карта оптической сети» — ' + (cfg.name || ''),
                 amount: amount,
                 currency: 'RUB',
                 accountId: payload.contactEmail || payload.organizationName || 'anonymous',

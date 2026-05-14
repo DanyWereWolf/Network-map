@@ -1070,7 +1070,7 @@ function setupEventListeners() {
         }
     });
 
-    ['mapFilterNode', 'mapFilterNodeAggregationOnly', 'mapFilterCross', 'mapFilterSleeve', 'mapFilterSupport', 'mapFilterAttachment', 'mapFilterOlt', 'mapFilterSplitter', 'mapFilterOnu', 'mapFilterCamera'].forEach(function(id) {
+    ['mapFilterNode', 'mapFilterNodeAggregationOnly', 'mapFilterCross', 'mapFilterSleeve', 'mapFilterSupport', 'mapFilterAttachment', 'mapFilterOlt', 'mapFilterSplitter', 'mapFilterOnu', 'mapFilterCamera', 'mapFilterMediaConverter'].forEach(function(id) {
         var el = document.getElementById(id);
         if (el) el.addEventListener('change', function() {
             if (typeof applyMapFilter === 'function') applyMapFilter();
@@ -1142,7 +1142,7 @@ function setupEventListeners() {
             const splitterSettingsGroup = document.getElementById('splitterSettingsGroup');
             const type = this.value;
 
-            const showName = ['node', 'cross', 'sleeve', 'support', 'attachment', 'olt', 'splitter', 'onu', 'camera'].indexOf(type) !== -1;
+            const showName = ['node', 'cross', 'sleeve', 'support', 'attachment', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter'].indexOf(type) !== -1;
             if (nameInputGroup) nameInputGroup.style.display = showName ? 'block' : 'none';
             if (sleeveSettingsGroup) sleeveSettingsGroup.style.display = type === 'sleeve' ? 'block' : 'none';
             if (crossSettingsGroup) crossSettingsGroup.style.display = type === 'cross' ? 'block' : 'none';
@@ -1153,11 +1153,13 @@ function setupEventListeners() {
             if (onuSettingsGroup) onuSettingsGroup.style.display = type === 'onu' ? 'block' : 'none';
             const cameraSettingsGroup = document.getElementById('cameraSettingsGroup');
             if (cameraSettingsGroup) cameraSettingsGroup.style.display = type === 'camera' ? 'block' : 'none';
+            const mediaConverterSettingsGroup = document.getElementById('mediaConverterSettingsGroup');
+            if (mediaConverterSettingsGroup) mediaConverterSettingsGroup.style.display = type === 'mediaConverter' ? 'block' : 'none';
 
             if (nameInputGroup) {
                 const nameLabel = nameInputGroup.querySelector('label');
                 if (nameLabel) {
-                    const labels = { cross: 'Имя кросса', sleeve: 'Название муфты', support: 'Подпись опоры', attachment: 'Название', node: 'Имя узла', olt: 'Имя OLT', splitter: 'Имя сплиттера', onu: 'Имя ONU', camera: 'Имя камеры' };
+                    const labels = { cross: 'Имя кросса', sleeve: 'Название муфты', support: 'Подпись опоры', attachment: 'Название', node: 'Имя узла', olt: 'Имя OLT', splitter: 'Имя сплиттера', onu: 'Имя ONU', camera: 'Имя камеры', mediaConverter: 'Название медиаконвертера' };
                     nameLabel.textContent = labels[type] || 'Имя';
                 }
             }
@@ -1170,7 +1172,7 @@ function setupEventListeners() {
             const newType = this.value;
             currentPlacementType = newType;
             
-            if (['node', 'cross', 'sleeve', 'olt', 'splitter', 'onu', 'camera'].indexOf(newType) !== -1) {
+            if (['node', 'cross', 'sleeve', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter'].indexOf(newType) !== -1) {
                 const nameInput = document.getElementById('objectName');
                 currentPlacementName = nameInput ? nameInput.value.trim() : '';
             } else {
@@ -1181,9 +1183,9 @@ function setupEventListeners() {
                 const nodeKindSelect = document.getElementById('nodeKind');
                 currentPlacementNodeKind = nodeKindSelect ? nodeKindSelect.value : 'network';
             }
-            if (['node', 'olt', 'onu', 'camera'].indexOf(newType) !== -1) {
+            if (['olt', 'onu', 'camera', 'mediaConverter'].indexOf(newType) !== -1) {
                 populateDeviceDatalists();
-                var mInp = newType === 'olt' ? document.getElementById('oltManufacturer') : (newType === 'onu' ? document.getElementById('onuManufacturer') : (newType === 'camera' ? document.getElementById('cameraManufacturer') : document.getElementById('nodeManufacturer')));
+                var mInp = newType === 'olt' ? document.getElementById('oltManufacturer') : (newType === 'onu' ? document.getElementById('onuManufacturer') : (newType === 'camera' ? document.getElementById('cameraManufacturer') : document.getElementById('mediaConverterManufacturer')));
                 var cat = 'node';
                 if (newType === 'camera') cat = 'camera';
                 else if (newType === 'olt') cat = 'olt';
@@ -1225,7 +1227,7 @@ function setupEventListeners() {
     setupDeviceManufacturerChangeHandlers('oltManufacturer', 'olt');
     setupDeviceManufacturerChangeHandlers('onuManufacturer', 'onu');
     setupDeviceManufacturerChangeHandlers('cameraManufacturer', 'camera');
-    setupDeviceManufacturerChangeHandlers('nodeManufacturer', 'node');
+    setupDeviceManufacturerChangeHandlers('mediaConverterManufacturer', 'node');
 
     function preventPasswordSuggestions(inputEl) {
         if (!inputEl || inputEl.tagName !== 'INPUT') return;
@@ -1668,6 +1670,13 @@ function handleMapClick(e) {
             const model = (document.getElementById('cameraModel') && document.getElementById('cameraModel').value) ? document.getElementById('cameraModel').value.trim() : '';
             createObject(type, name || '', coords, { manufacturer: manufacturer, model: model });
             currentPlacementName = name || '';
+        } else if (type === 'mediaConverter') {
+            const nameInputMc = document.getElementById('objectName');
+            const nameMc = currentPlacementName || (nameInputMc ? nameInputMc.value.trim() : '');
+            const manufacturerMc = (document.getElementById('mediaConverterManufacturer') && document.getElementById('mediaConverterManufacturer').value) ? document.getElementById('mediaConverterManufacturer').value.trim() : '';
+            const modelMc = (document.getElementById('mediaConverterModel') && document.getElementById('mediaConverterModel').value) ? document.getElementById('mediaConverterModel').value.trim() : '';
+            createObject(type, nameMc || '', coords, { manufacturer: manufacturerMc, model: modelMc });
+            currentPlacementName = nameMc || '';
         } else {
             createObject(type, '', coords);
         }
@@ -1725,7 +1734,7 @@ function handleMapClick(e) {
                     if (!obj || !obj.geometry || !obj.properties) return;
                     var tc = obj.properties.get('type');
                     if (tc === 'node' && getNodeAttachedSwitches(obj).length === 0) return;
-                    if (['cross', 'switch', 'node', 'support', 'attachment', 'camera'].indexOf(tc) === -1) return;
+                    if (['switch', 'node', 'support', 'attachment', 'camera', 'mediaConverter'].indexOf(tc) === -1) return;
                     if (obj === cableSource) return;
                     try {
                         var oc = obj.geometry.getCoordinates();
@@ -1766,8 +1775,8 @@ function handleMapClick(e) {
         if (clickedObject && clickedObject.geometry) {
             var objType = clickedObject.properties ? clickedObject.properties.get('type') : null;
 
-            if (objType === 'splitter' || objType === 'onu' || objType === 'camera') {
-                showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU или камеры. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
+            if (objType === 'splitter' || objType === 'onu' || objType === 'camera' || objType === 'mediaConverter') {
+                showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU, камеры или медиаконвертера. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
                 return;
             }
             
@@ -2039,6 +2048,9 @@ function updateCursorIndicator(e, objectType, objectCoord) {
             case 'camera':
                 text = 'Камера';
                 break;
+            case 'mediaConverter':
+                text = 'Медиаконвертер';
+                break;
             case 'cable':
                 text = 'Кабель';
                 break;
@@ -2172,6 +2184,13 @@ function updatePhantomPlacemark(type, coords) {
                 <circle cx="14" cy="14" r="2" fill="${color}" opacity="0.85"/>
             </svg>`;
             break;
+        case 'mediaConverter':
+            color = '#14b8a6';
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="7" width="20" height="14" rx="2" fill="${color}" stroke="white" stroke-width="2" opacity="0.6"/>
+                <path d="M10 14h8M14 10v8" stroke="white" stroke-width="2" stroke-linecap="round"/>
+            </svg>`;
+            break;
         default:
             color = '#94a3b8';
             iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -2180,7 +2199,7 @@ function updatePhantomPlacemark(type, coords) {
     }
     
     const clickableSize = 44;
-    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera') ? 32 : 28;
+    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter') ? 32 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
     
     const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
@@ -2768,6 +2787,14 @@ function createObject(type, name, coords, options = {}) {
             </svg>`;
             balloonContent = name ? 'Камера: ' + name : 'Камера';
             break;
+        case 'mediaConverter':
+            color = '#14b8a6';
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="7" width="20" height="14" rx="2" fill="${color}" stroke="white" stroke-width="2"/>
+                <path d="M10 14h8M14 10v8" stroke="white" stroke-width="2" stroke-linecap="round"/>
+            </svg>`;
+            balloonContent = name ? 'Медиаконвертер: ' + name : 'Медиаконвертер';
+            break;
         case 'switch':
             color = '#ea580c';
             iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
@@ -2788,7 +2815,7 @@ function createObject(type, name, coords, options = {}) {
     }
 
     const clickableSize = 44; 
-    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'switch') ? 32 : 28;
+    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'switch') ? 32 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
 
     const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
@@ -2863,6 +2890,12 @@ function createObject(type, name, coords, options = {}) {
         if (options.model) placemarkProperties.model = options.model;
         placemarkProperties.comment = options.comment || '';
     }
+    if (type === 'mediaConverter') {
+        if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
+        if (options.model) placemarkProperties.model = options.model;
+        placemarkProperties.comment = options.comment || '';
+        placemarkProperties.incomingFiber = null;
+    }
     if (!placemarkProperties.uniqueId) {
         placemarkProperties.uniqueId = 'obj-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
     }
@@ -2934,7 +2967,7 @@ function createObject(type, name, coords, options = {}) {
                 return;
             }
             
-            var targetName = fiberRoutingData.targetObj.properties.get('name') || (fiberRoutingData.targetType === 'onu' ? 'ONU' : 'Сплиттер');
+            var targetName = getFiberRoutingTargetLabel(fiberRoutingData.targetType, fiberRoutingData.targetObj);
             showWarning('Кликните по опоре или креплению для добавления точки маршрута, или по целевому объекту (' + escapeHtml(targetName) + ') для завершения.', 'Режим прокладки');
             return;
         }
@@ -2942,8 +2975,8 @@ function createObject(type, name, coords, options = {}) {
         if (currentCableTool && isEditMode) {
             var cableTypeVal = getEffectiveCableLayingType();
             if (handleCopperCablePlacemarkStep(placemark, type, cableTypeVal)) return;
-            if (type === 'splitter' || type === 'onu' || type === 'camera') {
-                showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU или камеры. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
+            if (type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter') {
+                showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU, камеры или медиаконвертера. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
                 return;
             }
             var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment', 'olt'];
@@ -2989,7 +3022,7 @@ function createObject(type, name, coords, options = {}) {
             return;
         }
 
-        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'switch')) {
+        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'switch')) {
             showObjectInfo(placemark);
             return;
         }
@@ -3092,6 +3125,9 @@ function deleteObject(obj, opts) {
                     var fiberNum = parseInt(parts.pop(), 10);
                     var cableId = parts.join('-');
                     if (!isNaN(fiberNum) && cableId) {
+                        if (conn.switchId != null && conn.switchPort != null) {
+                            clearNodeSwitchFiberPortOccupied(obj, conn.switchId, conn.switchPort);
+                        }
                         removeNodeConnectionLine(crossObj, cableId, fiberNum);
                         delete nodeConnections[key];
                         changed = true;
@@ -3133,6 +3169,29 @@ function deleteObject(obj, opts) {
                 }
             });
             if (changed) slot.properties.set('onuConnections', onuConn);
+        });
+    }
+    if (objType === 'mediaConverter' && objUniqueId) {
+        objects.forEach(function(slot) {
+            if (!slot.properties) return;
+            var t = slot.properties.get('type');
+            if (t !== 'cross' && t !== 'sleeve') return;
+            var mcConn = slot.properties.get('mediaConverterConnections');
+            if (!mcConn) return;
+            var changed = false;
+            Object.keys(mcConn).forEach(function(key) {
+                if (mcConn[key] && mcConn[key].mediaConverterId === objUniqueId) {
+                    var parts = key.split('-');
+                    var fiberNum = parseInt(parts.pop(), 10);
+                    var cableId = parts.join('-');
+                    if (!isNaN(fiberNum) && cableId) {
+                        removeOnuConnectionLine(slot, cableId, fiberNum);
+                    }
+                    delete mcConn[key];
+                    changed = true;
+                }
+            });
+            if (changed) slot.properties.set('mediaConverterConnections', mcConn);
         });
     }
     if (objType === 'splitter' && objUniqueId) {
@@ -3585,8 +3644,8 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
                 if (!skipSync) showError('Узел сети не может быть промежуточной точкой кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
                 return false;
             }
-            if (pt === 'splitter' || pt === 'onu' || pt === 'camera') {
-                if (!skipSync) showError('Сплиттер, ONU и камера не могут быть началом, концом или промежуточной точкой кабеля ВОЛС. Кабель прокладывается между муфтой, кроссом или OLT.', 'Недопустимое действие');
+            if (pt === 'splitter' || pt === 'onu' || pt === 'camera' || pt === 'mediaConverter') {
+                if (!skipSync) showError('Сплиттер, ONU, камера и медиаконвертер не могут быть началом, концом или промежуточной точкой кабеля ВОЛС. Кабель прокладывается между муфтой, кроссом или OLT.', 'Недопустимое действие');
                 return false;
             }
         }
@@ -3653,9 +3712,7 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
             var firstPt = points[0];
             var fUid = firstPt && firstPt.properties && firstPt.properties.get('uniqueId');
             var fType = firstPt && firstPt.properties && firstPt.properties.get('type');
-            if (pp.kind === 'cross' && fType === 'cross' && fUid === pp.crossUid) {
-                polyline.properties.set('copperPortFrom', pp.port);
-            } else if (pp.kind === 'node' && fType === 'node' && fUid === pp.nodeUid) {
+            if (pp.kind === 'node' && fType === 'node' && fUid === pp.nodeUid) {
                 polyline.properties.set('copperSwitchFromId', pp.switchId);
                 polyline.properties.set('copperPortFrom', pp.port);
             }
@@ -3777,8 +3834,22 @@ function markFiberAsUsed(obj, cableId, fiberNumber) {
     saveData();
 }
 
+function getFiberRoutingTargetLabel(targetType, targetObj) {
+    var n = targetObj && targetObj.properties && targetObj.properties.get('name');
+    if (n) return n;
+    if (targetType === 'onu') return 'ONU';
+    if (targetType === 'mediaConverter') return 'Медиаконвертер';
+    return 'Сплиттер';
+}
+
+function getFiberRoutingPreviewStroke(targetType) {
+    if (targetType === 'onu') return '#22c55e';
+    if (targetType === 'mediaConverter') return '#14b8a6';
+    return '#3b82f6';
+}
+
 /**
- * Проверяет, занята ли жила (cableId + fiberNumber) где-либо: порт OLT, подключение к узлу/ONU,
+ * Проверяет, занята ли жила (cableId + fiberNumber) где-либо: порт OLT, подключение к узлу/ONU/медиаконвертеру,
  * вход/выход сплиттера. exclude — контекст текущего назначения (чтобы не считать «занятой» ту же жилу при замене).
  * atCrossId/atSleeveId — проверять использование только в этом кроссе/муфте (жила имеет два конца,
  * подключение на одном конце не блокирует использование другого).
@@ -3801,7 +3872,10 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
         const uid = obj.properties.get('uniqueId');
 
         if (t === 'cross' || t === 'sleeve') {
-            if (onlyAtLocation && uid !== atCrossId && uid !== atSleeveId) continue;
+            if (onlyAtLocation) {
+                var matchLoc = (atCrossId && uid === atCrossId) || (atSleeveId && uid === atSleeveId);
+                if (!matchLoc) continue;
+            }
             const fiberConnections = obj.properties.get('fiberConnections') || [];
             const isConnected = fiberConnections.some(conn =>
                 (conn.from.cableId === cableId && conn.from.fiberNumber === fiberNumber) ||
@@ -3827,6 +3901,11 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
             if (onuConn[key]) {
                 if (exclude && exclude.type === 'onuConn' && exclude.sleeveId === uid) continue;
                 return { used: true, where: 'подключение к ONU' };
+            }
+            const mcConn = obj.properties.get('mediaConverterConnections') || {};
+            if (mcConn[key]) {
+                if (exclude && exclude.type === 'mediaConverterConn' && ((exclude.sleeveId && exclude.sleeveId === uid) || (exclude.crossId && exclude.crossId === uid))) continue;
+                return { used: true, where: 'подключение к медиаконвертеру' };
             }
             const splitterConn = obj.properties.get('splitterConnections') || {};
             if (splitterConn[key]) {
@@ -3855,6 +3934,13 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
             if (onuIncoming && onuIncoming.cableId === cableId && onuIncoming.fiberNumber === fiberNumber) {
                 if (exclude && exclude.type === 'onuConn' && exclude.onuId === uid) continue;
                 return { used: true, where: 'подключение к ONU' };
+            }
+        }
+        if (t === 'mediaConverter') {
+            const mcIncoming = obj.properties.get('incomingFiber');
+            if (mcIncoming && mcIncoming.cableId === cableId && mcIncoming.fiberNumber === fiberNumber) {
+                if (exclude && exclude.type === 'mediaConverterConn' && exclude.mediaConverterId === uid) continue;
+                return { used: true, where: 'подключение к медиаконвертеру' };
             }
         }
         if (t === 'splitter') {
@@ -4003,6 +4089,64 @@ function findAttachedSwitchOnNode(node, switchId) {
     return null;
 }
 
+/** Порт коммутатора под оптику с кросса: SFP, SFP+, комбо с SFP */
+function isSwitchPortSfpFiberType(portTypeLabel) {
+    if (!portTypeLabel || typeof portTypeLabel !== 'string') return false;
+    var L = portTypeLabel.trim();
+    return L === 'SFP' || L === 'SFP+' || L.indexOf('Комбо') === 0;
+}
+
+function collectFreeSfpPortOptionsOnNode(nodeObj) {
+    var out = [];
+    if (!nodeObj || !nodeObj.properties || nodeObj.properties.get('type') !== 'node') return out;
+    getNodeAttachedSwitches(nodeObj).forEach(function(sw) {
+        if (!sw || !sw.uniqueId) return;
+        var types = sw.switchPortTypes || [];
+        var fus = sw.fiberPortUsage || {};
+        var swLabel = (sw.name || '').trim() || 'Коммутатор';
+        for (var pi = 0; pi < types.length; pi++) {
+            var portNum = pi + 1;
+            if (!isSwitchPortSfpFiberType(types[pi])) continue;
+            if (fus[String(portNum)]) continue;
+            out.push({
+                switchId: sw.uniqueId,
+                switchLabel: swLabel,
+                port: portNum,
+                portTypeLabel: types[pi]
+            });
+        }
+    });
+    return out;
+}
+
+function markNodeSwitchFiberPortOccupied(nodeObj, switchId, portNum, fiberUsageKey) {
+    if (!nodeObj || !switchId || portNum == null) return false;
+    var arr = getNodeAttachedSwitches(nodeObj).slice();
+    var ix = arr.findIndex(function(s) { return s && s.uniqueId === switchId; });
+    if (ix < 0) return false;
+    var sw = Object.assign({}, arr[ix]);
+    var fu = Object.assign({}, sw.fiberPortUsage || {});
+    fu[String(portNum)] = fiberUsageKey;
+    sw.fiberPortUsage = fu;
+    arr[ix] = sw;
+    nodeObj.properties.set('attachedSwitches', arr);
+    return true;
+}
+
+function clearNodeSwitchFiberPortOccupied(nodeObj, switchId, portNum) {
+    if (!nodeObj || !switchId || portNum == null) return false;
+    var arr = getNodeAttachedSwitches(nodeObj).slice();
+    var ix = arr.findIndex(function(s) { return s && s.uniqueId === switchId; });
+    if (ix < 0) return false;
+    var sw = Object.assign({}, arr[ix]);
+    var fu = Object.assign({}, sw.fiberPortUsage || {});
+    delete fu[String(portNum)];
+    sw.fiberPortUsage = fu;
+    arr[ix] = sw;
+    nodeObj.properties.set('attachedSwitches', arr);
+    return true;
+}
+
 function resolveSwitchIdForCopperNodeClick(node) {
     var arr = getNodeAttachedSwitches(node);
     if (arr.length === 0) return null;
@@ -4032,7 +4176,8 @@ function migrateStandaloneSwitchesIntoNodes() {
             switchPortTypes: Array.isArray(sw.properties.get('switchPortTypes')) && sw.properties.get('switchPortTypes').length
                 ? sw.properties.get('switchPortTypes').slice()
                 : buildSwitchPortTypesArray(24, 'RJ45 10/100/1000'),
-            copperPortUsage: Object.assign({}, sw.properties.get('copperPortUsage') || {})
+            copperPortUsage: Object.assign({}, sw.properties.get('copperPortUsage') || {}),
+            fiberPortUsage: Object.assign({}, sw.properties.get('fiberPortUsage') || {})
         };
         var mMig = (sw.properties.get('manufacturer') || '').trim();
         var moMig = (sw.properties.get('model') || '').trim();
@@ -4092,7 +4237,8 @@ function addAttachedSwitchToNode(node, name, portCount, defaultKind, manufacture
         uniqueId: uid,
         name: (name || '').trim(),
         switchPortTypes: buildSwitchPortTypesArray(nPorts, dk),
-        copperPortUsage: {}
+        copperPortUsage: {},
+        fiberPortUsage: {}
     };
     if (mfr) entry.manufacturer = mfr;
     if (mod) entry.model = mod;
@@ -4109,18 +4255,149 @@ function removeAttachedSwitchFromNode(node, switchId) {
         if (typeof showError === 'function') showError('К этому коммутатору подключены медные кабели. Сначала удалите или переназначьте кабели.', 'Нельзя удалить');
         return false;
     }
+    var swDel = findAttachedSwitchOnNode(node, switchId);
+    if (swDel && swDel.fiberPortUsage && Object.keys(swDel.fiberPortUsage).length) {
+        if (typeof showError === 'function') showError('К этому коммутатору с кросса подключены оптические жилы (порты SFP). Сначала отключите их в карточке кросса.', 'Нельзя удалить');
+        return false;
+    }
     var arr = getNodeAttachedSwitches(node).filter(function(s) { return s.uniqueId !== switchId; });
     node.properties.set('attachedSwitches', arr);
     return true;
 }
 
+function isCopperLanEndDeviceType(t) {
+    return t === 'camera' || t === 'mediaConverter';
+}
+
 function cameraHasCopperCable(camObj) {
-    if (!camObj || !camObj.properties || camObj.properties.get('type') !== 'camera') return false;
+    if (!camObj || !camObj.properties || !isCopperLanEndDeviceType(camObj.properties.get('type'))) return false;
     return objects.some(function(c) {
         if (!c || !c.properties || c.properties.get('type') !== 'cable') return false;
         if (!isCopperCableType(c.properties.get('cableType'))) return false;
         return c.properties.get('from') === camObj || c.properties.get('to') === camObj;
     });
+}
+
+/** Для карточки камеры: медный аплинк и узел, по которому искать жилы кросса для трассировки. */
+function getCameraCopperUpstreamTraceContext(cameraObj) {
+    if (!cameraObj || !cameraObj.properties || cameraObj.properties.get('type') !== 'camera') return { kind: 'none' };
+    var cable = null;
+    for (var ci = 0; ci < objects.length; ci++) {
+        var c = objects[ci];
+        if (!c || !c.properties || c.properties.get('type') !== 'cable') continue;
+        if (!isCopperCableType(c.properties.get('cableType'))) continue;
+        if (c.properties.get('from') === cameraObj || c.properties.get('to') === cameraObj) {
+            cable = c;
+            break;
+        }
+    }
+    if (!cable) return { kind: 'none' };
+    var from = cable.properties.get('from');
+    var to = cable.properties.get('to');
+    var other = from === cameraObj ? to : (to === cameraObj ? from : null);
+    if (!other || !other.properties) return { kind: 'none', cable: cable };
+    var ot = other.properties.get('type');
+    if (ot === 'node') {
+        var swId = null;
+        if (from === cameraObj && to === other) {
+            swId = cable.properties.get('copperSwitchToId');
+        } else if (to === cameraObj && from === other) {
+            swId = cable.properties.get('copperSwitchFromId');
+        }
+        return { kind: 'node', nodeObj: other, cable: cable, copperSwitchId: swId || null };
+    }
+    if (ot === 'switch') {
+        var pid = other.properties.get('parentNodeId') || '';
+        if (!pid) return { kind: 'switch_no_parent', cable: cable };
+        var parentNode = objects.find(function(n) {
+            return n.properties && n.properties.get('type') === 'node' && n.properties.get('uniqueId') === pid;
+        });
+        if (!parentNode) return { kind: 'switch_no_parent', cable: cable };
+        return { kind: 'node', nodeObj: parentNode, cable: cable, copperSwitchId: other.properties.get('uniqueId') || null };
+    }
+    if (ot === 'mediaConverter') {
+        var inc = other.properties.get('incomingFiber');
+        return { kind: 'media_converter', mcObj: other, incomingFiber: inc && inc.cableId ? inc : null, cable: cable };
+    }
+    return { kind: 'unknown', cable: cable };
+}
+
+function filterNodeFibersBySwitchIfPossible(nodeUniqueId, preferSwitchId) {
+    var list = getNodeConnectedFibers(nodeUniqueId);
+    if (!preferSwitchId || list.length === 0) return list;
+    var filtered = list.filter(function(conn) {
+        var nc = conn.crossObj && conn.crossObj.properties ? conn.crossObj.properties.get('nodeConnections') : null;
+        if (!nc) return false;
+        var key = conn.cableId + '-' + conn.fiberNumber;
+        var row = nc[key];
+        return row && row.switchId === preferSwitchId;
+    });
+    return filtered.length ? filtered : list;
+}
+
+function buildCameraTraceSectionHtml(cameraObj) {
+    var ctx = getCameraCopperUpstreamTraceContext(cameraObj);
+    var html = '';
+    if (ctx.kind === 'none') {
+        html += '<div class="camera-trace-section" style="margin-bottom: 20px; padding: 16px; background: #fef3c7; border-radius: 6px; border: 1px solid #fde68a;">';
+        html += '<h4 style="margin: 0 0 8px 0; color: #92400e; font-size: 0.9375rem; font-weight: 600;">Трассировка</h4>';
+        html += '<div style="color: #92400e; font-size: 0.875rem;">Подключите камеру <strong>медным кабелем</strong> к коммутатору узла сети, к отдельному коммутатору на карте или к медиаконвертеру с оптикой — здесь появятся кнопки трассировки оптического пути.</div>';
+        html += '</div>';
+        return html;
+    }
+    if (ctx.kind === 'switch_no_parent' || ctx.kind === 'unknown') {
+        html += '<div class="camera-trace-section" style="margin-bottom: 20px; padding: 16px; background: #fef3c7; border-radius: 6px; border: 1px solid #fde68a;">';
+        html += '<h4 style="margin: 0 0 8px 0; color: #92400e; font-size: 0.9375rem; font-weight: 600;">Трассировка</h4>';
+        html += '<div style="color: #92400e; font-size: 0.875rem;">Медный кабель найден, но не удалось определить узел сети для оптических жил. Проверьте привязку коммутатора к узлу.</div>';
+        html += '</div>';
+        return html;
+    }
+    if (ctx.kind === 'media_converter') {
+        html += '<div class="camera-trace-section" style="margin-bottom: 20px; padding: 16px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0;">';
+        html += '<h4 style="margin: 0 0 8px 0; color: #166534; font-size: 0.9375rem; font-weight: 600;">Трассировка</h4>';
+        html += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 12px;">Камера подключена медным кабелем к <strong>медиаконвертеру</strong>. Оптический путь начинается с входной жилы МК (муфта или кросс).</p>';
+        if (ctx.incomingFiber && ctx.incomingFiber.cableId != null && ctx.incomingFiber.fiberNumber != null) {
+            var cid = escapeHtml(String(ctx.incomingFiber.cableId));
+            var fn = parseInt(ctx.incomingFiber.fiberNumber, 10);
+            html += '<button type="button" class="btn-trace-camera-mc-incoming" data-cable-id="' + cid + '" data-fiber-number="' + fn + '" style="padding: 10px 14px; background: #f59e0b; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600;">🔍 Трассировка по входной жиле МК</button>';
+        } else {
+            html += '<div style="color: #92400e; font-size: 0.875rem;">Сначала подключите к медиаконвертеру оптическую жилу с муфты или кросса.</div>';
+        }
+        html += '</div>';
+        return html;
+    }
+    if (ctx.kind === 'node' && ctx.nodeObj) {
+        var nodeUid = getObjectUniqueId(ctx.nodeObj);
+        var nodeTitle = ctx.nodeObj.properties.get('name') || 'Узел сети';
+        var fibers = filterNodeFibersBySwitchIfPossible(nodeUid, ctx.copperSwitchId);
+        html += '<div class="connected-fibers-section camera-trace-section" style="margin-bottom: 20px; padding: 16px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0;">';
+        html += '<h4 style="margin: 0 0 8px 0; color: #166534; font-size: 0.9375rem; font-weight: 600;">Трассировка</h4>';
+        html += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 12px;">Оптические жилы с кроссов, подключённые к узлу «' + escapeHtml(nodeTitle) + '». Выберите жилу, чтобы просмотреть полную трассу (как в карточке узла).</p>';
+        if (fibers.length > 0) {
+            html += '<div style="display: flex; flex-direction: column; gap: 8px;">';
+            fibers.forEach(function(conn) {
+                html += '<div class="fiber-connection-item" style="display: flex; align-items: center; justify-content: space-between; padding: 10px; background: var(--bg-card); border-radius: 4px; border: 1px solid #dcfce7;">';
+                html += '<div style="flex: 1;">';
+                html += '<div style="font-weight: 600; color: #166534;">Жила ' + conn.fiberNumber + '</div>';
+                html += '<div style="font-size: 0.8rem; color: var(--text-secondary);">От кросса: ' + escapeHtml(conn.crossName) + '</div>';
+                if (conn.fiberLabel) {
+                    html += '<div style="font-size: 0.75rem; color: #8b5cf6;">📝 ' + escapeHtml(conn.fiberLabel) + '</div>';
+                }
+                html += '</div>';
+                html += '<button type="button" class="btn-trace-from-node" data-cross-id="' + escapeHtml(conn.crossUniqueId) + '" data-cable-id="' + escapeHtml(conn.cableId) + '" data-fiber-number="' + conn.fiberNumber + '" style="padding: 8px 12px; background: #f59e0b; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">🔍 Трассировка</button>';
+                html += '</div>';
+            });
+            html += '</div>';
+        } else {
+            html += '<div style="padding: 12px; background: #fef3c7; border-radius: 6px; border: 1px solid #fde68a;">';
+            html += '<div style="color: #92400e; font-size: 0.875rem;">К этому узлу не подключено жил с кросса — трассировка оптики недоступна.</div>';
+            html += '<div style="color: #a16207; font-size: 0.8rem; margin-top: 4px;">Подключите SFP-порт коммутатора к жиле в карточке кросса.</div>';
+            html += '</div>';
+        }
+        html += '</div>';
+        return html;
+    }
+    return html;
 }
 
 function validateCopperCableRoute(points, skipSync, copperMeta) {
@@ -4143,33 +4420,44 @@ function validateCopperCableRoute(points, skipSync, copperMeta) {
     var pL = points[points.length - 1];
     var t0 = p0.properties.get('type');
     var tL = pL.properties.get('type');
-    var cam0 = t0 === 'camera';
-    var camL = tL === 'camera';
+    var cam0 = isCopperLanEndDeviceType(t0);
+    var camL = isCopperLanEndDeviceType(tL);
     if (cam0 && camL) {
-        if (!skipSync) showError('Нельзя соединить две камеры одним медным кабелем.', 'Недопустимое действие');
+        var mcCamPair = (t0 === 'mediaConverter' && tL === 'camera') || (t0 === 'camera' && tL === 'mediaConverter');
+        if (mcCamPair) {
+            var mcPm = t0 === 'mediaConverter' ? p0 : pL;
+            var camPm = t0 === 'camera' ? p0 : pL;
+            var incMc = mcPm.properties.get('incomingFiber');
+            if (!incMc || !incMc.cableId) {
+                if (!skipSync) showError('Медный кабель к камере от медиаконвертера возможен только после подключения оптической жилы с муфты или кросса.', 'Недопустимое действие');
+                return false;
+            }
+            if (cameraHasCopperCable(mcPm) || cameraHasCopperCable(camPm)) {
+                if (!skipSync) showError('К этому устройству уже подключён медный кабель.', 'Подключение');
+                return false;
+            }
+            return true;
+        }
+        if (!skipSync) showError('Нельзя соединить два конечных устройства (камера или медиаконвертер) одним медным кабелем.', 'Недопустимое действие');
         return false;
     }
     if (cam0 || camL) {
         var camPm = cam0 ? p0 : pL;
         var otherPm = cam0 ? pL : p0;
         var ot = otherPm.properties.get('type');
-        if (ot === 'cross') {
-            if (!skipSync) showError('Камеру можно подключить только от коммутатора (не от медного порта кросса).', 'Недопустимое действие');
-            return false;
-        }
         if (ot !== 'node' && ot !== 'switch') {
-            if (!skipSync) showError('Камеру можно подключить только медным кабелем от коммутатора.', 'Недопустимое действие');
+            if (!skipSync) showError('Камеру или медиаконвертер можно подключить только медным кабелем от коммутатора (узел сети или отдельный коммутатор на карте).', 'Недопустимое действие');
             return false;
         }
         var sidNeed = cam0 ? copperMeta.copperSwitchToId : copperMeta.copperSwitchFromId;
         if (ot === 'node') {
             if (!sidNeed || !findAttachedSwitchOnNode(otherPm, sidNeed)) {
-                if (!skipSync) showError('Для линии к камере выберите коммутатор в узле сети.', 'Недопустимое действие');
+                if (!skipSync) showError('Для линии к камере или медиаконвертеру выберите коммутатор в узле сети.', 'Недопустимое действие');
                 return false;
             }
         }
         if (cameraHasCopperCable(camPm)) {
-            if (!skipSync) showError('К этой камере уже подключён медный кабель.', 'Камера');
+            if (!skipSync) showError('К этому устройству уже подключён медный кабель.', 'Подключение');
             return false;
         }
         return true;
@@ -4177,8 +4465,11 @@ function validateCopperCableRoute(points, skipSync, copperMeta) {
     function endOk(obj, isFirst) {
         if (!obj || !obj.properties) return false;
         var t = obj.properties.get('type');
-        if (t === 'cross') return true;
         if (t === 'switch') return true;
+        if (t === 'mediaConverter') {
+            var incMc = obj.properties.get('incomingFiber');
+            return !!(incMc && incMc.cableId);
+        }
         if (t === 'node') {
             var sid = isFirst ? copperMeta.copperSwitchFromId : copperMeta.copperSwitchToId;
             return !!sid && !!findAttachedSwitchOnNode(obj, sid);
@@ -4186,11 +4477,11 @@ function validateCopperCableRoute(points, skipSync, copperMeta) {
         return false;
     }
     if (!endOk(points[0], true)) {
-        if (!skipSync) showError('Медный кабель: начало маршрута — оптический кросс или узел сети с коммутатором.', 'Недопустимое действие');
+        if (!skipSync) showError('Медный кабель: начало маршрута — узел сети с коммутатором, отдельный коммутатор на карте или медиаконвертер с подключённой оптической жилой.', 'Недопустимое действие');
         return false;
     }
     if (!endOk(points[points.length - 1], false)) {
-        if (!skipSync) showError('Медный кабель: конец маршрута — оптический кросс или узел сети с коммутатором.', 'Недопустимое действие');
+        if (!skipSync) showError('Медный кабель: конец маршрута — узел сети с коммутатором, отдельный коммутатор на карте или медиаконвертер с подключённой оптической жилой.', 'Недопустимое действие');
         return false;
     }
     if (t0 === 'switch' && tL === 'switch') {
@@ -4305,15 +4596,15 @@ function rebuildAllCopperPortUsageFromCables() {
 }
 
 /**
- * HTML <option> для выбора медного порта на кроссе / коммутаторе в узле.
+ * HTML <option> для выбора медного порта на коммутаторе (в т.ч. в узле).
  * @param {'optional'|'required'} placeholderMode optional — строка «не назначено»; required — обязательный выбор
  */
 function buildCopperPortOptionsHtml(obj, selected, switchIdForNode, excludeCableUniqueId, placeholderMode) {
     placeholderMode = placeholderMode || 'optional';
     if (!obj || !obj.properties) return '<option value="">—</option>';
     var t = obj.properties.get('type');
-    if (t === 'camera') {
-        return '<option value="" selected>— (камера — порт не задаётся) —</option>';
+    if (t === 'camera' || t === 'mediaConverter') {
+        return '<option value="" selected>— (порт не задаётся) —</option>';
     }
     var max = 0;
     var usage = {};
@@ -4424,25 +4715,76 @@ function openCopperEndPortModal(points, cableTypeVal, copperMeta) {
     if (!endObj || !endObj.properties || !startObj || !startObj.properties) return;
     var endType = endObj.properties.get('type');
 
-    if (endType === 'camera') {
+    if (isCopperLanEndDeviceType(endType)) {
         if (cameraHasCopperCable(endObj)) {
-            if (typeof showError === 'function') showError('К этой камере уже подключён медный кабель.', 'Камера');
+            if (typeof showError === 'function') showError('К этому устройству уже подключён медный кабель.', 'Подключение');
             return;
         }
         if (tryCreateCopperToCameraWithPendingPort(points, cableTypeVal, copperMeta)) return;
 
         var startType = startObj.properties.get('type');
-        if (startType === 'cross') {
-            if (typeof showError === 'function') showError('Камеру можно подключить только от коммутатора.', 'Недопустимое действие');
+        if (startType === 'cross' || startType === 'sleeve') {
+            if (typeof showError === 'function') showError('Камеру или медиаконвертер можно подключить только от коммутатора.', 'Недопустимое действие');
             return;
         }
-        if (startType !== 'node' && startType !== 'switch') {
-            if (typeof showError === 'function') showError('Камеру можно подключить только от коммутатора.', 'Недопустимое действие');
+        if (startType === 'camera' && endType === 'mediaConverter') {
+            var incEndMc = endObj.properties.get('incomingFiber');
+            if (!incEndMc || !incEndMc.cableId) {
+                if (typeof showError === 'function') showError('Сначала подключите оптическую жилу к медиаконвертеру с муфты или кросса.', 'Недопустимое действие');
+                return;
+            }
+            if (cameraHasCopperCable(startObj) || cameraHasCopperCable(endObj)) {
+                if (typeof showError === 'function') showError('К этому устройству уже подключён медный кабель.', 'Подключение');
+                return;
+            }
+            var cmCamMc = Object.assign({}, copperMeta, { copperPortFrom: null, copperPortTo: null, copperSwitchFromId: null, copperSwitchToId: null });
+            if (createCableFromPoints(points, cableTypeVal, null, null, false, false, cmCamMc)) {
+                finishCopperCableToolSession();
+                var lastCmMc = objects[objects.length - 1];
+                if (lastCmMc && lastCmMc.properties && lastCmMc.properties.get('type') === 'cable' && isCopperCableType(lastCmMc.properties.get('cableType'))) {
+                    if (typeof showCableInfo === 'function') showCableInfo(lastCmMc);
+                }
+            }
+            return;
+        }
+        if (startType === 'mediaConverter' && endType === 'camera') {
+            var incStartMc = startObj.properties.get('incomingFiber');
+            if (!incStartMc || !incStartMc.cableId) {
+                if (typeof showError === 'function') showError('Сначала подключите оптическую жилу к медиаконвертеру с муфты или кросса.', 'Недопустимое действие');
+                return;
+            }
+            if (cameraHasCopperCable(startObj) || cameraHasCopperCable(endObj)) {
+                if (typeof showError === 'function') showError('К этому устройству уже подключён медный кабель.', 'Подключение');
+                return;
+            }
+            var cmMcCam = Object.assign({}, copperMeta, { copperPortFrom: null, copperPortTo: null, copperSwitchFromId: null, copperSwitchToId: null });
+            if (createCableFromPoints(points, cableTypeVal, null, null, false, false, cmMcCam)) {
+                finishCopperCableToolSession();
+                var lastMcCam = objects[objects.length - 1];
+                if (lastMcCam && lastMcCam.properties && lastMcCam.properties.get('type') === 'cable' && isCopperCableType(lastMcCam.properties.get('cableType'))) {
+                    if (typeof showCableInfo === 'function') showCableInfo(lastMcCam);
+                }
+            }
+            return;
+        }
+        if (startType === 'mediaConverter' && endType === 'mediaConverter') {
+            if (typeof showError === 'function') showError('Нельзя соединять медным кабелем два медиаконвертера. От медиаконвертера прокладывайте кабель к узлу сети с коммутатором или к камере.', 'Недопустимое действие');
+            return;
+        }
+        if (startType === 'mediaConverter') {
+            var incMcStart = startObj.properties.get('incomingFiber');
+            if (!incMcStart || !incMcStart.cableId) {
+                if (typeof showError === 'function') showError('Сначала подключите оптическую жилу к медиаконвертеру с муфты или кросса.', 'Недопустимое действие');
+                return;
+            }
+        }
+        if (startType !== 'node' && startType !== 'switch' && startType !== 'mediaConverter') {
+            if (typeof showError === 'function') showError('Камеру или медиаконвертер можно подключить только от коммутатора.', 'Недопустимое действие');
             return;
         }
         var swStartId = startType === 'node' ? (copperMeta.copperSwitchFromId || cableSourceCopperSwitchId) : null;
         if (startType === 'node' && !swStartId) {
-            if (typeof showError === 'function') showError('Коммутатор для начала линии к камере не выбран.', 'Недопустимое действие');
+            if (typeof showError === 'function') showError('Коммутатор для начала линии к устройству не выбран.', 'Недопустимое действие');
             return;
         }
 
@@ -4456,7 +4798,7 @@ function openCopperEndPortModal(points, cableTypeVal, copperMeta) {
 
         modalTitleCam.textContent = 'Медный кабель: порт коммутатора';
         var labelFromCam = startType === 'switch' ? 'Порт на коммутаторе (начало маршрута)' : 'Порт на коммутаторе в узле (начало маршрута)';
-        var htmlCam = '<div class="info-section"><p style="font-size:0.875rem;color:var(--text-secondary);margin-bottom:12px;">На камере порт не задаётся. Выберите свободный порт коммутатора на <strong>начале</strong> линии. После прокладки режим «Проложить кабель» выключится.</p>';
+        var htmlCam = '<div class="info-section"><p style="font-size:0.875rem;color:var(--text-secondary);margin-bottom:12px;">На камере и медиаконвертере порт не задаётся. Выберите свободный порт коммутатора на <strong>начале</strong> линии. После прокладки режим «Проложить кабель» выключится.</p>';
         htmlCam += '<div class="form-group" style="margin-bottom:12px;"><label for="copperEndPortSel" style="font-size:0.8125rem;">' + escapeHtml(labelFromCam) + '</label>';
         htmlCam += '<select id="copperEndPortSel" class="form-select">' + buildCopperPortOptionsHtml(startObj, null, swStartId, null, 'required') + '</select></div>';
         htmlCam += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">';
@@ -4511,7 +4853,7 @@ function openCopperEndPortModal(points, cableTypeVal, copperMeta) {
         return;
     }
 
-    if (endType !== 'cross' && endType !== 'node') return;
+    if (endType !== 'node' && endType !== 'switch') return;
     var toSw = endType === 'node' ? copperMeta.copperSwitchToId : null;
     if (endType === 'node' && !toSw) return;
 
@@ -4524,8 +4866,8 @@ function openCopperEndPortModal(points, cableTypeVal, copperMeta) {
     if (!modal || !modalTitle || !modalContent) return;
 
     modalTitle.textContent = 'Медный кабель: порт на конце';
-    var labelTo = endType === 'cross' ? 'Порт на кроссе (конец маршрута)' : 'Порт на коммутаторе (конец маршрута)';
-    var htmlM = '<div class="info-section"><p style="font-size:0.875rem;color:var(--text-secondary);margin-bottom:12px;">Выберите порт для подключения на <strong>конце</strong> линии. После прокладки режим «Проложить кабель» выключится — следующий медный кабель начните снова с кнопки на панели или «Подключить» у порта.</p>';
+    var labelTo = endType === 'switch' ? 'Порт на коммутаторе (конец маршрута)' : 'Порт на коммутаторе в узле (конец маршрута)';
+    var htmlM = '<div class="info-section"><p style="font-size:0.875rem;color:var(--text-secondary);margin-bottom:12px;">Выберите порт для подключения на <strong>конце</strong> линии. После прокладки режим «Проложить кабель» выключится — следующий медный кабель начните снова с кнопки на панели или «Подключить» у порта коммутатора.</p>';
     htmlM += '<div class="form-group" style="margin-bottom:12px;"><label for="copperEndPortSel" style="font-size:0.8125rem;">' + escapeHtml(labelTo) + '</label>';
     htmlM += '<select id="copperEndPortSel" class="form-select">' + buildCopperPortOptionsHtml(endObj, null, toSw, null, 'required') + '</select></div>';
     htmlM += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">';
@@ -4578,29 +4920,36 @@ function openCopperEndPortModal(points, cableTypeVal, copperMeta) {
 function handleCopperCablePlacemarkStep(placemark, type, cableTypeVal) {
     if (!isCopperCableType(cableTypeVal)) return false;
     if (type === 'splitter' || type === 'onu') {
-        showError('Для медного кабеля используйте кросс, узел с коммутатором, опору или крепление узла.', 'Недопустимое действие');
+        showError('Для медного кабеля используйте узел с коммутатором, камеру, медиаконвертер, опору или крепление узла.', 'Недопустимое действие');
         return true;
     }
-    if (type === 'sleeve' || type === 'olt') {
-        showError('Медный кабель не прокладывается к муфте или OLT. Концы маршрута — кросс или узел сети с коммутатором.', 'Недопустимое действие');
+    if (type === 'sleeve' || type === 'cross' || type === 'olt') {
+        showError('Медный кабель не прокладывается к муфте, кроссу или OLT. Концы маршрута — узел сети с коммутатором, камера или медиаконвертер (с подключённой оптической жилой).', 'Недопустимое действие');
         return true;
     }
     if (type === 'node' && getNodeAttachedSwitches(placemark).length === 0) {
         showError('У этого узла нет коммутаторов. Добавьте коммутатор в карточке узла.', 'Недопустимое действие');
         return true;
     }
-    var ep = ['cross', 'switch', 'node', 'support', 'attachment', 'camera'];
+    var ep = ['switch', 'node', 'support', 'attachment', 'camera', 'mediaConverter'];
     if (ep.indexOf(type) === -1) {
-        showError('Медный кабель: доступны только кросс, узел с коммутатором, камера, опора и крепление узла.', 'Недопустимое действие');
+        showError('Медный кабель: доступны только узел с коммутатором, камера, медиаконвертер, опора и крепление узла.', 'Недопустимое действие');
         return true;
     }
     if (!cableSource) {
         if (type === 'support' || type === 'attachment') {
-            showError('Начало медного кабеля должно быть кроссом или узлом с коммутатором. Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
+            showError('Начало медного кабеля должно быть узлом с коммутатором или медиаконвертером (кнопка в карточке при наличии оптической жилы). Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
             return true;
         }
-        if (type === 'camera') {
-            showError('Сначала укажите начало медной линии на кроссе или на узле с коммутатором, затем кликните по камере (или используйте «Подключить» на порту коммутатора).', 'Недопустимое действие');
+        if (type === 'mediaConverter') {
+            var incMc = placemark.properties.get('incomingFiber');
+            if (!incMc || !incMc.cableId) {
+                showError('Медный кабель от медиаконвертера доступен только после подключения оптической жилы с муфты или кросса.', 'Недопустимое действие');
+                return true;
+            }
+        }
+        if (isCopperLanEndDeviceType(type)) {
+            showError('Сначала укажите начало медной линии на узле с коммутатором или на медиаконвертере (после подключения жилы), затем кликните по камере, медиаконвертеру или второму узлу (или используйте «Подключить» на порту коммутатора).', 'Недопустимое действие');
             return true;
         }
         cableSource = placemark;
@@ -4632,10 +4981,10 @@ function handleCopperCablePlacemarkStep(placemark, type, cableTypeVal) {
         selectObject(cableSource);
         return true;
     }
-    if (type === 'camera') {
+    if (isCopperLanEndDeviceType(type)) {
         var srcT = cableSource.properties.get('type');
-        if (srcT === 'cross') {
-            showError('Камеру можно подключить только от коммутатора. Закончите линию на узле сети с коммутатором или начните с «Подключить» на порту коммутатора.', 'Недопустимое действие');
+        if (srcT === 'cross' || srcT === 'sleeve') {
+            showError('Камеру или медиаконвертер можно подключить только от коммутатора или от медиаконвертера с оптической жилой.', 'Недопустимое действие');
             return true;
         }
     }
@@ -4656,40 +5005,38 @@ function handleCopperCablePlacemarkStep(placemark, type, cableTypeVal) {
     return true;
 }
 
-function startCopperCableFromCrossPort(crossObj, portNum) {
-    if (!isEditMode || !crossObj || !crossObj.properties) return;
-    var ncc = Math.max(0, parseInt(crossObj.properties.get('crossCopperPorts'), 10) || 0);
-    var p = parseInt(portNum, 10);
-    if (isNaN(p) || p < 1 || p > ncc) {
-        if (typeof showError === 'function') showError('Некорректный номер медного порта кросса.', 'Порт');
+function startCopperCableFromMediaConverter(mcObj) {
+    if (!isEditMode || !mcObj || !mcObj.properties || mcObj.properties.get('type') !== 'mediaConverter') return;
+    var inc = mcObj.properties.get('incomingFiber');
+    if (!inc || !inc.cableId) {
+        if (typeof showError === 'function') showError('Сначала подключите оптическую жилу к медиаконвертеру с муфты или кросса.', 'Нет входной жилы');
         return;
     }
-    var usage = crossObj.properties.get('copperPortUsage') || {};
-    if (usage[String(p)]) {
-        if (typeof showError === 'function') showError('Этот медный порт уже занят кабелем.', 'Порт занят');
+    if (cameraHasCopperCable(mcObj)) {
+        if (typeof showError === 'function') showError('К этому медиаконвертеру уже подключён медный кабель.', 'Подключение');
         return;
     }
     if (objectPlacementMode && typeof cancelObjectPlacement === 'function') cancelObjectPlacement();
     if (splitterFiberRoutingMode && typeof cancelSplitterFiberRouting === 'function') cancelSplitterFiberRouting();
     if (fiberRoutingMode && typeof cancelFiberRouting === 'function') cancelFiberRouting();
     if (!currentCableTool) {
-        var cableBtn = document.getElementById('addCable');
-        if (cableBtn) cableBtn.click();
+        var cableBtnMc = document.getElementById('addCable');
+        if (cableBtnMc) cableBtnMc.click();
     }
     copperCableLayingActive = true;
-    pendingCopperPortPreset = { kind: 'cross', crossUid: crossObj.properties.get('uniqueId'), port: p };
-    cableSource = crossObj;
+    pendingCopperPortPreset = null;
+    cableSource = mcObj;
     cableSourceCopperSwitchId = null;
     cableWaypoints = [];
     if (typeof removePhantomPlacemark === 'function') removePhantomPlacemark();
     if (typeof removeCablePreview === 'function') removeCablePreview();
     if (typeof clearSelection === 'function') clearSelection();
     if (typeof selectObject === 'function') selectObject(cableSource);
-    var modal = document.getElementById('infoModal');
-    if (modal) modal.style.display = 'none';
+    var modalMc = document.getElementById('infoModal');
+    if (modalMc) modalMc.style.display = 'none';
     currentModalObject = null;
     if (typeof showInfo === 'function') {
-        showInfo('Укажите на карте второй конец: кросс или узел с коммутатором. Опоры и крепления — только промежуточные точки.', 'Медный кабель');
+        showInfo('Укажите на карте второй конец: узел сети с коммутатором, отдельный коммутатор или камера. Опоры и крепления — только промежуточные точки.', 'Медный кабель');
     }
 }
 
@@ -4709,6 +5056,15 @@ function startCopperCableFromNodeSwitchPort(nodeObj, switchId, portNum) {
     var pts = sw.switchPortTypes || [];
     if (p > pts.length) {
         if (typeof showError === 'function') showError('Номер порта больше числа портов коммутатора.', 'Порт');
+        return;
+    }
+    if (isSwitchPortSfpFiberType(pts[p - 1] || '')) {
+        if (typeof showError === 'function') showError('Медный кабель не подключается к порту SFP, SFP+ или Комбо — для оптики используйте жилу с кросса.', 'Недопустимое действие');
+        return;
+    }
+    var fusStart = sw.fiberPortUsage || {};
+    if (fusStart[String(p)]) {
+        if (typeof showError === 'function') showError('Порт занят оптической жилой с кросса. Для меди выберите другой порт.', 'Порт занят');
         return;
     }
     var usageN = sw.copperPortUsage || {};
@@ -4736,7 +5092,7 @@ function startCopperCableFromNodeSwitchPort(nodeObj, switchId, portNum) {
     if (modal2) modal2.style.display = 'none';
     currentModalObject = null;
     if (typeof showInfo === 'function') {
-        showInfo('Укажите на карте второй конец: кросс или узел с коммутатором. Опоры и крепления — только промежуточные точки.', 'Медный кабель');
+        showInfo('Укажите на карте второй конец: узел сети с коммутатором, отдельный коммутатор или камера. Опоры и крепления — только промежуточные точки.', 'Медный кабель');
     }
 }
 
@@ -4817,7 +5173,7 @@ window.applyCopperCablePortSelection = function(cableUniqueId, fromPort, toPort)
             var ocN = usageN[String(port)];
             return !ocN || ocN === cableUniqueId;
         }
-        if (t === 'camera') return true;
+        if (t === 'camera' || t === 'mediaConverter') return true;
         return false;
     }
     if (!portFree(fromO, fromPort, swFrom) || !portFree(toO, toPort, swTo)) {
@@ -4885,6 +5241,7 @@ function showCableInfo(cable) {
         else if (type === 'onu') { typeName = 'ONU'; icon = '📟'; }
         else if (type === 'splitter') { typeName = 'Сплиттер'; icon = '🔀'; }
         else if (type === 'camera') { typeName = 'Камера'; icon = '📷'; }
+        else if (type === 'mediaConverter') { typeName = 'Медиаконвертер'; icon = '⇄'; }
         return { type: typeName, name, icon };
     };
     
@@ -4924,7 +5281,7 @@ function showCableInfo(cable) {
             } catch (eD) {}
         }
         var htmlCu = '<div class="info-section">';
-        htmlCu += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 12px;">Один медный кабель — одна линия. Назначьте порты на кроссе (медная патч-панель) и/или на коммутаторе в узле. Занятые порты нельзя выбрать для другого кабеля.</p>';
+        htmlCu += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 12px;">Один медный кабель — одна линия. Назначьте порты на коммутаторах на концах (в узле или отдельная точка на карте). У камеры и медиаконвертера порт не задаётся. Занятые порты нельзя выбрать для другого кабеля.</p>';
         htmlCu += '<div style="margin-bottom: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 8px; border: 1px solid var(--border-color);">';
         htmlCu += '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;"><span>' + fromInfoCu.icon + '</span><div><strong>' + escapeHtml(fromInfoCu.type) + '</strong>' + (fromInfoCu.name ? '<br><span style="font-size: 0.8rem; color: var(--text-secondary);">' + escapeHtml(fromInfoCu.name) + '</span>' : '') + '</div></div>';
         htmlCu += '<div style="margin-left: 14px; padding-left: 14px; border-left: 2px dashed ' + copperColor + '; margin-bottom: 8px;"><span style="font-size: 0.75rem; color: var(--text-muted);">↓</span></div>';
@@ -5310,7 +5667,7 @@ function setupRectSelection() {
         });
         counts.cable = selected.cables.length;
 
-        var typeNames = { cross: 'Кроссов', node: 'Узлов', sleeve: 'Муфт', support: 'Опар', attachment: 'Креплений', olt: 'OLT', splitter: 'Сплиттеров', onu: 'ONU', camera: 'Камер', cable: 'Кабелей' };
+        var typeNames = { cross: 'Кроссов', node: 'Узлов', sleeve: 'Муфт', support: 'Опар', attachment: 'Креплений', olt: 'OLT', splitter: 'Сплиттеров', onu: 'ONU', camera: 'Камер', mediaConverter: 'Медиаконв.', cable: 'Кабелей' };
         var parts = [];
         Object.keys(counts).sort().forEach(function(k) {
             if (counts[k] > 0) parts.push(counts[k] + ' ' + (typeNames[k] || k));
@@ -5615,11 +5972,13 @@ function getSerializedData() {
             if (props.fiberPorts) result.fiberPorts = props.fiberPorts;
             if (props.oltConnections) result.oltConnections = props.oltConnections;
             if (props.onuConnections) result.onuConnections = props.onuConnections;
+            if (props.mediaConverterConnections) result.mediaConverterConnections = props.mediaConverterConnections;
             if (props.splitterConnections) result.splitterConnections = props.splitterConnections;
         }
         if (props.type === 'sleeve') {
             if (props.oltConnections) result.oltConnections = props.oltConnections;
             if (props.onuConnections) result.onuConnections = props.onuConnections;
+            if (props.mediaConverterConnections) result.mediaConverterConnections = props.mediaConverterConnections;
             if (props.splitterConnections) result.splitterConnections = props.splitterConnections;
         }
         if (props.type === 'olt') {
@@ -5642,6 +6001,12 @@ function getSerializedData() {
             if (props.comment) result.comment = props.comment;
         }
         if (props.type === 'camera') {
+            if (props.manufacturer) result.manufacturer = props.manufacturer;
+            if (props.model) result.model = props.model;
+            if (props.comment) result.comment = props.comment;
+        }
+        if (props.type === 'mediaConverter') {
+            if (props.incomingFiber) result.incomingFiber = props.incomingFiber;
             if (props.manufacturer) result.manufacturer = props.manufacturer;
             if (props.model) result.model = props.model;
             if (props.comment) result.comment = props.comment;
@@ -6331,7 +6696,7 @@ function importData(data, opts) {
 }
 
 function createObjectFromData(data, opts) {
-    const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, fiberPorts, netboxId, netboxUrl, netboxDeviceType, netboxSite, sleeveType, maxFibers, crossPorts, crossCopperPorts, copperPortUsage, nodeConnections, oltConnections, onuConnections, uniqueId, nodeKind, manufacturer, model, comment, ponPorts, splitRatio, splitterConnections, incomingFiber, portAssignments, inputFiber, outputConnections, parentNodeId, switchPortTypes, attachedSwitches } = data;
+    const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, fiberPorts, netboxId, netboxUrl, netboxDeviceType, netboxSite, sleeveType, maxFibers, crossPorts, crossCopperPorts, copperPortUsage, nodeConnections, oltConnections, onuConnections, mediaConverterConnections, uniqueId, nodeKind, manufacturer, model, comment, ponPorts, splitRatio, splitterConnections, incomingFiber, portAssignments, inputFiber, outputConnections, parentNodeId, switchPortTypes, attachedSwitches } = data;
     
     let iconSvg, color, balloonContent;
     
@@ -6431,6 +6796,14 @@ function createObjectFromData(data, opts) {
             </svg>`;
             balloonContent = name ? 'Камера: ' + name : 'Камера';
             break;
+        case 'mediaConverter':
+            color = '#14b8a6';
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="7" width="20" height="14" rx="2" fill="${color}" stroke="white" stroke-width="2"/>
+                <path d="M10 14h8M14 10v8" stroke="white" stroke-width="2" stroke-linecap="round"/>
+            </svg>`;
+            balloonContent = name ? 'Медиаконвертер: ' + name : 'Медиаконвертер';
+            break;
         case 'switch':
             color = '#ea580c';
             iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
@@ -6451,7 +6824,7 @@ function createObjectFromData(data, opts) {
     }
 
     const clickableSize = 44; 
-    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'switch') ? 32 : 28;
+    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'switch') ? 32 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
 
     const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
@@ -6551,6 +6924,9 @@ function createObjectFromData(data, opts) {
         if (onuConnections) {
             placemark.properties.set('onuConnections', onuConnections);
         }
+        if (mediaConverterConnections) {
+            placemark.properties.set('mediaConverterConnections', mediaConverterConnections);
+        }
         if (splitterConnections) {
             placemark.properties.set('splitterConnections', splitterConnections);
         }
@@ -6561,6 +6937,9 @@ function createObjectFromData(data, opts) {
         }
         if (onuConnections) {
             placemark.properties.set('onuConnections', onuConnections);
+        }
+        if (mediaConverterConnections) {
+            placemark.properties.set('mediaConverterConnections', mediaConverterConnections);
         }
         if (splitterConnections) {
             placemark.properties.set('splitterConnections', splitterConnections);
@@ -6586,6 +6965,12 @@ function createObjectFromData(data, opts) {
         if (comment) placemark.properties.set('comment', comment);
     }
     if (type === 'camera') {
+        if (manufacturer) placemark.properties.set('manufacturer', manufacturer);
+        if (model) placemark.properties.set('model', model);
+        if (comment) placemark.properties.set('comment', comment);
+    }
+    if (type === 'mediaConverter') {
+        placemark.properties.set('incomingFiber', incomingFiber || null);
         if (manufacturer) placemark.properties.set('manufacturer', manufacturer);
         if (model) placemark.properties.set('model', model);
         if (comment) placemark.properties.set('comment', comment);
@@ -6668,7 +7053,7 @@ function createObjectFromData(data, opts) {
                 return;
             }
             
-            var targetName = fiberRoutingData.targetObj.properties.get('name') || (fiberRoutingData.targetType === 'onu' ? 'ONU' : 'Сплиттер');
+            var targetName = getFiberRoutingTargetLabel(fiberRoutingData.targetType, fiberRoutingData.targetObj);
             showWarning('Кликните по опоре или креплению для добавления точки маршрута, или по целевому объекту (' + escapeHtml(targetName) + ') для завершения.', 'Режим прокладки');
             return;
         }
@@ -6676,8 +7061,8 @@ function createObjectFromData(data, opts) {
         if (currentCableTool && isEditMode) {
             var cableTypeVal = getEffectiveCableLayingType();
             if (handleCopperCablePlacemarkStep(placemark, type, cableTypeVal)) return;
-            if (type === 'splitter' || type === 'onu' || type === 'camera') {
-                showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU или камеры. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
+            if (type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter') {
+                showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU, камеры или медиаконвертера. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
                 return;
             }
             var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment', 'olt'];
@@ -6723,7 +7108,7 @@ function createObjectFromData(data, opts) {
             return;
         }
 
-        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'switch')) {
+        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'switch')) {
             showObjectInfo(placemark);
             return;
         }
@@ -6748,7 +7133,7 @@ function createObjectFromData(data, opts) {
         }
     });
 
-        placemark.events.add('dragend', function() {
+    placemark.events.add('dragend', function() {
             window.syncDragInProgress = false;
             if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
             var uid = placemark.properties.get('uniqueId');
@@ -6892,11 +7277,15 @@ function exportData() {
                 if (props.onuConnections) {
                     result.onuConnections = props.onuConnections;
                 }
+                if (props.mediaConverterConnections) {
+                    result.mediaConverterConnections = props.mediaConverterConnections;
+                }
                 if (props.splitterConnections) result.splitterConnections = props.splitterConnections;
             }
             if (props.type === 'sleeve') {
                 if (props.oltConnections) result.oltConnections = props.oltConnections;
                 if (props.onuConnections) result.onuConnections = props.onuConnections;
+                if (props.mediaConverterConnections) result.mediaConverterConnections = props.mediaConverterConnections;
                 if (props.splitterConnections) result.splitterConnections = props.splitterConnections;
             }
             if (props.type === 'olt') {
@@ -6913,6 +7302,12 @@ function exportData() {
                 if (props.incomingFiber) result.incomingFiber = props.incomingFiber;
             }
             if (props.type === 'camera') {
+                if (props.manufacturer) result.manufacturer = props.manufacturer;
+                if (props.model) result.model = props.model;
+                if (props.comment) result.comment = props.comment;
+            }
+            if (props.type === 'mediaConverter') {
+                if (props.incomingFiber) result.incomingFiber = props.incomingFiber;
                 if (props.manufacturer) result.manufacturer = props.manufacturer;
                 if (props.model) result.model = props.model;
                 if (props.comment) result.comment = props.comment;
@@ -6979,7 +7374,14 @@ function clearMap(opts) {
 }
 
 function updateStats() {
-    const nodeCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'node').length;
+    const networkNodeCount = objects.filter(function(obj) {
+        if (!obj.properties || obj.properties.get('type') !== 'node') return false;
+        return (obj.properties.get('nodeKind') || 'network') !== 'aggregation';
+    }).length;
+    const aggregationNodeCount = objects.filter(function(obj) {
+        if (!obj.properties || obj.properties.get('type') !== 'node') return false;
+        return obj.properties.get('nodeKind') === 'aggregation';
+    }).length;
     const supportCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'support').length;
     const sleeveCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'sleeve').length;
     const crossCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'cross').length;
@@ -6987,6 +7389,7 @@ function updateStats() {
     const splitterCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'splitter').length;
     const onuCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'onu').length;
     const cameraCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'camera').length;
+    const mediaConverterCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'mediaConverter').length;
     var switchCount = 0;
     objects.forEach(function(obj) {
         if (!obj || !obj.properties) return;
@@ -6995,7 +7398,8 @@ function updateStats() {
     });
     const cableCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'cable').length;
 
-    const nodeEl = document.getElementById('nodeCount');
+    const networkNodeEl = document.getElementById('networkNodeCount');
+    const aggregationNodeEl = document.getElementById('aggregationNodeCount');
     const supportEl = document.getElementById('supportCount');
     const sleeveEl = document.getElementById('sleeveCount');
     const crossEl = document.getElementById('crossCount');
@@ -7003,9 +7407,11 @@ function updateStats() {
     const splitterEl = document.getElementById('splitterCount');
     const onuEl = document.getElementById('onuCount');
     const cameraEl = document.getElementById('cameraCount');
+    const mediaConverterEl = document.getElementById('mediaConverterCount');
     const switchEl = document.getElementById('switchCount');
     const cableEl = document.getElementById('cableCount');
-    if (nodeEl) nodeEl.textContent = nodeCount;
+    if (networkNodeEl) networkNodeEl.textContent = networkNodeCount;
+    if (aggregationNodeEl) aggregationNodeEl.textContent = aggregationNodeCount;
     if (supportEl) supportEl.textContent = supportCount;
     if (sleeveEl) sleeveEl.textContent = sleeveCount;
     if (crossEl) crossEl.textContent = crossCount;
@@ -7013,18 +7419,20 @@ function updateStats() {
     if (splitterEl) splitterEl.textContent = splitterCount;
     if (onuEl) onuEl.textContent = onuCount;
     if (cameraEl) cameraEl.textContent = cameraCount;
+    if (mediaConverterEl) mediaConverterEl.textContent = mediaConverterCount;
     if (switchEl) switchEl.textContent = switchCount;
     if (cableEl) cableEl.textContent = cableCount;
 }
 
 function showObjectInfo(obj) {
     var objType = obj && obj.properties ? obj.properties.get('type') : '';
-    if (['node', 'olt', 'onu', 'camera'].indexOf(objType) !== -1) {
+    if (['node', 'olt', 'onu', 'camera', 'mediaConverter'].indexOf(objType) !== -1) {
         if (typeof populateDeviceDatalists === 'function') populateDeviceDatalists();
         var mfr = obj.properties.get('manufacturer') || '';
         if (typeof populateModelDatalistForManufacturer === 'function') {
             var cat = 'node';
             if (objType === 'camera') cat = 'camera';
+            else if (objType === 'mediaConverter') cat = 'node';
             else if (objType === 'olt') cat = 'olt';
             else if (objType === 'onu') cat = 'onu';
             populateModelDatalistForManufacturer(mfr, 'deviceModelsList', cat);
@@ -7069,6 +7477,8 @@ function showObjectInfo(obj) {
         title = name ? `ONU: ${name}` : 'ONU';
     } else if (type === 'camera') {
         title = name ? `Камера: ${name}` : 'Камера';
+    } else if (type === 'mediaConverter') {
+        title = name ? `Медиаконвертер: ${name}` : 'Медиаконвертер';
     } else {
         title = 'Объект';
     }
@@ -7296,6 +7706,44 @@ function showObjectInfo(obj) {
         html += '</div>';
     }
 
+    if (type === 'mediaConverter') {
+        const manufacturerMc = obj.properties.get('manufacturer') || '';
+        const modelMc = obj.properties.get('model') || '';
+        const commentMc = obj.properties.get('comment') || '';
+        const mcIncoming = obj.properties.get('incomingFiber') || null;
+        html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
+        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Медиаконвертер</h4>';
+        html += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 12px;">Оптический медиаконвертер на карте. Медный кабель к коммутатору — кнопка ниже (доступна после подключения оптической жилы с муфты или кросса). Волокно — кнопка «⇄ МК» у жилы в карточке муфты или кросса.</p>';
+        if (isEditMode) {
+            html += '<div class="form-group" style="margin-bottom: 12px;">';
+            html += '<label for="editMediaConverterName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название</label>';
+            html += '<input type="text" id="editMediaConverterName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Название медиаконвертера">';
+            html += '</div>';
+            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Производитель</label><div class="device-combobox" data-catalog="node" data-type="manufacturer" data-value-id="editMediaConverterManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturerMc ? escapeHtml(manufacturerMc) : 'Выберите производителя') + '</button><input type="hidden" id="editMediaConverterManufacturer" value="' + escapeHtml(manufacturerMc) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Модель</label><div class="device-combobox" data-catalog="node" data-type="model" data-value-id="editMediaConverterModel" data-manufacturer-id="editMediaConverterManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (modelMc ? escapeHtml(modelMc) : 'Выберите модель') + '</button><input type="hidden" id="editMediaConverterModel" value="' + escapeHtml(modelMc) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+            html += '<div class="form-group"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Комментарий</label>';
+            html += '<textarea id="editMediaConverterComment" class="form-input" rows="2" placeholder="Дополнительные сведения">' + escapeHtml(commentMc) + '</textarea></div>';
+        } else if (name) {
+            html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;">Название: ' + escapeHtml(name) + '</div>';
+        }
+        if (manufacturerMc || modelMc) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 6px;">Устройство: ' + escapeHtml([manufacturerMc, modelMc].filter(Boolean).join(' ') || '—') + '</div>';
+        if (commentMc) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; white-space: pre-wrap; margin-top: 6px;">' + escapeHtml(commentMc) + '</div>';
+        if (mcIncoming) {
+            const cMc = objects.find(function(c) {
+                return c.properties && c.properties.get('type') === 'cable' && (c.properties.get('uniqueId') || '') === mcIncoming.cableId;
+            });
+            const mcDesc = cMc ? (cMc.properties.get('cableName') || getCableDescription(cMc.properties.get('cableType'))) : String(mcIncoming.cableId).substring(0, 12) + '…';
+            html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 8px;">Входная жила (от муфты/кросса): ' + escapeHtml(mcDesc) + ', жила ' + mcIncoming.fiberNumber + '</div>';
+        }
+        if (isEditMode && mcIncoming && mcIncoming.cableId && !cameraHasCopperCable(obj)) {
+            html += '<div style="margin-top: 16px; padding: 14px; background: linear-gradient(135deg, #0d9488 0%, #14b8a6 50%, #2dd4bf 100%); border-radius: 10px; border: 2px solid #0f766e; box-shadow: 0 4px 14px rgba(20, 184, 166, 0.45);">';
+            html += '<div style="font-size: 0.8125rem; color: #ecfdf5; margin-bottom: 10px; font-weight: 600;">Медный кабель к коммутатору или камере</div>';
+            html += '<button type="button" class="btn-copper-connect-from-media-converter" style="width: 100%; padding: 12px 16px; font-size: 0.9375rem; font-weight: 700; color: #0f172a; background: #f0fdfa; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.12);">🔌 Начать прокладку медного кабеля</button>';
+            html += '</div>';
+        }
+        html += '</div>';
+    }
+
     if (type === 'sleeve') {
         const sleeveType = obj.properties.get('sleeveType') || 'Не указан';
         const maxFibers = obj.properties.get('maxFibers');
@@ -7433,12 +7881,19 @@ function showObjectInfo(obj) {
                 html += '<div class="form-group" style="margin:0;"><label style="font-size:0.7rem;color:var(--text-muted);">Модель</label><div class="device-combobox" data-catalog="switch" data-type="model" data-value-id="editNodeSwMod_' + uidEsc + '" data-manufacturer-id="editNodeSwMfr_' + uidEsc + '"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (swMod ? escapeHtml(swMod) : 'Выберите') + '</button><input type="hidden" id="editNodeSwMod_' + uidEsc + '" value="' + escapeHtml(swMod) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
                 html += '</div>';
             }
-            html += '<div style="max-height: 200px; overflow-y: auto;"><table style="width:100%; font-size: 0.75rem; border-collapse: collapse;"><thead><tr><th style="text-align:left;padding:4px;">#</th><th style="text-align:left;padding:4px;">Тип</th><th style="text-align:left;padding:4px;">Кабель</th>' + (isEditMode ? '<th style="text-align:right;padding:4px;white-space:nowrap;"></th>' : '') + '</tr></thead><tbody>';
+            html += '<div style="max-height: 200px; overflow-y: auto;"><table style="width:100%; font-size: 0.75rem; border-collapse: collapse;"><thead><tr><th style="text-align:left;padding:4px;">#</th><th style="text-align:left;padding:4px;">Тип</th><th style="text-align:left;padding:4px;">Назначение</th>' + (isEditMode ? '<th style="text-align:right;padding:4px;white-space:nowrap;"></th>' : '') + '</tr></thead><tbody>';
             for (var swi = 0; swi < pts.length; swi++) {
                 var pnumSw = swi + 1;
+                var fiberUsageN = swRow.fiberPortUsage || {};
                 var cableUidSw = usageN[String(pnumSw)];
+                var fiberKeySw = fiberUsageN[String(pnumSw)];
                 var cblSw = cableUidSw ? objects.find(function(c) { return c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === cableUidSw; }) : null;
-                var cnameSw = cblSw ? (cblSw.properties.get('cableName') || getCableDescription(cblSw.properties.get('cableType'))) : '—';
+                var cnameSw = cblSw ? (cblSw.properties.get('cableName') || getCableDescription(cblSw.properties.get('cableType'))) : '';
+                var isSfpPortRow = isSwitchPortSfpFiberType(pts[swi] || '');
+                var assignParts = [];
+                if (cnameSw) assignParts.push('Медь: ' + cnameSw);
+                if (fiberKeySw) assignParts.push('ВОЛС (кросс)');
+                var displayAssign = assignParts.length ? assignParts.join(' · ') : '—';
                 html += '<tr><td style="padding:4px;">' + pnumSw + '</td><td style="padding:4px;">';
                 if (isEditMode) {
                     html += '<select class="edit-node-switch-port-kind form-select" data-switch-id="' + escapeHtml(swRow.uniqueId) + '" data-idx="' + swi + '" style="font-size:0.7rem;">';
@@ -7449,10 +7904,16 @@ function showObjectInfo(obj) {
                 } else {
                     html += escapeHtml(pts[swi] || '—');
                 }
-                html += '</td><td style="padding:4px;">' + escapeHtml(cnameSw) + '</td>';
+                html += '</td><td style="padding:4px;">' + escapeHtml(displayAssign) + '</td>';
                 if (isEditMode) {
                     html += '<td style="padding:4px;text-align:right;">';
-                    if (!cableUidSw) {
+                    if (isSfpPortRow) {
+                        if (fiberKeySw) {
+                            html += '<span style="font-size:0.65rem;color:#0f766e;font-weight:600;" title="Жила с оптического кросса">Назначен</span>';
+                        } else {
+                            html += '<span style="font-size:0.65rem;color:var(--text-muted);" title="Медный кабель к SFP не подключается — жила с кросса">—</span>';
+                        }
+                    } else if (!cableUidSw) {
                         html += '<button type="button" class="btn-secondary btn-copper-connect-from-node-port" data-switch-id="' + escapeHtml(swRow.uniqueId) + '" data-copper-port="' + pnumSw + '" style="font-size:0.65rem;padding:4px 6px;">Подключить</button>';
                     } else {
                         html += '—';
@@ -7497,17 +7958,13 @@ function showObjectInfo(obj) {
 
     if (type === 'cross') {
         const crossPorts = Math.max(1, parseInt(obj.properties.get('crossPorts'), 10) || 24);
-        
-        html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Информация о кроссе</h4>';
-        html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Количество портов:</strong> ${crossPorts}</div>`;
-        var crossCopperPortsInfo = Math.max(0, parseInt(obj.properties.get('crossCopperPorts'), 10) || 0);
-        html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Медные порты (патч):</strong> ${crossCopperPortsInfo}</div>`;
-
         const usedPorts = getTotalUsedPortsInCross(obj);
         const usagePercent = crossPorts > 0 ? Math.round((usedPorts / crossPorts) * 100) : 0;
         const statusColor = usedPorts > crossPorts ? '#dc2626' : (usagePercent >= 80 ? '#f59e0b' : '#22c55e');
-        
+
+        html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
+        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Информация о кроссе</h4>';
+        html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Количество портов:</strong> ${crossPorts}</div>`;
         html += `<div style="color: var(--text-secondary); font-size: 0.875rem;"><strong>Использовано:</strong> <span style="color: ${statusColor}; font-weight: 600;">${usedPorts}/${crossPorts} портов</span> (${usagePercent}%)</div>`;
         html += '</div>';
 
@@ -7518,35 +7975,6 @@ function showObjectInfo(obj) {
             html += '<label for="editCrossName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название кросса</label>';
             html += `<input type="text" id="editCrossName" class="form-input" value="${escapeHtml(name)}" placeholder="Введите название кросса">`;
             html += '</div>';
-            var ccpCur = Math.max(0, parseInt(obj.properties.get('crossCopperPorts'), 10) || 0);
-            html += '<div class="form-group" style="margin-bottom: 12px;">';
-            html += '<label for="editCrossCopperPorts" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600;">Медные порты (патч к меди)</label>';
-            html += '<select id="editCrossCopperPorts" class="form-select">';
-            [0, 8, 12, 16, 24].forEach(function(n) {
-                html += '<option value="' + n + '"' + (ccpCur === n ? ' selected' : '') + '>' + (n === 0 ? 'Нет (0)' : String(n)) + '</option>';
-            });
-            html += '</select></div>';
-            if (ccpCur > 0) {
-                var cuUsagePatch = obj.properties.get('copperPortUsage') || {};
-                html += '<div class="form-group" style="margin-top: 14px;">';
-                html += '<label style="display: block; margin-bottom: 8px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600;">Медная патч-панель</label>';
-                html += '<p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 10px;">У свободного порта нажмите «Подключить», затем укажите второй конец на карте (кросс или узел с коммутатором).</p>';
-                html += '<div style="display: flex; flex-wrap: wrap; gap: 8px; max-height: 220px; overflow-y: auto;">';
-                for (var cpi = 1; cpi <= ccpCur; cpi++) {
-                    var occUid = cuUsagePatch[String(cpi)];
-                    var occCblP = occUid ? objects.find(function(c) { return c && c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === occUid; }) : null;
-                    var occLabP = occCblP ? escapeHtml(String(occCblP.properties.get('cableName') || getCableDescription(occCblP.properties.get('cableType')) || 'кабель')) : '';
-                    html += '<div style="border: 1px solid var(--border-color); border-radius: 6px; padding: 8px; min-width: 104px; background: var(--bg-card);">';
-                    html += '<div style="font-weight: 600; font-size: 0.8rem; margin-bottom: 4px;">Порт ' + cpi + '</div>';
-                    if (occUid) {
-                        html += '<div style="font-size: 0.7rem; color: var(--text-muted);">Занят</div><div style="font-size: 0.7rem; word-break: break-word;">' + occLabP + '</div>';
-                    } else {
-                        html += '<button type="button" class="btn-secondary btn-copper-connect-from-cross-port" data-copper-port="' + cpi + '" style="width: 100%; font-size: 0.75rem; padding: 6px;">Подключить</button>';
-                    }
-                    html += '</div>';
-                }
-                html += '</div></div>';
-            }
             html += '</div>';
         }
     }
@@ -7565,7 +7993,9 @@ function showObjectInfo(obj) {
         html += '</div>';
     }
 
-    if (connectedCables.length === 0) {
+    if (type === 'camera') {
+        html += buildCameraTraceSectionHtml(obj);
+    } else if (connectedCables.length === 0) {
         const noCablesText = 'К этому объекту не подключено кабелей';
         html += '<div class="no-cables" style="padding: 15px; text-align: center; color: var(--text-muted); font-size: 0.875rem;">' + noCablesText + '</div>';
     } else {
@@ -7614,7 +8044,7 @@ function showObjectInfo(obj) {
                                 <div class="fiber-color" style="background-color: ${fiber.color}; ${isUsed ? 'opacity: 0.5; border: 2px dashed #dc2626;' : (fiber.hasBlackRing ? 'border: 2px solid #000;' : '')}"></div>
                                 <span class="fiber-label">Жила ${fiber.number}: ${fiber.name} ${isUsed ? '<span class="fiber-status">(используется)</span>' : '<span class="fiber-status fiber-free-text">(свободна)</span>'}</span>
                             </div>
-                            ${!isUsed && isEditMode && type !== 'sleeve' && type !== 'cross' && type !== 'olt' && type !== 'splitter' && type !== 'onu' && type !== 'camera' ? `<button class="btn-continue-cable" data-cable-id="${cableUniqueId}" data-fiber-number="${fiber.number}" title="Продолжить кабель с этой жилой">→</button>` : ''}
+                            ${!isUsed && isEditMode && type !== 'sleeve' && type !== 'cross' && type !== 'olt' && type !== 'splitter' && type !== 'onu' && type !== 'camera' && type !== 'mediaConverter' ? `<button class="btn-continue-cable" data-cable-id="${cableUniqueId}" data-fiber-number="${fiber.number}" title="Продолжить кабель с этой жилой">→</button>` : ''}
                         </div>
                     `;
                 });
@@ -7920,6 +8350,31 @@ function setupEditAndDeleteListeners() {
     var editCameraComment = document.getElementById('editCameraComment');
     if (editCameraComment) editCameraComment.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'camera') { currentModalObject.properties.set('comment', this.value || ''); saveData(); } });
 
+    var editMediaConverterNameInput = document.getElementById('editMediaConverterName');
+    if (editMediaConverterNameInput) {
+        editMediaConverterNameInput.addEventListener('input', function() {
+            if (!currentModalObject || currentModalObject.properties.get('type') !== 'mediaConverter') return;
+            const newNameMc = this.value.trim();
+            currentModalObject.properties.set('name', newNameMc);
+            currentModalObject.properties.set('balloonContent', newNameMc ? 'Медиаконвертер: ' + newNameMc : 'Медиаконвертер');
+            updateObjectLabel(currentModalObject, newNameMc);
+            saveData();
+        });
+    }
+    var editMediaConverterManufacturer = document.getElementById('editMediaConverterManufacturer');
+    if (editMediaConverterManufacturer) {
+        if (typeof preventPasswordSuggestions === 'function') preventPasswordSuggestions(editMediaConverterManufacturer);
+        editMediaConverterManufacturer.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'mediaConverter') { currentModalObject.properties.set('manufacturer', this.value || ''); saveData(); } populateModelDatalistForManufacturer(this.value.trim(), 'deviceModelsList', 'node'); });
+        editMediaConverterManufacturer.addEventListener('change', function() { populateModelDatalistForManufacturer(this.value.trim(), 'deviceModelsList', 'node'); });
+    }
+    var editMediaConverterModel = document.getElementById('editMediaConverterModel');
+    if (editMediaConverterModel) {
+        if (typeof preventPasswordSuggestions === 'function') preventPasswordSuggestions(editMediaConverterModel);
+        editMediaConverterModel.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'mediaConverter') { currentModalObject.properties.set('model', this.value || ''); saveData(); } });
+    }
+    var editMediaConverterComment = document.getElementById('editMediaConverterComment');
+    if (editMediaConverterComment) editMediaConverterComment.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'mediaConverter') { currentModalObject.properties.set('comment', this.value || ''); saveData(); } });
+
     const editCrossNameInput = document.getElementById('editCrossName');
     if (editCrossNameInput) {
         editCrossNameInput.addEventListener('input', function() {
@@ -8149,7 +8604,7 @@ function duplicateObject(obj) {
             copyNum++;
         }
     }
-    if (type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera') {
+    if (type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter') {
         if (name) newName = name + ' (копия)';
     }
     
@@ -8160,7 +8615,7 @@ function duplicateObject(obj) {
         opts.model = obj.properties.get('model') || '';
         opts.comment = obj.properties.get('comment') || '';
     }
-    if (type === 'camera') {
+    if (type === 'camera' || type === 'mediaConverter') {
         opts.manufacturer = obj.properties.get('manufacturer') || '';
         opts.model = obj.properties.get('model') || '';
         opts.comment = obj.properties.get('comment') || '';
@@ -8182,6 +8637,9 @@ function duplicateObject(obj) {
         newObj.properties.set('outputConnections', []);
     }
     if (type === 'onu') {
+        newObj.properties.set('incomingFiber', null);
+    }
+    if (type === 'mediaConverter') {
         newObj.properties.set('incomingFiber', null);
     }
     if (type === 'node' && newObj) {
@@ -8229,6 +8687,7 @@ function getObjectDefaultName(type) {
         case 'splitter': return 'Сплиттер';
         case 'onu': return 'ONU';
         case 'camera': return 'Камера';
+        case 'mediaConverter': return 'Медиаконвертер';
         case 'switch': return 'Коммутатор';
         default: return 'Объект';
     }
@@ -8406,12 +8865,11 @@ function setupModalEventListeners() {
             });
         });
         
-        document.querySelectorAll('.btn-copper-connect-from-cross-port').forEach(function(btn) {
+        document.querySelectorAll('.btn-copper-connect-from-media-converter').forEach(function(btn) {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
-                if (!currentModalObject || currentModalObject.properties.get('type') !== 'cross') return;
-                var port = parseInt(this.getAttribute('data-copper-port'), 10);
-                startCopperCableFromCrossPort(currentModalObject, port);
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'mediaConverter') return;
+                startCopperCableFromMediaConverter(currentModalObject);
             });
         });
         document.querySelectorAll('.btn-copper-connect-from-node-port').forEach(function(btn) {
@@ -8435,6 +8893,16 @@ function setupModalEventListeners() {
             const cableId = this.getAttribute('data-cable-id');
             const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
             traceFromNode(crossId, cableId, fiberNumber);
+        });
+    });
+
+    document.querySelectorAll('.btn-trace-camera-mc-incoming').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var mcCableId = btn.getAttribute('data-cable-id');
+            var mcFiber = parseInt(btn.getAttribute('data-fiber-number'), 10);
+            if (!mcCableId || !mcFiber) return;
+            showFiberTrace(mcCableId, mcFiber);
         });
     });
 
@@ -8551,6 +9019,7 @@ function setupFiberConnectionHandlers() {
                 
                 const nodeConnections = sleeveObj.properties.get('nodeConnections') || {};
                 const onuConnections = sleeveObj.properties.get('onuConnections') || {};
+                const mediaConverterConnections = sleeveObj.properties.get('mediaConverterConnections') || {};
                 const splitterConnections = sleeveObj.properties.get('splitterConnections') || {};
                 const fiberKey = `${cableId}-${fiberNumber}`;
                 
@@ -8576,6 +9045,19 @@ function setupFiberConnectionHandlers() {
                         hint.className = 'connection-hint';
                         hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
                         hint.textContent = `Жила ${fiberNumber} уже подключена к ONU "${onuConnections[fiberKey].onuName || 'ONU'}". Отключите её от ONU, чтобы соединить с другой жилой.`;
+                        instruction.appendChild(hint);
+                    }
+                    return;
+                }
+                if (mediaConverterConnections[fiberKey]) {
+                    const instruction = document.querySelector('.fiber-connections-container');
+                    if (instruction) {
+                        const existingMsg = instruction.querySelector('.connection-hint');
+                        if (existingMsg) existingMsg.remove();
+                        const hint = document.createElement('div');
+                        hint.className = 'connection-hint';
+                        hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
+                        hint.textContent = `Жила ${fiberNumber} уже подключена к медиаконвертеру "${mediaConverterConnections[fiberKey].mediaConverterName || 'Медиаконвертер'}". Отключите её, чтобы соединить с другой жилой.`;
                         instruction.appendChild(hint);
                     }
                     return;
@@ -8652,6 +9134,7 @@ function setupFiberConnectionHandlers() {
 
                     const nodeConnections = sleeveObj.properties.get('nodeConnections') || {};
                     const onuConnections = sleeveObj.properties.get('onuConnections') || {};
+                    const mediaConverterConnections = sleeveObj.properties.get('mediaConverterConnections') || {};
                     const splitterConnections = sleeveObj.properties.get('splitterConnections') || {};
                     const secondKey = `${cableId}-${fiberNumber}`;
                     const firstKey = `${selectedFiberForConnection.cableId}-${selectedFiberForConnection.fiberNumber}`;
@@ -8679,6 +9162,20 @@ function setupFiberConnectionHandlers() {
                             hint.className = 'connection-hint';
                             hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
                             hint.textContent = `Жила ${fiberNumber} уже подключена к ONU "${onuConnections[secondKey].onuName || 'ONU'}". Отключите её от ONU, чтобы соединить с другой жилой.`;
+                            instruction.appendChild(hint);
+                        }
+                        resetFiberSelection();
+                        return;
+                    }
+                    if (mediaConverterConnections[secondKey]) {
+                        const instruction = document.querySelector('.fiber-connections-container');
+                        if (instruction) {
+                            const existingMsg = instruction.querySelector('.connection-hint');
+                            if (existingMsg) existingMsg.remove();
+                            const hint = document.createElement('div');
+                            hint.className = 'connection-hint';
+                            hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
+                            hint.textContent = `Жила ${fiberNumber} уже подключена к медиаконвертеру "${mediaConverterConnections[secondKey].mediaConverterName || 'Медиаконвертер'}". Отключите её, чтобы соединить с другой жилой.`;
                             instruction.appendChild(hint);
                         }
                         resetFiberSelection();
@@ -8721,6 +9218,20 @@ function setupFiberConnectionHandlers() {
                             hint.className = 'connection-hint';
                             hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
                             hint.textContent = `Выбранная жила уже подключена к ONU "${onuConnections[firstKey].onuName || 'ONU'}". Отключите её от ONU для соединения с другой жилой.`;
+                            instruction.appendChild(hint);
+                        }
+                        resetFiberSelection();
+                        return;
+                    }
+                    if (mediaConverterConnections[firstKey]) {
+                        const instruction = document.querySelector('.fiber-connections-container');
+                        if (instruction) {
+                            const existingMsg = instruction.querySelector('.connection-hint');
+                            if (existingMsg) existingMsg.remove();
+                            const hint = document.createElement('div');
+                            hint.className = 'connection-hint';
+                            hint.style.cssText = 'padding: 8px; background: #fee2e2; border-radius: 4px; margin-top: 10px; font-size: 0.875rem; color: #dc2626;';
+                            hint.textContent = `Выбранная жила уже подключена к медиаконвертеру "${mediaConverterConnections[firstKey].mediaConverterName || 'Медиаконвертер'}". Отключите её для соединения с другой жилой.`;
                             instruction.appendChild(hint);
                         }
                         resetFiberSelection();
@@ -8886,6 +9397,15 @@ function setupFiberConnectionHandlers() {
         });
     });
 
+    document.querySelectorAll('.btn-connect-mc').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const cableId = this.getAttribute('data-cable-id');
+            const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
+            showMediaConverterSelectionDialog(sleeveObj, cableId, fiberNumber);
+        });
+    });
+
     document.querySelectorAll('.btn-connect-splitter').forEach(btn => {
         btn.addEventListener('click', function(e) {
             e.stopPropagation();
@@ -8919,6 +9439,15 @@ function setupFiberConnectionHandlers() {
             const cableId = this.getAttribute('data-cable-id');
             const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
             disconnectFiberFromOnu(sleeveObj, cableId, fiberNumber);
+        });
+    });
+
+    document.querySelectorAll('.btn-disconnect-mc').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const cableId = this.getAttribute('data-cable-id');
+            const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
+            disconnectFiberFromMediaConverter(sleeveObj, cableId, fiberNumber);
         });
     });
     
@@ -9535,6 +10064,9 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
         if (objType === 'onu') {
             break;
         }
+        if (objType === 'mediaConverter') {
+            break;
+        }
         if (objType === 'sleeve' || objType === 'cross') {
             const nodeConnKey = `${currentCableId}-${currentFiberNumber}`;
             if (objType === 'cross') {
@@ -9547,6 +10079,18 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
                     if (connectedOnu) {
                         path.push({ type: 'onuConnection', cableId: currentCableId, fiberNumber: currentFiberNumber, onuName: onuConn.onuName || 'ONU', cross: nextObject, onu: connectedOnu });
                         path.push({ type: 'object', objectType: 'onu', objectName: connectedOnu.properties.get('name') || 'ONU', object: connectedOnu });
+                    }
+                    break;
+                }
+                const mediaConverterConnections = nextObject.properties.get('mediaConverterConnections') || {};
+                const mcConn = mediaConverterConnections[nodeConnKey];
+                if (mcConn && mcConn.mediaConverterId) {
+                    const connectedMc = objects.find(obj =>
+                        obj.properties && obj.properties.get('type') === 'mediaConverter' && obj.properties.get('uniqueId') === mcConn.mediaConverterId
+                    );
+                    if (connectedMc) {
+                        path.push({ type: 'mediaConverterConnection', cableId: currentCableId, fiberNumber: currentFiberNumber, mediaConverterName: mcConn.mediaConverterName || 'Медиаконвертер', cross: nextObject, mediaConverter: connectedMc });
+                        path.push({ type: 'object', objectType: 'mediaConverter', objectName: connectedMc.properties.get('name') || 'Медиаконвертер', object: connectedMc, port: null });
                     }
                     break;
                 }
@@ -9601,6 +10145,31 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
                         }
                         path.push({ type: 'nodeConnection', cableId: nodeConnCableId, fiberNumber: nodeConnFiberNumber, nodeName: nodeConn.nodeName, cross: nextObject, node: connectedNode });
                         path.push({ type: 'object', objectType: 'node', objectName: connectedNode.properties.get('name') || 'Узел сети', object: connectedNode });
+                    }
+                    break;
+                }
+            }
+            if (objType === 'sleeve') {
+                const onuConnectionsS = nextObject.properties.get('onuConnections') || {};
+                const onuConnS = onuConnectionsS[nodeConnKey];
+                if (onuConnS) {
+                    const connectedOnuS = objects.find(obj =>
+                        obj.properties && obj.properties.get('type') === 'onu' && obj.properties.get('uniqueId') === onuConnS.onuId
+                    );
+                    if (connectedOnuS) {
+                        path.push({ type: 'onuConnection', cableId: currentCableId, fiberNumber: currentFiberNumber, onuName: onuConnS.onuName || 'ONU', cross: nextObject, onu: connectedOnuS });
+                        path.push({ type: 'object', objectType: 'onu', objectName: connectedOnuS.properties.get('name') || 'ONU', object: connectedOnuS });
+                    }
+                    break;
+                }
+                const mcConnSleeve = (nextObject.properties.get('mediaConverterConnections') || {})[nodeConnKey];
+                if (mcConnSleeve && mcConnSleeve.mediaConverterId) {
+                    const connectedMcS = objects.find(obj =>
+                        obj.properties && obj.properties.get('type') === 'mediaConverter' && obj.properties.get('uniqueId') === mcConnSleeve.mediaConverterId
+                    );
+                    if (connectedMcS) {
+                        path.push({ type: 'mediaConverterConnection', cableId: currentCableId, fiberNumber: currentFiberNumber, mediaConverterName: mcConnSleeve.mediaConverterName || 'Медиаконвертер', cross: nextObject, mediaConverter: connectedMcS });
+                        path.push({ type: 'object', objectType: 'mediaConverter', objectName: connectedMcS.properties.get('name') || 'Медиаконвертер', object: connectedMcS, port: null });
                     }
                     break;
                 }
@@ -10493,14 +11062,15 @@ function showNodeSelectionDialog(crossObj, cableId, fiberNumber) {
         crossObj: crossObj,
         cableId: cableId,
         fiberNumber: fiberNumber,
-        nodes: nodes
+        nodes: nodes,
+        phase: 'list'
     };
 
     const modal = document.getElementById('nodeSelectionModal');
     const fiberInfo = document.getElementById('nodeSelectionFiberInfo');
     const searchInput = document.getElementById('nodeSearchInput');
 
-    fiberInfo.textContent = `Подключение жилы #${fiberNumber} к узлу сети`;
+    fiberInfo.textContent = `Подключение жилы #${fiberNumber} к узлу: выберите узел, затем свободный порт SFP/SFP+/Комбо на коммутаторе.`;
 
     searchInput.value = '';
 
@@ -10585,20 +11155,81 @@ function escapeRegExpForSearch(string) {
 
 function selectNodeFromList(nodeIndex) {
     if (!nodeSelectionModalData) return;
-    
-    const { crossObj, cableId, fiberNumber, nodes } = nodeSelectionModalData;
-    
-    if (nodeIndex >= 0 && nodeIndex < nodes.length) {
-        
-        closeNodeSelectionModal();
 
-        connectFiberToNode(crossObj, cableId, fiberNumber, nodes[nodeIndex]);
+    const { nodes } = nodeSelectionModalData;
+    if (nodeIndex < 0 || nodeIndex >= nodes.length) return;
+    const nodeObj = nodes[nodeIndex];
+    const opts = collectFreeSfpPortOptionsOnNode(nodeObj);
+    if (!opts.length) {
+        if (typeof showError === 'function') {
+            showError('В этом узле нет коммутатора со свободным портом SFP, SFP+ или Комбо RJ45/SFP. Добавьте коммутатор в карточке узла и укажите типы портов.', 'Нет SFP-порта');
+        }
+        return;
     }
+    nodeSelectionModalData.phase = 'sfp';
+    nodeSelectionModalData.selectedNode = nodeObj;
+    nodeSelectionModalData.sfpOptions = opts;
+    renderNodeSfpPortSelectionUI();
+}
+
+function renderNodeSfpPortSelectionUI() {
+    var d = nodeSelectionModalData;
+    if (!d || d.phase !== 'sfp' || !d.selectedNode || !d.sfpOptions) return;
+    var container = document.getElementById('nodeListContainer');
+    var searchInput = document.getElementById('nodeSearchInput');
+    var searchGroup = searchInput && searchInput.closest('.form-group');
+    if (searchGroup) searchGroup.style.display = 'none';
+    var nodeName = escapeHtml(d.selectedNode.properties.get('name') || 'Узел');
+    var opts = d.sfpOptions;
+    var selOpts = opts.map(function(o, idx) {
+        return '<option value="' + idx + '">' + escapeHtml(o.switchLabel) + ' — порт ' + o.port + ' (' + escapeHtml(o.portTypeLabel) + ')</option>';
+    }).join('');
+    var htmlSfp = '<div style="padding: 8px 0;">';
+    htmlSfp += '<p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 12px;">Узел: <strong>' + nodeName + '</strong>. Жила с кросса занимает выбранный SFP-порт на коммутаторе.</p>';
+    htmlSfp += '<div class="form-group" style="margin-bottom: 12px;"><label for="nodeFiberSfpSelect" style="font-size: 0.8125rem;">Порт коммутатора (SFP)</label>';
+    htmlSfp += '<select id="nodeFiberSfpSelect" class="form-select">' + selOpts + '</select></div>';
+    htmlSfp += '<div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;">';
+    htmlSfp += '<button type="button" id="nodeFiberBackBtn" class="btn-secondary">Назад</button>';
+    htmlSfp += '<button type="button" id="nodeFiberConfirmBtn" class="btn-primary">Подключить</button></div></div>';
+    if (container) container.innerHTML = htmlSfp;
+}
+
+function backNodeSelectionToList() {
+    var d = nodeSelectionModalData;
+    if (!d) return;
+    d.phase = 'list';
+    d.selectedNode = null;
+    d.sfpOptions = null;
+    var searchInput = document.getElementById('nodeSearchInput');
+    var searchGroup = searchInput && searchInput.closest('.form-group');
+    if (searchGroup) searchGroup.style.display = '';
+    if (typeof renderNodeList === 'function') renderNodeList(d.nodes, searchInput ? searchInput.value : '');
+}
+
+function confirmNodeFiberToSfpPort() {
+    var d = nodeSelectionModalData;
+    if (!d || d.phase !== 'sfp' || !d.selectedNode) return;
+    var sel = document.getElementById('nodeFiberSfpSelect');
+    var idx = sel && sel.value !== '' ? parseInt(sel.value, 10) : NaN;
+    if (isNaN(idx) || !d.sfpOptions || idx < 0 || idx >= d.sfpOptions.length) {
+        if (typeof showError === 'function') showError('Выберите порт SFP на коммутаторе.', 'Порт');
+        return;
+    }
+    var opt = d.sfpOptions[idx];
+    var crossObj = d.crossObj;
+    var cableId = d.cableId;
+    var fiberNumber = d.fiberNumber;
+    var nodeObj = d.selectedNode;
+    closeNodeSelectionModal();
+    connectFiberToNode(crossObj, cableId, fiberNumber, nodeObj, opt.switchId, opt.port);
 }
 
 function closeNodeSelectionModal() {
     const modal = document.getElementById('nodeSelectionModal');
-    modal.style.display = 'none';
+    if (modal) modal.style.display = 'none';
+    var searchInput = document.getElementById('nodeSearchInput');
+    var searchGroup = searchInput && searchInput.closest('.form-group');
+    if (searchGroup) searchGroup.style.display = '';
     nodeSelectionModalData = null;
 }
 
@@ -10608,43 +11239,92 @@ function getAvailableOnus() {
     );
 }
 
+function getAvailableMediaConverters() {
+    return objects.filter(obj =>
+        obj.properties && obj.properties.get('type') === 'mediaConverter'
+    );
+}
+
+function setFiberTargetSelectionModalMode(mode) {
+    var modal = document.getElementById('onuSelectionModal');
+    if (!modal) return;
+    var title = modal.querySelector('.group-balloon-title');
+    var labels = modal.querySelectorAll('.modal-body .form-group > label');
+    var searchInput = document.getElementById('onuSearchInput');
+    if (title) title.textContent = mode === 'mediaConverter' ? 'Подключение жилы к медиаконвертеру' : 'Подключение жилы к ONU';
+    if (labels[0]) labels[0].textContent = mode === 'mediaConverter' ? 'Поиск медиаконвертера' : 'Поиск ONU';
+    if (labels[1]) labels[1].textContent = mode === 'mediaConverter' ? 'Выберите медиаконвертер' : 'Выберите ONU';
+    if (searchInput) searchInput.placeholder = mode === 'mediaConverter' ? 'Введите название медиаконвертера...' : 'Введите имя ONU...';
+}
+
 function showOnuSelectionDialog(sleeveObj, cableId, fiberNumber) {
     const onus = getAvailableOnus();
     if (onus.length === 0) {
         showWarning('Нет доступных ONU для подключения. Сначала создайте ONU на карте.', 'Нет ONU');
         return;
     }
-    onuSelectionModalData = { sleeveObj: sleeveObj, cableId: cableId, fiberNumber: fiberNumber, onus: onus };
+    onuSelectionModalData = { mode: 'onu', sleeveObj: sleeveObj, cableId: cableId, fiberNumber: fiberNumber, targets: onus };
     const modal = document.getElementById('onuSelectionModal');
     const fiberInfo = document.getElementById('onuSelectionFiberInfo');
     const searchInput = document.getElementById('onuSearchInput');
+    setFiberTargetSelectionModalMode('onu');
     if (fiberInfo) fiberInfo.textContent = 'Подключение жилы #' + fiberNumber + ' к ONU';
     if (searchInput) searchInput.value = '';
-    renderOnuList(onus, '');
+    renderOnuList('');
     if (modal) modal.style.display = 'block';
     setTimeout(function() { if (searchInput) searchInput.focus(); }, 100);
 }
 
-function renderOnuList(onus, searchQuery) {
+function showMediaConverterSelectionDialog(sleeveObj, cableId, fiberNumber) {
+    const placeId = sleeveObj.properties.get('uniqueId');
+    const stMcDlg = sleeveObj.properties.get('type');
+    const usageOptsMcDlg = stMcDlg === 'cross' ? { atCrossId: placeId } : { atSleeveId: placeId };
+    const usage = getFiberUsage(cableId, fiberNumber, usageOptsMcDlg);
+    if (usage.used) {
+        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
+        return;
+    }
+    const mcs = getAvailableMediaConverters();
+    if (mcs.length === 0) {
+        showWarning('Нет доступных медиаконвертеров. Сначала создайте медиаконвертер на карте.', 'Нет медиаконвертеров');
+        return;
+    }
+    onuSelectionModalData = { mode: 'mediaConverter', sleeveObj: sleeveObj, cableId: cableId, fiberNumber: fiberNumber, targets: mcs };
+    const modal = document.getElementById('onuSelectionModal');
+    const fiberInfo = document.getElementById('onuSelectionFiberInfo');
+    const searchInput = document.getElementById('onuSearchInput');
+    setFiberTargetSelectionModalMode('mediaConverter');
+    if (fiberInfo) fiberInfo.textContent = 'Подключение жилы #' + fiberNumber + ' к медиаконвертеру';
+    if (searchInput) searchInput.value = '';
+    renderOnuList('');
+    if (modal) modal.style.display = 'block';
+    setTimeout(function() { if (searchInput) searchInput.focus(); }, 100);
+}
+
+function renderOnuList(searchQuery) {
+    if (!onuSelectionModalData) return;
+    const mode = onuSelectionModalData.mode || 'onu';
+    const targets = onuSelectionModalData.targets || [];
     const container = document.getElementById('onuListContainer');
     if (!container) return;
-    if (onus.length === 0) {
-        container.innerHTML = '<div class="node-list-empty"><p>Нет доступных ONU</p></div>';
+    if (targets.length === 0) {
+        container.innerHTML = '<div class="node-list-empty"><p>' + (mode === 'mediaConverter' ? 'Нет доступных медиаконвертеров' : 'Нет доступных ONU') + '</p></div>';
         return;
     }
     const query = (searchQuery || '').toLowerCase().trim();
-    const filtered = query ? onus.filter(function(o) {
-        var name = (o.properties.get('name') || 'ONU').toLowerCase();
+    const defaultName = mode === 'mediaConverter' ? 'Медиаконвертер' : 'ONU';
+    const filtered = query ? targets.filter(function(o) {
+        var name = (o.properties.get('name') || defaultName).toLowerCase();
         return name.indexOf(query) !== -1;
-    }) : onus;
+    }) : targets;
     if (filtered.length === 0) {
-        container.innerHTML = '<div class="node-list-no-results">ONU не найдены по запросу</div>';
+        container.innerHTML = '<div class="node-list-no-results">' + (mode === 'mediaConverter' ? 'Медиаконвертеры не найдены по запросу' : 'ONU не найдены по запросу') + '</div>';
         return;
     }
     var html = '';
-    filtered.forEach(function(onu) {
-        var name = onu.properties.get('name') || 'ONU';
-        var idx = onus.indexOf(onu);
+    filtered.forEach(function(obj) {
+        var name = obj.properties.get('name') || defaultName;
+        var idx = targets.indexOf(obj);
         html += '<div class="node-list-item" data-onu-index="' + idx + '" onclick="selectOnuFromList(' + idx + ')">';
         html += '<div class="node-list-item-info"><div class="node-list-item-name">' + escapeHtml(name) + '</div></div></div>';
     });
@@ -10654,11 +11334,17 @@ function renderOnuList(onus, searchQuery) {
 function selectOnuFromList(onuIndex) {
     if (!onuSelectionModalData) return;
     var data = onuSelectionModalData;
-    if (onuIndex < 0 || onuIndex >= data.onus.length) return;
+    var targets = data.targets || [];
+    if (onuIndex < 0 || onuIndex >= targets.length) return;
+    var mode = data.mode || 'onu';
     closeOnuSelectionModal();
     var infoModal = document.getElementById('infoModal');
     if (infoModal) infoModal.style.display = 'none';
-    startFiberRouting(data.sleeveObj, data.cableId, data.fiberNumber, 'onu', data.onus[onuIndex]);
+    if (mode === 'mediaConverter') {
+        startFiberRouting(data.sleeveObj, data.cableId, data.fiberNumber, 'mediaConverter', targets[onuIndex]);
+    } else {
+        startFiberRouting(data.sleeveObj, data.cableId, data.fiberNumber, 'onu', targets[onuIndex]);
+    }
 }
 
 function closeOnuSelectionModal() {
@@ -10684,6 +11370,16 @@ function initNodeSelectionModal() {
     }
 
     modal.addEventListener('click', function(e) {
+        if (e.target.id === 'nodeFiberBackBtn') {
+            e.stopPropagation();
+            backNodeSelectionToList();
+            return;
+        }
+        if (e.target.id === 'nodeFiberConfirmBtn') {
+            e.stopPropagation();
+            confirmNodeFiberToSfpPort();
+            return;
+        }
         if (e.target === modal) {
             closeNodeSelectionModal();
         }
@@ -10691,7 +11387,7 @@ function initNodeSelectionModal() {
 
     if (searchInput) {
         searchInput.addEventListener('input', function() {
-            if (nodeSelectionModalData) {
+            if (nodeSelectionModalData && nodeSelectionModalData.phase === 'list') {
                 renderNodeList(nodeSelectionModalData.nodes, this.value);
             }
         });
@@ -10699,7 +11395,11 @@ function initNodeSelectionModal() {
 
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape' && modal.style.display === 'block') {
-            closeNodeSelectionModal();
+            if (nodeSelectionModalData && nodeSelectionModalData.phase === 'sfp') {
+                backNodeSelectionToList();
+            } else {
+                closeNodeSelectionModal();
+            }
         }
     });
 }
@@ -10715,7 +11415,7 @@ function initOnuSelectionModal() {
     modal.addEventListener('click', function(e) { if (e.target === modal) closeOnuSelectionModal(); });
     if (searchInput) {
         searchInput.addEventListener('input', function() {
-            if (onuSelectionModalData) renderOnuList(onuSelectionModalData.onus, this.value);
+            if (onuSelectionModalData) renderOnuList(this.value);
         });
     }
     document.addEventListener('keydown', function(e) {
@@ -11192,6 +11892,20 @@ function updateSplitterFiberPreviewWithCursor(cursorCoords) {
     myMap.geoObjects.add(splitterFiberPreviewLine);
 }
 
+function getFiberRoutingTargetLabel(targetType, targetObj) {
+    var n = targetObj && targetObj.properties && targetObj.properties.get('name');
+    if (n) return n;
+    if (targetType === 'onu') return 'ONU';
+    if (targetType === 'mediaConverter') return 'Медиаконвертер';
+    return 'Сплиттер';
+}
+
+function getFiberRoutingPreviewStroke(targetType) {
+    if (targetType === 'onu') return '#22c55e';
+    if (targetType === 'mediaConverter') return '#14b8a6';
+    return '#3b82f6';
+}
+
 function startFiberRouting(sleeveObj, cableId, fiberNumber, targetType, targetObj) {
     fiberRoutingMode = true;
     var targetId = getObjectUniqueId(targetObj);
@@ -11209,7 +11923,7 @@ function startFiberRouting(sleeveObj, cableId, fiberNumber, targetType, targetOb
     };
     fiberRoutingWaypoints = [];
     var sleeveName = sleeveObj.properties.get('name') || (sleeveObj.properties.get('type') === 'cross' ? 'Кросс' : 'Муфта');
-    var targetName = targetObj.properties.get('name') || (targetType === 'onu' ? 'ONU' : 'Сплиттер');
+    var targetName = getFiberRoutingTargetLabel(targetType, targetObj);
     showInfo('Режим прокладки жилы: ' + sleeveName + ' → ' + targetName + '. Кликайте по опорам и креплениям для маршрута, затем кликните по целевому объекту для завершения. Нажмите Escape для отмены.', 'Прокладка жилы');
     selectObject(sleeveObj);
 }
@@ -11243,6 +11957,8 @@ function completeFiberRouting() {
     
     if (data.targetType === 'onu') {
         connectFiberToOnuWithRoute(data.sleeveObj, data.cableId, data.fiberNumber, data.targetObj, routeIds);
+    } else if (data.targetType === 'mediaConverter') {
+        connectFiberToMediaConverterWithRoute(data.sleeveObj, data.cableId, data.fiberNumber, data.targetObj, routeIds);
     } else if (data.targetType === 'splitter') {
         connectFiberToSplitterWithRoute(data.sleeveObj, data.cableId, data.fiberNumber, data.targetObj, routeIds);
     }
@@ -11287,10 +12003,10 @@ function handleFiberRoutingClick(coords) {
             return;
         }
         
-        var targetName = data.targetObj.properties.get('name') || (data.targetType === 'onu' ? 'ONU' : 'Сплиттер');
+        var targetName = getFiberRoutingTargetLabel(data.targetType, data.targetObj);
         showWarning('Кликните по опоре или креплению для добавления промежуточной точки, или по целевому объекту (' + escapeHtml(targetName) + ') для завершения.', 'Режим прокладки');
     } else {
-        var targetName = data.targetObj.properties.get('name') || (data.targetType === 'onu' ? 'ONU' : 'Сплиттер');
+        var targetName = getFiberRoutingTargetLabel(data.targetType, data.targetObj);
         showWarning('Кликните по опоре, креплению или целевому объекту (' + escapeHtml(targetName) + ').', 'Режим прокладки');
     }
 }
@@ -11320,7 +12036,7 @@ function updateFiberRoutingPreview() {
         points.push(targetCoords);
         
         fiberRoutingPreviewLine = new ymaps.Polyline(points, {}, {
-            strokeColor: data.targetType === 'onu' ? '#22c55e' : '#3b82f6',
+            strokeColor: getFiberRoutingPreviewStroke(data.targetType),
             strokeWidth: 2,
             strokeStyle: 'shortdash',
             strokeOpacity: 0.5
@@ -11352,7 +12068,7 @@ function updateFiberRoutingPreviewWithCursor(cursorCoords) {
     points.push(cursorCoords);
     
     fiberRoutingPreviewLine = new ymaps.Polyline(points, {}, {
-        strokeColor: data.targetType === 'onu' ? '#22c55e' : '#3b82f6',
+        strokeColor: getFiberRoutingPreviewStroke(data.targetType),
         strokeWidth: 2,
         strokeStyle: 'shortdash',
         strokeOpacity: 0.4
@@ -11626,38 +12342,66 @@ function initOltSelectionModal() {
     }
 }
 
-function connectFiberToNode(crossObj, cableId, fiberNumber, nodeObj) {
+function connectFiberToNode(crossObj, cableId, fiberNumber, nodeObj, switchId, switchPort) {
     const crossId = crossObj.properties.get('uniqueId');
     const usage = getFiberUsage(cableId, fiberNumber, { type: 'nodeConn', crossId: crossId, atCrossId: crossId });
     if (usage.used) {
         showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
         return;
     }
+    if (!switchId || switchPort == null || isNaN(parseInt(switchPort, 10))) {
+        showError('Выберите коммутатор и порт SFP/SFP+/Комбо для оптического подключения.', 'Порт');
+        return;
+    }
+    var portNum = parseInt(switchPort, 10);
+    var swAtt = findAttachedSwitchOnNode(nodeObj, switchId);
+    if (!swAtt) {
+        showError('Коммутатор не найден в узле.', 'Ошибка');
+        return;
+    }
+    var typesAtt = swAtt.switchPortTypes || [];
+    if (portNum < 1 || portNum > typesAtt.length) {
+        showError('Некорректный номер порта коммутатора.', 'Порт');
+        return;
+    }
+    if (!isSwitchPortSfpFiberType(typesAtt[portNum - 1])) {
+        showError('К кроссу можно подключить жилу только в порт типа SFP, SFP+ или Комбо RJ45/SFP.', 'Тип порта');
+        return;
+    }
+    var fusAtt = swAtt.fiberPortUsage || {};
+    if (fusAtt[String(portNum)]) {
+        showError('Выбранный SFP-порт уже занят другой жилой. Выберите другой порт.', 'Порт занят');
+        return;
+    }
     let nodeConnections = crossObj.properties.get('nodeConnections');
     if (!nodeConnections) {
         nodeConnections = {};
     }
-    
+
     const key = `${cableId}-${fiberNumber}`;
     const nodeUniqueId = nodeObj.properties.get('uniqueId') || generateUniqueId('node');
     const crossUniqueId = crossObj.properties.get('uniqueId') || generateUniqueId('cross');
-    
+
     if (!nodeObj.properties.get('uniqueId')) {
         nodeObj.properties.set('uniqueId', nodeUniqueId);
     }
     if (!crossObj.properties.get('uniqueId')) {
         crossObj.properties.set('uniqueId', crossUniqueId);
     }
-    
+
     nodeConnections[key] = {
         nodeId: nodeUniqueId,
-        nodeName: nodeObj.properties.get('name') || 'Узел'
+        nodeName: nodeObj.properties.get('name') || 'Узел',
+        switchId: switchId,
+        switchPort: portNum,
+        switchPortType: typesAtt[portNum - 1]
     };
-    
+
     crossObj.properties.set('nodeConnections', nodeConnections);
+    markNodeSwitchFiberPortOccupied(nodeObj, switchId, portNum, key);
 
     createNodeConnectionLine(crossObj, nodeObj, cableId, fiberNumber);
-    
+
     saveData();
 
     showObjectInfo(crossObj);
@@ -11666,13 +12410,23 @@ function connectFiberToNode(crossObj, cableId, fiberNumber, nodeObj) {
 function disconnectFiberFromNode(crossObj, cableId, fiberNumber) {
     let nodeConnections = crossObj.properties.get('nodeConnections');
     if (!nodeConnections) return;
-    
+
     const key = `${cableId}-${fiberNumber}`;
+    const conn = nodeConnections[key];
 
     removeNodeConnectionLine(crossObj, cableId, fiberNumber);
-    
+
+    if (conn && conn.nodeId && conn.switchId != null && conn.switchPort != null) {
+        var nodeObjDisc = objects.find(function(n) {
+            return n.properties && n.properties.get('type') === 'node' && n.properties.get('uniqueId') === conn.nodeId;
+        });
+        if (nodeObjDisc) {
+            clearNodeSwitchFiberPortOccupied(nodeObjDisc, conn.switchId, conn.switchPort);
+        }
+    }
+
     delete nodeConnections[key];
-    
+
     crossObj.properties.set('nodeConnections', nodeConnections);
     saveData();
 
@@ -11749,6 +12503,60 @@ function connectFiberToOnuWithRoute(sleeveObj, cableId, fiberNumber, onuObj, rou
     saveData();
 }
 
+function connectFiberToMediaConverterWithRoute(sleeveObj, cableId, fiberNumber, mcObj, routeIds) {
+    const placeId = sleeveObj.properties.get('uniqueId');
+    const mcId = getObjectUniqueId(mcObj);
+    const slotTypeMc = sleeveObj.properties.get('type');
+    const usageOptsMc = { type: 'mediaConverterConn', mediaConverterId: mcId };
+    if (slotTypeMc === 'cross') {
+        usageOptsMc.crossId = placeId;
+        usageOptsMc.atCrossId = placeId;
+    } else {
+        usageOptsMc.sleeveId = placeId;
+        usageOptsMc.atSleeveId = placeId;
+    }
+    const usage = getFiberUsage(cableId, fiberNumber, usageOptsMc);
+    if (usage.used) {
+        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
+        return;
+    }
+    let mcConnections = sleeveObj.properties.get('mediaConverterConnections');
+    if (!mcConnections) {
+        mcConnections = {};
+    }
+    const key = cableId + '-' + fiberNumber;
+    const mcUniqueId = mcObj.properties.get('uniqueId') || generateUniqueId('mediaConverter');
+    const sleeveUniqueId = sleeveObj.properties.get('uniqueId') || generateUniqueId('cross');
+    if (!mcObj.properties.get('uniqueId')) mcObj.properties.set('uniqueId', mcUniqueId);
+    if (!sleeveObj.properties.get('uniqueId')) sleeveObj.properties.set('uniqueId', sleeveUniqueId);
+    mcConnections[key] = { mediaConverterId: mcUniqueId, mediaConverterName: mcObj.properties.get('name') || 'Медиаконвертер', routeIds: routeIds || [] };
+    sleeveObj.properties.set('mediaConverterConnections', mcConnections);
+    mcObj.properties.set('incomingFiber', { cableId: cableId, fiberNumber: fiberNumber });
+    createMediaConverterConnectionLine(sleeveObj, mcObj, cableId, fiberNumber, routeIds);
+    saveData();
+}
+
+function disconnectFiberFromMediaConverter(sleeveObj, cableId, fiberNumber) {
+    let mcConnections = sleeveObj.properties.get('mediaConverterConnections');
+    if (!mcConnections) return;
+    const key = cableId + '-' + fiberNumber;
+    const conn = mcConnections[key];
+    if (conn && conn.mediaConverterId) {
+        var mcObj = objects.find(function(o) { return o.properties && o.properties.get('type') === 'mediaConverter' && getObjectUniqueId(o) === conn.mediaConverterId; });
+        if (mcObj) {
+            var ifMc = mcObj.properties.get('incomingFiber');
+            if (ifMc && ifMc.cableId === cableId && ifMc.fiberNumber === fiberNumber) {
+                mcObj.properties.set('incomingFiber', null);
+            }
+        }
+    }
+    removeOnuConnectionLine(sleeveObj, cableId, fiberNumber);
+    delete mcConnections[key];
+    sleeveObj.properties.set('mediaConverterConnections', mcConnections);
+    saveData();
+    showObjectInfo(sleeveObj);
+}
+
 function createOnuConnectionLine(sleeveObj, onuObj, cableId, fiberNumber, routeIds) {
     const sleeveCoords = sleeveObj.geometry.getCoordinates();
     const onuCoords = onuObj.geometry.getCoordinates();
@@ -11780,6 +12588,40 @@ function createOnuConnectionLine(sleeveObj, onuObj, cableId, fiberNumber, routeI
     line.properties.set('cableId', cableId);
     line.properties.set('fiberNumber', fiberNumber);
     line.properties.set('onuName', onuName);
+    line.properties.set('routeIds', routeIds || []);
+    onuConnectionLines.push(line);
+    myMap.geoObjects.add(line);
+}
+
+function createMediaConverterConnectionLine(sleeveObj, mcObj, cableId, fiberNumber, routeIds) {
+    const sleeveCoords = sleeveObj.geometry.getCoordinates();
+    const mcCoords = mcObj.geometry.getCoordinates();
+    const sleeveUniqueId = sleeveObj.properties.get('uniqueId');
+    const key = sleeveUniqueId + '-' + cableId + '-' + fiberNumber;
+    removeOnuConnectionLineByKey(key);
+    const mcName = mcObj.properties.get('name') || 'Медиаконвертер';
+    var points = [sleeveCoords];
+    if (routeIds && routeIds.length > 0) {
+        routeIds.forEach(function(wpId) {
+            var wpObj = objects.find(function(o) { return o.properties && getObjectUniqueId(o) === wpId; });
+            if (wpObj && wpObj.geometry) {
+                points.push(wpObj.geometry.getCoordinates());
+            }
+        });
+    }
+    points.push(mcCoords);
+    const line = new ymaps.Polyline(points, {}, {
+        strokeColor: '#14b8a6',
+        strokeWidth: 2,
+        strokeStyle: 'shortdash',
+        strokeOpacity: 0.8
+    });
+    line.properties.set('type', 'mediaConverterConnectionLine');
+    line.properties.set('connectionKey', key);
+    line.properties.set('sleeveId', sleeveUniqueId);
+    line.properties.set('cableId', cableId);
+    line.properties.set('fiberNumber', fiberNumber);
+    line.properties.set('mediaConverterName', mcName);
     line.properties.set('routeIds', routeIds || []);
     onuConnectionLines.push(line);
     myMap.geoObjects.add(line);
@@ -11934,18 +12776,33 @@ function updateOnuConnectionLines() {
         const type = obj.properties.get('type');
         if (type !== 'cross' && type !== 'sleeve') return;
         const onuConnections = obj.properties.get('onuConnections');
-        if (!onuConnections) return;
-        Object.keys(onuConnections).forEach(function(key) {
-            const conn = onuConnections[key];
-            const parts = key.split('-');
-            const fiberNumberParsed = parseInt(parts.pop(), 10);
-            const cableIdParsed = parts.join('-');
-            if (!crossHasFiberForConnection(obj, cableIdParsed, fiberNumberParsed)) return;
-            const onuObj = objects.find(function(n) {
-                return n.properties && n.properties.get('type') === 'onu' && n.properties.get('uniqueId') === conn.onuId;
+        if (onuConnections) {
+            Object.keys(onuConnections).forEach(function(key) {
+                const conn = onuConnections[key];
+                const parts = key.split('-');
+                const fiberNumberParsed = parseInt(parts.pop(), 10);
+                const cableIdParsed = parts.join('-');
+                if (!crossHasFiberForConnection(obj, cableIdParsed, fiberNumberParsed)) return;
+                const onuObj = objects.find(function(n) {
+                    return n.properties && n.properties.get('type') === 'onu' && n.properties.get('uniqueId') === conn.onuId;
+                });
+                if (onuObj) createOnuConnectionLine(obj, onuObj, cableIdParsed, fiberNumberParsed, conn.routeIds || []);
             });
-            if (onuObj) createOnuConnectionLine(obj, onuObj, cableIdParsed, fiberNumberParsed, conn.routeIds || []);
-        });
+        }
+        const mcConnections = obj.properties.get('mediaConverterConnections');
+        if (mcConnections) {
+            Object.keys(mcConnections).forEach(function(key) {
+                const conn = mcConnections[key];
+                const parts = key.split('-');
+                const fiberNumberParsed = parseInt(parts.pop(), 10);
+                const cableIdParsed = parts.join('-');
+                if (!crossHasFiberForConnection(obj, cableIdParsed, fiberNumberParsed)) return;
+                const mcObj = objects.find(function(n) {
+                    return n.properties && n.properties.get('type') === 'mediaConverter' && n.properties.get('uniqueId') === conn.mediaConverterId;
+                });
+                if (mcObj) createMediaConverterConnectionLine(obj, mcObj, cableIdParsed, fiberNumberParsed, conn.routeIds || []);
+            });
+        }
     });
 }
 
@@ -12161,7 +13018,7 @@ function traceFromNode(crossUniqueId, cableId, fiberNumber) {
         showError('Кросс был удалён. Информация обновлена.', 'Данные устарели');
         if (currentModalObject && currentModalObject.properties) {
             var currentType = currentModalObject.properties.get('type');
-            if (currentType === 'node') {
+            if (currentType === 'node' || currentType === 'camera') {
                 showObjectInfo(currentModalObject);
             }
         }
@@ -12173,7 +13030,7 @@ function traceFromNode(crossUniqueId, cableId, fiberNumber) {
         showError('Кабель был удалён. Информация обновлена.', 'Данные устарели');
         if (currentModalObject && currentModalObject.properties) {
             var currentType = currentModalObject.properties.get('type');
-            if (currentType === 'node') {
+            if (currentType === 'node' || currentType === 'camera') {
                 showObjectInfo(currentModalObject);
             }
         }
@@ -12188,7 +13045,7 @@ function traceFromNode(crossUniqueId, cableId, fiberNumber) {
         showError('Соединение было удалено. Информация обновлена.', 'Данные устарели');
         if (currentModalObject && currentModalObject.properties) {
             var currentType = currentModalObject.properties.get('type');
-            if (currentType === 'node') {
+            if (currentType === 'node' || currentType === 'camera') {
                 showObjectInfo(currentModalObject);
             }
         }
@@ -12305,12 +13162,12 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
         var showOnMapBtn = objUniqueId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(objUniqueId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
         
         if (item.type === 'start') {
-            var icon = item.objectType === 'cross' ? '📦' : (item.objectType === 'sleeve' ? '🔴' : (item.objectType === 'olt' ? '📶' : (item.objectType === 'onu' ? '📟' : (item.objectType === 'splitter' ? '🔀' : '📍'))));
+            var icon = item.objectType === 'cross' ? '📦' : (item.objectType === 'sleeve' ? '🔴' : (item.objectType === 'olt' ? '📶' : (item.objectType === 'onu' ? '📟' : (item.objectType === 'mediaConverter' ? '⇄' : (item.objectType === 'splitter' ? '🔀' : '📍')))));
             var portBadge = (item.objectType === 'cross' && item.port) ? ' <span class="trace-port-badge">Порт ' + escapeHtml(String(item.port)) + '</span>' : '';
             html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-start">' + stepNumber + '</span><div class="trace-path-block trace-path-start"><div><span>' + icon + ' ' + escapeHtml(item.objectName) + '</span>' + portBadge + '<span class="trace-path-muted"> (' + getObjectTypeName(item.objectType) + ')</span></div>' + showOnMapBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'object') {
-            icon = item.objectType === 'cross' ? '📦' : (item.objectType === 'sleeve' ? '🔴' : (item.objectType === 'node' ? '🖥️' : (item.objectType === 'olt' ? '📶' : (item.objectType === 'onu' ? '📟' : (item.objectType === 'splitter' ? '🔀' : '📍')))));
+            icon = item.objectType === 'cross' ? '📦' : (item.objectType === 'sleeve' ? '🔴' : (item.objectType === 'node' ? '🖥️' : (item.objectType === 'olt' ? '📶' : (item.objectType === 'onu' ? '📟' : (item.objectType === 'mediaConverter' ? '⇄' : (item.objectType === 'splitter' ? '🔀' : '📍'))))));
             portBadge = (item.objectType === 'cross' && item.port) ? ' <span class="trace-port-badge">Порт ' + escapeHtml(String(item.port)) + '</span>' : '';
             html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">' + stepNumber + '</span><div class="trace-path-block trace-path-object"><div><span>' + icon + ' ' + escapeHtml(item.objectName) + '</span>' + portBadge + '<span class="trace-path-muted"> (' + getObjectTypeName(item.objectType) + ')</span></div>' + showOnMapBtn + '</div></div>';
             stepNumber++;
@@ -12318,6 +13175,11 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
             var onuConnObjId = item.onu ? getObjectUniqueId(item.onu) : null;
             var onuConnShowBtn = onuConnObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(onuConnObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
             html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">🔌</span><div class="trace-path-block trace-path-object"><span>🔌 Вывод на ONU: Жила ' + item.fiberNumber + ' → ' + escapeHtml(item.onuName) + '</span>' + onuConnShowBtn + '</div></div>';
+            stepNumber++;
+        } else if (item.type === 'mediaConverterConnection') {
+            var mcConnObjId = item.mediaConverter ? getObjectUniqueId(item.mediaConverter) : null;
+            var mcConnShowBtn = mcConnObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(mcConnObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">⇄</span><div class="trace-path-block trace-path-object"><span>⇄ Вывод на медиаконвертер: Жила ' + item.fiberNumber + ' → ' + escapeHtml(item.mediaConverterName || 'Медиаконвертер') + '</span>' + mcConnShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'cable') {
             var cableObjId = item.cable ? getObjectUniqueId(item.cable) : null;
@@ -12545,6 +13407,7 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
         if (t === 'cross' || t === 'sleeve') {
             var oltConn = slot.properties.get('oltConnections');
             var onuConn = slot.properties.get('onuConnections');
+            var mcConn = slot.properties.get('mediaConverterConnections');
             var splitterConn = slot.properties.get('splitterConnections');
             var nodeConn = slot.properties.get('nodeConnections');
             var fiberConn = slot.properties.get('fiberConnections');
@@ -12561,6 +13424,14 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
                 Object.keys(onuConn).forEach(function(key) {
                     if (key.indexOf(cableUniqueId + '-') === 0) {
                         delete onuConn[key];
+                        changed = true;
+                    }
+                });
+            }
+            if (mcConn) {
+                Object.keys(mcConn).forEach(function(key) {
+                    if (key.indexOf(cableUniqueId + '-') === 0) {
+                        delete mcConn[key];
                         changed = true;
                     }
                 });
@@ -12596,6 +13467,7 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
             if (changed) {
                 if (oltConn) slot.properties.set('oltConnections', oltConn);
                 if (onuConn) slot.properties.set('onuConnections', onuConn);
+                if (mcConn) slot.properties.set('mediaConverterConnections', mcConn);
                 if (splitterConn) slot.properties.set('splitterConnections', splitterConn);
                 if (nodeConn) slot.properties.set('nodeConnections', nodeConn);
             }
@@ -12635,6 +13507,12 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
         if (t === 'onu') {
             var onuIncoming = slot.properties.get('incomingFiber');
             if (onuIncoming && onuIncoming.cableId === cableUniqueId) {
+                slot.properties.set('incomingFiber', null);
+            }
+        }
+        if (t === 'mediaConverter') {
+            var mcIncomingDel = slot.properties.get('incomingFiber');
+            if (mcIncomingDel && mcIncomingDel.cableId === cableUniqueId) {
                 slot.properties.set('incomingFiber', null);
             }
         }
@@ -13382,6 +14260,7 @@ function getMapFilterState() {
     var splitterEl = document.getElementById('mapFilterSplitter');
     var onuEl = document.getElementById('mapFilterOnu');
     var cameraEl = document.getElementById('mapFilterCamera');
+    var mediaConverterEl = document.getElementById('mapFilterMediaConverter');
     return {
         node: nodeEl ? nodeEl.checked : true,
         nodeAggregationOnly: nodeAggEl ? nodeAggEl.checked : false,
@@ -13392,7 +14271,8 @@ function getMapFilterState() {
         olt: oltEl ? oltEl.checked : true,
         splitter: splitterEl ? splitterEl.checked : true,
         onu: onuEl ? onuEl.checked : true,
-        camera: cameraEl ? cameraEl.checked : true
+        camera: cameraEl ? cameraEl.checked : true,
+        mediaConverter: mediaConverterEl ? mediaConverterEl.checked : true
     };
 }
 
@@ -13486,7 +14366,7 @@ function applyMapFilter() {
             if (filter.nodeAggregationOnly) return obj.properties.get('nodeKind') === 'aggregation';
             return true;
         }
-        if (type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera') return filter[type] !== false;
+        if (type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter') return filter[type] !== false;
         return filter[type] === true;
     }
     var visibleCables = new Set();
@@ -13512,7 +14392,7 @@ function applyMapFilter() {
             var cables = obj.properties.get('cables');
             visible = Array.isArray(cables) && cables.some(function(c) { return visibleCables.has(c); });
         } else {
-            visible = filter[type] === true || (['olt', 'splitter', 'onu', 'camera'].indexOf(type) !== -1 && filter[type] !== false);
+            visible = filter[type] === true || (['olt', 'splitter', 'onu', 'camera', 'mediaConverter'].indexOf(type) !== -1 && filter[type] !== false);
         }
         try {
             if (obj.options) obj.options.set('visible', visible);
@@ -13635,6 +14515,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     }
     const oltConnections = sleeveObj.properties.get('oltConnections') || {};
     const onuConnections = sleeveObj.properties.get('onuConnections') || {};
+    const mediaConverterConnections = sleeveObj.properties.get('mediaConverterConnections') || {};
     const crossPorts = isCross ? (sleeveObj.properties.get('crossPorts') || 24) : 24;
     let fiberPorts = isCross ? sleeveObj.properties.get('fiberPorts') : null;
     if (isCross && !fiberPorts) {
@@ -13693,9 +14574,11 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         if (isCross) {
             html += '• <strong>Соединение жил:</strong> клик по жиле в таблице или в схеме → затем по жиле в <u>другом</u> кабеле.<br>';
             html += '• <strong>На узел:</strong> кнопка «Узел» у свободной жилы.<br>';
+            html += '• <strong>ONU / медиаконвертер:</strong> кнопки «📡 ONU» и «⇄ МК» у жилы с трассой от OLT (как для GPON).<br>';
             if (canConnectFibers) html += '• Уже соединённые жилы — синяя обводка в схеме; занятые — красным в таблице.';
         } else if (canConnectFibers) {
-            html += '• Клик по жиле первого кабеля, затем по жиле второго. Клик по линии соединения в схеме — удалить соединение.';
+            html += '• Клик по жиле первого кабеля, затем по жиле второго. Клик по линии соединения в схеме — удалить соединение.<br>';
+            html += '• <strong>ONU / медиаконвертер:</strong> кнопки «📡 ONU» и «⇄ МК» у жилы с трассой от OLT.';
         }
         html += '</div></details>';
         if (canConnectFibers || isCross) {
@@ -13846,7 +14729,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     }
     html += '</div>';
 
-    function buildFiberCell(cableData, fiber, sleeveObj, isCross, isEditMode, fiberLabels, fiberConnections, nodeConnections, oltConnections, onuConnections, fiberPorts, crossPorts) {
+    function buildFiberCell(cableData, fiber, sleeveObj, isCross, isEditMode, fiberLabels, fiberConnections, nodeConnections, oltConnections, onuConnections, mediaConverterConnections, fiberPorts, crossPorts) {
         const isUsed = cableData.usedFibers.includes(fiber.number);
         const fiberLabelKey = `${cableData.cableUniqueId}-${fiber.number}`;
         const directLabel = fiberLabels[fiberLabelKey] || '';
@@ -13860,6 +14743,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         const nodeConnection = nodeConnections[fiberLabelKey];
         const oltConnection = oltConnections[fiberLabelKey];
         const onuConnection = onuConnections[fiberLabelKey];
+        const mcConnection = mediaConverterConnections[fiberLabelKey];
         const splitterConnections = sleeveObj.properties.get('splitterConnections') || {};
         const splitterConnection = splitterConnections[fiberLabelKey];
         const hasSplitterConnection = !!splitterConnection && !!splitterConnection.splitterId;
@@ -13871,19 +14755,21 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         const hasNodeConnection = !!nodeConnection;
         const hasOltConnection = !!oltConnection;
         const hasOnuConnection = !!onuConnection;
-        const hasAnyOutConnection = hasNodeConnection || hasOltConnection || hasOnuConnection || hasSplitterConnection;
+        const hasMcConnection = !!mcConnection && !!mcConnection.mediaConverterId;
+        const hasAnyOutConnection = hasNodeConnection || hasOltConnection || hasOnuConnection || hasMcConnection || hasSplitterConnection;
         const canConnectToOnu = isFiberConnectedToOlt(sleeveObj, cableData.cableUniqueId, fiber.number);
         const fiberTextColor = (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00' || fiber.color === '#FFC0CB') ? '#000' : '#fff';
-        let statusText = isUsed ? '(исп.)' : (hasNodeConnection ? '(на узел)' : (hasOnuConnection ? '(на ONU)' : (hasSplitterConnection ? '(на сплит.)' : (hasOltConnection ? '(от OLT)' : '(своб.)'))));
+        let statusText = isUsed ? '(исп.)' : (hasNodeConnection ? '(на узел)' : (hasOnuConnection ? '(на ONU)' : (hasMcConnection ? '(на МК)' : (hasSplitterConnection ? '(на сплит.)' : (hasOltConnection ? '(от OLT)' : '(своб.)')))));
         if (hasOltConnection && oltConnection.oltId) {
             const oltObj = objects.find(o => o.properties && o.properties.get('type') === 'olt' && o.properties.get('uniqueId') === oltConnection.oltId);
             const oltName = oltObj ? (oltObj.properties.get('name') || 'OLT') : 'OLT';
             statusText = oltConnection.incoming ? ('приход OLT ' + escapeHtml(oltName)) : ('OLT ' + escapeHtml(oltName) + ', порт ' + (oltConnection.portNumber || '?'));
         }
         if (hasOnuConnection) statusText = '→ ONU ' + escapeHtml(onuConnection.onuName || 'ONU');
+        if (hasMcConnection) statusText = '→ МК ' + escapeHtml(mcConnection.mediaConverterName || 'Медиаконвертер');
         if (hasSplitterConnection) statusText = '→ ' + escapeHtml(splitterName);
-        const statusColor = isUsed ? '#b91c1c' : (hasNodeConnection ? '#22c55e' : (hasOnuConnection ? '#a855f7' : (hasSplitterConnection ? '#f97316' : (hasOltConnection ? '#0ea5e9' : '#22c55e'))));
-        const itemBorder = isUsed ? '#dc2626' : (hasNodeConnection ? '#22c55e' : (hasOnuConnection ? '#a855f7' : (hasSplitterConnection ? '#f97316' : (hasOltConnection ? '#0ea5e9' : 'var(--border-color)'))));
+        const statusColor = isUsed ? '#b91c1c' : (hasNodeConnection ? '#22c55e' : (hasOnuConnection ? '#a855f7' : (hasMcConnection ? '#0f766e' : (hasSplitterConnection ? '#f97316' : (hasOltConnection ? '#0ea5e9' : '#22c55e')))));
+        const itemBorder = isUsed ? '#dc2626' : (hasNodeConnection ? '#22c55e' : (hasOnuConnection ? '#a855f7' : (hasMcConnection ? '#14b8a6' : (hasSplitterConnection ? '#f97316' : (hasOltConnection ? '#0ea5e9' : 'var(--border-color)')))));
         const usedClass = isUsed ? ' fiber-used cross-fiber-used' : (hasSplitterConnection ? ' fiber-splitter-connected' : '');
         var cellTitle = '';
         if (isEditMode && !hasAnyOutConnection && !isConnected) cellTitle = 'Клик: выбрать жилу, затем клик по жиле в другом кабеле — создать соединение';
@@ -13909,12 +14795,13 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
                     <span style="font-size: 0.7rem; color: ${statusColor}; font-weight: 600; white-space: nowrap;">${statusText}</span>
                 </div>
                 ${portRow}
-                ${hasNodeConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #f0fdf4; border-radius: 3px; font-size: 0.75rem;"><span style="color: #166534;">🖥️ → ${escapeHtml(nodeConnection.nodeName)}</span>${isEditMode ? `<button class="btn-disconnect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от узла" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
+                ${hasNodeConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #f0fdf4; border-radius: 3px; font-size: 0.75rem;"><span style="color: #166534;">🖥️ → ${escapeHtml(nodeConnection.nodeName)}${nodeConnection.switchPort != null ? ' · SFP п. ' + nodeConnection.switchPort : ''}</span>${isEditMode ? `<button class="btn-disconnect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от узла" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
                 ${hasOnuConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #f5f3ff; border-radius: 3px; font-size: 0.75rem;"><span style="color: #6d28d9;">📡 → ${escapeHtml(onuConnection.onuName || 'ONU')}${onuConnection.routeIds && onuConnection.routeIds.length > 0 ? ' (' + onuConnection.routeIds.length + ' точ.)' : ''}</span>${isEditMode ? `<button class="btn-disconnect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от ONU" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
+                ${hasMcConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #ecfeff; border-radius: 3px; font-size: 0.75rem;"><span style="color: #0f766e;">⇄ → ${escapeHtml(mcConnection.mediaConverterName || 'Медиаконвертер')}${mcConnection.routeIds && mcConnection.routeIds.length > 0 ? ' (' + mcConnection.routeIds.length + ' точ.)' : ''}</span>${isEditMode ? `<button class="btn-disconnect-mc" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от медиаконвертера" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
                 ${hasSplitterConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #fff7ed; border-radius: 3px; font-size: 0.75rem;"><span style="color: #c2410c;">🔀 → ${escapeHtml(splitterName)}${splitterConnection.routeIds && splitterConnection.routeIds.length > 0 ? ' (' + splitterConnection.routeIds.length + ' точ.)' : ''}</span>${isEditMode ? `<button class="btn-disconnect-splitter" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от сплиттера" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
                 ${hasOltConnection && oltConnection.oltId ? (function() { const o = objects.find(obj => obj.properties && obj.properties.get('type') === 'olt' && obj.properties.get('uniqueId') === oltConnection.oltId); const n = o ? (o.properties.get('name') || 'OLT') : 'OLT'; const label = oltConnection.incoming ? ('приход OLT ' + escapeHtml(n)) : ('OLT ' + escapeHtml(n) + ', порт ' + (oltConnection.portNumber || '?')); return `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #e0f2fe; border-radius: 3px; font-size: 0.75rem;"><span style="color: #0369a1;">📶 ${label}</span>${isEditMode ? `<button class="btn-disconnect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от OLT" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>`; }()) : ''}
-                ${(!isConnected && !hasAnyOutConnection && isEditMode && isCross) ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;"><button class="btn-connect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к узлу" style="padding: 4px 6px; background: #22c55e; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🖥️ Узел</button><button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 OLT</button>${canConnectToOnu ? `<button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}</div>` : ''}
-                ${(!isConnected && !hasAnyOutConnection && isEditMode && !isCross) ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;"><button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 OLT</button>${(cableData.isFromOlt || canConnectToOnu) ? `<button class="btn-connect-splitter" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к входу сплиттера" style="padding: 4px 6px; background: #f97316; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🔀 Сплиттер</button>` : ''}${canConnectToOnu ? `<button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}</div>` : ''}
+                ${(!isConnected && !hasAnyOutConnection && isEditMode && isCross) ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;"><button class="btn-connect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к узлу" style="padding: 4px 6px; background: #22c55e; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🖥️ Узел</button><button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 OLT</button>${canConnectToOnu ? `<button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}<button class="btn-connect-mc" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к медиаконвертеру" style="padding: 4px 6px; background: #14b8a6; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">⇄ МК</button></div>` : ''}
+                ${(!isConnected && !hasAnyOutConnection && isEditMode && !isCross) ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;"><button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к OLT" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 OLT</button>${(cableData.isFromOlt || canConnectToOnu) ? `<button class="btn-connect-splitter" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к входу сплиттера" style="padding: 4px 6px; background: #f97316; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🔀 Сплиттер</button>` : ''}${canConnectToOnu ? `<button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}<button class="btn-connect-mc" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к медиаконвертеру" style="padding: 4px 6px; background: #14b8a6; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">⇄ МК</button></div>` : ''}
                 ${isEditMode ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px;"><input type="text" class="fiber-label-input" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" value="${directLabel}" placeholder="${isInheritedLabel ? '← ' + displayLabel : 'Подпись...'}" style="flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid ${isInheritedLabel ? '#8b5cf6' : '#ced4da'}; border-radius: 3px; font-size: 0.7rem; ${isInheritedLabel ? 'background: #f5f3ff;' : ''}">${isInheritedLabel ? '<span style="font-size: 0.65rem; color: #8b5cf6;">⬅️</span>' : ''}</div>` : (displayLabel ? `<div style="margin-left: 30px; font-size: 0.7rem; color: ${isInheritedLabel ? '#8b5cf6' : '#6366f1'}; overflow: hidden; text-overflow: ellipsis;">${isInheritedLabel ? '⬅️ ' : '📝 '}${displayLabel}</div>` : '')}
             </div>`;
     }
@@ -13941,7 +14828,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             const fiber = cableData.fibers[row];
             html += '<td>';
             if (fiber) {
-                html += buildFiberCell(cableData, fiber, sleeveObj, isCross, isEditMode, fiberLabels, fiberConnections, nodeConnections, oltConnections, onuConnections, fiberPorts, crossPorts);
+                html += buildFiberCell(cableData, fiber, sleeveObj, isCross, isEditMode, fiberLabels, fiberConnections, nodeConnections, oltConnections, onuConnections, mediaConverterConnections, fiberPorts, crossPorts);
             } else {
                 html += '<div class="cross-fiber-empty">—</div>';
             }

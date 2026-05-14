@@ -1,4 +1,4 @@
-const APP_VERSION = '1.1.8';
+const APP_VERSION = '1.1.9';
 const GITHUB_REPO = { owner: 'DanyWereWolf', repo: 'Network-map' };
 
 var lastUpdateCheckResult = null;

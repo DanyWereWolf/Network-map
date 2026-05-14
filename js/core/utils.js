@@ -14,6 +14,7 @@ function getObjectTypeName(type) {
         case 'splitter': return 'Сплиттер';
         case 'onu': return 'ONU';
         case 'camera': return 'Камера';
+        case 'mediaConverter': return 'Медиаконвертер';
         case 'node': return 'Узел сети';
         case 'switch': return 'Коммутатор';
         case 'attachment': return 'Крепление узлов';

@@ -26,10 +26,13 @@ var SUBSCRIPTION_PLANS = {
     pro: { maxConcurrentUsers: 10, name: 'Про' },
     enterprise: { maxConcurrentUsers: -1, name: 'Корпоративный' }
 };
+function planIdsMatch(planIdFromOrg, planEntryId) {
+    return String(planIdFromOrg || '').trim().toLowerCase() === String(planEntryId || '').trim().toLowerCase();
+}
 function getMaxConcurrentFromPricingPlan(planId) {
     if (!planId) return null;
     const plans = db.getPricingPlans();
-    const p = plans.find(function(x) { return x.id === planId; });
+    const p = plans.find(function(x) { return planIdsMatch(planId, x.id); });
     if (!p || p.maxConcurrentUsers === undefined || p.maxConcurrentUsers === null || p.maxConcurrentUsers === '') return null;
     const n = typeof p.maxConcurrentUsers === 'number' ? p.maxConcurrentUsers : parseInt(p.maxConcurrentUsers, 10);
     if (isNaN(n) || n === 0) return null;
@@ -52,7 +55,8 @@ function getMaxConcurrentForOrg(org) {
     if (org.maxConcurrentUsers != null && org.maxConcurrentUsers > 0) return org.maxConcurrentUsers;
     const fromPricing = getMaxConcurrentFromPricingPlan(org.planId);
     if (fromPricing != null) return fromPricing === -1 ? 999 : fromPricing;
-    var plan = SUBSCRIPTION_PLANS[org.planId || 'basic'];
+    var planKey = Object.keys(SUBSCRIPTION_PLANS).find(function(k) { return planIdsMatch(org.planId || 'basic', k); });
+    var plan = planKey ? SUBSCRIPTION_PLANS[planKey] : SUBSCRIPTION_PLANS.basic;
     return plan ? (plan.maxConcurrentUsers === -1 ? 999 : plan.maxConcurrentUsers) : 3;
 }
 

@@ -7,7 +7,7 @@ let currentState = null;
 
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-    res.end('Сервер синхронизации карты. Подключитесь по WebSocket (ws://' + (req.headers.host || 'localhost:' + PORT) + ').');
+    res.end('Сервер синхронизации «Карта оптической сети». Подключитесь по WebSocket (ws://' + (req.headers.host || 'localhost:' + PORT) + ').');
 });
 
 const wss = new WebSocket.Server({ server });

@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="author" content="Карта ВОЛС">
-    <meta name="copyright" content="Copyright (c) 2024–2026 Карта ВОЛС. Все права защищены.">
-    <meta name="description" content="Интерактивная карта волоконно-оптической сети: узлы, кроссы, муфты, кабели, OLT, сплиттеры и ONU. Поиск, фильтры, история изменений и совместная работа.">
+    <meta name="author" content="Карта оптической сети">
+    <meta name="copyright" content="Copyright (c) 2024–2026 Карта оптической сети. Все права защищены.">
+    <meta name="description" content="Интерактивная карта ВОЛС и узлов связи: кроссы, муфты, кабели, GPON (OLT, сплиттер, ONU), камеры и медиаконвертеры с медными линиями к коммутатору. Поиск, фильтры, история изменений и совместная работа.">
     <title>Карта оптической сети</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <script>
@@ -227,6 +227,7 @@
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterSplitter" checked> Сплиттеры</label>
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterOnu" checked> ONU</label>
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterCamera" checked> Камеры</label>
+                            <label class="map-filter-check"><input type="checkbox" id="mapFilterMediaConverter" checked> Медиаконвертеры</label>
                         </div>
                         <p class="map-filter-note">Кабели отображаются только между видимыми объектами. «Только узлы агрегации» скрывает обычные узлы сети, остальные объекты остаются на карте.</p>
                         <div class="map-filter-save-start">
@@ -262,6 +263,7 @@
                                 <option value="splitter">🔀 Сплиттер</option>
                                 <option value="onu">📟 ONU</option>
                                 <option value="camera">📷 Камера</option>
+                                <option value="mediaConverter">⇄ Медиаконвертер</option>
                                 <option value="node">🖥️ Узлы сети</option>
                                 <option value="attachment">🔗 Крепление узлов</option>
                             </select>
@@ -340,6 +342,27 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="form-group" id="mediaConverterSettingsGroup" style="display: none;">
+                            <p class="form-hint" style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px;">Точка на карте: оптический медиаконвертер (марка и модель из справочника узла).</p>
+                            <label for="mediaConverterManufacturer">Производитель</label>
+                            <div class="device-combobox" data-catalog="node" data-type="manufacturer" data-value-id="mediaConverterManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="mediaConverterManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button>
+                                <input type="hidden" id="mediaConverterManufacturer" name="mediaConverterManufacturer" value="">
+                                <div class="device-combobox-panel" role="listbox" id="mediaConverterManufacturerPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
+                            </div>
+                            <label for="mediaConverterModel" class="form-group-sub">Модель</label>
+                            <div class="device-combobox" data-catalog="node" data-type="model" data-value-id="mediaConverterModel" data-manufacturer-id="mediaConverterManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="mediaConverterModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
+                                <input type="hidden" id="mediaConverterModel" name="mediaConverterModel" value="">
+                                <div class="device-combobox-panel" role="listbox" id="mediaConverterModelPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
+                            </div>
+                        </div>
                         <div class="form-group" id="splitterSettingsGroup" style="display: none;">
                             <label for="splitterRatio">Коэффициент деления</label>
                             <select id="splitterRatio" class="form-select">
@@ -357,24 +380,6 @@
                                 <option value="network">Узел сети (зелёный)</option>
                                 <option value="aggregation">Узел агрегации (красный)</option>
                             </select>
-                            <label for="nodeManufacturer" class="form-group-sub">Производитель</label>
-                            <div class="device-combobox" data-catalog="node" data-type="manufacturer" data-value-id="nodeManufacturer">
-                                <button type="button" class="device-combobox-trigger" id="nodeManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button>
-                                <input type="hidden" id="nodeManufacturer" name="nodeManufacturer" value="">
-                                <div class="device-combobox-panel" role="listbox" id="nodeManufacturerPanel">
-                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
-                                    <ul class="device-combobox-list"></ul>
-                                </div>
-                            </div>
-                            <label for="nodeModel" class="form-group-sub">Модель</label>
-                            <div class="device-combobox" data-catalog="node" data-type="model" data-value-id="nodeModel" data-manufacturer-id="nodeManufacturer">
-                                <button type="button" class="device-combobox-trigger" id="nodeModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
-                                <input type="hidden" id="nodeModel" name="nodeModel" value="">
-                                <div class="device-combobox-panel" role="listbox" id="nodeModelPanel">
-                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
-                                    <ul class="device-combobox-list"></ul>
-                                </div>
-                            </div>
                         </div>
                         <div class="form-group" id="crossSettingsGroup" style="display: none;">
                             <label for="crossPorts">Количество портов</label>
@@ -386,15 +391,6 @@
                                 <option value="24" selected>24 порта</option>
                                 <option value="48">48 портов</option>
                                 <option value="96">96 портов</option>
-                            </select>
-                            <label for="crossCopperPorts" class="form-group-sub">Медные порты (патч к меди)</label>
-                            <select id="crossCopperPorts" class="form-select">
-                                <option value="0" selected>Нет (0)</option>
-                                <option value="8">8</option>
-                                <option value="12">12</option>
-                                <option value="16">16</option>
-                                <option value="24">24</option>
-                                <option value="48">48</option>
                             </select>
                         </div>
                         <div class="form-group" id="sleeveSettingsGroup" style="display: none;">
@@ -631,8 +627,20 @@
                                 </svg>
                             </div>
                             <div class="stat-info">
-                                <div class="stat-value" id="nodeCount">0</div>
-                                <div class="stat-label">Узлы</div>
+                                <div class="stat-value" id="networkNodeCount">0</div>
+                                <div class="stat-label">Узлы сети</div>
+                            </div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-icon" style="background: #ef444420; color: #ef4444;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <circle cx="12" cy="12" r="4" fill="currentColor" opacity="0.35"></circle>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="aggregationNodeCount">0</div>
+                                <div class="stat-label">Агрегация</div>
                             </div>
                         </div>
                         <div class="stat-item">
@@ -715,6 +723,18 @@
                             </div>
                         </div>
                         <div class="stat-item">
+                            <div class="stat-icon" style="background: #14b8a620; color: #14b8a6;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="4" y="7" width="16" height="10" rx="2"></rect>
+                                    <path d="M8 12h8M12 8v8" stroke-linecap="round"></path>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="mediaConverterCount">0</div>
+                                <div class="stat-label">Медиаконв.</div>
+                            </div>
+                        </div>
+                        <div class="stat-item">
                             <div class="stat-icon" style="background: #ea580c20; color: #ea580c;">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <rect x="4" y="6" width="16" height="12" rx="2"></rect>
@@ -759,7 +779,7 @@
                     </div>
                 </div>
                 <div class="sidebar-license" title="Подробнее — в разделе «Справка»">
-                    © 2024–2026 Карта ВОЛС. Проприетарное ПО.
+                    © 2024–2026 Карта оптической сети. Проприетарное ПО.
                 </div>
             </div>
         </div>
@@ -786,7 +806,7 @@
                 <span class="close" id="welcomeModalCloseBtn" title="Закрыть" role="button" tabindex="0">&times;</span>
             </div>
             <div class="modal-body welcome-modal-body">
-                <p class="home-intro-lead">Здесь отображается инфраструктура ВОЛС: опоры, муфты, кроссы, узлы, кабели и оборудование GPON. Используйте поиск в шапке и фильтры в боковой панели, чтобы сфокусироваться на нужном.</p>
+                <p class="home-intro-lead">Здесь отображается инфраструктура ВОЛС: опоры, муфты, кроссы, узлы, кабели, оборудование GPON, камеры и медиаконвертеры. Используйте поиск в шапке и фильтры в боковой панели, чтобы сфокусироваться на нужном.</p>
                 <ul class="home-intro-features" role="list">
                     <li>
                         <span class="home-intro-feature-icon" aria-hidden="true">
