@@ -1007,21 +1007,29 @@ function setupEventListeners() {
         if (currentCableTool) {
             cableBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span>Завершить прокладку</span>';
             cableBtn.style.background = '#e74c3c';
+            copperCableLayingActive = false;
             clearShowOnMapHighlight();
             clearSelection();
             removeCablePreview();
             cableSource = null;
+            cableSourceCopperSwitchId = null;
             cableWaypoints = [];
+            pendingCopperPortPreset = null;
+            pendingCopperRouteFinish = null;
             const mapEl = myMap.container.getElement();
             mapEl.style.cursor = 'crosshair';
             mapEl.classList.add('map-crosshair-active');
         } else {
             cableBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><line x1="12" y1="2" x2="12" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line></svg><span>Проложить кабель</span>';
             cableBtn.style.background = '#3498db';
+            copperCableLayingActive = false;
             clearSelection();
             removeCablePreview();
             cableSource = null;
+            cableSourceCopperSwitchId = null;
             cableWaypoints = [];
+            pendingCopperPortPreset = null;
+            pendingCopperRouteFinish = null;
             const mapEl = myMap.container.getElement();
             mapEl.style.cursor = '';
             mapEl.classList.remove('map-crosshair-active');
@@ -1098,6 +1106,9 @@ function setupEventListeners() {
             for (var i = 0; i < modalIds.length; i++) {
                 var m = document.getElementById(modalIds[i]);
                 if (m && m.style && m.style.display === 'block') {
+                    if (modalIds[i] === 'infoModal' && typeof pendingCopperRouteFinish !== 'undefined' && pendingCopperRouteFinish) {
+                        pendingCopperRouteFinish = null;
+                    }
                     m.style.display = 'none';
                     e.preventDefault();
                     return;
@@ -1345,7 +1356,11 @@ function handleAddObject() {
         clearSelection();
         removeCablePreview();
         cableSource = null;
+        cableSourceCopperSwitchId = null;
         cableWaypoints = [];
+        pendingCopperPortPreset = null;
+        pendingCopperRouteFinish = null;
+        copperCableLayingActive = false;
         if (myMap && myMap.container) {
             const mapEl = myMap.container.getElement();
             mapEl.style.cursor = '';
@@ -1600,7 +1615,9 @@ function handleMapClick(e) {
         } else if (type === 'cross') {
             const name = currentPlacementName || document.getElementById('objectName').value.trim();
             const crossPorts = parseInt(document.getElementById('crossPorts').value) || 24;
-            createObject(type, name || '', coords, { crossPorts: crossPorts });
+            var ccpElPl = document.getElementById('crossCopperPorts');
+            var crossCopperPortsPl = ccpElPl ? (parseInt(ccpElPl.value, 10) || 0) : 0;
+            createObject(type, name || '', coords, { crossPorts: crossPorts, crossCopperPorts: crossCopperPortsPl });
             currentPlacementName = name || '';
         } else if (type === 'support') {
             const name = document.getElementById('objectName').value.trim();
@@ -1675,7 +1692,55 @@ function handleMapClick(e) {
         }
 
         const clickedObject = findObjectAtCoords(coords);
-        const cableType = document.getElementById('cableType') ? document.getElementById('cableType').value : 'fiber4';
+        const cableType = getEffectiveCableLayingType();
+        if (isCopperCableType(cableType)) {
+            if (clickedObject && clickedObject.geometry) {
+                var otc = clickedObject.properties.get('type');
+                if (handleCopperCablePlacemarkStep(clickedObject, otc, cableType)) return;
+            } else if (cableSource) {
+                const autoSelectTolerance = zoom < 12 ? 0.0015 : (zoom < 15 ? 0.001 : 0.0005);
+                var nearestCu = null;
+                var minDCu = Infinity;
+                objects.forEach(function(obj) {
+                    if (!obj || !obj.geometry || !obj.properties) return;
+                    var tc = obj.properties.get('type');
+                    if (tc === 'node' && getNodeAttachedSwitches(obj).length === 0) return;
+                    if (['cross', 'switch', 'node', 'support', 'attachment'].indexOf(tc) === -1) return;
+                    if (obj === cableSource) return;
+                    try {
+                        var oc = obj.geometry.getCoordinates();
+                        var latD = Math.abs(oc[0] - coords[0]);
+                        var lonD = Math.abs(oc[1] - coords[1]);
+                        var dist = Math.sqrt(latD * latD + lonD * lonD);
+                        if (dist < autoSelectTolerance && dist < minDCu) {
+                            minDCu = dist;
+                            nearestCu = obj;
+                        }
+                    } catch (eCu) {}
+                });
+                if (nearestCu) {
+                    var tnc = nearestCu.properties.get('type');
+                    if (tnc === 'support' || tnc === 'attachment') {
+                        cableWaypoints.push(nearestCu);
+                        clearSelection();
+                        selectObject(cableSource);
+                    } else {
+                        var toSwNearest = null;
+                        if (tnc === 'node') {
+                            toSwNearest = resolveSwitchIdForCopperNodeClick(nearestCu);
+                            if (!toSwNearest) return;
+                        }
+                        var copperMetaNear = {
+                            copperSwitchFromId: cableSource.properties.get('type') === 'node' ? cableSourceCopperSwitchId : null,
+                            copperSwitchToId: tnc === 'node' ? toSwNearest : null
+                        };
+                        var ptsCu = [cableSource].concat(cableWaypoints).concat([nearestCu]);
+                        openCopperEndPortModal(ptsCu, cableType, copperMetaNear);
+                    }
+                }
+            }
+            return;
+        }
         var cableEndpoints = ['cross', 'sleeve', 'support', 'attachment', 'olt'];
         
         if (clickedObject && clickedObject.geometry) {
@@ -1768,7 +1833,7 @@ function handleMapClick(e) {
         } else {
             
             if (cableSource) {
-                const currentCableType = document.getElementById('cableType') ? document.getElementById('cableType').value : 'fiber4';
+                const currentCableType = getEffectiveCableLayingType();
                 const autoSelectTolerance = zoom < 12 ? 0.0015 : (zoom < 15 ? 0.001 : 0.0005);
                 let nearestObject = null;
                 let minDist = Infinity;
@@ -1798,7 +1863,7 @@ function handleMapClick(e) {
                         selectObject(cableSource);
                     } else {
                         const points = [cableSource].concat(cableWaypoints).concat([nearestObject]);
-                        const cableTypeVal = document.getElementById('cableType').value;
+                        const cableTypeVal = getEffectiveCableLayingType();
                         const success = createCableFromPoints(points, cableTypeVal);
                         if (success) {
                             cableSource = nearestObject;
@@ -2465,8 +2530,12 @@ function switchToViewMode() {
     const wasEditMode = isEditMode;
     isEditMode = false;
     currentCableTool = false;
+    copperCableLayingActive = false;
     cableSource = null;
+    cableSourceCopperSwitchId = null;
     cableWaypoints = [];
+    pendingCopperPortPreset = null;
+    pendingCopperRouteFinish = null;
 
     if (objectPlacementMode) {
         cancelObjectPlacement();
@@ -2659,6 +2728,17 @@ function createObject(type, name, coords, options = {}) {
             </svg>`;
             balloonContent = name ? 'ONU: ' + name : 'ONU';
             break;
+        case 'switch':
+            color = '#ea580c';
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <rect x="3" y="6" width="22" height="16" rx="2" fill="${color}" stroke="white" stroke-width="2"/>
+                <line x1="8" y1="10" x2="8.01" y2="10" stroke="white" stroke-width="2"/>
+                <line x1="13" y1="10" x2="13.01" y2="10" stroke="white" stroke-width="2"/>
+                <line x1="18" y1="10" x2="18.01" y2="10" stroke="white" stroke-width="2"/>
+                <line x1="8" y1="15" x2="18" y2="15" stroke="white" stroke-width="1.5" opacity="0.85"/>
+            </svg>`;
+            balloonContent = name ? 'Коммутатор: ' + name : 'Коммутатор';
+            break;
         default:
             color = '#94a3b8';
             iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -2668,7 +2748,7 @@ function createObject(type, name, coords, options = {}) {
     }
 
     const clickableSize = 44; 
-    const iconSize = (type === 'node' || type === 'cross') ? 32 : 28;
+    const iconSize = (type === 'node' || type === 'cross' || type === 'switch') ? 32 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
 
     const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
@@ -2701,6 +2781,11 @@ function createObject(type, name, coords, options = {}) {
         if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
         if (options.model) placemarkProperties.model = options.model;
         placemarkProperties.comment = options.comment || '';
+        if (Array.isArray(options.attachedSwitches) && options.attachedSwitches.length) {
+            placemarkProperties.attachedSwitches = JSON.parse(JSON.stringify(options.attachedSwitches));
+        } else {
+            placemarkProperties.attachedSwitches = [];
+        }
     }
 
     if (type === 'sleeve' && options.sleeveType) {
@@ -2710,6 +2795,9 @@ function createObject(type, name, coords, options = {}) {
 
     if (type === 'cross') {
         placemarkProperties.crossPorts = options.crossPorts || 24;
+        var ccp = options.crossCopperPorts !== undefined && options.crossCopperPorts !== null ? parseInt(options.crossCopperPorts, 10) : 0;
+        placemarkProperties.crossCopperPorts = isNaN(ccp) ? 0 : Math.max(0, ccp);
+        placemarkProperties.copperPortUsage = {};
     }
     if (type === 'olt') {
         placemarkProperties.ponPorts = options.ponPorts || 8;
@@ -2730,7 +2818,6 @@ function createObject(type, name, coords, options = {}) {
         if (options.model) placemarkProperties.model = options.model;
         placemarkProperties.comment = options.comment || '';
     }
-
     if (!placemarkProperties.uniqueId) {
         placemarkProperties.uniqueId = 'obj-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
     }
@@ -2808,11 +2895,12 @@ function createObject(type, name, coords, options = {}) {
         }
 
         if (currentCableTool && isEditMode) {
+            var cableTypeVal = getEffectiveCableLayingType();
+            if (handleCopperCablePlacemarkStep(placemark, type, cableTypeVal)) return;
             if (type === 'splitter' || type === 'onu') {
                 showError('Нельзя прокладывать кабель ВОЛС от сплиттера или ONU. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
                 return;
             }
-            var cableTypeVal = document.getElementById('cableType') ? document.getElementById('cableType').value : 'fiber4';
             var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment', 'olt'];
             if (cableEndpointsPlacemark.indexOf(type) !== -1) {
                 if (!cableSource) {
@@ -2856,7 +2944,7 @@ function createObject(type, name, coords, options = {}) {
             return;
         }
 
-        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu')) {
+        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'switch')) {
             showObjectInfo(placemark);
             return;
         }
@@ -3127,7 +3215,7 @@ function selectObject(obj) {
         }
 
         const clickableSize = 50;
-        const iconSize = (type === 'node' || type === 'cross') ? 38 : (type === 'crossGroup' || type === 'nodeGroup') ? 40 : 34;
+        const iconSize = (type === 'node' || type === 'cross' || type === 'switch') ? 38 : (type === 'crossGroup' || type === 'nodeGroup') ? 40 : 34;
         const iconOffset = (clickableSize - iconSize) / 2;
         
         let iconSvg;
@@ -3156,6 +3244,15 @@ function selectObject(obj) {
                     <rect x="2" y="2" width="34" height="34" rx="5" fill="#f59e0b" stroke="white" stroke-width="2"/>
                     <rect x="8" y="15" width="22" height="5" rx="1" fill="white" opacity="0.95"/>
                     <rect x="15" y="7" width="8" height="24" rx="1" fill="white" opacity="0.95"/>
+                </svg>`;
+                break;
+            case 'switch':
+                iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 38 38" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="5" y="10" width="28" height="18" rx="3" fill="#ea580c" stroke="white" stroke-width="2"/>
+                    <line x1="11" y1="16" x2="11.01" y2="16" stroke="white" stroke-width="2"/>
+                    <line x1="18" y1="16" x2="18.01" y2="16" stroke="white" stroke-width="2"/>
+                    <line x1="25" y1="16" x2="25.01" y2="16" stroke="white" stroke-width="2"/>
+                    <line x1="11" y1="22" x2="25" y2="22" stroke="white" stroke-width="1.5"/>
                 </svg>`;
                 break;
             case 'nodeGroup': {
@@ -3295,6 +3392,34 @@ function deselectObject(obj) {
             </svg>`;
             break;
         }
+        case 'olt':
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="4" width="24" height="20" rx="3" fill="#0ea5e9" stroke="white" stroke-width="2"/>
+                <rect x="6" y="8" width="4" height="3" rx="1" fill="white" opacity="0.9"/>
+                <rect x="12" y="8" width="4" height="3" rx="1" fill="white" opacity="0.9"/>
+                <rect x="18" y="8" width="4" height="3" rx="1" fill="white" opacity="0.9"/>
+            </svg>`;
+            break;
+        case 'splitter':
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="14" cy="8" r="5" fill="#a855f7" stroke="white" stroke-width="2"/>
+                <path d="M14 13 L14 20 M8 20 L20 20" stroke="white" stroke-width="1.5" fill="none"/>
+            </svg>`;
+            break;
+        case 'onu':
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="6" width="20" height="16" rx="2" fill="#10b981" stroke="white" stroke-width="2"/>
+                <circle cx="14" cy="14" r="3" fill="white" opacity="0.95"/>
+            </svg>`;
+            break;
+        case 'switch':
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <rect x="3" y="6" width="22" height="16" rx="2" fill="#ea580c" stroke="white" stroke-width="2"/>
+                <line x1="8" y1="10" x2="8.01" y2="10" stroke="white" stroke-width="2"/>
+                <line x1="14" y1="10" x2="14.01" y2="10" stroke="white" stroke-width="2"/>
+                <line x1="20" y1="10" x2="20.01" y2="10" stroke="white" stroke-width="2"/>
+            </svg>`;
+            break;
         default:
             iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="12" cy="12" r="10" fill="#94a3b8" stroke="white" stroke-width="2"/>
@@ -3328,60 +3453,114 @@ function clearSelection() {
 
 }
 
-function addCable(fromObj, toObj, cableType, existingCableId = null, fiberNumber = null, skipHistoryLog = false, skipSync = false) {
+function addCable(fromObj, toObj, cableType, existingCableId = null, fiberNumber = null, skipHistoryLog = false, skipSync = false, copperMeta = null) {
     
     if (Array.isArray(toObj)) {
-        return createCableFromPoints(toObj, cableType, existingCableId, null, skipHistoryLog, skipSync);
+        return createCableFromPoints(toObj, cableType, existingCableId, null, skipHistoryLog, skipSync, copperMeta);
     }
 
-    return createCableFromPoints([fromObj, toObj], cableType, existingCableId, fiberNumber, skipHistoryLog, skipSync);
+    return createCableFromPoints([fromObj, toObj], cableType, existingCableId, fiberNumber, skipHistoryLog, skipSync, copperMeta);
 }
 
-function createCableFromPoints(points, cableType, existingCableId = null, fiberNumber = null, skipHistoryLog = false, skipSync = false) {
+/** Метаданные меди из JSON / op.data для createCableFromPoints */
+function copperSerializedMetaFromItem(item) {
+    if (!item || item.cableType !== 'copper') return null;
+    var m = {};
+    if (item.copperSwitchFromId) m.copperSwitchFromId = item.copperSwitchFromId;
+    if (item.copperSwitchToId) m.copperSwitchToId = item.copperSwitchToId;
+    if (item.copperPortFrom != null && item.copperPortFrom !== '') {
+        var x = parseInt(item.copperPortFrom, 10);
+        if (!isNaN(x)) m.copperPortFrom = x;
+    }
+    if (item.copperPortTo != null && item.copperPortTo !== '') {
+        var y = parseInt(item.copperPortTo, 10);
+        if (!isNaN(y)) m.copperPortTo = y;
+    }
+    return Object.keys(m).length ? m : null;
+}
+
+/** Восстановление полей меди и занятости портов из сохранённого элемента (импорт / merge). */
+function applySerializedCopperMetadataToCable(cable, item) {
+    if (!cable || !cable.properties || !item || item.cableType !== 'copper') return;
+    if (item.copperPortFrom != null && item.copperPortFrom !== '') {
+        var cpf = parseInt(item.copperPortFrom, 10);
+        cable.properties.set('copperPortFrom', isNaN(cpf) ? null : cpf);
+    } else cable.properties.set('copperPortFrom', null);
+    if (item.copperPortTo != null && item.copperPortTo !== '') {
+        var cpt = parseInt(item.copperPortTo, 10);
+        cable.properties.set('copperPortTo', isNaN(cpt) ? null : cpt);
+    } else cable.properties.set('copperPortTo', null);
+    cable.properties.set('copperSwitchFromId', item.copperSwitchFromId || null);
+    cable.properties.set('copperSwitchToId', item.copperSwitchToId || null);
+    applyCopperCableOccupancyFromCable(cable);
+}
+
+function getEffectiveCableLayingType() {
+    if (typeof copperCableLayingActive !== 'undefined' && copperCableLayingActive) return 'copper';
+    var el = document.getElementById('cableType');
+    return el && el.value ? el.value : 'fiber4';
+}
+
+/** Без uniqueId op add_cable на сервере не находит концы — кабель не попадает в сохранённое состояние. */
+function ensurePlacemarkUniqueIdForSync(pm) {
+    if (!pm || !pm.properties) return;
+    var uid = pm.properties.get('uniqueId');
+    if (uid != null && uid !== '') return;
+    var t = pm.properties.get('type') || 'obj';
+    pm.properties.set('uniqueId', generateUniqueId(t));
+}
+
+function createCableFromPoints(points, cableType, existingCableId = null, fiberNumber = null, skipHistoryLog = false, skipSync = false, copperMeta = null) {
     if (!points || points.length < 2) return false;
     
     var firstType = points[0] && points[0].properties ? points[0].properties.get('type') : null;
     var lastType = points[points.length - 1] && points[points.length - 1].properties ? points[points.length - 1].properties.get('type') : null;
 
-    if (firstType === 'node' || lastType === 'node') {
-        if (!skipSync) showError('Нельзя прокладывать кабель напрямую к узлу сети. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
-        return false;
-    }
-    const validEndpoints = ['sleeve', 'cross', 'olt'];
-    if (validEndpoints.indexOf(firstType) === -1) {
-        if (!skipSync) showError('Кабель можно прокладывать от муфты, кросса или OLT. Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
-        return false;
-    }
-    if (validEndpoints.indexOf(lastType) === -1) {
-        if (!skipSync) showError('Кабель можно прокладывать до муфты, кросса или OLT. Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
-        return false;
-    }
-
-    for (var idx = 0; idx < points.length; idx++) {
-        var obj = points[idx];
-        var pt = obj && obj.properties ? obj.properties.get('type') : null;
-        if (pt === 'node') {
-            if (!skipSync) showError('Узел сети не может быть промежуточной точкой кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
+    if (isCopperCableType(cableType)) {
+        if (!validateCopperCableRoute(points, skipSync, copperMeta || {})) return false;
+    } else {
+        if (firstType === 'node' || lastType === 'node') {
+            if (!skipSync) showError('Нельзя прокладывать кабель напрямую к узлу сети. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
             return false;
         }
-        if (pt === 'splitter' || pt === 'onu') {
-            if (!skipSync) showError('Сплиттер и ONU не могут быть началом, концом или промежуточной точкой кабеля ВОЛС. Кабель прокладывается между муфтой, кроссом или OLT.', 'Недопустимое действие');
+        const validEndpoints = ['sleeve', 'cross', 'olt'];
+        if (validEndpoints.indexOf(firstType) === -1) {
+            if (!skipSync) showError('Кабель можно прокладывать от муфты, кросса или OLT. Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
             return false;
+        }
+        if (validEndpoints.indexOf(lastType) === -1) {
+            if (!skipSync) showError('Кабель можно прокладывать до муфты, кросса или OLT. Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
+            return false;
+        }
+
+        for (var idx = 0; idx < points.length; idx++) {
+            var obj = points[idx];
+            var pt = obj && obj.properties ? obj.properties.get('type') : null;
+            if (pt === 'node') {
+                if (!skipSync) showError('Узел сети не может быть промежуточной точкой кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
+                return false;
+            }
+            if (pt === 'splitter' || pt === 'onu') {
+                if (!skipSync) showError('Сплиттер и ONU не могут быть началом, концом или промежуточной точкой кабеля ВОЛС. Кабель прокладывается между муфтой, кроссом или OLT.', 'Недопустимое действие');
+                return false;
+            }
         }
     }
 
     {
         const fiberCount = getFiberCount(cableType);
-        for (let i = 0; i < points.length; i++) {
-            const obj = points[i];
-            if (obj && obj.properties && obj.properties.get('type') === 'sleeve') {
-                const maxFibers = obj.properties.get('maxFibers');
-                if (maxFibers && maxFibers > 0) {
-                    const usedFibersCount = getTotalUsedFibersInSleeve(obj);
-                    const segmentsCount = (i === 0 || i === points.length - 1) ? 1 : 2;
-                    if (usedFibersCount + (fiberCount * segmentsCount) > maxFibers) {
-                        if (!skipSync) showError(`Превышена максимальная вместимость муфты! Использовано: ${usedFibersCount}/${maxFibers} волокон. Попытка добавить: ${fiberCount * segmentsCount} волокон`, 'Переполнение муфты');
-                        return false;
+        if (!isCopperCableType(cableType) && fiberCount > 0) {
+            for (let i = 0; i < points.length; i++) {
+                const obj = points[i];
+                if (obj && obj.properties && obj.properties.get('type') === 'sleeve') {
+                    const maxFibers = obj.properties.get('maxFibers');
+                    if (maxFibers && maxFibers > 0) {
+                        const usedFibersCount = getTotalUsedFibersInSleeve(obj);
+                        const segmentsCount = (i === 0 || i === points.length - 1) ? 1 : 2;
+                        if (usedFibersCount + (fiberCount * segmentsCount) > maxFibers) {
+                            if (!skipSync) showError(`Превышена максимальная вместимость муфты! Использовано: ${usedFibersCount}/${maxFibers} волокон. Попытка добавить: ${fiberCount * segmentsCount} волокон`, 'Переполнение муфты');
+                            return false;
+                        }
                     }
                 }
             }
@@ -3418,6 +3597,35 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
         distance: totalDistance,
         points: points 
     });
+    if (isCopperCableType(cableType)) {
+        polyline.properties.set('copperPortFrom', null);
+        polyline.properties.set('copperPortTo', null);
+        var cm = copperMeta || {};
+        polyline.properties.set('copperSwitchFromId', cm.copperSwitchFromId || null);
+        polyline.properties.set('copperSwitchToId', cm.copperSwitchToId || null);
+        if (pendingCopperPortPreset) {
+            var pp = pendingCopperPortPreset;
+            var firstPt = points[0];
+            var fUid = firstPt && firstPt.properties && firstPt.properties.get('uniqueId');
+            var fType = firstPt && firstPt.properties && firstPt.properties.get('type');
+            if (pp.kind === 'cross' && fType === 'cross' && fUid === pp.crossUid) {
+                polyline.properties.set('copperPortFrom', pp.port);
+            } else if (pp.kind === 'node' && fType === 'node' && fUid === pp.nodeUid) {
+                polyline.properties.set('copperSwitchFromId', pp.switchId);
+                polyline.properties.set('copperPortFrom', pp.port);
+            }
+            pendingCopperPortPreset = null;
+        }
+        var cpToMeta = cm.copperPortTo;
+        if (cpToMeta != null && cpToMeta !== '' && !isNaN(parseInt(cpToMeta, 10))) {
+            polyline.properties.set('copperPortTo', parseInt(cpToMeta, 10));
+        }
+        var cpFromMeta = cm.copperPortFrom;
+        if (cpFromMeta != null && cpFromMeta !== '' && !isNaN(parseInt(cpFromMeta, 10))) {
+            polyline.properties.set('copperPortFrom', parseInt(cpFromMeta, 10));
+        }
+        applyCopperCableOccupancyFromCable(polyline);
+    }
 
     polyline.events.add('click', function(e) {
         try {
@@ -3447,6 +3655,11 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     updateCableVisualization();
     
     if (!skipSync) {
+        ensurePlacemarkUniqueIdForSync(points[0]);
+        ensurePlacemarkUniqueIdForSync(points[points.length - 1]);
+        for (var pUi = 1; pUi < points.length - 1; pUi++) {
+            ensurePlacemarkUniqueIdForSync(points[pUi]);
+        }
         saveData();
         if (typeof window.syncSendOp === 'function') {
             const fromUid = points[0].properties.get('uniqueId');
@@ -3474,6 +3687,16 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
                     ridAdd.push(uAdd);
                 }
                 if (ridAdd && ridAdd.length === points.length) addCableOp.data.routeUniqueIds = ridAdd;
+            }
+            if (isCopperCableType(cableType)) {
+                var cfs = polyline.properties.get('copperSwitchFromId');
+                var cts = polyline.properties.get('copperSwitchToId');
+                var cpfS = polyline.properties.get('copperPortFrom');
+                var cptS = polyline.properties.get('copperPortTo');
+                if (cfs) addCableOp.data.copperSwitchFromId = cfs;
+                if (cts) addCableOp.data.copperSwitchToId = cts;
+                if (cpfS != null && cpfS !== '') addCableOp.data.copperPortFrom = cpfS;
+                if (cptS != null && cptS !== '') addCableOp.data.copperPortTo = cptS;
             }
             window.syncSendOp(addCableOp);
         }
@@ -3682,6 +3905,7 @@ function getCableColor(type) {
         case 'fiber8': return '#00AA00'; 
         case 'fiber16': return '#008800'; 
         case 'fiber24': return '#006600'; 
+        case 'copper': return '#b45309';
         default: return '#64748b'; 
     }
 }
@@ -3692,6 +3916,7 @@ function getCableWidth(type) {
         case 'fiber8': return 3;
         case 'fiber16': return 4;
         case 'fiber24': return 5;
+        case 'copper': return 3;
         default: return 2;
     }
 }
@@ -3702,7 +3927,586 @@ function getCableDescription(type) {
         case 'fiber8': return 'ВОЛС 8 жил';
         case 'fiber16': return 'ВОЛС 16 жил';
         case 'fiber24': return 'ВОЛС 24 жилы';
+        case 'copper': return 'Медный кабель';
         default: return 'Кабель';
+    }
+}
+
+function isCopperCableType(cableType) {
+    return cableType === 'copper';
+}
+
+function buildSwitchPortTypesArray(count, defaultKind) {
+    var arr = [];
+    var k = defaultKind || 'RJ45 10/100/1000';
+    for (var i = 0; i < count; i++) arr.push(k);
+    return arr;
+}
+
+function getNodeAttachedSwitches(node) {
+    if (!node || !node.properties || node.properties.get('type') !== 'node') return [];
+    var a = node.properties.get('attachedSwitches');
+    return Array.isArray(a) ? a : [];
+}
+
+function findAttachedSwitchOnNode(node, switchId) {
+    if (!switchId) return null;
+    var arr = getNodeAttachedSwitches(node);
+    for (var i = 0; i < arr.length; i++) {
+        if (arr[i] && arr[i].uniqueId === switchId) return arr[i];
+    }
+    return null;
+}
+
+function resolveSwitchIdForCopperNodeClick(node) {
+    var arr = getNodeAttachedSwitches(node);
+    if (arr.length === 0) return null;
+    if (arr.length === 1) return arr[0].uniqueId;
+    var lines = arr.map(function(s, i) { return (i + 1) + ') ' + (s.name || 'Коммутатор'); });
+    var r = typeof window.prompt === 'function' ? window.prompt('Выберите коммутатор (введите номер 1–' + arr.length + '):\n' + lines.join('\n'), '1') : '1';
+    var n = parseInt(r, 10);
+    if (isNaN(n) || n < 1 || n > arr.length) return null;
+    return arr[n - 1].uniqueId;
+}
+
+function migrateStandaloneSwitchesIntoNodes() {
+    if (!Array.isArray(objects) || !myMap) return;
+    var switches = objects.filter(function(o) { return o && o.properties && o.properties.get('type') === 'switch'; });
+    if (switches.length === 0) return;
+    switches.forEach(function(sw) {
+        var pid = sw.properties.get('parentNodeId');
+        var node = objects.find(function(n) {
+            return n && n.properties && n.properties.get('type') === 'node' && n.properties.get('uniqueId') === pid;
+        });
+        if (!node) return;
+        var swUid = sw.properties.get('uniqueId') || ('sw-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6));
+        var arr = getNodeAttachedSwitches(node).slice();
+        arr.push({
+            uniqueId: swUid,
+            name: sw.properties.get('name') || '',
+            switchPortTypes: Array.isArray(sw.properties.get('switchPortTypes')) && sw.properties.get('switchPortTypes').length
+                ? sw.properties.get('switchPortTypes').slice()
+                : buildSwitchPortTypesArray(24, 'RJ45 10/100/1000'),
+            copperPortUsage: Object.assign({}, sw.properties.get('copperPortUsage') || {})
+        });
+        node.properties.set('attachedSwitches', arr);
+        objects.forEach(function(c) {
+            if (!c || !c.properties || c.properties.get('type') !== 'cable') return;
+            if (c.properties.get('from') === sw) {
+                c.properties.set('from', node);
+                c.properties.set('copperSwitchFromId', swUid);
+            }
+            if (c.properties.get('to') === sw) {
+                c.properties.set('to', node);
+                c.properties.set('copperSwitchToId', swUid);
+            }
+        });
+        try { myMap.geoObjects.remove(sw); } catch (eR) {}
+        var lbl = sw.properties.get('label');
+        if (lbl) try { myMap.geoObjects.remove(lbl); } catch (eL) {}
+        var idx = objects.indexOf(sw);
+        if (idx !== -1) objects.splice(idx, 1);
+    });
+}
+
+function isCopperCableUsingNodeSwitch(cable, nodeUid, switchId) {
+    if (!cable || !cable.properties || cable.properties.get('type') !== 'cable') return false;
+    if (!isCopperCableType(cable.properties.get('cableType'))) return false;
+    var from = cable.properties.get('from');
+    var to = cable.properties.get('to');
+    if (from && from.properties && from.properties.get('uniqueId') === nodeUid && cable.properties.get('copperSwitchFromId') === switchId) return true;
+    if (to && to.properties && to.properties.get('uniqueId') === nodeUid && cable.properties.get('copperSwitchToId') === switchId) return true;
+    return false;
+}
+
+function addAttachedSwitchToNode(node, name, portCount, defaultKind) {
+    if (!node || !node.properties || node.properties.get('type') !== 'node') return null;
+    var arr = getNodeAttachedSwitches(node).slice();
+    var uid = 'sw-' + Date.now() + '-' + Math.random().toString(36).substr(2, 8);
+    var nPorts = Math.max(1, parseInt(portCount, 10) || 24);
+    var dk = defaultKind || 'RJ45 10/100/1000';
+    arr.push({
+        uniqueId: uid,
+        name: (name || '').trim(),
+        switchPortTypes: buildSwitchPortTypesArray(nPorts, dk),
+        copperPortUsage: {}
+    });
+    node.properties.set('attachedSwitches', arr);
+    return uid;
+}
+
+function removeAttachedSwitchFromNode(node, switchId) {
+    if (!node || !switchId) return false;
+    var nodeUid = node.properties.get('uniqueId');
+    var used = objects.some(function(c) { return isCopperCableUsingNodeSwitch(c, nodeUid, switchId); });
+    if (used) {
+        if (typeof showError === 'function') showError('К этому коммутатору подключены медные кабели. Сначала удалите или переназначьте кабели.', 'Нельзя удалить');
+        return false;
+    }
+    var arr = getNodeAttachedSwitches(node).filter(function(s) { return s.uniqueId !== switchId; });
+    node.properties.set('attachedSwitches', arr);
+    return true;
+}
+
+function validateCopperCableRoute(points, skipSync, copperMeta) {
+    copperMeta = copperMeta || {};
+    if (!points || points.length < 2) return false;
+    if (skipSync) {
+        return true;
+    }
+    var mid = ['support', 'attachment'];
+    function endOk(obj, isFirst) {
+        if (!obj || !obj.properties) return false;
+        var t = obj.properties.get('type');
+        if (t === 'cross') return true;
+        if (t === 'switch') return true;
+        if (t === 'node') {
+            var sid = isFirst ? copperMeta.copperSwitchFromId : copperMeta.copperSwitchToId;
+            return !!sid && !!findAttachedSwitchOnNode(obj, sid);
+        }
+        return false;
+    }
+    if (!endOk(points[0], true)) {
+        if (!skipSync) showError('Медный кабель: начало маршрута — оптический кросс или узел сети с коммутатором.', 'Недопустимое действие');
+        return false;
+    }
+    if (!endOk(points[points.length - 1], false)) {
+        if (!skipSync) showError('Медный кабель: конец маршрута — оптический кросс или узел сети с коммутатором.', 'Недопустимое действие');
+        return false;
+    }
+    for (var i = 0; i < points.length; i++) {
+        var pt = points[i].properties.get('type');
+        if (i > 0 && i < points.length - 1) {
+            if (mid.indexOf(pt) === -1) {
+                if (!skipSync) showError('Медный кабель: промежуточные точки — только опоры связи и крепления узлов.', 'Недопустимое действие');
+                return false;
+            }
+        }
+    }
+    var p0 = points[0];
+    var pL = points[points.length - 1];
+    var t0 = p0.properties.get('type');
+    var tL = pL.properties.get('type');
+    if (t0 === 'switch' && tL === 'switch') {
+        var n1 = p0.properties.get('parentNodeId') || '';
+        var n2 = pL.properties.get('parentNodeId') || '';
+        if (!n1 || n1 !== n2) {
+            if (!skipSync) showError('Два коммутатора на концах медного кабеля должны быть привязаны к одному и тому же узлу сети.', 'Недопустимое действие');
+            return false;
+        }
+    }
+    if (t0 === 'node' && tL === 'node' && getObjectUniqueId(p0) === getObjectUniqueId(pL)) {
+        var sf = copperMeta.copperSwitchFromId;
+        var st = copperMeta.copperSwitchToId;
+        if (!sf || !st || sf === st) {
+            if (!skipSync) showError('Для медного кабеля между двумя коммутаторами одного узла выберите два разных коммутатора.', 'Недопустимое действие');
+            return false;
+        }
+    }
+    return true;
+}
+
+function clearCopperCableOccupancyForCableId(cableUniqueId) {
+    objects.forEach(function(o) {
+        if (!o.properties) return;
+        var t = o.properties.get('type');
+        if (t === 'cross' || t === 'switch') {
+            var usage = o.properties.get('copperPortUsage') || {};
+            var changed = false;
+            Object.keys(usage).forEach(function(k) {
+                if (usage[k] === cableUniqueId) {
+                    delete usage[k];
+                    changed = true;
+                }
+            });
+            if (changed) o.properties.set('copperPortUsage', usage);
+        } else if (t === 'node') {
+            var arr = getNodeAttachedSwitches(o);
+            var ch = false;
+            var narr = arr.map(function(sw) {
+                var u = sw.copperPortUsage || {};
+                var u2 = Object.assign({}, u);
+                Object.keys(u2).forEach(function(k) {
+                    if (u2[k] === cableUniqueId) {
+                        delete u2[k];
+                        ch = true;
+                    }
+                });
+                return Object.assign({}, sw, { copperPortUsage: u2 });
+            });
+            if (ch) o.properties.set('attachedSwitches', narr);
+        }
+    });
+}
+
+function applyCopperCableOccupancyFromCable(cable) {
+    var uid = cable.properties.get('uniqueId');
+    if (!uid) return;
+    clearCopperCableOccupancyForCableId(uid);
+    var fromObj = cable.properties.get('from');
+    var toObj = cable.properties.get('to');
+    var pf = cable.properties.get('copperPortFrom');
+    var pt = cable.properties.get('copperPortTo');
+    var sf = cable.properties.get('copperSwitchFromId');
+    var st = cable.properties.get('copperSwitchToId');
+    function mark(obj, portNum, switchId) {
+        if (portNum == null || portNum === '') return;
+        var pn = parseInt(portNum, 10);
+        if (isNaN(pn) || pn < 1) return;
+        if (!obj || !obj.properties) return;
+        var t = obj.properties.get('type');
+        if (t === 'cross') {
+            var usageC = obj.properties.get('copperPortUsage') || {};
+            usageC[String(pn)] = uid;
+            obj.properties.set('copperPortUsage', usageC);
+        } else if (t === 'switch') {
+            var usageS = obj.properties.get('copperPortUsage') || {};
+            usageS[String(pn)] = uid;
+            obj.properties.set('copperPortUsage', usageS);
+        } else if (t === 'node' && switchId) {
+            var arr = getNodeAttachedSwitches(obj).slice();
+            var ix = arr.findIndex(function(s) { return s.uniqueId === switchId; });
+            if (ix < 0) return;
+            var sw = Object.assign({}, arr[ix]);
+            var uu = Object.assign({}, sw.copperPortUsage || {});
+            uu[String(pn)] = uid;
+            sw.copperPortUsage = uu;
+            arr[ix] = sw;
+            obj.properties.set('attachedSwitches', arr);
+        }
+    }
+    mark(fromObj, pf, sf);
+    mark(toObj, pt, st);
+}
+
+function rebuildAllCopperPortUsageFromCables() {
+    objects.forEach(function(o) {
+        if (!o.properties) return;
+        var t = o.properties.get('type');
+        if (t === 'cross' || t === 'switch') o.properties.set('copperPortUsage', {});
+        if (t === 'node') {
+            var arr = getNodeAttachedSwitches(o).map(function(sw) {
+                return Object.assign({}, sw, { copperPortUsage: {} });
+            });
+            o.properties.set('attachedSwitches', arr);
+        }
+    });
+    objects.forEach(function(cable) {
+        if (!cable.properties || cable.properties.get('type') !== 'cable') return;
+        if (!isCopperCableType(cable.properties.get('cableType'))) return;
+        applyCopperCableOccupancyFromCable(cable);
+    });
+}
+
+/**
+ * HTML <option> для выбора медного порта на кроссе / коммутаторе в узле.
+ * @param {'optional'|'required'} placeholderMode optional — строка «не назначено»; required — обязательный выбор
+ */
+function buildCopperPortOptionsHtml(obj, selected, switchIdForNode, excludeCableUniqueId, placeholderMode) {
+    placeholderMode = placeholderMode || 'optional';
+    if (!obj || !obj.properties) return '<option value="">—</option>';
+    var t = obj.properties.get('type');
+    var max = 0;
+    var usage = {};
+    if (t === 'cross') {
+        max = Math.max(0, parseInt(obj.properties.get('crossCopperPorts'), 10) || 0);
+        usage = obj.properties.get('copperPortUsage') || {};
+    } else if (t === 'switch') {
+        var stSw = obj.properties.get('switchPortTypes') || [];
+        max = Array.isArray(stSw) ? stSw.length : 0;
+        usage = obj.properties.get('copperPortUsage') || {};
+    } else if (t === 'node') {
+        if (!switchIdForNode) return '<option value="">Нет привязки к коммутатору</option>';
+        var swN = findAttachedSwitchOnNode(obj, switchIdForNode);
+        if (!swN) return '<option value="">Коммутатор не найден</option>';
+        var stn = swN.switchPortTypes || [];
+        max = Array.isArray(stn) ? stn.length : 0;
+        usage = swN.copperPortUsage || {};
+    }
+    if (max === 0) return '<option value="">Нет портов (настройте кросс или коммутатор)</option>';
+    var html = '';
+    if (placeholderMode === 'required') {
+        html += '<option value="" disabled selected>— выберите порт —</option>';
+    } else {
+        html += '<option value="">— не назначено —</option>';
+    }
+    for (var pi = 1; pi <= max; pi++) {
+        var occup = usage[String(pi)];
+        var dis = !!(occup && (!excludeCableUniqueId || occup !== excludeCableUniqueId));
+        var sel = selected != null && selected !== '' && parseInt(selected, 10) === pi;
+        html += '<option value="' + pi + '"' + (sel ? ' selected' : '') + (dis ? ' disabled' : '') + '>Порт ' + pi + (dis ? ' (занят)' : '') + '</option>';
+    }
+    return html;
+}
+
+function isCopperPortAvailableForNewLay(obj, portNum, switchIdForNode) {
+    if (!obj || !obj.properties) return false;
+    var p = parseInt(portNum, 10);
+    if (isNaN(p) || p < 1) return false;
+    var t = obj.properties.get('type');
+    if (t === 'cross') {
+        var u = obj.properties.get('copperPortUsage') || {};
+        return !u[String(p)];
+    }
+    if (t === 'switch') {
+        var us = obj.properties.get('copperPortUsage') || {};
+        return !us[String(p)];
+    }
+    if (t === 'node') {
+        if (!switchIdForNode) return false;
+        var sw = findAttachedSwitchOnNode(obj, switchIdForNode);
+        if (!sw) return false;
+        var un = sw.copperPortUsage || {};
+        return !un[String(p)];
+    }
+    return false;
+}
+
+function finishCopperCableToolSession() {
+    currentCableTool = false;
+    copperCableLayingActive = false;
+    pendingCopperRouteFinish = null;
+    var cableBtn = document.getElementById('addCable');
+    if (cableBtn) {
+        cableBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><line x1="12" y1="2" x2="12" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line></svg><span>Проложить кабель</span>';
+        cableBtn.style.background = '#3498db';
+    }
+    cableSource = null;
+    cableSourceCopperSwitchId = null;
+    cableWaypoints = [];
+    pendingCopperPortPreset = null;
+    if (typeof removeCablePreview === 'function') removeCablePreview();
+    if (typeof clearSelection === 'function') clearSelection();
+    if (myMap && myMap.container) {
+        try {
+            const mapEl = myMap.container.getElement();
+            mapEl.style.cursor = '';
+            mapEl.classList.remove('map-crosshair-active');
+        } catch (eM) {}
+    }
+}
+
+function openCopperEndPortModal(points, cableTypeVal, copperMeta) {
+    if (!points || points.length < 2 || !isCopperCableType(cableTypeVal)) return;
+    var endObj = points[points.length - 1];
+    if (!endObj || !endObj.properties) return;
+    var endType = endObj.properties.get('type');
+    if (endType !== 'cross' && endType !== 'node') return;
+    copperMeta = copperMeta || {};
+    var toSw = endType === 'node' ? copperMeta.copperSwitchToId : null;
+    if (endType === 'node' && !toSw) return;
+
+    var pointsCopy = points.slice();
+    pendingCopperRouteFinish = { points: pointsCopy, cableTypeVal: cableTypeVal, copperMeta: Object.assign({}, copperMeta) };
+
+    var modal = document.getElementById('infoModal');
+    var modalTitle = document.getElementById('modalTitle');
+    var modalContent = document.getElementById('modalInfo');
+    if (!modal || !modalTitle || !modalContent) return;
+
+    modalTitle.textContent = 'Медный кабель: порт на конце';
+    var labelTo = endType === 'cross' ? 'Порт на кроссе (конец маршрута)' : 'Порт на коммутаторе (конец маршрута)';
+    var htmlM = '<div class="info-section"><p style="font-size:0.875rem;color:var(--text-secondary);margin-bottom:12px;">Выберите порт для подключения на <strong>конце</strong> линии. После прокладки режим «Проложить кабель» выключится — следующий медный кабель начните снова с кнопки на панели или «Подключить» у порта.</p>';
+    htmlM += '<div class="form-group" style="margin-bottom:12px;"><label for="copperEndPortSel" style="font-size:0.8125rem;">' + escapeHtml(labelTo) + '</label>';
+    htmlM += '<select id="copperEndPortSel" class="form-select">' + buildCopperPortOptionsHtml(endObj, null, toSw, null, 'required') + '</select></div>';
+    htmlM += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">';
+    htmlM += '<button type="button" id="copperEndPortCancel" class="btn-secondary">Отмена</button>';
+    htmlM += '<button type="button" id="copperEndPortOk" class="btn-primary">Проложить</button></div></div>';
+    modalContent.innerHTML = htmlM;
+    modal.style.display = 'block';
+    currentModalObject = null;
+
+    var btnCancel = document.getElementById('copperEndPortCancel');
+    var btnOk = document.getElementById('copperEndPortOk');
+    if (btnCancel) {
+        btnCancel.onclick = function() {
+            pendingCopperRouteFinish = null;
+            modal.style.display = 'none';
+        };
+    }
+    if (btnOk) {
+        btnOk.onclick = function() {
+            var sel = document.getElementById('copperEndPortSel');
+            var v = sel && sel.value ? parseInt(sel.value, 10) : NaN;
+            if (isNaN(v) || v < 1) {
+                if (typeof showError === 'function') showError('Выберите свободный порт на конце маршрута.', 'Порт');
+                return;
+            }
+            if (!isCopperPortAvailableForNewLay(endObj, v, toSw)) {
+                if (typeof showError === 'function') showError('Этот порт занят. Выберите другой.', 'Порт занят');
+                return;
+            }
+            var pr = pendingCopperRouteFinish;
+            pendingCopperRouteFinish = null;
+            modal.style.display = 'none';
+            if (!pr) return;
+            var cm = Object.assign({}, pr.copperMeta, { copperPortTo: v });
+            var ok = createCableFromPoints(pr.points, pr.cableTypeVal, null, null, false, false, cm);
+            if (ok) {
+                finishCopperCableToolSession();
+                var last = objects[objects.length - 1];
+                if (last && last.properties && last.properties.get('type') === 'cable' && isCopperCableType(last.properties.get('cableType'))) {
+                    if (typeof showCableInfo === 'function') showCableInfo(last);
+                }
+            } else {
+                if (typeof showError === 'function') showError('Не удалось создать кабель. Проверьте маршрут и порты.', 'Ошибка');
+            }
+        };
+    }
+}
+
+/** Обработка клика по объекту в режиме прокладки медного кабеля. Возвращает true, если клик обработан (в т.ч. ошибка). */
+function handleCopperCablePlacemarkStep(placemark, type, cableTypeVal) {
+    if (!isCopperCableType(cableTypeVal)) return false;
+    if (type === 'splitter' || type === 'onu') {
+        showError('Для медного кабеля используйте кросс, узел с коммутатором, опору или крепление узла.', 'Недопустимое действие');
+        return true;
+    }
+    if (type === 'sleeve' || type === 'olt') {
+        showError('Медный кабель не прокладывается к муфте или OLT. Концы маршрута — кросс или узел сети с коммутатором.', 'Недопустимое действие');
+        return true;
+    }
+    if (type === 'node' && getNodeAttachedSwitches(placemark).length === 0) {
+        showError('У этого узла нет коммутаторов. Добавьте коммутатор в карточке узла.', 'Недопустимое действие');
+        return true;
+    }
+    var ep = ['cross', 'switch', 'node', 'support', 'attachment'];
+    if (ep.indexOf(type) === -1) {
+        showError('Медный кабель: доступны только кросс, узел с коммутатором, опора и крепление узла.', 'Недопустимое действие');
+        return true;
+    }
+    if (!cableSource) {
+        if (type === 'support' || type === 'attachment') {
+            showError('Начало медного кабеля должно быть кроссом или узлом с коммутатором. Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
+            return true;
+        }
+        cableSource = placemark;
+        if (type === 'node') {
+            cableSourceCopperSwitchId = resolveSwitchIdForCopperNodeClick(placemark);
+            if (!cableSourceCopperSwitchId) {
+                cableSource = null;
+                cableSourceCopperSwitchId = null;
+                showError('Коммутатор не выбран или у узла нет коммутаторов.', 'Недопустимое действие');
+                return true;
+            }
+        } else {
+            cableSourceCopperSwitchId = null;
+        }
+        cableWaypoints = [];
+        clearSelection();
+        selectObject(cableSource);
+        return true;
+    }
+    if (placemark === cableSource) {
+        cableWaypoints = [];
+        clearSelection();
+        selectObject(cableSource);
+        return true;
+    }
+    if (type === 'support' || type === 'attachment') {
+        cableWaypoints.push(placemark);
+        clearSelection();
+        selectObject(cableSource);
+        return true;
+    }
+    var toSwitchId = null;
+    if (type === 'node') {
+        toSwitchId = resolveSwitchIdForCopperNodeClick(placemark);
+        if (!toSwitchId) {
+            showError('Коммутатор не выбран.', 'Недопустимое действие');
+            return true;
+        }
+    }
+    var points = [cableSource].concat(cableWaypoints).concat([placemark]);
+    var copperMeta = {
+        copperSwitchFromId: cableSource.properties.get('type') === 'node' ? cableSourceCopperSwitchId : null,
+        copperSwitchToId: type === 'node' ? toSwitchId : null
+    };
+    openCopperEndPortModal(points, cableTypeVal, copperMeta);
+    return true;
+}
+
+function startCopperCableFromCrossPort(crossObj, portNum) {
+    if (!isEditMode || !crossObj || !crossObj.properties) return;
+    var ncc = Math.max(0, parseInt(crossObj.properties.get('crossCopperPorts'), 10) || 0);
+    var p = parseInt(portNum, 10);
+    if (isNaN(p) || p < 1 || p > ncc) {
+        if (typeof showError === 'function') showError('Некорректный номер медного порта кросса.', 'Порт');
+        return;
+    }
+    var usage = crossObj.properties.get('copperPortUsage') || {};
+    if (usage[String(p)]) {
+        if (typeof showError === 'function') showError('Этот медный порт уже занят кабелем.', 'Порт занят');
+        return;
+    }
+    if (objectPlacementMode && typeof cancelObjectPlacement === 'function') cancelObjectPlacement();
+    if (splitterFiberRoutingMode && typeof cancelSplitterFiberRouting === 'function') cancelSplitterFiberRouting();
+    if (fiberRoutingMode && typeof cancelFiberRouting === 'function') cancelFiberRouting();
+    if (!currentCableTool) {
+        var cableBtn = document.getElementById('addCable');
+        if (cableBtn) cableBtn.click();
+    }
+    copperCableLayingActive = true;
+    pendingCopperPortPreset = { kind: 'cross', crossUid: crossObj.properties.get('uniqueId'), port: p };
+    cableSource = crossObj;
+    cableSourceCopperSwitchId = null;
+    cableWaypoints = [];
+    if (typeof removePhantomPlacemark === 'function') removePhantomPlacemark();
+    if (typeof removeCablePreview === 'function') removeCablePreview();
+    if (typeof clearSelection === 'function') clearSelection();
+    if (typeof selectObject === 'function') selectObject(cableSource);
+    var modal = document.getElementById('infoModal');
+    if (modal) modal.style.display = 'none';
+    currentModalObject = null;
+    if (typeof showInfo === 'function') {
+        showInfo('Укажите на карте второй конец: кросс или узел с коммутатором. Опоры и крепления — только промежуточные точки.', 'Медный кабель');
+    }
+}
+
+function startCopperCableFromNodeSwitchPort(nodeObj, switchId, portNum) {
+    if (!isEditMode || !nodeObj || !nodeObj.properties || nodeObj.properties.get('type') !== 'node') return;
+    if (!switchId) return;
+    var p = parseInt(portNum, 10);
+    if (isNaN(p) || p < 1) {
+        if (typeof showError === 'function') showError('Некорректный номер порта коммутатора.', 'Порт');
+        return;
+    }
+    var sw = findAttachedSwitchOnNode(nodeObj, switchId);
+    if (!sw) {
+        if (typeof showError === 'function') showError('Коммутатор не найден в узле.', 'Ошибка');
+        return;
+    }
+    var pts = sw.switchPortTypes || [];
+    if (p > pts.length) {
+        if (typeof showError === 'function') showError('Номер порта больше числа портов коммутатора.', 'Порт');
+        return;
+    }
+    var usageN = sw.copperPortUsage || {};
+    if (usageN[String(p)]) {
+        if (typeof showError === 'function') showError('Этот порт коммутатора уже занят медным кабелем.', 'Порт занят');
+        return;
+    }
+    if (objectPlacementMode && typeof cancelObjectPlacement === 'function') cancelObjectPlacement();
+    if (splitterFiberRoutingMode && typeof cancelSplitterFiberRouting === 'function') cancelSplitterFiberRouting();
+    if (fiberRoutingMode && typeof cancelFiberRouting === 'function') cancelFiberRouting();
+    if (!currentCableTool) {
+        var cableBtn2 = document.getElementById('addCable');
+        if (cableBtn2) cableBtn2.click();
+    }
+    copperCableLayingActive = true;
+    pendingCopperPortPreset = { kind: 'node', nodeUid: nodeObj.properties.get('uniqueId'), switchId: switchId, port: p };
+    cableSource = nodeObj;
+    cableSourceCopperSwitchId = switchId;
+    cableWaypoints = [];
+    if (typeof removePhantomPlacemark === 'function') removePhantomPlacemark();
+    if (typeof removeCablePreview === 'function') removeCablePreview();
+    if (typeof clearSelection === 'function') clearSelection();
+    if (typeof selectObject === 'function') selectObject(cableSource);
+    var modal2 = document.getElementById('infoModal');
+    if (modal2) modal2.style.display = 'none';
+    currentModalObject = null;
+    if (typeof showInfo === 'function') {
+        showInfo('Укажите на карте второй конец: кросс или узел с коммутатором. Опоры и крепления — только промежуточные точки.', 'Медный кабель');
     }
 }
 
@@ -3757,6 +4561,46 @@ function pointToLineDistance(point, lineStart, lineEnd) {
     };
 }
 
+window.applyCopperCablePortSelection = function(cableUniqueId, fromPort, toPort) {
+    var cab = objects.find(function(o) {
+        return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === cableUniqueId;
+    });
+    if (!cab || !isCopperCableType(cab.properties.get('cableType'))) return;
+    var fromO = cab.properties.get('from');
+    var toO = cab.properties.get('to');
+    var swFrom = cab.properties.get('copperSwitchFromId');
+    var swTo = cab.properties.get('copperSwitchToId');
+    function portFree(obj, port, switchIdForNode) {
+        if (port == null || isNaN(port)) return true;
+        if (!obj || !obj.properties) return false;
+        var t = obj.properties.get('type');
+        if (t === 'cross' || t === 'switch') {
+            var usage = obj.properties.get('copperPortUsage') || {};
+            var oc = usage[String(port)];
+            return !oc || oc === cableUniqueId;
+        }
+        if (t === 'node') {
+            if (!switchIdForNode) return false;
+            var sw = findAttachedSwitchOnNode(obj, switchIdForNode);
+            if (!sw) return false;
+            var usageN = sw.copperPortUsage || {};
+            var ocN = usageN[String(port)];
+            return !ocN || ocN === cableUniqueId;
+        }
+        return false;
+    }
+    if (!portFree(fromO, fromPort, swFrom) || !portFree(toO, toPort, swTo)) {
+        if (typeof showError === 'function') showError('Один из выбранных портов уже занят другим кабелем.', 'Порт занят');
+        return;
+    }
+    cab.properties.set('copperPortFrom', fromPort == null || isNaN(fromPort) ? null : fromPort);
+    cab.properties.set('copperPortTo', toPort == null || isNaN(toPort) ? null : toPort);
+    applyCopperCableOccupancyFromCable(cab);
+    saveData();
+    if (typeof showInfo === 'function') showInfo('Назначение портов сохранено', 'Сохранено');
+    showCableInfo(cab);
+};
+
 function showCableInfo(cable) {
     if (splitterFiberRoutingMode) {
         cancelSplitterFiberRouting();
@@ -3805,6 +4649,8 @@ function showCableInfo(cable) {
         else if (type === 'cross') { typeName = 'Оптический кросс'; icon = '📦'; }
         else if (type === 'node') { typeName = 'Узел сети'; icon = '🖥️'; }
         else if (type === 'attachment') { typeName = 'Крепление узлов'; icon = '🔗'; }
+        else if (type === 'switch') { typeName = 'Коммутатор'; icon = '🔀'; }
+        else if (type === 'olt') { typeName = 'OLT (GPON)'; icon = '📶'; }
         return { type: typeName, name, icon };
     };
     
@@ -3817,6 +4663,66 @@ function showCableInfo(cable) {
     
     if (!modal || !modalContent) {
         console.error('Модальное окно не найдено!');
+        return;
+    }
+
+    if (isCopperCableType(cableType)) {
+        modalTitle.textContent = '🔌 Медный кабель';
+        const copperColor = '#b45309';
+        const pf = cable.properties.get('copperPortFrom');
+        const pt = cable.properties.get('copperPortTo');
+        const swFromCable = cable.properties.get('copperSwitchFromId');
+        const swToCable = cable.properties.get('copperSwitchToId');
+        function buildCopperPortOptions(obj, selected, switchIdForNode) {
+            return buildCopperPortOptionsHtml(obj, selected, switchIdForNode, uniqueId, 'optional');
+        }
+        const fromInfoCu = getObjInfo(fromObj);
+        const toInfoCu = getObjInfo(toObj);
+        var distCu = cable.properties.get('distance');
+        if (distCu == null && cable.geometry) {
+            try {
+                var gc = cable.geometry.getCoordinates();
+                if (gc && gc.length >= 2) {
+                    var sum = 0;
+                    for (var di = 0; di < gc.length - 1; di++) sum += calculateDistance(gc[di], gc[di + 1]);
+                    distCu = sum;
+                }
+            } catch (eD) {}
+        }
+        var htmlCu = '<div class="info-section">';
+        htmlCu += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 12px;">Один медный кабель — одна линия. Назначьте порты на кроссе (медная патч-панель) и/или на коммутаторе в узле. Занятые порты нельзя выбрать для другого кабеля.</p>';
+        htmlCu += '<div style="margin-bottom: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 8px; border: 1px solid var(--border-color);">';
+        htmlCu += '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;"><span>' + fromInfoCu.icon + '</span><div><strong>' + escapeHtml(fromInfoCu.type) + '</strong>' + (fromInfoCu.name ? '<br><span style="font-size: 0.8rem; color: var(--text-secondary);">' + escapeHtml(fromInfoCu.name) + '</span>' : '') + '</div></div>';
+        htmlCu += '<div style="margin-left: 14px; padding-left: 14px; border-left: 2px dashed ' + copperColor + '; margin-bottom: 8px;"><span style="font-size: 0.75rem; color: var(--text-muted);">↓</span></div>';
+        htmlCu += '<div style="display: flex; align-items: center; gap: 8px;"><span>' + toInfoCu.icon + '</span><div><strong>' + escapeHtml(toInfoCu.type) + '</strong>' + (toInfoCu.name ? '<br><span style="font-size: 0.8rem; color: var(--text-secondary);">' + escapeHtml(toInfoCu.name) + '</span>' : '') + '</div></div></div>';
+        if (isEditMode) {
+            htmlCu += '<div class="form-group" style="margin-bottom: 12px;"><label style="font-size: 0.8125rem;">Порт на начале маршрута (' + escapeHtml(fromInfoCu.type) + ')</label>';
+            htmlCu += '<select id="copperPortFromSel" class="form-select">' + buildCopperPortOptions(fromObj, pf, swFromCable) + '</select></div>';
+            htmlCu += '<div class="form-group" style="margin-bottom: 12px;"><label style="font-size: 0.8125rem;">Порт на конце маршрута (' + escapeHtml(toInfoCu.type) + ')</label>';
+            htmlCu += '<select id="copperPortToSel" class="form-select">' + buildCopperPortOptions(toObj, pt, swToCable) + '</select></div>';
+            htmlCu += '<button type="button" class="btn-primary" id="saveCopperPortsBtn">Сохранить назначение портов</button>';
+        } else {
+            htmlCu += '<div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 8px;"><strong>Порт «от»:</strong> ' + (pf != null && pf !== '' ? String(pf) : '—') + '</div>';
+            htmlCu += '<div style="font-size: 0.875rem; color: var(--text-secondary);"><strong>Порт «до»:</strong> ' + (pt != null && pt !== '' ? String(pt) : '—') + '</div>';
+        }
+        htmlCu += '<div style="margin-top: 12px; font-size: 0.8125rem; color: var(--text-muted);">Длина по маршруту: ' + (distCu != null ? distCu + ' м' : '—') + '</div>';
+        htmlCu += '</div>';
+        if (isEditMode) {
+            htmlCu += '<div style="padding-top: 16px; border-top: 1px solid var(--border-color);"><button class="btn-danger" onclick="deleteCableByUniqueId(\'' + uniqueId + '\')">Удалить кабель</button></div>';
+        }
+        modalContent.innerHTML = htmlCu;
+        var saveCuBtn = modalContent.querySelector('#saveCopperPortsBtn');
+        if (saveCuBtn) {
+            saveCuBtn.addEventListener('click', function() {
+                var sf = document.getElementById('copperPortFromSel');
+                var st = document.getElementById('copperPortToSel');
+                var vf = sf && sf.value ? parseInt(sf.value, 10) : null;
+                var vt = st && st.value ? parseInt(st.value, 10) : null;
+                if (window.applyCopperCablePortSelection) window.applyCopperCablePortSelection(uniqueId, vf, vt);
+            });
+        }
+        modal.style.display = 'block';
+        currentModalObject = cable;
         return;
     }
 
@@ -4002,7 +4908,7 @@ function updateCablePreview(sourceObj, waypoints, targetCoords) {
         const offset = zoom < 12 ? 0.0001 : (zoom < 15 ? 0.00005 : 0.00002);
         allCoords[allCoords.length - 1] = [sourceCoords[0] + offset, sourceCoords[1] + offset];
     }
-    const cableType = document.getElementById('cableType').value;
+    const cableType = getEffectiveCableLayingType();
     const cableWidth = getCableWidth(cableType);
     if (cablePreviewLine) {
         cablePreviewLine.geometry.setCoordinates(allCoords);
@@ -4447,6 +5353,12 @@ function getSerializedData() {
                 }
                 if (routeIds && routeIds.length === ptsRoute.length) result.routeUniqueIds = routeIds;
             }
+            if (props.cableType === 'copper') {
+                if (props.copperPortFrom != null && props.copperPortFrom !== '') result.copperPortFrom = props.copperPortFrom;
+                if (props.copperPortTo != null && props.copperPortTo !== '') result.copperPortTo = props.copperPortTo;
+                if (props.copperSwitchFromId) result.copperSwitchFromId = props.copperSwitchFromId;
+                if (props.copperSwitchToId) result.copperSwitchToId = props.copperSwitchToId;
+            }
             return result;
         }
         const result = {
@@ -4464,6 +5376,7 @@ function getSerializedData() {
         }
         if (props.type === 'cross') {
             if (props.crossPorts) result.crossPorts = props.crossPorts;
+            if (props.crossCopperPorts !== undefined && props.crossCopperPorts !== null) result.crossCopperPorts = props.crossCopperPorts;
             if (props.nodeConnections) result.nodeConnections = props.nodeConnections;
             if (props.fiberPorts) result.fiberPorts = props.fiberPorts;
             if (props.oltConnections) result.oltConnections = props.oltConnections;
@@ -4499,6 +5412,12 @@ function getSerializedData() {
             if (props.manufacturer) result.manufacturer = props.manufacturer;
             if (props.model) result.model = props.model;
             if (props.comment) result.comment = props.comment;
+            var attSw = props.attachedSwitches;
+            if (Array.isArray(attSw) && attSw.length) result.attachedSwitches = JSON.parse(JSON.stringify(attSw));
+        }
+        if (props.type === 'switch') {
+            if (props.parentNodeId) result.parentNodeId = props.parentNodeId;
+            if (props.switchPortTypes) result.switchPortTypes = props.switchPortTypes;
         }
         if (props.netboxId) result.netboxId = props.netboxId;
         if (props.netboxUrl) result.netboxUrl = props.netboxUrl;
@@ -4810,6 +5729,7 @@ function applyRemoteStateMerged(data) {
             }
         }
         if (!fromObj || !toObj) return;
+        var itemCuMetaMerge = copperSerializedMetaFromItem(item);
         var existingCable = objects.find(function(o) {
             return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId;
         });
@@ -4836,6 +5756,7 @@ function applyRemoteStateMerged(data) {
             }
             if (item.distance !== undefined) existingCable.properties.set('distance', item.distance);
             if (item.cableName != null) existingCable.properties.set('cableName', item.cableName);
+            applySerializedCopperMetadataToCable(existingCable, item);
         } else {
             var points = buildCableRoutePointsFromData(refs, item, fromObj, toObj, coords);
             if (!points || points.length < 2) {
@@ -4844,9 +5765,9 @@ function applyRemoteStateMerged(data) {
             if (points && points.length >= 2) {
                 if (fromObj) points[0] = fromObj;
                 if (toObj) points[points.length - 1] = toObj;
-                addCable(points[0], points, item.cableType, item.uniqueId, undefined, true, true);
+                addCable(points[0], points, item.cableType, item.uniqueId, undefined, true, true, itemCuMetaMerge);
             } else {
-                addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true, true);
+                addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true, true, itemCuMetaMerge);
             }
             var cable = objects.find(function(o) {
                 return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId;
@@ -4949,6 +5870,7 @@ function applyOperationToMap(op) {
         return;
     }
     if (op.type === 'add_cable' && op.data) {
+        var opCuMeta = copperSerializedMetaFromItem(op.data);
         var refsOpMap = objects.filter(function(o) {
             var t = o.properties && o.properties.get('type');
             return t && t !== 'cable' && t !== 'cableLabel';
@@ -4972,6 +5894,15 @@ function applyOperationToMap(op) {
             }
             if (op.data.distance !== undefined) existingByOp.properties.set('distance', op.data.distance);
             if (op.data.cableName != null) existingByOp.properties.set('cableName', op.data.cableName);
+            if (op.data.cableType === 'copper' && opCuMeta) {
+                if (opCuMeta.copperSwitchFromId) existingByOp.properties.set('copperSwitchFromId', opCuMeta.copperSwitchFromId);
+                else existingByOp.properties.set('copperSwitchFromId', null);
+                if (opCuMeta.copperSwitchToId) existingByOp.properties.set('copperSwitchToId', opCuMeta.copperSwitchToId);
+                else existingByOp.properties.set('copperSwitchToId', null);
+                existingByOp.properties.set('copperPortFrom', opCuMeta.copperPortFrom != null ? opCuMeta.copperPortFrom : null);
+                existingByOp.properties.set('copperPortTo', opCuMeta.copperPortTo != null ? opCuMeta.copperPortTo : null);
+                applyCopperCableOccupancyFromCable(existingByOp);
+            }
             updateCableVisualization();
             updateAllConnectionLines();
             updateStats();
@@ -4983,18 +5914,18 @@ function applyOperationToMap(op) {
         if (fromObj && toObj) {
             var routeOp = buildCableRoutePointsFromData(refsOpMap, op.data, fromObj, toObj, opCoordsNorm);
             if (routeOp && routeOp.length >= 2) {
-                addCable(routeOp[0], routeOp, op.data.cableType, op.data.uniqueId, undefined, true, true);
+                addCable(routeOp[0], routeOp, op.data.cableType, op.data.uniqueId, undefined, true, true, opCuMeta);
             } else if (opCoordsNorm && opCoordsNorm.length > 2) {
                 var ptsOp = findObjectsAtGeometry(refsOpMap, op.data.geometry);
                 if (ptsOp && ptsOp.length >= 2) {
                     if (fromObj) ptsOp[0] = fromObj;
                     if (toObj) ptsOp[ptsOp.length - 1] = toObj;
-                    addCable(ptsOp[0], ptsOp, op.data.cableType, op.data.uniqueId, undefined, true, true);
+                    addCable(ptsOp[0], ptsOp, op.data.cableType, op.data.uniqueId, undefined, true, true, opCuMeta);
                 } else {
-                    addCable(fromObj, toObj, op.data.cableType, op.data.uniqueId, undefined, true, true);
+                    addCable(fromObj, toObj, op.data.cableType, op.data.uniqueId, undefined, true, true, opCuMeta);
                 }
             } else {
-                addCable(fromObj, toObj, op.data.cableType, op.data.uniqueId, undefined, true, true);
+                addCable(fromObj, toObj, op.data.cableType, op.data.uniqueId, undefined, true, true, opCuMeta);
             }
             var cable = objects.find(function(o) { return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === op.data.uniqueId; });
             if (cable) {
@@ -5083,6 +6014,7 @@ function importData(data, opts) {
                 toObj = objectRefs[item.to];
             }
             if (!fromObj || !toObj) return;
+            var itemCuMeta = copperSerializedMetaFromItem(item);
             var existingCableImport = objects.find(function(o) { return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId; });
             if (existingCableImport) {
                 var routeExisting = buildCableRoutePointsFromData(refsOnly, item, fromObj, toObj, coords);
@@ -5104,19 +6036,20 @@ function importData(data, opts) {
                 }
                 if (item && 'cableName' in item) existingCableImport.properties.set('cableName', item.cableName);
                 if (item.distance !== undefined) existingCableImport.properties.set('distance', item.distance);
+                applySerializedCopperMetadataToCable(existingCableImport, item);
                 return;
             }
             var routePts = buildCableRoutePointsFromData(refsOnly, item, fromObj, toObj, coords);
             if (routePts && routePts.length >= 2) {
-                addCable(routePts[0], routePts, item.cableType, item.uniqueId, undefined, true, true);
+                addCable(routePts[0], routePts, item.cableType, item.uniqueId, undefined, true, true, itemCuMeta);
             } else {
                 var points = (coords && coords.length > 2) ? findObjectsAtGeometry(refsOnly, item.geometry) : null;
                 if (points && points.length >= 2) {
                     if (fromObj) points[0] = fromObj;
                     if (toObj) points[points.length - 1] = toObj;
-                    addCable(points[0], points, item.cableType, item.uniqueId, undefined, true, true);
+                    addCable(points[0], points, item.cableType, item.uniqueId, undefined, true, true, itemCuMeta);
                 } else {
-                    addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true, true);
+                    addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true, true, itemCuMeta);
                 }
             }
             const cable = objects.find(obj =>
@@ -5150,10 +6083,12 @@ function importData(data, opts) {
     updateCrossDisplay();
     updateNodeDisplay();
     updateAllConnectionLines();
+    migrateStandaloneSwitchesIntoNodes();
+    rebuildAllCopperPortUsageFromCables();
 }
 
 function createObjectFromData(data, opts) {
-    const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, fiberPorts, netboxId, netboxUrl, netboxDeviceType, netboxSite, sleeveType, maxFibers, crossPorts, nodeConnections, oltConnections, onuConnections, uniqueId, nodeKind, manufacturer, model, comment, ponPorts, splitRatio, splitterConnections, incomingFiber, portAssignments, inputFiber, outputConnections } = data;
+    const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, fiberPorts, netboxId, netboxUrl, netboxDeviceType, netboxSite, sleeveType, maxFibers, crossPorts, crossCopperPorts, copperPortUsage, nodeConnections, oltConnections, onuConnections, uniqueId, nodeKind, manufacturer, model, comment, ponPorts, splitRatio, splitterConnections, incomingFiber, portAssignments, inputFiber, outputConnections, parentNodeId, switchPortTypes, attachedSwitches } = data;
     
     let iconSvg, color, balloonContent;
     
@@ -5244,6 +6179,17 @@ function createObjectFromData(data, opts) {
             </svg>`;
             balloonContent = name ? 'ONU: ' + name : 'ONU';
             break;
+        case 'switch':
+            color = '#ea580c';
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <rect x="3" y="6" width="22" height="16" rx="2" fill="${color}" stroke="white" stroke-width="2"/>
+                <line x1="8" y1="10" x2="8.01" y2="10" stroke="white" stroke-width="2"/>
+                <line x1="13" y1="10" x2="13.01" y2="10" stroke="white" stroke-width="2"/>
+                <line x1="18" y1="10" x2="18.01" y2="10" stroke="white" stroke-width="2"/>
+                <line x1="8" y1="15" x2="18" y2="15" stroke="white" stroke-width="1.5" opacity="0.85"/>
+            </svg>`;
+            balloonContent = name ? 'Коммутатор: ' + name : 'Коммутатор';
+            break;
         default:
             color = '#94a3b8';
             iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -5253,7 +6199,7 @@ function createObjectFromData(data, opts) {
     }
 
     const clickableSize = 44; 
-    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu') ? 32 : 28;
+    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'switch') ? 32 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
 
     const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
@@ -5286,9 +6232,14 @@ function createObjectFromData(data, opts) {
         if (manufacturer) placemark.properties.set('manufacturer', manufacturer);
         if (model) placemark.properties.set('model', model);
         if (comment) placemark.properties.set('comment', comment);
+        if (Array.isArray(attachedSwitches) && attachedSwitches.length) {
+            placemark.properties.set('attachedSwitches', JSON.parse(JSON.stringify(attachedSwitches)));
+        } else {
+            placemark.properties.set('attachedSwitches', []);
+        }
     }
 
-    if (type === 'node' || type === 'cross') {
+    if (type === 'node' || type === 'cross' || type === 'switch') {
         placemark.events.add('dragend', function() {
             const label = placemark.properties.get('label');
             const coords = placemark.geometry.getCoordinates();
@@ -5328,6 +6279,13 @@ function createObjectFromData(data, opts) {
     if (type === 'cross') {
         if (crossPorts) {
             placemark.properties.set('crossPorts', crossPorts);
+        }
+        var ccpImp = crossCopperPorts !== undefined && crossCopperPorts !== null ? parseInt(crossCopperPorts, 10) : 0;
+        placemark.properties.set('crossCopperPorts', isNaN(ccpImp) ? 0 : Math.max(0, ccpImp));
+        if (copperPortUsage && typeof copperPortUsage === 'object') {
+            placemark.properties.set('copperPortUsage', copperPortUsage);
+        } else {
+            placemark.properties.set('copperPortUsage', {});
         }
         if (nodeConnections) {
             placemark.properties.set('nodeConnections', nodeConnections);
@@ -5374,6 +6332,13 @@ function createObjectFromData(data, opts) {
         if (manufacturer) placemark.properties.set('manufacturer', manufacturer);
         if (model) placemark.properties.set('model', model);
         if (comment) placemark.properties.set('comment', comment);
+    }
+    if (type === 'switch') {
+        placemark.properties.set('parentNodeId', parentNodeId || '');
+        placemark.properties.set('switchPortTypes', Array.isArray(switchPortTypes) && switchPortTypes.length
+            ? switchPortTypes.slice()
+            : buildSwitchPortTypesArray(24, 'RJ45 10/100/1000'));
+        placemark.properties.set('copperPortUsage', copperPortUsage && typeof copperPortUsage === 'object' ? copperPortUsage : {});
     }
 
     if (netboxId) {
@@ -5450,11 +6415,12 @@ function createObjectFromData(data, opts) {
         }
 
         if (currentCableTool && isEditMode) {
+            var cableTypeVal = getEffectiveCableLayingType();
+            if (handleCopperCablePlacemarkStep(placemark, type, cableTypeVal)) return;
             if (type === 'splitter' || type === 'onu') {
                 showError('Нельзя прокладывать кабель ВОЛС от сплиттера или ONU. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
                 return;
             }
-            var cableTypeVal = document.getElementById('cableType') ? document.getElementById('cableType').value : 'fiber4';
             var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment', 'olt'];
             if (cableEndpointsPlacemark.indexOf(type) !== -1) {
                 if (!cableSource) {
@@ -5498,7 +6464,7 @@ function createObjectFromData(data, opts) {
             return;
         }
 
-        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu')) {
+        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'switch')) {
             showObjectInfo(placemark);
             return;
         }
@@ -5609,6 +6575,12 @@ function exportData() {
                 }
                 if (routeIdsEx && routeIdsEx.length === ptsRouteEx.length) result.routeUniqueIds = routeIdsEx;
             }
+            if (props.cableType === 'copper') {
+                if (props.copperPortFrom != null && props.copperPortFrom !== '') result.copperPortFrom = props.copperPortFrom;
+                if (props.copperPortTo != null && props.copperPortTo !== '') result.copperPortTo = props.copperPortTo;
+                if (props.copperSwitchFromId) result.copperSwitchFromId = props.copperSwitchFromId;
+                if (props.copperSwitchToId) result.copperSwitchToId = props.copperSwitchToId;
+            }
             return result;
         } else {
             const result = {
@@ -5646,6 +6618,9 @@ function exportData() {
                 if (props.crossPorts) {
                     result.crossPorts = props.crossPorts;
                 }
+                if (props.crossCopperPorts !== undefined && props.crossCopperPorts !== null) {
+                    result.crossCopperPorts = props.crossCopperPorts;
+                }
                 if (props.nodeConnections) {
                     result.nodeConnections = props.nodeConnections;
                 }
@@ -5677,6 +6652,14 @@ function exportData() {
             }
             if (props.type === 'onu') {
                 if (props.incomingFiber) result.incomingFiber = props.incomingFiber;
+            }
+            if (props.type === 'node') {
+                var asEx = props.attachedSwitches;
+                if (Array.isArray(asEx) && asEx.length) result.attachedSwitches = JSON.parse(JSON.stringify(asEx));
+            }
+            if (props.type === 'switch') {
+                if (props.parentNodeId) result.parentNodeId = props.parentNodeId;
+                if (props.switchPortTypes) result.switchPortTypes = props.switchPortTypes;
             }
             
             if (props.netboxId) {
@@ -5737,6 +6720,12 @@ function updateStats() {
     const oltCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'olt').length;
     const splitterCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'splitter').length;
     const onuCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'onu').length;
+    var switchCount = 0;
+    objects.forEach(function(obj) {
+        if (!obj || !obj.properties) return;
+        if (obj.properties.get('type') === 'switch') switchCount++;
+        if (obj.properties.get('type') === 'node') switchCount += getNodeAttachedSwitches(obj).length;
+    });
     const cableCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'cable').length;
 
     const nodeEl = document.getElementById('nodeCount');
@@ -5746,6 +6735,7 @@ function updateStats() {
     const oltEl = document.getElementById('oltCount');
     const splitterEl = document.getElementById('splitterCount');
     const onuEl = document.getElementById('onuCount');
+    const switchEl = document.getElementById('switchCount');
     const cableEl = document.getElementById('cableCount');
     if (nodeEl) nodeEl.textContent = nodeCount;
     if (supportEl) supportEl.textContent = supportCount;
@@ -5754,6 +6744,7 @@ function updateStats() {
     if (oltEl) oltEl.textContent = oltCount;
     if (splitterEl) splitterEl.textContent = splitterCount;
     if (onuEl) onuEl.textContent = onuCount;
+    if (switchEl) switchEl.textContent = switchCount;
     if (cableEl) cableEl.textContent = cableCount;
 }
 
@@ -6091,6 +7082,71 @@ function showObjectInfo(obj) {
             html += '</div>';
         }
 
+        var attachedList = getNodeAttachedSwitches(obj);
+        var kindOptsNodeSw = ['RJ45 10/100/1000', 'RJ45 PoE', 'SFP', 'SFP+', 'Комбо RJ45/SFP', 'Консоль', 'Uplink/stack'];
+        html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
+        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">🔀 Коммутаторы в узле</h4>';
+        html += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 12px;">Коммутатор не является отдельной точкой на карте: медные кабели подключаются к <strong>узлу</strong> (точка на карте), при прокладке меди выбирается коммутатор.</p>';
+        if (isEditMode) {
+            html += '<div style="margin-bottom: 12px; padding: 12px; background: var(--bg-card); border-radius: 6px; border: 1px dashed var(--border-color);">';
+            html += '<div class="form-group" style="margin-bottom: 8px;"><label for="newNodeSwitchName" style="font-size: 0.8125rem;">Подпись коммутатора</label>';
+            html += '<input type="text" id="newNodeSwitchName" class="form-input" placeholder="Необязательно"></div>';
+            html += '<div class="form-group" style="margin-bottom: 8px;"><label for="newNodeSwitchPortCount" style="font-size: 0.8125rem;">Число портов</label>';
+            html += '<select id="newNodeSwitchPortCount" class="form-select"><option value="8">8</option><option value="16">16</option><option value="24" selected>24</option><option value="48">48</option></select></div>';
+            html += '<div class="form-group" style="margin-bottom: 8px;"><label for="newNodeSwitchPortKind" style="font-size: 0.8125rem;">Тип порта по умолчанию</label>';
+            html += '<select id="newNodeSwitchPortKind" class="form-select">';
+            kindOptsNodeSw.forEach(function(kk) {
+                html += '<option value="' + escapeHtml(kk) + '"' + (kk === 'RJ45 10/100/1000' ? ' selected' : '') + '>' + escapeHtml(kk) + '</option>';
+            });
+            html += '</select></div>';
+            html += '<button type="button" id="btnAddNodeSwitch" class="btn-secondary" style="width:100%;">Добавить коммутатор</button>';
+            html += '</div>';
+        }
+        if (attachedList.length === 0) {
+            html += '<p style="font-size: 0.875rem; color: var(--text-muted);">Коммутаторов нет — добавьте для прокладки медных кабелей к узлу.</p>';
+        }
+        attachedList.forEach(function(swRow, six) {
+            var usageN = swRow.copperPortUsage || {};
+            var pts = swRow.switchPortTypes || [];
+            html += '<div style="margin-bottom: 14px; padding: 12px; background: var(--bg-card); border-radius: 6px; border: 1px solid var(--border-color);">';
+            html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">';
+            html += '<span style="font-weight:600; font-size:0.875rem;">' + escapeHtml(swRow.name || ('Коммутатор ' + (six + 1))) + '</span>';
+            if (isEditMode) {
+                html += '<button type="button" class="btn-remove-node-switch btn-danger" data-switch-id="' + escapeHtml(swRow.uniqueId) + '" style="padding:4px 10px;font-size:0.75rem;">Удалить</button>';
+            }
+            html += '</div>';
+            html += '<div style="max-height: 200px; overflow-y: auto;"><table style="width:100%; font-size: 0.75rem; border-collapse: collapse;"><thead><tr><th style="text-align:left;padding:4px;">#</th><th style="text-align:left;padding:4px;">Тип</th><th style="text-align:left;padding:4px;">Кабель</th>' + (isEditMode ? '<th style="text-align:right;padding:4px;white-space:nowrap;"></th>' : '') + '</tr></thead><tbody>';
+            for (var swi = 0; swi < pts.length; swi++) {
+                var pnumSw = swi + 1;
+                var cableUidSw = usageN[String(pnumSw)];
+                var cblSw = cableUidSw ? objects.find(function(c) { return c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === cableUidSw; }) : null;
+                var cnameSw = cblSw ? (cblSw.properties.get('cableName') || getCableDescription(cblSw.properties.get('cableType'))) : '—';
+                html += '<tr><td style="padding:4px;">' + pnumSw + '</td><td style="padding:4px;">';
+                if (isEditMode) {
+                    html += '<select class="edit-node-switch-port-kind form-select" data-switch-id="' + escapeHtml(swRow.uniqueId) + '" data-idx="' + swi + '" style="font-size:0.7rem;">';
+                    kindOptsNodeSw.forEach(function(ko) {
+                        html += '<option value="' + escapeHtml(ko) + '"' + ((pts[swi] || '') === ko ? ' selected' : '') + '>' + escapeHtml(ko) + '</option>';
+                    });
+                    html += '</select>';
+                } else {
+                    html += escapeHtml(pts[swi] || '—');
+                }
+                html += '</td><td style="padding:4px;">' + escapeHtml(cnameSw) + '</td>';
+                if (isEditMode) {
+                    html += '<td style="padding:4px;text-align:right;">';
+                    if (!cableUidSw) {
+                        html += '<button type="button" class="btn-secondary btn-copper-connect-from-node-port" data-switch-id="' + escapeHtml(swRow.uniqueId) + '" data-copper-port="' + pnumSw + '" style="font-size:0.65rem;padding:4px 6px;">Подключить</button>';
+                    } else {
+                        html += '—';
+                    }
+                    html += '</td>';
+                }
+                html += '</tr>';
+            }
+            html += '</tbody></table></div></div>';
+        });
+        html += '</div>';
+
         const nodeUniqueId = getObjectUniqueId(obj);
         const connectedFibers = getNodeConnectedFibers(nodeUniqueId);
         
@@ -6127,6 +7183,8 @@ function showObjectInfo(obj) {
         html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
         html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Информация о кроссе</h4>';
         html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Количество портов:</strong> ${crossPorts}</div>`;
+        var crossCopperPortsInfo = Math.max(0, parseInt(obj.properties.get('crossCopperPorts'), 10) || 0);
+        html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Медные порты (патч):</strong> ${crossCopperPortsInfo}</div>`;
 
         const usedPorts = getTotalUsedPortsInCross(obj);
         const usagePercent = crossPorts > 0 ? Math.round((usedPorts / crossPorts) * 100) : 0;
@@ -6142,6 +7200,35 @@ function showObjectInfo(obj) {
             html += '<label for="editCrossName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название кросса</label>';
             html += `<input type="text" id="editCrossName" class="form-input" value="${escapeHtml(name)}" placeholder="Введите название кросса">`;
             html += '</div>';
+            var ccpCur = Math.max(0, parseInt(obj.properties.get('crossCopperPorts'), 10) || 0);
+            html += '<div class="form-group" style="margin-bottom: 12px;">';
+            html += '<label for="editCrossCopperPorts" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600;">Медные порты (патч к меди)</label>';
+            html += '<select id="editCrossCopperPorts" class="form-select">';
+            [0, 8, 12, 16, 24].forEach(function(n) {
+                html += '<option value="' + n + '"' + (ccpCur === n ? ' selected' : '') + '>' + (n === 0 ? 'Нет (0)' : String(n)) + '</option>';
+            });
+            html += '</select></div>';
+            if (ccpCur > 0) {
+                var cuUsagePatch = obj.properties.get('copperPortUsage') || {};
+                html += '<div class="form-group" style="margin-top: 14px;">';
+                html += '<label style="display: block; margin-bottom: 8px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600;">Медная патч-панель</label>';
+                html += '<p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 10px;">У свободного порта нажмите «Подключить», затем укажите второй конец на карте (кросс или узел с коммутатором).</p>';
+                html += '<div style="display: flex; flex-wrap: wrap; gap: 8px; max-height: 220px; overflow-y: auto;">';
+                for (var cpi = 1; cpi <= ccpCur; cpi++) {
+                    var occUid = cuUsagePatch[String(cpi)];
+                    var occCblP = occUid ? objects.find(function(c) { return c && c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === occUid; }) : null;
+                    var occLabP = occCblP ? escapeHtml(String(occCblP.properties.get('cableName') || getCableDescription(occCblP.properties.get('cableType')) || 'кабель')) : '';
+                    html += '<div style="border: 1px solid var(--border-color); border-radius: 6px; padding: 8px; min-width: 104px; background: var(--bg-card);">';
+                    html += '<div style="font-weight: 600; font-size: 0.8rem; margin-bottom: 4px;">Порт ' + cpi + '</div>';
+                    if (occUid) {
+                        html += '<div style="font-size: 0.7rem; color: var(--text-muted);">Занят</div><div style="font-size: 0.7rem; word-break: break-word;">' + occLabP + '</div>';
+                    } else {
+                        html += '<button type="button" class="btn-secondary btn-copper-connect-from-cross-port" data-copper-port="' + cpi + '" style="width: 100%; font-size: 0.75rem; padding: 6px;">Подключить</button>';
+                    }
+                    html += '</div>';
+                }
+                html += '</div></div>';
+            }
             html += '</div>';
         }
     }
@@ -6185,12 +7272,12 @@ function showObjectInfo(obj) {
                         <div class="cable-header">
                             <h4>Кабель ${index + 1}: ${cableDescription}</h4>
                             <div class="cable-actions">
-                                ${isEditMode ? `<select class="cable-type-select" data-cable-id="${cableUniqueId}">
+                                ${isEditMode ? (cableType === 'copper' ? `<span style="font-size: 0.875rem; color: var(--text-secondary);">${escapeHtml(cableDescription)}</span>` : `<select class="cable-type-select" data-cable-id="${cableUniqueId}">
                                     <option value="fiber4" ${cableType === 'fiber4' ? 'selected' : ''}>ВОЛС 4 жилы</option>
                                     <option value="fiber8" ${cableType === 'fiber8' ? 'selected' : ''}>ВОЛС 8 жил</option>
                                     <option value="fiber16" ${cableType === 'fiber16' ? 'selected' : ''}>ВОЛС 16 жил</option>
                                     <option value="fiber24" ${cableType === 'fiber24' ? 'selected' : ''}>ВОЛС 24 жилы</option>
-                                </select>` : `<span style="font-size: 0.875rem; color: var(--text-secondary);">${cableDescription}</span>`}
+                                </select>`) : `<span style="font-size: 0.875rem; color: var(--text-secondary);">${cableDescription}</span>`}
                                 ${isEditMode ? `<button class="btn-delete-cable" data-cable-id="${cableUniqueId}" title="Удалить кабель">✕</button>` : ''}
                             </div>
                         </div>
@@ -6466,6 +7553,32 @@ function setupEditAndDeleteListeners() {
         });
     }
 
+    var editCrossCopperPortsEl = document.getElementById('editCrossCopperPorts');
+    if (editCrossCopperPortsEl) {
+        editCrossCopperPortsEl.addEventListener('change', function() {
+            if (!currentModalObject || currentModalObject.properties.get('type') !== 'cross') return;
+            var newVal = parseInt(this.value, 10);
+            if (isNaN(newVal)) newVal = 0;
+            newVal = Math.max(0, newVal);
+            var usage = currentModalObject.properties.get('copperPortUsage') || {};
+            var maxUsed = 0;
+            Object.keys(usage).forEach(function(k) {
+                var n = parseInt(k, 10);
+                if (!isNaN(n) && n > maxUsed) maxUsed = n;
+            });
+            if (newVal < maxUsed) {
+                if (typeof showError === 'function') showError('На медных портах есть кабели (до порта ' + maxUsed + '). Уменьшить число портов нельзя.', 'Медные порты');
+                var curCcp = Math.max(0, parseInt(currentModalObject.properties.get('crossCopperPorts'), 10) || 0);
+                this.value = String(curCcp);
+                return;
+            }
+            currentModalObject.properties.set('crossCopperPorts', newVal);
+            saveData();
+            if (typeof rebuildAllCopperPortUsageFromCables === 'function') rebuildAllCopperPortUsageFromCables();
+            if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
+        });
+    }
+
     const editSleeveNameInput = document.getElementById('editSleeveName');
     if (editSleeveNameInput) {
         editSleeveNameInput.addEventListener('input', function() {
@@ -6503,6 +7616,57 @@ function setupEditAndDeleteListeners() {
             currentModalObject.properties.set('balloonContent', newName ? 'ONU: ' + newName : 'ONU');
             updateObjectLabel(currentModalObject, newName);
             saveData();
+        });
+    }
+
+    var btnAddNodeSwitch = document.getElementById('btnAddNodeSwitch');
+    if (btnAddNodeSwitch) {
+        btnAddNodeSwitch.addEventListener('click', function() {
+            if (!currentModalObject || currentModalObject.properties.get('type') !== 'node') return;
+            var nmEl = document.getElementById('newNodeSwitchName');
+            var pcEl = document.getElementById('newNodeSwitchPortCount');
+            var pkEl = document.getElementById('newNodeSwitchPortKind');
+            var nm = nmEl ? nmEl.value.trim() : '';
+            var pc = pcEl ? pcEl.value : '24';
+            var pk = pkEl ? pkEl.value : 'RJ45 10/100/1000';
+            addAttachedSwitchToNode(currentModalObject, nm, pc, pk);
+            saveData();
+            if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
+            refreshObjectModal(currentModalObject);
+        });
+    }
+    document.querySelectorAll('.btn-remove-node-switch').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            if (!currentModalObject || currentModalObject.properties.get('type') !== 'node') return;
+            var sid = this.getAttribute('data-switch-id');
+            if (!sid) return;
+            if (removeAttachedSwitchFromNode(currentModalObject, sid)) {
+                saveData();
+                if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
+                refreshObjectModal(currentModalObject);
+            }
+        });
+    });
+    var modalInfoNodeSw = document.getElementById('modalInfo');
+    if (modalInfoNodeSw) {
+        modalInfoNodeSw.querySelectorAll('.edit-node-switch-port-kind').forEach(function(sel) {
+            sel.addEventListener('change', function() {
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'node') return;
+                var swId = this.getAttribute('data-switch-id');
+                var idx = parseInt(this.getAttribute('data-idx'), 10);
+                if (!swId || isNaN(idx) || idx < 0) return;
+                var arr = getNodeAttachedSwitches(currentModalObject).slice();
+                var ix = arr.findIndex(function(s) { return s.uniqueId === swId; });
+                if (ix < 0) return;
+                var sw = Object.assign({}, arr[ix]);
+                var pt = (sw.switchPortTypes || []).slice();
+                while (pt.length <= idx) pt.push('RJ45 10/100/1000');
+                pt[idx] = this.value;
+                sw.switchPortTypes = pt;
+                arr[ix] = sw;
+                currentModalObject.properties.set('attachedSwitches', arr);
+                saveData();
+            });
         });
     }
     
@@ -6612,6 +7776,7 @@ function duplicateObject(obj) {
         opts.model = obj.properties.get('model') || '';
         opts.comment = obj.properties.get('comment') || '';
     }
+
     createObject(type, newName, newCoords, Object.keys(opts).length ? opts : undefined);
 
     const newObj = objects[objects.length - 1];
@@ -6629,6 +7794,20 @@ function duplicateObject(obj) {
     }
     if (type === 'onu') {
         newObj.properties.set('incomingFiber', null);
+    }
+    if (type === 'node' && newObj) {
+        var attSrc = obj.properties.get('attachedSwitches');
+        if (Array.isArray(attSrc) && attSrc.length) {
+            var t0 = Date.now();
+            newObj.properties.set('attachedSwitches', attSrc.map(function (sw, idx) {
+                return {
+                    uniqueId: 'sw-' + t0 + '-' + idx + '-' + Math.random().toString(36).substr(2, 9),
+                    name: (sw && sw.name) ? String(sw.name) : 'Коммутатор',
+                    switchPortTypes: Array.isArray(sw && sw.switchPortTypes) ? sw.switchPortTypes.slice() : [],
+                    copperPortUsage: {}
+                };
+            }));
+        }
     }
 
     const netboxId = obj.properties.get('netboxId');
@@ -6657,6 +7836,7 @@ function getObjectDefaultName(type) {
         case 'olt': return 'OLT';
         case 'splitter': return 'Сплиттер';
         case 'onu': return 'ONU';
+        case 'switch': return 'Коммутатор';
         default: return 'Объект';
     }
 }
@@ -6830,6 +8010,24 @@ function setupModalEventListeners() {
                 const modal = document.getElementById('infoModal');
                 modal.style.display = 'none';
 
+            });
+        });
+        
+        document.querySelectorAll('.btn-copper-connect-from-cross-port').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'cross') return;
+                var port = parseInt(this.getAttribute('data-copper-port'), 10);
+                startCopperCableFromCrossPort(currentModalObject, port);
+            });
+        });
+        document.querySelectorAll('.btn-copper-connect-from-node-port').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'node') return;
+                var swId = this.getAttribute('data-switch-id');
+                var portN = parseInt(this.getAttribute('data-copper-port'), 10);
+                startCopperCableFromNodeSwitchPort(currentModalObject, swId, portN);
             });
         });
         
@@ -10934,6 +12132,8 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
     
     if (!cable) return;
 
+    clearCopperCableOccupancyForCableId(cableUniqueId);
+
     const fromObj = cable.properties.get('from');
     const toObj = cable.properties.get('to');
     const cableType = getCableDescription(cable.properties.get('cableType'));
@@ -11106,6 +12306,12 @@ function changeCableType(cableUniqueId, newCableType) {
     if (!cable) return;
     
     const oldCableType = cable.properties.get('cableType');
+    if ((isCopperCableType(oldCableType) || isCopperCableType(newCableType)) && oldCableType !== newCableType) {
+        if (typeof showError === 'function') showError('Медный кабель нельзя сменить на оптический и наоборот. Удалите кабель и проложите заново.', 'Недопустимое действие');
+        if (currentModalObject) refreshObjectModal(currentModalObject);
+        return;
+    }
+    
     const oldFiberCount = getFiberCount(oldCableType);
     const newFiberCount = getFiberCount(newCableType);
 
@@ -11154,6 +12360,7 @@ function getFiberCount(cableType) {
         case 'fiber8': return 8;
         case 'fiber16': return 16;
         case 'fiber24': return 24;
+        case 'copper': return 1;
         default: return 0;
     }
 }
@@ -11417,7 +12624,7 @@ function updateCrossDisplay() {
             if (crosses.length === 1) {
                 if (currentCableTool && isEditMode) {
                     if (cableSource && cableSource !== crosses[0]) {
-                        const cableType = document.getElementById('cableType').value;
+                        const cableType = getEffectiveCableLayingType();
                         if (addCable(cableSource, crosses[0], cableType)) {
                             cableSource = crosses[0];
                             clearSelection();
@@ -11506,7 +12713,7 @@ function updateCrossDisplay() {
                         myMap.balloon.close();
                         if (currentCableTool && isEditMode) {
                             if (cableSource && cableSource !== crossObj) {
-                                const cableType = document.getElementById('cableType').value;
+                                const cableType = getEffectiveCableLayingType();
                                 if (addCable(cableSource, crossObj, cableType)) {
                                     cableSource = crossObj;
                                     clearSelection();
@@ -12494,6 +13701,8 @@ function getFiberColors(cableType) {
         case 'fiber8': fiberCount = 8; break;
         case 'fiber16': fiberCount = 16; break;
         case 'fiber24': fiberCount = 24; break;
+        case 'copper':
+            return [{ number: 1, name: 'Линия', color: '#b45309', hasBlackRing: false }];
         default: return [];
     }
 

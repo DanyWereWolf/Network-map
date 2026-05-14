@@ -88,6 +88,22 @@ function searchObjects(query) {
             results.push({ object: obj, type: type, name: searchName, matchType: 'name' });
             return;
         }
+        if (type === 'node' && typeof getNodeAttachedSwitches === 'function') {
+            var attached = getNodeAttachedSwitches(obj);
+            for (var ai = 0; ai < attached.length; ai++) {
+                var sw = attached[ai];
+                var sn = (sw && sw.name) ? String(sw.name).trim() : '';
+                if (!sn || sn.toLowerCase().indexOf(lowerQuery) === -1) continue;
+                results.push({
+                    object: obj,
+                    type: 'node',
+                    name: sn,
+                    matchType: 'name',
+                    labelType: 'switchInNode',
+                    parentNodeName: searchName || ''
+                });
+            }
+        }
         const typeName = getObjectTypeName(type);
         if (typeName.toLowerCase().indexOf(lowerQuery) !== -1) {
             results.push({ object: obj, type: type, name: searchName || typeName, matchType: 'type' });
@@ -121,13 +137,15 @@ function renderSearchResults(results, query) {
     };
     var html = '<div class="search-results-header">Найдено: ' + results.length + '</div>';
     results.forEach(function(result, index) {
-        var typeName = getObjectTypeName(result.type);
-        var icon = getIcon(result.type);
+        var typeName = result.labelType === 'switchInNode' ? 'Коммутатор в узле' : getObjectTypeName(result.type);
+        var icon = result.labelType === 'switchInNode' ? '🔀' : getIcon(result.type);
         var uniqueId = result.object.properties.get('uniqueId') || index;
         html += '<div class="search-result-item" data-index="' + index + '" data-id="' + escapeHtml(String(uniqueId)) + '">' +
             '<div class="search-result-icon ' + result.type + '">' + icon + '</div>' +
             '<div class="search-result-info"><div class="search-result-name">' + escapeHtml(result.name) + '</div>' +
-            '<div class="search-result-type">' + typeName + '</div></div></div>';
+            '<div class="search-result-type">' + escapeHtml(typeName) +
+            (result.labelType === 'switchInNode' && result.parentNodeName ? ' · ' + escapeHtml(result.parentNodeName) : '') +
+            '</div></div></div>';
     });
     searchResults.innerHTML = html;
     searchResults.style.display = 'block';
@@ -161,7 +179,7 @@ function goToSearchResult(result) {
     setTimeout(function() {
         if (result.type === 'cable') showCableInfo(obj);
         else if (result.type === 'support' || result.type === 'attachment') showSupportInfo(obj);
-        else if (result.type === 'node' || result.type === 'cross' || result.type === 'sleeve') showObjectInfo(obj);
+        else if (result.type === 'node' || result.type === 'cross' || result.type === 'sleeve' || result.type === 'olt' || result.type === 'splitter' || result.type === 'onu') showObjectInfo(obj);
     }, 600);
     searchInput.value = '';
     var clearEl = document.getElementById('clearSearch');

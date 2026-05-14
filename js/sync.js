@@ -295,12 +295,19 @@
         if (!data) return;
         pendingState = data;
         if (sendTimer) clearTimeout(sendTimer);
-        sendTimer = setTimeout(function() {
+        sendTimer = setTimeout(function flushSendState() {
             sendTimer = null;
             var toSend = pendingState;
             pendingState = null;
-            if (lastOpSendTime && (Date.now() - lastOpSendTime) < SUPPRESS_STATE_AFTER_OP_MS) return;
-            if (ws && ws.readyState === WebSocket.OPEN && toSend) {
+            if (!toSend) return;
+            if (lastOpSendTime && (Date.now() - lastOpSendTime) < SUPPRESS_STATE_AFTER_OP_MS) {
+                pendingState = toSend;
+                var wait = SUPPRESS_STATE_AFTER_OP_MS - (Date.now() - lastOpSendTime);
+                if (wait < 50) wait = 50;
+                sendTimer = setTimeout(flushSendState, wait);
+                return;
+            }
+            if (ws && ws.readyState === WebSocket.OPEN) {
                 try {
                     var payload = { type: 'state', clientId: myClientId, data: toSend };
                     if (typeof window.getGroupNamesForSync === 'function') {

@@ -851,7 +851,6 @@ const wss = new WebSocket.Server({ server, path: '/sync' });
 const syncClientNames = new Map();
 const syncClientUserIds = new Map();
 const syncClientOrgIds = new Map();
-var syncDirtyOrgs = {};
 
 function isSyncClientAdmin(clientId) {
     const userId = syncClientUserIds.get(clientId);
@@ -914,6 +913,12 @@ function mergeMapState(current, incoming) {
             if (c.distance !== undefined) cableData.distance = c.distance;
             if (c.cableName != null) cableData.cableName = c.cableName;
             if (Array.isArray(c.routeUniqueIds) && c.routeUniqueIds.length >= 2) cableData.routeUniqueIds = c.routeUniqueIds.slice();
+            if (c.cableType === 'copper') {
+                if (c.copperSwitchFromId) cableData.copperSwitchFromId = c.copperSwitchFromId;
+                if (c.copperSwitchToId) cableData.copperSwitchToId = c.copperSwitchToId;
+                if (c.copperPortFrom != null && c.copperPortFrom !== '') cableData.copperPortFrom = c.copperPortFrom;
+                if (c.copperPortTo != null && c.copperPortTo !== '') cableData.copperPortTo = c.copperPortTo;
+            }
             mergedCables.push(cableData);
         }
     }
@@ -931,6 +936,12 @@ function mergeMapState(current, incoming) {
         if (c.distance !== undefined) cableData.distance = c.distance;
         if (c.cableName != null) cableData.cableName = c.cableName;
         if (Array.isArray(c.routeUniqueIds) && c.routeUniqueIds.length >= 2) cableData.routeUniqueIds = c.routeUniqueIds.slice();
+        if (c.cableType === 'copper') {
+            if (c.copperSwitchFromId) cableData.copperSwitchFromId = c.copperSwitchFromId;
+            if (c.copperSwitchToId) cableData.copperSwitchToId = c.copperSwitchToId;
+            if (c.copperPortFrom != null && c.copperPortFrom !== '') cableData.copperPortFrom = c.copperPortFrom;
+            if (c.copperPortTo != null && c.copperPortTo !== '') cableData.copperPortTo = c.copperPortTo;
+        }
         existing = mergedCables.findIndex(function(x) { return x.uniqueId === c.uniqueId; });
         if (existing >= 0) mergedCables[existing] = cableData; else mergedCables.push(cableData);
     }
@@ -978,10 +989,26 @@ function applyOperationToState(state, op) {
         toIdx = state.findIndex(function(i) { return i.type !== 'cable' && i.uniqueId === toUid; });
         if (fromIdx >= 0 && toIdx >= 0) {
             c = { type: 'cable', cableType: op.data.cableType, from: fromIdx, to: toIdx, geometry: op.data.geometry };
+            if (fromUid != null && fromUid !== '') c.fromUniqueId = fromUid;
+            if (toUid != null && toUid !== '') c.toUniqueId = toUid;
             if (op.data.uniqueId != null) c.uniqueId = op.data.uniqueId;
             if (op.data.distance !== undefined) c.distance = op.data.distance;
             if (op.data.cableName != null) c.cableName = op.data.cableName;
             if (Array.isArray(op.data.routeUniqueIds) && op.data.routeUniqueIds.length >= 2) c.routeUniqueIds = op.data.routeUniqueIds.slice();
+            if (op.data.cableType === 'copper') {
+                if (op.data.copperSwitchFromId) c.copperSwitchFromId = op.data.copperSwitchFromId;
+                if (op.data.copperSwitchToId) c.copperSwitchToId = op.data.copperSwitchToId;
+                if (op.data.copperPortFrom != null && op.data.copperPortFrom !== '') c.copperPortFrom = op.data.copperPortFrom;
+                if (op.data.copperPortTo != null && op.data.copperPortTo !== '') c.copperPortTo = op.data.copperPortTo;
+            }
+            if (op.data.uniqueId != null && op.data.uniqueId !== '') {
+                var dupIdx = state.findIndex(function(i) { return i.type === 'cable' && i.uniqueId === op.data.uniqueId; });
+                if (dupIdx >= 0) {
+                    state = state.slice();
+                    state[dupIdx] = c;
+                    return state;
+                }
+            }
             return state.concat([c]);
         }
         return state;
@@ -1088,13 +1115,14 @@ wss.on('connection', (ws, req) => {
                 var state = getSyncStateForOrg(orgId);
                 state.data = applyOperationToState(state.data, msg.op);
                 state.clientId = msg.clientId || clientId;
-                syncDirtyOrgs[orgId] = true;
+                try {
+                    if (orgId) db.setMapData(orgId, state.data);
+                } catch (eDb) {}
                 wss.clients.forEach(function(client) {
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.orgId === orgId) {
                         try { client.send(JSON.stringify({ type: 'op', op: msg.op })); } catch (e) {}
                     }
                 });
-                scheduleSyncWrite();
                 return;
             }
             var justConnected = (Date.now() - (ws.connectedAt || 0)) < 4000;
@@ -1106,7 +1134,9 @@ wss.on('connection', (ws, req) => {
                     syncGroupNamesByOrg[orgId] = msg.groupNames;
                     try { db.setSettings({ groupNames: msg.groupNames }, orgId); } catch (e) {}
                 }
-                syncDirtyOrgs[orgId] = true;
+                try {
+                    if (orgId) db.setMapData(orgId, state.data);
+                } catch (eDb2) {}
                 var statePayload = { type: 'state', clientId: state.clientId, data: state.data };
                 var gn = syncGroupNamesByOrg[orgId] || syncGroupNames;
                 if (gn && (gn.cross || gn.node)) statePayload.groupNames = gn;
@@ -1115,7 +1145,6 @@ wss.on('connection', (ws, req) => {
                         try { client.send(JSON.stringify(statePayload)); } catch (e) {}
                     }
                 });
-                scheduleSyncWrite();
             }
         } catch (e) {}
         });
@@ -1131,23 +1160,6 @@ wss.on('connection', (ws, req) => {
         });
     });
 });
-
-var syncWriteTimer = null;
-var SYNC_WRITE_DELAY_MS = 1800;
-
-function scheduleSyncWrite() {
-    if (syncWriteTimer) clearTimeout(syncWriteTimer);
-    syncWriteTimer = setTimeout(function() {
-        syncWriteTimer = null;
-        try {
-            Object.keys(syncDirtyOrgs).forEach(function(orgId) {
-                var state = syncCurrentStateByOrg[orgId];
-                if (state && orgId) db.setMapData(orgId, state.data);
-            });
-            syncDirtyOrgs = {};
-        } catch (e) {}
-    }, SYNC_WRITE_DELAY_MS);
-}
 
 var lastCursorsBroadcast = 0;
 var cursorsBroadcastTimer = null;

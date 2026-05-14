@@ -364,6 +364,15 @@
                                 <option value="48">48 портов</option>
                                 <option value="96">96 портов</option>
                             </select>
+                            <label for="crossCopperPorts" class="form-group-sub">Медные порты (патч к меди)</label>
+                            <select id="crossCopperPorts" class="form-select">
+                                <option value="0" selected>Нет (0)</option>
+                                <option value="8">8</option>
+                                <option value="12">12</option>
+                                <option value="16">16</option>
+                                <option value="24">24</option>
+                                <option value="48">48</option>
+                            </select>
                         </div>
                         <div class="form-group" id="sleeveSettingsGroup" style="display: none;">
                             <label for="sleeveType">Тип муфты</label>
@@ -562,6 +571,10 @@
                             <span class="legend-text">ВОЛС 24 жилы</span>
                         </div>
                         <div class="legend-item">
+                            <div class="legend-color" style="background-color: #b45309; height: 3px;"></div>
+                            <span class="legend-text">Медный кабель (от порта коммутатора / кросса)</span>
+                        </div>
+                        <div class="legend-item">
                             <div class="legend-color" style="background-color: #22c55e; height: 2px; border-style: dashed;"></div>
                             <span class="legend-text">Кросс → Узел (жила)</span>
                         </div>
@@ -664,6 +677,19 @@
                             <div class="stat-info">
                                 <div class="stat-value" id="onuCount">0</div>
                                 <div class="stat-label">ONU</div>
+                            </div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-icon" style="background: #ea580c20; color: #ea580c;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="4" y="6" width="16" height="12" rx="2"></rect>
+                                    <line x1="8" y1="10" x2="8.01" y2="10"></line><line x1="12" y1="10" x2="12.01" y2="10"></line><line x1="16" y1="10" x2="16.01" y2="10"></line>
+                                    <line x1="8" y1="14" x2="16" y2="14"></line>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="switchCount">0</div>
+                                <div class="stat-label">Коммутаторы</div>
                             </div>
                         </div>
                         <div class="stat-item">

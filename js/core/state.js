@@ -14,6 +14,14 @@ var cursorIndicator = null;
 var phantomPlacemark = null;
 var currentCableTool = false;
 var cableSource = null;
+/** При прокладке меди: если начало маршрута — узел, id коммутатора из attachedSwitches */
+var cableSourceCopperSwitchId = null;
+/** После «Подключить» с порта: первый конец и порт задаются заранее; сбрасывается после создания кабеля или выхода из режима */
+var pendingCopperPortPreset = null;
+/** Ожидание выбора порта на конце медного кабеля (маршрут уже задан) */
+var pendingCopperRouteFinish = null;
+/** Прокладка меди только с портов коммутатора/кросса (не из списка типа кабеля) */
+var copperCableLayingActive = false;
 var cableWaypoints = [];
 var cablePreviewLine = null;
 var selectedFiberForConnection = null;
