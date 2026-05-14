@@ -226,6 +226,7 @@
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterOlt" checked> OLT (GPON)</label>
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterSplitter" checked> Сплиттеры</label>
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterOnu" checked> ONU</label>
+                            <label class="map-filter-check"><input type="checkbox" id="mapFilterCamera" checked> Камеры</label>
                         </div>
                         <p class="map-filter-note">Кабели отображаются только между видимыми объектами. «Только узлы агрегации» скрывает обычные узлы сети, остальные объекты остаются на карте.</p>
                         <div class="map-filter-save-start">
@@ -260,6 +261,7 @@
                                 <option value="olt">📶 OLT (GPON)</option>
                                 <option value="splitter">🔀 Сплиттер</option>
                                 <option value="onu">📟 ONU</option>
+                                <option value="camera">📷 Камера</option>
                                 <option value="node">🖥️ Узлы сети</option>
                                 <option value="attachment">🔗 Крепление узлов</option>
                             </select>
@@ -278,7 +280,7 @@
                                 <option value="64">64 порта</option>
                             </select>
                             <label for="oltManufacturer" class="form-group-sub">Производитель</label>
-                            <div class="device-combobox" data-type="manufacturer" data-value-id="oltManufacturer">
+                            <div class="device-combobox" data-catalog="olt" data-type="manufacturer" data-value-id="oltManufacturer">
                                 <button type="button" class="device-combobox-trigger" id="oltManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button>
                                 <input type="hidden" id="oltManufacturer" name="oltManufacturer" value="">
                                 <div class="device-combobox-panel" role="listbox" id="oltManufacturerPanel">
@@ -287,7 +289,7 @@
                                 </div>
                             </div>
                             <label for="oltModel" class="form-group-sub">Модель</label>
-                            <div class="device-combobox" data-type="model" data-value-id="oltModel" data-manufacturer-id="oltManufacturer">
+                            <div class="device-combobox" data-catalog="olt" data-type="model" data-value-id="oltModel" data-manufacturer-id="oltManufacturer">
                                 <button type="button" class="device-combobox-trigger" id="oltModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
                                 <input type="hidden" id="oltModel" name="oltModel" value="">
                                 <div class="device-combobox-panel" role="listbox" id="oltModelPanel">
@@ -299,7 +301,7 @@
                         </div>
                         <div class="form-group" id="onuSettingsGroup" style="display: none;">
                             <label for="onuManufacturer">Производитель</label>
-                            <div class="device-combobox" data-type="manufacturer" data-value-id="onuManufacturer">
+                            <div class="device-combobox" data-catalog="onu" data-type="manufacturer" data-value-id="onuManufacturer">
                                 <button type="button" class="device-combobox-trigger" id="onuManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button>
                                 <input type="hidden" id="onuManufacturer" name="onuManufacturer" value="">
                                 <div class="device-combobox-panel" role="listbox" id="onuManufacturerPanel">
@@ -308,10 +310,31 @@
                                 </div>
                             </div>
                             <label for="onuModel" class="form-group-sub">Модель</label>
-                            <div class="device-combobox" data-type="model" data-value-id="onuModel" data-manufacturer-id="onuManufacturer">
+                            <div class="device-combobox" data-catalog="onu" data-type="model" data-value-id="onuModel" data-manufacturer-id="onuManufacturer">
                                 <button type="button" class="device-combobox-trigger" id="onuModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
                                 <input type="hidden" id="onuModel" name="onuModel" value="">
                                 <div class="device-combobox-panel" role="listbox" id="onuModelPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group" id="cameraSettingsGroup" style="display: none;">
+                            <p class="form-hint" style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px;">Подключение к сети — только медным кабелем от порта коммутатора в узле (или отдельной точки коммутатора).</p>
+                            <label for="cameraManufacturer">Производитель</label>
+                            <div class="device-combobox" data-catalog="camera" data-type="manufacturer" data-value-id="cameraManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="cameraManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button>
+                                <input type="hidden" id="cameraManufacturer" name="cameraManufacturer" value="">
+                                <div class="device-combobox-panel" role="listbox" id="cameraManufacturerPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
+                            </div>
+                            <label for="cameraModel" class="form-group-sub">Модель</label>
+                            <div class="device-combobox" data-catalog="camera" data-type="model" data-value-id="cameraModel" data-manufacturer-id="cameraManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="cameraModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
+                                <input type="hidden" id="cameraModel" name="cameraModel" value="">
+                                <div class="device-combobox-panel" role="listbox" id="cameraModelPanel">
                                     <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
                                     <ul class="device-combobox-list"></ul>
                                 </div>
@@ -335,7 +358,7 @@
                                 <option value="aggregation">Узел агрегации (красный)</option>
                             </select>
                             <label for="nodeManufacturer" class="form-group-sub">Производитель</label>
-                            <div class="device-combobox" data-type="manufacturer" data-value-id="nodeManufacturer">
+                            <div class="device-combobox" data-catalog="node" data-type="manufacturer" data-value-id="nodeManufacturer">
                                 <button type="button" class="device-combobox-trigger" id="nodeManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button>
                                 <input type="hidden" id="nodeManufacturer" name="nodeManufacturer" value="">
                                 <div class="device-combobox-panel" role="listbox" id="nodeManufacturerPanel">
@@ -344,7 +367,7 @@
                                 </div>
                             </div>
                             <label for="nodeModel" class="form-group-sub">Модель</label>
-                            <div class="device-combobox" data-type="model" data-value-id="nodeModel" data-manufacturer-id="nodeManufacturer">
+                            <div class="device-combobox" data-catalog="node" data-type="model" data-value-id="nodeModel" data-manufacturer-id="nodeManufacturer">
                                 <button type="button" class="device-combobox-trigger" id="nodeModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
                                 <input type="hidden" id="nodeModel" name="nodeModel" value="">
                                 <div class="device-combobox-panel" role="listbox" id="nodeModelPanel">
@@ -572,7 +595,7 @@
                         </div>
                         <div class="legend-item">
                             <div class="legend-color" style="background-color: #b45309; height: 3px;"></div>
-                            <span class="legend-text">Медный кабель (от порта коммутатора / кросса)</span>
+                            <span class="legend-text">Медный кабель (кросс ↔ узел/коммутатор; к камере — только от коммутатора)</span>
                         </div>
                         <div class="legend-item">
                             <div class="legend-color" style="background-color: #22c55e; height: 2px; border-style: dashed;"></div>
@@ -677,6 +700,18 @@
                             <div class="stat-info">
                                 <div class="stat-value" id="onuCount">0</div>
                                 <div class="stat-label">ONU</div>
+                            </div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-icon" style="background: #64748b20; color: #64748b;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                    <circle cx="12" cy="13" r="4"></circle>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="cameraCount">0</div>
+                                <div class="stat-label">Камеры</div>
                             </div>
                         </div>
                         <div class="stat-item">
@@ -1235,13 +1270,20 @@
 
     <!-- Модальное окно справочника устройств (только админ) -->
     <div id="deviceCatalogModal" class="modal">
-        <div class="modal-content" style="max-width: 560px;">
+        <div class="modal-content" style="max-width: 640px;">
             <div class="modal-header">
                 <h2>Справочник устройств</h2>
                 <span class="close-device-catalog">&times;</span>
             </div>
             <div class="modal-body">
-                <p class="backups-hint" style="margin-bottom: 12px;">Производители и модели для полей устройств (OLT, ONU, узел). Добавляйте и удаляйте по необходимости.</p>
+                <p class="backups-hint" style="margin-bottom: 12px;">Отдельные справочники для <strong>узла сети</strong>, <strong>OLT</strong>, <strong>ONU</strong>, <strong>камер</strong> и <strong>коммутаторов</strong> в узле. Для моделей коммутаторов можно задать число портов по умолчанию (подсказка при добавлении коммутатора в узел).</p>
+                <div class="device-catalog-tabs" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+                    <button type="button" class="device-catalog-tab device-catalog-tab-active btn-secondary" data-tab="node" style="font-size: 0.8125rem;">Узел</button>
+                    <button type="button" class="device-catalog-tab btn-secondary" data-tab="olt" style="font-size: 0.8125rem;">OLT</button>
+                    <button type="button" class="device-catalog-tab btn-secondary" data-tab="onu" style="font-size: 0.8125rem;">ONU</button>
+                    <button type="button" class="device-catalog-tab btn-secondary" data-tab="camera" style="font-size: 0.8125rem;">Камеры</button>
+                    <button type="button" class="device-catalog-tab btn-secondary" data-tab="switch" style="font-size: 0.8125rem;">Коммутаторы</button>
+                </div>
                 <div id="deviceCatalogList" class="device-catalog-list"></div>
                 <div class="device-catalog-actions" style="margin-top: 12px;">
                     <div class="device-catalog-add-mfr-row" style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap;">

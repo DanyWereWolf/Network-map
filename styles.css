@@ -1774,23 +1774,33 @@ button {
 /* ==================== Статистика ==================== */
 .stats-section {
     margin-top: 12px;
-    padding: 14px;
+    padding: 10px;
     background: var(--bg-card);
     border-radius: var(--radius-md);
     border: 1px solid var(--border-color);
+    max-width: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
 }
 
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 6px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .stat-item {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 10px;
-    padding: 12px;
+    justify-content: flex-start;
+    text-align: center;
+    gap: 4px;
+    padding: 8px 4px;
+    min-width: 0;
     background: var(--bg-card);
     border-radius: var(--radius-md);
     border: 1px solid var(--border-color);
@@ -1806,8 +1816,8 @@ button {
 }
 
 .stat-icon {
-    width: 36px;
-    height: 36px;
+    width: 30px;
+    height: 30px;
     border-radius: 4px;
     display: flex;
     align-items: center;
@@ -1815,24 +1825,35 @@ button {
     flex-shrink: 0;
 }
 
+.stat-icon svg {
+    width: 16px;
+    height: 16px;
+}
+
 .stat-info {
     flex: 1;
+    min-width: 0;
+    width: 100%;
 }
 
 .stat-value {
-    font-size: 1.125rem;
+    font-size: 1rem;
     font-weight: 700;
     color: var(--text-primary);
-    line-height: 1.2;
+    line-height: 1.15;
+    word-break: break-all;
 }
 
 .stat-label {
-    font-size: 0.6875rem;
+    font-size: 0.5625rem;
     color: var(--text-muted);
-    margin-top: 2px;
+    margin-top: 0;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.2px;
     font-weight: 600;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+    hyphens: auto;
 }
 
 /* ==================== Действия ==================== */
@@ -3477,8 +3498,8 @@ button {
     }
     
     .stats-grid {
-        grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
+        grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+        gap: 5px;
     }
     
     .stat-item {
@@ -4118,5 +4139,12 @@ button {
 
 .fiber-splitter-connected .fiber-name {
     color: var(--accent-warning) !important;
+    font-weight: 600;
+}
+
+/* Вкладки справочника устройств */
+.device-catalog-tab.device-catalog-tab-active {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
     font-weight: 600;
 }

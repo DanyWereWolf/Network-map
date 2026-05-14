@@ -13,6 +13,7 @@ function getObjectTypeName(type) {
         case 'olt': return 'OLT (GPON)';
         case 'splitter': return 'Сплиттер';
         case 'onu': return 'ONU';
+        case 'camera': return 'Камера';
         case 'node': return 'Узел сети';
         case 'switch': return 'Коммутатор';
         case 'attachment': return 'Крепление узлов';

@@ -131,6 +131,7 @@ function renderSearchResults(results, query) {
             case 'sleeve': return '🔴';
             case 'support': return '📍';
             case 'attachment': return '🔗';
+            case 'camera': return '📷';
             case 'cable': return '🔌';
             default: return '📍';
         }
@@ -179,7 +180,7 @@ function goToSearchResult(result) {
     setTimeout(function() {
         if (result.type === 'cable') showCableInfo(obj);
         else if (result.type === 'support' || result.type === 'attachment') showSupportInfo(obj);
-        else if (result.type === 'node' || result.type === 'cross' || result.type === 'sleeve' || result.type === 'olt' || result.type === 'splitter' || result.type === 'onu') showObjectInfo(obj);
+        else if (result.type === 'node' || result.type === 'cross' || result.type === 'sleeve' || result.type === 'olt' || result.type === 'splitter' || result.type === 'onu' || result.type === 'camera') showObjectInfo(obj);
     }, 600);
     searchInput.value = '';
     var clearEl = document.getElementById('clearSearch');

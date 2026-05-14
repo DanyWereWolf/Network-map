@@ -1,3 +1,53 @@
+/** Справочник для узла сети (шасси/маршрутизаторы и т.п., не OLT/ONU). */
+var NODE_CATALOG_DEFAULT = {
+    'MikroTik': ['hEX', 'hAP', 'RB750', 'CCR'],
+    'Ruijie': ['S6750-H36C', 'S6730-H48X6C'],
+    'Eltex': ['NTU-2', 'NTU-4', 'Router', 'Switch'],
+    'Nokia': ['Router', 'Switch', 'SFU', 'HGU'],
+    'Iskratel': ['Router', 'Switch', 'SFU', 'HGU'],
+    'BDCOM': ['Router', 'Switch', 'SFU', 'HGU'],
+    'Sercomm': ['SFU', 'HGU', 'WAP'],
+    'D-Link': ['Router', 'Switch', 'WAP'],
+    'Zyxel': ['Router', 'Switch', 'SFU', 'HGU', 'WAP'],
+    'Ubiquiti': ['WAP', 'Router', 'Switch'],
+    'Keenetic': ['Router', 'WAP'],
+    'TP-Link': ['Router', 'Switch', 'WAP'],
+    'Cisco': ['Router', 'Switch'],
+    'Cambium': ['WAP'],
+    'Huawei': ['NE серия', 'ATN'],
+    'ZTE': ['ZXR10']
+};
+
+/** Справочник только для OLT. */
+var OLT_CATALOG_DEFAULT = {
+    'Huawei': ['MA5608', 'MA5683T'],
+    'ZTE': ['C300', 'C320'],
+    'FiberHome': ['AN5516'],
+    'SNR': ['SNR-GPON-OLT'],
+    'B-OptiX': ['BO-GPON-OLT']
+};
+
+/** Справочник только для ONU. */
+var ONU_CATALOG_DEFAULT = {
+    'Huawei': ['HG8145', 'HG8245'],
+    'ZTE': ['F660', 'F670'],
+    'FiberHome': ['AN5506'],
+    'SNR': ['SNR-ONU-GPON-1G-mini'],
+    'B-OptiX': ['BO-ONU-GPON-4G-1P-DW'],
+    'Sercomm': ['SFU', 'HGU', 'WAP'],
+    'Nokia': ['SFU', 'HGU'],
+    'Iskratel': ['SFU', 'HGU'],
+    'BDCOM': ['SFU', 'HGU'],
+    'D-Link': ['Router', 'Switch', 'WAP'],
+    'Zyxel': ['Router', 'Switch', 'SFU', 'HGU', 'WAP'],
+    'Ubiquiti': ['WAP', 'Router'],
+    'Keenetic': ['Router', 'WAP'],
+    'TP-Link': ['Router', 'Switch', 'WAP'],
+    'Cisco': ['Router', 'Switch'],
+    'Cambium': ['WAP']
+};
+
+/** Полный старый справочник (только для миграции со старых сохранений). */
 var DEVICE_CATALOG_DEFAULT = {
     'Huawei': ['MA5608', 'MA5683T', 'HG8145', 'HG8245'],
     'ZTE': ['C300', 'C320', 'F660', 'F670'],
@@ -20,83 +70,240 @@ var DEVICE_CATALOG_DEFAULT = {
     'Cambium': ['WAP']
 };
 
-var deviceCatalog = {};
+/** Справочник только для камер (отдельно от OLT/ONU/узла). */
+var CAMERA_CATALOG_DEFAULT = {
+    'Hikvision': ['DS-2CD2143G0-I', 'DS-2CD2T47G1-L'],
+    'Dahua': ['IPC-HFW2431S-S', 'IPC-HFW2231T-ZS'],
+    'Uniview': ['IPC2124LB-SF40'],
+    'Axis': ['P1445-LE']
+};
+
+/** Справочник только для коммутаторов в узле (отдельно от узла/OLT/ONU). */
+var SWITCH_CATALOG_DEFAULT = {
+    'MikroTik': ['CRS326-24G-2S+', 'CSS326-24G-2S+', 'CRS312-4C+8XG'],
+    'TP-Link': ['TL-SG1024DE', 'TL-SG3428'],
+    'Ruijie': ['RG-S2928G-E', 'RG-S5750C'],
+    'Eltex': ['MES3324', 'MES2348'],
+    'Cisco': ['CBS350-24T-4X']
+};
+
+var nodeDeviceCatalog = {};
+var oltDeviceCatalog = {};
+var onuDeviceCatalog = {};
+var cameraDeviceCatalog = {};
+var switchDeviceCatalog = {};
+/** switchModelDefaultPorts[manufacturer][model] = число портов по умолчанию при добавлении коммутатора. */
+var switchModelDefaultPorts = {};
+
+window.deviceCatalogActiveTab = 'node';
+
+function cloneDeepCatalog(cat) {
+    var o = {};
+    Object.keys(cat || {}).forEach(function(m) {
+        if (!m) return;
+        o[m] = (cat[m] || []).slice();
+    });
+    return o;
+}
+
+function getCatalogObjectRef(kind) {
+    if (kind === 'node') return nodeDeviceCatalog;
+    if (kind === 'olt') return oltDeviceCatalog;
+    if (kind === 'onu') return onuDeviceCatalog;
+    if (kind === 'camera') return cameraDeviceCatalog;
+    if (kind === 'switch') return switchDeviceCatalog;
+    if (kind === 'general') return nodeDeviceCatalog;
+    return nodeDeviceCatalog;
+}
+
+function getCatalogDefault(kind) {
+    if (kind === 'node' || kind === 'general') return NODE_CATALOG_DEFAULT;
+    if (kind === 'olt') return OLT_CATALOG_DEFAULT;
+    if (kind === 'onu') return ONU_CATALOG_DEFAULT;
+    if (kind === 'camera') return CAMERA_CATALOG_DEFAULT;
+    if (kind === 'switch') return SWITCH_CATALOG_DEFAULT;
+    return NODE_CATALOG_DEFAULT;
+}
 
 function getDeviceCatalog() {
     var out = {};
-    Object.keys(deviceCatalog || {}).forEach(function(m) {
+    Object.keys(nodeDeviceCatalog || {}).forEach(function(m) {
         if (!m) return;
-        var arr = (deviceCatalog[m] || []).slice();
-        out[m] = arr;
+        out[m] = (nodeDeviceCatalog[m] || []).slice();
     });
     return out;
 }
 
+function getNodeDeviceCatalog() {
+    return cloneDeepCatalog(nodeDeviceCatalog);
+}
+
+function getOltDeviceCatalog() {
+    return cloneDeepCatalog(oltDeviceCatalog);
+}
+
+function getOnuDeviceCatalog() {
+    return cloneDeepCatalog(onuDeviceCatalog);
+}
+
+function getCameraDeviceCatalog() {
+    return cloneDeepCatalog(cameraDeviceCatalog);
+}
+
+function getSwitchDeviceCatalog() {
+    return cloneDeepCatalog(switchDeviceCatalog);
+}
+
 function setDeviceCatalog(catalog) {
-    deviceCatalog = {};
+    nodeDeviceCatalog = {};
     if (catalog && typeof catalog === 'object') {
         Object.keys(catalog).forEach(function(m) {
-            if (m && Array.isArray(catalog[m])) deviceCatalog[m] = catalog[m].filter(Boolean);
+            if (m && Array.isArray(catalog[m])) nodeDeviceCatalog[m] = catalog[m].filter(Boolean);
         });
     }
     saveDeviceCatalog();
 }
 
 function resetDeviceCatalogToDefault() {
-    deviceCatalog = JSON.parse(JSON.stringify(DEVICE_CATALOG_DEFAULT));
+    nodeDeviceCatalog = cloneDeepCatalog(NODE_CATALOG_DEFAULT);
+    oltDeviceCatalog = cloneDeepCatalog(OLT_CATALOG_DEFAULT);
+    onuDeviceCatalog = cloneDeepCatalog(ONU_CATALOG_DEFAULT);
+    cameraDeviceCatalog = cloneDeepCatalog(CAMERA_CATALOG_DEFAULT);
+    switchDeviceCatalog = cloneDeepCatalog(SWITCH_CATALOG_DEFAULT);
+    switchModelDefaultPorts = {};
     saveDeviceCatalog();
 }
 
-function addDeviceManufacturer(name) {
+function addManufacturerForCatalog(kind, name) {
     name = (name || '').trim();
-    if (!name || deviceCatalog[name]) return false;
-    deviceCatalog[name] = [];
+    if (!name) return false;
+    var cat = getCatalogObjectRef(kind);
+    if (cat[name]) return false;
+    cat[name] = [];
     saveDeviceCatalog();
     return true;
 }
 
-function removeDeviceManufacturer(name) {
-    if (!deviceCatalog[name]) return false;
-    delete deviceCatalog[name];
+function removeManufacturerForCatalog(kind, name) {
+    var cat = getCatalogObjectRef(kind);
+    if (!cat[name]) return false;
+    delete cat[name];
+    if (kind === 'switch' && switchModelDefaultPorts[name]) {
+        delete switchModelDefaultPorts[name];
+    }
     saveDeviceCatalog();
     return true;
 }
 
-function addDeviceModel(manufacturer, model) {
+function addModelForCatalog(kind, manufacturer, model) {
     manufacturer = (manufacturer || '').trim();
     model = (model || '').trim();
     if (!manufacturer || !model) return false;
-    if (!deviceCatalog[manufacturer]) deviceCatalog[manufacturer] = [];
-    if (deviceCatalog[manufacturer].indexOf(model) !== -1) return false;
-    deviceCatalog[manufacturer].push(model);
-    deviceCatalog[manufacturer].sort();
+    var cat = getCatalogObjectRef(kind);
+    if (!cat[manufacturer]) cat[manufacturer] = [];
+    if (cat[manufacturer].indexOf(model) !== -1) return false;
+    cat[manufacturer].push(model);
+    cat[manufacturer].sort();
     saveDeviceCatalog();
     return true;
 }
 
-function removeDeviceModel(manufacturer, model) {
-    if (!deviceCatalog[manufacturer]) return false;
-    var idx = deviceCatalog[manufacturer].indexOf(model);
+function removeModelForCatalog(kind, manufacturer, model) {
+    var cat = getCatalogObjectRef(kind);
+    if (!cat[manufacturer]) return false;
+    var idx = cat[manufacturer].indexOf(model);
     if (idx === -1) return false;
-    deviceCatalog[manufacturer].splice(idx, 1);
+    cat[manufacturer].splice(idx, 1);
+    if (kind === 'switch' && switchModelDefaultPorts[manufacturer]) {
+        if (switchModelDefaultPorts[manufacturer][model] !== undefined) {
+            delete switchModelDefaultPorts[manufacturer][model];
+        }
+        if (Object.keys(switchModelDefaultPorts[manufacturer]).length === 0) {
+            delete switchModelDefaultPorts[manufacturer];
+        }
+    }
     saveDeviceCatalog();
     return true;
 }
 
-function getDeviceManufacturers() {
-    return Object.keys(deviceCatalog || {}).filter(Boolean).sort();
+function getManufacturersForCatalog(kind) {
+    return Object.keys(getCatalogObjectRef(kind) || {}).filter(Boolean).sort();
 }
 
-function getDeviceModels(manufacturer) {
+function getModelsForCatalog(kind, manufacturer) {
+    var cat = getCatalogObjectRef(kind);
     var mfr = (manufacturer || '').trim();
     if (!mfr) {
         var all = [];
-        Object.keys(deviceCatalog || {}).forEach(function(m) {
-            (deviceCatalog[m] || []).forEach(function(mod) { if (mod && all.indexOf(mod) === -1) all.push(mod); });
+        Object.keys(cat || {}).forEach(function(m) {
+            (cat[m] || []).forEach(function(mod) { if (mod && all.indexOf(mod) === -1) all.push(mod); });
         });
         return all.sort();
     }
-    return (deviceCatalog[mfr] || []).slice();
+    return (cat[mfr] || []).slice();
+}
+
+function addDeviceManufacturer(name) {
+    return addManufacturerForCatalog('node', name);
+}
+
+function removeDeviceManufacturer(name) {
+    return removeManufacturerForCatalog('node', name);
+}
+
+function addDeviceModel(manufacturer, model) {
+    return addModelForCatalog('node', manufacturer, model);
+}
+
+function removeDeviceModel(manufacturer, model) {
+    return removeModelForCatalog('node', manufacturer, model);
+}
+
+function getDeviceManufacturers() {
+    return getManufacturersForCatalog('node');
+}
+
+function getDeviceModels(manufacturer) {
+    return getModelsForCatalog('node', manufacturer);
+}
+
+function getSwitchModelDefaultPortCount(manufacturer, model) {
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (!mfr || !mod) return null;
+    var byM = switchModelDefaultPorts[mfr];
+    if (!byM || typeof byM !== 'object') return null;
+    var n = parseInt(byM[mod], 10);
+    if (isNaN(n) || n < 1) return null;
+    return Math.min(96, n);
+}
+
+function setSwitchModelDefaultPortCount(manufacturer, model, portCount) {
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (!mfr || !mod) return false;
+    if (portCount === null || portCount === undefined || portCount === '') {
+        if (switchModelDefaultPorts[mfr] && switchModelDefaultPorts[mfr][mod] !== undefined) {
+            delete switchModelDefaultPorts[mfr][mod];
+            if (Object.keys(switchModelDefaultPorts[mfr]).length === 0) delete switchModelDefaultPorts[mfr];
+        }
+        saveDeviceCatalog();
+        return true;
+    }
+    var n = parseInt(portCount, 10);
+    if (isNaN(n) || n < 1) {
+        if (switchModelDefaultPorts[mfr] && switchModelDefaultPorts[mfr][mod] !== undefined) {
+            delete switchModelDefaultPorts[mfr][mod];
+            if (Object.keys(switchModelDefaultPorts[mfr]).length === 0) delete switchModelDefaultPorts[mfr];
+        }
+        saveDeviceCatalog();
+        return true;
+    }
+    n = Math.min(96, Math.max(1, n));
+    if (!switchModelDefaultPorts[mfr]) switchModelDefaultPorts[mfr] = {};
+    switchModelDefaultPorts[mfr][mod] = n;
+    saveDeviceCatalog();
+    return true;
 }
 
 function addCustomManufacturer(v) {
@@ -119,7 +326,14 @@ function addCustomModel(v, manufacturer) {
 
 var CUSTOM_DEVICE_OPTIONS_STORAGE_KEY = 'networkmap_customDeviceOptions';
 function saveDeviceCatalog() {
-    var payload = { deviceCatalog: getDeviceCatalog() };
+    var payload = {
+        nodeDeviceCatalog: cloneDeepCatalog(nodeDeviceCatalog),
+        oltDeviceCatalog: cloneDeepCatalog(oltDeviceCatalog),
+        onuDeviceCatalog: cloneDeepCatalog(onuDeviceCatalog),
+        cameraDeviceCatalog: cloneDeepCatalog(cameraDeviceCatalog),
+        switchDeviceCatalog: cloneDeepCatalog(switchDeviceCatalog),
+        switchModelDefaultPorts: JSON.parse(JSON.stringify(switchModelDefaultPorts || {}))
+    };
     try { localStorage.setItem(CUSTOM_DEVICE_OPTIONS_STORAGE_KEY, JSON.stringify(payload)); } catch (e) {}
     if (getApiBase() && getAuthToken()) {
         try {
@@ -133,30 +347,90 @@ function saveDeviceCatalog() {
 }
 
 function loadDeviceCatalog(opts) {
-    if (opts && opts.deviceCatalog && typeof opts.deviceCatalog === 'object' && Object.keys(opts.deviceCatalog).length > 0) {
-        setDeviceCatalog(opts.deviceCatalog);
-        return;
-    }
+    opts = opts || {};
     var hasLegacyData = opts && (
         (opts.manufacturers && opts.manufacturers.length > 0) ||
         (opts.modelsByManufacturer && typeof opts.modelsByManufacturer === 'object' && Object.keys(opts.modelsByManufacturer).length > 0)
     );
     if (hasLegacyData) {
-        var merged = JSON.parse(JSON.stringify(DEVICE_CATALOG_DEFAULT));
-        (opts.manufacturers || []).forEach(function(m) { if (m && !merged[m]) merged[m] = []; });
+        var legacyMerged = JSON.parse(JSON.stringify(DEVICE_CATALOG_DEFAULT));
+        (opts.manufacturers || []).forEach(function(m) { if (m && !legacyMerged[m]) legacyMerged[m] = []; });
         if (opts.modelsByManufacturer && typeof opts.modelsByManufacturer === 'object') {
             Object.keys(opts.modelsByManufacturer).forEach(function(m) {
-                if (!merged[m]) merged[m] = [];
+                if (!legacyMerged[m]) legacyMerged[m] = [];
                 (opts.modelsByManufacturer[m] || []).forEach(function(mod) {
-                    if (mod && merged[m].indexOf(mod) === -1) merged[m].push(mod);
+                    if (mod && legacyMerged[m].indexOf(mod) === -1) legacyMerged[m].push(mod);
                 });
             });
         }
-        setDeviceCatalog(merged);
+        nodeDeviceCatalog = cloneDeepCatalog(legacyMerged);
+        oltDeviceCatalog = cloneDeepCatalog(legacyMerged);
+        onuDeviceCatalog = cloneDeepCatalog(legacyMerged);
+        if ('cameraDeviceCatalog' in opts && opts.cameraDeviceCatalog && typeof opts.cameraDeviceCatalog === 'object') {
+            cameraDeviceCatalog = cloneDeepCatalog(opts.cameraDeviceCatalog);
+        } else {
+            cameraDeviceCatalog = cloneDeepCatalog(CAMERA_CATALOG_DEFAULT);
+        }
+        if ('switchDeviceCatalog' in opts && opts.switchDeviceCatalog && typeof opts.switchDeviceCatalog === 'object') {
+            switchDeviceCatalog = cloneDeepCatalog(opts.switchDeviceCatalog);
+        } else {
+            switchDeviceCatalog = cloneDeepCatalog(SWITCH_CATALOG_DEFAULT);
+        }
+        if (opts.switchModelDefaultPorts && typeof opts.switchModelDefaultPorts === 'object') {
+            switchModelDefaultPorts = JSON.parse(JSON.stringify(opts.switchModelDefaultPorts));
+        } else {
+            switchModelDefaultPorts = {};
+        }
+        saveDeviceCatalog();
         return;
     }
-    if (Object.keys(deviceCatalog || {}).length === 0) {
-        resetDeviceCatalogToDefault();
+
+    if (opts.nodeDeviceCatalog && typeof opts.nodeDeviceCatalog === 'object') {
+        nodeDeviceCatalog = cloneDeepCatalog(opts.nodeDeviceCatalog);
+    } else if (opts.deviceCatalog && typeof opts.deviceCatalog === 'object' && Object.keys(opts.deviceCatalog).length > 0) {
+        nodeDeviceCatalog = cloneDeepCatalog(opts.deviceCatalog);
+    } else if (!('nodeDeviceCatalog' in opts) && !('deviceCatalog' in opts)) {
+        nodeDeviceCatalog = cloneDeepCatalog(NODE_CATALOG_DEFAULT);
+    } else if (Object.keys(nodeDeviceCatalog).length === 0) {
+        nodeDeviceCatalog = cloneDeepCatalog(NODE_CATALOG_DEFAULT);
+    }
+
+    if (opts.oltDeviceCatalog && typeof opts.oltDeviceCatalog === 'object') {
+        oltDeviceCatalog = cloneDeepCatalog(opts.oltDeviceCatalog);
+    } else if (opts.deviceCatalog && typeof opts.deviceCatalog === 'object' && Object.keys(opts.deviceCatalog).length > 0) {
+        oltDeviceCatalog = cloneDeepCatalog(opts.deviceCatalog);
+    } else if (!('oltDeviceCatalog' in opts) && !('deviceCatalog' in opts)) {
+        oltDeviceCatalog = cloneDeepCatalog(OLT_CATALOG_DEFAULT);
+    } else if (Object.keys(oltDeviceCatalog).length === 0) {
+        oltDeviceCatalog = cloneDeepCatalog(OLT_CATALOG_DEFAULT);
+    }
+
+    if (opts.onuDeviceCatalog && typeof opts.onuDeviceCatalog === 'object') {
+        onuDeviceCatalog = cloneDeepCatalog(opts.onuDeviceCatalog);
+    } else if (opts.deviceCatalog && typeof opts.deviceCatalog === 'object' && Object.keys(opts.deviceCatalog).length > 0) {
+        onuDeviceCatalog = cloneDeepCatalog(opts.deviceCatalog);
+    } else if (!('onuDeviceCatalog' in opts) && !('deviceCatalog' in opts)) {
+        onuDeviceCatalog = cloneDeepCatalog(ONU_CATALOG_DEFAULT);
+    } else if (Object.keys(onuDeviceCatalog).length === 0) {
+        onuDeviceCatalog = cloneDeepCatalog(ONU_CATALOG_DEFAULT);
+    }
+
+    if ('cameraDeviceCatalog' in opts && opts.cameraDeviceCatalog && typeof opts.cameraDeviceCatalog === 'object') {
+        cameraDeviceCatalog = cloneDeepCatalog(opts.cameraDeviceCatalog);
+    } else if (!('cameraDeviceCatalog' in opts)) {
+        cameraDeviceCatalog = cloneDeepCatalog(CAMERA_CATALOG_DEFAULT);
+    }
+
+    if ('switchDeviceCatalog' in opts && opts.switchDeviceCatalog && typeof opts.switchDeviceCatalog === 'object') {
+        switchDeviceCatalog = cloneDeepCatalog(opts.switchDeviceCatalog);
+    } else if (!('switchDeviceCatalog' in opts)) {
+        switchDeviceCatalog = cloneDeepCatalog(SWITCH_CATALOG_DEFAULT);
+    }
+
+    if (opts.switchModelDefaultPorts && typeof opts.switchModelDefaultPorts === 'object') {
+        switchModelDefaultPorts = JSON.parse(JSON.stringify(opts.switchModelDefaultPorts));
+    } else {
+        switchModelDefaultPorts = {};
     }
 }
 
@@ -173,6 +447,14 @@ function loadCustomDeviceOptionsFromStorage() {
     } catch (e) {}
 }
 
+function ensureDeviceCatalogsNonEmpty() {
+    if (Object.keys(nodeDeviceCatalog || {}).length === 0) nodeDeviceCatalog = cloneDeepCatalog(NODE_CATALOG_DEFAULT);
+    if (Object.keys(oltDeviceCatalog || {}).length === 0) oltDeviceCatalog = cloneDeepCatalog(OLT_CATALOG_DEFAULT);
+    if (Object.keys(onuDeviceCatalog || {}).length === 0) onuDeviceCatalog = cloneDeepCatalog(ONU_CATALOG_DEFAULT);
+    if (Object.keys(cameraDeviceCatalog || {}).length === 0) cameraDeviceCatalog = cloneDeepCatalog(CAMERA_CATALOG_DEFAULT);
+    if (Object.keys(switchDeviceCatalog || {}).length === 0) switchDeviceCatalog = cloneDeepCatalog(SWITCH_CATALOG_DEFAULT);
+}
+
 function populateDeviceDatalists() {
     var dlM = document.getElementById('deviceManufacturersList');
     if (dlM) {
@@ -185,12 +467,14 @@ function populateDeviceDatalists() {
     }
 }
 
-function populateModelDatalistForManufacturer(manufacturer, datalistId) {
+function populateModelDatalistForManufacturer(manufacturer, datalistId, catalogKind) {
     datalistId = datalistId || 'deviceModelsList';
+    catalogKind = catalogKind || 'node';
+    if (catalogKind === 'general') catalogKind = 'node';
     var dlMod = document.getElementById(datalistId);
     if (dlMod) {
         dlMod.innerHTML = '';
-        (getDeviceModels(manufacturer) || []).forEach(function(m) {
+        (getModelsForCatalog(catalogKind, manufacturer) || []).forEach(function(m) {
             var opt = document.createElement('option');
             opt.value = m;
             dlMod.appendChild(opt);
@@ -217,6 +501,10 @@ function initDeviceComboboxes(container) {
         if (wrapper.dataset.initialized) return;
         wrapper.dataset.initialized = '1';
         var type = wrapper.dataset.type;
+        var catalogKind = (wrapper.dataset.catalog || 'node').trim();
+        if (catalogKind === 'general') catalogKind = 'node';
+        var allowedCatalogKinds = { node: 1, olt: 1, onu: 1, camera: 1, switch: 1 };
+        if (!allowedCatalogKinds[catalogKind]) catalogKind = 'node';
         var valueId = wrapper.dataset.valueId;
         var manufacturerId = wrapper.dataset.manufacturerId;
         var valueInput = document.getElementById(valueId) || wrapper.querySelector('input[type="hidden"]');
@@ -231,10 +519,10 @@ function initDeviceComboboxes(container) {
         var placeholder = type === 'model' ? placeholderMod : placeholderMfr;
 
         function getOptions() {
-            if (type === 'manufacturer') return getDeviceManufacturers() || [];
+            if (type === 'manufacturer') return getManufacturersForCatalog(catalogKind) || [];
             var mfrInput = manufacturerId ? document.getElementById(manufacturerId) : null;
             var mfr = mfrInput ? (mfrInput.value || '').trim() : '';
-            return getDeviceModels(mfr) || [];
+            return getModelsForCatalog(catalogKind, mfr) || [];
         }
 
         function renderList(filter) {
@@ -266,7 +554,8 @@ function initDeviceComboboxes(container) {
                         var evInput = new Event('input', { bubbles: true });
                         valueInput.dispatchEvent(evInput);
                         if (type === 'manufacturer' && manufacturerId) {
-                            var modelCombobox = container.querySelector('.device-combobox[data-manufacturer-id="' + manufacturerId + '"]');
+                            var modelCombobox = container.querySelector('.device-combobox[data-type="model"][data-manufacturer-id="' + manufacturerId + '"][data-catalog="' + catalogKind + '"]')
+                                || container.querySelector('.device-combobox[data-manufacturer-id="' + manufacturerId + '"]');
                             if (modelCombobox) {
                                 var mValInp = document.getElementById(modelCombobox.dataset.valueId) || modelCombobox.querySelector('input[type="hidden"]');
                                 var mTrigger = modelCombobox.querySelector('.device-combobox-trigger');
@@ -437,7 +726,12 @@ function setDeviceComboboxValue(valueId, value) {
 function renderDeviceCatalogList() {
     var container = document.getElementById('deviceCatalogList');
     if (!container) return;
-    var catalog = getDeviceCatalog();
+    var tab = window.deviceCatalogActiveTab || 'node';
+    var allowedTabs = { node: 1, olt: 1, onu: 1, camera: 1, switch: 1 };
+    if (!allowedTabs[tab]) tab = 'node';
+
+    var catalog = getCatalogObjectRef(tab);
+
     var mfrs = Object.keys(catalog).sort();
     if (mfrs.length === 0) {
         container.innerHTML = '<p class="text-muted-inline" style="font-size: 0.8125rem; margin: 0;">Справочник пуст. Добавьте производителя или сбросьте к значениям по умолчанию.</p>';
@@ -454,10 +748,14 @@ function renderDeviceCatalogList() {
         html += '<button type="button" class="device-catalog-add-model" data-mfr="' + escapeHtml(mfr) + '" title="Добавить модель" style="padding: 4px 10px; font-size: 0.75rem; background: var(--accent-primary); color: white; border: none; border-radius: 4px; cursor: pointer;">+</button>';
         html += '<button type="button" class="device-catalog-remove-mfr" data-mfr="' + escapeHtml(mfr) + '" title="Удалить производителя" style="padding: 4px 8px; font-size: 0.75rem; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer;">✕</button>';
         html += '</div></div>';
-        html += '<div class="device-catalog-models" style="display: flex; flex-wrap: wrap; gap: 4px;">';
+        html += '<div class="device-catalog-models" style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">';
         models.forEach(function(mod) {
             html += '<span class="device-catalog-model-tag" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 0.75rem; background: var(--bg-card); border-radius: 4px; border: 1px solid var(--border-color);">';
             html += escapeHtml(mod);
+            if (tab === 'switch') {
+                var defN = getSwitchModelDefaultPortCount(mfr, mod);
+                html += '<label style="display:inline-flex;align-items:center;gap:2px;margin-left:4px;font-size:0.65rem;color:var(--text-muted);" title="Число портов по умолчанию при добавлении коммутатора в узел">порт.<input type="number" class="form-input switch-catalog-def-ports" min="1" max="96" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" value="' + (defN != null ? String(defN) : '') + '" placeholder="—" style="width:44px;padding:2px 4px;font-size:0.65rem;"></label>';
+            }
             html += '<button type="button" class="device-catalog-remove-model" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" title="Удалить" style="padding: 0; margin: 0; background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 0.9em; line-height: 1;">×</button>';
             html += '</span>';
         });
@@ -471,11 +769,11 @@ function renderDeviceCatalogList() {
             var inp = container.querySelector('.device-catalog-new-model[data-mfr="' + mfr + '"]');
             var val = inp ? inp.value.trim() : '';
             if (!val) { if (typeof showError === 'function') showError('Введите модель', ''); return; }
-            if (addDeviceModel(mfr, val)) {
+            if (addModelForCatalog(tab, mfr, val)) {
                 inp.value = '';
                 renderDeviceCatalogList();
                 populateDeviceDatalists();
-                populateModelDatalistForManufacturer(mfr);
+                populateModelDatalistForManufacturer(mfr, 'deviceModelsList', tab);
                 if (typeof showInfo === 'function') showInfo('Модель добавлена', '');
             }
         });
@@ -486,11 +784,11 @@ function renderDeviceCatalogList() {
                 e.preventDefault();
                 var mfr = inp.getAttribute('data-mfr');
                 var val = inp.value.trim();
-                if (val && addDeviceModel(mfr, val)) {
+                if (val && addModelForCatalog(tab, mfr, val)) {
                     inp.value = '';
                     renderDeviceCatalogList();
                     populateDeviceDatalists();
-                    populateModelDatalistForManufacturer(mfr);
+                    populateModelDatalistForManufacturer(mfr, 'deviceModelsList', tab);
                     if (typeof showInfo === 'function') showInfo('Модель добавлена', '');
                 }
             }
@@ -501,7 +799,7 @@ function renderDeviceCatalogList() {
             var mfr = btn.getAttribute('data-mfr');
             (async function() {
                 if (!(await showConfirm('Удалить производителя «' + mfr + '» и все его модели?', 'Удалить производителя', { confirmText: 'Удалить' }))) return;
-            if (removeDeviceManufacturer(mfr)) {
+            if (removeManufacturerForCatalog(tab, mfr)) {
                 renderDeviceCatalogList();
                 populateDeviceDatalists();
                 if (typeof showInfo === 'function') showInfo('Производитель удалён', '');
@@ -513,25 +811,60 @@ function renderDeviceCatalogList() {
         btn.addEventListener('click', function() {
             var mfr = btn.getAttribute('data-mfr');
             var mod = btn.getAttribute('data-model');
-            if (removeDeviceModel(mfr, mod)) {
+            if (removeModelForCatalog(tab, mfr, mod)) {
                 renderDeviceCatalogList();
                 populateDeviceDatalists();
-                populateModelDatalistForManufacturer(mfr);
+                populateModelDatalistForManufacturer(mfr, 'deviceModelsList', tab);
                 if (typeof showInfo === 'function') showInfo('Модель удалена', '');
             }
         });
     });
+    if (tab === 'switch') {
+        container.querySelectorAll('.switch-catalog-def-ports').forEach(function(inp) {
+            inp.addEventListener('change', function() {
+                var mf = this.getAttribute('data-mfr');
+                var md = this.getAttribute('data-model');
+                var v = parseInt(this.value, 10);
+                if (isNaN(v) || v < 1) {
+                    setSwitchModelDefaultPortCount(mf, md, null);
+                    this.value = '';
+                } else {
+                    setSwitchModelDefaultPortCount(mf, md, v);
+                    this.value = String(Math.min(96, Math.max(1, v)));
+                }
+            });
+        });
+    }
 }
 
 function setupDeviceCatalogHandlers() {
     var addMfrBtn = document.getElementById('deviceCatalogAddMfr');
     var resetBtn = document.getElementById('deviceCatalogReset');
+    var catModal = document.getElementById('deviceCatalogModal');
+    if (catModal && !catModal._deviceCatalogTabBound) {
+        catModal._deviceCatalogTabBound = true;
+        catModal.addEventListener('click', function(e) {
+            var b = e.target.closest('.device-catalog-tab');
+            if (!b || !catModal.contains(b)) return;
+            var t = b.getAttribute('data-tab');
+            var allowedTabs = { node: 1, olt: 1, onu: 1, camera: 1, switch: 1 };
+            if (!t || !allowedTabs[t]) return;
+            window.deviceCatalogActiveTab = t;
+            catModal.querySelectorAll('.device-catalog-tab').forEach(function(x) {
+                x.classList.toggle('device-catalog-tab-active', x === b);
+            });
+            renderDeviceCatalogList();
+        });
+    }
     if (addMfrBtn) {
         addMfrBtn.addEventListener('click', function() {
             var inp = document.getElementById('deviceCatalogNewMfr');
             var name = inp ? inp.value.trim() : '';
             if (!name) { if (typeof showError === 'function') showError('Введите название производителя', ''); return; }
-            if (addDeviceManufacturer(name)) {
+            var tab = window.deviceCatalogActiveTab || 'node';
+            var allowedTabs = { node: 1, olt: 1, onu: 1, camera: 1, switch: 1 };
+            if (!allowedTabs[tab]) tab = 'node';
+            if (addManufacturerForCatalog(tab, name)) {
                 if (inp) inp.value = '';
                 renderDeviceCatalogList();
                 populateDeviceDatalists();
@@ -593,6 +926,10 @@ function openDeviceCatalogModal() {
     if (typeof requireAdmin === 'function' && !requireAdmin()) return;
     var modal = document.getElementById('deviceCatalogModal');
     if (modal) {
+        window.deviceCatalogActiveTab = 'node';
+        modal.querySelectorAll('.device-catalog-tab').forEach(function(x) {
+            x.classList.toggle('device-catalog-tab-active', x.getAttribute('data-tab') === 'node');
+        });
         modal.style.display = 'block';
         renderDeviceCatalogList();
     }

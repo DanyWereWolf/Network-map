@@ -1065,7 +1065,7 @@ function setupEventListeners() {
         }
     });
 
-    ['mapFilterNode', 'mapFilterNodeAggregationOnly', 'mapFilterCross', 'mapFilterSleeve', 'mapFilterSupport', 'mapFilterAttachment', 'mapFilterOlt', 'mapFilterSplitter', 'mapFilterOnu'].forEach(function(id) {
+    ['mapFilterNode', 'mapFilterNodeAggregationOnly', 'mapFilterCross', 'mapFilterSleeve', 'mapFilterSupport', 'mapFilterAttachment', 'mapFilterOlt', 'mapFilterSplitter', 'mapFilterOnu', 'mapFilterCamera'].forEach(function(id) {
         var el = document.getElementById(id);
         if (el) el.addEventListener('change', function() {
             if (typeof applyMapFilter === 'function') applyMapFilter();
@@ -1137,7 +1137,7 @@ function setupEventListeners() {
             const splitterSettingsGroup = document.getElementById('splitterSettingsGroup');
             const type = this.value;
 
-            const showName = ['node', 'cross', 'sleeve', 'support', 'attachment', 'olt', 'splitter', 'onu'].indexOf(type) !== -1;
+            const showName = ['node', 'cross', 'sleeve', 'support', 'attachment', 'olt', 'splitter', 'onu', 'camera'].indexOf(type) !== -1;
             if (nameInputGroup) nameInputGroup.style.display = showName ? 'block' : 'none';
             if (sleeveSettingsGroup) sleeveSettingsGroup.style.display = type === 'sleeve' ? 'block' : 'none';
             if (crossSettingsGroup) crossSettingsGroup.style.display = type === 'cross' ? 'block' : 'none';
@@ -1146,11 +1146,13 @@ function setupEventListeners() {
             if (splitterSettingsGroup) splitterSettingsGroup.style.display = type === 'splitter' ? 'block' : 'none';
             const onuSettingsGroup = document.getElementById('onuSettingsGroup');
             if (onuSettingsGroup) onuSettingsGroup.style.display = type === 'onu' ? 'block' : 'none';
+            const cameraSettingsGroup = document.getElementById('cameraSettingsGroup');
+            if (cameraSettingsGroup) cameraSettingsGroup.style.display = type === 'camera' ? 'block' : 'none';
 
             if (nameInputGroup) {
                 const nameLabel = nameInputGroup.querySelector('label');
                 if (nameLabel) {
-                    const labels = { cross: 'Имя кросса', sleeve: 'Название муфты', support: 'Подпись опоры', attachment: 'Название', node: 'Имя узла', olt: 'Имя OLT', splitter: 'Имя сплиттера', onu: 'Имя ONU' };
+                    const labels = { cross: 'Имя кросса', sleeve: 'Название муфты', support: 'Подпись опоры', attachment: 'Название', node: 'Имя узла', olt: 'Имя OLT', splitter: 'Имя сплиттера', onu: 'Имя ONU', camera: 'Имя камеры' };
                     nameLabel.textContent = labels[type] || 'Имя';
                 }
             }
@@ -1163,7 +1165,7 @@ function setupEventListeners() {
             const newType = this.value;
             currentPlacementType = newType;
             
-            if (['node', 'cross', 'sleeve', 'olt', 'splitter', 'onu'].indexOf(newType) !== -1) {
+            if (['node', 'cross', 'sleeve', 'olt', 'splitter', 'onu', 'camera'].indexOf(newType) !== -1) {
                 const nameInput = document.getElementById('objectName');
                 currentPlacementName = nameInput ? nameInput.value.trim() : '';
             } else {
@@ -1174,10 +1176,14 @@ function setupEventListeners() {
                 const nodeKindSelect = document.getElementById('nodeKind');
                 currentPlacementNodeKind = nodeKindSelect ? nodeKindSelect.value : 'network';
             }
-            if (['node', 'olt', 'onu'].indexOf(newType) !== -1) {
+            if (['node', 'olt', 'onu', 'camera'].indexOf(newType) !== -1) {
                 populateDeviceDatalists();
-                var mInp = newType === 'olt' ? document.getElementById('oltManufacturer') : (newType === 'onu' ? document.getElementById('onuManufacturer') : document.getElementById('nodeManufacturer'));
-                populateModelDatalistForManufacturer(mInp ? mInp.value.trim() : '');
+                var mInp = newType === 'olt' ? document.getElementById('oltManufacturer') : (newType === 'onu' ? document.getElementById('onuManufacturer') : (newType === 'camera' ? document.getElementById('cameraManufacturer') : document.getElementById('nodeManufacturer')));
+                var cat = 'node';
+                if (newType === 'camera') cat = 'camera';
+                else if (newType === 'olt') cat = 'olt';
+                else if (newType === 'onu') cat = 'onu';
+                populateModelDatalistForManufacturer(mInp ? mInp.value.trim() : '', 'deviceModelsList', cat);
             }
         }
         });
@@ -1202,17 +1208,19 @@ function setupEventListeners() {
         });
     }
 
-    function setupDeviceManufacturerChangeHandlers(manufacturerId) {
+    function setupDeviceManufacturerChangeHandlers(manufacturerId, catalogKind) {
+        catalogKind = catalogKind || 'node';
         var mInp = document.getElementById(manufacturerId);
         if (mInp) {
             mInp.addEventListener('change', function() {
-                if (typeof populateModelDatalistForManufacturer === 'function') populateModelDatalistForManufacturer(this.value.trim());
+                if (typeof populateModelDatalistForManufacturer === 'function') populateModelDatalistForManufacturer(this.value.trim(), 'deviceModelsList', catalogKind);
             });
         }
     }
-    setupDeviceManufacturerChangeHandlers('oltManufacturer');
-    setupDeviceManufacturerChangeHandlers('onuManufacturer');
-    setupDeviceManufacturerChangeHandlers('nodeManufacturer');
+    setupDeviceManufacturerChangeHandlers('oltManufacturer', 'olt');
+    setupDeviceManufacturerChangeHandlers('onuManufacturer', 'onu');
+    setupDeviceManufacturerChangeHandlers('cameraManufacturer', 'camera');
+    setupDeviceManufacturerChangeHandlers('nodeManufacturer', 'node');
 
     function preventPasswordSuggestions(inputEl) {
         if (!inputEl || inputEl.tagName !== 'INPUT') return;
@@ -1648,6 +1656,13 @@ function handleMapClick(e) {
             const model = (document.getElementById('onuModel') && document.getElementById('onuModel').value) ? document.getElementById('onuModel').value.trim() : '';
             createObject(type, name || '', coords, { manufacturer: manufacturer, model: model });
             currentPlacementName = name || '';
+        } else if (type === 'camera') {
+            const nameInput = document.getElementById('objectName');
+            const name = currentPlacementName || (nameInput ? nameInput.value.trim() : '');
+            const manufacturer = (document.getElementById('cameraManufacturer') && document.getElementById('cameraManufacturer').value) ? document.getElementById('cameraManufacturer').value.trim() : '';
+            const model = (document.getElementById('cameraModel') && document.getElementById('cameraModel').value) ? document.getElementById('cameraModel').value.trim() : '';
+            createObject(type, name || '', coords, { manufacturer: manufacturer, model: model });
+            currentPlacementName = name || '';
         } else {
             createObject(type, '', coords);
         }
@@ -1705,7 +1720,7 @@ function handleMapClick(e) {
                     if (!obj || !obj.geometry || !obj.properties) return;
                     var tc = obj.properties.get('type');
                     if (tc === 'node' && getNodeAttachedSwitches(obj).length === 0) return;
-                    if (['cross', 'switch', 'node', 'support', 'attachment'].indexOf(tc) === -1) return;
+                    if (['cross', 'switch', 'node', 'support', 'attachment', 'camera'].indexOf(tc) === -1) return;
                     if (obj === cableSource) return;
                     try {
                         var oc = obj.geometry.getCoordinates();
@@ -1746,8 +1761,8 @@ function handleMapClick(e) {
         if (clickedObject && clickedObject.geometry) {
             var objType = clickedObject.properties ? clickedObject.properties.get('type') : null;
 
-            if (objType === 'splitter' || objType === 'onu') {
-                showError('Нельзя прокладывать кабель ВОЛС от сплиттера или ONU. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
+            if (objType === 'splitter' || objType === 'onu' || objType === 'camera') {
+                showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU или камеры. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
                 return;
             }
             
@@ -2016,6 +2031,9 @@ function updateCursorIndicator(e, objectType, objectCoord) {
             case 'onu':
                 text = 'ONU';
                 break;
+            case 'camera':
+                text = 'Камера';
+                break;
             case 'cable':
                 text = 'Кабель';
                 break;
@@ -2141,6 +2159,14 @@ function updatePhantomPlacemark(type, coords) {
                 <rect x="10" y="18" width="8" height="2" rx="1" fill="white" opacity="0.6"/>
             </svg>`;
             break;
+        case 'camera':
+            color = '#475569';
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <rect x="5" y="7" width="18" height="14" rx="2" fill="${color}" stroke="white" stroke-width="2" opacity="0.6"/>
+                <circle cx="14" cy="14" r="4" fill="white" opacity="0.7"/>
+                <circle cx="14" cy="14" r="2" fill="${color}" opacity="0.85"/>
+            </svg>`;
+            break;
         default:
             color = '#94a3b8';
             iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -2149,7 +2175,7 @@ function updatePhantomPlacemark(type, coords) {
     }
     
     const clickableSize = 44;
-    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu') ? 32 : 28;
+    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera') ? 32 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
     
     const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
@@ -2728,6 +2754,15 @@ function createObject(type, name, coords, options = {}) {
             </svg>`;
             balloonContent = name ? 'ONU: ' + name : 'ONU';
             break;
+        case 'camera':
+            color = '#475569';
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <rect x="5" y="7" width="18" height="14" rx="2" fill="${color}" stroke="white" stroke-width="2"/>
+                <circle cx="14" cy="14" r="4" fill="white" opacity="0.9"/>
+                <circle cx="14" cy="14" r="2" fill="${color}"/>
+            </svg>`;
+            balloonContent = name ? 'Камера: ' + name : 'Камера';
+            break;
         case 'switch':
             color = '#ea580c';
             iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
@@ -2748,7 +2783,7 @@ function createObject(type, name, coords, options = {}) {
     }
 
     const clickableSize = 44; 
-    const iconSize = (type === 'node' || type === 'cross' || type === 'switch') ? 32 : 28;
+    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'switch') ? 32 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
 
     const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
@@ -2814,6 +2849,11 @@ function createObject(type, name, coords, options = {}) {
     }
     if (type === 'onu') {
         placemarkProperties.incomingFiber = null;
+        if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
+        if (options.model) placemarkProperties.model = options.model;
+        placemarkProperties.comment = options.comment || '';
+    }
+    if (type === 'camera') {
         if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
         if (options.model) placemarkProperties.model = options.model;
         placemarkProperties.comment = options.comment || '';
@@ -2897,8 +2937,8 @@ function createObject(type, name, coords, options = {}) {
         if (currentCableTool && isEditMode) {
             var cableTypeVal = getEffectiveCableLayingType();
             if (handleCopperCablePlacemarkStep(placemark, type, cableTypeVal)) return;
-            if (type === 'splitter' || type === 'onu') {
-                showError('Нельзя прокладывать кабель ВОЛС от сплиттера или ONU. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
+            if (type === 'splitter' || type === 'onu' || type === 'camera') {
+                showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU или камеры. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
                 return;
             }
             var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment', 'olt'];
@@ -2944,7 +2984,7 @@ function createObject(type, name, coords, options = {}) {
             return;
         }
 
-        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'switch')) {
+        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'switch')) {
             showObjectInfo(placemark);
             return;
         }
@@ -3540,8 +3580,8 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
                 if (!skipSync) showError('Узел сети не может быть промежуточной точкой кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
                 return false;
             }
-            if (pt === 'splitter' || pt === 'onu') {
-                if (!skipSync) showError('Сплиттер и ONU не могут быть началом, концом или промежуточной точкой кабеля ВОЛС. Кабель прокладывается между муфтой, кроссом или OLT.', 'Недопустимое действие');
+            if (pt === 'splitter' || pt === 'onu' || pt === 'camera') {
+                if (!skipSync) showError('Сплиттер, ONU и камера не могут быть началом, концом или промежуточной точкой кабеля ВОЛС. Кабель прокладывается между муфтой, кроссом или OLT.', 'Недопустимое действие');
                 return false;
             }
         }
@@ -3981,14 +4021,19 @@ function migrateStandaloneSwitchesIntoNodes() {
         if (!node) return;
         var swUid = sw.properties.get('uniqueId') || ('sw-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6));
         var arr = getNodeAttachedSwitches(node).slice();
-        arr.push({
+        var swEntry = {
             uniqueId: swUid,
             name: sw.properties.get('name') || '',
             switchPortTypes: Array.isArray(sw.properties.get('switchPortTypes')) && sw.properties.get('switchPortTypes').length
                 ? sw.properties.get('switchPortTypes').slice()
                 : buildSwitchPortTypesArray(24, 'RJ45 10/100/1000'),
             copperPortUsage: Object.assign({}, sw.properties.get('copperPortUsage') || {})
-        });
+        };
+        var mMig = (sw.properties.get('manufacturer') || '').trim();
+        var moMig = (sw.properties.get('model') || '').trim();
+        if (mMig) swEntry.manufacturer = mMig;
+        if (moMig) swEntry.model = moMig;
+        arr.push(swEntry);
         node.properties.set('attachedSwitches', arr);
         objects.forEach(function(c) {
             if (!c || !c.properties || c.properties.get('type') !== 'cable') return;
@@ -4019,18 +4064,34 @@ function isCopperCableUsingNodeSwitch(cable, nodeUid, switchId) {
     return false;
 }
 
-function addAttachedSwitchToNode(node, name, portCount, defaultKind) {
+function updateAttachedSwitchMeta(node, switchId, field, value) {
+    if (!node || !node.properties || node.properties.get('type') !== 'node' || !switchId || !field) return;
+    var arr = getNodeAttachedSwitches(node).slice();
+    var ix = arr.findIndex(function(s) { return s && s.uniqueId === switchId; });
+    if (ix < 0) return;
+    var sw = Object.assign({}, arr[ix]);
+    sw[field] = value;
+    arr[ix] = sw;
+    node.properties.set('attachedSwitches', arr);
+}
+
+function addAttachedSwitchToNode(node, name, portCount, defaultKind, manufacturer, model) {
     if (!node || !node.properties || node.properties.get('type') !== 'node') return null;
     var arr = getNodeAttachedSwitches(node).slice();
     var uid = 'sw-' + Date.now() + '-' + Math.random().toString(36).substr(2, 8);
     var nPorts = Math.max(1, parseInt(portCount, 10) || 24);
     var dk = defaultKind || 'RJ45 10/100/1000';
-    arr.push({
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    var entry = {
         uniqueId: uid,
         name: (name || '').trim(),
         switchPortTypes: buildSwitchPortTypesArray(nPorts, dk),
         copperPortUsage: {}
-    });
+    };
+    if (mfr) entry.manufacturer = mfr;
+    if (mod) entry.model = mod;
+    arr.push(entry);
     node.properties.set('attachedSwitches', arr);
     return uid;
 }
@@ -4048,6 +4109,15 @@ function removeAttachedSwitchFromNode(node, switchId) {
     return true;
 }
 
+function cameraHasCopperCable(camObj) {
+    if (!camObj || !camObj.properties || camObj.properties.get('type') !== 'camera') return false;
+    return objects.some(function(c) {
+        if (!c || !c.properties || c.properties.get('type') !== 'cable') return false;
+        if (!isCopperCableType(c.properties.get('cableType'))) return false;
+        return c.properties.get('from') === camObj || c.properties.get('to') === camObj;
+    });
+}
+
 function validateCopperCableRoute(points, skipSync, copperMeta) {
     copperMeta = copperMeta || {};
     if (!points || points.length < 2) return false;
@@ -4055,6 +4125,50 @@ function validateCopperCableRoute(points, skipSync, copperMeta) {
         return true;
     }
     var mid = ['support', 'attachment'];
+    for (var mi = 0; mi < points.length; mi++) {
+        var ptMid = points[mi].properties.get('type');
+        if (mi > 0 && mi < points.length - 1) {
+            if (mid.indexOf(ptMid) === -1) {
+                if (!skipSync) showError('Медный кабель: промежуточные точки — только опоры связи и крепления узлов.', 'Недопустимое действие');
+                return false;
+            }
+        }
+    }
+    var p0 = points[0];
+    var pL = points[points.length - 1];
+    var t0 = p0.properties.get('type');
+    var tL = pL.properties.get('type');
+    var cam0 = t0 === 'camera';
+    var camL = tL === 'camera';
+    if (cam0 && camL) {
+        if (!skipSync) showError('Нельзя соединить две камеры одним медным кабелем.', 'Недопустимое действие');
+        return false;
+    }
+    if (cam0 || camL) {
+        var camPm = cam0 ? p0 : pL;
+        var otherPm = cam0 ? pL : p0;
+        var ot = otherPm.properties.get('type');
+        if (ot === 'cross') {
+            if (!skipSync) showError('Камеру можно подключить только от коммутатора (не от медного порта кросса).', 'Недопустимое действие');
+            return false;
+        }
+        if (ot !== 'node' && ot !== 'switch') {
+            if (!skipSync) showError('Камеру можно подключить только медным кабелем от коммутатора.', 'Недопустимое действие');
+            return false;
+        }
+        var sidNeed = cam0 ? copperMeta.copperSwitchToId : copperMeta.copperSwitchFromId;
+        if (ot === 'node') {
+            if (!sidNeed || !findAttachedSwitchOnNode(otherPm, sidNeed)) {
+                if (!skipSync) showError('Для линии к камере выберите коммутатор в узле сети.', 'Недопустимое действие');
+                return false;
+            }
+        }
+        if (cameraHasCopperCable(camPm)) {
+            if (!skipSync) showError('К этой камере уже подключён медный кабель.', 'Камера');
+            return false;
+        }
+        return true;
+    }
     function endOk(obj, isFirst) {
         if (!obj || !obj.properties) return false;
         var t = obj.properties.get('type');
@@ -4074,19 +4188,6 @@ function validateCopperCableRoute(points, skipSync, copperMeta) {
         if (!skipSync) showError('Медный кабель: конец маршрута — оптический кросс или узел сети с коммутатором.', 'Недопустимое действие');
         return false;
     }
-    for (var i = 0; i < points.length; i++) {
-        var pt = points[i].properties.get('type');
-        if (i > 0 && i < points.length - 1) {
-            if (mid.indexOf(pt) === -1) {
-                if (!skipSync) showError('Медный кабель: промежуточные точки — только опоры связи и крепления узлов.', 'Недопустимое действие');
-                return false;
-            }
-        }
-    }
-    var p0 = points[0];
-    var pL = points[points.length - 1];
-    var t0 = p0.properties.get('type');
-    var tL = pL.properties.get('type');
     if (t0 === 'switch' && tL === 'switch') {
         var n1 = p0.properties.get('parentNodeId') || '';
         var n2 = pL.properties.get('parentNodeId') || '';
@@ -4206,6 +4307,9 @@ function buildCopperPortOptionsHtml(obj, selected, switchIdForNode, excludeCable
     placeholderMode = placeholderMode || 'optional';
     if (!obj || !obj.properties) return '<option value="">—</option>';
     var t = obj.properties.get('type');
+    if (t === 'camera') {
+        return '<option value="" selected>— (камера — порт не задаётся) —</option>';
+    }
     var max = 0;
     var usage = {};
     if (t === 'cross') {
@@ -4286,13 +4390,123 @@ function finishCopperCableToolSession() {
     }
 }
 
+function tryCreateCopperToCameraWithPendingPort(points, cableTypeVal, copperMeta) {
+    var pp = pendingCopperPortPreset;
+    if (!pp || pp.kind !== 'node') return false;
+    var startObj = points[0];
+    if (!startObj || !startObj.properties || startObj.properties.get('type') !== 'node') return false;
+    if (startObj.properties.get('uniqueId') !== pp.nodeUid) return false;
+    var cm = Object.assign({}, copperMeta || {}, {
+        copperSwitchFromId: pp.switchId,
+        copperPortFrom: pp.port,
+        copperPortTo: null,
+        copperSwitchToId: null
+    });
+    if (!createCableFromPoints(points, cableTypeVal, null, null, false, false, cm)) return false;
+    finishCopperCableToolSession();
+    var last = objects[objects.length - 1];
+    if (last && last.properties && last.properties.get('type') === 'cable' && isCopperCableType(last.properties.get('cableType'))) {
+        if (typeof showCableInfo === 'function') showCableInfo(last);
+    }
+    return true;
+}
+
 function openCopperEndPortModal(points, cableTypeVal, copperMeta) {
     if (!points || points.length < 2 || !isCopperCableType(cableTypeVal)) return;
-    var endObj = points[points.length - 1];
-    if (!endObj || !endObj.properties) return;
-    var endType = endObj.properties.get('type');
-    if (endType !== 'cross' && endType !== 'node') return;
     copperMeta = copperMeta || {};
+    var endObj = points[points.length - 1];
+    var startObj = points[0];
+    if (!endObj || !endObj.properties || !startObj || !startObj.properties) return;
+    var endType = endObj.properties.get('type');
+
+    if (endType === 'camera') {
+        if (cameraHasCopperCable(endObj)) {
+            if (typeof showError === 'function') showError('К этой камере уже подключён медный кабель.', 'Камера');
+            return;
+        }
+        if (tryCreateCopperToCameraWithPendingPort(points, cableTypeVal, copperMeta)) return;
+
+        var startType = startObj.properties.get('type');
+        if (startType === 'cross') {
+            if (typeof showError === 'function') showError('Камеру можно подключить только от коммутатора.', 'Недопустимое действие');
+            return;
+        }
+        if (startType !== 'node' && startType !== 'switch') {
+            if (typeof showError === 'function') showError('Камеру можно подключить только от коммутатора.', 'Недопустимое действие');
+            return;
+        }
+        var swStartId = startType === 'node' ? (copperMeta.copperSwitchFromId || cableSourceCopperSwitchId) : null;
+        if (startType === 'node' && !swStartId) {
+            if (typeof showError === 'function') showError('Коммутатор для начала линии к камере не выбран.', 'Недопустимое действие');
+            return;
+        }
+
+        var pointsCopyCam = points.slice();
+        pendingCopperRouteFinish = { points: pointsCopyCam, cableTypeVal: cableTypeVal, copperMeta: Object.assign({}, copperMeta, { copperPortTo: null, copperSwitchToId: null }), copperCameraEnd: true };
+
+        var modalCam = document.getElementById('infoModal');
+        var modalTitleCam = document.getElementById('modalTitle');
+        var modalContentCam = document.getElementById('modalInfo');
+        if (!modalCam || !modalTitleCam || !modalContentCam) return;
+
+        modalTitleCam.textContent = 'Медный кабель: порт коммутатора';
+        var labelFromCam = startType === 'switch' ? 'Порт на коммутаторе (начало маршрута)' : 'Порт на коммутаторе в узле (начало маршрута)';
+        var htmlCam = '<div class="info-section"><p style="font-size:0.875rem;color:var(--text-secondary);margin-bottom:12px;">На камере порт не задаётся. Выберите свободный порт коммутатора на <strong>начале</strong> линии. После прокладки режим «Проложить кабель» выключится.</p>';
+        htmlCam += '<div class="form-group" style="margin-bottom:12px;"><label for="copperEndPortSel" style="font-size:0.8125rem;">' + escapeHtml(labelFromCam) + '</label>';
+        htmlCam += '<select id="copperEndPortSel" class="form-select">' + buildCopperPortOptionsHtml(startObj, null, swStartId, null, 'required') + '</select></div>';
+        htmlCam += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">';
+        htmlCam += '<button type="button" id="copperEndPortCancel" class="btn-secondary">Отмена</button>';
+        htmlCam += '<button type="button" id="copperEndPortOk" class="btn-primary">Проложить</button></div></div>';
+        modalContentCam.innerHTML = htmlCam;
+        modalCam.style.display = 'block';
+        currentModalObject = null;
+
+        var btnCancelCam = document.getElementById('copperEndPortCancel');
+        var btnOkCam = document.getElementById('copperEndPortOk');
+        if (btnCancelCam) {
+            btnCancelCam.onclick = function() {
+                pendingCopperRouteFinish = null;
+                modalCam.style.display = 'none';
+            };
+        }
+        if (btnOkCam) {
+            btnOkCam.onclick = function() {
+                var selCam = document.getElementById('copperEndPortSel');
+                var vCam = selCam && selCam.value ? parseInt(selCam.value, 10) : NaN;
+                if (isNaN(vCam) || vCam < 1) {
+                    if (typeof showError === 'function') showError('Выберите свободный порт на коммутаторе.', 'Порт');
+                    return;
+                }
+                if (!isCopperPortAvailableForNewLay(startObj, vCam, swStartId)) {
+                    if (typeof showError === 'function') showError('Этот порт занят. Выберите другой.', 'Порт занят');
+                    return;
+                }
+                var prCam = pendingCopperRouteFinish;
+                pendingCopperRouteFinish = null;
+                modalCam.style.display = 'none';
+                if (!prCam) return;
+                var cmCam = Object.assign({}, prCam.copperMeta, {
+                    copperPortFrom: vCam,
+                    copperSwitchFromId: startType === 'node' ? (swStartId || prCam.copperMeta.copperSwitchFromId) : null,
+                    copperPortTo: null,
+                    copperSwitchToId: null
+                });
+                var okCam = createCableFromPoints(prCam.points, prCam.cableTypeVal, null, null, false, false, cmCam);
+                if (okCam) {
+                    finishCopperCableToolSession();
+                    var lastCam = objects[objects.length - 1];
+                    if (lastCam && lastCam.properties && lastCam.properties.get('type') === 'cable' && isCopperCableType(lastCam.properties.get('cableType'))) {
+                        if (typeof showCableInfo === 'function') showCableInfo(lastCam);
+                    }
+                } else {
+                    if (typeof showError === 'function') showError('Не удалось создать кабель. Проверьте маршрут и порты.', 'Ошибка');
+                }
+            };
+        }
+        return;
+    }
+
+    if (endType !== 'cross' && endType !== 'node') return;
     var toSw = endType === 'node' ? copperMeta.copperSwitchToId : null;
     if (endType === 'node' && !toSw) return;
 
@@ -4370,14 +4584,18 @@ function handleCopperCablePlacemarkStep(placemark, type, cableTypeVal) {
         showError('У этого узла нет коммутаторов. Добавьте коммутатор в карточке узла.', 'Недопустимое действие');
         return true;
     }
-    var ep = ['cross', 'switch', 'node', 'support', 'attachment'];
+    var ep = ['cross', 'switch', 'node', 'support', 'attachment', 'camera'];
     if (ep.indexOf(type) === -1) {
-        showError('Медный кабель: доступны только кросс, узел с коммутатором, опора и крепление узла.', 'Недопустимое действие');
+        showError('Медный кабель: доступны только кросс, узел с коммутатором, камера, опора и крепление узла.', 'Недопустимое действие');
         return true;
     }
     if (!cableSource) {
         if (type === 'support' || type === 'attachment') {
             showError('Начало медного кабеля должно быть кроссом или узлом с коммутатором. Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
+            return true;
+        }
+        if (type === 'camera') {
+            showError('Сначала укажите начало медной линии на кроссе или на узле с коммутатором, затем кликните по камере (или используйте «Подключить» на порту коммутатора).', 'Недопустимое действие');
             return true;
         }
         cableSource = placemark;
@@ -4408,6 +4626,13 @@ function handleCopperCablePlacemarkStep(placemark, type, cableTypeVal) {
         clearSelection();
         selectObject(cableSource);
         return true;
+    }
+    if (type === 'camera') {
+        var srcT = cableSource.properties.get('type');
+        if (srcT === 'cross') {
+            showError('Камеру можно подключить только от коммутатора. Закончите линию на узле сети с коммутатором или начните с «Подключить» на порту коммутатора.', 'Недопустимое действие');
+            return true;
+        }
     }
     var toSwitchId = null;
     if (type === 'node') {
@@ -4587,6 +4812,7 @@ window.applyCopperCablePortSelection = function(cableUniqueId, fromPort, toPort)
             var ocN = usageN[String(port)];
             return !ocN || ocN === cableUniqueId;
         }
+        if (t === 'camera') return true;
         return false;
     }
     if (!portFree(fromO, fromPort, swFrom) || !portFree(toO, toPort, swTo)) {
@@ -4651,6 +4877,9 @@ function showCableInfo(cable) {
         else if (type === 'attachment') { typeName = 'Крепление узлов'; icon = '🔗'; }
         else if (type === 'switch') { typeName = 'Коммутатор'; icon = '🔀'; }
         else if (type === 'olt') { typeName = 'OLT (GPON)'; icon = '📶'; }
+        else if (type === 'onu') { typeName = 'ONU'; icon = '📟'; }
+        else if (type === 'splitter') { typeName = 'Сплиттер'; icon = '🔀'; }
+        else if (type === 'camera') { typeName = 'Камера'; icon = '📷'; }
         return { type: typeName, name, icon };
     };
     
@@ -5076,7 +5305,7 @@ function setupRectSelection() {
         });
         counts.cable = selected.cables.length;
 
-        var typeNames = { cross: 'Кроссов', node: 'Узлов', sleeve: 'Муфт', support: 'Опар', attachment: 'Креплений', olt: 'OLT', splitter: 'Сплиттеров', onu: 'ONU', cable: 'Кабелей' };
+        var typeNames = { cross: 'Кроссов', node: 'Узлов', sleeve: 'Муфт', support: 'Опар', attachment: 'Креплений', olt: 'OLT', splitter: 'Сплиттеров', onu: 'ONU', camera: 'Камер', cable: 'Кабелей' };
         var parts = [];
         Object.keys(counts).sort().forEach(function(k) {
             if (counts[k] > 0) parts.push(counts[k] + ' ' + (typeNames[k] || k));
@@ -5407,6 +5636,11 @@ function getSerializedData() {
             if (props.model) result.model = props.model;
             if (props.comment) result.comment = props.comment;
         }
+        if (props.type === 'camera') {
+            if (props.manufacturer) result.manufacturer = props.manufacturer;
+            if (props.model) result.model = props.model;
+            if (props.comment) result.comment = props.comment;
+        }
         if (props.type === 'node') {
             if (props.nodeKind) result.nodeKind = props.nodeKind;
             if (props.manufacturer) result.manufacturer = props.manufacturer;
@@ -5418,6 +5652,8 @@ function getSerializedData() {
         if (props.type === 'switch') {
             if (props.parentNodeId) result.parentNodeId = props.parentNodeId;
             if (props.switchPortTypes) result.switchPortTypes = props.switchPortTypes;
+            if (props.manufacturer) result.manufacturer = props.manufacturer;
+            if (props.model) result.model = props.model;
         }
         if (props.netboxId) result.netboxId = props.netboxId;
         if (props.netboxUrl) result.netboxUrl = props.netboxUrl;
@@ -5495,6 +5731,7 @@ function loadDataFromStorage() {
 function loadData() {
     loadGroupNamesFromStorage();
     loadCustomDeviceOptionsFromStorage();
+    if (typeof ensureDeviceCatalogsNonEmpty === 'function') ensureDeviceCatalogsNonEmpty();
     if (typeof updateCrossDisplay === 'function') updateCrossDisplay();
     if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
     if (!getApiBase()) {
@@ -5520,6 +5757,7 @@ function loadData() {
                 } catch (e) {}
             }
             if (s.customDeviceOptions && typeof loadCustomDeviceOptions === 'function') loadCustomDeviceOptions(s.customDeviceOptions);
+            if (typeof ensureDeviceCatalogsNonEmpty === 'function') ensureDeviceCatalogsNonEmpty();
             if (s.mapStart && typeof myMap !== 'undefined' && myMap && Array.isArray(s.mapStart.center) && s.mapStart.center.length >= 2) {
                 try { myMap.setCenter(s.mapStart.center, s.mapStart.zoom || 15); } catch (e) {}
             }
@@ -6179,6 +6417,15 @@ function createObjectFromData(data, opts) {
             </svg>`;
             balloonContent = name ? 'ONU: ' + name : 'ONU';
             break;
+        case 'camera':
+            color = '#475569';
+            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <rect x="5" y="7" width="18" height="14" rx="2" fill="${color}" stroke="white" stroke-width="2"/>
+                <circle cx="14" cy="14" r="4" fill="white" opacity="0.9"/>
+                <circle cx="14" cy="14" r="2" fill="${color}"/>
+            </svg>`;
+            balloonContent = name ? 'Камера: ' + name : 'Камера';
+            break;
         case 'switch':
             color = '#ea580c';
             iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
@@ -6199,7 +6446,7 @@ function createObjectFromData(data, opts) {
     }
 
     const clickableSize = 44; 
-    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'switch') ? 32 : 28;
+    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'switch') ? 32 : 28;
     const iconOffset = (clickableSize - iconSize) / 2;
 
     const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
@@ -6333,12 +6580,19 @@ function createObjectFromData(data, opts) {
         if (model) placemark.properties.set('model', model);
         if (comment) placemark.properties.set('comment', comment);
     }
+    if (type === 'camera') {
+        if (manufacturer) placemark.properties.set('manufacturer', manufacturer);
+        if (model) placemark.properties.set('model', model);
+        if (comment) placemark.properties.set('comment', comment);
+    }
     if (type === 'switch') {
         placemark.properties.set('parentNodeId', parentNodeId || '');
         placemark.properties.set('switchPortTypes', Array.isArray(switchPortTypes) && switchPortTypes.length
             ? switchPortTypes.slice()
             : buildSwitchPortTypesArray(24, 'RJ45 10/100/1000'));
         placemark.properties.set('copperPortUsage', copperPortUsage && typeof copperPortUsage === 'object' ? copperPortUsage : {});
+        if (manufacturer) placemark.properties.set('manufacturer', manufacturer);
+        if (model) placemark.properties.set('model', model);
     }
 
     if (netboxId) {
@@ -6417,8 +6671,8 @@ function createObjectFromData(data, opts) {
         if (currentCableTool && isEditMode) {
             var cableTypeVal = getEffectiveCableLayingType();
             if (handleCopperCablePlacemarkStep(placemark, type, cableTypeVal)) return;
-            if (type === 'splitter' || type === 'onu') {
-                showError('Нельзя прокладывать кабель ВОЛС от сплиттера или ONU. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
+            if (type === 'splitter' || type === 'onu' || type === 'camera') {
+                showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU или камеры. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
                 return;
             }
             var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment', 'olt'];
@@ -6464,7 +6718,7 @@ function createObjectFromData(data, opts) {
             return;
         }
 
-        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'switch')) {
+        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'switch')) {
             showObjectInfo(placemark);
             return;
         }
@@ -6653,6 +6907,11 @@ function exportData() {
             if (props.type === 'onu') {
                 if (props.incomingFiber) result.incomingFiber = props.incomingFiber;
             }
+            if (props.type === 'camera') {
+                if (props.manufacturer) result.manufacturer = props.manufacturer;
+                if (props.model) result.model = props.model;
+                if (props.comment) result.comment = props.comment;
+            }
             if (props.type === 'node') {
                 var asEx = props.attachedSwitches;
                 if (Array.isArray(asEx) && asEx.length) result.attachedSwitches = JSON.parse(JSON.stringify(asEx));
@@ -6660,6 +6919,8 @@ function exportData() {
             if (props.type === 'switch') {
                 if (props.parentNodeId) result.parentNodeId = props.parentNodeId;
                 if (props.switchPortTypes) result.switchPortTypes = props.switchPortTypes;
+                if (props.manufacturer) result.manufacturer = props.manufacturer;
+                if (props.model) result.model = props.model;
             }
             
             if (props.netboxId) {
@@ -6720,6 +6981,7 @@ function updateStats() {
     const oltCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'olt').length;
     const splitterCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'splitter').length;
     const onuCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'onu').length;
+    const cameraCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'camera').length;
     var switchCount = 0;
     objects.forEach(function(obj) {
         if (!obj || !obj.properties) return;
@@ -6735,6 +6997,7 @@ function updateStats() {
     const oltEl = document.getElementById('oltCount');
     const splitterEl = document.getElementById('splitterCount');
     const onuEl = document.getElementById('onuCount');
+    const cameraEl = document.getElementById('cameraCount');
     const switchEl = document.getElementById('switchCount');
     const cableEl = document.getElementById('cableCount');
     if (nodeEl) nodeEl.textContent = nodeCount;
@@ -6744,16 +7007,23 @@ function updateStats() {
     if (oltEl) oltEl.textContent = oltCount;
     if (splitterEl) splitterEl.textContent = splitterCount;
     if (onuEl) onuEl.textContent = onuCount;
+    if (cameraEl) cameraEl.textContent = cameraCount;
     if (switchEl) switchEl.textContent = switchCount;
     if (cableEl) cableEl.textContent = cableCount;
 }
 
 function showObjectInfo(obj) {
     var objType = obj && obj.properties ? obj.properties.get('type') : '';
-    if (['node', 'olt', 'onu'].indexOf(objType) !== -1) {
+    if (['node', 'olt', 'onu', 'camera'].indexOf(objType) !== -1) {
         if (typeof populateDeviceDatalists === 'function') populateDeviceDatalists();
         var mfr = obj.properties.get('manufacturer') || '';
-        if (typeof populateModelDatalistForManufacturer === 'function') populateModelDatalistForManufacturer(mfr);
+        if (typeof populateModelDatalistForManufacturer === 'function') {
+            var cat = 'node';
+            if (objType === 'camera') cat = 'camera';
+            else if (objType === 'olt') cat = 'olt';
+            else if (objType === 'onu') cat = 'onu';
+            populateModelDatalistForManufacturer(mfr, 'deviceModelsList', cat);
+        }
     }
     if (splitterFiberRoutingMode && splitterFiberRoutingData) {
         var objId = getObjectUniqueId(obj);
@@ -6792,6 +7062,8 @@ function showObjectInfo(obj) {
         title = name ? `Сплиттер: ${name}` : 'Сплиттер';
     } else if (type === 'onu') {
         title = name ? `ONU: ${name}` : 'ONU';
+    } else if (type === 'camera') {
+        title = name ? `Камера: ${name}` : 'Камера';
     } else {
         title = 'Объект';
     }
@@ -6812,8 +7084,8 @@ function showObjectInfo(obj) {
         if (isEditMode) {
             html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
             html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Устройство</h4>';
-            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Производитель</label><div class="device-combobox" data-type="manufacturer" data-value-id="editOltManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturer ? escapeHtml(manufacturer) : 'Выберите производителя') + '</button><input type="hidden" id="editOltManufacturer" value="' + escapeHtml(manufacturer) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
-            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Модель</label><div class="device-combobox" data-type="model" data-value-id="editOltModel" data-manufacturer-id="editOltManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editOltModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Производитель</label><div class="device-combobox" data-catalog="olt" data-type="manufacturer" data-value-id="editOltManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturer ? escapeHtml(manufacturer) : 'Выберите производителя') + '</button><input type="hidden" id="editOltManufacturer" value="' + escapeHtml(manufacturer) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Модель</label><div class="device-combobox" data-catalog="olt" data-type="model" data-value-id="editOltModel" data-manufacturer-id="editOltManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editOltModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
             html += '<div class="form-group"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Комментарий</label>';
             html += '<textarea id="editOltComment" class="form-input" rows="2" placeholder="Дополнительные сведения">' + escapeHtml(comment) + '</textarea></div>';
             html += '</div>';
@@ -6982,8 +7254,8 @@ function showObjectInfo(obj) {
             html += '<label for="editOnuName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название ONU</label>';
             html += '<input type="text" id="editOnuName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Введите название ONU">';
             html += '</div>';
-            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Производитель</label><div class="device-combobox" data-type="manufacturer" data-value-id="editOnuManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturer ? escapeHtml(manufacturer) : 'Выберите производителя') + '</button><input type="hidden" id="editOnuManufacturer" value="' + escapeHtml(manufacturer) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
-            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Модель</label><div class="device-combobox" data-type="model" data-value-id="editOnuModel" data-manufacturer-id="editOnuManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editOnuModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Производитель</label><div class="device-combobox" data-catalog="onu" data-type="manufacturer" data-value-id="editOnuManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturer ? escapeHtml(manufacturer) : 'Выберите производителя') + '</button><input type="hidden" id="editOnuManufacturer" value="' + escapeHtml(manufacturer) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Модель</label><div class="device-combobox" data-catalog="onu" data-type="model" data-value-id="editOnuModel" data-manufacturer-id="editOnuManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editOnuModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
             html += '<div class="form-group"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Комментарий</label>';
             html += '<textarea id="editOnuComment" class="form-input" rows="2" placeholder="Дополнительные сведения">' + escapeHtml(comment) + '</textarea></div>';
         } else if (name) {
@@ -6992,6 +7264,30 @@ function showObjectInfo(obj) {
         if (manufacturer || model) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 6px;">Устройство: ' + escapeHtml([manufacturer, model].filter(Boolean).join(' ') || '—') + '</div>';
         if (comment) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; white-space: pre-wrap; margin-top: 6px;">' + escapeHtml(comment) + '</div>';
         if (onuIncoming) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 6px;">Подключена жила: кабель ' + escapeHtml(String(onuIncoming.cableId).substring(0, 12)) + '…, жила ' + onuIncoming.fiberNumber + '</div>';
+        html += '</div>';
+    }
+
+    if (type === 'camera') {
+        const manufacturer = obj.properties.get('manufacturer') || '';
+        const model = obj.properties.get('model') || '';
+        const comment = obj.properties.get('comment') || '';
+        html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
+        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Камера</h4>';
+        html += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 12px;">К сети подключайте <strong>только медным кабелем</strong> от порта коммутатора (узел с коммутатором или точка коммутатора на карте).</p>';
+        if (isEditMode) {
+            html += '<div class="form-group" style="margin-bottom: 12px;">';
+            html += '<label for="editCameraName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название</label>';
+            html += '<input type="text" id="editCameraName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Введите название камеры">';
+            html += '</div>';
+            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Производитель</label><div class="device-combobox" data-catalog="camera" data-type="manufacturer" data-value-id="editCameraManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturer ? escapeHtml(manufacturer) : 'Выберите производителя') + '</button><input type="hidden" id="editCameraManufacturer" value="' + escapeHtml(manufacturer) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Модель</label><div class="device-combobox" data-catalog="camera" data-type="model" data-value-id="editCameraModel" data-manufacturer-id="editCameraManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editCameraModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+            html += '<div class="form-group"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Комментарий</label>';
+            html += '<textarea id="editCameraComment" class="form-input" rows="2" placeholder="Дополнительные сведения">' + escapeHtml(comment) + '</textarea></div>';
+        } else if (name) {
+            html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;">Название: ' + escapeHtml(name) + '</div>';
+        }
+        if (manufacturer || model) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 6px;">Устройство: ' + escapeHtml([manufacturer, model].filter(Boolean).join(' ') || '—') + '</div>';
+        if (comment) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; white-space: pre-wrap; margin-top: 6px;">' + escapeHtml(comment) + '</div>';
         html += '</div>';
     }
 
@@ -7058,11 +7354,11 @@ function showObjectInfo(obj) {
             html += '</div>';
             html += '<div class="form-group" style="margin-bottom: 12px;">';
             html += '<label for="editNodeManufacturer" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Производитель</label>';
-            html += '<div class="device-combobox" data-type="manufacturer" data-value-id="editNodeManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturer ? escapeHtml(manufacturer) : 'Выберите производителя') + '</button><input type="hidden" id="editNodeManufacturer" value="' + escapeHtml(manufacturer) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div>';
+            html += '<div class="device-combobox" data-catalog="node" data-type="manufacturer" data-value-id="editNodeManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturer ? escapeHtml(manufacturer) : 'Выберите производителя') + '</button><input type="hidden" id="editNodeManufacturer" value="' + escapeHtml(manufacturer) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div>';
             html += '</div>';
             html += '<div class="form-group" style="margin-bottom: 12px;">';
             html += '<label for="editNodeModel" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Модель</label>';
-            html += '<div class="device-combobox" data-type="model" data-value-id="editNodeModel" data-manufacturer-id="editNodeManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editNodeModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div>';
+            html += '<div class="device-combobox" data-catalog="node" data-type="model" data-value-id="editNodeModel" data-manufacturer-id="editNodeManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editNodeModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div>';
             html += '</div>';
             html += '<div class="form-group" style="margin-bottom: 12px;">';
             html += '<label for="editNodeComment" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Комментарий</label>';
@@ -7091,14 +7387,19 @@ function showObjectInfo(obj) {
             html += '<div style="margin-bottom: 12px; padding: 12px; background: var(--bg-card); border-radius: 6px; border: 1px dashed var(--border-color);">';
             html += '<div class="form-group" style="margin-bottom: 8px;"><label for="newNodeSwitchName" style="font-size: 0.8125rem;">Подпись коммутатора</label>';
             html += '<input type="text" id="newNodeSwitchName" class="form-input" placeholder="Необязательно"></div>';
+            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem;">Производитель (справочник коммутаторов)</label>';
+            html += '<div class="device-combobox" data-catalog="switch" data-type="manufacturer" data-value-id="newNodeSwitchManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button><input type="hidden" id="newNodeSwitchManufacturer" value=""><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem;">Модель</label>';
+            html += '<div class="device-combobox" data-catalog="switch" data-type="model" data-value-id="newNodeSwitchModel" data-manufacturer-id="newNodeSwitchManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button><input type="hidden" id="newNodeSwitchModel" value=""><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
             html += '<div class="form-group" style="margin-bottom: 8px;"><label for="newNodeSwitchPortCount" style="font-size: 0.8125rem;">Число портов</label>';
-            html += '<select id="newNodeSwitchPortCount" class="form-select"><option value="8">8</option><option value="16">16</option><option value="24" selected>24</option><option value="48">48</option></select></div>';
+            html += '<input type="number" id="newNodeSwitchPortCount" class="form-input" min="1" max="96" value="24" style="max-width: 100px;"></div>';
             html += '<div class="form-group" style="margin-bottom: 8px;"><label for="newNodeSwitchPortKind" style="font-size: 0.8125rem;">Тип порта по умолчанию</label>';
             html += '<select id="newNodeSwitchPortKind" class="form-select">';
             kindOptsNodeSw.forEach(function(kk) {
                 html += '<option value="' + escapeHtml(kk) + '"' + (kk === 'RJ45 10/100/1000' ? ' selected' : '') + '>' + escapeHtml(kk) + '</option>';
             });
             html += '</select></div>';
+            html += '<p style="font-size: 0.7rem; color: var(--text-muted); margin: 0 0 8px 0;">Если для модели в справочнике задано число портов по умолчанию, оно подставится при выборе модели.</p>';
             html += '<button type="button" id="btnAddNodeSwitch" class="btn-secondary" style="width:100%;">Добавить коммутатор</button>';
             html += '</div>';
         }
@@ -7108,13 +7409,25 @@ function showObjectInfo(obj) {
         attachedList.forEach(function(swRow, six) {
             var usageN = swRow.copperPortUsage || {};
             var pts = swRow.switchPortTypes || [];
+            var swMfr = (swRow.manufacturer || '').trim();
+            var swMod = (swRow.model || '').trim();
+            var uidEsc = escapeHtml(swRow.uniqueId);
             html += '<div style="margin-bottom: 14px; padding: 12px; background: var(--bg-card); border-radius: 6px; border: 1px solid var(--border-color);">';
             html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">';
             html += '<span style="font-weight:600; font-size:0.875rem;">' + escapeHtml(swRow.name || ('Коммутатор ' + (six + 1))) + '</span>';
             if (isEditMode) {
-                html += '<button type="button" class="btn-remove-node-switch btn-danger" data-switch-id="' + escapeHtml(swRow.uniqueId) + '" style="padding:4px 10px;font-size:0.75rem;">Удалить</button>';
+                html += '<button type="button" class="btn-remove-node-switch btn-danger" data-switch-id="' + uidEsc + '" style="padding:4px 10px;font-size:0.75rem;">Удалить</button>';
             }
             html += '</div>';
+            if (!isEditMode && (swMfr || swMod)) {
+                html += '<div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:8px;">Устройство: ' + escapeHtml([swMfr, swMod].filter(Boolean).join(' ') || '—') + '</div>';
+            }
+            if (isEditMode) {
+                html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">';
+                html += '<div class="form-group" style="margin:0;"><label style="font-size:0.7rem;color:var(--text-muted);">Производитель</label><div class="device-combobox" data-catalog="switch" data-type="manufacturer" data-value-id="editNodeSwMfr_' + uidEsc + '"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (swMfr ? escapeHtml(swMfr) : 'Выберите') + '</button><input type="hidden" id="editNodeSwMfr_' + uidEsc + '" value="' + escapeHtml(swMfr) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+                html += '<div class="form-group" style="margin:0;"><label style="font-size:0.7rem;color:var(--text-muted);">Модель</label><div class="device-combobox" data-catalog="switch" data-type="model" data-value-id="editNodeSwMod_' + uidEsc + '" data-manufacturer-id="editNodeSwMfr_' + uidEsc + '"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (swMod ? escapeHtml(swMod) : 'Выберите') + '</button><input type="hidden" id="editNodeSwMod_' + uidEsc + '" value="' + escapeHtml(swMod) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+                html += '</div>';
+            }
             html += '<div style="max-height: 200px; overflow-y: auto;"><table style="width:100%; font-size: 0.75rem; border-collapse: collapse;"><thead><tr><th style="text-align:left;padding:4px;">#</th><th style="text-align:left;padding:4px;">Тип</th><th style="text-align:left;padding:4px;">Кабель</th>' + (isEditMode ? '<th style="text-align:right;padding:4px;white-space:nowrap;"></th>' : '') + '</tr></thead><tbody>';
             for (var swi = 0; swi < pts.length; swi++) {
                 var pnumSw = swi + 1;
@@ -7296,7 +7609,7 @@ function showObjectInfo(obj) {
                                 <div class="fiber-color" style="background-color: ${fiber.color}; ${isUsed ? 'opacity: 0.5; border: 2px dashed #dc2626;' : (fiber.hasBlackRing ? 'border: 2px solid #000;' : '')}"></div>
                                 <span class="fiber-label">Жила ${fiber.number}: ${fiber.name} ${isUsed ? '<span class="fiber-status">(используется)</span>' : '<span class="fiber-status fiber-free-text">(свободна)</span>'}</span>
                             </div>
-                            ${!isUsed && isEditMode && type !== 'sleeve' && type !== 'cross' && type !== 'olt' && type !== 'splitter' && type !== 'onu' ? `<button class="btn-continue-cable" data-cable-id="${cableUniqueId}" data-fiber-number="${fiber.number}" title="Продолжить кабель с этой жилой">→</button>` : ''}
+                            ${!isUsed && isEditMode && type !== 'sleeve' && type !== 'cross' && type !== 'olt' && type !== 'splitter' && type !== 'onu' && type !== 'camera' ? `<button class="btn-continue-cable" data-cable-id="${cableUniqueId}" data-fiber-number="${fiber.number}" title="Продолжить кабель с этой жилой">→</button>` : ''}
                         </div>
                     `;
                 });
@@ -7465,7 +7778,43 @@ function refreshObjectModal(obj) {
 }
 
 function setupEditAndDeleteListeners() {
-    
+    if (!window._modalSwitchCatalogDelegates) {
+        window._modalSwitchCatalogDelegates = true;
+        var modalRoot = document.getElementById('modalInfo');
+        if (modalRoot) {
+            modalRoot.addEventListener('input', function(e) {
+                var t = e.target;
+                if (!t || !t.id) return;
+                var co = currentModalObject;
+                if (!co || !co.properties || co.properties.get('type') !== 'node') return;
+                var mfrM = /^editNodeSwMfr_(.+)$/.exec(t.id);
+                if (mfrM) {
+                    updateAttachedSwitchMeta(co, mfrM[1], 'manufacturer', t.value || '');
+                    if (typeof populateModelDatalistForManufacturer === 'function') populateModelDatalistForManufacturer((t.value || '').trim(), 'deviceModelsList', 'switch');
+                    saveData();
+                    if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
+                    return;
+                }
+                var modM = /^editNodeSwMod_(.+)$/.exec(t.id);
+                if (modM) {
+                    updateAttachedSwitchMeta(co, modM[1], 'model', t.value || '');
+                    saveData();
+                    if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
+                }
+            });
+            modalRoot.addEventListener('change', function(e) {
+                var t = e.target;
+                if (!t || t.id !== 'newNodeSwitchModel') return;
+                var mfrH = document.getElementById('newNodeSwitchManufacturer');
+                var pcEl = document.getElementById('newNodeSwitchPortCount');
+                var mfr = mfrH ? (mfrH.value || '').trim() : '';
+                var mod = (t.value || '').trim();
+                var n = typeof getSwitchModelDefaultPortCount === 'function' ? getSwitchModelDefaultPortCount(mfr, mod) : null;
+                if (n != null && n >= 1 && n <= 96 && pcEl) pcEl.value = String(n);
+            });
+        }
+    }
+
     const editNodeNameInput = document.getElementById('editNodeName');
     if (editNodeNameInput) {
         editNodeNameInput.addEventListener('input', function() {
@@ -7496,8 +7845,8 @@ function setupEditAndDeleteListeners() {
     var editNodeManufacturer = document.getElementById('editNodeManufacturer');
     if (editNodeManufacturer) {
         if (typeof preventPasswordSuggestions === 'function') preventPasswordSuggestions(editNodeManufacturer);
-        editNodeManufacturer.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'node') { currentModalObject.properties.set('manufacturer', this.value || ''); saveData(); } populateModelDatalistForManufacturer(this.value.trim()); });
-        editNodeManufacturer.addEventListener('change', function() { populateModelDatalistForManufacturer(this.value.trim()); });
+        editNodeManufacturer.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'node') { currentModalObject.properties.set('manufacturer', this.value || ''); saveData(); } populateModelDatalistForManufacturer(this.value.trim(), 'deviceModelsList', 'node'); });
+        editNodeManufacturer.addEventListener('change', function() { populateModelDatalistForManufacturer(this.value.trim(), 'deviceModelsList', 'node'); });
     }
     var editNodeModel = document.getElementById('editNodeModel');
     if (editNodeModel) {
@@ -7517,8 +7866,8 @@ function setupEditAndDeleteListeners() {
     var editOltManufacturer = document.getElementById('editOltManufacturer');
     if (editOltManufacturer) {
         if (typeof preventPasswordSuggestions === 'function') preventPasswordSuggestions(editOltManufacturer);
-        editOltManufacturer.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'olt') { currentModalObject.properties.set('manufacturer', this.value || ''); saveData(); } populateModelDatalistForManufacturer(this.value.trim()); });
-        editOltManufacturer.addEventListener('change', function() { populateModelDatalistForManufacturer(this.value.trim()); });
+        editOltManufacturer.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'olt') { currentModalObject.properties.set('manufacturer', this.value || ''); saveData(); } populateModelDatalistForManufacturer(this.value.trim(), 'deviceModelsList', 'olt'); });
+        editOltManufacturer.addEventListener('change', function() { populateModelDatalistForManufacturer(this.value.trim(), 'deviceModelsList', 'olt'); });
     }
     var editOltModel = document.getElementById('editOltModel');
     if (editOltModel) {
@@ -7530,8 +7879,8 @@ function setupEditAndDeleteListeners() {
     var editOnuManufacturer = document.getElementById('editOnuManufacturer');
     if (editOnuManufacturer) {
         if (typeof preventPasswordSuggestions === 'function') preventPasswordSuggestions(editOnuManufacturer);
-        editOnuManufacturer.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'onu') { currentModalObject.properties.set('manufacturer', this.value || ''); saveData(); } populateModelDatalistForManufacturer(this.value.trim()); });
-        editOnuManufacturer.addEventListener('change', function() { populateModelDatalistForManufacturer(this.value.trim()); });
+        editOnuManufacturer.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'onu') { currentModalObject.properties.set('manufacturer', this.value || ''); saveData(); } populateModelDatalistForManufacturer(this.value.trim(), 'deviceModelsList', 'onu'); });
+        editOnuManufacturer.addEventListener('change', function() { populateModelDatalistForManufacturer(this.value.trim(), 'deviceModelsList', 'onu'); });
     }
     var editOnuModel = document.getElementById('editOnuModel');
     if (editOnuModel) {
@@ -7540,6 +7889,31 @@ function setupEditAndDeleteListeners() {
     }
     var editOnuComment = document.getElementById('editOnuComment');
     if (editOnuComment) editOnuComment.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'onu') { currentModalObject.properties.set('comment', this.value || ''); saveData(); } });
+
+    var editCameraNameInput = document.getElementById('editCameraName');
+    if (editCameraNameInput) {
+        editCameraNameInput.addEventListener('input', function() {
+            if (!currentModalObject || currentModalObject.properties.get('type') !== 'camera') return;
+            const newName = this.value.trim();
+            currentModalObject.properties.set('name', newName);
+            currentModalObject.properties.set('balloonContent', newName ? 'Камера: ' + newName : 'Камера');
+            updateObjectLabel(currentModalObject, newName);
+            saveData();
+        });
+    }
+    var editCameraManufacturer = document.getElementById('editCameraManufacturer');
+    if (editCameraManufacturer) {
+        if (typeof preventPasswordSuggestions === 'function') preventPasswordSuggestions(editCameraManufacturer);
+        editCameraManufacturer.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'camera') { currentModalObject.properties.set('manufacturer', this.value || ''); saveData(); } populateModelDatalistForManufacturer(this.value.trim(), 'deviceModelsList', 'camera'); });
+        editCameraManufacturer.addEventListener('change', function() { populateModelDatalistForManufacturer(this.value.trim(), 'deviceModelsList', 'camera'); });
+    }
+    var editCameraModel = document.getElementById('editCameraModel');
+    if (editCameraModel) {
+        if (typeof preventPasswordSuggestions === 'function') preventPasswordSuggestions(editCameraModel);
+        editCameraModel.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'camera') { currentModalObject.properties.set('model', this.value || ''); saveData(); } });
+    }
+    var editCameraComment = document.getElementById('editCameraComment');
+    if (editCameraComment) editCameraComment.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'camera') { currentModalObject.properties.set('comment', this.value || ''); saveData(); } });
 
     const editCrossNameInput = document.getElementById('editCrossName');
     if (editCrossNameInput) {
@@ -7626,10 +8000,15 @@ function setupEditAndDeleteListeners() {
             var nmEl = document.getElementById('newNodeSwitchName');
             var pcEl = document.getElementById('newNodeSwitchPortCount');
             var pkEl = document.getElementById('newNodeSwitchPortKind');
+            var mfrEl = document.getElementById('newNodeSwitchManufacturer');
+            var modEl = document.getElementById('newNodeSwitchModel');
             var nm = nmEl ? nmEl.value.trim() : '';
-            var pc = pcEl ? pcEl.value : '24';
+            var pcRaw = pcEl ? pcEl.value : '24';
+            var pc = Math.max(1, Math.min(96, parseInt(pcRaw, 10) || 24));
             var pk = pkEl ? pkEl.value : 'RJ45 10/100/1000';
-            addAttachedSwitchToNode(currentModalObject, nm, pc, pk);
+            var mfr = mfrEl ? mfrEl.value.trim() : '';
+            var mod = modEl ? modEl.value.trim() : '';
+            addAttachedSwitchToNode(currentModalObject, nm, pc, pk, mfr, mod);
             saveData();
             if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
             refreshObjectModal(currentModalObject);
@@ -7765,13 +8144,18 @@ function duplicateObject(obj) {
             copyNum++;
         }
     }
-    if (type === 'olt' || type === 'splitter' || type === 'onu') {
+    if (type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera') {
         if (name) newName = name + ' (копия)';
     }
     
     var opts = {};
     if (type === 'node') {
         opts.nodeKind = obj.properties.get('nodeKind') || 'network';
+        opts.manufacturer = obj.properties.get('manufacturer') || '';
+        opts.model = obj.properties.get('model') || '';
+        opts.comment = obj.properties.get('comment') || '';
+    }
+    if (type === 'camera') {
         opts.manufacturer = obj.properties.get('manufacturer') || '';
         opts.model = obj.properties.get('model') || '';
         opts.comment = obj.properties.get('comment') || '';
@@ -7800,12 +8184,15 @@ function duplicateObject(obj) {
         if (Array.isArray(attSrc) && attSrc.length) {
             var t0 = Date.now();
             newObj.properties.set('attachedSwitches', attSrc.map(function (sw, idx) {
-                return {
+                var o = {
                     uniqueId: 'sw-' + t0 + '-' + idx + '-' + Math.random().toString(36).substr(2, 9),
                     name: (sw && sw.name) ? String(sw.name) : 'Коммутатор',
                     switchPortTypes: Array.isArray(sw && sw.switchPortTypes) ? sw.switchPortTypes.slice() : [],
                     copperPortUsage: {}
                 };
+                if (sw && sw.manufacturer) o.manufacturer = String(sw.manufacturer);
+                if (sw && sw.model) o.model = String(sw.model);
+                return o;
             }));
         }
     }
@@ -7836,6 +8223,7 @@ function getObjectDefaultName(type) {
         case 'olt': return 'OLT';
         case 'splitter': return 'Сплиттер';
         case 'onu': return 'ONU';
+        case 'camera': return 'Камера';
         case 'switch': return 'Коммутатор';
         default: return 'Объект';
     }
@@ -12988,6 +13376,7 @@ function getMapFilterState() {
     var oltEl = document.getElementById('mapFilterOlt');
     var splitterEl = document.getElementById('mapFilterSplitter');
     var onuEl = document.getElementById('mapFilterOnu');
+    var cameraEl = document.getElementById('mapFilterCamera');
     return {
         node: nodeEl ? nodeEl.checked : true,
         nodeAggregationOnly: nodeAggEl ? nodeAggEl.checked : false,
@@ -12997,7 +13386,8 @@ function getMapFilterState() {
         attachment: attachmentEl ? attachmentEl.checked : true,
         olt: oltEl ? oltEl.checked : true,
         splitter: splitterEl ? splitterEl.checked : true,
-        onu: onuEl ? onuEl.checked : true
+        onu: onuEl ? onuEl.checked : true,
+        camera: cameraEl ? cameraEl.checked : true
     };
 }
 
@@ -13091,7 +13481,7 @@ function applyMapFilter() {
             if (filter.nodeAggregationOnly) return obj.properties.get('nodeKind') === 'aggregation';
             return true;
         }
-        if (type === 'olt' || type === 'splitter' || type === 'onu') return filter[type] !== false;
+        if (type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera') return filter[type] !== false;
         return filter[type] === true;
     }
     var visibleCables = new Set();
@@ -13117,7 +13507,7 @@ function applyMapFilter() {
             var cables = obj.properties.get('cables');
             visible = Array.isArray(cables) && cables.some(function(c) { return visibleCables.has(c); });
         } else {
-            visible = filter[type] === true || (['olt', 'splitter', 'onu'].indexOf(type) !== -1 && filter[type] !== false);
+            visible = filter[type] === true || (['olt', 'splitter', 'onu', 'camera'].indexOf(type) !== -1 && filter[type] !== false);
         }
         try {
             if (obj.options) obj.options.set('visible', visible);
