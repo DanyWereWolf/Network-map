@@ -329,7 +329,7 @@ function addOrganization(org) {
         id: id,
         name: org.name || 'Организация',
         planId: org.planId || 'basic',
-        maxConcurrentUsers: org.maxConcurrentUsers != null ? org.maxConcurrentUsers : 3,
+        maxConcurrentUsers: org.maxConcurrentUsers != null && org.maxConcurrentUsers !== '' ? org.maxConcurrentUsers : null,
         subscriptionEndsAt: org.subscriptionEndsAt || null,
         status: org.status || 'active',
         contactEmail: org.contactEmail != null ? String(org.contactEmail).trim() : '',

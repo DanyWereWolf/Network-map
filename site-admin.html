@@ -1331,7 +1331,7 @@
                 sessionsArray.push(activeSessions);
                 var planKey = (o.planId || 'basic').toLowerCase();
                 planCounts[planKey] = (planCounts[planKey] || 0) + 1;
-                var rawLimit = parseInt(o.maxConcurrentUsers, 10);
+                var rawLimit = parseInt(o.effectiveMaxConcurrentUsers != null ? o.effectiveMaxConcurrentUsers : o.maxConcurrentUsers, 10);
                 if (!isNaN(rawLimit) && rawLimit > 0) {
                     totalLimit += rawLimit;
                     var loadPct = (activeSessions / rawLimit) * 100;
@@ -1550,7 +1550,7 @@
                     '<td>' + (o.name || '—') + '</td>' +
                     '<td class="text-muted" style="max-width:160px;word-break:break-all;">' + mail + '</td>' +
                     '<td>' + (o.planId || 'basic') + '</td>' +
-                    '<td>' + (o.maxConcurrentUsers != null ? o.maxConcurrentUsers : 'по плану') + '</td>' +
+                    '<td>' + (o.effectiveMaxConcurrentUsers != null ? o.effectiveMaxConcurrentUsers : (o.maxConcurrentUsers != null && o.maxConcurrentUsers > 0 ? o.maxConcurrentUsers : 'по плану')) + '</td>' +
                     '<td>' + endStr + '</td>' +
                     '<td><span class="pill ' + pillClass + '">' + pillText + '</span></td>' +
                     '<td>' + (o.activeSessions != null ? o.activeSessions : '—') + '</td>' +
@@ -1654,7 +1654,7 @@
             if (!o) return;
             document.getElementById('pricingPlanId').value = o.planId || 'basic';
             document.getElementById('pricingMaxUsers').value =
-                (o.maxConcurrentUsers != null && o.maxConcurrentUsers >= 0) ? o.maxConcurrentUsers : '';
+                (o.maxConcurrentUsers != null && o.maxConcurrentUsers > 0) ? o.maxConcurrentUsers : '';
             document.getElementById('pricingSubscriptionEndsAt').value =
                 o.subscriptionEndsAt ? o.subscriptionEndsAt.slice(0, 10) : '';
             document.getElementById('pricingStatus').value = o.status || 'active';
@@ -1771,7 +1771,11 @@
                 return;
             }
             var maxRaw = document.getElementById('pricingMaxUsers').value.trim();
-            var maxUsers = maxRaw === '' ? undefined : parseInt(maxRaw, 10);
+            var maxUsers = null;
+            if (maxRaw !== '') {
+                var parsed = parseInt(maxRaw, 10);
+                if (!isNaN(parsed) && parsed > 0) maxUsers = parsed;
+            }
             var dateRaw = document.getElementById('pricingSubscriptionEndsAt').value;
             var endsAt = dateRaw ? (dateRaw + 'T23:59:59.000Z') : null;
             var status = document.getElementById('pricingStatus').value;

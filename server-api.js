@@ -35,9 +35,21 @@ function getMaxConcurrentFromPricingPlan(planId) {
     if (isNaN(n) || n === 0) return null;
     return n;
 }
+/** null / пусто / 0 — не хранить переопределение, лимит брать из тарифа (витрина + базовые планы). */
+function normalizeMaxConcurrentForCreate(raw) {
+    if (raw === undefined || raw === null || raw === '') return null;
+    var n = typeof raw === 'number' ? raw : parseInt(raw, 10);
+    if (isNaN(n) || n === 0) return null;
+    if (n < 0) return 999;
+    return Math.min(999, n);
+}
+function normalizeMaxConcurrentForPatch(raw) {
+    if (raw === undefined) return undefined;
+    return normalizeMaxConcurrentForCreate(raw);
+}
 function getMaxConcurrentForOrg(org) {
     if (!org) return 1;
-    if (org.maxConcurrentUsers != null && org.maxConcurrentUsers >= 0) return org.maxConcurrentUsers;
+    if (org.maxConcurrentUsers != null && org.maxConcurrentUsers > 0) return org.maxConcurrentUsers;
     const fromPricing = getMaxConcurrentFromPricingPlan(org.planId);
     if (fromPricing != null) return fromPricing === -1 ? 999 : fromPricing;
     var plan = SUBSCRIPTION_PLANS[org.planId || 'basic'];
@@ -322,7 +334,8 @@ app.get('/api/organizations', (req, res) => {
                 id: o.id,
                 name: o.name,
                 planId: o.planId,
-                maxConcurrentUsers: o.maxConcurrentUsers != null ? o.maxConcurrentUsers : (SUBSCRIPTION_PLANS[o.planId] && SUBSCRIPTION_PLANS[o.planId].maxConcurrentUsers >= 0 ? SUBSCRIPTION_PLANS[o.planId].maxConcurrentUsers : -1),
+                maxConcurrentUsers: o.maxConcurrentUsers,
+                effectiveMaxConcurrentUsers: getMaxConcurrentForOrg(o),
                 subscriptionEndsAt: o.subscriptionEndsAt,
                 status: o.status,
                 contactEmail: o.contactEmail != null ? String(o.contactEmail) : '',
@@ -423,8 +436,7 @@ app.post('/api/organizations', (req, res) => {
     var body = req.body || {};
     var name = (body.name && String(body.name).trim()) || 'Организация';
     var planId = body.planId || 'basic';
-    var maxConcurrentUsers = body.maxConcurrentUsers;
-    if (maxConcurrentUsers === undefined && SUBSCRIPTION_PLANS[planId]) maxConcurrentUsers = SUBSCRIPTION_PLANS[planId].maxConcurrentUsers === -1 ? 999 : SUBSCRIPTION_PLANS[planId].maxConcurrentUsers;
+    var maxConcurrentUsers = normalizeMaxConcurrentForCreate(body.maxConcurrentUsers);
     var id = db.addOrganization({
         name: name,
         planId: planId,
@@ -444,7 +456,10 @@ app.patch('/api/organizations/:id', (req, res) => {
     var updates = {};
     if (body.name !== undefined) updates.name = body.name;
     if (body.planId !== undefined) updates.planId = body.planId;
-    if (body.maxConcurrentUsers !== undefined) updates.maxConcurrentUsers = body.maxConcurrentUsers;
+    if (body.maxConcurrentUsers !== undefined) {
+        var nrm = normalizeMaxConcurrentForPatch(body.maxConcurrentUsers);
+        if (nrm !== undefined) updates.maxConcurrentUsers = nrm;
+    }
     if (body.subscriptionEndsAt !== undefined) updates.subscriptionEndsAt = body.subscriptionEndsAt;
     if (body.status !== undefined) updates.status = body.status;
     if (body.contactEmail !== undefined) updates.contactEmail = body.contactEmail;
@@ -539,7 +554,7 @@ app.post('/api/auth/register', (req, res) => {
     var organizationId = db.addOrganization({
         name: String(organizationName).trim(),
         planId: 'basic',
-        maxConcurrentUsers: 1,
+        maxConcurrentUsers: null,
         subscriptionEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
         status: 'active',
         contactEmail: String(contactEmail).trim()

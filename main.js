@@ -409,7 +409,7 @@ function renderOrganizationsList(organizations, plans) {
     }
     var html = '';
     organizations.forEach(function(org) {
-        var maxU = org.maxConcurrentUsers != null ? org.maxConcurrentUsers : (plans[org.planId] && plans[org.planId].maxConcurrentUsers >= 0 ? plans[org.planId].maxConcurrentUsers : '∞');
+        var maxU = org.effectiveMaxConcurrentUsers != null ? org.effectiveMaxConcurrentUsers : (org.maxConcurrentUsers != null && org.maxConcurrentUsers > 0 ? org.maxConcurrentUsers : (plans[org.planId] && plans[org.planId].maxConcurrentUsers >= 0 ? plans[org.planId].maxConcurrentUsers : '∞'));
         if (maxU === -1) maxU = '∞';
         var end = org.subscriptionEndsAt ? new Date(org.subscriptionEndsAt).toLocaleDateString('ru-RU') : '—';
         var statusClass = org.status === 'suspended' ? 'rejected' : 'approved';
@@ -432,7 +432,7 @@ function editOrganization(orgId) {
     document.getElementById('organizationEditTitle').textContent = 'Редактировать организацию';
     document.getElementById('editOrgName').value = org.name || '';
     document.getElementById('editOrgPlanId').value = org.planId || 'basic';
-    document.getElementById('editOrgMaxUsers').value = (org.maxConcurrentUsers != null && org.maxConcurrentUsers >= 0) ? org.maxConcurrentUsers : '';
+    document.getElementById('editOrgMaxUsers').value = (org.maxConcurrentUsers != null && org.maxConcurrentUsers > 0) ? org.maxConcurrentUsers : '';
     document.getElementById('editOrgSubscriptionEndsAt').value = org.subscriptionEndsAt ? org.subscriptionEndsAt.slice(0, 10) : '';
     document.getElementById('editOrgStatus').value = org.status || 'active';
     document.getElementById('organizationEditModal').style.display = 'block';
@@ -452,7 +452,12 @@ function saveOrganizationFromModal() {
     var name = document.getElementById('editOrgName').value.trim() || 'Организация';
     var planId = document.getElementById('editOrgPlanId').value;
     var maxUsersRaw = document.getElementById('editOrgMaxUsers').value.trim();
-    var maxUsers = maxUsersRaw === '' ? undefined : parseInt(maxUsersRaw, 10);
+    var maxUsers;
+    if (maxUsersRaw === '') maxUsers = null;
+    else {
+        var parsed = parseInt(maxUsersRaw, 10);
+        maxUsers = isNaN(parsed) ? null : (parsed === 0 ? null : parsed);
+    }
     var endsAt = document.getElementById('editOrgSubscriptionEndsAt').value || null;
     if (endsAt) endsAt = endsAt + 'T23:59:59.000Z';
     var status = document.getElementById('editOrgStatus').value;
