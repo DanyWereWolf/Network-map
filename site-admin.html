@@ -886,7 +886,7 @@
                     <div class="panel-head">
                         <h2 class="panel-title">Тарифы и лимиты</h2>
                         <ul class="fact-list">
-                            <li>Справочник basic / pro / enterprise задан на сервере; у организации можно переопределить лимит одновременных сессий и дату окончания подписки.</li>
+                            <li>Тариф организации (<strong>planId</strong>) — встроенные basic / pro / enterprise и id карточек с вкладки «Витрина тарифов»; лимит сессий и дату подписки можно переопределить отдельно.</li>
                             <li>Приостановка (<strong>приостановлена</strong>) сбрасывает сессии и блокирует вход для всех пользователей организации.</li>
                             <li>Ниже — сброс пароля пользователя организации (завершает его активные сессии).</li>
                         </ul>
@@ -899,8 +899,11 @@
                             </select>
                         </div>
                         <div class="field-col">
-                            <label for="pricingPlanId">Базовый план (информативно)</label>
-                            <input id="pricingPlanId" type="text" readonly class="text-muted">
+                            <label for="pricingOrgPlanId">Тариф (planId)</label>
+                            <select id="pricingOrgPlanId" disabled>
+                                <option value="">Сначала выберите организацию…</option>
+                            </select>
+                            <div class="hint">Витрина: вкладка «Витрина тарифов». Если у организации нестандартный id, он появится в списке как «Текущий».</div>
                         </div>
                     </div>
                     <div class="field-row">
@@ -1649,10 +1652,64 @@
             });
         }
 
+        function fetchPricingPlansForOrgSelect() {
+            return fetch('api/pricing', { credentials: 'include' })
+                .then(function(r) { return r.ok ? r.json() : { plans: [] }; })
+                .then(function(body) {
+                    return (body && Array.isArray(body.plans)) ? body.plans : [];
+                })
+                .catch(function() { return []; });
+        }
+
+        function buildOrgPlanSelect(selectEl, catalogPlans, currentPlanId) {
+            if (!selectEl) return;
+            selectEl.innerHTML = '';
+            var seen = {};
+            function mark(id) {
+                if (id == null || id === '') return false;
+                var k = String(id).trim().toLowerCase();
+                if (!k || seen[k]) return false;
+                seen[k] = true;
+                return true;
+            }
+            function addOption(id, text) {
+                if (!mark(id)) return;
+                var opt = document.createElement('option');
+                opt.value = String(id).trim();
+                opt.textContent = text;
+                selectEl.appendChild(opt);
+            }
+            addOption('basic', 'Базовый (basic)');
+            addOption('pro', 'Про (pro)');
+            addOption('enterprise', 'Корпоративный (enterprise)');
+            (catalogPlans || []).forEach(function(p) {
+                var id = p.id != null ? String(p.id).trim() : '';
+                if (!id) return;
+                var title = (p.title && String(p.title).trim()) ? String(p.title).trim() : id;
+                var kind = String(p.kind || 'paid').trim() || 'paid';
+                addOption(id, title + ' — ' + id + ' · ' + kind);
+            });
+            var cur = String(currentPlanId != null && currentPlanId !== '' ? currentPlanId : 'basic').trim();
+            if (cur && !seen[cur.toLowerCase()]) {
+                addOption(cur, 'Текущий: ' + cur);
+            }
+            selectEl.value = cur;
+            if (!selectEl.value && selectEl.options.length) {
+                selectEl.selectedIndex = 0;
+            }
+        }
+
         function fillPricingFormForOrg(orgId) {
             var o = orgs.find(function(x) { return x.id === orgId; });
             if (!o) return;
-            document.getElementById('pricingPlanId').value = o.planId || 'basic';
+            var planSel = document.getElementById('pricingOrgPlanId');
+            if (planSel) {
+                planSel.disabled = false;
+                fetchPricingPlansForOrgSelect().then(function(plans) {
+                    if (document.getElementById('pricingOrgSelect').value !== orgId) return;
+                    buildOrgPlanSelect(planSel, plans, o.planId || 'basic');
+                });
+            }
             document.getElementById('pricingMaxUsers').value =
                 (o.maxConcurrentUsers != null && o.maxConcurrentUsers > 0) ? o.maxConcurrentUsers : '';
             document.getElementById('pricingSubscriptionEndsAt').value =
@@ -1752,8 +1809,12 @@
 
         document.getElementById('pricingOrgSelect').addEventListener('change', function() {
             var id = this.value;
+            var planSel = document.getElementById('pricingOrgPlanId');
             if (!id) {
-                document.getElementById('pricingPlanId').value = '';
+                if (planSel) {
+                    planSel.innerHTML = '<option value="">Сначала выберите организацию…</option>';
+                    planSel.disabled = true;
+                }
                 document.getElementById('pricingMaxUsers').value = '';
                 document.getElementById('pricingSubscriptionEndsAt').value = '';
                 document.getElementById('pricingStatus').value = 'active';
@@ -1780,7 +1841,11 @@
             var endsAt = dateRaw ? (dateRaw + 'T23:59:59.000Z') : null;
             var status = document.getElementById('pricingStatus').value;
             var contactEmail = (document.getElementById('pricingContactEmail') || {}).value;
+            var planIdEl = document.getElementById('pricingOrgPlanId');
+            var planId = planIdEl && planIdEl.value ? String(planIdEl.value).trim() : 'basic';
+            if (!planId) planId = 'basic';
             var payload = {
+                planId: planId,
                 maxConcurrentUsers: maxUsers,
                 subscriptionEndsAt: endsAt,
                 status: status,
