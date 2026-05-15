@@ -6444,8 +6444,11 @@ function applyRemoteStateMerged(data) {
         }
         if (!fromObj || !toObj) {
             if (coords && coords.length >= 2) {
-                fromObj = fromObj || findRefClosestToCoord(refs, coords[0], undefined, true);
-                toObj = toObj || findRefClosestToCoord(refs, coords[coords.length - 1], undefined, true);
+                // Для ВОЛС при коллизии координат предпочитаем кросс/муфту/OLT; для меди концы —
+                // узел, коммутатор, камера, МК. Иначе МК у кросса ошибочно привязывается к кроссу.
+                var preferFiberEndpoint = item.cableType !== 'copper';
+                fromObj = fromObj || findRefClosestToCoord(refs, coords[0], undefined, preferFiberEndpoint);
+                toObj = toObj || findRefClosestToCoord(refs, coords[coords.length - 1], undefined, preferFiberEndpoint);
             }
         }
         if (!fromObj || !toObj) return;
@@ -6724,8 +6727,9 @@ function importData(data, opts) {
             }
             if (!fromObj || !toObj) {
                 if (coords && coords.length >= 2) {
-                    fromObj = fromObj || findRefClosestToCoord(refsOnly, coords[0], undefined, true);
-                    toObj = toObj || findRefClosestToCoord(refsOnly, coords[coords.length - 1], undefined, true);
+                    var preferFiberEpImp = item.cableType !== 'copper';
+                    fromObj = fromObj || findRefClosestToCoord(refsOnly, coords[0], undefined, preferFiberEpImp);
+                    toObj = toObj || findRefClosestToCoord(refsOnly, coords[coords.length - 1], undefined, preferFiberEpImp);
                 }
             }
             if (!fromObj || !toObj) {
