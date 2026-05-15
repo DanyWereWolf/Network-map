@@ -112,7 +112,7 @@ function loginUser(username, password, rememberMe) {
     }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
 }
 
-function registerUser(username, password, fullName, organizationName, contactEmail) {
+function registerUser(username, password, fullName, organizationName, contactEmail, planId) {
     if (username.length < 3) return Promise.resolve({ success: false, error: 'Имя пользователя должно быть не менее 3 символов' });
     if (!organizationName || organizationName.trim().length < 3) return Promise.resolve({ success: false, error: 'Укажите название организации (не менее 3 символов)' });
     if (password.length < 6) return Promise.resolve({ success: false, error: 'Пароль должен быть не менее 6 символов' });
@@ -120,6 +120,8 @@ function registerUser(username, password, fullName, organizationName, contactEma
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return Promise.resolve({ success: false, error: 'Укажите корректный e-mail для связи' });
     if (!getApiBase()) return Promise.resolve({ success: false, error: 'Запустите сервер: npm run api, затем откройте http://localhost:3000' });
     var body = { username: username, password: password, fullName: fullName || username, organizationName: String(organizationName).trim(), contactEmail: email };
+    var pid = planId != null && String(planId).trim() ? String(planId).trim() : '';
+    if (pid) body.planId = pid;
     return fetch(getApiBase() + '/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -128,6 +130,67 @@ function registerUser(username, password, fullName, organizationName, contactEma
         if (!res.success) return { success: false, error: res.error || 'Ошибка' };
         return { success: true, pending: res.pending, organizationId: res.organizationId };
     }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
+}
+
+/** Ссылка с лендинга / checkout: ?trial=1 и/или ?plan=<id тарифа из витрины>. */
+var registerPlanFromLanding = {
+    wantsTrialLink: false,
+    planQuery: '',
+    resolvedCatalogPlanId: null,
+    prefetchPromise: null
+};
+
+function ensureRegisterPlanPrefetchFromLanding() {
+    if (registerPlanFromLanding.prefetchPromise) return registerPlanFromLanding.prefetchPromise;
+    if (!getApiBase()) {
+        registerPlanFromLanding.prefetchPromise = Promise.resolve();
+        return registerPlanFromLanding.prefetchPromise;
+    }
+    registerPlanFromLanding.prefetchPromise = fetch(getApiBase() + '/api/pricing')
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+            var plans = (data && data.plans) || [];
+            var trialPlans = plans.filter(function(p) {
+                return String(p.kind || '').toLowerCase() === 'trial';
+            });
+            var pick = null;
+            if (registerPlanFromLanding.planQuery) {
+                var low = registerPlanFromLanding.planQuery.toLowerCase();
+                pick = plans.find(function(p) { return String(p.id).toLowerCase() === low; }) || null;
+            } else if (registerPlanFromLanding.wantsTrialLink && trialPlans.length) {
+                pick = trialPlans[0];
+            }
+            registerPlanFromLanding.resolvedCatalogPlanId = pick ? String(pick.id) : null;
+            var msgEl = document.getElementById('authMessage');
+            if (msgEl && (registerPlanFromLanding.wantsTrialLink || registerPlanFromLanding.planQuery)) {
+                if (pick) {
+                    var title = (pick.title && String(pick.title).trim()) ? pick.title : pick.id;
+                    var isTrial = String(pick.kind || '').toLowerCase() === 'trial';
+                    msgEl.className = 'auth-message info';
+                    if (isTrial) {
+                        msgEl.textContent = 'Пробный период 14 дней. Тариф «' + title + '» будет назначен организации. После окончания выберите платный план.';
+                    } else {
+                        msgEl.textContent = 'Выбран тариф «' + title + '». После регистрации он будет указан для организации.';
+                    }
+                } else if (registerPlanFromLanding.planQuery) {
+                    msgEl.className = 'auth-message error';
+                    msgEl.textContent = 'Тариф с таким кодом на сайте не найден. Регистрация без выбора — будет назначен стандартный план.';
+                } else if (registerPlanFromLanding.wantsTrialLink) {
+                    msgEl.className = 'auth-message info';
+                    msgEl.textContent = 'Пробный доступ: 14 дней. В каталоге нет пробного тарифа — при регистрации может быть назначен стандартный план; уточните у администратора.';
+                }
+            }
+        })
+        .catch(function() {});
+    return registerPlanFromLanding.prefetchPromise;
+}
+
+function resolvePlanIdToSendForRegister() {
+    if (!registerPlanFromLanding.wantsTrialLink && !registerPlanFromLanding.planQuery) return null;
+    if (registerPlanFromLanding.resolvedCatalogPlanId) return registerPlanFromLanding.resolvedCatalogPlanId;
+    if (registerPlanFromLanding.planQuery) return registerPlanFromLanding.planQuery;
+    if (registerPlanFromLanding.wantsTrialLink) return 'trial';
+    return null;
 }
 
 function approveUser(userId) {
@@ -352,9 +415,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 acc[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || '');
                 return acc;
             }, {});
-            if (search.trial === '1') {
+            registerPlanFromLanding.wantsTrialLink = search.trial === '1';
+            registerPlanFromLanding.planQuery = search.plan ? String(search.plan).trim() : '';
+            if (registerPlanFromLanding.wantsTrialLink || registerPlanFromLanding.planQuery) {
                 switchForm('register');
-                showMessage('Пробный доступ: 14 дней, до 1 одновременного пользователя для вашей организации. После окончания потребуется выбрать тариф.', 'info');
+                ensureRegisterPlanPrefetchFromLanding();
             }
         } catch (e) {}
     }
@@ -394,7 +459,12 @@ document.addEventListener('DOMContentLoaded', function() {
             var password = document.getElementById('regPassword').value;
             var passwordConfirm = document.getElementById('regPasswordConfirm').value;
             if (password !== passwordConfirm) { showMessage('Пароли не совпадают', 'error'); return; }
-            Promise.resolve(registerUser(username, password, fullName, organizationName, contactEmail)).then(function(result) {
+            var regChain = (registerPlanFromLanding.wantsTrialLink || registerPlanFromLanding.planQuery)
+                ? ensureRegisterPlanPrefetchFromLanding().then(function() {
+                    return registerUser(username, password, fullName, organizationName, contactEmail, resolvePlanIdToSendForRegister());
+                })
+                : registerUser(username, password, fullName, organizationName, contactEmail, null);
+            Promise.resolve(regChain).then(function(result) {
                 if (result.success) {
                     if (result.organizationId) {
                         showMessage('Организация создана. Вы можете войти.', 'success');

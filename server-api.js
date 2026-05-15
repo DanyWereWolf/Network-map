@@ -38,6 +38,19 @@ function getMaxConcurrentFromPricingPlan(planId) {
     if (isNaN(n) || n === 0) return null;
     return n;
 }
+/** Самостоятельная регистрация: planId должен совпадать с карточкой в /api/pricing (витрина). Иначе — basic. */
+function resolveSelfServiceRegisterPlanId(requested) {
+    if (requested === undefined || requested === null) return 'basic';
+    var raw = String(requested).trim();
+    if (!raw) return 'basic';
+    const plans = db.getPricingPlans();
+    const hit = plans.find(function(p) {
+        return planIdsMatch(raw, p.id);
+    });
+    if (!hit) return 'basic';
+    var id = hit.id != null ? String(hit.id).trim() : '';
+    return id || 'basic';
+}
 /** null / пусто / 0 — не хранить переопределение, лимит брать из тарифа (витрина + базовые планы). */
 function normalizeMaxConcurrentForCreate(raw) {
     if (raw === undefined || raw === null || raw === '') return null;
@@ -548,16 +561,17 @@ function isValidContactEmail(email) {
 }
 
 app.post('/api/auth/register', (req, res) => {
-    const { username, password, fullName, organizationName, contactEmail } = req.body || {};
+    const { username, password, fullName, organizationName, contactEmail, planId: requestedPlanId } = req.body || {};
     if (!username || username.length < 3) return res.status(400).json({ success: false, error: 'Имя не менее 3 символов' });
     if (!organizationName || String(organizationName).trim().length < 3) return res.status(400).json({ success: false, error: 'Укажите название организации (не менее 3 символов)' });
     if (!password || password.length < 6) return res.status(400).json({ success: false, error: 'Пароль не менее 6 символов' });
     if (!contactEmail || !isValidContactEmail(String(contactEmail))) return res.status(400).json({ success: false, error: 'Укажите корректный e-mail для связи' });
     const users = db.getUsers();
     if (users.find(u => u.username.toLowerCase() === username.toLowerCase())) return res.json({ success: false, error: 'Пользователь уже существует' });
+    var resolvedPlanId = resolveSelfServiceRegisterPlanId(requestedPlanId);
     var organizationId = db.addOrganization({
         name: String(organizationName).trim(),
-        planId: 'basic',
+        planId: resolvedPlanId,
         maxConcurrentUsers: null,
         subscriptionEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
         status: 'active',

@@ -1017,7 +1017,7 @@
                         <span class="badge-pill">История и резервные копии</span>
                     </div>
                     <div style="display:flex;gap:10px;margin-bottom:8px;">
-                        <button class="btn-primary-hero" onclick="window.location.href='auth.html?trial=1'">
+                        <button class="btn-primary-hero" onclick="window.location.href='auth.html?trial=1&amp;plan=trial'">
                             Попробовать 14 дней бесплатно
                         </button>
                         <button type="button" class="btn-outline" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">
@@ -1408,7 +1408,7 @@
                     var plan = this.getAttribute('data-plan') || 'basic';
                     var kind = this.getAttribute('data-kind') || 'paid';
                     if (kind === 'trial') {
-                        window.location.href = 'auth.html?trial=1';
+                        window.location.href = 'auth.html?trial=1&plan=' + encodeURIComponent(plan);
                         return;
                     }
                     if (kind === 'contact') {

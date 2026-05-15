@@ -248,6 +248,7 @@ function initUserUI() {
 
 function getPlanDisplayName(planId) {
     var names = {
+        trial: 'Пробный',
         basic: 'Базовый',
         pro: 'Про',
         enterprise: 'Корпоративный'

@@ -368,46 +368,98 @@
         </div>
     </div>
 
+    <script src="js/core/config.js"></script>
     <script>
     (function() {
-        var search = window.location.search.replace(/^\\?/, '').split('&').reduce(function(acc, part) {
+        var search = window.location.search.replace(/^\?/, '').split('&').reduce(function(acc, part) {
             if (!part) return acc;
             var kv = part.split('=');
             acc[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || '');
             return acc;
         }, {});
         var plan = (search.plan || 'basic').toLowerCase();
-        var plans = {
+        var fallbackPlans = {
             basic: {
                 name: 'Базовый',
                 price: '1 490 ₽ / месяц',
                 extra: 'До 3 одновременных пользователей',
-                chip: 'Подходит для небольших команд'
+                chip: 'Подходит для небольших команд',
+                amount: 1490
             },
             pro: {
                 name: 'Про',
                 price: '3 490 ₽ / месяц',
                 extra: 'До 10 одновременных пользователей',
-                chip: 'Рекомендуемый тариф для провайдера'
+                chip: 'Рекомендуемый тариф для провайдера',
+                amount: 3490
             },
             enterprise: {
                 name: 'Корпоративный',
                 price: 'Цена по договору',
                 extra: 'Неограниченное число пользователей',
-                chip: 'Индивидуальные условия и внедрение'
+                chip: 'Индивидуальные условия и внедрение',
+                amount: 0
             }
         };
-        var cfg = plans[plan] || plans.basic;
-        document.getElementById('planName').textContent = cfg.name;
-        document.getElementById('planPrice').textContent = cfg.price;
-        document.getElementById('planExtra').textContent = cfg.extra;
-        var chipEl = document.getElementById('planChip');
-        var chipText = document.getElementById('planChipText');
-        if (cfg.chip) {
-            chipText.textContent = cfg.chip;
-            chipEl.style.display = 'inline-flex';
-        } else {
-            chipEl.style.display = 'none';
+        function formatMetaLine(p) {
+            var text = (p.maxUsersText && String(p.maxUsersText).trim()) ? String(p.maxUsersText).trim() : '';
+            if (text) return text;
+            var mcu = p.maxConcurrentUsers;
+            if (mcu === undefined || mcu === null || mcu === '') return '';
+            var n = typeof mcu === 'number' ? mcu : parseFloat(mcu);
+            if (isNaN(n)) return '';
+            if (n === -1) return 'Неограниченное число одновременных пользователей';
+            return 'До ' + n + ' одновременных пользователей';
+        }
+        function amountFromPriceString(priceStr, fallbackAmount) {
+            if (!priceStr) return fallbackAmount;
+            var digits = String(priceStr).replace(/[^\d]/g, '');
+            if (!digits) return fallbackAmount;
+            var n = parseInt(digits, 10);
+            return isNaN(n) || n <= 0 ? fallbackAmount : Math.min(n, 99999999);
+        }
+        function applyCfg(cfg) {
+            document.getElementById('planName').textContent = cfg.name;
+            document.getElementById('planPrice').textContent = cfg.price;
+            document.getElementById('planExtra').textContent = cfg.extra;
+            var chipEl = document.getElementById('planChip');
+            var chipText = document.getElementById('planChipText');
+            if (cfg.chip) {
+                chipText.textContent = cfg.chip;
+                chipEl.style.display = 'inline-flex';
+            } else {
+                chipEl.style.display = 'none';
+            }
+            return cfg;
+        }
+        var cfg = applyCfg(fallbackPlans[plan] || {
+            name: 'Тариф',
+            price: '—',
+            extra: 'Загружаем описание тарифа…',
+            chip: '',
+            amount: 1490
+        });
+        var api = typeof getApiBase === 'function' ? getApiBase() : '';
+        if (api) {
+            fetch(api + '/api/pricing')
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(body) {
+                    var list = body && Array.isArray(body.plans) ? body.plans : [];
+                    var hit = list.find(function(p) { return String(p.id).toLowerCase() === plan; });
+                    if (!hit) return;
+                    var fb = fallbackPlans[plan] || fallbackPlans.basic;
+                    var name = (hit.title && String(hit.title).trim()) ? hit.title : (hit.id || fb.name);
+                    var priceLine = ((hit.price != null && String(hit.price).trim()) ? String(hit.price).trim() : '') +
+                        ((hit.period != null && String(hit.period).trim()) ? (' ' + String(hit.period).trim()) : '');
+                    if (!priceLine.trim()) priceLine = fb.price;
+                    var extra = formatMetaLine(hit) || fb.extra;
+                    var chip = (hit.short && String(hit.short).trim()) ? hit.short : fb.chip;
+                    var amt = fb.amount;
+                    if (plan === 'basic' || plan === 'pro') amt = fb.amount;
+                    else amt = amountFromPriceString(hit.price, fb.amount);
+                    cfg = applyCfg({ name: name, price: priceLine, extra: extra, chip: chip, amount: amt });
+                })
+                .catch(function() {});
         }
 
         var form = document.getElementById('checkoutForm');
@@ -429,8 +481,7 @@
                 alert('Для корпоративного тарифа с вами свяжется менеджер. Мы получили контакты:\n\n' + JSON.stringify(payload, null, 2));
                 return;
             }
-            var amounts = { basic: 1490, pro: 3490 };
-            var amount = amounts[plan] || amounts.basic;
+            var amount = typeof cfg.amount === 'number' && cfg.amount > 0 ? cfg.amount : (fallbackPlans[plan] && fallbackPlans[plan].amount) || 1490;
             var widget = new cp.CloudPayments();
             widget.pay('charge', {
                 publicId: 'YOUR_CLOUDPAYMENTS_PUBLIC_ID',
@@ -442,7 +493,7 @@
                 data: payload
             }, {
                 onSuccess: function(options) {
-                    window.location.href = 'auth.html';
+                    window.location.href = 'auth.html?plan=' + encodeURIComponent(plan);
                 },
                 onFail: function(reason) {
                     alert('Оплата не завершена: ' + (reason || 'отмена пользователем'));
