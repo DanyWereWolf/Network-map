@@ -96,10 +96,12 @@ html {
         min-width: 0;
     }
 
-    /* На телефоне только просмотр — отмена/повтор и справочник устройств не нужны */
+    /* На телефоне только просмотр: без отмены/повтора, справочника, обновлений и истории */
     #undoBtn,
     #redoBtn,
-    #deviceCatalogBtn {
+    #deviceCatalogBtn,
+    #updatesBtn,
+    #historyBtn {
         display: none !important;
     }
 

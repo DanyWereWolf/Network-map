@@ -2205,9 +2205,9 @@ function updatePhantomPlacemark(type, coords) {
     switch(type) {
         case 'support':
             color = '#3b82f6';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="2" width="24" height="24" rx="4" fill="${color}" stroke="white" stroke-width="2" opacity="0.6"/>
-                <rect x="10" y="6" width="8" height="16" rx="1" fill="white" opacity="0.5"/>
+            iconSvg = `<svg width="22" height="22" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
+                <rect x="1.5" y="1.5" width="19" height="19" rx="3" fill="${color}" stroke="white" stroke-width="1.5" opacity="0.6"/>
+                <rect x="8" y="5" width="6" height="12" rx="1" fill="white" opacity="0.5"/>
             </svg>`;
             break;
         case 'sleeve':
@@ -2295,7 +2295,7 @@ function updatePhantomPlacemark(type, coords) {
     }
     
     const clickableSize = 44;
-    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter') ? 32 : 28;
+    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter') ? 32 : (type === 'support' ? 22 : 28);
     const iconOffset = (clickableSize - iconSize) / 2;
     
     const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
@@ -2394,9 +2394,9 @@ function highlightObjectOnHover(obj, e) {
     
     switch(type) {
         case 'support':
-            iconSvg = `<svg width="32" height="32" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="2" width="24" height="24" rx="4" fill="#3b82f6" stroke="#60a5fa" stroke-width="3"/>
-                <rect x="10" y="6" width="8" height="16" rx="1" fill="white" opacity="0.9"/>
+            iconSvg = `<svg width="26" height="26" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
+                <rect x="1.5" y="1.5" width="19" height="19" rx="3" fill="#3b82f6" stroke="#60a5fa" stroke-width="2"/>
+                <rect x="8" y="5" width="6" height="12" rx="1" fill="white" opacity="0.9"/>
             </svg>`;
             break;
         case 'sleeve':
@@ -2449,7 +2449,7 @@ function highlightObjectOnHover(obj, e) {
     }
 
     const clickableSize = 44;
-    const iconSize = (type === 'node' || type === 'cross') ? 32 : (type === 'crossGroup' || type === 'nodeGroup') ? 40 : 28;
+    const iconSize = (type === 'node' || type === 'cross') ? 32 : (type === 'crossGroup' || type === 'nodeGroup') ? 40 : (type === 'support' ? 26 : 28);
     const iconOffset = (clickableSize - iconSize) / 2;
     
     const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
@@ -2806,9 +2806,9 @@ function createObject(type, name, coords, options = {}) {
         case 'support':
             
             color = '#3b82f6';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="2" width="24" height="24" rx="4" fill="${color}" stroke="white" stroke-width="2"/>
-                <rect x="10" y="6" width="8" height="16" rx="1" fill="white" opacity="0.9"/>
+            iconSvg = `<svg width="22" height="22" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
+                <rect x="1.5" y="1.5" width="19" height="19" rx="3" fill="${color}" stroke="white" stroke-width="1.5"/>
+                <rect x="8" y="5" width="6" height="12" rx="1" fill="white" opacity="0.9"/>
             </svg>`;
             balloonContent = name ? 'Опора связи: ' + name : 'Опора связи';
             break;
@@ -2927,7 +2927,7 @@ function createObject(type, name, coords, options = {}) {
     }
 
     const clickableSize = 44; 
-    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'switch') ? 32 : 28;
+    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'switch') ? 32 : (type === 'support' ? 22 : 28);
     const iconOffset = (clickableSize - iconSize) / 2;
 
     const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
@@ -3431,15 +3431,15 @@ function selectObject(obj) {
         }
 
         const clickableSize = 50;
-        const iconSize = (type === 'node' || type === 'cross' || type === 'switch') ? 38 : (type === 'crossGroup' || type === 'nodeGroup') ? 40 : 34;
+        const iconSize = (type === 'node' || type === 'cross' || type === 'switch') ? 38 : (type === 'crossGroup' || type === 'nodeGroup') ? 40 : (type === 'support' ? 26 : 34);
         const iconOffset = (clickableSize - iconSize) / 2;
         
         let iconSvg;
         switch(type) {
             case 'support':
-                iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 34 34" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="2" y="2" width="30" height="30" rx="5" fill="#3b82f6" stroke="white" stroke-width="2"/>
-                    <rect x="11" y="6" width="12" height="22" rx="2" fill="white" opacity="0.95"/>
+                iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="1.5" y="1.5" width="19" height="19" rx="3" fill="#3b82f6" stroke="white" stroke-width="2"/>
+                    <rect x="8" y="5" width="6" height="12" rx="1" fill="white" opacity="0.95"/>
                 </svg>`;
                 break;
             case 'sleeve':
@@ -3565,9 +3565,9 @@ function deselectObject(obj) {
     
     switch(type) {
         case 'support':
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="2" width="24" height="24" rx="4" fill="#3b82f6" stroke="white" stroke-width="2"/>
-                <rect x="10" y="6" width="8" height="16" rx="1" fill="white" opacity="0.9"/>
+            iconSvg = `<svg width="22" height="22" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
+                <rect x="1.5" y="1.5" width="19" height="19" rx="3" fill="#3b82f6" stroke="white" stroke-width="1.5"/>
+                <rect x="8" y="5" width="6" height="12" rx="1" fill="white" opacity="0.9"/>
             </svg>`;
             break;
         case 'sleeve':
@@ -3643,7 +3643,7 @@ function deselectObject(obj) {
     }
 
     const clickableSize = 44;
-    const iconSize = (type === 'node' || type === 'cross') ? 32 : (type === 'crossGroup' || type === 'nodeGroup') ? 36 : 28;
+    const iconSize = (type === 'node' || type === 'cross') ? 32 : (type === 'crossGroup' || type === 'nodeGroup') ? 36 : (type === 'support' ? 22 : 28);
     const iconOffset = (clickableSize - iconSize) / 2;
     
     const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
@@ -6816,9 +6816,9 @@ function createObjectFromData(data, opts) {
         case 'support':
             
             color = '#3b82f6';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="2" width="24" height="24" rx="4" fill="${color}" stroke="white" stroke-width="2"/>
-                <rect x="10" y="6" width="8" height="16" rx="1" fill="white" opacity="0.9"/>
+            iconSvg = `<svg width="22" height="22" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
+                <rect x="1.5" y="1.5" width="19" height="19" rx="3" fill="${color}" stroke="white" stroke-width="1.5"/>
+                <rect x="8" y="5" width="6" height="12" rx="1" fill="white" opacity="0.9"/>
             </svg>`;
             balloonContent = name ? 'Опора связи: ' + name : 'Опора связи';
             break;
@@ -6936,7 +6936,7 @@ function createObjectFromData(data, opts) {
     }
 
     const clickableSize = 44; 
-    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'switch') ? 32 : 28;
+    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'switch') ? 32 : (type === 'support' ? 22 : 28);
     const iconOffset = (clickableSize - iconSize) / 2;
 
     const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
@@ -8858,7 +8858,7 @@ function updateObjectLabel(placemark, name) {
             iconImageSize: [1, 1],
             iconImageOffset: [0, 0],
             iconContent: '<div class="map-label">' + displayName + '</div>',
-            iconContentOffset: [0, 18],
+            iconContentOffset: type === 'support' ? [0, 14] : [0, 18],
             zIndex: 1000,
             zIndexHover: 1000,
             cursor: 'default',
@@ -8903,7 +8903,7 @@ function updateSupportLabelLegacy(placemark, name) {
             iconImageSize: [1, 1],
             iconImageOffset: [0, 0],
             iconContent: labelContent,
-            iconContentOffset: [0, 18],
+            iconContentOffset: [0, 14],
             zIndex: 1000,
             zIndexHover: 1000,
             cursor: 'default',
