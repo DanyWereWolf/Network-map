@@ -4434,6 +4434,77 @@ function getCameraCopperUpstreamTraceContext(cameraObj) {
     return { kind: 'unknown', cable: cable };
 }
 
+/** Порт коммутатора на медном кабеле со стороны камеры (RJ45). */
+function getCopperSwitchPortForCameraOnCable(cable, cameraObj) {
+    if (!cable || !cameraObj || !cable.properties) return null;
+    var from = cable.properties.get('from');
+    if (from === cameraObj) {
+        var pt = cable.properties.get('copperPortTo');
+        return pt != null && pt !== '' ? parseInt(pt, 10) : null;
+    }
+    var pf = cable.properties.get('copperPortFrom');
+    return pf != null && pf !== '' ? parseInt(pf, 10) : null;
+}
+
+/**
+ * Контекст медного «хвоста» камеры для окна трассировки жилы с кросса:
+ * коммутатор (объект на карте или в составе узла), медный кабель, камера.
+ */
+function buildCameraLanTailTraceContext(cameraObj) {
+    var ctx = getCameraCopperUpstreamTraceContext(cameraObj);
+    if (!cameraObj || !cameraObj.properties || ctx.kind === 'none' || ctx.kind === 'unknown' || ctx.kind === 'switch_no_parent') return null;
+    if (ctx.kind === 'media_converter') return null;
+    if (ctx.kind !== 'node' || !ctx.nodeObj || !ctx.cable) return null;
+    var swId = ctx.copperSwitchId;
+    if (!swId) return null;
+    var copperPort = getCopperSwitchPortForCameraOnCable(ctx.cable, cameraObj);
+    if (copperPort != null && isNaN(copperPort)) copperPort = null;
+    var swPlacemark = objects.find(function(o) {
+        return o.properties && o.properties.get('type') === 'switch' && o.properties.get('uniqueId') === swId;
+    });
+    var attached = findAttachedSwitchOnNode(ctx.nodeObj, swId);
+    var switchName = 'Коммутатор';
+    if (swPlacemark) switchName = (swPlacemark.properties.get('name') || '').trim() || switchName;
+    else if (attached) switchName = (attached.name || '').trim() || switchName;
+    return {
+        cameraObj: cameraObj,
+        copperCable: ctx.cable,
+        nodeObj: ctx.nodeObj,
+        switchPlacemark: swPlacemark || null,
+        switchName: switchName,
+        copperPort: copperPort
+    };
+}
+
+function buildCameraLanTailTraceSectionHtml(tailCtx, opts) {
+    opts = opts || {};
+    if (!tailCtx || !tailCtx.cameraObj || !tailCtx.copperCable) return '';
+    var cableName = tailCtx.copperCable.properties.get('cableName') || getCableDescription(tailCtx.copperCable.properties.get('cableType'));
+    var camName = tailCtx.cameraObj.properties.get('name') || 'Камера';
+    var portPart = (tailCtx.copperPort != null && !isNaN(tailCtx.copperPort))
+        ? '<span class="trace-path-muted"> · порт Ethernet ' + tailCtx.copperPort + '</span>'
+        : '';
+    var mapBtn = function(obj) {
+        var uid = obj ? getObjectUniqueId(obj) : null;
+        if (!uid) return '';
+        return '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(uid) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>';
+    };
+    var swUidForBtn = tailCtx.switchPlacemark ? tailCtx.switchPlacemark : tailCtx.nodeObj;
+    var swRow = '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">🔌</span><div class="trace-path-block trace-path-object"><div><span>🔌 ' + escapeHtml(tailCtx.switchName) + '</span><span class="trace-path-muted"> (коммутатор)</span>' + portPart + '</div>' + mapBtn(swUidForBtn) + '</div></div>';
+    var cableUid = getObjectUniqueId(tailCtx.copperCable);
+    var cableRow = '<div class="trace-step-row"><span class="trace-step-num trace-step-num-cable">➡</span><div class="trace-path-block trace-path-cable" style="border-left-color: #ca8a04;"><div><span>🔶 ' + escapeHtml(cableName) + '</span><span class="trace-path-muted"> (медный кабель)</span></div>' + (cableUid ? mapBtn(tailCtx.copperCable) : '') + '</div></div>';
+    var camRow = '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">📷</span><div class="trace-path-block trace-path-object"><div><span>📷 ' + escapeHtml(camName) + '</span><span class="trace-path-muted"> (камера)</span></div>' + mapBtn(tailCtx.cameraObj) + '</div></div>';
+    var wrapStyle = opts.skipIntro
+        ? 'margin-top: 0; padding-top: 0;'
+        : 'margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-color);';
+    var introP = opts.skipIntro ? '' : '<p style="font-size: 0.8rem; color: var(--text-secondary); margin: 0 0 10px 0;">Камера подключена не жилой с кросса, а медной линией от коммутатора — он указан ниже.</p>';
+    return '<div style="' + wrapStyle + '">' +
+        '<h4 class="trace-path-title" style="margin: 0 0 10px 0; font-size: 0.95rem;">Медный участок до камеры</h4>' +
+        introP +
+        swRow + cableRow + camRow +
+        '</div>';
+}
+
 function filterNodeFibersBySwitchIfPossible(nodeUniqueId, preferSwitchId) {
     var list = getNodeConnectedFibers(nodeUniqueId);
     if (!preferSwitchId || list.length === 0) return list;
@@ -4482,10 +4553,19 @@ function buildCameraTraceSectionHtml(cameraObj) {
         var nodeUid = getObjectUniqueId(ctx.nodeObj);
         var nodeTitle = ctx.nodeObj.properties.get('name') || 'Узел сети';
         var fibers = filterNodeFibersBySwitchIfPossible(nodeUid, ctx.copperSwitchId);
+        var lanTail = buildCameraLanTailTraceContext(cameraObj);
         html += '<div class="connected-fibers-section camera-trace-section" style="margin-bottom: 20px; padding: 16px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0;">';
         html += '<h4 style="margin: 0 0 8px 0; color: #166534; font-size: 0.9375rem; font-weight: 600;">Трассировка</h4>';
-        html += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 12px;">Оптические жилы с кроссов, подключённые к узлу «' + escapeHtml(nodeTitle) + '». Выберите жилу, чтобы просмотреть полную трассу (как в карточке узла).</p>';
+        if (lanTail) {
+            html += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 12px;">Камера подключена <strong>медным кабелем</strong> к узлу «' + escapeHtml(nodeTitle) + '». Ниже видно, <strong>к какому коммутатору и порту</strong> идёт линия. Оптика с кросса нужна только если у коммутатора есть SFP и жила заведена в карточке кросса.</p>';
+            html += buildCameraLanTailTraceSectionHtml(lanTail, { skipIntro: true });
+        } else {
+            html += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 12px;">Оптические жилы с кроссов, подключённые к узлу «' + escapeHtml(nodeTitle) + '». Выберите жилу, чтобы просмотреть полную трассу (как в карточке узла).</p>';
+        }
         if (fibers.length > 0) {
+            if (lanTail) {
+                html += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin: 16px 0 10px 0; font-weight: 600;">Оптические жилы с кроссов</p>';
+            }
             html += '<div style="display: flex; flex-direction: column; gap: 8px;">';
             fibers.forEach(function(conn) {
                 html += '<div class="fiber-connection-item" style="display: flex; align-items: center; justify-content: space-between; padding: 10px; background: var(--bg-card); border-radius: 4px; border: 1px solid #dcfce7;">';
@@ -4501,9 +4581,13 @@ function buildCameraTraceSectionHtml(cameraObj) {
             });
             html += '</div>';
         } else {
-            html += '<div style="padding: 12px; background: #fef3c7; border-radius: 6px; border: 1px solid #fde68a;">';
-            html += '<div style="color: #92400e; font-size: 0.875rem;">К этому узлу не подключено жил с кросса — трассировка оптики недоступна.</div>';
-            html += '<div style="color: #a16207; font-size: 0.8rem; margin-top: 4px;">Подключите SFP-порт коммутатора к жиле в карточке кросса.</div>';
+            html += '<div style="padding: 12px; background: #fef3c7; border-radius: 6px; border: 1px solid #fde68a;' + (lanTail ? ' margin-top: 14px;' : '') + '">';
+            if (lanTail) {
+                html += '<div style="color: #92400e; font-size: 0.875rem;">С кросса к этому узлу в модели не заведены жилы на коммутатор — <strong>трассировка оптики</strong> по кнопке недоступна. Для камеры на коммутаторе только Ethernet этого не требуется: маршрут указан в блоке «Медный участок до камеры» выше.</div>';
+            } else {
+                html += '<div style="color: #92400e; font-size: 0.875rem;">К этому узлу не подключено жил с кросса — трассировка оптики недоступна.</div>';
+                html += '<div style="color: #a16207; font-size: 0.8rem; margin-top: 4px;">Если на коммутаторе есть SFP, подключите порт к жиле в карточке кросса. Если камера идёт только медью от коммутатора без оптики — укажите коммутатор при прокладке медного кабеля.</div>';
+            }
             html += '</div>';
         }
         html += '</div>';
@@ -8192,6 +8276,9 @@ function showObjectInfo(obj) {
     setupEditAndDeleteListeners();
     var modalInfo = document.getElementById('modalInfo');
     if (modalInfo) initDeviceComboboxes(modalInfo);
+    if (type === 'camera' && modalInfo && modalInfo.querySelector('.trace-show-on-map-btn')) {
+        attachTraceShowOnMapHandlers(modalInfo);
+    }
     modal.style.display = 'block';
 
     if ((type === 'sleeve' || type === 'cross') && savedFiberConnectionsScrollPos) {
@@ -13219,7 +13306,12 @@ function traceFromNode(crossUniqueId, cableId, fiberNumber) {
         );
     }
 
-    showFiberTraceFromCross(crossObj, cableId, fiberNumber, nodeObj);
+    var lanTailContext = null;
+    if (currentModalObject && currentModalObject.properties && currentModalObject.properties.get('type') === 'camera') {
+        lanTailContext = buildCameraLanTailTraceContext(currentModalObject);
+    }
+
+    showFiberTraceFromCross(crossObj, cableId, fiberNumber, nodeObj, lanTailContext);
 }
 
 function traceFromOLTPort(oltObj, portNumber) {
@@ -13439,7 +13531,7 @@ function showFiberTraceFromOLTPort(oltObj, oltName, portNumber, startObj, cableI
     modal.style.display = 'block';
 }
 
-function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeObj = null) {
+function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeObj = null, lanTailContext = null) {
     var res = traceAllFiberPathsFromObject(startCrossObj, cableId, fiberNumber);
     
     if (res.error) {
@@ -13459,10 +13551,12 @@ function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeO
     title.textContent = '🔍 Трассировка жилы ' + fiberNumber;
     
     var header = '<div class="trace-path" style="padding: 10px;"><h4 class="trace-path-title">📍 Трасса жилы по всей линии</h4>';
-    if (startNodeObj) {
+    if (startNodeObj && !lanTailContext) {
         var nodeName = startNodeObj.properties.get('name') || 'Узел сети';
         header += '<div class="trace-path-block trace-path-start"><span>🖥️ ' + escapeHtml(nodeName) + '</span><span class="trace-path-muted">(Узел сети — начало)</span></div>';
         header += '<div class="trace-path-block trace-path-info"><span>🔌 Подключение к кроссу через жилу ' + fiberNumber + '</span></div>';
+    } else if (lanTailContext) {
+        header += '<div class="trace-path-block trace-path-info" style="margin-bottom: 8px;"><span>Оптический путь от кросса; ниже — медный участок от коммутатора до камеры.</span></div>';
     }
     if (res.paths.length > 1) {
         var stepNum = 1;
@@ -13475,6 +13569,9 @@ function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeO
     } else {
         var pathHtml = renderOnePathToTraceHtml(res.paths[0], 1);
         header += pathHtml.html;
+    }
+    if (lanTailContext) {
+        header += buildCameraLanTailTraceSectionHtml(lanTailContext);
     }
     header += '</div>';
     
