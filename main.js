@@ -15,6 +15,96 @@ function clearShowOnMapHighlight() {
     }
 }
 
+/** Макс. волокон по типу муфты (0 = без лимита / пользовательская). Список совпадает с формой добавления объекта. */
+function getDefaultMaxFibersForSleeveType(sleeveType) {
+    if (!sleeveType) return 0;
+    const sleeveMaxFibersMap = {
+        'SNR-FOSC-04': 4,
+        'SNR-FOSC-X': 12,
+        'SNR-FOSC-12': 12,
+        'SNR-FOSC-D': 24,
+        'SNR-FOSC-M': 48,
+        'SNR-FOSC-G': 72,
+        'SNR-FOSC-L': 96,
+        'SNR-FOSC-B': 144,
+        'SNR-FOSC-UF2': 144,
+        'SNR-FOSC-CV018': 36,
+        'SNR-FOSC-CV019': 36,
+        'SNR-FOSC-CV021': 96,
+        'SNR-FOSC-CV028A': 36,
+        'SNR-FOSC-CV037': 36,
+        'SNR-FOSC-Q-T': 36,
+        'SNR-FOSC-D-T': 24,
+        'SNR-FOSC-CH009': 24,
+        'SNR-FOSC-CH018': 36,
+        'SNR-FOSC-CH019': 36,
+        'SNR-FOSC-CH025': 24,
+        'SNR-FT-E': 12,
+        'МВОТ-108-3-Т-1-36': 108,
+        'МВОТ-216-4-Т-1-36': 216,
+        'МВОТ-3611-22-32-2К16': 32,
+        'МОГ-У-33-1К4845': 33,
+        'МКО-Ц8/С09-5SC': 18,
+        'МТОК-Ф3/216-1КТ3645-К': 216,
+        'KSC-MURR': 12,
+        '101-01-18': 18,
+        'custom': 0
+    };
+    return sleeveMaxFibersMap[sleeveType] || 0;
+}
+
+/** HTML option-элементов для селекта типа муфты (как в index.html). */
+function getSleeveTypeSelectOptionsHtml(selectedValue) {
+    var rows = [
+        ['SNR-FOSC-04', 'SNR-FOSC-04 (4 волокна)'],
+        ['SNR-FOSC-X', 'SNR-FOSC-X (компактная)'],
+        ['SNR-FOSC-12', 'SNR-FOSC-12 (12 волокон)'],
+        ['SNR-FOSC-D', 'SNR-FOSC-D (до 24 волокон)'],
+        ['SNR-FOSC-M', 'SNR-FOSC-M (до 48 волокон)'],
+        ['SNR-FOSC-G', 'SNR-FOSC-G (до 72 волокон)'],
+        ['SNR-FOSC-L', 'SNR-FOSC-L (до 96 волокон)'],
+        ['SNR-FOSC-B', 'SNR-FOSC-B (до 144 волокон)'],
+        ['SNR-FOSC-UF2', 'SNR-FOSC-UF2 (универсальная)'],
+        ['SNR-FOSC-CV018', 'SNR-FOSC-CV018 (купольная)'],
+        ['SNR-FOSC-CV019', 'SNR-FOSC-CV019 (тупиковая)'],
+        ['SNR-FOSC-CV021', 'SNR-FOSC-CV021 (96 волокон)'],
+        ['SNR-FOSC-CV028A', 'SNR-FOSC-CV028A'],
+        ['SNR-FOSC-CV037', 'SNR-FOSC-CV037'],
+        ['SNR-FOSC-Q-T', 'SNR-FOSC-Q-T'],
+        ['SNR-FOSC-D-T', 'SNR-FOSC-D-T'],
+        ['SNR-FOSC-CH009', 'SNR-FOSC-CH009 (проходная)'],
+        ['SNR-FOSC-CH018', 'SNR-FOSC-CH018 (проходная)'],
+        ['SNR-FOSC-CH019', 'SNR-FOSC-CH019 (проходная)'],
+        ['SNR-FOSC-CH025', 'SNR-FOSC-CH025 (проходная)'],
+        ['SNR-FT-E', 'SNR-FT-E'],
+        ['МВОТ-108-3-Т-1-36', 'МВОТ-108-3-Т-1-36 (108 волокон)'],
+        ['МВОТ-216-4-Т-1-36', 'МВОТ-216-4-Т-1-36 (216 волокон)'],
+        ['МВОТ-3611-22-32-2К16', 'МВОТ-3611-22-32-2К16'],
+        ['МОГ-У-33-1К4845', 'МОГ-У-33-1К4845 ССД'],
+        ['МКО-Ц8/С09-5SC', 'МКО-Ц8/С09-5SC (кросс-муфта)'],
+        ['МТОК-Ф3/216-1КТ3645-К', 'МТОК-Ф3/216-1КТ3645-К'],
+        ['KSC-MURR', 'KSC LIGHT PON МУРР (до 12 волокон)'],
+        ['101-01-18', '101-01-18 (кросс-муфта FTTH, до 18SC)'],
+        ['custom', 'Пользовательская']
+    ];
+    var sel = (selectedValue != null && selectedValue !== '') ? String(selectedValue) : '';
+    var html = '';
+    if (!sel) {
+        html += '<option value="" selected>— Не указано —</option>';
+    }
+    var found = false;
+    for (var i = 0; i < rows.length; i++) {
+        var v = rows[i][0];
+        var lab = rows[i][1];
+        if (v === sel) found = true;
+        html += '<option value="' + escapeHtml(v) + '"' + (v === sel ? ' selected' : '') + '>' + escapeHtml(lab) + '</option>';
+    }
+    if (sel && !found) {
+        html += '<option value="' + escapeHtml(sel) + '" selected>' + escapeHtml(sel) + '</option>';
+    }
+    return html;
+}
+
 function checkAuth() {
     if (typeof AuthSystem === 'undefined') {
         console.warn('AuthSystem не загружен');
@@ -198,7 +288,7 @@ function initUserUI() {
     
     if (currentUser.role !== 'admin') {
         hideAdminOnlyElements();
-        if (typeof switchToViewMode === 'function') switchToViewMode();
+        if (typeof switchToViewMode === 'function') switchToViewMode(false);
     }
 
     const logoutBtn = document.getElementById('logoutBtn');
@@ -234,14 +324,6 @@ function initUserUI() {
     setupDeviceCatalogModalHandlers();
 
     setupSidebarToggle();
-
-    // На телефонах по умолчанию сворачиваем боковую панель,
-    // чтобы карта занимала максимум места по высоте.
-    try {
-        if (window.innerWidth <= 768) {
-            document.body.classList.add('sidebar-collapsed');
-        }
-    } catch (e) {}
 
     if (typeof updateHistoryBadge === 'function') updateHistoryBadge();
 }
@@ -968,7 +1050,21 @@ function init() {
         if (lastSavedState === null && typeof getSerializedData === 'function') lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
         if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
     }, 0);
-    switchToViewMode();
+    switchToViewMode(false);
+    syncMapPanLockForEditTools();
+
+    (function setupMobileReadonlyResizeGuard() {
+        var resizeTimer = null;
+        window.addEventListener('resize', function() {
+            if (resizeTimer) clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(function() {
+                if (typeof isNetworkMapMobileViewOnly === 'function' && isNetworkMapMobileViewOnly() && isEditMode) {
+                    switchToViewMode(true);
+                }
+            }, 200);
+        });
+    })();
+
     if (getApiBase() && typeof AuthSystem !== 'undefined' && AuthSystem.refreshSessionFromApi) {
         setInterval(AuthSystem.refreshSessionFromApi, 60000);
     }
@@ -976,7 +1072,7 @@ function init() {
 
 function setupEventListeners() {
     
-    document.getElementById('viewMode').addEventListener('click', switchToViewMode);
+    document.getElementById('viewMode').addEventListener('click', function() { switchToViewMode(false); });
     document.getElementById('editMode').addEventListener('click', switchToEditMode);
 
     const addObjectBtn = document.getElementById('addObject');
@@ -991,6 +1087,10 @@ function setupEventListeners() {
     });
 
     document.getElementById('addCable').addEventListener('click', function() {
+        try {
+        if (isNetworkMapMobileViewOnly()) {
+            return;
+        }
         if (!isEditMode) {
             return;
         }
@@ -1039,6 +1139,9 @@ function setupEventListeners() {
             const mapEl = myMap.container.getElement();
             mapEl.style.cursor = '';
             mapEl.classList.remove('map-crosshair-active');
+        }
+        } finally {
+            syncMapPanLockForEditTools();
         }
     });
 
@@ -1248,46 +1351,11 @@ function setupEventListeners() {
     }
 
     function updateSleeveMaxFibers() {
-        const sleeveType = document.getElementById('sleeveType').value;
+        const sleeveTypeEl = document.getElementById('sleeveType');
         const maxFibersInput = document.getElementById('sleeveMaxFibers');
-
-        const sleeveMaxFibersMap = {
-            'SNR-FOSC-04': 4,
-            'SNR-FOSC-X': 12,
-            'SNR-FOSC-12': 12,
-            'SNR-FOSC-D': 24,
-            'SNR-FOSC-M': 48,
-            'SNR-FOSC-G': 72,
-            'SNR-FOSC-L': 96,
-            'SNR-FOSC-B': 144,
-            'SNR-FOSC-UF2': 144,
-            'SNR-FOSC-CV018': 36,
-            'SNR-FOSC-CV019': 36,
-            'SNR-FOSC-CV021': 96,
-            'SNR-FOSC-CV028A': 36,
-            'SNR-FOSC-CV037': 36,
-            'SNR-FOSC-Q-T': 36,
-            'SNR-FOSC-D-T': 24,
-            'SNR-FOSC-CH009': 24,
-            'SNR-FOSC-CH018': 36,
-            'SNR-FOSC-CH019': 36,
-            'SNR-FOSC-CH025': 24,
-            'SNR-FT-E': 12,
-            'МВОТ-108-3-Т-1-36': 108,
-            'МВОТ-216-4-Т-1-36': 216,
-            'МВОТ-3611-22-32-2К16': 32,
-            'МОГ-У-33-1К4845': 33,
-            'МКО-Ц8/С09-5SC': 18,
-            'МТОК-Ф3/216-1КТ3645-К': 216,
-            'KSC-MURR': 12,
-            '101-01-18': 18,
-            'custom': 0
-        };
-        
-        const maxFibers = sleeveMaxFibersMap[sleeveType] || 0;
-        if (maxFibersInput) {
-            maxFibersInput.value = maxFibers;
-        }
+        if (!maxFibersInput) return;
+        const sleeveType = sleeveTypeEl ? sleeveTypeEl.value : '';
+        maxFibersInput.value = String(getDefaultMaxFibersForSleeveType(sleeveType));
     }
 
     setupAccordions();
@@ -1357,6 +1425,10 @@ let currentPlacementName = null;
 let currentPlacementNodeKind = 'network';
 
 function handleAddObject() {
+    try {
+    if (isNetworkMapMobileViewOnly()) {
+        return;
+    }
     if (!isEditMode) {
         return;
     }
@@ -1446,6 +1518,9 @@ function handleAddObject() {
             addBtn.onclick = cancelObjectPlacement;
         }
     }
+    } finally {
+        syncMapPanLockForEditTools();
+    }
 }
 
 function cancelObjectPlacement() {
@@ -1469,9 +1544,26 @@ function cancelObjectPlacement() {
         addBtn.style.background = '#3498db';
         addBtn.onclick = null;
     }
+    syncMapPanLockForEditTools();
+}
+
+/**
+ * На сенсорных экранах поведение «перетаскивание» карты перехватывает движение пальца,
+ * из‑за чего не срабатывает предпросмотр кабеля / «фантом» при размещении объектов.
+ * Пока активны эти режимы, отключаем pan (drag); масштаб жестами и кнопками зума сохраняется.
+ */
+function syncMapPanLockForEditTools() {
+    if (!myMap || !myMap.behaviors) return;
+    var lockPan = !!(objectPlacementMode || fiberRoutingMode || splitterFiberRoutingMode ||
+        (currentCableTool && cableSource));
+    try {
+        if (lockPan) myMap.behaviors.disable('drag');
+        else myMap.behaviors.enable('drag');
+    } catch (err) {}
 }
 
 function handleMapClick(e) {
+    try {
     clearShowOnMapHighlight();
     const coords = e.get('coords');
 
@@ -1909,6 +2001,9 @@ function handleMapClick(e) {
         return;
     }
     
+    } finally {
+        try { syncMapPanLockForEditTools(); } catch (eLock) {}
+    }
 }
 
 var mapMouseMoveRafId = null;
@@ -2577,7 +2672,16 @@ function handleFileImport(e) {
     reader.readAsText(file);
 }
 
-function switchToViewMode() {
+/** Узкая ширина как у телефона: только просмотр (согласовано с app-mobile.css, 768px). */
+function isNetworkMapMobileViewOnly() {
+    try {
+        return typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 768px)').matches;
+    } catch (e) {
+        return false;
+    }
+}
+
+function switchToViewMode(silent) {
     const wasEditMode = isEditMode;
     isEditMode = false;
     currentCableTool = false;
@@ -2600,7 +2704,7 @@ function switchToViewMode() {
         cancelFiberRouting();
     }
     
-    if (wasEditMode) {
+    if (wasEditMode && !silent) {
         showInfo('Переключено в режим просмотра', 'Режим');
     }
     
@@ -2620,6 +2724,7 @@ function switchToViewMode() {
     
     updateEditControls();
     makeObjectsNonDraggable();
+    syncMapPanLockForEditTools();
 }
 
 function switchToEditMode() {
@@ -2628,12 +2733,18 @@ function switchToEditMode() {
         showWarning('Редактирование доступно только администраторам', 'Нет доступа');
         return;
     }
+
+    if (isNetworkMapMobileViewOnly()) {
+        showInfo('На этом экране доступен только просмотр. Редактирование карты — с компьютера или планшета (ширина окна больше 768px).', 'Режим');
+        return;
+    }
     
     isEditMode = true;
     updateUIForMode();
     updateEditControls();
     makeObjectsDraggable();
     showInfo('Переключено в режим редактирования', 'Режим');
+    syncMapPanLockForEditTools();
 }
 
 function updateUIForMode() {
@@ -7746,14 +7857,15 @@ function showObjectInfo(obj) {
     }
 
     if (type === 'sleeve') {
-        const sleeveType = obj.properties.get('sleeveType') || 'Не указан';
+        const storedSleeveType = obj.properties.get('sleeveType');
+        const sleeveTypeLabel = storedSleeveType ? String(storedSleeveType) : 'Не указан';
         const maxFibers = obj.properties.get('maxFibers');
         const usedFibers = getTotalUsedFibersInSleeve(obj);
         
         html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
         html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Информация о муфте</h4>';
         if (name) html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Название:</strong> ${escapeHtml(name)}</div>`;
-        html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Тип муфты:</strong> ${escapeHtml(sleeveType)}</div>`;
+        html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Тип муфты:</strong> ${escapeHtml(sleeveTypeLabel)}</div>`;
         
         if (maxFibers !== undefined && maxFibers !== null && maxFibers > 0) {
             const usagePercent = Math.round((usedFibers / maxFibers) * 100);
@@ -7777,6 +7889,11 @@ function showObjectInfo(obj) {
             html += '<div class="form-group" style="margin-bottom: 12px;">';
             html += '<label for="editSleeveName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название муфты</label>';
             html += `<input type="text" id="editSleeveName" class="form-input" value="${escapeHtml(name)}" placeholder="Введите название муфты">`;
+            html += '</div>';
+            html += '<div class="form-group" style="margin-bottom: 12px;">';
+            html += '<label for="editSleeveType" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Тип муфты</label>';
+            html += '<select id="editSleeveType" class="form-select">' + getSleeveTypeSelectOptionsHtml(storedSleeveType ? String(storedSleeveType) : '') + '</select>';
+            html += '<p style="font-size: 0.7rem; color: var(--text-muted); margin: 8px 0 0 0;">Вместимость пересчитывается по выбранному типу; для «Пользовательская» лимита нет (как при добавлении муфты).</p>';
             html += '</div>';
             html += '</div>';
         }
@@ -8425,6 +8542,36 @@ function setupEditAndDeleteListeners() {
             updateObjectLabel(currentModalObject, newName);
             saveData();
             if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
+        });
+    }
+
+    var editSleeveTypeSelect = document.getElementById('editSleeveType');
+    if (editSleeveTypeSelect) {
+        editSleeveTypeSelect.addEventListener('change', function() {
+            if (!currentModalObject || currentModalObject.properties.get('type') !== 'sleeve') return;
+            var newType = this.value;
+            var newMax = getDefaultMaxFibersForSleeveType(newType);
+            var used = typeof getTotalUsedFibersInSleeve === 'function' ? getTotalUsedFibersInSleeve(currentModalObject) : 0;
+            if (newMax > 0 && used > newMax) {
+                if (typeof showError === 'function') {
+                    showError('Для выбранного типа допускается не более ' + newMax + ' волокон, а в муфте уже задействовано ' + used + '. Снимите соединения или выберите другой тип.', 'Вместимость муфты');
+                }
+                var prev = currentModalObject.properties.get('sleeveType');
+                this.value = prev ? String(prev) : '';
+                return;
+            }
+            if (!newType) {
+                try {
+                    currentModalObject.properties.unset('sleeveType');
+                } catch (eUnset) {}
+                currentModalObject.properties.set('maxFibers', 0);
+            } else {
+                currentModalObject.properties.set('sleeveType', newType);
+                currentModalObject.properties.set('maxFibers', newMax);
+            }
+            saveData();
+            if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
+            refreshObjectModal(currentModalObject);
         });
     }
     
@@ -11731,6 +11878,7 @@ function startSplitterFiberRouting(splitterObj, outIdx, targetType, targetObj, t
     var targetName = targetObj.properties.get('name') || (targetType === 'onu' ? 'ONU' : 'Сплиттер');
     showInfo('Режим прокладки жилы: ' + splitterName + ' → ' + targetName + '. Кликайте по опорам и креплениям для маршрута, затем кликните по целевому объекту для завершения. Нажмите Escape для отмены.', 'Прокладка жилы');
     selectObject(splitterObj);
+    syncMapPanLockForEditTools();
 }
 
 function cancelSplitterFiberRouting() {
@@ -11742,6 +11890,7 @@ function cancelSplitterFiberRouting() {
         splitterFiberPreviewLine = null;
     }
     clearSelection();
+    syncMapPanLockForEditTools();
 }
 
 function completeSplitterFiberRouting() {
@@ -11791,6 +11940,7 @@ function completeSplitterFiberRouting() {
     updateSplitterOutputConnectionLines();
     clearSelection();
     showObjectInfo(sp);
+    syncMapPanLockForEditTools();
 }
 
 function handleSplitterFiberRoutingClick(coords) {
@@ -11927,6 +12077,7 @@ function startFiberRouting(sleeveObj, cableId, fiberNumber, targetType, targetOb
     var targetName = getFiberRoutingTargetLabel(targetType, targetObj);
     showInfo('Режим прокладки жилы: ' + sleeveName + ' → ' + targetName + '. Кликайте по опорам и креплениям для маршрута, затем кликните по целевому объекту для завершения. Нажмите Escape для отмены.', 'Прокладка жилы');
     selectObject(sleeveObj);
+    syncMapPanLockForEditTools();
 }
 
 function cancelFiberRouting() {
@@ -11938,6 +12089,7 @@ function cancelFiberRouting() {
         fiberRoutingPreviewLine = null;
     }
     clearSelection();
+    syncMapPanLockForEditTools();
 }
 
 function completeFiberRouting() {
@@ -11975,6 +12127,7 @@ function completeFiberRouting() {
     
     clearSelection();
     showObjectInfo(data.sleeveObj);
+    syncMapPanLockForEditTools();
 }
 
 function handleFiberRoutingClick(coords) {

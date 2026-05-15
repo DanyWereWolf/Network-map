@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="author" content="Карта оптической сети">
     <meta name="copyright" content="Copyright (c) 2024–2026 Карта оптической сети. Все права защищены.">
     <meta name="description" content="Интерактивная карта ВОЛС и узлов связи: кроссы, муфты, кабели, GPON (OLT, сплиттер, ONU), камеры и медиаконвертеры с медными линиями к коммутатору. Поиск, фильтры, история изменений и совместная работа.">
@@ -21,6 +21,7 @@
         })();
     </script>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="app-mobile.css">
     <link rel="stylesheet" href="cookie-consent.css">
     <!-- Защита от копирования -->
     <script>
@@ -183,6 +184,7 @@
     <div class="container">
         <div class="sidebar" id="sidebar">
             <div class="sidebar-content">
+                <p class="sidebar-readonly-hint" role="status">На этом экране карта только для просмотра. Изменения — с компьютера (ширина окна больше 768&nbsp;px).</p>
                 <!-- Переключатель режимов -->
                 <div class="control-section">
                     <div class="mode-switcher">

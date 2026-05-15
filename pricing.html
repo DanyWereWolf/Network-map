@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="description" content="Карта оптической сети: топология ВОЛС на Яндекс.Картах, узлы, кроссы, муфты, GPON, камеры и медные линии, история изменений и подписка под размер команды. Пробный период 14 дней.">
     <title>Карта оптической сети — платформа для управления ВОЛС</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -80,8 +80,8 @@
             z-index: 20;
             margin-left: -42px;
             margin-right: -42px;
-            padding: 10px 42px 12px;
-            background: linear-gradient(to bottom, rgba(255,255,255,0.97) 70%, rgba(255,255,255,0));
+            padding: calc(10px + env(safe-area-inset-top, 0px)) 42px 12px;
+            background: linear-gradient(to bottom, rgba(255,255,255,1) 0%, rgba(255,255,255,0.98) 32%, rgba(255,255,255,0.75) 70%, rgba(255,255,255,0));
             backdrop-filter: blur(8px);
         }
         .landing-nav-left {
@@ -755,10 +755,11 @@
             }
         }
         @media (max-width: 640px) {
-            .landing-shell {
-                padding: 26px 18px;
+            /* Верхний отступ у шапки — в .landing-nav (липкая зона + safe-area), не у оболочки */
+            .auth-card.landing-shell {
+                padding: 0 18px 26px;
             }
-            .auth-card {
+            .auth-card:not(.landing-shell) {
                 padding: 26px 18px;
             }
             .landing-hero-title {
@@ -828,7 +829,7 @@
             box-shadow: 0 24px 70px rgba(2, 6, 23, 0.75);
         }
         [data-theme="dark"] .landing-nav {
-            background: linear-gradient(to bottom, rgba(2,6,23,0.95) 70%, rgba(2,6,23,0));
+            background: linear-gradient(to bottom, #0f172a 0%, rgba(15,23,42,0.98) 28%, rgba(2,6,23,0.88) 58%, rgba(2,6,23,0));
         }
         [data-theme="dark"] .landing-hero-visual {
             background: radial-gradient(circle at 0 0, rgba(96,165,250,0.22), transparent 60%), #020617;
@@ -957,6 +958,7 @@
             color: #64748b;
         }
     </style>
+    <link rel="stylesheet" href="pages-mobile.css">
 </head>
 <body>
     <div class="auth-bg" aria-hidden="true">

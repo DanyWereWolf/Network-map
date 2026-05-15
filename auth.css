@@ -4,6 +4,10 @@
     box-sizing: border-box;
 }
 
+html {
+    height: 100%;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
     min-height: 100vh;
@@ -364,28 +368,6 @@ body {
     border-radius: 6px;
 }
 
-/* Адаптивность */
-@media (max-width: 480px) {
-    .auth-card {
-        padding: 32px 24px;
-    }
-    
-    .auth-header h1 {
-        font-size: 1.5rem;
-    }
-    
-    .auth-logo {
-        width: 64px;
-        height: 64px;
-    }
-    
-    .auth-logo svg {
-        width: 36px;
-        height: 36px;
-    }
-}
-
-/* ==================== Темы авторизации ==================== */
 [data-theme="light"] .auth-bg-gradient {
     background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 38%, #f8fafc 72%, #eef2ff 100%);
 }
@@ -449,4 +431,102 @@ body {
     color: #bbf7d0;
     background: rgba(20, 83, 45, 0.32);
     border-color: rgba(74, 222, 128, 0.35);
+}
+
+/* ==================== Мобильные: auth, pricing, checkout, site-admin ==================== */
+html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+@media (max-width: 640px) {
+    body {
+        padding: max(12px, env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(14px, env(safe-area-inset-left, 0px));
+        min-height: 100dvh;
+        min-height: 100svh;
+    }
+
+    body.auth-page {
+        align-items: center;
+        align-items: safe center;
+        justify-content: center;
+    }
+
+    .auth-container {
+        gap: 16px;
+        max-width: 100%;
+        width: 100%;
+        margin: 0 auto;
+    }
+
+    .auth-card {
+        padding: 22px 18px;
+        border-radius: 14px;
+    }
+
+    .auth-header {
+        margin-bottom: 20px;
+    }
+
+    .auth-header h1 {
+        font-size: 1.45rem;
+    }
+
+    .auth-logo {
+        width: 68px;
+        height: 68px;
+    }
+
+    .auth-logo svg {
+        width: 38px;
+        height: 38px;
+    }
+
+    .auth-form h2 {
+        font-size: 1.1rem;
+        margin-bottom: 18px;
+    }
+
+    .form-group {
+        margin-bottom: 16px;
+    }
+
+    .input-wrapper input {
+        font-size: 16px;
+        min-height: 48px;
+        padding-top: 14px;
+        padding-bottom: 14px;
+    }
+
+    .toggle-password {
+        min-width: 44px;
+        min-height: 44px;
+        padding: 10px;
+    }
+
+    .btn-primary {
+        min-height: 50px;
+        padding: 16px 20px;
+        font-size: 1rem;
+        touch-action: manipulation;
+    }
+
+    .auth-footer {
+        margin-top: 18px;
+        padding-top: 18px;
+    }
+
+    .auth-info {
+        padding: 14px 16px;
+    }
+}
+
+@media (max-width: 400px) {
+    .auth-card {
+        padding: 18px 14px;
+    }
+
+    .auth-header h1 {
+        font-size: 1.3rem;
+    }
 }

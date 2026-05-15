@@ -1,0 +1,472 @@
+/**
+ * Мобильный слой UI для основного приложения (index).
+ * Подключается после styles.css — дополняет и переопределяет брейкпоинты.
+ */
+
+html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+.sidebar-readonly-hint {
+    display: none;
+    margin: 0;
+}
+
+@media (max-width: 768px) {
+    /* Карта на всю высоту под шапкой — боковую панель на телефоне не показываем */
+    .container {
+        flex-direction: column;
+    }
+
+    .map-area-wrapper {
+        width: 100%;
+        flex: 1 1 auto;
+        min-height: 0;
+        order: 0;
+    }
+
+    .map-area-wrapper .map {
+        min-height: 0;
+    }
+
+    .sidebar {
+        display: none !important;
+    }
+
+    .sidebar-toggle,
+    #sidebarToggle {
+        display: none !important;
+    }
+
+    /* ---------- Шапка: сетка «логотип + кнопки / поиск на всю ширину» ---------- */
+    .top-header {
+        height: auto;
+        min-height: 46px;
+        flex-shrink: 0;
+        overflow-x: clip;
+        -webkit-transform: translateZ(0);
+        padding-top: max(10px, calc(env(safe-area-inset-top, 0px) + 6px));
+    }
+
+    .top-header-content {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+            "brand tools"
+            "search search";
+        align-items: center;
+        column-gap: 10px;
+        row-gap: 8px;
+        height: auto;
+        min-height: 0;
+        padding-top: 10px;
+        padding-bottom: 8px;
+    }
+
+    .header-title-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
+    }
+
+    .header-title-icon svg {
+        width: 28px;
+        height: 28px;
+    }
+
+    .header-brand {
+        grid-area: brand;
+        min-width: 0;
+    }
+
+    .header-search {
+        grid-area: search;
+        width: 100%;
+        max-width: none;
+        margin: 0;
+    }
+
+    .user-panel {
+        grid-area: tools;
+        border-left: none;
+        padding-left: 0;
+        justify-self: end;
+        gap: 10px;
+        min-width: 0;
+    }
+
+    /* На телефоне только просмотр — отмена/повтор и справочник устройств не нужны */
+    #undoBtn,
+    #redoBtn,
+    #deviceCatalogBtn {
+        display: none !important;
+    }
+
+    .user-menu {
+        flex-wrap: nowrap;
+        gap: 6px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        max-width: calc(100vw - 56px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+        padding-bottom: 2px;
+    }
+
+    .user-menu::-webkit-scrollbar {
+        display: none;
+    }
+
+    .user-menu-btn {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+        flex-shrink: 0;
+        border-radius: 10px;
+        touch-action: manipulation;
+    }
+
+    .user-menu-btn svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    .user-avatar {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        min-height: 40px;
+        font-size: 14px;
+    }
+
+    .search-input {
+        font-size: 16px;
+        min-height: 44px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
+
+    .search-clear {
+        min-width: 40px;
+        min-height: 40px;
+        padding: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .search-results {
+        max-height: min(52dvh, 420px);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-lg);
+    }
+
+    .search-result-item {
+        min-height: 48px;
+        padding: 12px 14px;
+        touch-action: manipulation;
+    }
+
+    /* ---------- Модальные окна ---------- */
+    .modal {
+        padding: max(10px, env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-right, 0px)) max(10px, env(safe-area-inset-bottom, 0px)) max(10px, env(safe-area-inset-left, 0px));
+        box-sizing: border-box;
+    }
+
+    .modal-content {
+        width: 100%;
+        max-width: min(100%, 720px);
+        margin: 0 auto;
+        max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 20px);
+        display: flex;
+        flex-direction: column;
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+    }
+
+    .modal-header {
+        flex-shrink: 0;
+        padding: 14px 16px;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+    }
+
+    .modal-header h2 {
+        font-size: 1.05rem;
+        line-height: 1.25;
+        padding-right: 8px;
+    }
+
+    .modal-body {
+        flex: 1;
+        min-height: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 16px;
+        max-height: none;
+    }
+
+    .modal-content.fiber-management-modal {
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
+        max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px);
+    }
+
+    .modal-content.fiber-management-modal .modal-body {
+        max-height: none;
+        min-height: 200px;
+    }
+
+    .fiber-scheme-wrap,
+    .fiber-connections-list-wrap {
+        max-height: min(40dvh, 320px);
+    }
+
+    .fiber-view-toggle {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .fiber-view-btn {
+        flex: 1;
+        text-align: center;
+        padding: 12px 10px;
+        min-height: 48px;
+        font-size: 0.9rem;
+    }
+
+    .close,
+    .close-users,
+    .close-history,
+    .close-user-edit,
+    .close-help,
+    .close-updates,
+    .close-netbox,
+    .close-import,
+    .close-node-selection,
+    .close-device-catalog,
+    .close-confirm-modal,
+    .close-profile,
+    .close-organizations,
+    .close-organization-edit,
+    .close-splitter-selection,
+    .close-onu-selection,
+    .close-splitter-output-onu,
+    .close-splitter-output-splitter,
+    .close-olt-selection {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+        font-size: 28px;
+        flex-shrink: 0;
+        touch-action: manipulation;
+    }
+
+    .group-balloon-close {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+        font-size: 22px;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        touch-action: manipulation;
+    }
+
+    .group-balloon-header {
+        gap: 10px;
+        align-items: flex-start;
+    }
+
+    .group-balloon-title {
+        flex: 1;
+        min-width: 0;
+        line-height: 1.3;
+    }
+
+    .node-selection-actions {
+        display: flex;
+        flex-direction: column-reverse;
+        gap: 10px;
+        margin-top: 12px;
+    }
+
+    .node-selection-actions .btn-primary,
+    .node-selection-actions .btn-secondary {
+        width: 100%;
+        min-height: 48px;
+    }
+
+    .accordion-header {
+        min-height: 48px;
+        padding: 12px 14px;
+        touch-action: manipulation;
+    }
+
+    .form-group .form-input,
+    .form-group .form-select,
+    .form-group textarea,
+    .form-select,
+    .form-input,
+    textarea.form-input {
+        font-size: 16px;
+        min-height: 48px;
+    }
+
+    .form-group textarea {
+        min-height: 100px;
+    }
+
+    .map-filter-checkboxes {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px 12px;
+    }
+
+    .map-filter-check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.8125rem;
+        line-height: 1.3;
+        padding: 6px 0;
+        touch-action: manipulation;
+    }
+
+    .map-filter-check input {
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
+    }
+
+    .btn-primary,
+    .btn-secondary,
+    .btn-danger {
+        min-height: 48px;
+        padding: 12px 16px;
+        touch-action: manipulation;
+    }
+
+    .confirm-modal-actions {
+        flex-direction: column-reverse !important;
+        align-items: stretch !important;
+        gap: 10px !important;
+    }
+
+    .confirm-modal-actions button {
+        width: 100%;
+        min-height: 48px;
+    }
+
+    /* ---------- Toast ---------- */
+    .toast-container {
+        left: max(10px, env(safe-area-inset-left, 0px));
+        right: max(10px, env(safe-area-inset-right, 0px));
+        top: max(10px, env(safe-area-inset-top, 0px));
+        width: auto;
+        align-items: stretch;
+    }
+
+    .toast {
+        max-width: none;
+        min-width: 0;
+        width: 100%;
+    }
+
+    .toast-close {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    /* ---------- История / списки ---------- */
+    .history-modal-content .modal-body,
+    #historyModal .modal-body {
+        padding: 12px;
+    }
+
+    .history-filter-btn {
+        min-height: 40px;
+        padding: 8px 12px;
+    }
+
+    /* ---------- Трассировка в модалке ---------- */
+    .trace-step-row {
+        flex-wrap: wrap;
+    }
+
+    .trace-show-on-map-btn {
+        min-height: 40px;
+        padding: 8px 12px !important;
+    }
+
+    .welcome-modal .modal-content.welcome-modal-content {
+        max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px);
+        margin: 12px auto;
+    }
+
+    #nodeSelectionModal .modal-content.node-selection-modal-content,
+    #onuSelectionModal .modal-content.node-selection-modal-content,
+    #splitterSelectionModal .modal-content.node-selection-modal-content,
+    #splitterOutputOnuModal .modal-content.node-selection-modal-content,
+    #splitterOutputSplitterModal .modal-content.node-selection-modal-content,
+    #oltSelectionModal .modal-content.node-selection-modal-content {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    #nodeSelectionModal .network-map-balloon,
+    #onuSelectionModal .network-map-balloon,
+    #splitterSelectionModal .network-map-balloon,
+    #splitterOutputOnuModal .network-map-balloon,
+    #splitterOutputSplitterModal .network-map-balloon,
+    #oltSelectionModal .network-map-balloon {
+        max-width: 100%;
+    }
+
+    .node-list-container {
+        max-height: min(45dvh, 360px);
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+@media (max-width: 480px) {
+    .modal-header h2 {
+        font-size: 1rem;
+    }
+
+    .modal-body {
+        padding: 14px 12px;
+    }
+
+    .map-filter-checkboxes {
+        grid-template-columns: 1fr;
+    }
+
+    .fiber-view-toggle {
+        flex-direction: column;
+    }
+
+    .fiber-view-btn {
+        width: 100%;
+    }
+}
+
+@media (max-width: 768px) and (orientation: landscape) {
+    .modal-content.fiber-management-modal {
+        max-height: 94dvh;
+    }
+
+    .fiber-scheme-wrap,
+    .fiber-connections-list-wrap {
+        max-height: min(34dvh, 260px);
+    }
+}

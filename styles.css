@@ -68,16 +68,25 @@
     box-sizing: border-box;
 }
 
+/* Без скролла корня: иначе на iOS шапка «плывёт» при overscroll и смене высоты панели браузера */
+html {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+}
+
 body {
     margin: 0;
     padding: 0;
     overflow: hidden;
+    overscroll-behavior: none;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     background: var(--bg-primary);
     color: var(--text-primary);
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    height: 100%;
+    max-height: 100dvh;
     transition: background var(--transition-normal), color var(--transition-normal);
 }
 
@@ -86,6 +95,9 @@ body {
     background: var(--header-bg);
     color: white;
     padding: 0 20px;
+    padding-top: max(0px, env(safe-area-inset-top, 0px));
+    padding-left: max(20px, env(safe-area-inset-left, 0px));
+    padding-right: max(20px, env(safe-area-inset-right, 0px));
     height: var(--header-height);
     flex-shrink: 0;
     box-shadow: var(--shadow-md);
@@ -364,6 +376,7 @@ body {
 .container {
     display: flex;
     flex: 1;
+    min-height: 0;
     position: relative;
     overflow: hidden;
 }
@@ -3359,6 +3372,9 @@ button {
 @media (max-width: 768px) {
     .top-header {
         padding: 0 12px;
+        padding-top: max(0px, env(safe-area-inset-top, 0px));
+        padding-left: max(12px, env(safe-area-inset-left, 0px));
+        padding-right: max(12px, env(safe-area-inset-right, 0px));
         height: 46px;
     }
     
@@ -3455,6 +3471,8 @@ button {
     .map-area-wrapper {
         width: 100%;
         min-height: 300px;
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        box-sizing: border-box;
     }
     
     .sidebar {
@@ -3474,7 +3492,7 @@ button {
     
     .sidebar-toggle {
         top: auto;
-        bottom: 0;
+        bottom: max(0px, env(safe-area-inset-bottom, 0px));
         left: 50%;
         transform: translate(-50%, 50%);
         width: 60px;
@@ -3489,7 +3507,7 @@ button {
     }
     
     body.sidebar-collapsed .sidebar-toggle {
-        bottom: 0;
+        bottom: max(0px, env(safe-area-inset-bottom, 0px));
         transform: translate(-50%, 50%);
     }
     
@@ -3532,6 +3550,16 @@ button {
     
     .mode-switcher {
         grid-template-columns: 1fr 1fr;
+    }
+    
+    #addObject,
+    #addCable,
+    .mode-btn,
+    .accordion-header,
+    .btn-primary,
+    .btn-secondary,
+    .btn-danger {
+        touch-action: manipulation;
     }
     
     .mode-btn {
@@ -3666,6 +3694,9 @@ button {
 @media (max-width: 480px) {
     .top-header {
         padding: 0 8px;
+        padding-top: max(0px, env(safe-area-inset-top, 0px));
+        padding-left: max(8px, env(safe-area-inset-left, 0px));
+        padding-right: max(8px, env(safe-area-inset-right, 0px));
         height: 44px;
     }
     
