@@ -8,6 +8,7 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="stylesheet" href="auth.css">
     <link rel="stylesheet" href="cookie-consent.css">
+    <link rel="stylesheet" href="maintenance-notice.css">
     <script>
         (function() {
             try {
@@ -1062,7 +1063,7 @@
                             <div class="hero-metric-value" id="heroStatUsers">—</div>
                         </div>
                         <div class="hero-metric">
-                            <div class="hero-metric-label">Объектов на картах</div>
+                            <div class="hero-metric-label" title="Узлы, кроссы, муфты, OLT и др.; без кабелей">Объектов на картах</div>
                             <div class="hero-metric-value" id="heroStatNodes">—</div>
                         </div>
                     </div>
@@ -1355,23 +1356,36 @@
     </script>
     <script>
     (function() {
+        var HERO_STATS_REFRESH_MS = 5 * 60 * 1000;
+
         function formatHeroStat(n) {
             var x = Math.max(0, Math.floor(Number(n) || 0));
             return String(x).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
         }
-        var base = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : '';
-        fetch(base + '/api/public-stats')
-            .then(function(r) { return r.ok ? r.json() : null; })
-            .then(function(d) {
-                if (!d) return;
-                var o = document.getElementById('heroStatOrgs');
-                var u = document.getElementById('heroStatUsers');
-                var m = document.getElementById('heroStatNodes');
-                if (o) o.textContent = formatHeroStat(d.organizationCount);
-                if (u) u.textContent = formatHeroStat(d.userAccountCount);
-                if (m) m.textContent = formatHeroStat(d.mapObjectCount);
-            })
-            .catch(function() {});
+
+        function loadHeroStats() {
+            var base = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : '';
+            var url = base + '/api/public-stats?_=' + Date.now();
+            return fetch(url, { cache: 'no-store' })
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(d) {
+                    if (!d) return;
+                    var o = document.getElementById('heroStatOrgs');
+                    var u = document.getElementById('heroStatUsers');
+                    var m = document.getElementById('heroStatNodes');
+                    if (o) o.textContent = formatHeroStat(d.organizationCount);
+                    if (u) u.textContent = formatHeroStat(d.userAccountCount);
+                    if (m) m.textContent = formatHeroStat(d.mapObjectCount);
+                })
+                .catch(function() {});
+        }
+
+        loadHeroStats();
+        setInterval(loadHeroStats, HERO_STATS_REFRESH_MS);
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible') loadHeroStats();
+        });
+        window.addEventListener('focus', loadHeroStats);
     })();
     </script>
     <script>
@@ -1677,6 +1691,7 @@
     })();
     </script>
     <script src="js/core/cookie-consent.js"></script>
+    <script src="js/core/maintenance-notice.js"></script>
 </body>
 </html>
 

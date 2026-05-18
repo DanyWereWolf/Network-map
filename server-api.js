@@ -404,6 +404,50 @@ app.get('/api/pricing', (req, res) => {
     }
 });
 
+app.get('/api/maintenance-notice', (req, res) => {
+    try {
+        res.json(db.getPublicMaintenanceNotice());
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.get('/api/admin/maintenance-notice', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    try {
+        const notice = db.getMaintenanceNotice();
+        res.json({
+            notice: notice,
+            active: db.isMaintenanceNoticeActive(notice)
+        });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.put('/api/admin/maintenance-notice', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    const body = req.body || {};
+    try {
+        const patch = {};
+        if (body.enabled !== undefined) patch.enabled = !!body.enabled;
+        if (body.title !== undefined) patch.title = String(body.title || '').trim();
+        if (body.message !== undefined) patch.message = String(body.message || '').trim();
+        if (body.startsAt !== undefined) patch.startsAt = body.startsAt ? String(body.startsAt) : null;
+        if (body.endsAt !== undefined) patch.endsAt = body.endsAt ? String(body.endsAt) : null;
+        const notice = db.setMaintenanceNotice(patch);
+        res.json({
+            success: true,
+            notice: notice,
+            active: db.isMaintenanceNoticeActive(notice)
+        });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
 app.put('/api/pricing', (req, res) => {
     const admin = getSessionUser(req);
     if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Только администратор' });
@@ -823,6 +867,7 @@ app.get('/api/public-config', (req, res) => {
 });
 
 app.get('/api/public-stats', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
     try {
         res.json(db.getPublicStats());
     } catch (e) {
@@ -832,6 +877,7 @@ app.get('/api/public-stats', (req, res) => {
 
 // Лицевая страница по умолчанию — тарифы
 app.get('/', (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(__dirname, 'pricing.html'));
 });
 

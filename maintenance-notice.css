@@ -1,0 +1,130 @@
+/* Баннер уведомления о технических работах */
+.maintenance-notice {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 99998;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 12px;
+    padding: 10px 16px;
+    padding-top: max(10px, env(safe-area-inset-top, 0px));
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+    border-bottom: 1px solid #fdba74;
+    color: #9a3412;
+    font-size: 0.875rem;
+    line-height: 1.45;
+    box-shadow: 0 4px 20px rgba(154, 52, 18, 0.12);
+}
+
+.maintenance-notice-inner {
+    flex: 1;
+    max-width: 1160px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    min-width: 0;
+}
+
+.maintenance-notice-icon {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #f97316;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin-top: 1px;
+}
+
+.maintenance-notice-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.maintenance-notice-text strong {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #7c2d12;
+    margin-bottom: 2px;
+}
+
+.maintenance-notice-text p {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: #9a3412;
+    white-space: pre-wrap;
+}
+
+.maintenance-notice-meta {
+    margin-top: 4px;
+    font-size: 0.75rem;
+    color: #c2410c;
+    opacity: 0.9;
+}
+
+.maintenance-notice-close {
+    flex-shrink: 0;
+    border: none;
+    background: rgba(154, 52, 18, 0.1);
+    color: #9a3412;
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    min-height: 36px;
+    touch-action: manipulation;
+    transition: background 0.15s ease;
+}
+
+.maintenance-notice-close:hover {
+    background: rgba(154, 52, 18, 0.18);
+}
+
+body.maintenance-notice-visible {
+    padding-top: var(--maintenance-notice-offset, 52px);
+}
+
+[data-theme="dark"] .maintenance-notice {
+    background: linear-gradient(135deg, #431407 0%, #7c2d12 100%);
+    border-bottom-color: #ea580c;
+    color: #ffedd5;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="dark"] .maintenance-notice-text strong {
+    color: #fff7ed;
+}
+
+[data-theme="dark"] .maintenance-notice-text p,
+[data-theme="dark"] .maintenance-notice-meta {
+    color: #fed7aa;
+}
+
+[data-theme="dark"] .maintenance-notice-close {
+    background: rgba(255, 237, 213, 0.12);
+    color: #ffedd5;
+}
+
+[data-theme="dark"] .maintenance-notice-close:hover {
+    background: rgba(255, 237, 213, 0.2);
+}
+
+@media (max-width: 640px) {
+    .maintenance-notice {
+        flex-wrap: wrap;
+    }
+    .maintenance-notice-close {
+        width: 100%;
+    }
+}

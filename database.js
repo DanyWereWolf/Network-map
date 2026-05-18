@@ -296,6 +296,44 @@ function getOrganization(orgId) {
     return orgs.find(function(o) { return organizationIdsMatch(o.id, orgId); }) || null;
 }
 
+/** Кабели и служебные подписи не считаются объектами на карте. */
+function isMapInfrastructureObject(item) {
+    if (!item || !item.type) return false;
+    return item.type !== 'cable' && item.type !== 'cableLabel';
+}
+
+/**
+ * Реальное число объектов на одной карте: узлы, кроссы, муфты, опоры и т.д.
+ * Без кабелей, без дублей по uniqueId; коммутаторы внутри узла — как в статистике приложения.
+ */
+function countActualMapObjectsInArray(arr) {
+    if (!Array.isArray(arr) || !arr.length) return 0;
+    const byUid = Object.create(null);
+    const withoutUid = [];
+    arr.forEach(function(item) {
+        if (!isMapInfrastructureObject(item)) return;
+        const uid = item.uniqueId;
+        if (uid != null && uid !== '') {
+            if (!byUid[uid]) byUid[uid] = item;
+        } else {
+            withoutUid.push(item);
+        }
+    });
+    const placemarks = withoutUid.concat(Object.keys(byUid).map(function(k) { return byUid[k]; }));
+    let count = 0;
+    placemarks.forEach(function(item) {
+        count++;
+        if (item.type !== 'node' || !Array.isArray(item.attachedSwitches)) return;
+        item.attachedSwitches.forEach(function(sw) {
+            if (!sw) return;
+            const swId = sw.uniqueId;
+            if (swId != null && swId !== '' && byUid[swId]) return;
+            count++;
+        });
+    });
+    return count;
+}
+
 /** Агрегаты для публичного лендинга (без авторизации). */
 function getPublicStats() {
     const s = loadStore();
@@ -304,17 +342,7 @@ function getPublicStats() {
     let mapObjectCount = 0;
     const byOrg = s.mapDataByOrg && typeof s.mapDataByOrg === 'object' ? s.mapDataByOrg : {};
     Object.keys(byOrg).forEach(function(oid) {
-        const arr = byOrg[oid];
-        if (!Array.isArray(arr)) return;
-        const seen = new Set();
-        arr.forEach(function(item, i) {
-            if (!item || !item.type) return;
-            const uid = item.uniqueId;
-            const key = (uid != null && uid !== '') ? (item.type + ':' + uid) : (item.type + ':i:' + i);
-            if (seen.has(key)) return;
-            seen.add(key);
-            mapObjectCount++;
-        });
+        mapObjectCount += countActualMapObjectsInArray(byOrg[oid]);
     });
     let userAccountCount = 0;
     users.forEach(function(u) {
@@ -776,6 +804,94 @@ function getVisitLogs() {
     return Array.isArray(s.visitLogs) ? s.visitLogs : [];
 }
 
+const MAINTENANCE_NOTICE_DEFAULTS = {
+    enabled: false,
+    title: 'Технические работы',
+    message: '',
+    startsAt: null,
+    endsAt: null,
+    id: '',
+    updatedAt: null
+};
+
+function parseMaintenanceNoticeRaw(raw) {
+    if (!raw) return null;
+    try {
+        return typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch (e) {
+        return null;
+    }
+}
+
+function normalizeMaintenanceNotice(obj) {
+    const src = obj && typeof obj === 'object' ? obj : {};
+    const title = String(src.title != null ? src.title : MAINTENANCE_NOTICE_DEFAULTS.title).trim() || MAINTENANCE_NOTICE_DEFAULTS.title;
+    const message = String(src.message != null ? src.message : '').trim();
+    const startsAt = src.startsAt ? String(src.startsAt).trim() : null;
+    const endsAt = src.endsAt ? String(src.endsAt).trim() : null;
+    return {
+        enabled: !!src.enabled,
+        title: title,
+        message: message,
+        startsAt: startsAt || null,
+        endsAt: endsAt || null,
+        id: src.id ? String(src.id) : '',
+        updatedAt: src.updatedAt ? String(src.updatedAt) : null
+    };
+}
+
+function isMaintenanceNoticeActive(notice) {
+    const n = normalizeMaintenanceNotice(notice);
+    if (!n.enabled || !n.message) return false;
+    const now = Date.now();
+    if (n.startsAt) {
+        const s = new Date(n.startsAt).getTime();
+        if (!isNaN(s) && now < s) return false;
+    }
+    if (n.endsAt) {
+        const e = new Date(n.endsAt).getTime();
+        if (!isNaN(e) && now > e) return false;
+    }
+    return true;
+}
+
+function getMaintenanceNotice() {
+    const parsed = parseMaintenanceNoticeRaw(getSetting('maintenanceNotice'));
+    return normalizeMaintenanceNotice(parsed || MAINTENANCE_NOTICE_DEFAULTS);
+}
+
+function setMaintenanceNotice(patch) {
+    const prev = getMaintenanceNotice();
+    const next = normalizeMaintenanceNotice(Object.assign({}, prev, patch || {}));
+    const contentChanged = patch && (
+        patch.message !== undefined && String(patch.message).trim() !== prev.message ||
+        patch.title !== undefined && String(patch.title).trim() !== prev.title ||
+        patch.startsAt !== undefined && (patch.startsAt || null) !== (prev.startsAt || null) ||
+        patch.endsAt !== undefined && (patch.endsAt || null) !== (prev.endsAt || null)
+    );
+    if (patch && patch.enabled && (contentChanged || !prev.id)) {
+        next.id = 'mn_' + Date.now();
+    } else if (!next.id && next.enabled && next.message) {
+        next.id = 'mn_' + Date.now();
+    }
+    next.updatedAt = new Date().toISOString();
+    setSetting('maintenanceNotice', JSON.stringify(next));
+    return next;
+}
+
+function getPublicMaintenanceNotice() {
+    const notice = getMaintenanceNotice();
+    const active = isMaintenanceNoticeActive(notice);
+    return {
+        active: active,
+        id: notice.id || '',
+        title: notice.title,
+        message: notice.message,
+        startsAt: notice.startsAt,
+        endsAt: notice.endsAt
+    };
+}
+
 module.exports = {
     getDb,
     getMapData,
@@ -811,6 +927,11 @@ module.exports = {
     getPricingPlans,
     setPricingPlans,
     getPublicStats,
+    countActualMapObjectsInArray,
     addVisitLog,
-    getVisitLogs
+    getVisitLogs,
+    getMaintenanceNotice,
+    setMaintenanceNotice,
+    getPublicMaintenanceNotice,
+    isMaintenanceNoticeActive
 };

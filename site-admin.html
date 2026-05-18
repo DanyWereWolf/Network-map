@@ -17,6 +17,7 @@
     </script>
     <link rel="stylesheet" href="auth.css">
     <link rel="stylesheet" href="cookie-consent.css">
+    <link rel="stylesheet" href="maintenance-notice.css">
     <style>
         body {
             color: #0f172a;
@@ -157,6 +158,219 @@
         }
         .tab-content.active {
             display: block;
+        }
+        .tab.tab-maintenance {
+            position: relative;
+        }
+        .tab-maintenance-dot {
+            display: none;
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #f97316;
+            box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.25);
+            margin-left: 4px;
+            vertical-align: middle;
+        }
+        .tab-maintenance-dot.visible {
+            display: inline-block;
+        }
+        .maintenance-admin-layout {
+            max-width: 960px;
+        }
+        .maintenance-admin-head-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .maint-live-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 12px;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            white-space: nowrap;
+            border: 1px solid transparent;
+        }
+        .maint-live-badge::before {
+            content: '';
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+        .maint-live-badge--on {
+            background: #fff7ed;
+            color: #c2410c;
+            border-color: #fdba74;
+        }
+        .maint-live-badge--scheduled {
+            background: #eff6ff;
+            color: #1d4ed8;
+            border-color: #93c5fd;
+        }
+        .maint-live-badge--off {
+            background: #f1f5f9;
+            color: #64748b;
+            border-color: #e2e8f0;
+        }
+        .maintenance-admin-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+            gap: 20px;
+            align-items: start;
+        }
+        @media (max-width: 900px) {
+            .maintenance-admin-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        .maintenance-preview-card,
+        .maintenance-form-card {
+            border-radius: 16px;
+            border: 1px solid #e2e8f0;
+            background: #fff;
+            padding: 18px 20px;
+            box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
+        }
+        .maintenance-form-card {
+            border-color: #fed7aa;
+            background: linear-gradient(180deg, #fffbeb 0%, #ffffff 42%);
+        }
+        .maintenance-card-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #94a3b8;
+            margin: 0 0 12px;
+        }
+        .maintenance-preview {
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid #fdba74;
+            background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+            color: #9a3412;
+            font-size: 0.8125rem;
+            line-height: 1.45;
+        }
+        .maintenance-preview.is-empty {
+            padding: 28px 16px;
+            text-align: center;
+            color: #c2410c;
+            opacity: 0.75;
+            border-style: dashed;
+            background: #fffbeb;
+        }
+        .maintenance-preview-inner {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 12px 14px;
+        }
+        .maintenance-preview-icon {
+            flex-shrink: 0;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: #f97316;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            font-weight: 700;
+        }
+        .maintenance-preview-text strong {
+            display: block;
+            font-size: 0.88rem;
+            color: #7c2d12;
+            margin-bottom: 2px;
+        }
+        .maintenance-preview-text p {
+            margin: 0;
+            white-space: pre-wrap;
+        }
+        .maintenance-preview-meta {
+            margin-top: 4px;
+            font-size: 0.72rem;
+            color: #c2410c;
+        }
+        .maintenance-toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 14px;
+            margin-bottom: 14px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid #fed7aa;
+        }
+        .maintenance-toggle-row label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            font-weight: 500;
+            color: #7c2d12;
+            margin: 0;
+        }
+        .maintenance-form-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+            padding-top: 14px;
+            border-top: 1px solid rgba(253, 186, 116, 0.45);
+        }
+        [data-theme="dark"] .maintenance-preview-card {
+            background: #1e293b;
+            border-color: #334155;
+        }
+        [data-theme="dark"] .maintenance-form-card {
+            background: linear-gradient(180deg, #431407 0%, #1e293b 38%);
+            border-color: #9a3412;
+        }
+        [data-theme="dark"] .maintenance-card-label {
+            color: #94a3b8;
+        }
+        [data-theme="dark"] .maintenance-preview {
+            border-color: #ea580c;
+            background: linear-gradient(135deg, #431407 0%, #7c2d12 100%);
+            color: #ffedd5;
+        }
+        [data-theme="dark"] .maintenance-preview.is-empty {
+            background: #292524;
+            color: #fdba74;
+        }
+        [data-theme="dark"] .maintenance-preview-text strong {
+            color: #fff7ed;
+        }
+        [data-theme="dark"] .maintenance-preview-meta {
+            color: #fed7aa;
+        }
+        [data-theme="dark"] .maintenance-toggle-row {
+            background: rgba(15, 23, 42, 0.45);
+            border-color: #9a3412;
+        }
+        [data-theme="dark"] .maintenance-toggle-row label {
+            color: #ffedd5;
+        }
+        [data-theme="dark"] .maint-live-badge--on {
+            background: #431407;
+            color: #fdba74;
+            border-color: #9a3412;
+        }
+        [data-theme="dark"] .maint-live-badge--off {
+            background: #0f172a;
+            color: #94a3b8;
+            border-color: #334155;
         }
         .panel-head {
             margin-bottom: 16px;
@@ -476,7 +690,7 @@
             color: #6b7280;
             margin-bottom: 3px;
         }
-        .field-col input, .field-col select {
+        .field-col input, .field-col select, .field-col textarea {
             width: 100%;
             padding: 6px 8px;
             border-radius: 8px;
@@ -650,7 +864,8 @@
         [data-theme="dark"] .search-field input[type="search"],
         [data-theme="dark"] .search-field input[type="text"],
         [data-theme="dark"] .field-col input,
-        [data-theme="dark"] .field-col select {
+        [data-theme="dark"] .field-col select,
+        [data-theme="dark"] .field-col textarea {
             background-color: #0f172a;
             border-color: #334155;
             color: #e2e8f0;
@@ -723,6 +938,7 @@
                     <div class="tab" role="tab" data-tab="pricing">Тарифы и лимиты</div>
                     <div class="tab" role="tab" data-tab="subscriptions">Подписки</div>
                     <div class="tab" role="tab" data-tab="landing-pricing">Витрина</div>
+                    <div class="tab tab-maintenance" role="tab" data-tab="maintenance">Уведомления<span class="tab-maintenance-dot" id="maintTabBadge" aria-hidden="true"></span></div>
                     <div class="tab" role="tab" data-tab="account">Аккаунт</div>
                 </nav>
 
@@ -1127,6 +1343,69 @@
                         </table>
                     </div>
                     <div class="hint">Кнопки продления сдвигают дату окончания подписки на указанный период.</div>
+                </section>
+
+                <!-- Уведомления пользователям -->
+                <section id="tab-maintenance" class="tab-content">
+                    <div class="maintenance-admin-layout">
+                        <div class="panel-head">
+                            <div class="maintenance-admin-head-row">
+                                <div>
+                                    <h2 class="panel-title">Уведомления пользователям</h2>
+                                    <ul class="fact-list">
+                                        <li>Оранжевый баннер вверху страницы: вход, витрина, оплата и приложение карты.</li>
+                                        <li>После изменения текста баннер снова появится у тех, кто нажимал «Понятно».</li>
+                                    </ul>
+                                </div>
+                                <span id="maintLiveBadge" class="maint-live-badge maint-live-badge--off">Выключено</span>
+                            </div>
+                        </div>
+
+                        <div class="maintenance-admin-grid">
+                            <div class="maintenance-preview-card">
+                                <p class="maintenance-card-label">Предпросмотр</p>
+                                <div id="maintPreview" class="maintenance-preview is-empty">Включите уведомление и введите текст</div>
+                            </div>
+
+                            <div class="maintenance-form-card">
+                                <p class="maintenance-card-label">Настройки</p>
+                                <div class="maintenance-toggle-row">
+                                    <label for="maintEnabled">
+                                        <input type="checkbox" id="maintEnabled">
+                                        <span>Показывать баннер пользователям</span>
+                                    </label>
+                                </div>
+                                <div class="field-row">
+                                    <div class="field-col">
+                                        <label for="maintTitle">Заголовок</label>
+                                        <input id="maintTitle" type="text" placeholder="Технические работы">
+                                    </div>
+                                </div>
+                                <div class="field-row">
+                                    <div class="field-col" style="flex:1 1 100%;">
+                                        <label for="maintMessage">Текст уведомления</label>
+                                        <textarea id="maintMessage" rows="4" placeholder="Например: 20 мая с 02:00 до 06:00 возможны перебои в работе сервиса."></textarea>
+                                    </div>
+                                </div>
+                                <div class="field-row">
+                                    <div class="field-col">
+                                        <label for="maintStartsAt">Показывать с</label>
+                                        <input id="maintStartsAt" type="datetime-local">
+                                        <div class="hint">Необязательно. Локальное время браузера.</div>
+                                    </div>
+                                    <div class="field-col">
+                                        <label for="maintEndsAt">Показывать до</label>
+                                        <input id="maintEndsAt" type="datetime-local">
+                                        <div class="hint">Необязательно.</div>
+                                    </div>
+                                </div>
+                                <div class="maintenance-form-actions">
+                                    <button type="button" class="btn-sm-primary" id="maintSaveBtn">Сохранить</button>
+                                    <span class="hint" id="maintStatusHint"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </section>
 
                 <!-- Аккаунт -->
@@ -1787,6 +2066,177 @@
                 });
         }
 
+        function isoToDatetimeLocal(iso) {
+            if (!iso) return '';
+            var d = new Date(iso);
+            if (isNaN(d.getTime())) return '';
+            var pad = function(n) { return String(n).padStart(2, '0'); };
+            return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+        }
+
+        function datetimeLocalToIso(val) {
+            if (!val) return null;
+            var d = new Date(val);
+            return isNaN(d.getTime()) ? null : d.toISOString();
+        }
+
+        function formatMaintDateRange(startsAt, endsAt) {
+            var parts = [];
+            var opts = { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' };
+            try {
+                if (startsAt) {
+                    var s = new Date(startsAt);
+                    if (!isNaN(s.getTime())) parts.push('с ' + s.toLocaleString('ru-RU', opts));
+                }
+                if (endsAt) {
+                    var e = new Date(endsAt);
+                    if (!isNaN(e.getTime())) parts.push('до ' + e.toLocaleString('ru-RU', opts));
+                }
+            } catch (err) {}
+            return parts.join(' ');
+        }
+
+        function getMaintenanceFormState() {
+            var enabledEl = document.getElementById('maintEnabled');
+            var titleEl = document.getElementById('maintTitle');
+            var msgEl = document.getElementById('maintMessage');
+            var startsEl = document.getElementById('maintStartsAt');
+            var endsEl = document.getElementById('maintEndsAt');
+            return {
+                enabled: enabledEl ? !!enabledEl.checked : false,
+                title: titleEl ? titleEl.value : '',
+                message: msgEl ? msgEl.value : '',
+                startsAt: startsEl && startsEl.value ? datetimeLocalToIso(startsEl.value) : null,
+                endsAt: endsEl && endsEl.value ? datetimeLocalToIso(endsEl.value) : null
+            };
+        }
+
+        function wouldMaintenanceBeActive(state) {
+            if (!state.enabled || !String(state.message || '').trim()) return false;
+            var now = Date.now();
+            if (state.startsAt) {
+                var s = new Date(state.startsAt).getTime();
+                if (!isNaN(s) && now < s) return false;
+            }
+            if (state.endsAt) {
+                var e = new Date(state.endsAt).getTime();
+                if (!isNaN(e) && now > e) return false;
+            }
+            return true;
+        }
+
+        function refreshMaintenancePreview(serverActive) {
+            var preview = document.getElementById('maintPreview');
+            var badge = document.getElementById('maintLiveBadge');
+            var tabBadge = document.getElementById('maintTabBadge');
+            if (!preview) return;
+
+            var state = getMaintenanceFormState();
+            var activeNow = serverActive === true || (serverActive === undefined && wouldMaintenanceBeActive(state));
+            var scheduled = state.enabled && String(state.message || '').trim() && !activeNow
+                && (state.startsAt || state.endsAt);
+
+            if (badge) {
+                badge.className = 'maint-live-badge ' + (
+                    activeNow ? 'maint-live-badge--on' :
+                    (state.enabled && String(state.message || '').trim() ? 'maint-live-badge--scheduled' : 'maint-live-badge--off')
+                );
+                badge.textContent = activeNow ? 'Сейчас на сайте' : (scheduled ? 'Запланировано' : 'Выключено');
+            }
+            if (tabBadge) tabBadge.classList.toggle('visible', !!activeNow);
+
+            if (!state.enabled || !String(state.message || '').trim()) {
+                preview.className = 'maintenance-preview is-empty';
+                preview.textContent = state.enabled ? 'Введите текст уведомления' : 'Баннер скрыт — включите показ и сохраните';
+                return;
+            }
+
+            var title = String(state.title || '').trim() || 'Технические работы';
+            var meta = formatMaintDateRange(state.startsAt, state.endsAt);
+            preview.className = 'maintenance-preview';
+            preview.innerHTML =
+                '<div class="maintenance-preview-inner">' +
+                    '<div class="maintenance-preview-icon" aria-hidden="true">!</div>' +
+                    '<div class="maintenance-preview-text">' +
+                        '<strong></strong><p></p>' +
+                        (meta ? '<div class="maintenance-preview-meta"></div>' : '') +
+                    '</div>' +
+                '</div>';
+            preview.querySelector('strong').textContent = title;
+            preview.querySelector('p').textContent = state.message;
+            var metaEl = preview.querySelector('.maintenance-preview-meta');
+            if (metaEl) metaEl.textContent = meta;
+        }
+
+        function applyMaintenanceAdminState(body) {
+            var notice = body && body.notice ? body.notice : {};
+            var enabledEl = document.getElementById('maintEnabled');
+            var titleEl = document.getElementById('maintTitle');
+            var msgEl = document.getElementById('maintMessage');
+            var startsEl = document.getElementById('maintStartsAt');
+            var endsEl = document.getElementById('maintEndsAt');
+            var hintEl = document.getElementById('maintStatusHint');
+            if (enabledEl) enabledEl.checked = !!notice.enabled;
+            if (titleEl) titleEl.value = notice.title || '';
+            if (msgEl) msgEl.value = notice.message || '';
+            if (startsEl) startsEl.value = isoToDatetimeLocal(notice.startsAt);
+            if (endsEl) endsEl.value = isoToDatetimeLocal(notice.endsAt);
+            if (hintEl) {
+                hintEl.textContent = body && body.active
+                    ? 'Баннер сейчас виден пользователям на всех страницах.'
+                    : (notice.enabled ? 'Сохранено. Показ вне интервала дат или ждёт наступления времени «с».' : 'Уведомление отключено.');
+            }
+            refreshMaintenancePreview(body && body.active);
+        }
+
+        function loadMaintenanceNotice() {
+            var token = getAuthToken();
+            var headers = {};
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            return fetch('api/admin/maintenance-notice', { credentials: 'include', headers: headers })
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(body) {
+                    if (body) applyMaintenanceAdminState(body);
+                })
+                .catch(function() {});
+        }
+
+        function saveMaintenanceNotice() {
+            var token = getAuthToken();
+            var headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            var enabledEl = document.getElementById('maintEnabled');
+            var titleEl = document.getElementById('maintTitle');
+            var msgEl = document.getElementById('maintMessage');
+            var startsEl = document.getElementById('maintStartsAt');
+            var endsEl = document.getElementById('maintEndsAt');
+            var hintEl = document.getElementById('maintStatusHint');
+            var payload = {
+                enabled: enabledEl ? !!enabledEl.checked : false,
+                title: titleEl ? titleEl.value : '',
+                message: msgEl ? msgEl.value : '',
+                startsAt: startsEl && startsEl.value ? datetimeLocalToIso(startsEl.value) : null,
+                endsAt: endsEl && endsEl.value ? datetimeLocalToIso(endsEl.value) : null
+            };
+            if (payload.enabled && !String(payload.message || '').trim()) {
+                alert('Укажите текст уведомления или отключите показ.');
+                return Promise.resolve();
+            }
+            return fetch('api/admin/maintenance-notice', {
+                method: 'PUT',
+                credentials: 'include',
+                headers: headers,
+                body: JSON.stringify(payload)
+            }).then(function(r) {
+                if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+                return r.json();
+            }).then(function(body) {
+                applyMaintenanceAdminState(body || {});
+            }).catch(function(err) {
+                alert('Ошибка: ' + (err.message || err));
+            });
+        }
+
         function loadAll() {
             fetchOrganizations().then(function(body) {
                 if (!body || !body.organizations) return;
@@ -1797,9 +2247,23 @@
                 renderPricingSelector();
                 renderSubscriptionsTable();
                 loadLandingPricing();
+                loadMaintenanceNotice();
                 return fetchUsersCached();
             });
         }
+
+        var maintSaveBtnEl = document.getElementById('maintSaveBtn');
+        if (maintSaveBtnEl) {
+            maintSaveBtnEl.addEventListener('click', function() {
+                saveMaintenanceNotice();
+            });
+        }
+        ['maintEnabled', 'maintTitle', 'maintMessage', 'maintStartsAt', 'maintEndsAt'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener('input', function() { refreshMaintenancePreview(); });
+            el.addEventListener('change', function() { refreshMaintenancePreview(); });
+        });
 
         var orgsSearchInputEl = document.getElementById('orgsSearchInput');
         if (orgsSearchInputEl) {
@@ -2235,6 +2699,7 @@
     })();
     </script>
     <script src="js/core/cookie-consent.js"></script>
+    <script src="js/core/maintenance-notice.js"></script>
 </body>
 </html>
 
