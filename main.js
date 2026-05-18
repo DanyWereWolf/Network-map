@@ -3574,6 +3574,22 @@ function findFiberCablesNearPoint(coords, maxDistance) {
     return found.map(function(x) { return x.cable; });
 }
 
+function getCableSplitPreviewStroke() {
+    try {
+        var v = getComputedStyle(document.documentElement).getPropertyValue('--cable-split-preview');
+        if (v && v.trim()) return v.trim();
+    } catch (e) {}
+    return document.documentElement.getAttribute('data-theme') === 'dark' ? '#f87171' : '#ef4444';
+}
+
+function getCableSplitPreviewOpacity() {
+    try {
+        var v = getComputedStyle(document.documentElement).getPropertyValue('--cable-split-preview-opacity');
+        if (v && v.trim()) return parseFloat(v.trim()) || 0.38;
+    } catch (e) {}
+    return document.documentElement.getAttribute('data-theme') === 'dark' ? 0.52 : 0.38;
+}
+
 function showCableSplitSelectionDialog(cables, waypointObj, clickCoords) {
     if (!cables || !cables.length) return;
     var modal = document.getElementById('infoModal');
@@ -3581,17 +3597,17 @@ function showCableSplitSelectionDialog(cables, waypointObj, clickCoords) {
     var modalContent = document.getElementById('modalInfo');
     if (!modal || !modalContent) return;
     modalTitle.textContent = 'Выбор кабеля для разреза';
-    var html = '<div class="info-section">';
-    html += '<p style="font-size: 0.875rem; color: var(--text-secondary); margin: 0 0 12px 0;">Несколько кабелей рядом с точкой клика. Выберите, какой разделить:</p>';
-    html += '<div style="display: flex; flex-direction: column; gap: 8px;">';
+    var html = '<div class="info-section cable-split-dialog">';
+    html += '<p class="cable-split-dialog__lead">Несколько кабелей рядом с точкой клика. Выберите, какой разделить:</p>';
+    html += '<div class="cable-split-pick-list">';
     cables.forEach(function(cable) {
         var cid = cable.properties.get('uniqueId');
-        html += '<button type="button" class="btn-secondary btn-pick-cable-split" data-cable-id="' + escapeHtml(cid) + '" style="width: 100%; text-align: left; padding: 10px 12px;">';
+        html += '<button type="button" class="btn-secondary btn-cable-split-pick btn-pick-cable-split" data-cable-id="' + escapeHtml(cid) + '">';
         html += escapeHtml(getCableSplitLabel(cable));
         html += '</button>';
     });
     html += '</div>';
-    html += '<button type="button" id="cancelCableSplitPick" class="btn-secondary" style="width: 100%; margin-top: 12px;">Отмена</button>';
+    html += '<button type="button" id="cancelCableSplitPick" class="btn-secondary cable-split-dialog-cancel">Отмена</button>';
     html += '</div>';
     modalContent.innerHTML = html;
     modal.style.display = 'block';
@@ -3792,6 +3808,7 @@ function cancelCableSplitMode() {
         mapEl.style.cursor = '';
         mapEl.classList.remove('map-crosshair-active');
     }
+    document.documentElement.classList.remove('cable-split-mode-active');
     syncMapPanLockForEditTools();
 }
 
@@ -3814,6 +3831,7 @@ function startCableSplitPickOnCable(cable) {
         mapEl.style.cursor = 'crosshair';
         mapEl.classList.add('map-crosshair-active');
     }
+    document.documentElement.classList.add('cable-split-mode-active');
     syncMapPanLockForEditTools();
 }
 
@@ -3878,9 +3896,9 @@ function updateCableSplitPreview(cursorCoords) {
         try { myMap.geoObjects.remove(cableSplitPreviewLine); } catch (e) {}
     }
     cableSplitPreviewLine = new ymaps.Polyline([proj.point], {}, {
-        strokeColor: '#ef4444',
+        strokeColor: getCableSplitPreviewStroke(),
         strokeWidth: 10,
-        strokeOpacity: 0.35
+        strokeOpacity: getCableSplitPreviewOpacity()
     });
     myMap.geoObjects.add(cableSplitPreviewLine);
 }
@@ -6349,8 +6367,8 @@ function showCableInfo(cable) {
     html += '</div></div>';
 
     if (isEditMode) {
-        html += '<div style="padding-top: 16px; border-top: 1px solid var(--border-color); display: flex; flex-wrap: wrap; gap: 8px;">';
-        html += '<button type="button" id="btnSplitCableSleeve" class="btn-secondary" style="flex: 1; min-width: 180px;">🔴 Установить муфту на кабеле</button>';
+        html += '<div class="cable-split-toolbar">';
+        html += '<button type="button" id="btnSplitCableSleeve" class="btn-cable-split-start">🔴 Установить муфту на кабеле</button>';
         html += '<button id="saveCableChangesBtn" class="btn-primary" style="flex: 1; min-width: 140px;">';
         html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg> Сохранить</button>';
         html += `<button class="btn-danger" onclick="deleteCableByUniqueId('${uniqueId}')" style="flex: 1; min-width: 120px;">`;
@@ -9097,13 +9115,13 @@ function showSupportInfo(supportObj) {
 
     var splittableAtSupport = isEditMode ? getSplittableFiberCablesAtWaypoint(supportObj) : [];
     if (splittableAtSupport.length) {
-        html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: #fef2f2; border-radius: 6px; border: 1px solid #fecaca;">';
-        html += '<h4 style="margin: 0 0 8px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">🔴 Муфта на маршруте</h4>';
-        html += '<p style="margin: 0 0 12px 0; font-size: 0.8125rem; color: var(--text-secondary);">Выберите кабель для разделения. ' + (isAttachment ? 'Крепление' : 'Опора') + ' останется в маршруте обоих сегментов.</p>';
-        html += '<div style="display: flex; flex-direction: column; gap: 8px;">';
+        html += '<div class="edit-section cable-split-section">';
+        html += '<h4 class="cable-split-section__title">🔴 Муфта на маршруте</h4>';
+        html += '<p class="cable-split-section__desc">Выберите кабель для разделения. ' + (isAttachment ? 'Крепление' : 'Опора') + ' останется в маршруте обоих сегментов.</p>';
+        html += '<div class="cable-split-pick-list">';
         splittableAtSupport.forEach(function(cable) {
             var cid = cable.properties.get('uniqueId');
-            html += '<button type="button" class="btn-secondary btn-split-cable-at-waypoint" data-cable-id="' + escapeHtml(cid) + '" style="width: 100%; text-align: left; padding: 10px 12px;">';
+            html += '<button type="button" class="btn-secondary btn-cable-split-pick btn-split-cable-at-waypoint" data-cable-id="' + escapeHtml(cid) + '">';
             html += 'Разделить: ' + escapeHtml(getCableSplitLabel(cable));
             html += '</button>';
         });
