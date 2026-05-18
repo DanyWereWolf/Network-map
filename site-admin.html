@@ -948,6 +948,7 @@
                         <h2 class="panel-title">Обзор</h2>
                         <ul class="fact-list">
                             <li>Сводка по данным API <code style="font-size:0.76em;">/api/organizations</code> на момент загрузки.</li>
+                            <li>Счётчик объектов на картах — узлы, кроссы, муфты и т.д. (кабели не учитываются), как в приложении карты.</li>
                             <li>Счётчики подписок «скоро истекут» зависят от поля «Граница дней» во вкладке «Подписки» (по умолчанию 14).</li>
                             <li>Здесь нельзя ничего изменить — только просмотр для быстрой оценки состояния.</li>
                         </ul>
@@ -1018,6 +1019,11 @@
                             <div class="stat-value" id="statVisits7d">—</div>
                             <div class="stat-extra">Суммарно по всем источникам</div>
                         </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Объектов на картах</div>
+                            <div class="stat-value" id="statMapObjectsTotal">—</div>
+                            <div class="stat-extra">Суммарно по всем организациям</div>
+                        </div>
                     </div>
                     <div class="overview-analytics-grid">
                         <div class="analytics-card">
@@ -1038,6 +1044,10 @@
                         <div class="analytics-card">
                             <div class="analytics-title">Топ организаций по загрузке лимита</div>
                             <div class="bar-chart" id="capacityBarChart"></div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-title">Топ организаций по объектам на карте</div>
+                            <div class="bar-chart" id="mapObjectsBarChart"></div>
                         </div>
                         <div class="analytics-card">
                             <div class="analytics-title">Качество данных и риски</div>
@@ -1064,7 +1074,7 @@
                     <div class="panel-head">
                         <h2 class="panel-title">Организации</h2>
                         <ul class="fact-list">
-                            <li>Полный список организаций из хранилища сервера: тариф (planId), лимит сессий, дата подписки, контактная почта.</li>
+                            <li>Полный список организаций из хранилища сервера: тариф (planId), лимит сессий, дата подписки, контактная почта, число объектов на карте (узлы, кроссы, муфты и т.д., без кабелей).</li>
                             <li>«Настроить» переключает на вкладку «Тарифы и лимиты» с уже выбранной организацией.</li>
                             <li>«Удалить» безвозвратно удаляет организацию, карту, историю и пользователей этой организации.</li>
                             <li>Роли и список пользователей по-прежнему ведутся в приложении карты (модальное окно «Пользователи»).</li>
@@ -1088,6 +1098,7 @@
                                     <th>Подписка до</th>
                                     <th>Статус</th>
                                     <th>Активных сессий</th>
+                                    <th>Объектов на карте</th>
                                     <th></th>
                                 </tr>
                             </thead>
@@ -1607,6 +1618,8 @@
             var highLoadOrgs = 0;
             var sessionsArray = [];
             var orgCapacityList = [];
+            var orgMapObjectsList = [];
+            var mapObjectsTotal = 0;
             orgs.forEach(function(o) {
                 var activeSessions = parseInt(o.activeSessions, 10);
                 if (isNaN(activeSessions) || activeSessions < 0) activeSessions = 0;
@@ -1628,6 +1641,13 @@
                 } else {
                     orgsWithoutLimit++;
                 }
+                var mapObj = parseInt(o.mapObjectCount, 10);
+                if (isNaN(mapObj) || mapObj < 0) mapObj = 0;
+                mapObjectsTotal += mapObj;
+                orgMapObjectsList.push({
+                    name: o.name || o.id || 'Организация',
+                    count: mapObj
+                });
                 if (o.subscriptionEndsAt) {
                     var end = new Date(o.subscriptionEndsAt);
                     var diff = end - now;
@@ -1662,6 +1682,35 @@
                     : sessionsArray[mid];
             }
             document.getElementById('statMedianSessions').textContent = median.toFixed(1);
+
+            var mapTotalEl = document.getElementById('statMapObjectsTotal');
+            if (mapTotalEl) mapTotalEl.textContent = String(mapObjectsTotal);
+
+            var mapObjectsContainer = document.getElementById('mapObjectsBarChart');
+            if (mapObjectsContainer) {
+                mapObjectsContainer.innerHTML = '';
+                var topMapObjects = orgMapObjectsList
+                    .filter(function(item) { return item.count > 0; })
+                    .sort(function(a, b) { return b.count - a.count; })
+                    .slice(0, 5);
+                if (!topMapObjects.length) {
+                    mapObjectsContainer.innerHTML = '<div class="hint">Нет объектов на картах</div>';
+                } else {
+                    var maxMapObj = topMapObjects[0].count || 1;
+                    topMapObjects.forEach(function(item) {
+                        var pct = Math.round((item.count / maxMapObj) * 100);
+                        var safeFullName = escapeHtml(item.name);
+                        var safeShortName = escapeHtml(compactLabel(item.name, 20));
+                        var row = document.createElement('div');
+                        row.className = 'bar-row';
+                        row.innerHTML =
+                            '<span title="' + safeFullName + '">' + safeShortName + '</span>' +
+                            '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>' +
+                            '<strong>' + item.count + '</strong>';
+                        mapObjectsContainer.appendChild(row);
+                    });
+                }
+            }
 
             var donutEl = document.getElementById('statusDonutChart');
             var statusTotal = Math.max(total, 1);
@@ -1791,7 +1840,8 @@
                 var mail = (o.contactEmail || '').toLowerCase();
                 var plan = (o.planId || '').toLowerCase();
                 var id = (o.id || '').toLowerCase();
-                return name.indexOf(q) >= 0 || mail.indexOf(q) >= 0 || plan.indexOf(q) >= 0 || id.indexOf(q) >= 0;
+                var mapCnt = String(o.mapObjectCount != null ? o.mapObjectCount : '');
+                return name.indexOf(q) >= 0 || mail.indexOf(q) >= 0 || plan.indexOf(q) >= 0 || id.indexOf(q) >= 0 || mapCnt.indexOf(q) >= 0;
             });
         }
 
@@ -1806,11 +1856,11 @@
             }
             tbody.innerHTML = '';
             if (!orgs.length) {
-                tbody.innerHTML = '<tr><td colspan="8" class="text-muted">Организаций пока нет</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="text-muted">Организаций пока нет</td></tr>';
                 return;
             }
             if (!list.length) {
-                tbody.innerHTML = '<tr><td colspan="8" class="text-muted">По запросу ничего не найдено — уточните поиск.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="text-muted">По запросу ничего не найдено — уточните поиск.</td></tr>';
                 return;
             }
             var now = new Date();
@@ -1837,6 +1887,7 @@
                     '<td>' + endStr + '</td>' +
                     '<td><span class="pill ' + pillClass + '">' + pillText + '</span></td>' +
                     '<td>' + (o.activeSessions != null ? o.activeSessions : '—') + '</td>' +
+                    '<td>' + (o.mapObjectCount != null ? o.mapObjectCount : '0') + '</td>' +
                     '<td class="actions-cell">' +
                         '<button data-id="' + o.id + '" data-action="selectPricing">Настроить</button>' +
                         '<button data-id="' + o.id + '" data-action="deleteOrg" style="margin-left:4px;color:#b91c1c;border-color:#fecaca;">Удалить</button>' +

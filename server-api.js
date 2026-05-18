@@ -357,7 +357,8 @@ app.get('/api/organizations', (req, res) => {
                 status: o.status,
                 contactEmail: o.contactEmail != null ? String(o.contactEmail) : '',
                 createdAt: o.createdAt,
-                activeSessions: activeSessions
+                activeSessions: activeSessions,
+                mapObjectCount: db.countMapObjectsForOrganization(o.id)
             };
         });
         res.json({ organizations: list, plans: SUBSCRIPTION_PLANS });

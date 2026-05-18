@@ -6,7 +6,7 @@
     right: 0;
     z-index: 99998;
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: center;
     gap: 12px;
     padding: 10px 16px;
@@ -25,7 +25,7 @@
     flex: 1;
     max-width: 1160px;
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 12px;
     min-width: 0;
 }
@@ -42,7 +42,6 @@
     justify-content: center;
     font-size: 0.95rem;
     font-weight: 700;
-    margin-top: 1px;
 }
 
 .maintenance-notice-text {
@@ -74,6 +73,7 @@
 
 .maintenance-notice-close {
     flex-shrink: 0;
+    align-self: center;
     border: none;
     background: rgba(154, 52, 18, 0.1);
     color: #9a3412;
@@ -121,10 +121,10 @@ body.maintenance-notice-visible {
 }
 
 @media (max-width: 640px) {
-    .maintenance-notice {
-        flex-wrap: wrap;
+    .maintenance-notice-inner {
+        align-items: center;
     }
     .maintenance-notice-close {
-        width: 100%;
+        flex-shrink: 0;
     }
 }

@@ -334,6 +334,11 @@ function countActualMapObjectsInArray(arr) {
     return count;
 }
 
+/** Число объектов на карте одной организации (узлы, кроссы, муфты и т.д., без кабелей). */
+function countMapObjectsForOrganization(orgId) {
+    return countActualMapObjectsInArray(getMapData(orgId));
+}
+
 /** Агрегаты для публичного лендинга (без авторизации). */
 function getPublicStats() {
     const s = loadStore();
@@ -928,6 +933,7 @@ module.exports = {
     setPricingPlans,
     getPublicStats,
     countActualMapObjectsInArray,
+    countMapObjectsForOrganization,
     addVisitLog,
     getVisitLogs,
     getMaintenanceNotice,
