@@ -33,6 +33,12 @@ var fiberRoutingMode = false;
 var fiberRoutingData = null;
 var fiberRoutingWaypoints = [];
 var fiberRoutingPreviewLine = null;
+/** Разрез ВОЛС: установка муфты на линии кабеля или на опоре */
+var cableSplitMode = false;
+var cableSplitData = null;
+var cableSplitPreviewLine = null;
+/** Блокирует showCableInfo сразу после клика в режиме установки муфты (двойное срабатывание карта + линия). */
+var cableSplitSuppressInfoUntil = 0;
 var netboxConfig = { url: '', token: '', ignoreSSL: false };
 var netboxDevices = [];
 var currentUser = null;
