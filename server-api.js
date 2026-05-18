@@ -927,9 +927,12 @@ function mergeMapState(current, incoming) {
     for (i = 0; i < currentObjs.length; i++) mergedObjs.push(currentObjs[i]);
     for (j = 0; j < incomingObjs.length; j++) {
         inc = incomingObjs[j];
-        uid = inc.uniqueId != null ? inc.uniqueId : 'obj-' + j;
-        idx = mergedObjs.findIndex(function(o) { return (o.uniqueId != null ? o.uniqueId : '') === uid; });
-        if (idx >= 0) mergedObjs[idx] = inc; else mergedObjs.push(inc);
+        idx = -1;
+        if (inc.uniqueId != null && inc.uniqueId !== '') {
+            idx = mergedObjs.findIndex(function(o) { return o.uniqueId === inc.uniqueId; });
+        }
+        if (idx >= 0) mergedObjs[idx] = inc;
+        else mergedObjs.push(inc);
     }
     var mergedCables = [];
     for (i = 0; i < currentCables.length; i++) {
@@ -986,6 +989,15 @@ function applyOperationToState(state, op) {
     var objCount = state.filter(function(i) { return i.type !== 'cable'; }).length;
     var i, idx, fromIdx, toIdx, fromUid, toUid, c;
     if (op.type === 'add_object' && op.data) {
+        var addUid = op.data.uniqueId;
+        if (addUid != null && addUid !== '') {
+            idx = state.findIndex(function(i) { return i.type !== 'cable' && i.uniqueId === addUid; });
+            if (idx >= 0) {
+                state = state.slice();
+                state[idx] = Object.assign({}, state[idx], op.data);
+                return state;
+            }
+        }
         state = state.slice(0, objCount).concat([op.data]).concat(state.slice(objCount));
         state = state.map(function(item) {
             if (item.type !== 'cable') return item;

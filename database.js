@@ -305,7 +305,16 @@ function getPublicStats() {
     const byOrg = s.mapDataByOrg && typeof s.mapDataByOrg === 'object' ? s.mapDataByOrg : {};
     Object.keys(byOrg).forEach(function(oid) {
         const arr = byOrg[oid];
-        if (Array.isArray(arr)) mapObjectCount += arr.length;
+        if (!Array.isArray(arr)) return;
+        const seen = new Set();
+        arr.forEach(function(item, i) {
+            if (!item || !item.type) return;
+            const uid = item.uniqueId;
+            const key = (uid != null && uid !== '') ? (item.type + ':' + uid) : (item.type + ':i:' + i);
+            if (seen.has(key)) return;
+            seen.add(key);
+            mapObjectCount++;
+        });
     });
     let userAccountCount = 0;
     users.forEach(function(u) {
