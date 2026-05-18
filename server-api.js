@@ -862,9 +862,55 @@ app.post('/api/backups/restore', (req, res) => {
 
 app.get('/api/health', (req, res) => res.json({ ok: true, db: 'sqlite' }));
 
+const DEFAULT_PUBLIC_SITE_URL = 'https://volsmap.ru';
+
+function getSiteBaseUrl(req) {
+    const configured = serverConfig.publicSiteUrl || process.env.PUBLIC_SITE_URL || '';
+    if (configured) return String(configured).trim().replace(/\/$/, '');
+    const proto = (req.get('x-forwarded-proto') || req.protocol || 'http').split(',')[0].trim();
+    const host = (req.get('x-forwarded-host') || req.get('host') || '').split(',')[0].trim();
+    if (!host) return DEFAULT_PUBLIC_SITE_URL;
+    const hostname = host.replace(/:\d+$/, '').toLowerCase();
+    if (hostname === 'localhost' || hostname === '127.0.0.1') return '';
+    return proto + '://' + host;
+}
+
 app.get('/api/public-config', (req, res) => {
     const key = serverConfig.yandexMapsApiKey || process.env.YANDEX_MAPS_API_KEY || '';
-    res.json({ yandexMapsApiKey: key });
+    const publicSiteUrl = serverConfig.publicSiteUrl || process.env.PUBLIC_SITE_URL || getSiteBaseUrl(req);
+    res.json({
+        yandexMapsApiKey: key,
+        publicSiteUrl: publicSiteUrl ? String(publicSiteUrl).trim().replace(/\/$/, '') : ''
+    });
+});
+
+app.get('/robots.txt', (req, res) => {
+    const base = getSiteBaseUrl(req);
+    const sitemapLine = base ? ('Sitemap: ' + base + '/sitemap.xml\n') : '';
+    res.type('text/plain').send(
+        'User-agent: *\n' +
+        'Allow: /\n' +
+        'Disallow: /index.html\n' +
+        'Disallow: /site-admin.html\n' +
+        'Disallow: /checkout.html\n' +
+        '\n' +
+        sitemapLine
+    );
+});
+
+app.get('/sitemap.xml', (req, res) => {
+    const base = getSiteBaseUrl(req);
+    const loc = base ? (base + '/') : '/';
+    const xml =
+        '<?xml version="1.0" encoding="UTF-8"?>\n' +
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+        '  <url>\n' +
+        '    <loc>' + loc + '</loc>\n' +
+        '    <changefreq>weekly</changefreq>\n' +
+        '    <priority>1.0</priority>\n' +
+        '  </url>\n' +
+        '</urlset>\n';
+    res.type('application/xml').send(xml);
 });
 
 app.get('/api/public-stats', (req, res) => {
@@ -880,6 +926,10 @@ app.get('/api/public-stats', (req, res) => {
 app.get('/', (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(__dirname, 'pricing.html'));
+});
+
+app.get('/pricing.html', (req, res) => {
+    res.redirect(301, '/');
 });
 
 // Раздача JS с явным Content-Type (избегаем text/html от прокси/404)
