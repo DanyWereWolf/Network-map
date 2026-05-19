@@ -822,6 +822,13 @@ app.post('/api/settings', (req, res) => {
     }
 });
 
+function wsClientBelongsToOrg(clientOrgId, targetOrgId) {
+    if (clientOrgId == null || clientOrgId === '' || !targetOrgId) return false;
+    if (String(clientOrgId) === String(targetOrgId)) return true;
+    var org = db.getOrganization(targetOrgId);
+    return !!(org && String(clientOrgId) === String(org.id));
+}
+
 app.get('/api/backups', (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
@@ -846,14 +853,15 @@ app.post('/api/backups/restore', (req, res) => {
     if (!filename || typeof filename !== 'string') return res.status(400).json({ error: 'Укажите filename' });
     try {
         db.restoreFromBackup(orgId, filename.trim());
-        Object.keys(syncCurrentStateByOrg).forEach(function(oid) { delete syncCurrentStateByOrg[oid]; });
+        Object.keys(syncCurrentStateByOrg).forEach(function(oid) {
+            if (wsClientBelongsToOrg(oid, orgId)) delete syncCurrentStateByOrg[oid];
+        });
         wss.clients.forEach(function(client) {
-            if (client.readyState === WebSocket.OPEN && client.orgId) {
-                var state = getSyncStateForOrg(client.orgId);
-                try { client.send(JSON.stringify({ type: 'state', clientId: state.clientId, data: state.data })); } catch (e) {}
+            if (client.readyState === WebSocket.OPEN && wsClientBelongsToOrg(client.orgId, orgId)) {
+                try { client.close(4002, 'Данные карты восстановлены'); } catch (e) {}
             }
         });
-        res.json({ ok: true, message: 'Данные восстановлены. Войдите снова.' });
+        res.json({ ok: true, message: 'Данные восстановлены. Все учётные записи организации отключены. Войдите снова.' });
     } catch (e) {
         const msg = e && e.message ? String(e.message) : 'Ошибка восстановления';
         res.status(400).json({ error: msg });

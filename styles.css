@@ -2099,7 +2099,23 @@ button {
     backdrop-filter: blur(20px);
 }
 
-/* Кросс / муфта: широкое окно, почти на весь экран — всё вмещается и видно */
+/* Кросс / муфта: полноэкранное окно */
+#infoModal.fiber-management-modal-open {
+    padding: 0;
+    align-items: stretch;
+}
+
+#infoModal.fiber-management-modal-open .modal-content.fiber-management-modal {
+    width: 100%;
+    max-width: 100%;
+    height: 100vh;
+    max-height: 100vh;
+    margin: 0;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+}
+
 .modal-content.fiber-management-modal {
     width: 96%;
     max-width: 1600px;
@@ -2112,33 +2128,690 @@ button {
 .modal-content.fiber-management-modal .modal-body {
     max-height: calc(97vh - 120px);
     min-height: 400px;
-    overflow-y: auto;
-    overflow-x: hidden;
+    overflow: hidden;
     flex: 1;
+    display: flex;
+    flex-direction: column;
 }
 
-/* Блок схемы жил: фиксированная высота и прокрутка */
-.fiber-scheme-wrap {
-    max-height: 42vh;
+#infoModal.fiber-management-modal-open .modal-content.fiber-management-modal .modal-body {
+    max-height: none;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.fiber-management-modal-open #modalInfo {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+#infoModal.fiber-management-modal-open .modal-content.fiber-management-modal .modal-header {
+    border-radius: 0;
+    flex-shrink: 0;
+}
+
+.fiber-management-modal-open .fiber-connections-container {
+    min-height: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    margin-top: 0;
+}
+
+.fiber-workspace-root {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.fiber-workspace {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 0;
+    border: none;
+    border-radius: 0;
+    overflow: hidden;
+    background: var(--bg-primary);
+}
+
+.fiber-ws-sidebar {
+    padding: 12px;
+    background: var(--bg-primary);
+    border-right: 1px solid var(--border-color);
+    overflow-y: auto;
+    font-size: 0.8125rem;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.fiber-ws-card {
+    padding: 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+}
+
+.fiber-ws-card-head {
+    padding-top: 14px;
+}
+
+.fiber-ws-section-title {
+    margin: 0 0 10px 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+}
+
+.fiber-ws-type-badge {
+    display: inline-block;
+    margin-bottom: 8px;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.fiber-ws-type-badge--cross {
+    color: var(--accent-primary);
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.28);
+}
+
+.fiber-ws-type-badge--sleeve {
+    color: var(--accent-danger);
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.22);
+}
+
+.fiber-ws-side-title {
+    font-weight: 700;
+    font-size: 1rem;
+    line-height: 1.3;
+    color: var(--text-primary);
+}
+
+.fiber-ws-side-edit {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.fiber-ws-side-edit .form-group {
+    margin-bottom: 10px;
+}
+
+.fiber-ws-side-edit .form-group:last-child {
+    margin-bottom: 0;
+}
+
+.fiber-ws-side-edit .form-input,
+.fiber-ws-side-edit .form-select {
+    padding: 8px 10px;
+    font-size: 0.8125rem;
+}
+
+.fiber-ws-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+}
+
+.fiber-ws-hint {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.fiber-ws-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.fiber-ws-stat {
+    padding: 8px;
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+    text-align: center;
+}
+
+.fiber-ws-stat-val {
+    display: block;
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.fiber-ws-stat-lbl {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+}
+
+.fiber-ws-legend {
+    margin: 0;
+}
+
+.fiber-ws-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.fiber-ws-leg-line {
+    width: 20px;
+    height: 3px;
+    border-radius: 2px;
+}
+
+.fiber-ws-leg-splice {
+    background: var(--accent-warning);
+}
+
+.fiber-ws-leg-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.fiber-ws-leg-connected {
+    border-color: var(--accent-warning);
+    background: rgba(245, 158, 11, 0.2);
+}
+
+.fiber-ws-leg-used {
+    border-color: var(--accent-danger);
+    background: rgba(239, 68, 68, 0.15);
+}
+
+.fiber-ws-leg-free {
+    border-color: var(--accent-success);
+    background: rgba(34, 197, 94, 0.15);
+}
+
+.fiber-ws-help {
+    font-size: 0.8125rem;
+}
+
+.fiber-ws-help-summary {
+    cursor: pointer;
+    list-style: none;
+    margin-bottom: 0;
+}
+
+.fiber-ws-help-summary::-webkit-details-marker {
+    display: none;
+}
+
+.fiber-ws-help-body p {
+    margin: 0 0 8px 0;
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.45;
+}
+
+.fiber-ws-actions.object-actions-section {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 16px;
+    margin: 0;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    flex-shrink: 0;
+}
+
+.fiber-ws-actions .btn-primary,
+.fiber-ws-actions .btn-secondary,
+.fiber-ws-actions .btn-danger {
+    flex: 1;
+    min-width: 120px;
+    margin-bottom: 0;
+}
+
+.fiber-ws-main {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+}
+
+.fiber-ws-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    flex-shrink: 0;
+}
+
+.fiber-ws-tabs {
+    display: flex;
+    gap: 0;
+    flex-wrap: wrap;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--bg-card);
+}
+
+.fiber-ws-tab {
+    padding: 8px 14px;
+    border: none;
+    border-right: 1px solid var(--border-color);
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.fiber-ws-tab:last-child {
+    border-right: none;
+}
+
+.fiber-ws-tab:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.fiber-ws-tab.active {
+    background: var(--accent-primary);
+    color: #fff;
+}
+
+.fiber-ws-tab.active:hover {
+    background: var(--accent-primary);
+    color: #fff;
+}
+
+.fiber-ws-tab-badge {
+    margin-left: 6px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.18);
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.fiber-ws-tab.active .fiber-ws-tab-badge {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.fiber-ws-panel-title {
+    flex-shrink: 0;
+    margin: 0;
+    padding: 10px 14px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+}
+
+.fiber-ws-toolbar-zoom {
+    margin-left: auto;
+}
+
+.fiber-ws-panels {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.fiber-ws-panel {
+    display: none;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.fiber-ws-panel.active {
+    display: flex;
+}
+
+.fiber-ws-panel-scheme .fiber-scheme-viewport {
+    flex: 1;
+    min-height: 200px;
+    max-height: none;
+    margin-bottom: 0;
+    border: none;
+    border-radius: 0;
+}
+
+.fiber-ws-panel-table {
+    padding: 0;
+    overflow: hidden;
+}
+
+.fiber-ws-panel-table .cross-fiber-table-section {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-top: 0;
+    overflow: hidden;
+}
+
+.fiber-ws-panel-table .fiber-ws-panel-title {
+    flex-shrink: 0;
+}
+
+.fiber-ws-panel-table .cross-fiber-table-wrap {
+    flex: 1;
+    min-height: 0;
+    max-height: none !important;
+    margin-top: 0;
+    border: none;
+    border-radius: 0;
+}
+
+.fiber-management-modal-open .fiber-ws-panel-table .cross-fiber-table-wrap {
+    max-height: none !important;
+    min-height: 0 !important;
+}
+
+.fiber-ws-panel-table .cross-fiber-table {
+    font-size: 0.8125rem;
+}
+
+.fiber-ws-panel-table .cross-fiber-table th {
+    min-width: 108px;
+    padding: 6px 6px;
+}
+
+.fiber-ws-panel-table .cross-fiber-table td {
+    padding: 4px 6px;
+}
+
+.fiber-ws-panel-table .cross-fiber-table .fiber-item {
+    padding: 5px 6px !important;
+}
+
+.fiber-ws-panel-table .cross-fiber-table .fiber-item .fiber-color {
+    width: 18px !important;
+    height: 18px !important;
+}
+
+.fiber-table-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    flex-shrink: 0;
+}
+
+.fiber-ws-panel-connections {
+    padding: 0;
+    overflow: hidden;
+}
+
+.fiber-ws-panel-connections .fiber-connections-list-wrap {
+    display: block !important;
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    margin: 0;
+    padding: 12px 14px;
+    border: none;
+    border-radius: 0;
+    background: var(--bg-primary);
+}
+
+.fiber-table-filter-label {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.fiber-table-filter-select {
+    min-width: 120px;
+    padding: 4px 8px;
+    font-size: 0.8125rem;
+}
+
+.fiber-table-search {
+    flex: 1;
+    min-width: 120px;
+    max-width: 200px;
+    padding: 4px 8px;
+    font-size: 0.8125rem;
+}
+
+.fiber-management-modal-open .fiber-selection-bar {
+    flex: 1;
+    min-width: 160px;
+    margin: 0;
+}
+
+@media (max-width: 900px) {
+    .fiber-workspace {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+    }
+    .fiber-ws-sidebar {
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+        max-height: 200px;
+    }
+}
+
+.fiber-management-modal-open .fiber-diagram-block {
+    flex: 1;
+    min-height: 42vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.fiber-connections-container {
+    margin-top: 12px;
+}
+
+.fiber-connections-heading {
+    margin: 0 0 8px 0;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.fiber-scheme-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-bottom: 6px;
+    flex-shrink: 0;
+}
+
+.fiber-scheme-zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+}
+
+.fiber-scheme-zoom-btn {
+    min-width: 28px;
+    height: 28px;
+    padding: 0 6px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.fiber-scheme-zoom-btn:hover {
+    background: var(--bg-accent);
+}
+
+.fiber-scheme-zoom-slider {
+    width: 100px;
+    accent-color: var(--accent-primary);
+}
+
+.fiber-scheme-zoom-label {
+    min-width: 40px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+/* Область схемы: прокрутка + масштаб */
+.fiber-scheme-viewport {
+    flex: 1;
     min-height: 220px;
+    max-height: 58vh;
     overflow: auto;
-    margin-bottom: 14px;
+    margin-bottom: 8px;
     border-radius: var(--radius-md);
     border: 1px solid var(--border-color);
     background: var(--bg-tertiary);
 }
 
+.fiber-scheme-zoom-inner {
+    display: inline-block;
+    min-width: 100%;
+    text-align: center;
+    padding: 8px 4px 16px;
+}
+
+.fiber-scheme-viewport svg,
 .fiber-scheme-wrap svg {
     display: block;
+    margin: 0 auto;
+}
+
+.fiber-scheme-wrap {
+    max-height: 50vh;
+    min-height: 160px;
+    overflow: auto;
+}
+
+.fiber-scheme-links .fiber-scheme-link {
+    transition: stroke-width 0.15s ease, opacity 0.15s ease;
+}
+
+#fiber-connections-svg .fiber-scheme-link:hover {
+    stroke-width: 4.5;
+    filter: brightness(1.08);
+}
+
+.fiber-scheme-cables .fiber-cable-block {
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+}
+
+.fiber-scheme-port {
+    cursor: default;
+    transition: opacity 0.15s ease;
+}
+
+.fiber-scheme-port .fiber-fan-path {
+    pointer-events: stroke;
+    stroke-linecap: round;
+    transition: stroke-width 0.15s ease, filter 0.15s ease;
+}
+
+.fiber-scheme-port .fiber-port-node,
+.fiber-scheme-port .fiber-port-badge {
+    transition: stroke-width 0.15s ease, filter 0.15s ease;
+}
+
+#fiber-connections-svg.fiber-scheme-hover-active .fiber-scheme-port.fiber-scheme-dimmed {
+    opacity: 0.28;
+}
+
+#fiber-connections-svg .fiber-scheme-port.fiber-scheme-hovered .fiber-fan-path {
+    stroke-width: 3.5;
+    filter: drop-shadow(0 0 3px rgba(59, 130, 246, 0.65));
+}
+
+#fiber-connections-svg .fiber-scheme-port.fiber-scheme-hovered .fiber-port-node {
+    stroke-width: 3;
+    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.35));
+}
+
+#fiber-connections-svg .fiber-scheme-port.fiber-scheme-hovered .fiber-port-badge {
+    stroke-width: 2.5;
+    filter: drop-shadow(0 0 4px rgba(37, 99, 235, 0.55));
+}
+
+#fiber-connections-svg .fiber-cable-block.fiber-cable-block-hovered text {
+    fill: var(--accent-primary);
+    font-weight: 700;
+}
+
+#fiber-connections-svg.fiber-scheme-hover-active .fiber-scheme-link.fiber-scheme-link-dimmed {
+    opacity: 0.2;
+}
+
+#fiber-connections-svg .fiber-scheme-link.fiber-scheme-link-hovered {
+    stroke-width: 5 !important;
+    opacity: 1 !important;
+    filter: drop-shadow(0 0 4px rgba(255, 204, 0, 0.85));
+}
+
+.fiber-scheme-link-hits {
+    pointer-events: stroke;
+}
+
+.fiber-scheme-cables .fiber-cable-column rect {
+    pointer-events: none;
+}
+
+.fiber-scheme-stubs line {
+    pointer-events: none;
 }
 
 /* Скрыть / Показать схему */
 .fiber-scheme-toggle-row {
-    margin-bottom: 10px;
+    margin-bottom: 6px;
 }
 
 .fiber-scheme-visibility-btn {
-    padding: 6px 12px;
+    padding: 4px 10px;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     background: var(--bg-tertiary);
@@ -2156,7 +2829,7 @@ button {
 .fiber-view-toggle {
     display: flex;
     gap: 0;
-    margin-bottom: 12px;
+    margin-bottom: 6px;
     border-radius: var(--radius-sm);
     overflow: hidden;
     border: 1px solid var(--border-color);
@@ -2164,11 +2837,11 @@ button {
 }
 
 .fiber-view-btn {
-    padding: 8px 16px;
+    padding: 5px 12px;
     border: none;
     background: var(--bg-tertiary);
     color: var(--text-secondary);
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     cursor: pointer;
     transition: background 0.2s, color 0.2s;
 }
@@ -2250,17 +2923,20 @@ button {
 
 .fiber-conn-delete {
     margin-left: auto;
-    padding: 4px 10px;
-    background: #dc2626;
-    color: white;
+    padding: 6px 10px;
+    background: var(--accent-danger);
+    color: #fff;
     border: none;
     border-radius: var(--radius-sm);
     cursor: pointer;
-    font-size: 0.8125rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    transition: background var(--transition-fast), transform var(--transition-fast);
 }
 
 .fiber-conn-delete:hover {
-    background: #b91c1c;
+    background: #dc2626;
+    transform: translateY(-1px);
 }
 
 @keyframes modalSlideIn {
@@ -2650,10 +3326,10 @@ button {
 
 /* Таблица кабелей/жил в кроссе: максимум видимой области, фиксированный заголовок, прокрутка */
 .cross-fiber-table-wrap {
-    max-height: 52vh;
-    min-height: 260px;
+    max-height: 55vh;
+    min-height: 180px;
     overflow: auto;
-    margin-top: 10px;
+    margin-top: 6px;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     background: var(--bg-card);
@@ -2665,13 +3341,22 @@ button {
     min-height: 400px;
 }
 
-/* В режиме редактирования кросса — таблица заметнее и выше */
-.fiber-connections-container.cross-edit-mode .cross-fiber-table-wrap {
+.fiber-management-modal-open .cross-fiber-table-wrap {
+    max-height: 28vh;
+    min-height: 120px;
+}
+
+.fiber-management-modal-open.scheme-hidden .cross-fiber-table-wrap {
     max-height: 55vh;
-    min-height: 280px;
-    border-width: 2px;
-    border-color: var(--accent-primary);
-    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+}
+
+/* legacy: cross-edit-mode больше не используется в workspace */
+.fiber-connections-container.cross-edit-mode .cross-fiber-table-wrap {
+    max-height: none;
+    min-height: 0;
+    border-width: 1px;
+    border-color: var(--border-color);
+    box-shadow: none;
 }
 
 .cross-fiber-table {
@@ -2689,12 +3374,12 @@ button {
 }
 
 .cross-fiber-table th {
-    padding: 6px 5px;
+    padding: 4px 4px;
     text-align: left;
     border-bottom: 2px solid var(--border-color);
     border-right: 1px solid var(--border-color);
     vertical-align: top;
-    min-width: 110px;
+    min-width: 92px;
 }
 
 .cross-fiber-table th:last-child {
@@ -2748,15 +3433,15 @@ button {
 /* Компактные ячейки жил — больше строк и столбцов видно */
 .cross-fiber-table .fiber-item {
     cursor: pointer;
-    padding: 4px 5px !important;
-    gap: 2px !important;
+    padding: 3px 4px !important;
+    gap: 1px !important;
     min-height: 0;
 }
 
 .cross-fiber-table .fiber-item .fiber-color {
-    width: 18px !important;
-    height: 18px !important;
-    font-size: 8px !important;
+    width: 16px !important;
+    height: 16px !important;
+    font-size: 7px !important;
 }
 
 .cross-fiber-table .fiber-item .fiber-name {
@@ -2817,12 +3502,12 @@ button {
 
 /* Панель выбора жилы в кроссе */
 .fiber-selection-bar {
-    padding: 10px 12px;
-    margin-bottom: 12px;
-    background: #fffbeb;
-    border: 1px solid #f59e0b;
-    border-radius: var(--radius-md);
-    font-size: 0.875rem;
+    padding: 8px 12px;
+    margin: 0;
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    border-radius: var(--radius-sm);
+    font-size: 0.8125rem;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
@@ -2830,21 +3515,22 @@ button {
 }
 
 .fiber-selection-bar .fiber-selection-text {
-    color: #92400e;
+    color: var(--text-primary);
     flex: 1;
     min-width: 0;
 }
 
 .fiber-selection-cancel {
     padding: 6px 12px;
-    background: #f59e0b;
-    color: white;
+    background: var(--accent-warning);
+    color: #fff;
     border: none;
     border-radius: var(--radius-sm);
     cursor: pointer;
-    font-size: 0.8125rem;
+    font-size: 0.75rem;
     font-weight: 600;
     flex-shrink: 0;
+    transition: background var(--transition-fast);
 }
 
 .fiber-selection-cancel:hover {

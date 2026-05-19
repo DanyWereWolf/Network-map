@@ -8719,7 +8719,9 @@ function showObjectInfo(obj) {
         html += '</div>';
     }
 
-    if (type === 'sleeve') {
+    const fiberUsesWorkspace = (type === 'sleeve' || type === 'cross') && connectedCables.length >= 1;
+
+    if (type === 'sleeve' && !fiberUsesWorkspace) {
         const storedSleeveType = obj.properties.get('sleeveType');
         const sleeveTypeLabel = storedSleeveType ? String(storedSleeveType) : 'Не указан';
         const maxFibers = obj.properties.get('maxFibers');
@@ -8937,7 +8939,7 @@ function showObjectInfo(obj) {
         }
     }
 
-    if (type === 'cross') {
+    if (type === 'cross' && !fiberUsesWorkspace) {
         const crossPorts = Math.max(1, parseInt(obj.properties.get('crossPorts'), 10) || 24);
         const usedPorts = getTotalUsedPortsInCross(obj);
         const usagePercent = crossPorts > 0 ? Math.round((usedPorts / crossPorts) * 100) : 0;
@@ -8960,7 +8962,7 @@ function showObjectInfo(obj) {
         }
     }
 
-    if (isEditMode) {
+    if (isEditMode && !fiberUsesWorkspace) {
         html += '<div class="object-actions-section" style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 8px;">';
         html += '<button id="saveChangesBtn" class="btn-primary" style="flex: 1; min-width: 140px;">';
         html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>';
@@ -9046,6 +9048,10 @@ function showObjectInfo(obj) {
         if (type === 'cross' || type === 'sleeve') modalContent.classList.add('fiber-management-modal');
         else modalContent.classList.remove('fiber-management-modal');
     }
+    if (modal) {
+        if (type === 'cross' || type === 'sleeve') modal.classList.add('fiber-management-modal-open');
+        else modal.classList.remove('fiber-management-modal-open');
+    }
     
     setupModalEventListeners();
     setupEditAndDeleteListeners();
@@ -9061,7 +9067,7 @@ function showObjectInfo(obj) {
         savedFiberConnectionsScrollPos = null;
         requestAnimationFrame(function() {
             requestAnimationFrame(function() {
-                var schemeWrap = document.querySelector('.fiber-scheme-wrap');
+                var schemeWrap = document.getElementById('fiber-scheme-viewport');
                 var tableWrap = document.querySelector('.cross-fiber-table-wrap');
                 if (schemeWrap && saved.scheme != null) schemeWrap.scrollTop = saved.scheme;
                 if (tableWrap && saved.table != null) tableWrap.scrollTop = saved.table;
@@ -9198,6 +9204,8 @@ function showSupportInfo(supportObj) {
     const modal = document.getElementById('infoModal');
     const modalContent = modal && modal.querySelector('.modal-content');
     if (modalContent) modalContent.classList.remove('fiber-management-modal');
+    const infoModalEl = document.getElementById('infoModal');
+    if (infoModalEl) infoModalEl.classList.remove('fiber-management-modal-open');
     
     setupEditAndDeleteListeners();
     modal.style.display = 'block';
@@ -10347,7 +10355,7 @@ function setupFiberConnectionHandlers() {
                         
                         saveData();
 
-                        var schemeWrap = document.querySelector('.fiber-scheme-wrap');
+                        var schemeWrap = document.getElementById('fiber-scheme-viewport');
                         var tableWrap = document.querySelector('.cross-fiber-table-wrap');
                         savedFiberConnectionsScrollPos = {
                             scheme: schemeWrap ? schemeWrap.scrollTop : 0,
@@ -10380,7 +10388,7 @@ function setupFiberConnectionHandlers() {
         });
     });
 
-    document.querySelectorAll('#fiber-connections-svg path[id^="connection-"], #fiber-connections-svg polygon[data-connection-index]').forEach(element => {
+    document.querySelectorAll('#fiber-connections-svg path[id^="connection-"], #fiber-connections-svg path.fiber-scheme-link-hit, #fiber-connections-svg polygon[data-connection-index]').forEach(element => {
         element.addEventListener('click', function(e) {
             e.stopPropagation();
             if (!isEditMode) return;
@@ -10389,7 +10397,7 @@ function setupFiberConnectionHandlers() {
                 fiberConnections.splice(connIndex, 1);
                 sleeveObj.properties.set('fiberConnections', fiberConnections);
                 saveData();
-                var schemeWrap = document.querySelector('.fiber-scheme-wrap');
+                var schemeWrap = document.getElementById('fiber-scheme-viewport');
                 var tableWrap = document.querySelector('.cross-fiber-table-wrap');
                 savedFiberConnectionsScrollPos = {
                     scheme: schemeWrap ? schemeWrap.scrollTop : 0,
@@ -10513,45 +10521,7 @@ function setupFiberConnectionHandlers() {
         });
     });
 
-    const schemeVisibilityBtn = document.getElementById('fiber-scheme-visibility-btn');
-    const diagramBlock = document.getElementById('fiber-diagram-block');
-    const container = document.querySelector('.fiber-connections-container');
-    if (schemeVisibilityBtn && diagramBlock) {
-        schemeVisibilityBtn.addEventListener('click', function() {
-            const hidden = diagramBlock.style.display === 'none';
-            diagramBlock.style.display = hidden ? 'block' : 'none';
-            schemeVisibilityBtn.textContent = hidden ? '▼ Скрыть схему' : '▶ Показать схему';
-            schemeVisibilityBtn.title = hidden ? 'Скрыть схему' : 'Показать схему';
-            if (container) container.classList.toggle('scheme-hidden', !hidden);
-            if (hidden) {
-                var schemeWrap = document.getElementById('fiber-scheme-wrap');
-                var listWrap = document.getElementById('fiber-connections-list-wrap');
-                if (schemeWrap) schemeWrap.style.display = 'block';
-                if (listWrap) listWrap.style.display = 'none';
-                var schemeBtn = document.querySelector('.fiber-view-btn[data-view="scheme"]');
-                var listBtn = document.querySelector('.fiber-view-btn[data-view="list"]');
-                if (schemeBtn) schemeBtn.classList.add('active');
-                if (listBtn) listBtn.classList.remove('active');
-            }
-        });
-    }
-    
-    document.querySelectorAll('.fiber-view-btn').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            const view = this.getAttribute('data-view');
-            const schemeWrap = document.getElementById('fiber-scheme-wrap');
-            const listWrap = document.getElementById('fiber-connections-list-wrap');
-            document.querySelectorAll('.fiber-view-btn').forEach(function(b) { b.classList.remove('active'); });
-            this.classList.add('active');
-            if (view === 'list') {
-                if (schemeWrap) schemeWrap.style.display = 'none';
-                if (listWrap) listWrap.style.display = 'block';
-            } else {
-                if (schemeWrap) schemeWrap.style.display = 'block';
-                if (listWrap) listWrap.style.display = 'none';
-            }
-        });
-    });
+    setupFiberWorkspaceUI();
 
     document.querySelectorAll('.fiber-conn-delete').forEach(function(btn) {
         btn.addEventListener('click', function(e) {
@@ -10566,6 +10536,91 @@ function setupFiberConnectionHandlers() {
                 showObjectInfo(sleeveObj);
             }
         });
+    });
+
+    setupFiberSchemeHoverHandlers();
+    setupFiberSchemeZoomHandlers();
+}
+
+function setupFiberSchemeZoomHandlers() {
+    var viewport = document.getElementById('fiber-scheme-viewport');
+    var inner = document.getElementById('fiber-scheme-zoom-inner');
+    var slider = document.getElementById('fiber-scheme-zoom-slider');
+    var label = document.getElementById('fiber-scheme-zoom-label');
+    var btnIn = document.getElementById('fiber-scheme-zoom-in');
+    var btnOut = document.getElementById('fiber-scheme-zoom-out');
+    var btnReset = document.getElementById('fiber-scheme-zoom-reset');
+    if (!viewport || !inner) return;
+
+    var zoom = parseFloat(sessionStorage.getItem('fiberSchemeZoom') || '1');
+    if (isNaN(zoom)) zoom = 1;
+    zoom = Math.max(0.5, Math.min(2, zoom));
+
+    function applyZoom(z) {
+        zoom = Math.max(0.5, Math.min(2, Math.round(z * 20) / 20));
+        inner.style.transform = 'scale(' + zoom + ')';
+        inner.style.transformOrigin = 'top center';
+        if (slider) slider.value = String(Math.round(zoom * 100));
+        if (label) label.textContent = Math.round(zoom * 100) + '%';
+        try { sessionStorage.setItem('fiberSchemeZoom', String(zoom)); } catch (e) {}
+    }
+    applyZoom(zoom);
+
+    if (btnIn) btnIn.addEventListener('click', function() { applyZoom(zoom + 0.1); });
+    if (btnOut) btnOut.addEventListener('click', function() { applyZoom(zoom - 0.1); });
+    if (btnReset) btnReset.addEventListener('click', function() { applyZoom(1); });
+    if (slider) slider.addEventListener('input', function() { applyZoom(parseInt(this.value, 10) / 100); });
+    viewport.addEventListener('wheel', function(e) {
+        if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            applyZoom(zoom + (e.deltaY < 0 ? 0.08 : -0.08));
+        }
+    }, { passive: false });
+}
+
+function setupFiberSchemeHoverHandlers() {
+    const svg = document.getElementById('fiber-connections-svg');
+    if (!svg) return;
+
+    let activeFiberKey = null;
+
+    function clearHover() {
+        if (!activeFiberKey) return;
+        activeFiberKey = null;
+        svg.classList.remove('fiber-scheme-hover-active');
+        svg.querySelectorAll('.fiber-scheme-hovered, .fiber-scheme-dimmed, .fiber-scheme-link-hovered, .fiber-scheme-link-dimmed, .fiber-cable-block-hovered').forEach(function(el) {
+            el.classList.remove('fiber-scheme-hovered', 'fiber-scheme-dimmed', 'fiber-scheme-link-hovered', 'fiber-scheme-link-dimmed', 'fiber-cable-block-hovered');
+        });
+    }
+
+    function applyHover(fiberKey) {
+        if (!fiberKey || fiberKey === activeFiberKey) return;
+        activeFiberKey = fiberKey;
+        svg.classList.add('fiber-scheme-hover-active');
+        const port = svg.querySelector('.fiber-scheme-port[data-fiber-key="' + fiberKey + '"]');
+        const cableId = port ? port.getAttribute('data-cable-id') : null;
+
+        svg.querySelectorAll('.fiber-scheme-port').forEach(function(el) {
+            el.classList.toggle('fiber-scheme-hovered', el.getAttribute('data-fiber-key') === fiberKey);
+            el.classList.toggle('fiber-scheme-dimmed', el.getAttribute('data-fiber-key') !== fiberKey);
+        });
+        svg.querySelectorAll('.fiber-scheme-link').forEach(function(el) {
+            const hit = el.getAttribute('data-from-fiber') === fiberKey || el.getAttribute('data-to-fiber') === fiberKey;
+            el.classList.toggle('fiber-scheme-link-hovered', hit);
+            el.classList.toggle('fiber-scheme-link-dimmed', !hit);
+        });
+        svg.querySelectorAll('.fiber-cable-block').forEach(function(el) {
+            el.classList.toggle('fiber-cable-block-hovered', cableId && el.getAttribute('data-cable-id') === cableId);
+        });
+    }
+
+    svg.addEventListener('mouseover', function(e) {
+        const port = e.target.closest('.fiber-scheme-port');
+        if (port) applyHover(port.getAttribute('data-fiber-key'));
+    });
+    svg.addEventListener('mouseleave', function(e) {
+        const rt = e.relatedTarget;
+        if (!rt || !svg.contains(rt)) clearHover();
     });
 }
 
@@ -15565,14 +15620,85 @@ function setUsedFibers(obj, cableUniqueId, fiberNumbers) {
     saveData();
 }
 
+function buildFiberWorkspaceSidebarHtml(sleeveObj, isCross, cablesData, fiberConnections, isEditMode) {
+    const name = sleeveObj.properties.get('name') || '';
+    const typeBadgeClass = isCross ? 'fiber-ws-type-badge--cross' : 'fiber-ws-type-badge--sleeve';
+    const typeLabel = isCross ? 'Оптический кросс' : 'Кабельная муфта';
+    let h = '<div class="fiber-ws-card fiber-ws-card-head">';
+    h += '<span class="fiber-ws-type-badge ' + typeBadgeClass + '">' + typeLabel + '</span>';
+    h += '<div class="fiber-ws-side-title">' + escapeHtml(name || (isCross ? 'Кросс' : 'Муфта')) + '</div>';
+    h += '</div>';
+
+    if (isEditMode) {
+        h += '<div class="fiber-ws-card"><h4 class="fiber-ws-section-title">Редактирование</h4><div class="fiber-ws-side-edit">';
+        if (isCross) {
+            h += '<div class="form-group"><label class="fiber-ws-label" for="editCrossName">Название</label>';
+            h += '<input type="text" id="editCrossName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Название кросса"></div>';
+        } else {
+            const storedSleeveType = sleeveObj.properties.get('sleeveType');
+            h += '<div class="form-group"><label class="fiber-ws-label" for="editSleeveName">Название</label>';
+            h += '<input type="text" id="editSleeveName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Название муфты"></div>';
+            h += '<div class="form-group"><label class="fiber-ws-label" for="editSleeveType">Тип муфты</label>';
+            h += '<select id="editSleeveType" class="form-select">' + getSleeveTypeSelectOptionsHtml(storedSleeveType ? String(storedSleeveType) : '') + '</select></div>';
+        }
+        h += '</div></div>';
+    }
+
+    h += '<div class="fiber-ws-card"><h4 class="fiber-ws-section-title">Сводка</h4><div class="fiber-ws-stats">';
+    h += '<div class="fiber-ws-stat"><span class="fiber-ws-stat-val">' + cablesData.length + '</span><span class="fiber-ws-stat-lbl">кабелей</span></div>';
+    h += '<div class="fiber-ws-stat"><span class="fiber-ws-stat-val">' + fiberConnections.length + '</span><span class="fiber-ws-stat-lbl">сращений</span></div>';
+    if (isCross) {
+        const crossPorts = Math.max(1, parseInt(sleeveObj.properties.get('crossPorts'), 10) || 24);
+        const usedPorts = getTotalUsedPortsInCross(sleeveObj);
+        const pct = crossPorts > 0 ? Math.round((usedPorts / crossPorts) * 100) : 0;
+        h += '<div class="fiber-ws-stat"><span class="fiber-ws-stat-val">' + usedPorts + '/' + crossPorts + '</span><span class="fiber-ws-stat-lbl">портов (' + pct + '%)</span></div>';
+    } else {
+        const maxFibers = sleeveObj.properties.get('maxFibers');
+        const usedFibers = getTotalUsedFibersInSleeve(sleeveObj);
+        if (maxFibers && maxFibers > 0) {
+            const pct = Math.round((usedFibers / maxFibers) * 100);
+            h += '<div class="fiber-ws-stat"><span class="fiber-ws-stat-val">' + usedFibers + '/' + maxFibers + '</span><span class="fiber-ws-stat-lbl">волокон (' + pct + '%)</span></div>';
+        } else {
+            h += '<div class="fiber-ws-stat"><span class="fiber-ws-stat-val">' + usedFibers + '</span><span class="fiber-ws-stat-lbl">волокон</span></div>';
+        }
+    }
+    h += '</div></div>';
+
+    h += '<div class="fiber-ws-card"><h4 class="fiber-ws-section-title">Обозначения</h4><div class="fiber-ws-legend">';
+    h += '<div class="fiber-ws-legend-item"><span class="fiber-ws-leg-line fiber-ws-leg-splice"></span> сращивание</div>';
+    h += '<div class="fiber-ws-legend-item"><span class="fiber-ws-leg-dot fiber-ws-leg-connected"></span> жила сращена</div>';
+    h += '<div class="fiber-ws-legend-item"><span class="fiber-ws-leg-dot fiber-ws-leg-used"></span> жила занята</div>';
+    h += '<div class="fiber-ws-legend-item"><span class="fiber-ws-leg-dot fiber-ws-leg-free"></span> свободна</div>';
+    h += '</div></div>';
+
+    if (isEditMode) {
+        h += '<details class="fiber-ws-card fiber-ws-help"><summary class="fiber-ws-section-title fiber-ws-help-summary">Как работать</summary><div class="fiber-ws-help-body">';
+        h += '<p>1. Вкладка <strong>Схема</strong> — клик по жиле, затем по жиле другого кабеля.</p>';
+        h += '<p>2. Вкладка <strong>Таблица</strong> — то же + кнопки OLT, ONU, узел.</p>';
+        h += '<p>3. Клик по жёлтой линии — удалить сращивание.</p>';
+        h += '<p>4. Масштаб: ползунок или Ctrl+колёсико в схеме.</p>';
+        h += '</div></details>';
+    }
+    return h;
+}
+
+function buildFiberWorkspaceActionsHtml() {
+    var saveSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>';
+    var dupSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+    var delSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
+    return '<div class="fiber-ws-actions object-actions-section">' +
+        '<button type="button" id="saveChangesBtn" class="btn-primary" style="flex:1;min-width:140px;margin-bottom:0;">' + saveSvg + ' Сохранить</button>' +
+        '<button type="button" id="duplicateCurrentObject" class="btn-secondary" style="flex:1;min-width:120px;margin-bottom:0;">' + dupSvg + ' Дублировать</button>' +
+        '<button type="button" id="deleteCurrentObject" class="btn-danger" style="flex:1;min-width:120px;margin-bottom:0;">' + delSvg + ' Удалить</button>' +
+        '</div>';
+}
+
 function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     const objType = sleeveObj.properties.get('type');
     const isCross = objType === 'cross';
     
-    var containerClass = 'fiber-connections-container';
-    if (isCross && isEditMode) containerClass += ' cross-edit-mode';
-    let html = '<div class="' + containerClass + '" style="margin-top: 20px;">';
-    html += `<h4 style="margin: 0 0 15px 0; color: var(--text-primary); font-size: 1rem; font-weight: 600;">${isCross ? 'Управление жилами в кроссе' : 'Объединение жил в муфте'}</h4>`;
+    var containerClass = 'fiber-connections-container fiber-workspace-root fiber-workspace-root--' + (isCross ? 'cross' : 'sleeve');
+    let html = '<div class="' + containerClass + '">';
 
     let fiberConnections = sleeveObj.properties.get('fiberConnections');
     if (!fiberConnections) {
@@ -15633,159 +15759,175 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         };
     });
     
-    const maxFibers = Math.max(...cablesData.map(c => c.fibers.length));
-    
-    const schemeMaxW = 1100;
-    const schemeMinW = 720;
-    const svgWidth = Math.min(schemeMaxW, Math.max(schemeMinW, window.innerWidth - 100));
-    const rowHeight = 36;
-    const svgHeight = Math.max(420, maxFibers * rowHeight + 90);
-    const cableColumnWidth = svgWidth / (cablesData.length + 1);
+    const maxFibers = Math.max(...cablesData.map(function(c) { return c.fibers.length; }), 1);
+    const leftCableCount = Math.ceil(cablesData.length / 2);
+    const rightCableCount = cablesData.length - leftCableCount;
+    const schemeMaxW = 1400;
+    const schemeMinW = Math.min(900, Math.max(760, window.innerWidth - 120));
+    const sidePad = 12;
+    const panelW = 200;
+    const centerGapMin = 140;
+    const rowHeight = 18;
+    const fiberFanLen = 40;
+    const blockGap = 14;
+    const labelH = 26;
+    const nodeR = 4;
+    const badgeW = 22;
+    const badgeH = 16;
+    const svgWidth = Math.min(schemeMaxW, Math.max(schemeMinW, window.innerWidth - 100, sidePad * 2 + panelW * 2 + centerGapMin));
+    const schemeLayoutOpts = { rowHeight: rowHeight, sidePad: sidePad, panelW: panelW, fiberFanLen: fiberFanLen, blockGap: blockGap, labelH: labelH };
+    const schemeLayout = layoutFiberSchemeReference(cablesData, svgWidth, schemeLayoutOpts);
+    const svgHeight = schemeLayout.svgHeight;
 
-    if (isEditMode) {
-        const canConnectFibers = cablesData.length >= 2;
-        html += '<details class="cross-instruction-details" style="margin-bottom: 10px;">';
-        html += '<summary style="cursor: pointer; padding: 8px 10px; background: var(--bg-tertiary); border-radius: 6px; font-size: 0.875rem; color: var(--text-secondary); list-style: none; user-select: none;">';
-        html += '▸ Краткая инструкция';
-        html += '</summary>';
-        html += '<div style="padding: 10px 12px; background: #e0f2fe; border-radius: 6px; margin-top: 4px; font-size: 0.8125rem; color: #0369a1;">';
-        if (isCross) {
-            html += '• <strong>Соединение жил:</strong> клик по жиле в таблице или в схеме → затем по жиле в <u>другом</u> кабеле.<br>';
-            html += '• <strong>На узел:</strong> кнопка «Узел» у свободной жилы.<br>';
-            html += '• <strong>ONU / медиаконвертер:</strong> кнопки «📡 ONU» и «⇄ МК» у жилы с трассой от OLT (как для GPON).<br>';
-            if (canConnectFibers) html += '• Уже соединённые жилы — синяя обводка в схеме; занятые — красным в таблице.';
-        } else if (canConnectFibers) {
-            html += '• Клик по жиле первого кабеля, затем по жиле второго. Клик по линии соединения в схеме — удалить соединение.<br>';
-            html += '• <strong>ONU / медиаконвертер:</strong> кнопки «📡 ONU» и «⇄ МК» у жилы с трассой от OLT.';
-        }
-        html += '</div></details>';
-        if (canConnectFibers || isCross) {
-            html += '<div id="fiber-selection-bar" class="fiber-selection-bar" style="display: none;"></div>';
-        }
+    const canConnectFibers = cablesData.length >= 2;
+    if (isEditMode) html += buildFiberWorkspaceActionsHtml();
+    html += '<div class="fiber-workspace fiber-workspace--' + (isCross ? 'cross' : 'sleeve') + '"><aside class="fiber-ws-sidebar">' + buildFiberWorkspaceSidebarHtml(sleeveObj, isCross, cablesData, fiberConnections, isEditMode) + '</aside><main class="fiber-ws-main"><div class="fiber-ws-toolbar"><nav class="fiber-ws-tabs"><button type="button" class="fiber-ws-tab active" data-tab="scheme">Схема</button><button type="button" class="fiber-ws-tab" data-tab="table">Таблица</button>';
+    if (cablesData.length >= 2) html += '<button type="button" class="fiber-ws-tab" data-tab="connections">Соединения<span class="fiber-ws-tab-badge">' + fiberConnections.length + '</span></button>';
+    if (isEditMode && (canConnectFibers || isCross)) {
+        html += '<div id="fiber-selection-bar" class="fiber-selection-bar" style="display: none;"></div>';
     }
-
-    html += '<div class="fiber-scheme-toggle-row">';
-    html += '<button type="button" class="fiber-scheme-visibility-btn" id="fiber-scheme-visibility-btn" title="Скрыть схему и список соединений. Таблица ниже станет выше.">▼ Скрыть схему</button>';
-    html += '</div>';
-    html += '<div class="fiber-diagram-block" id="fiber-diagram-block">';
-    if (cablesData.length >= 2) {
-        html += '<div class="fiber-view-toggle">';
-        html += '<button type="button" class="fiber-view-btn active" data-view="scheme">Схема</button>';
-        html += '<button type="button" class="fiber-view-btn" data-view="list">Список соединений</button>';
-        html += '</div>';
-    }
-    html += '<div class="fiber-scheme-wrap" id="fiber-scheme-wrap">';
+    html += '</nav><div class="fiber-ws-toolbar-zoom" id="fiber-ws-toolbar-zoom">';
+    html += '<div class="fiber-scheme-zoom-controls" title="Масштаб (Ctrl + колёсико в области схемы)">';
+    html += '<button type="button" class="fiber-scheme-zoom-btn" id="fiber-scheme-zoom-out" title="Уменьшить">−</button>';
+    html += '<input type="range" class="fiber-scheme-zoom-slider" id="fiber-scheme-zoom-slider" min="50" max="200" value="100" step="5" aria-label="Масштаб схемы">';
+    html += '<span class="fiber-scheme-zoom-label" id="fiber-scheme-zoom-label">100%</span>';
+    html += '<button type="button" class="fiber-scheme-zoom-btn" id="fiber-scheme-zoom-in" title="Увеличить">+</button>';
+    html += '<button type="button" class="fiber-scheme-zoom-btn fiber-scheme-zoom-reset" id="fiber-scheme-zoom-reset" title="Сбросить">100%</button>';
+    html += '</div></div></div>';
+    html += '<div class="fiber-ws-panels"><div class="fiber-ws-panel fiber-ws-panel-scheme active" data-panel="scheme">';
+    html += '<div class="fiber-scheme-viewport" id="fiber-scheme-viewport">';
+    html += '<div class="fiber-scheme-zoom-inner" id="fiber-scheme-zoom-inner">';
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     const svgBgColor = isDark ? '#1e293b' : '#ffffff';
     const svgBorderColor = isDark ? '#334155' : '#dee2e6';
     const svgTextColor = isDark ? '#f1f5f9' : '#2c3e50';
     const svgTextMuted = isDark ? '#94a3b8' : '#6c757d';
-    const svgLabelColor = isDark ? '#cbd5e1' : '#495057';
-    
-    html += `<svg id="fiber-connections-svg" width="${svgWidth}" height="${svgHeight}" style="border: 1px solid ${svgBorderColor}; border-radius: 6px; background: ${svgBgColor}; display: block; min-width: 100%;">`;
-
-    const fiberPositions = new Map();
+    html += `<svg id="fiber-connections-svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" style="border: 1px solid ${svgBorderColor}; border-radius: 6px; background: ${svgBgColor}; display: block;">`;
 
     const connectedFibers = new Set();
     fiberConnections.forEach(conn => {
         connectedFibers.add(`${conn.from.cableId}-${conn.from.fiberNumber}`);
         connectedFibers.add(`${conn.to.cableId}-${conn.to.fiberNumber}`);
     });
-    
-    cablesData.forEach((cableData, cableIndex) => {
-        const x = cableColumnWidth * (cableIndex + 1);
-        const startY = 52;
-        const fiberSpacing = rowHeight;
 
-        const svgCableTitle = cableData.cableName || `Кабель ${cableData.index}`;
-        html += `<text x="${x}" y="25" text-anchor="middle" style="font-size: 11px; font-weight: 600; fill: ${svgTextColor};">${svgCableTitle}</text>`;
-        html += `<text x="${x}" y="38" text-anchor="middle" style="font-size: 9px; fill: ${svgTextMuted};">${cableData.cableDescription}</text>`;
+    const fiberPositions = schemeLayout.fiberPositions;
+    const schemeBlocks = schemeLayout.blocks;
+    const cableBarStroke = isDark ? '#64748b' : '#9ca3af';
 
-        cableData.fibers.forEach((fiber, fiberIndex) => {
-            const y = startY + fiberIndex * fiberSpacing;
+    function fiberSchemeExitX(pos) {
+        return pos.isLeft ? pos.x + badgeW / 2 : pos.x - badgeW / 2;
+    }
+    const linkColor = isDark ? '#facc15' : '#ffcc00';
+    const linkShadow = isDark ? '#a16207' : '#ca8a04';
+    const badgeStroke = isDark ? '#60a5fa' : '#2563eb';
+    const badgeFill = isDark ? '#1e3a5f' : '#eff6ff';
+    const anchorLeft = 'start';
+    const anchorRight = 'end';
+
+    const linkPaint = [];
+    fiberConnections.forEach((connection, connIndex) => {
+        const fromKey = `${connection.from.cableId}-${connection.from.fiberNumber}`;
+        const toKey = `${connection.to.cableId}-${connection.to.fiberNumber}`;
+        const fromPos = fiberPositions.get(fromKey);
+        const toPos = fiberPositions.get(toKey);
+        if (!fromPos || !toPos) return;
+        const sameSide = fromPos.isLeft === toPos.isLeft;
+        const pathD = buildFiberSchemeConnectionPath(
+            fiberSchemeExitX(fromPos), fromPos.y,
+            fiberSchemeExitX(toPos), toPos.y,
+            nodeR + 2,
+            { sameSide: sameSide, isLeft: fromPos.isLeft, svgWidth: svgWidth }
+        );
+        linkPaint.push({ connIndex, pathD, fromKey: fromKey, toKey: toKey });
+    });
+
+    html += '<g class="fiber-scheme-cables">';
+    schemeBlocks.forEach(function(block) {
+        const cableData = block.cableData;
+        const isLeft = block.isLeft;
+        const anchor = isLeft ? anchorLeft : anchorRight;
+        const title = cableData.cableName || ('Кабель ' + cableData.index);
+        const subLine = cableData.cableDescription + (cableData.isFromSleeve ? ' · ← вход' : ' · → выход');
+        const labelAnchorX = block.labelX;
+
+        html += `<g class="fiber-cable-block" data-cable-id="${cableData.cableUniqueId}">`;
+        html += `<text x="${labelAnchorX}" y="${block.blockTop + 12}" text-anchor="${anchor}" style="font-size: 9px; font-weight: 700; fill: ${svgTextColor};">${escapeHtml(title)}</text>`;
+        html += `<text x="${labelAnchorX}" y="${block.blockTop + 22}" text-anchor="${anchor}" style="font-size: 7px; fill: ${svgTextMuted};">${escapeHtml(subLine)}</text>`;
+        html += `<line x1="${block.barX1}" y1="${block.cableBarY}" x2="${block.barX2}" y2="${block.cableBarY}" stroke="${cableBarStroke}" stroke-width="5" stroke-linecap="round"/>`;
+        html += `<text x="${labelAnchorX}" y="${block.cableBarY + 14}" text-anchor="${anchor}" style="font-size: 7px; fill: ${svgTextMuted};">${escapeHtml(cableData.isFromSleeve ? 'от муфты/кросса' : 'к муфте/кроссу')}</text>`;
+        html += '</g>';
+    });
+    html += '</g>';
+
+    html += '<g class="fiber-scheme-links" fill="none">';
+    linkPaint.forEach(function(link) {
+        html += `<path class="fiber-scheme-link-shadow" d="${link.pathD}" stroke="${linkShadow}" stroke-width="6" stroke-linecap="round" opacity="0.35"/>`;
+    });
+    linkPaint.forEach(function(link) {
+        const clickable = isEditMode ? 'cursor: pointer;' : '';
+        html += `<path id="connection-${link.connIndex}" class="fiber-scheme-link" d="${link.pathD}" stroke="${linkColor}" stroke-width="3.5" stroke-linecap="round" data-connection-index="${link.connIndex}" data-from-fiber="${link.fromKey}" data-to-fiber="${link.toKey}" style="${clickable}"/>`;
+    });
+    html += '</g>';
+
+    html += '<g class="fiber-scheme-ports">';
+    schemeBlocks.forEach(function(block) {
+        const cableData = block.cableData;
+        const isLeft = block.isLeft;
+        cableData.fibers.forEach(function(fiber) {
+            const fiberKey = cableData.cableUniqueId + '-' + fiber.number;
+            const pos = fiberPositions.get(fiberKey);
+            if (!pos) return;
             const isUsed = cableData.usedFibers.includes(fiber.number);
-            const fiberKey = `${cableData.cableUniqueId}-${fiber.number}`;
             const isConnected = connectedFibers.has(fiberKey);
-
-            fiberPositions.set(fiberKey, { x, y, cableIndex, fiberIndex, cableData, fiber });
-
-            let strokeColor = '#333';
-            let strokeWidth = '1';
-            let strokeDasharray = 'none';
-            let opacity = '1';
-            
-            if (isConnected) {
-                strokeColor = '#3b82f6';
-                strokeWidth = '3';
-                strokeDasharray = 'none';
-            } else if (isUsed) {
-                strokeColor = '#dc2626';
-                strokeWidth = '2';
-                strokeDasharray = '3,3';
-                opacity = '0.7';
-            } else if (fiber.hasBlackRing) {
-                strokeColor = '#000';
-                strokeWidth = '2';
-            }
-
-            const portW = 26;
-            const portH = 20;
-            const portX = x - portW / 2;
-            const portY = y - portH / 2;
             const clickable = isEditMode ? 'cursor: pointer;' : '';
-            const textFill = (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00' || fiber.color === '#FFC0CB') ? '#000' : '#fff';
-            html += `<g id="fiber-${fiberKey}" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" data-fiber-connected="${isConnected}" data-fiber-used="${isUsed}" style="${clickable}">`;
-            html += `<rect x="${portX}" y="${portY}" width="${portW}" height="${portH}" rx="4" fill="${fiber.color}" stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-dasharray="${strokeDasharray}" opacity="${opacity}" style="pointer-events: inherit;"/>`;
-            html += `<text x="${x}" y="${y + 3}" text-anchor="middle" style="font-size: 10px; font-weight: 600; fill: ${textFill}; pointer-events: none;">${fiber.number}</text>`;
-            html += '</g>';
-            
-            const fiberLabelKey = `${cableData.cableUniqueId}-${fiber.number}`;
+            const badgeX = isLeft ? pos.x - badgeW / 2 : pos.x - badgeW / 2;
+            const badgeY = pos.y - badgeH / 2;
+            const circleX = isLeft ? badgeX - nodeR - 2 : badgeX + badgeW + nodeR + 2;
+            let circleStroke = isConnected ? linkColor : (isUsed ? '#dc2626' : '#333');
+            if (fiber.hasBlackRing && !isConnected && !isUsed) circleStroke = '#000';
+
+            const fiberLabelKey = cableData.cableUniqueId + '-' + fiber.number;
             const directLabel = fiberLabels[fiberLabelKey] || '';
             const inheritedInfo = getInheritedFiberLabel(sleeveObj, cableData.cableUniqueId, fiber.number);
             const displayLabel = directLabel || inheritedInfo.label;
             const isInherited = !directLabel && inheritedInfo.inherited;
-            const statusText = isConnected ? ' (соед.)' : '';
+            const statusText = isConnected ? ' (соед.)' : (isUsed ? ' (исп.)' : '');
             let labelText = '';
-            if (displayLabel) labelText = isInherited ? ` [← ${displayLabel}]` : ` [${displayLabel}]`;
-            const portText = isCross && fiberPorts && fiberPorts[fiberLabelKey] ? ` · порт ${fiberPorts[fiberLabelKey]}` : '';
-            const labelColor = isInherited ? '#8b5cf6' : (isConnected ? '#3b82f6' : svgLabelColor);
-            html += `<text x="${x + portW / 2 + 6}" y="${y + 3}" style="font-size: 10px; fill: ${labelColor};">${fiber.name}${labelText}${statusText}${portText}</text>`;
+            if (displayLabel) labelText = isInherited ? ' ← ' + displayLabel : ' ' + displayLabel;
+            const portText = isCross && fiberPorts && fiberPorts[fiberLabelKey] ? ', порт ' + fiberPorts[fiberLabelKey] : '';
+            const tooltipText = escapeHtml(fiber.name + labelText + statusText + portText);
+            const textFill = (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00' || fiber.color === '#FFC0CB') ? '#000' : '#fff';
+
+            const fanPath = buildFiberSchemeFanPath(pos.block, pos, isLeft, nodeR, badgeW);
+            const fanColor = fiberSchemeLinkStrokeColor(fiber.color, isDark);
+            html += `<g id="fiber-${fiberKey}" class="fiber-scheme-port" data-fiber-key="${fiberKey}" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" data-fiber-connected="${isConnected}" data-fiber-used="${isUsed}" style="${clickable}">`;
+            html += `<title>${tooltipText}</title>`;
+            html += `<path class="fiber-fan-path" data-fiber-key="${fiberKey}" d="${fanPath}" stroke="${fanColor}" stroke-width="2" fill="none" stroke-linecap="round"/>`;
+            html += `<circle class="fiber-port-node" cx="${circleX}" cy="${pos.y}" r="${nodeR}" fill="${fiber.color}" stroke="${circleStroke}" stroke-width="1.5"/>`;
+            html += `<rect class="fiber-port-badge" x="${badgeX}" y="${badgeY}" width="${badgeW}" height="${badgeH}" rx="2" fill="${badgeFill}" stroke="${badgeStroke}" stroke-width="1.5"/>`;
+            html += `<text x="${pos.x}" y="${pos.y + 3}" text-anchor="middle" style="font-size: 8px; font-weight: 700; fill: ${badgeStroke}; pointer-events: none;">${fiber.number}</text>`;
+            html += '</g>';
         });
     });
+    html += '</g>';
 
-    fiberConnections.forEach((connection, connIndex) => {
-        const fromKey = `${connection.from.cableId}-${connection.from.fiberNumber}`;
-        const toKey = `${connection.to.cableId}-${connection.to.fiberNumber}`;
-        
-        const fromPos = fiberPositions.get(fromKey);
-        const toPos = fiberPositions.get(toKey);
-        
-        if (fromPos && toPos) {
-            const x1 = fromPos.x;
-            const y1 = fromPos.y;
-            const x2 = toPos.x;
-            const y2 = toPos.y;
-            
-            const portHalf = 13;
-            const midX = (x1 + x2) / 2;
-            const midY = (y1 + y2) / 2 - 10;
-            const clickable = isEditMode ? 'cursor: pointer;' : '';
-            html += `<path id="connection-${connIndex}" d="M ${x1 + portHalf} ${y1} Q ${midX} ${midY} ${x2 - portHalf} ${y2}" 
-                stroke="#3b82f6" stroke-width="2" fill="none" opacity="0.8" stroke-dasharray="5,3" style="${clickable}" data-connection-index="${connIndex}"/>`;
-            html += `<polygon points="${midX - 3},${midY - 2} ${midX},${midY + 2} ${midX + 3},${midY - 2}" 
-                fill="#3b82f6" opacity="0.8" style="${clickable}" data-connection-index="${connIndex}"/>`;
-        }
-    });
+    if (isEditMode && linkPaint.length > 0) {
+        html += '<g class="fiber-scheme-link-hits" fill="none">';
+        linkPaint.forEach(function(link) {
+            html += `<path class="fiber-scheme-link-hit" d="${link.pathD}" stroke="transparent" stroke-width="14" data-connection-index="${link.connIndex}" style="cursor: pointer;"/>`;
+        });
+        html += '</g>';
+    }
     
     html += '</svg>';
-    html += '</div></div>';
+    html += '</div></div></div>';
 
     if (cablesData.length >= 2) {
         function cableNameById(id) {
             const d = cablesData.find(function(c) { return c.cableUniqueId === id; });
             return d ? (d.cableName || ('Кабель ' + d.index)) : id.substring(0, 8) + '…';
         }
-        html += '<div class="fiber-connections-list-wrap" id="fiber-connections-list-wrap" style="display: none;">';
+        html += '<div class="fiber-ws-panel fiber-ws-panel-connections" data-panel="connections"><div class="fiber-connections-list-wrap" id="fiber-connections-list-wrap">';
         html += '<div class="fiber-connections-list">';
         if (isEditMode && fiberConnections.length > 0) html += '<p class="fiber-connections-list-sub">Удаление: клик по линии в схеме или кнопка ✕ в строке.</p>';
         if (fiberConnections.length === 0) {
@@ -15803,9 +15945,11 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
                 html += '</div>';
             });
         }
-        html += '</div></div>';
+        html += '</div></div></div>';
     }
-    html += '</div>';
+
+    html += '<div class="fiber-ws-panel fiber-ws-panel-table" data-panel="table">';
+    html += '<div class="fiber-table-toolbar"><label class="fiber-table-filter-label">Показать <select id="fiber-table-filter" class="form-select fiber-table-filter-select"><option value="all">Все</option><option value="connected">Сращённые</option><option value="free">Свободные</option><option value="used">Занятые</option></select></label><input type="search" id="fiber-table-search" class="form-input fiber-table-search" placeholder="№ жилы" autocomplete="off"></div>';
 
     function buildFiberCell(cableData, fiber, sleeveObj, isCross, isEditMode, fiberLabels, fiberConnections, nodeConnections, oltConnections, onuConnections, mediaConverterConnections, fiberPorts, crossPorts) {
         const isUsed = cableData.usedFibers.includes(fiber.number);
@@ -15863,14 +16007,14 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
                 : `<div class="fiber-port-row" style="margin-left: 18px; margin-top: 2px; font-size: 0.7rem; color: var(--text-secondary);">Порт: ${currentPort ? currentPort : '—'}</div>`)
             : '';
         return `
-            <div class="fiber-item${usedClass}" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}"${cellTitle ? ' title="' + cellTitle.replace(/"/g, '&quot;') + '"' : ''}
-                 style="display: flex; flex-direction: column; gap: 4px; padding: 8px; border-radius: 4px; border: 1px solid ${itemBorder}; min-width: 0;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <div class="fiber-color" style="width: 22px; height: 22px; border-radius: 50%; background-color: ${fiber.color}; border: 2px solid ${fiber.hasBlackRing ? '#000' : '#333'}; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
-                        <span style="font-size: 9px; font-weight: 700; color: ${fiberTextColor};">${fiber.number}</span>
+            <div class="fiber-item${usedClass}" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" data-fiber-connected="${isConnected}" data-fiber-used="${isUsed}" data-fiber-assigned="${hasAnyOutConnection}"${cellTitle ? ' title="' + cellTitle.replace(/"/g, '&quot;') + '"' : ''}
+                 style="display: flex; flex-direction: column; gap: 2px; padding: 4px 5px; border-radius: 3px; border: 1px solid ${itemBorder}; min-width: 0;">
+                <div style="display: flex; align-items: center; gap: 5px;">
+                    <div class="fiber-color" style="width: 18px; height: 18px; border-radius: 50%; background-color: ${fiber.color}; border: 2px solid ${fiber.hasBlackRing ? '#000' : '#333'}; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
+                        <span style="font-size: 8px; font-weight: 700; color: ${fiberTextColor};">${fiber.number}</span>
                     </div>
-                    <span class="fiber-name" style="font-size: 0.8125rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;"><strong>${fiber.name}</strong></span>
-                    <span style="font-size: 0.7rem; color: ${statusColor}; font-weight: 600; white-space: nowrap;">${statusText}</span>
+                    <span class="fiber-name" style="font-size: 0.7rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;"><strong>${fiber.name}</strong></span>
+                    <span style="font-size: 0.65rem; color: ${statusColor}; font-weight: 600; white-space: nowrap;">${statusText}</span>
                 </div>
                 ${portRow}
                 ${hasNodeConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #f0fdf4; border-radius: 3px; font-size: 0.75rem;"><span style="color: #166534;">🖥️ → ${escapeHtml(nodeConnection.nodeName)}${nodeConnection.switchPort != null ? ' · SFP п. ' + nodeConnection.switchPort : ''}</span>${isEditMode ? `<button class="btn-disconnect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от узла" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
@@ -15886,7 +16030,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
 
     const maxRows = Math.max(1, maxFibers);
     html += '<div class="cross-fiber-table-section">';
-    html += '<h4 class="cross-fiber-table-caption">Таблица кабелей и жил</h4>';
+    html += '<h4 class="fiber-ws-panel-title">Таблица кабелей и жил</h4>';
     html += '<div class="cross-fiber-table-wrap">';
     html += '<table class="cross-fiber-table">';
     html += '<thead><tr>';
@@ -15915,11 +16059,57 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         html += '</tr>';
     }
     html += '</tbody></table>';
-    html += '</div></div></div>';
+    html += '</div></div></div></div></main>';
+    html += '</div></div>';
 
     html += `<div id="fiber-connections-data" data-sleeve-obj-id="${sleeveObj.properties.get('uniqueId') || 'temp'}" style="display: none;"></div>`;
     
     return html;
+}
+
+function setupFiberWorkspaceUI() {
+    var root = document.querySelector('.fiber-workspace');
+    if (!root) return;
+    var tabs = root.querySelectorAll('.fiber-ws-tab');
+    var panels = root.querySelectorAll('.fiber-ws-panel');
+    var zoomToolbar = document.getElementById('fiber-ws-toolbar-zoom');
+    var savedTab = sessionStorage.getItem('fiberWorkspaceTab') || 'scheme';
+    function showTab(tabName) {
+        tabs.forEach(function(t) {
+            var on = t.getAttribute('data-tab') === tabName;
+            t.classList.toggle('active', on);
+            t.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        panels.forEach(function(p) {
+            p.classList.toggle('active', p.getAttribute('data-panel') === tabName);
+        });
+        if (zoomToolbar) zoomToolbar.style.display = tabName === 'scheme' ? '' : 'none';
+        sessionStorage.setItem('fiberWorkspaceTab', tabName);
+    }
+    tabs.forEach(function(tab) {
+        tab.addEventListener('click', function() { showTab(this.getAttribute('data-tab')); });
+    });
+    showTab(['scheme', 'table', 'connections'].indexOf(savedTab) >= 0 ? savedTab : 'scheme');
+    var filterEl = document.getElementById('fiber-table-filter');
+    var searchEl = document.getElementById('fiber-table-search');
+    function applyTableFilter() {
+        var filter = filterEl ? filterEl.value : 'all';
+        var q = searchEl ? searchEl.value.trim() : '';
+        document.querySelectorAll('.cross-fiber-table .fiber-item').forEach(function(el) {
+            var connected = el.getAttribute('data-fiber-connected') === 'true';
+            var used = el.getAttribute('data-fiber-used') === 'true';
+            var assigned = el.getAttribute('data-fiber-assigned') === 'true';
+            var num = el.getAttribute('data-fiber-number') || '';
+            var show = true;
+            if (filter === 'connected') show = connected;
+            else if (filter === 'free') show = !connected && !used && !assigned;
+            else if (filter === 'used') show = used || assigned;
+            if (show && q && num.indexOf(q) === -1) show = false;
+            el.style.display = show ? '' : 'none';
+        });
+    }
+    if (filterEl) filterEl.addEventListener('change', applyTableFilter);
+    if (searchEl) searchEl.addEventListener('input', applyTableFilter);
 }
 
 function showMergeCablesDialog(sleeveObj) {
@@ -16024,6 +16214,129 @@ function toggleFiberUsage(cableUniqueId, fiberNumber) {
     setUsedFibers(currentModalObject, cableUniqueId, usedFibers);
 
     refreshObjectModal(currentModalObject);
+}
+
+/** Цвет линии соединения в схеме кросса/муфты (контраст на светлом/тёмном фоне). */
+function fiberSchemeLinkStrokeColor(fiberColor, isDark) {
+    if (!fiberColor) return isDark ? '#fbbf24' : '#d97706';
+    const c = String(fiberColor).toUpperCase();
+    if (c === '#FFFFFF' || c === '#FFFF00' || c === '#FFFACD' || c === '#FFC0CB') {
+        return isDark ? '#fde047' : '#ca8a04';
+    }
+    if (c === '#00FF00') return isDark ? '#4ade80' : '#15803d';
+    if (c === '#000000') return isDark ? '#cbd5e1' : '#374151';
+    if (c === '#0000FF' && isDark) return '#60a5fa';
+    return fiberColor;
+}
+
+/** Изогнутый отвод жилы: от магистрали кабеля S-образной кривой к порту жилы (виден веер при нескольких кабелях). */
+function buildFiberSchemeFanPath(block, pos, isLeft, nodeR, badgeW) {
+    const sx = block.fanOriginX;
+    const sy = block.cableBarY;
+    const ex = isLeft ? pos.x - badgeW / 2 - nodeR * 2 - 1 : pos.x + badgeW / 2 + nodeR * 2 + 1;
+    const ey = pos.y;
+    const dy = ey - sy;
+    const absDy = Math.abs(dy);
+    const dx = Math.abs(ex - sx);
+    const bowV = Math.max(22, Math.min(90, absDy * 0.9 + dx * 0.12 + 16));
+    const bowH = Math.max(16, Math.min(48, dx * 0.35 + 12));
+    let c1x, c1y, c2x, c2y;
+    if (isLeft) {
+        c1x = sx + bowH * 0.2;
+        c1y = sy + (dy >= 0 ? bowV * 0.5 : -bowV * 0.5);
+        c2x = ex - bowH;
+        c2y = ey - (dy >= 0 ? bowV * 0.25 : -bowV * 0.25);
+    } else {
+        c1x = sx - bowH * 0.2;
+        c1y = sy + (dy >= 0 ? bowV * 0.5 : -bowV * 0.5);
+        c2x = ex + bowH;
+        c2y = ey - (dy >= 0 ? bowV * 0.25 : -bowV * 0.25);
+    }
+    if (absDy < 10) {
+        c1y = sy - bowV * 0.42;
+        c2y = ey + bowV * 0.42;
+    }
+    return 'M ' + sx + ' ' + sy + ' C ' + c1x + ' ' + c1y + ', ' + c2x + ' ' + c2y + ', ' + ex + ' ' + ey;
+}
+
+/** Плавная кубическая кривая между портами жил. При сращении в одном столбце — дуга к центру схемы. */
+function buildFiberSchemeConnectionPath(x1, y1, x2, y2, portHalf, opts) {
+    opts = opts || {};
+    const goRight = x2 >= x1;
+    const sx = x1 + (goRight ? portHalf : -portHalf);
+    const ex = x2 + (goRight ? -portHalf : portHalf);
+    const dy = y2 - y1;
+    const absDy = Math.abs(dy);
+    const sameSide = opts.sameSide || Math.abs(x2 - x1) < 10;
+
+    if (sameSide) {
+        const isLeft = opts.isLeft != null ? opts.isLeft : x1 < (opts.svgWidth || 800) / 2;
+        const bowX = Math.max(48, Math.min(160, absDy * 0.5 + 40)) * (isLeft ? 1 : -1);
+        const bowY = Math.max(8, Math.min(32, absDy * 0.1));
+        const c1x = sx + bowX;
+        const c2x = ex + bowX;
+        const c1y = y1 + (dy >= 0 ? bowY : -bowY);
+        const c2y = y2 + (dy >= 0 ? -bowY : bowY);
+        return 'M ' + sx + ' ' + y1 + ' C ' + c1x + ' ' + c1y + ', ' + c2x + ' ' + c2y + ', ' + ex + ' ' + y2;
+    }
+    const dx = Math.abs(x2 - x1);
+    const bow = Math.max(18, Math.min(64, dx * 0.45));
+    const c1x = sx + (goRight ? bow : -bow);
+    const c2x = ex + (goRight ? -bow : bow);
+    return 'M ' + sx + ' ' + y1 + ' C ' + c1x + ' ' + y1 + ', ' + c2x + ' ' + y2 + ', ' + ex + ' ' + y2;
+}
+
+/** Раскладка по образцу: слева/справа столбцы кабелей (гориз. магистраль + подписи), жилы веером к центру. */
+function layoutFiberSchemeReference(cablesData, svgWidth, opts) {
+    const rowHeight = opts.rowHeight;
+    const sidePad = opts.sidePad;
+    const panelW = opts.panelW;
+    const fiberFanLen = opts.fiberFanLen;
+    const blockGap = opts.blockGap;
+    const labelH = opts.labelH;
+    const fiberPositions = new Map();
+    const blocks = [];
+    const leftCount = Math.ceil(cablesData.length / 2);
+    const leftCables = cablesData.slice(0, leftCount);
+    const rightCables = cablesData.slice(leftCount);
+
+    function addSide(cables, side) {
+        let y = sidePad;
+        const isLeft = side === 'left';
+        const fanOriginX = isLeft ? sidePad + panelW - 12 : svgWidth - sidePad - panelW + 12;
+        const portX = isLeft ? fanOriginX + fiberFanLen : fanOriginX - fiberFanLen;
+        const labelX = isLeft ? sidePad + 4 : svgWidth - sidePad - 4;
+        const barX1 = isLeft ? sidePad : fanOriginX;
+        const barX2 = isLeft ? fanOriginX : svgWidth - sidePad;
+
+        cables.forEach(function(cableData) {
+            const n = Math.max(cableData.fibers.length, 1);
+            const zoneH = n * rowHeight;
+            const blockH = labelH * 2 + zoneH + blockGap;
+            const fiberZoneTop = y + labelH;
+            const cableBarY = fiberZoneTop + zoneH / 2;
+            const block = {
+                cableData, side, fanOriginX, portX, labelX, barX1, barX2, cableBarY,
+                fiberZoneTop, blockTop: y, blockH, isLeft
+            };
+            blocks.push(block);
+            cableData.fibers.forEach(function(fiber, fi) {
+                const fy = fiberZoneTop + fi * rowHeight + rowHeight / 2;
+                const fiberKey = cableData.cableUniqueId + '-' + fiber.number;
+                fiberPositions.set(fiberKey, {
+                    x: portX, y: fy, cableData: cableData, fiber: fiber, side: side,
+                    fanOriginX: fanOriginX, portX: portX, isLeft: isLeft, block: block
+                });
+            });
+            y += blockH;
+        });
+        return y;
+    }
+
+    const leftBottom = addSide(leftCables, 'left');
+    const rightBottom = addSide(rightCables, 'right');
+    const svgHeight = Math.max(leftBottom, rightBottom, 180) + sidePad;
+    return { fiberPositions: fiberPositions, blocks: blocks, svgHeight: svgHeight };
 }
 
 function getFiberColors(cableType) {
@@ -16510,7 +16823,7 @@ function handleBackupListClick(e) {
     e.preventDefault();
     var dateLabel = filename.replace(/backup-|\.json/g, '');
     (async function() {
-        if (!(await showConfirm('Восстановить данные от ' + dateLabel + '? Текущие данные будут заменены. После восстановления обновите страницу.', 'Восстановление бэкапа', { confirmText: 'Восстановить' }))) return;
+        if (!(await showConfirm('Восстановить данные от ' + dateLabel + '? Текущие данные будут заменены, все учётные записи организации будут отключены. После восстановления потребуется войти снова.', 'Восстановление бэкапа', { confirmText: 'Восстановить' }))) return;
     btn.disabled = true;
     fetch(getApiBase() + '/api/backups/restore', {
         method: 'POST',
@@ -16525,8 +16838,8 @@ function handleBackupListClick(e) {
                 localStorage.removeItem('networkMap_session');
                 localStorage.removeItem('networkMap_tokenExpiry');
             } catch (e) {}
-            if (typeof showSuccess === 'function') showSuccess('Данные восстановлены. Войдите снова.');
-            else alert('Данные восстановлены. Войдите снова.');
+            if (typeof showSuccess === 'function') showSuccess('Данные восстановлены. Все учётные записи организации отключены. Войдите снова.');
+            else alert('Данные восстановлены. Все учётные записи организации отключены. Войдите снова.');
             setTimeout(function() { window.location.href = 'auth.html'; }, 800);
         } else {
             btn.disabled = false;

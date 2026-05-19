@@ -732,6 +732,7 @@ function restoreFromBackup(orgId, filename) {
     s.settingsByOrg[key] = (parsed.settings && typeof parsed.settings === 'object') ? parsed.settings : {};
 
     saveStore();
+    deleteSessionsForOrganization(orgId);
     console.log('[Backup] Восстановлено из:', orgId + '/' + trimmed);
 }
 
