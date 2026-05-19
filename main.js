@@ -6968,10 +6968,6 @@ function getSerializedData() {
             if (props.manufacturer) result.manufacturer = props.manufacturer;
             if (props.model) result.model = props.model;
         }
-        if (props.netboxId) result.netboxId = props.netboxId;
-        if (props.netboxUrl) result.netboxUrl = props.netboxUrl;
-        if (props.netboxDeviceType) result.netboxDeviceType = props.netboxDeviceType;
-        if (props.netboxSite) result.netboxSite = props.netboxSite;
         return result;
     });
 }
@@ -7668,7 +7664,7 @@ function importData(data, opts) {
 }
 
 function createObjectFromData(data, opts) {
-    const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, fiberPorts, netboxId, netboxUrl, netboxDeviceType, netboxSite, sleeveType, maxFibers, crossPorts, crossCopperPorts, copperPortUsage, nodeConnections, oltConnections, onuConnections, mediaConverterConnections, uniqueId, nodeKind, manufacturer, model, comment, ponPorts, splitRatio, splitterConnections, incomingFiber, portAssignments, inputFiber, outputConnections, parentNodeId, switchPortTypes, attachedSwitches } = data;
+    const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, fiberPorts, sleeveType, maxFibers, crossPorts, crossCopperPorts, copperPortUsage, nodeConnections, oltConnections, onuConnections, mediaConverterConnections, uniqueId, nodeKind, manufacturer, model, comment, ponPorts, splitRatio, splitterConnections, incomingFiber, portAssignments, inputFiber, outputConnections, parentNodeId, switchPortTypes, attachedSwitches } = data;
     
     let iconSvg, color, balloonContent;
     
@@ -7957,19 +7953,6 @@ function createObjectFromData(data, opts) {
         placemark.properties.set('copperPortUsage', copperPortUsage && typeof copperPortUsage === 'object' ? copperPortUsage : {});
         if (manufacturer) placemark.properties.set('manufacturer', manufacturer);
         if (model) placemark.properties.set('model', model);
-    }
-
-    if (netboxId) {
-        placemark.properties.set('netboxId', netboxId);
-    }
-    if (netboxUrl) {
-        placemark.properties.set('netboxUrl', netboxUrl);
-    }
-    if (netboxDeviceType) {
-        placemark.properties.set('netboxDeviceType', netboxDeviceType);
-    }
-    if (netboxSite) {
-        placemark.properties.set('netboxSite', netboxSite);
     }
 
     placemark.events.add('click', function(e) {
@@ -8296,19 +8279,6 @@ function exportData() {
                 if (props.switchPortTypes) result.switchPortTypes = props.switchPortTypes;
                 if (props.manufacturer) result.manufacturer = props.manufacturer;
                 if (props.model) result.model = props.model;
-            }
-            
-            if (props.netboxId) {
-                result.netboxId = props.netboxId;
-            }
-            if (props.netboxUrl) {
-                result.netboxUrl = props.netboxUrl;
-            }
-            if (props.netboxDeviceType) {
-                result.netboxDeviceType = props.netboxDeviceType;
-            }
-            if (props.netboxSite) {
-                result.netboxSite = props.netboxSite;
             }
             return result;
         }
@@ -8765,10 +8735,6 @@ function showObjectInfo(obj) {
     }
 
     if (type === 'node') {
-        const netboxId = obj.properties.get('netboxId');
-        const netboxUrl = obj.properties.get('netboxUrl');
-        const netboxDeviceType = obj.properties.get('netboxDeviceType');
-        const netboxSite = obj.properties.get('netboxSite');
         const nodeKind = obj.properties.get('nodeKind') || 'network';
         const manufacturer = obj.properties.get('manufacturer') || '';
         const model = obj.properties.get('model') || '';
@@ -9708,12 +9674,6 @@ function duplicateObject(obj) {
                 return o;
             }));
         }
-    }
-
-    const netboxId = obj.properties.get('netboxId');
-    if (netboxId && newObj) {
-        newObj.properties.set('netboxId', null); 
-        newObj.properties.set('netboxUrl', null);
     }
 
     const modal = document.getElementById('infoModal');
@@ -16380,341 +16340,6 @@ function getFiberColors(cableType) {
     }
 
     return fiberColors.slice(0, fiberCount);
-}
-
-function setupNetBoxEventListeners() {
-    
-    document.getElementById('netboxConfigBtn').addEventListener('click', function() {
-        const modal = document.getElementById('netboxConfigModal');
-        document.getElementById('netboxUrl').value = netboxConfig.url || '';
-        document.getElementById('netboxToken').value = netboxConfig.token || '';
-        document.getElementById('netboxIgnoreSSL').checked = netboxConfig.ignoreSSL || false;
-        document.getElementById('netboxStatus').textContent = '';
-        modal.style.display = 'block';
-    });
-
-    document.querySelector('.close-netbox').addEventListener('click', function() {
-        document.getElementById('netboxConfigModal').style.display = 'none';
-    });
-
-    window.addEventListener('click', function(event) {
-        const modal = document.getElementById('netboxConfigModal');
-        if (event.target === modal) {
-            modal.style.display = 'none';
-        }
-    });
-
-    document.getElementById('testNetboxConnection').addEventListener('click', testNetBoxConnection);
-
-    document.getElementById('saveNetboxConfig').addEventListener('click', function() {
-        const url = document.getElementById('netboxUrl').value.trim();
-        const token = document.getElementById('netboxToken').value.trim();
-        const ignoreSSL = document.getElementById('netboxIgnoreSSL').checked;
-
-        if (!url || !token) {
-            showNetBoxStatus('Заполните все поля', 'error');
-            return;
-        }
-
-        netboxConfig.url = url.replace(/\/$/, ''); 
-        netboxConfig.token = token;
-        netboxConfig.ignoreSSL = ignoreSSL;
-        saveNetBoxConfig();
-        showNetBoxStatus('Конфигурация сохранена', 'success');
-        
-        setTimeout(() => {
-            document.getElementById('netboxConfigModal').style.display = 'none';
-        }, 1500);
-    });
-
-    document.getElementById('netboxImportBtn').addEventListener('click', function() {
-        if (!netboxConfig.url || !netboxConfig.token) {
-            return;
-        }
-        openNetBoxImportModal();
-    });
-
-    document.querySelector('.close-import').addEventListener('click', function() {
-        document.getElementById('netboxImportModal').style.display = 'none';
-    });
-
-    window.addEventListener('click', function(event) {
-        const modal = document.getElementById('netboxImportModal');
-        if (event.target === modal) {
-            modal.style.display = 'none';
-        }
-    });
-
-    document.getElementById('selectAllDevices').addEventListener('click', function() {
-        document.querySelectorAll('#netboxDevicesList input[type="checkbox"]').forEach(cb => {
-            cb.checked = true;
-        });
-    });
-
-    document.getElementById('deselectAllDevices').addEventListener('click', function() {
-        document.querySelectorAll('#netboxDevicesList input[type="checkbox"]').forEach(cb => {
-            cb.checked = false;
-        });
-    });
-
-    document.getElementById('importSelectedDevices').addEventListener('click', importSelectedNetBoxDevices);
-}
-
-function loadNetBoxConfig() {
-    try {
-        var saved = sessionStorage.getItem('netboxConfig');
-        if (saved) netboxConfig = JSON.parse(saved);
-    } catch (e) { console.error('Ошибка загрузки конфигурации NetBox:', e); }
-}
-
-function saveNetBoxConfig() {
-    try { sessionStorage.setItem('netboxConfig', JSON.stringify(netboxConfig)); } catch (e) {}
-}
-
-function showNetBoxStatus(message, type) {
-    const statusEl = document.getElementById('netboxStatus');
-    statusEl.textContent = message;
-    statusEl.className = 'status-message';
-    if (type === 'success') {
-        statusEl.style.color = '#22c55e';
-    } else if (type === 'error') {
-        statusEl.style.color = '#ef4444';
-    } else {
-        statusEl.style.color = '#3b82f6';
-    }
-}
-
-async function netboxFetch(url, options = {}) {
-
-    if (netboxConfig.ignoreSSL) {
-
-        try {
-            
-            return await fetch(url, options);
-        } catch (error) {
-            
-            if (error.message && (error.message.includes('certificate') || error.message.includes('SSL') || error.message.includes('TLS'))) {
-                console.warn('SSL ошибка обнаружена. В браузере нельзя отключить проверку SSL. Используйте Electron или настройте сертификат.');
-                throw new Error('Ошибка SSL сертификата. В браузере нельзя отключить проверку SSL. Для работы с самоподписанными сертификатами используйте Electron или настройте браузер.');
-            }
-            throw error;
-        }
-    } else {
-        return await fetch(url, options);
-    }
-}
-
-async function testNetBoxConnection() {
-    const url = document.getElementById('netboxUrl').value.trim();
-    const token = document.getElementById('netboxToken').value.trim();
-    const ignoreSSL = document.getElementById('netboxIgnoreSSL').checked;
-
-    if (!url || !token) {
-        showNetBoxStatus('Заполните все поля', 'error');
-        return;
-    }
-
-    showNetBoxStatus('Проверка подключения...', 'info');
-
-    try {
-        
-        const originalIgnoreSSL = netboxConfig.ignoreSSL;
-        netboxConfig.ignoreSSL = ignoreSSL;
-        
-        const response = await netboxFetch(`${url}/api/dcim/devices/?limit=1`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Token ${token}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            }
-        });
-
-        netboxConfig.ignoreSSL = originalIgnoreSSL;
-
-        if (response.ok) {
-            showNetBoxStatus('Подключение успешно!', 'success');
-        } else if (response.status === 401) {
-            showNetBoxStatus('Ошибка: Неверный токен API', 'error');
-        } else if (response.status === 404) {
-            showNetBoxStatus('Ошибка: Сервер не найден. Проверьте URL', 'error');
-        } else {
-            showNetBoxStatus(`Ошибка: ${response.status} ${response.statusText}`, 'error');
-        }
-    } catch (error) {
-        let errorMessage = error.message;
-        if (error.message && (error.message.includes('certificate') || error.message.includes('SSL') || error.message.includes('TLS'))) {
-            errorMessage = 'Ошибка SSL сертификата. В браузере нельзя отключить проверку SSL. Для работы с самоподписанными сертификатами используйте Electron или настройте браузер.';
-        }
-        showNetBoxStatus(`Ошибка подключения: ${errorMessage}`, 'error');
-        console.error('NetBox connection error:', error);
-    }
-}
-
-async function openNetBoxImportModal() {
-    const modal = document.getElementById('netboxImportModal');
-    const devicesList = document.getElementById('netboxDevicesList');
-    
-    devicesList.innerHTML = '<div style="text-align: center; padding: 20px;">Загрузка устройств...</div>';
-    modal.style.display = 'block';
-
-    try {
-        await fetchNetBoxDevices();
-        showNetBoxDevices();
-    } catch (error) {
-        const errMsg = (error && error.message) ? String(error.message) : 'Неизвестная ошибка';
-        devicesList.innerHTML = '<div style="color: #ef4444; padding: 20px;">Ошибка загрузки устройств: ' + escapeHtml(errMsg) + '</div>';
-    }
-}
-
-async function fetchNetBoxDevices() {
-    netboxDevices = [];
-    let nextUrl = `${netboxConfig.url}/api/dcim/devices/?limit=100`;
-
-    try {
-        while (nextUrl) {
-            const response = await netboxFetch(nextUrl, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Token ${netboxConfig.token}`,
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            
-            if (data.results && Array.isArray(data.results)) {
-                netboxDevices = netboxDevices.concat(data.results);
-            }
-
-            nextUrl = data.next || null;
-        }
-    } catch (error) {
-        console.error('Ошибка загрузки устройств из NetBox:', error);
-        throw error;
-    }
-}
-
-function showNetBoxDevices() {
-    const devicesList = document.getElementById('netboxDevicesList');
-
-    if (netboxDevices.length === 0) {
-        devicesList.innerHTML = '<div style="text-align: center; padding: 20px; color: #666;">Устройства не найдены</div>';
-        return;
-    }
-
-    let html = '<div style="max-height: 400px; overflow-y: auto; margin-bottom: 15px;">';
-    html += '<table style="width: 100%; border-collapse: collapse;">';
-    html += '<thead><tr style="background: var(--bg-tertiary); position: sticky; top: 0;">';
-    html += '<th style="padding: 10px; text-align: left; border-bottom: 2px solid var(--border-color); width: 40px; color: var(--text-primary);"><input type="checkbox" id="selectAllCheckbox"></th>';
-    html += '<th style="padding: 10px; text-align: left; border-bottom: 2px solid var(--border-color); color: var(--text-primary);">Имя</th>';
-    html += '<th style="padding: 10px; text-align: left; border-bottom: 2px solid var(--border-color); color: var(--text-primary);">Тип</th>';
-    html += '<th style="padding: 10px; text-align: left; border-bottom: 2px solid var(--border-color); color: var(--text-primary);">Местоположение</th>';
-    html += '</tr></thead><tbody>';
-
-    netboxDevices.forEach((device, index) => {
-        const name = device.name || device.display || `Устройство #${device.id}`;
-        const deviceType = device.device_type?.model || 'Не указан';
-        const location = device.site?.name || device.location?.name || 'Не указано';
-        const hasCoords = device.site?.latitude && device.site?.longitude;
-
-        html += `<tr style="border-bottom: 1px solid #dee2e6;">`;
-        const disabledAttr = hasCoords ? '' : 'disabled title="У устройства нет координат"';
-        html += `<td style="padding: 10px;"><input type="checkbox" class="device-checkbox" data-index="${index}" ${disabledAttr}></td>`;
-        html += `<td style="padding: 10px;">${escapeHtml(name)}</td>`;
-        html += `<td style="padding: 10px;">${escapeHtml(deviceType)}</td>`;
-        html += `<td style="padding: 10px;">${escapeHtml(location)}</td>`;
-        html += `</tr>`;
-    });
-
-    html += '</tbody></table></div>';
-
-    devicesList.innerHTML = html;
-
-    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
-    if (selectAllCheckbox) {
-        selectAllCheckbox.addEventListener('change', function() {
-            document.querySelectorAll('.device-checkbox:not(:disabled)').forEach(cb => {
-                cb.checked = this.checked;
-            });
-        });
-    }
-}
-
-function importSelectedNetBoxDevices() {
-    if (!isEditMode) {
-        return;
-    }
-
-    const selectedCheckboxes = document.querySelectorAll('.device-checkbox:checked:not(:disabled)');
-    
-    if (selectedCheckboxes.length === 0) {
-        return;
-    }
-
-    let importedCount = 0;
-    let skippedCount = 0;
-
-    selectedCheckboxes.forEach(checkbox => {
-        const index = parseInt(checkbox.getAttribute('data-index'));
-        const device = netboxDevices[index];
-
-        if (!device) return;
-
-        const site = device.site;
-        if (!site || !site.latitude || !site.longitude) {
-            skippedCount++;
-            return;
-        }
-
-        const coords = [parseFloat(site.latitude), parseFloat(site.longitude)];
-        const deviceName = device.name || device.display || `NetBox-${device.id}`;
-
-        const existingNode = objects.find(obj => 
-            obj.properties && 
-            obj.properties.get('type') === 'node' &&
-            obj.properties.get('name') === deviceName
-        );
-
-        if (existingNode) {
-            skippedCount++;
-            return;
-        }
-
-        createObject('node', deviceName, coords);
-
-        const nodeObj = objects[objects.length - 1];
-        if (nodeObj && nodeObj.properties) {
-            nodeObj.properties.set('netboxId', device.id);
-            nodeObj.properties.set('netboxUrl', `${netboxConfig.url}/dcim/devices/${device.id}/`);
-            nodeObj.properties.set('netboxDeviceType', device.device_type?.model || '');
-            nodeObj.properties.set('netboxSite', site.name || '');
-        }
-
-        importedCount++;
-    });
-
-    document.getElementById('netboxImportModal').style.display = 'none';
-
-    if (importedCount > 0) {
-        const importedNodes = objects.filter(obj => 
-            obj.properties && 
-            obj.properties.get('type') === 'node' &&
-            obj.properties.get('netboxId')
-        );
-        
-        if (importedNodes.length > 0) {
-            const bounds = importedNodes.map(node => node.geometry.getCoordinates());
-            myMap.setBounds(myMap.geoObjects.getBounds(), {
-                checkZoomRange: true
-            });
-        }
-    }
 }
 
 function setupBackupsSection() {

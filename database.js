@@ -74,7 +74,52 @@ function loadStore() {
     if (!Array.isArray(store.pricingPlans)) store.pricingPlans = [];
     if (!Array.isArray(store.visitLogs)) store.visitLogs = [];
     migrateToOrganizations();
+    stripNetboxFromStore(store);
     return store;
+}
+
+function stripNetboxFromStore(s) {
+    if (!s) return;
+    var dirty = false;
+    if (s.settings && s.settings.netboxConfig !== undefined) {
+        delete s.settings.netboxConfig;
+        dirty = true;
+    }
+    if (s.settingsByOrg && typeof s.settingsByOrg === 'object') {
+        Object.keys(s.settingsByOrg).forEach(function(orgId) {
+            var o = s.settingsByOrg[orgId];
+            if (o && o.netboxConfig !== undefined) {
+                delete o.netboxConfig;
+                dirty = true;
+            }
+        });
+    }
+    function stripMapObject(obj) {
+        if (!obj || typeof obj !== 'object') return false;
+        var changed = false;
+        ['netboxId', 'netboxUrl', 'netboxDeviceType', 'netboxSite'].forEach(function(k) {
+            if (obj[k] !== undefined) {
+                delete obj[k];
+                changed = true;
+            }
+        });
+        return changed;
+    }
+    function stripMapList(list) {
+        if (!Array.isArray(list)) return false;
+        var c = false;
+        list.forEach(function(item) {
+            if (stripMapObject(item)) c = true;
+        });
+        return c;
+    }
+    if (stripMapList(s.mapData)) dirty = true;
+    if (s.mapDataByOrg && typeof s.mapDataByOrg === 'object') {
+        Object.keys(s.mapDataByOrg).forEach(function(orgId) {
+            if (stripMapList(s.mapDataByOrg[orgId])) dirty = true;
+        });
+    }
+    if (dirty) saveStore();
 }
 
 function migrateToOrganizations() {
@@ -566,7 +611,6 @@ function deleteSessionsForUser(userId) {
 function getSettings(orgId) {
     let theme = getSetting('theme');
     let groupNames = getSetting('groupNames');
-    let netboxConfig = getSetting('netboxConfig');
     let customDeviceOptions = getSetting('customDeviceOptions');
     if (orgId) {
         const s = loadStore();
@@ -574,18 +618,13 @@ function getSettings(orgId) {
         if (byOrg && typeof byOrg === 'object') {
             if (byOrg.theme !== undefined) theme = byOrg.theme;
             if (byOrg.groupNames !== undefined) groupNames = byOrg.groupNames;
-            if (byOrg.netboxConfig !== undefined) netboxConfig = byOrg.netboxConfig;
             if (byOrg.customDeviceOptions !== undefined) customDeviceOptions = byOrg.customDeviceOptions;
         }
     }
     let parsedGroupNames = {};
-    let parsedNetboxConfig = { url: '', token: '', ignoreSSL: false };
     let parsedCustomDevice = { manufacturers: [], models: [] };
     try {
         parsedGroupNames = groupNames ? (typeof groupNames === 'string' ? JSON.parse(groupNames) : groupNames) : {};
-    } catch (e) {  }
-    try {
-        parsedNetboxConfig = netboxConfig ? (typeof netboxConfig === 'string' ? JSON.parse(netboxConfig) : netboxConfig) : { url: '', token: '', ignoreSSL: false };
     } catch (e) {  }
     try {
         parsedCustomDevice = customDeviceOptions ? (typeof customDeviceOptions === 'string' ? JSON.parse(customDeviceOptions) : customDeviceOptions) : { deviceCatalog: {}, manufacturers: [], models: [], modelsByManufacturer: {} };
@@ -597,7 +636,6 @@ function getSettings(orgId) {
     return {
         theme: theme || '',
         groupNames: parsedGroupNames,
-        netboxConfig: parsedNetboxConfig,
         customDeviceOptions: parsedCustomDevice
     };
 }
@@ -610,14 +648,13 @@ function setSettings(obj, orgId) {
         const o = s.settingsByOrg[orgId];
         if (obj.theme !== undefined) o.theme = obj.theme;
         if (obj.groupNames !== undefined) o.groupNames = typeof obj.groupNames === 'string' ? obj.groupNames : JSON.stringify(obj.groupNames);
-        if (obj.netboxConfig !== undefined) o.netboxConfig = typeof obj.netboxConfig === 'string' ? obj.netboxConfig : JSON.stringify(obj.netboxConfig);
         if (obj.customDeviceOptions !== undefined) o.customDeviceOptions = typeof obj.customDeviceOptions === 'string' ? obj.customDeviceOptions : JSON.stringify(obj.customDeviceOptions);
+        delete o.netboxConfig;
         saveStore();
         return;
     }
     if (obj.theme !== undefined) setSetting('theme', obj.theme);
     if (obj.groupNames !== undefined) setSetting('groupNames', typeof obj.groupNames === 'string' ? obj.groupNames : JSON.stringify(obj.groupNames));
-    if (obj.netboxConfig !== undefined) setSetting('netboxConfig', typeof obj.netboxConfig === 'string' ? obj.netboxConfig : JSON.stringify(obj.netboxConfig));
     if (obj.customDeviceOptions !== undefined) setSetting('customDeviceOptions', typeof obj.customDeviceOptions === 'string' ? obj.customDeviceOptions : JSON.stringify(obj.customDeviceOptions));
 }
 
@@ -729,7 +766,9 @@ function restoreFromBackup(orgId, filename) {
 
     s.mapDataByOrg[key] = Array.isArray(parsed.mapData) ? parsed.mapData : [];
     s.historyByOrg[key] = Array.isArray(parsed.history) ? parsed.history : [];
-    s.settingsByOrg[key] = (parsed.settings && typeof parsed.settings === 'object') ? parsed.settings : {};
+    var restoredSettings = (parsed.settings && typeof parsed.settings === 'object') ? parsed.settings : {};
+    delete restoredSettings.netboxConfig;
+    s.settingsByOrg[key] = restoredSettings;
 
     saveStore();
     deleteSessionsForOrganization(orgId);

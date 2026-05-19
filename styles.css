@@ -2985,8 +2985,6 @@ button {
 .close-user-edit,
 .close-help,
 .close-updates,
-.close-netbox,
-.close-import,
 .close-node-selection,
 .close-device-catalog {
     color: #fff;
@@ -3019,10 +3017,6 @@ button {
 .close-help:focus,
 .close-updates:hover,
 .close-updates:focus,
-.close-netbox:hover,
-.close-netbox:focus,
-.close-import:hover,
-.close-import:focus,
 .close-node-selection:hover,
 .close-node-selection:focus,
 .close-device-catalog:hover,
@@ -3575,128 +3569,6 @@ button {
     font-style: italic;
     text-align: center;
     padding: 20px;
-}
-
-/* NetBox стили - используем общие стили form-group */
-
-.netbox-form .form-input:focus {
-    outline: none;
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-}
-
-.btn-test, .btn-save {
-    padding: 10px 20px;
-    margin: 5px;
-    border: none;
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    font-size: 0.875rem;
-    transition: all 0.2s;
-}
-
-.btn-test {
-    background: var(--accent-primary);
-    color: white;
-}
-
-.btn-test:hover {
-    filter: brightness(1.1);
-}
-
-.btn-save {
-    background: var(--accent-success);
-    color: white;
-}
-
-.btn-save:hover {
-    filter: brightness(1.1);
-}
-
-.status-message {
-    margin-top: 15px;
-    padding: 12px;
-    border-radius: var(--radius-md);
-    font-size: 0.875rem;
-    text-align: center;
-}
-
-/* Стили кнопок закрытия модалок заданы в общем блоке .close, .close-help и др. выше */
-
-.import-actions {
-    display: flex;
-    gap: 10px;
-    margin-top: 15px;
-    padding-top: 15px;
-    border-top: 1px solid var(--border-color);
-}
-
-.import-actions button {
-    flex: 1;
-    padding: 10px;
-    border: none;
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    font-size: 0.875rem;
-    transition: all 0.2s;
-}
-
-#netboxDevicesList {
-    margin-bottom: 15px;
-}
-
-#netboxDevicesList table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-#netboxDevicesList th {
-    background: var(--bg-tertiary);
-    padding: 12px;
-    text-align: left;
-    border-bottom: 2px solid var(--border-color);
-    font-weight: 600;
-    color: var(--text-primary);
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    font-size: 0.875rem;
-}
-
-#netboxDevicesList td {
-    padding: 12px;
-    border-bottom: 1px solid var(--border-color);
-    font-size: 0.875rem;
-    color: var(--text-primary);
-}
-
-#netboxDevicesList tr:hover {
-    background: var(--bg-hover);
-}
-
-#netboxDevicesList input[type="checkbox"] {
-    width: auto;
-    margin: 0;
-    cursor: pointer;
-}
-
-#netboxDevicesList input[type="checkbox"]:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-}
-
-.netbox-info {
-    margin-bottom: 20px;
-    padding: 16px;
-    background: #e0f2fe;
-    border-radius: 12px;
-    border-left: 4px solid #3b82f6;
-}
-
-.netbox-info h4 {
-    margin: 0 0 10px 0;
-    color: #1e40af;
-    font-size: 1rem;
 }
 
 /* ==================== Модальное окно выбора узла (как балун групп — одна карточка, без двойного балуна) ==================== */
@@ -4322,19 +4194,6 @@ button {
         grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
     }
 
-    .import-actions {
-        flex-direction: column;
-    }
-
-    #netboxDevicesList {
-        font-size: 12px;
-    }
-
-    #netboxDevicesList th,
-    #netboxDevicesList td {
-        padding: 8px 5px;
-    }
-    
     /* История */
     .history-filters {
         flex-wrap: wrap;
@@ -4521,7 +4380,7 @@ button {
         font-size: 0.95rem;
     }
     
-    .close, .close-users, .close-history, .close-user-edit, .close-help, .close-updates, .close-netbox, .close-import, .close-node-selection, .close-device-catalog {
+    .close, .close-users, .close-history, .close-user-edit, .close-help, .close-updates, .close-node-selection, .close-device-catalog {
         font-size: 22px;
         width: 32px;
         height: 32px;
