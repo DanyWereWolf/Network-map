@@ -25,6 +25,8 @@ var copperCableLayingActive = false;
 var cableWaypoints = [];
 var cablePreviewLine = null;
 var selectedFiberForConnection = null;
+/** Индекс выбранного сращивания для редактирования подписи (карточка кросса/муфты) */
+var selectedFiberConnectionIndex = null;
 var splitterFiberRoutingMode = false;
 var splitterFiberRoutingData = null;
 var splitterFiberWaypoints = [];
