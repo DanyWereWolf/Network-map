@@ -1120,6 +1120,7 @@ function init() {
     
     loadData();
     setupEventListeners();
+    setupObjectPlacementPanDrag();
     setupRectSelection();
     if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
     
@@ -1512,6 +1513,11 @@ let objectPlacementMode = false;
 let currentPlacementType = null;
 let currentPlacementName = null;
 let currentPlacementNodeKind = 'network';
+let placementPanBlockClickUntil = 0;
+const placementPanPointer = { down: false, startX: 0, startY: 0, moved: false };
+const PLACEMENT_PAN_DRAG_THRESHOLD_PX = 5;
+/** Короткое окно после pan — только чтобы не поставить объект «хвостом» жеста перетаскивания. */
+const PLACEMENT_PAN_CLICK_BLOCK_MS = 40;
 
 function handleAddObject() {
     try {
@@ -1616,6 +1622,9 @@ function cancelObjectPlacement() {
     objectPlacementMode = false;
     currentPlacementType = null;
     currentPlacementName = null;
+    placementPanBlockClickUntil = 0;
+    placementPanPointer.down = false;
+    placementPanPointer.moved = false;
     removePhantomPlacemark();
     if (cursorIndicator) cursorIndicator.style.display = 'none';
     if (hoveredObject) clearHoverHighlight();
@@ -1636,19 +1645,65 @@ function cancelObjectPlacement() {
     syncMapPanLockForEditTools();
 }
 
+/** На touch при размещении объектов pan отключён — иначе не двигается «фантом». На мыши pan включён. */
+function isMapPanLockedForObjectPlacement() {
+    if (!objectPlacementMode) return false;
+    try {
+        if (window.matchMedia('(pointer: coarse)').matches) return true;
+        if (window.matchMedia('(hover: none)').matches) return true;
+    } catch (e) {}
+    return false;
+}
+
 /**
  * На сенсорных экранах поведение «перетаскивание» карты перехватывает движение пальца,
  * из‑за чего не срабатывает предпросмотр кабеля / «фантом» при размещении объектов.
  * Пока активны эти режимы, отключаем pan (drag); масштаб жестами и кнопками зума сохраняется.
+ * В режиме размещения объектов на мыши pan (ЛКМ + перетаскивание) включён; клик после pan не ставит объект.
  */
 function syncMapPanLockForEditTools() {
     if (!myMap || !myMap.behaviors) return;
-    var lockPan = !!(objectPlacementMode || fiberRoutingMode || splitterFiberRoutingMode || cableSplitMode ||
+    var lockPan = !!(isMapPanLockedForObjectPlacement() || fiberRoutingMode || splitterFiberRoutingMode || cableSplitMode ||
         (currentCableTool && cableSource));
     try {
         if (lockPan) myMap.behaviors.disable('drag');
         else myMap.behaviors.enable('drag');
     } catch (err) {}
+}
+
+function setupObjectPlacementPanDrag() {
+    if (!myMap || !myMap.container) return;
+    var el = myMap.container.getElement();
+    if (!el || el.dataset.placementPanDragBound) return;
+    el.dataset.placementPanDragBound = '1';
+
+    el.addEventListener('mousedown', function(e) {
+        if (e.button !== 0 || !objectPlacementMode) return;
+        placementPanBlockClickUntil = 0;
+        placementPanPointer.down = true;
+        placementPanPointer.startX = e.clientX;
+        placementPanPointer.startY = e.clientY;
+        placementPanPointer.moved = false;
+    });
+
+    document.addEventListener('mousemove', function(e) {
+        if (!placementPanPointer.down || !objectPlacementMode) return;
+        if (!placementPanPointer.moved) {
+            var dx = e.clientX - placementPanPointer.startX;
+            var dy = e.clientY - placementPanPointer.startY;
+            if (dx * dx + dy * dy > PLACEMENT_PAN_DRAG_THRESHOLD_PX * PLACEMENT_PAN_DRAG_THRESHOLD_PX) {
+                placementPanPointer.moved = true;
+            }
+        }
+    });
+
+    document.addEventListener('mouseup', function() {
+        if (!placementPanPointer.down) return;
+        placementPanPointer.down = false;
+        if (placementPanPointer.moved && objectPlacementMode) {
+            placementPanBlockClickUntil = Date.now() + PLACEMENT_PAN_CLICK_BLOCK_MS;
+        }
+    });
 }
 
 function handleMapClick(e) {
@@ -1787,6 +1842,10 @@ function handleMapClick(e) {
         });
 
         if (shouldBlock) {
+            return;
+        }
+
+        if (Date.now() < placementPanBlockClickUntil) {
             return;
         }
 
