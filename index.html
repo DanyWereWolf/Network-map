@@ -1291,30 +1291,103 @@
         </div>
     </div>
 
-    <!-- Модальное окно справочника устройств (только админ) -->
-    <div id="deviceCatalogModal" class="modal">
-        <div class="modal-content" style="max-width: 640px;">
-            <div class="modal-header">
-                <h2>Справочник устройств</h2>
-                <span class="close-device-catalog">&times;</span>
+    <!-- Модальное окно справочника устройств (только админ), полноэкранное -->
+    <div id="deviceCatalogModal" class="modal device-catalog-modal">
+        <div class="modal-content device-catalog-modal-content">
+            <div class="modal-header device-catalog-modal-header">
+                <div class="device-catalog-header-text">
+                    <h2>Справочник устройств</h2>
+                    <p id="deviceCatalogHeaderHint" class="device-catalog-header-hint">Производители и модели для выпадающих списков на карте</p>
+                </div>
+                <div id="deviceCatalogGlobalStats" class="device-catalog-global-stats" aria-live="polite"></div>
+                <span class="close-device-catalog" title="Закрыть">&times;</span>
             </div>
-            <div class="modal-body">
-                <p class="backups-hint" style="margin-bottom: 12px;">Отдельные справочники для <strong>узла сети</strong>, <strong>OLT</strong>, <strong>ONU</strong>, <strong>камер</strong> и <strong>коммутаторов</strong> в узле. Для моделей коммутаторов можно задать число портов по умолчанию (подсказка при добавлении коммутатора в узел).</p>
-                <div class="device-catalog-tabs" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
-                    <button type="button" class="device-catalog-tab device-catalog-tab-active btn-secondary" data-tab="node" style="font-size: 0.8125rem;">Узел</button>
-                    <button type="button" class="device-catalog-tab btn-secondary" data-tab="olt" style="font-size: 0.8125rem;">OLT</button>
-                    <button type="button" class="device-catalog-tab btn-secondary" data-tab="onu" style="font-size: 0.8125rem;">ONU</button>
-                    <button type="button" class="device-catalog-tab btn-secondary" data-tab="camera" style="font-size: 0.8125rem;">Камеры</button>
-                    <button type="button" class="device-catalog-tab btn-secondary" data-tab="switch" style="font-size: 0.8125rem;">Коммутаторы</button>
-                </div>
-                <div id="deviceCatalogList" class="device-catalog-list"></div>
-                <div class="device-catalog-actions" style="margin-top: 12px;">
-                    <div class="device-catalog-add-mfr-row" style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap;">
-                        <input type="text" id="deviceCatalogNewMfr" class="form-input" placeholder="Название производителя" style="flex: 1; min-width: 160px;">
-                        <button type="button" id="deviceCatalogAddMfr" class="btn-secondary" style="flex-shrink: 0;">+ Добавить производителя</button>
+            <div class="modal-body device-catalog-modal-body">
+                <aside class="device-catalog-sidebar" aria-label="Разделы справочника">
+                    <nav class="device-catalog-tabs">
+                        <button type="button" class="device-catalog-tab device-catalog-tab-active" data-tab="switch">
+                            <span class="device-catalog-tab-label">Коммутаторы</span>
+                            <span class="device-catalog-tab-badge" data-stat-tab="switch"></span>
+                        </button>
+                        <button type="button" class="device-catalog-tab" data-tab="olt">
+                            <span class="device-catalog-tab-label">OLT</span>
+                            <span class="device-catalog-tab-badge" data-stat-tab="olt"></span>
+                        </button>
+                        <button type="button" class="device-catalog-tab" data-tab="onu">
+                            <span class="device-catalog-tab-label">ONU</span>
+                            <span class="device-catalog-tab-badge" data-stat-tab="onu"></span>
+                        </button>
+                        <button type="button" class="device-catalog-tab" data-tab="camera">
+                            <span class="device-catalog-tab-label">Камеры</span>
+                            <span class="device-catalog-tab-badge" data-stat-tab="camera"></span>
+                        </button>
+                        <button type="button" class="device-catalog-tab" data-tab="node">
+                            <span class="device-catalog-tab-label">Медиаконвертер</span>
+                            <span class="device-catalog-tab-badge" data-stat-tab="node"></span>
+                        </button>
+                    </nav>
+                    <div class="device-catalog-sidebar-actions">
+                        <button type="button" id="deviceCatalogOpenAddBtn" class="btn-primary device-catalog-sidebar-add">+ Добавить</button>
+                        <button type="button" id="deviceCatalogReset" class="btn-secondary device-catalog-reset-btn">Сбросить раздел</button>
                     </div>
-                    <button type="button" id="deviceCatalogReset" class="btn-secondary" style="background: transparent; border-color: var(--accent-warning); color: var(--accent-warning);">Сбросить к значениям по умолчанию</button>
+                    <p id="deviceCatalogTabDesc" class="device-catalog-tab-desc"></p>
+                </aside>
+                <div class="device-catalog-main">
+                    <div class="device-catalog-toolbar">
+                        <div class="device-catalog-toolbar-stats">
+                            <span id="deviceCatalogTabStats" class="device-catalog-tab-stats"></span>
+                        </div>
+                        <label class="device-catalog-search-wrap">
+                            <span class="device-catalog-search-icon" aria-hidden="true">⌕</span>
+                            <input type="search" id="deviceCatalogSearch" class="form-input device-catalog-search" placeholder="Поиск производителя или модели…" autocomplete="off">
+                        </label>
+                    </div>
+                    <div id="deviceCatalogList" class="device-catalog-list" role="region" aria-label="Список производителей и моделей"></div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Добавление производителя / модели в справочник -->
+    <div id="deviceCatalogEntryModal" class="modal device-catalog-entry-modal">
+        <div class="modal-content device-catalog-entry-modal-content">
+            <div class="modal-header">
+                <h2 id="deviceCatalogEntryModalTitle">Добавить в справочник</h2>
+                <span class="close-device-catalog-entry" title="Закрыть">&times;</span>
+            </div>
+            <div class="modal-body device-catalog-entry-body">
+                <p id="deviceCatalogEntrySectionHint" class="device-catalog-entry-hint"></p>
+                <div class="device-catalog-entry-type-tabs" role="tablist">
+                    <button type="button" class="device-catalog-entry-type device-catalog-entry-type-active" data-entry-type="manufacturer" role="tab" aria-selected="true">Производитель</button>
+                    <button type="button" class="device-catalog-entry-type" data-entry-type="model" role="tab" aria-selected="false">Модель устройства</button>
+                </div>
+                <div id="deviceCatalogEntryMfrPanel" class="device-catalog-entry-panel">
+                    <div class="form-group">
+                        <label for="deviceCatalogEntryMfrName">Название производителя</label>
+                        <input type="text" id="deviceCatalogEntryMfrName" class="form-input" placeholder="Например: MikroTik" autocomplete="off">
+                    </div>
+                </div>
+                <div id="deviceCatalogEntryModelPanel" class="device-catalog-entry-panel" hidden>
+                    <div class="form-group">
+                        <label for="deviceCatalogEntryMfrSelect">Производитель</label>
+                        <select id="deviceCatalogEntryMfrSelect" class="form-select">
+                            <option value="">— Выберите —</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="deviceCatalogEntryModelName">Модель устройства</label>
+                        <input type="text" id="deviceCatalogEntryModelName" class="form-input" placeholder="Например: CRS326-24G-2S+" autocomplete="off">
+                    </div>
+                    <div id="deviceCatalogEntryPortsGroup" class="form-group" hidden>
+                        <label for="deviceCatalogEntryDefaultPorts">Портов по умолчанию</label>
+                        <input type="number" id="deviceCatalogEntryDefaultPorts" class="form-input" min="1" max="96" placeholder="24" style="max-width: 120px;">
+                        <p class="form-hint device-catalog-entry-ports-hint">Подставится при добавлении коммутатора в узел на карте</p>
+                    </div>
+                </div>
+            </div>
+            <div class="device-catalog-entry-footer">
+                <button type="button" id="deviceCatalogEntryCancel" class="btn-secondary">Отмена</button>
+                <button type="button" id="deviceCatalogEntrySave" class="btn-primary">Сохранить</button>
             </div>
         </div>
     </div>

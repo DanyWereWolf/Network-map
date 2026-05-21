@@ -95,7 +95,145 @@ var switchDeviceCatalog = {};
 /** switchModelDefaultPorts[manufacturer][model] = число портов по умолчанию при добавлении коммутатора. */
 var switchModelDefaultPorts = {};
 
-window.deviceCatalogActiveTab = 'node';
+window.deviceCatalogActiveTab = 'switch';
+
+var DEVICE_CATALOG_TAB_META = {
+    switch: {
+        label: 'Коммутаторы',
+        desc: 'Коммутаторы в узле на карте: производитель и модель при редактировании узла и при добавлении коммутатора. Для модели можно задать число портов по умолчанию.'
+    },
+    olt: {
+        label: 'OLT',
+        desc: 'Оптические линейные терминалы на карте: производитель и модель при создании и редактировании OLT.'
+    },
+    onu: {
+        label: 'ONU',
+        desc: 'Абонентские терминалы в сплиттерах и узлах. Отдельный список от OLT и коммутаторов.'
+    },
+    camera: {
+        label: 'Камеры',
+        desc: 'Видеокамеры на карте: марка и модель при добавлении и в карточке объекта.'
+    },
+    node: {
+        label: 'Медиаконвертер',
+        desc: 'Оптические медиаконвертеры на карте (отдельно от коммутаторов узла сети).'
+    }
+};
+
+var DEVICE_CATALOG_ALLOWED_TABS = { node: 1, olt: 1, onu: 1, camera: 1, switch: 1 };
+
+function getDeviceCatalogStats(kind) {
+    var catalog = getCatalogObjectRef(kind);
+    var mfrs = Object.keys(catalog || {});
+    var models = 0;
+    mfrs.forEach(function(m) {
+        models += (catalog[m] || []).length;
+    });
+    return { manufacturers: mfrs.length, models: models };
+}
+
+function getDeviceCatalogSearchQuery() {
+    var inp = document.getElementById('deviceCatalogSearch');
+    return inp ? inp.value.trim().toLowerCase() : '';
+}
+
+function catalogEntryMatchesSearch(mfr, models, q) {
+    if (!q) return true;
+    if (mfr.toLowerCase().indexOf(q) !== -1) return true;
+    return (models || []).some(function(mod) {
+        return String(mod).toLowerCase().indexOf(q) !== -1;
+    });
+}
+
+function updateDeviceCatalogChrome() {
+    var tab = window.deviceCatalogActiveTab || 'switch';
+    if (!DEVICE_CATALOG_ALLOWED_TABS[tab]) tab = 'switch';
+    var meta = DEVICE_CATALOG_TAB_META[tab] || DEVICE_CATALOG_TAB_META.switch;
+    var stats = getDeviceCatalogStats(tab);
+
+    var descEl = document.getElementById('deviceCatalogTabDesc');
+    if (descEl) descEl.textContent = meta.desc;
+
+    var tabStatsEl = document.getElementById('deviceCatalogTabStats');
+    if (tabStatsEl) {
+        var mLabel = stats.manufacturers === 1 ? 'производитель' : (stats.manufacturers >= 2 && stats.manufacturers <= 4 ? 'производителя' : 'производителей');
+        var modLabel = stats.models === 1 ? 'модель' : (stats.models >= 2 && stats.models <= 4 ? 'модели' : 'моделей');
+        tabStatsEl.innerHTML = escapeHtml(meta.label) + ': <strong>' + stats.manufacturers + '</strong> ' + mLabel + ', <strong>' + stats.models + '</strong> ' + modLabel;
+    }
+
+    var globalEl = document.getElementById('deviceCatalogGlobalStats');
+    if (globalEl) {
+        var totalM = 0;
+        var totalMod = 0;
+        Object.keys(DEVICE_CATALOG_TAB_META).forEach(function(k) {
+            var s = getDeviceCatalogStats(k);
+            totalM += s.manufacturers;
+            totalMod += s.models;
+        });
+        globalEl.innerHTML =
+            '<span class="device-catalog-stat-pill">Всего: ' + totalM + ' произв., ' + totalMod + ' мод.</span>' +
+            '<span class="device-catalog-stat-pill">Раздел: ' + escapeHtml(meta.label) + '</span>';
+    }
+
+    document.querySelectorAll('.device-catalog-tab-badge[data-stat-tab]').forEach(function(badge) {
+        var k = badge.getAttribute('data-stat-tab');
+        if (!k || !DEVICE_CATALOG_ALLOWED_TABS[k]) return;
+        var s = getDeviceCatalogStats(k);
+        badge.textContent = s.manufacturers + ' / ' + s.models;
+        badge.title = s.manufacturers + ' производителей, ' + s.models + ' моделей';
+    });
+}
+
+function applyDeviceCatalogSearchFilter() {
+    var q = getDeviceCatalogSearchQuery();
+    var list = document.getElementById('deviceCatalogList');
+    if (!list) return;
+    var cards = list.querySelectorAll('.device-catalog-mfr');
+    var visible = 0;
+    cards.forEach(function(card) {
+        var mfr = card.getAttribute('data-mfr') || '';
+        var models = [];
+        card.querySelectorAll('.device-catalog-model-name').forEach(function(el) {
+            models.push(el.textContent);
+        });
+        var show = catalogEntryMatchesSearch(mfr, models, q);
+        card.classList.toggle('is-hidden-by-search', !show);
+        if (show) visible++;
+    });
+    var noRes = list.querySelector('.device-catalog-no-results');
+    if (cards.length > 0 && q && visible === 0) {
+        if (!noRes) {
+            noRes = document.createElement('p');
+            noRes.className = 'device-catalog-no-results';
+            noRes.textContent = 'Ничего не найдено. Измените запрос или выберите другой раздел.';
+            list.appendChild(noRes);
+        }
+    } else if (noRes) {
+        noRes.remove();
+    }
+}
+
+/** Слияние старого справочника «узла» в коммутаторы (узел сети = коммутатор). */
+function mergeNodeCatalogIntoSwitch() {
+    var changed = false;
+    Object.keys(nodeDeviceCatalog || {}).forEach(function(mfr) {
+        if (!mfr) return;
+        if (!switchDeviceCatalog[mfr]) {
+            switchDeviceCatalog[mfr] = [];
+            changed = true;
+        }
+        var existing = {};
+        (switchDeviceCatalog[mfr] || []).forEach(function(mod) { if (mod) existing[mod] = true; });
+        (nodeDeviceCatalog[mfr] || []).forEach(function(mod) {
+            if (mod && !existing[mod]) {
+                switchDeviceCatalog[mfr].push(mod);
+                existing[mod] = true;
+                changed = true;
+            }
+        });
+    });
+    return changed;
+}
 
 function cloneDeepCatalog(cat) {
     var o = {};
@@ -171,6 +309,20 @@ function resetDeviceCatalogToDefault() {
     cameraDeviceCatalog = cloneDeepCatalog(CAMERA_CATALOG_DEFAULT);
     switchDeviceCatalog = cloneDeepCatalog(SWITCH_CATALOG_DEFAULT);
     switchModelDefaultPorts = {};
+    saveDeviceCatalog();
+}
+
+function resetDeviceCatalogTabToDefault(kind) {
+    if (!DEVICE_CATALOG_ALLOWED_TABS[kind]) return;
+    var def = getCatalogDefault(kind);
+    if (kind === 'node') nodeDeviceCatalog = cloneDeepCatalog(def);
+    else if (kind === 'olt') oltDeviceCatalog = cloneDeepCatalog(def);
+    else if (kind === 'onu') onuDeviceCatalog = cloneDeepCatalog(def);
+    else if (kind === 'camera') cameraDeviceCatalog = cloneDeepCatalog(def);
+    else if (kind === 'switch') {
+        switchDeviceCatalog = cloneDeepCatalog(def);
+        switchModelDefaultPorts = {};
+    }
     saveDeviceCatalog();
 }
 
@@ -432,6 +584,8 @@ function loadDeviceCatalog(opts) {
     } else {
         switchModelDefaultPorts = {};
     }
+
+    if (mergeNodeCatalogIntoSwitch()) saveDeviceCatalog();
 }
 
 function loadCustomDeviceOptions(opts) {
@@ -453,6 +607,7 @@ function ensureDeviceCatalogsNonEmpty() {
     if (Object.keys(onuDeviceCatalog || {}).length === 0) onuDeviceCatalog = cloneDeepCatalog(ONU_CATALOG_DEFAULT);
     if (Object.keys(cameraDeviceCatalog || {}).length === 0) cameraDeviceCatalog = cloneDeepCatalog(CAMERA_CATALOG_DEFAULT);
     if (Object.keys(switchDeviceCatalog || {}).length === 0) switchDeviceCatalog = cloneDeepCatalog(SWITCH_CATALOG_DEFAULT);
+    if (mergeNodeCatalogIntoSwitch()) saveDeviceCatalog();
 }
 
 function populateDeviceDatalists() {
@@ -726,72 +881,61 @@ function setDeviceComboboxValue(valueId, value) {
 function renderDeviceCatalogList() {
     var container = document.getElementById('deviceCatalogList');
     if (!container) return;
-    var tab = window.deviceCatalogActiveTab || 'node';
-    var allowedTabs = { node: 1, olt: 1, onu: 1, camera: 1, switch: 1 };
-    if (!allowedTabs[tab]) tab = 'node';
+    var tab = window.deviceCatalogActiveTab || 'switch';
+    if (!DEVICE_CATALOG_ALLOWED_TABS[tab]) tab = 'switch';
 
     var catalog = getCatalogObjectRef(tab);
+    var searchQ = getDeviceCatalogSearchQuery();
 
     var mfrs = Object.keys(catalog).sort();
+    updateDeviceCatalogChrome();
+
     if (mfrs.length === 0) {
-        container.innerHTML = '<p class="text-muted-inline" style="font-size: 0.8125rem; margin: 0;">Справочник пуст. Добавьте производителя или сбросьте к значениям по умолчанию.</p>';
+        container.innerHTML = '<p class="device-catalog-empty">Раздел пуст. Нажмите «+ Добавить» или сбросьте раздел к значениям по умолчанию.</p>';
         return;
     }
+
     var html = '';
+    var visibleCount = 0;
     mfrs.forEach(function(mfr) {
         var models = (catalog[mfr] || []).slice();
-        html += '<div class="device-catalog-mfr" data-mfr="' + escapeHtml(mfr) + '" style="margin-bottom: 12px; padding: 10px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-        html += '<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">';
-        html += '<strong style="font-size: 0.875rem;">' + escapeHtml(mfr) + '</strong>';
-        html += '<div style="display: flex; gap: 6px;">';
-        html += '<input type="text" class="form-input device-catalog-new-model" data-mfr="' + escapeHtml(mfr) + '" placeholder="Модель" style="width: 120px; padding: 4px 8px; font-size: 0.8125rem;">';
-        html += '<button type="button" class="device-catalog-add-model" data-mfr="' + escapeHtml(mfr) + '" title="Добавить модель" style="padding: 4px 10px; font-size: 0.75rem; background: var(--accent-primary); color: white; border: none; border-radius: 4px; cursor: pointer;">+</button>';
-        html += '<button type="button" class="device-catalog-remove-mfr" data-mfr="' + escapeHtml(mfr) + '" title="Удалить производителя" style="padding: 4px 8px; font-size: 0.75rem; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer;">✕</button>';
-        html += '</div></div>';
-        html += '<div class="device-catalog-models" style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">';
+        var matches = catalogEntryMatchesSearch(mfr, models, searchQ);
+        if (matches) visibleCount++;
+        var countWord = models.length === 1 ? 'модель' : (models.length >= 2 && models.length <= 4 ? 'модели' : 'моделей');
+        html += '<article class="device-catalog-mfr' + (matches ? '' : ' is-hidden-by-search') + '" data-mfr="' + escapeHtml(mfr) + '">';
+        html += '<header class="device-catalog-mfr-header">';
+        html += '<div class="device-catalog-mfr-title">';
+        html += '<span class="device-catalog-mfr-name">' + escapeHtml(mfr) + '</span>';
+        html += '<span class="device-catalog-mfr-count">' + models.length + ' ' + countWord + '</span>';
+        html += '</div>';
+        html += '<div class="device-catalog-mfr-actions">';
+        html += '<button type="button" class="device-catalog-add-model-card device-catalog-btn-add-model" data-mfr="' + escapeHtml(mfr) + '" title="Добавить модель">+ Модель</button>';
+        html += '<button type="button" class="device-catalog-remove-mfr device-catalog-btn-remove-mfr" data-mfr="' + escapeHtml(mfr) + '" title="Удалить производителя и все модели">Удалить</button>';
+        html += '</div></header>';
+        html += '<div class="device-catalog-models">';
+        if (models.length === 0) {
+            html += '<span class="device-catalog-mfr-count">Нет моделей — нажмите «+ Добавить»</span>';
+        }
         models.forEach(function(mod) {
-            html += '<span class="device-catalog-model-tag" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 0.75rem; background: var(--bg-card); border-radius: 4px; border: 1px solid var(--border-color);">';
-            html += escapeHtml(mod);
+            html += '<span class="device-catalog-model-tag">';
+            html += '<span class="device-catalog-model-name">' + escapeHtml(mod) + '</span>';
             if (tab === 'switch') {
                 var defN = getSwitchModelDefaultPortCount(mfr, mod);
-                html += '<label style="display:inline-flex;align-items:center;gap:2px;margin-left:4px;font-size:0.65rem;color:var(--text-muted);" title="Число портов по умолчанию при добавлении коммутатора в узел">порт.<input type="number" class="form-input switch-catalog-def-ports" min="1" max="96" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" value="' + (defN != null ? String(defN) : '') + '" placeholder="—" style="width:44px;padding:2px 4px;font-size:0.65rem;"></label>';
+                html += '<label class="device-catalog-ports-label" title="Портов по умолчанию при добавлении коммутатора в узел">Портов<input type="number" class="form-input device-catalog-ports-input switch-catalog-def-ports" min="1" max="96" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" value="' + (defN != null ? String(defN) : '') + '" placeholder="—" aria-label="Портов по умолчанию"></label>';
             }
-            html += '<button type="button" class="device-catalog-remove-model" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" title="Удалить" style="padding: 0; margin: 0; background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 0.9em; line-height: 1;">×</button>';
+            html += '<button type="button" class="device-catalog-remove-model" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" title="Удалить модель" aria-label="Удалить модель">×</button>';
             html += '</span>';
         });
-        html += '</div></div>';
+        html += '</div></article>';
     });
+    if (searchQ && visibleCount === 0) {
+        html += '<p class="device-catalog-no-results">Ничего не найдено по запросу «' + escapeHtml(searchQ) + '». Измените поиск или выберите другой раздел.</p>';
+    }
     container.innerHTML = html;
 
-    container.querySelectorAll('.device-catalog-add-model').forEach(function(btn) {
+    container.querySelectorAll('.device-catalog-add-model-card').forEach(function(btn) {
         btn.addEventListener('click', function() {
-            var mfr = btn.getAttribute('data-mfr');
-            var inp = container.querySelector('.device-catalog-new-model[data-mfr="' + mfr + '"]');
-            var val = inp ? inp.value.trim() : '';
-            if (!val) { if (typeof showError === 'function') showError('Введите модель', ''); return; }
-            if (addModelForCatalog(tab, mfr, val)) {
-                inp.value = '';
-                renderDeviceCatalogList();
-                populateDeviceDatalists();
-                populateModelDatalistForManufacturer(mfr, 'deviceModelsList', tab);
-                if (typeof showInfo === 'function') showInfo('Модель добавлена', '');
-            }
-        });
-    });
-    container.querySelectorAll('.device-catalog-new-model').forEach(function(inp) {
-        inp.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                var mfr = inp.getAttribute('data-mfr');
-                var val = inp.value.trim();
-                if (val && addModelForCatalog(tab, mfr, val)) {
-                    inp.value = '';
-                    renderDeviceCatalogList();
-                    populateDeviceDatalists();
-                    populateModelDatalistForManufacturer(mfr, 'deviceModelsList', tab);
-                    if (typeof showInfo === 'function') showInfo('Модель добавлена', '');
-                }
-            }
+            openDeviceCatalogEntryModal('model', btn.getAttribute('data-mfr') || '');
         });
     });
     container.querySelectorAll('.device-catalog-remove-mfr').forEach(function(btn) {
@@ -837,18 +981,196 @@ function renderDeviceCatalogList() {
     }
 }
 
+function getActiveDeviceCatalogTab() {
+    var tab = window.deviceCatalogActiveTab || 'switch';
+    if (!DEVICE_CATALOG_ALLOWED_TABS[tab]) tab = 'switch';
+    return tab;
+}
+
+function setDeviceCatalogEntryType(entryType) {
+    var mfrPanel = document.getElementById('deviceCatalogEntryMfrPanel');
+    var modelPanel = document.getElementById('deviceCatalogEntryModelPanel');
+    var isMfr = entryType === 'manufacturer';
+    document.querySelectorAll('.device-catalog-entry-type').forEach(function(btn) {
+        var active = btn.getAttribute('data-entry-type') === entryType;
+        btn.classList.toggle('device-catalog-entry-type-active', active);
+        btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    if (mfrPanel) mfrPanel.hidden = !isMfr;
+    if (modelPanel) modelPanel.hidden = isMfr;
+}
+
+function refreshDeviceCatalogEntryMfrSelect(preselect) {
+    var sel = document.getElementById('deviceCatalogEntryMfrSelect');
+    if (!sel) return;
+    var tab = getActiveDeviceCatalogTab();
+    var mfrs = getManufacturersForCatalog(tab);
+    var prev = preselect != null ? preselect : sel.value;
+    sel.innerHTML = '<option value="">— Выберите —</option>';
+    mfrs.forEach(function(m) {
+        var opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m;
+        sel.appendChild(opt);
+    });
+    if (prev && mfrs.indexOf(prev) !== -1) sel.value = prev;
+}
+
+function updateDeviceCatalogEntryModalChrome() {
+    var tab = getActiveDeviceCatalogTab();
+    var meta = DEVICE_CATALOG_TAB_META[tab] || DEVICE_CATALOG_TAB_META.switch;
+    var hint = document.getElementById('deviceCatalogEntrySectionHint');
+    var portsGroup = document.getElementById('deviceCatalogEntryPortsGroup');
+    if (hint) hint.textContent = 'Раздел: «' + meta.label + '». ' + meta.desc;
+    if (portsGroup) portsGroup.hidden = tab !== 'switch';
+}
+
+function openDeviceCatalogEntryModal(entryType, presetMfr) {
+    var modal = document.getElementById('deviceCatalogEntryModal');
+    if (!modal) return;
+    entryType = entryType === 'model' ? 'model' : 'manufacturer';
+    updateDeviceCatalogEntryModalChrome();
+    refreshDeviceCatalogEntryMfrSelect(presetMfr || '');
+    setDeviceCatalogEntryType(entryType);
+
+    var mfrNameInp = document.getElementById('deviceCatalogEntryMfrName');
+    var modelNameInp = document.getElementById('deviceCatalogEntryModelName');
+    var portsInp = document.getElementById('deviceCatalogEntryDefaultPorts');
+    if (mfrNameInp) mfrNameInp.value = '';
+    if (modelNameInp) modelNameInp.value = '';
+    if (portsInp) portsInp.value = '';
+    if (entryType === 'model' && presetMfr) {
+        var sel = document.getElementById('deviceCatalogEntryMfrSelect');
+        if (sel) sel.value = presetMfr;
+    }
+
+    var titleEl = document.getElementById('deviceCatalogEntryModalTitle');
+    if (titleEl) titleEl.textContent = entryType === 'model' ? 'Добавить модель' : 'Добавить производителя';
+
+    modal.style.display = 'flex';
+    var focusEl = entryType === 'model'
+        ? (document.getElementById('deviceCatalogEntryModelName') || document.getElementById('deviceCatalogEntryMfrSelect'))
+        : document.getElementById('deviceCatalogEntryMfrName');
+    if (focusEl) setTimeout(function() { focusEl.focus(); }, 50);
+}
+
+function closeDeviceCatalogEntryModal() {
+    var modal = document.getElementById('deviceCatalogEntryModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function saveDeviceCatalogEntry() {
+    var tab = getActiveDeviceCatalogTab();
+    var entryType = document.querySelector('.device-catalog-entry-type-active');
+    var type = entryType ? entryType.getAttribute('data-entry-type') : 'manufacturer';
+
+    if (type === 'manufacturer') {
+        var nameInp = document.getElementById('deviceCatalogEntryMfrName');
+        var name = nameInp ? nameInp.value.trim() : '';
+        if (!name) {
+            if (typeof showError === 'function') showError('Введите название производителя', '');
+            return;
+        }
+        if (addManufacturerForCatalog(tab, name)) {
+            closeDeviceCatalogEntryModal();
+            renderDeviceCatalogList();
+            populateDeviceDatalists();
+            if (typeof showInfo === 'function') showInfo('Производитель добавлен', '');
+        } else if (typeof showError === 'function') showError('Производитель уже существует', '');
+        return;
+    }
+
+    var sel = document.getElementById('deviceCatalogEntryMfrSelect');
+    var mfr = sel ? sel.value.trim() : '';
+    if (!mfr) {
+        if (typeof showError === 'function') showError('Выберите производителя', '');
+        return;
+    }
+    var modelInp = document.getElementById('deviceCatalogEntryModelName');
+    var model = modelInp ? modelInp.value.trim() : '';
+    if (!model) {
+        if (typeof showError === 'function') showError('Введите модель устройства', '');
+        return;
+    }
+    var cat = getCatalogObjectRef(tab);
+    if (cat[mfr] && cat[mfr].indexOf(model) !== -1) {
+        if (typeof showError === 'function') showError('Такая модель уже есть у этого производителя', '');
+        return;
+    }
+    if (!addModelForCatalog(tab, mfr, model)) return;
+
+    if (tab === 'switch') {
+        var portsInp = document.getElementById('deviceCatalogEntryDefaultPorts');
+        var pv = portsInp ? parseInt(portsInp.value, 10) : NaN;
+        if (!isNaN(pv) && pv >= 1) setSwitchModelDefaultPortCount(mfr, model, Math.min(96, pv));
+    }
+
+    closeDeviceCatalogEntryModal();
+    renderDeviceCatalogList();
+    populateDeviceDatalists();
+    populateModelDatalistForManufacturer(mfr, 'deviceModelsList', tab);
+    if (typeof showInfo === 'function') showInfo('Модель добавлена', '');
+}
+
+function setupDeviceCatalogEntryHandlers() {
+    var entryModal = document.getElementById('deviceCatalogEntryModal');
+    if (!entryModal || entryModal._deviceCatalogEntryBound) return;
+    entryModal._deviceCatalogEntryBound = true;
+
+    entryModal.querySelectorAll('.device-catalog-entry-type').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            setDeviceCatalogEntryType(btn.getAttribute('data-entry-type'));
+            refreshDeviceCatalogEntryMfrSelect();
+        });
+    });
+
+    var saveBtn = document.getElementById('deviceCatalogEntrySave');
+    if (saveBtn) saveBtn.addEventListener('click', saveDeviceCatalogEntry);
+
+    var cancelBtn = document.getElementById('deviceCatalogEntryCancel');
+    if (cancelBtn) cancelBtn.addEventListener('click', closeDeviceCatalogEntryModal);
+
+    var closeBtn = document.querySelector('.close-device-catalog-entry');
+    if (closeBtn) closeBtn.addEventListener('click', closeDeviceCatalogEntryModal);
+
+    entryModal.addEventListener('click', function(e) {
+        if (e.target === entryModal) closeDeviceCatalogEntryModal();
+    });
+
+    ['deviceCatalogEntryMfrName', 'deviceCatalogEntryModelName'].forEach(function(id) {
+        var inp = document.getElementById(id);
+        if (inp) {
+            inp.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    saveDeviceCatalogEntry();
+                }
+            });
+        }
+    });
+}
+
 function setupDeviceCatalogHandlers() {
-    var addMfrBtn = document.getElementById('deviceCatalogAddMfr');
+    var openAddBtn = document.getElementById('deviceCatalogOpenAddBtn');
     var resetBtn = document.getElementById('deviceCatalogReset');
+    var searchInp = document.getElementById('deviceCatalogSearch');
     var catModal = document.getElementById('deviceCatalogModal');
+
+    setupDeviceCatalogEntryHandlers();
+
+    if (searchInp && !searchInp._deviceCatalogSearchBound) {
+        searchInp._deviceCatalogSearchBound = true;
+        searchInp.addEventListener('input', function() {
+            applyDeviceCatalogSearchFilter();
+        });
+    }
     if (catModal && !catModal._deviceCatalogTabBound) {
         catModal._deviceCatalogTabBound = true;
         catModal.addEventListener('click', function(e) {
             var b = e.target.closest('.device-catalog-tab');
             if (!b || !catModal.contains(b)) return;
             var t = b.getAttribute('data-tab');
-            var allowedTabs = { node: 1, olt: 1, onu: 1, camera: 1, switch: 1 };
-            if (!t || !allowedTabs[t]) return;
+            if (!t || !DEVICE_CATALOG_ALLOWED_TABS[t]) return;
             window.deviceCatalogActiveTab = t;
             catModal.querySelectorAll('.device-catalog-tab').forEach(function(x) {
                 x.classList.toggle('device-catalog-tab-active', x === b);
@@ -856,41 +1178,26 @@ function setupDeviceCatalogHandlers() {
             renderDeviceCatalogList();
         });
     }
-    if (addMfrBtn) {
-        addMfrBtn.addEventListener('click', function() {
-            var inp = document.getElementById('deviceCatalogNewMfr');
-            var name = inp ? inp.value.trim() : '';
-            if (!name) { if (typeof showError === 'function') showError('Введите название производителя', ''); return; }
-            var tab = window.deviceCatalogActiveTab || 'node';
-            var allowedTabs = { node: 1, olt: 1, onu: 1, camera: 1, switch: 1 };
-            if (!allowedTabs[tab]) tab = 'node';
-            if (addManufacturerForCatalog(tab, name)) {
-                if (inp) inp.value = '';
-                renderDeviceCatalogList();
-                populateDeviceDatalists();
-                if (typeof showInfo === 'function') showInfo('Производитель добавлен', '');
-            } else {
-                if (typeof showError === 'function') showError('Производитель уже существует', '');
-            }
-        });
-    }
-    var newMfrInput = document.getElementById('deviceCatalogNewMfr');
-    if (newMfrInput) {
-        newMfrInput.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                if (addMfrBtn) addMfrBtn.click();
-            }
+    if (openAddBtn && !openAddBtn._deviceCatalogAddBound) {
+        openAddBtn._deviceCatalogAddBound = true;
+        openAddBtn.addEventListener('click', function() {
+            openDeviceCatalogEntryModal('manufacturer');
         });
     }
     if (resetBtn) {
         resetBtn.addEventListener('click', function() {
             (async function() {
-                if (!(await showConfirm('Сбросить справочник к значениям по умолчанию? Текущие данные будут заменены.', 'Сброс справочника', { confirmText: 'Сбросить' }))) return;
-            resetDeviceCatalogToDefault();
-            renderDeviceCatalogList();
-            populateDeviceDatalists();
-            if (typeof showInfo === 'function') showInfo('Справочник сброшен', '');
+                var tab = getActiveDeviceCatalogTab();
+                var meta = DEVICE_CATALOG_TAB_META[tab] || DEVICE_CATALOG_TAB_META.switch;
+                if (!(await showConfirm(
+                    'Сбросить раздел «' + meta.label + '» к заводским значениям? Ваши правки в этом разделе будут заменены.',
+                    'Сброс раздела',
+                    { confirmText: 'Сбросить' }
+                ))) return;
+                resetDeviceCatalogTabToDefault(tab);
+                renderDeviceCatalogList();
+                populateDeviceDatalists();
+                if (typeof showInfo === 'function') showInfo('Раздел «' + meta.label + '» сброшен', '');
             })();
         });
     }
@@ -926,18 +1233,27 @@ function openDeviceCatalogModal() {
     if (typeof requireAdmin === 'function' && !requireAdmin()) return;
     var modal = document.getElementById('deviceCatalogModal');
     if (modal) {
-        window.deviceCatalogActiveTab = 'node';
+        window.deviceCatalogActiveTab = 'switch';
         modal.querySelectorAll('.device-catalog-tab').forEach(function(x) {
-            x.classList.toggle('device-catalog-tab-active', x.getAttribute('data-tab') === 'node');
+            x.classList.toggle('device-catalog-tab-active', x.getAttribute('data-tab') === 'switch');
         });
-        modal.style.display = 'block';
+        var searchInp = document.getElementById('deviceCatalogSearch');
+        if (searchInp) searchInp.value = '';
+        modal.classList.add('device-catalog-modal-open');
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
         renderDeviceCatalogList();
     }
 }
 
 function closeDeviceCatalogModal() {
+    closeDeviceCatalogEntryModal();
     var modal = document.getElementById('deviceCatalogModal');
-    if (modal) modal.style.display = 'none';
+    if (modal) {
+        modal.classList.remove('device-catalog-modal-open');
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+    }
 }
 
 function setupDeviceCatalogModalHandlers() {
@@ -946,7 +1262,10 @@ function setupDeviceCatalogModalHandlers() {
     var modal = document.getElementById('deviceCatalogModal');
     if (modal) {
         modal.addEventListener('click', function(e) {
-            if (e.target === modal) closeDeviceCatalogModal();
+            if (e.target !== modal) return;
+            var entry = document.getElementById('deviceCatalogEntryModal');
+            if (entry && entry.style.display && entry.style.display !== 'none') return;
+            closeDeviceCatalogModal();
         });
     }
 }

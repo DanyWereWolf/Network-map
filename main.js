@@ -1292,14 +1292,21 @@ function setupEventListeners() {
 
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
-            var modalIds = ['infoModal', 'nodeSelectionModal', 'onuSelectionModal', 'splitterSelectionModal', 'splitterOutputOnuModal', 'splitterOutputSplitterModal', 'oltSelectionModal', 'usersModal', 'userEditModal', 'organizationsModal', 'organizationEditModal', 'updatesModal', 'profileModal', 'deviceCatalogModal', 'confirmModal'];
+            var modalIds = ['deviceCatalogEntryModal', 'infoModal', 'nodeSelectionModal', 'onuSelectionModal', 'splitterSelectionModal', 'splitterOutputOnuModal', 'splitterOutputSplitterModal', 'oltSelectionModal', 'usersModal', 'userEditModal', 'organizationsModal', 'organizationEditModal', 'updatesModal', 'profileModal', 'deviceCatalogModal', 'confirmModal'];
             for (var i = 0; i < modalIds.length; i++) {
                 var m = document.getElementById(modalIds[i]);
-                if (m && m.style && m.style.display === 'block') {
+                var modalOpen = m && m.style && m.style.display && m.style.display !== 'none';
+                if (modalOpen) {
                     if (modalIds[i] === 'infoModal' && typeof pendingCopperRouteFinish !== 'undefined' && pendingCopperRouteFinish) {
                         pendingCopperRouteFinish = null;
                     }
-                    m.style.display = 'none';
+                    if (modalIds[i] === 'deviceCatalogEntryModal' && typeof closeDeviceCatalogEntryModal === 'function') {
+                        closeDeviceCatalogEntryModal();
+                    } else if (modalIds[i] === 'deviceCatalogModal' && typeof closeDeviceCatalogModal === 'function') {
+                        closeDeviceCatalogModal();
+                    } else {
+                        m.style.display = 'none';
+                    }
                     e.preventDefault();
                     return;
                 }
@@ -1794,12 +1801,8 @@ function handleMapClick(e) {
                 return;
             }
             const nodeKindSelect = document.getElementById('nodeKind');
-            const nodeManufacturerInput = document.getElementById('nodeManufacturer');
-            const nodeModelInput = document.getElementById('nodeModel');
             const nodeKind = currentPlacementNodeKind || (nodeKindSelect ? nodeKindSelect.value : 'network');
-            var manufacturer = nodeManufacturerInput ? nodeManufacturerInput.value.trim() : '';
-            var model = nodeModelInput ? nodeModelInput.value.trim() : '';
-            createObject(type, name || '', coords, { nodeKind: nodeKind, manufacturer: manufacturer, model: model });
+            createObject(type, name || '', coords, { nodeKind: nodeKind });
             
             currentPlacementName = name || '';
             currentPlacementNodeKind = nodeKind;
@@ -3063,8 +3066,6 @@ function createObject(type, name, coords, options = {}) {
 
     if (type === 'node') {
         placemarkProperties.nodeKind = (options.nodeKind || 'network');
-        if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
-        if (options.model) placemarkProperties.model = options.model;
         placemarkProperties.comment = options.comment || '';
         if (Array.isArray(options.attachedSwitches) && options.attachedSwitches.length) {
             placemarkProperties.attachedSwitches = JSON.parse(JSON.stringify(options.attachedSwitches));
@@ -4999,6 +5000,228 @@ function getNodeAttachedSwitches(node) {
     return Array.isArray(a) ? a : [];
 }
 
+function getAttachedSwitchPortStats(swRow) {
+    var pts = (swRow && swRow.switchPortTypes) ? swRow.switchPortTypes : [];
+    var usageN = (swRow && swRow.copperPortUsage) ? swRow.copperPortUsage : {};
+    var fiberUsageN = (swRow && swRow.fiberPortUsage) ? swRow.fiberPortUsage : {};
+    var total = pts.length;
+    var busy = 0;
+    for (var i = 1; i <= total; i++) {
+        if (usageN[String(i)] || fiberUsageN[String(i)]) busy++;
+    }
+    return { total: total, busy: busy, free: Math.max(0, total - busy) };
+}
+
+function getNodeSwitchesSummary(node) {
+    var list = getNodeAttachedSwitches(node);
+    var totalPorts = 0;
+    var busyPorts = 0;
+    list.forEach(function(sw) {
+        var s = getAttachedSwitchPortStats(sw);
+        totalPorts += s.total;
+        busyPorts += s.busy;
+    });
+    return { swCount: list.length, totalPorts: totalPorts, busyPorts: busyPorts };
+}
+
+function buildNodeCardContent(obj, isEditMode, name) {
+    var html = '';
+    var nodeKind = obj.properties.get('nodeKind') || 'network';
+    var comment = obj.properties.get('comment') || '';
+    var nodeKindLabel = nodeKind === 'aggregation' ? 'Узел агрегации' : 'Узел сети';
+    var kindDotClass = nodeKind === 'aggregation' ? 'node-kind-dot--aggregation' : 'node-kind-dot--network';
+    var attachedList = getNodeAttachedSwitches(obj);
+    var swSummary = getNodeSwitchesSummary(obj);
+    var kindOptsNodeSw = ['RJ45 10/100/1000', 'RJ45 PoE', 'SFP', 'SFP+', 'Комбо RJ45/SFP', 'Консоль', 'Uplink/stack'];
+    var nodeUniqueId = getObjectUniqueId(obj);
+    var connectedFibers = getNodeConnectedFibers(nodeUniqueId);
+
+    html += '<div class="node-card">';
+
+    html += '<section class="object-card-section">';
+    if (isEditMode) {
+        html += '<h4 class="object-card-section-title">Узел</h4>';
+        html += '<div class="node-card-fields-grid">';
+        html += '<div class="form-group"><label for="editNodeName" class="object-card-label">Название</label>';
+        html += '<input type="text" id="editNodeName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Название узла">';
+        html += '</div>';
+        html += '<div class="form-group"><label for="editNodeKind" class="object-card-label">Тип</label>';
+        html += '<select id="editNodeKind" class="form-select">';
+        html += '<option value="network"' + (nodeKind === 'network' ? ' selected' : '') + '>Сеть (зелёный)</option>';
+        html += '<option value="aggregation"' + (nodeKind === 'aggregation' ? ' selected' : '') + '>Агрегация (красный)</option>';
+        html += '</select></div></div>';
+        html += '<div class="form-group" style="margin-top:12px;margin-bottom:0;"><label for="editNodeComment" class="object-card-label">Комментарий</label>';
+        html += '<textarea id="editNodeComment" class="form-input" rows="2" placeholder="Необязательно">' + escapeHtml(comment) + '</textarea></div>';
+    } else {
+        html += '<div class="node-card-view-header">';
+        html += '<span class="node-kind-dot ' + kindDotClass + '" title="' + escapeHtml(nodeKindLabel) + '"></span>';
+        html += '<div><div class="node-card-view-name">' + escapeHtml(name || 'Без названия') + '</div>';
+        html += '<div class="node-card-view-meta">' + escapeHtml(nodeKindLabel) + '</div></div></div>';
+        if (comment) {
+            html += '<div class="node-card-comment">' + escapeHtml(comment) + '</div>';
+        }
+    }
+    html += '</section>';
+
+    html += '<section class="object-card-section object-card-section--fibers">';
+    html += '<h4 class="object-card-section-title">Оптика <span class="object-card-badge">' + connectedFibers.length + '</span></h4>';
+    if (connectedFibers.length > 0) {
+        html += '<div class="node-fiber-list">';
+        connectedFibers.forEach(function(conn) {
+            html += '<div class="node-fiber-item">';
+            html += '<div class="node-fiber-item-main">';
+            html += '<span class="node-fiber-num">Жила ' + conn.fiberNumber + '</span>';
+            html += '<span class="node-fiber-cross">' + escapeHtml(conn.crossName) + '</span>';
+            if (conn.fiberLabel) {
+                html += '<span class="node-fiber-label">' + escapeHtml(conn.fiberLabel) + '</span>';
+            }
+            html += '</div>';
+            html += '<button type="button" class="btn-trace-from-node btn-trace-compact" data-cross-id="' + escapeHtml(conn.crossUniqueId) + '" data-cable-id="' + escapeHtml(conn.cableId) + '" data-fiber-number="' + conn.fiberNumber + '">Трассировка</button>';
+            html += '</div>';
+        });
+        html += '</div>';
+    } else {
+        html += '<p class="object-card-hint object-card-hint--warn">Жил с кросса нет — подключите через оптический кросс.</p>';
+    }
+    html += '</section>';
+
+    html += '<section class="object-card-section object-card-section--switches">';
+    html += '<div class="object-card-section-head">';
+    html += '<h4 class="object-card-section-title">Коммутаторы</h4>';
+    if (swSummary.swCount > 0) {
+        html += '<span class="object-card-badge" title="Занято медных/SFP портов">' + swSummary.busyPorts + '/' + swSummary.totalPorts + ' портов</span>';
+    }
+    html += '</div>';
+
+    if (isEditMode) {
+        var addOpen = attachedList.length === 0 ? ' open' : '';
+        html += '<details class="node-card-add-switch"' + addOpen + '>';
+        html += '<summary class="node-card-add-switch-summary">Добавить коммутатор</summary>';
+        html += '<div class="node-card-add-switch-body">';
+        html += '<div class="node-card-fields-grid node-card-fields-grid--add">';
+        html += '<div class="form-group"><label for="newNodeSwitchName" class="object-card-label">Подпись</label>';
+        html += '<input type="text" id="newNodeSwitchName" class="form-input" placeholder="Необязательно"></div>';
+        html += '<div class="form-group"><label for="newNodeSwitchPortCount" class="object-card-label">Портов</label>';
+        html += '<input type="number" id="newNodeSwitchPortCount" class="form-input" min="1" max="96" value="24"></div>';
+        html += '<div class="form-group"><label class="object-card-label">Производитель</label>';
+        html += '<div class="device-combobox" data-catalog="switch" data-type="manufacturer" data-value-id="newNodeSwitchManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">Выберите</button><input type="hidden" id="newNodeSwitchManufacturer" value=""><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+        html += '<div class="form-group"><label class="object-card-label">Модель</label>';
+        html += '<div class="device-combobox" data-catalog="switch" data-type="model" data-value-id="newNodeSwitchModel" data-manufacturer-id="newNodeSwitchManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">Выберите</button><input type="hidden" id="newNodeSwitchModel" value=""><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+        html += '<div class="form-group node-card-add-portkind"><label for="newNodeSwitchPortKind" class="object-card-label">Тип порта по умолчанию</label>';
+        html += '<select id="newNodeSwitchPortKind" class="form-select">';
+        kindOptsNodeSw.forEach(function(kk) {
+            html += '<option value="' + escapeHtml(kk) + '"' + (kk === 'RJ45 10/100/1000' ? ' selected' : '') + '>' + escapeHtml(kk) + '</option>';
+        });
+        html += '</select></div></div>';
+        html += '<p class="object-card-hint">Число портов подставится из справочника при выборе модели.</p>';
+        html += '<button type="button" id="btnAddNodeSwitch" class="btn-primary node-card-add-btn">Добавить</button>';
+        html += '</div></details>';
+    }
+
+    if (attachedList.length === 0) {
+        html += '<p class="object-card-hint">Нет коммутаторов — добавьте для медных кабелей и выбора порта при прокладке.</p>';
+    }
+
+    attachedList.forEach(function(swRow, six) {
+        var usageN = swRow.copperPortUsage || {};
+        var pts = swRow.switchPortTypes || [];
+        var swMfr = (swRow.manufacturer || '').trim();
+        var swMod = (swRow.model || '').trim();
+        var uidEsc = escapeHtml(swRow.uniqueId);
+        var portStats = getAttachedSwitchPortStats(swRow);
+        var swTitle = swRow.name || ('Коммутатор ' + (six + 1));
+        var deviceLine = [swMfr, swMod].filter(Boolean).join(' · ');
+        var swOpen = attachedList.length === 1 || portStats.total <= 8 ? ' open' : '';
+        html += '<details class="node-card-switch-item"' + swOpen + '>';
+        html += '<summary class="node-card-switch-summary">';
+        html += '<span class="node-card-switch-title">' + escapeHtml(swTitle) + '</span>';
+        if (deviceLine) {
+            html += '<span class="node-card-switch-device">' + escapeHtml(deviceLine) + '</span>';
+        }
+        html += '<span class="object-card-badge object-card-badge--inline">' + portStats.busy + '/' + portStats.total + '</span>';
+        html += '</summary>';
+        html += '<div class="node-card-switch-body">';
+        if (isEditMode) {
+            html += '<div class="node-card-switch-toolbar">';
+            html += '<div class="form-group node-card-switch-label-field"><label class="object-card-label">Подпись</label>';
+            html += '<input type="text" class="form-input edit-node-switch-name" data-switch-id="' + uidEsc + '" value="' + escapeHtml(swRow.name || '') + '" placeholder="Коммутатор ' + (six + 1) + '">';
+            html += '</div>';
+            html += '<div class="node-card-switch-delete-wrap"><button type="button" class="btn-remove-node-switch btn-danger" data-switch-id="' + uidEsc + '">Удалить</button></div>';
+            html += '</div>';
+            html += '<div class="node-card-fields-grid">';
+            html += '<div class="form-group"><label class="object-card-label">Производитель</label>';
+            html += '<div class="device-combobox" data-catalog="switch" data-type="manufacturer" data-value-id="editNodeSwMfr_' + uidEsc + '"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (swMfr ? escapeHtml(swMfr) : 'Выберите') + '</button><input type="hidden" id="editNodeSwMfr_' + uidEsc + '" value="' + escapeHtml(swMfr) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+            html += '<div class="form-group"><label class="object-card-label">Модель</label>';
+            html += '<div class="device-combobox" data-catalog="switch" data-type="model" data-value-id="editNodeSwMod_' + uidEsc + '" data-manufacturer-id="editNodeSwMfr_' + uidEsc + '"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (swMod ? escapeHtml(swMod) : 'Выберите') + '</button><input type="hidden" id="editNodeSwMod_' + uidEsc + '" value="' + escapeHtml(swMod) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+            html += '</div>';
+        } else if (deviceLine) {
+            html += '<div class="node-card-switch-device-view">' + escapeHtml(deviceLine) + '</div>';
+        }
+        html += '<div class="node-ports-table-wrap"><table class="node-ports-table"><thead><tr><th>#</th><th>Тип</th><th>Назначение</th>';
+        if (isEditMode) html += '<th class="node-ports-table-actions"></th>';
+        html += '</tr></thead><tbody>';
+        for (var swi = 0; swi < pts.length; swi++) {
+            var pnumSw = swi + 1;
+            var fiberUsageN = swRow.fiberPortUsage || {};
+            var cableUidSw = usageN[String(pnumSw)];
+            var fiberKeySw = fiberUsageN[String(pnumSw)];
+            var cblSw = cableUidSw ? objects.find(function(c) { return c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === cableUidSw; }) : null;
+            var cnameSw = cblSw ? (cblSw.properties.get('cableName') || getCableDescription(cblSw.properties.get('cableType'))) : '';
+            var isSfpPortRow = isSwitchPortSfpFiberType(pts[swi] || '');
+            var assignParts = [];
+            if (cnameSw) assignParts.push('Медь: ' + cnameSw);
+            if (fiberKeySw) assignParts.push('ВОЛС');
+            var displayAssign = assignParts.length ? assignParts.join(' · ') : '—';
+            var rowBusy = !!(cableUidSw || fiberKeySw);
+            html += '<tr class="' + (rowBusy ? 'node-port-row--busy' : 'node-port-row--free') + '">';
+            html += '<td>' + pnumSw + '</td><td>';
+            if (isEditMode) {
+                html += '<select class="edit-node-switch-port-kind form-select form-select-compact" data-switch-id="' + escapeHtml(swRow.uniqueId) + '" data-idx="' + swi + '">';
+                kindOptsNodeSw.forEach(function(ko) {
+                    html += '<option value="' + escapeHtml(ko) + '"' + ((pts[swi] || '') === ko ? ' selected' : '') + '>' + escapeHtml(ko) + '</option>';
+                });
+                html += '</select>';
+            } else {
+                html += escapeHtml(pts[swi] || '—');
+            }
+            html += '</td><td class="node-port-assign">' + escapeHtml(displayAssign) + '</td>';
+            if (isEditMode) {
+                html += '<td class="node-ports-table-actions">';
+                if (isSfpPortRow) {
+                    if (fiberKeySw) {
+                        html += '<span class="node-port-status node-port-status--ok">SFP</span>';
+                    } else {
+                        html += '<span class="node-port-status node-port-status--muted" title="Жила с кросса">—</span>';
+                    }
+                } else if (!cableUidSw) {
+                    html += '<button type="button" class="btn-secondary btn-copper-connect-from-node-port btn-compact" data-switch-id="' + escapeHtml(swRow.uniqueId) + '" data-copper-port="' + pnumSw + '">Подключить</button>';
+                }
+                html += '</td>';
+            }
+            html += '</tr>';
+        }
+        html += '</tbody></table></div></div></details>';
+    });
+
+    html += '</section>';
+    if (isEditMode) {
+        html += buildNodeCardActionsHtml();
+    }
+    html += '</div>';
+    return html;
+}
+
+function buildNodeCardActionsHtml() {
+    var saveSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>';
+    var dupSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+    var delSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
+    return '<div class="node-card-actions object-actions-section">' +
+        '<button type="button" id="saveChangesBtn" class="btn-primary" style="flex:1;min-width:140px;">' + saveSvg + ' Сохранить</button>' +
+        '<button type="button" id="duplicateCurrentObject" class="btn-secondary" style="flex:1;min-width:120px;">' + dupSvg + ' Дублировать</button>' +
+        '<button type="button" id="deleteCurrentObject" class="btn-danger" style="flex:1;min-width:120px;">' + delSvg + ' Удалить</button>' +
+        '</div>';
+}
+
 function findAttachedSwitchOnNode(node, switchId) {
     if (!switchId) return null;
     var arr = getNodeAttachedSwitches(node);
@@ -5075,6 +5298,32 @@ function resolveSwitchIdForCopperNodeClick(node) {
     var n = parseInt(r, 10);
     if (isNaN(n) || n < 1 || n > arr.length) return null;
     return arr[n - 1].uniqueId;
+}
+
+/** Переносит manufacturer/model с узла (устаревшее) в attachedSwitches и очищает поля узла. */
+function migrateNodeLevelSwitchMetaToAttached() {
+    if (!Array.isArray(objects)) return;
+    var changed = false;
+    objects.forEach(function(node) {
+        if (!node || !node.properties || node.properties.get('type') !== 'node') return;
+        var mfr = (node.properties.get('manufacturer') || '').trim();
+        var mod = (node.properties.get('model') || '').trim();
+        if (!mfr && !mod) return;
+        var arr = getNodeAttachedSwitches(node).slice();
+        if (arr.length === 0) {
+            addAttachedSwitchToNode(node, '', 24, 'RJ45 10/100/1000', mfr, mod);
+        } else {
+            var sw = Object.assign({}, arr[0]);
+            if (mfr && !(sw.manufacturer || '').trim()) sw.manufacturer = mfr;
+            if (mod && !(sw.model || '').trim()) sw.model = mod;
+            arr[0] = sw;
+            node.properties.set('attachedSwitches', arr);
+        }
+        node.properties.unset('manufacturer');
+        node.properties.unset('model');
+        changed = true;
+    });
+    return changed;
 }
 
 function migrateStandaloneSwitchesIntoNodes() {
@@ -7053,8 +7302,6 @@ function getSerializedData() {
         }
         if (props.type === 'node') {
             if (props.nodeKind) result.nodeKind = props.nodeKind;
-            if (props.manufacturer) result.manufacturer = props.manufacturer;
-            if (props.model) result.model = props.model;
             if (props.comment) result.comment = props.comment;
             var attSw = props.attachedSwitches;
             if (Array.isArray(attSw) && attSw.length) result.attachedSwitches = JSON.parse(JSON.stringify(attSw));
@@ -7757,6 +8004,7 @@ function importData(data, opts) {
     updateNodeDisplay();
     updateAllConnectionLines();
     migrateStandaloneSwitchesIntoNodes();
+    if (migrateNodeLevelSwitchMetaToAttached()) saveData();
     rebuildAllCopperPortUsageFromCables();
 }
 
@@ -7919,8 +8167,6 @@ function createObjectFromData(data, opts) {
     
     if (type === 'node') {
         placemark.properties.set('nodeKind', nodeKind || 'network');
-        if (manufacturer) placemark.properties.set('manufacturer', manufacturer);
-        if (model) placemark.properties.set('model', model);
         if (comment) placemark.properties.set('comment', comment);
         if (Array.isArray(attachedSwitches) && attachedSwitches.length) {
             placemark.properties.set('attachedSwitches', JSON.parse(JSON.stringify(attachedSwitches)));
@@ -8470,14 +8716,16 @@ function showObjectInfo(obj) {
     var objType = obj && obj.properties ? obj.properties.get('type') : '';
     if (['node', 'olt', 'onu', 'camera', 'mediaConverter'].indexOf(objType) !== -1) {
         if (typeof populateDeviceDatalists === 'function') populateDeviceDatalists();
-        var mfr = obj.properties.get('manufacturer') || '';
-        if (typeof populateModelDatalistForManufacturer === 'function') {
-            var cat = 'node';
-            if (objType === 'camera') cat = 'camera';
-            else if (objType === 'mediaConverter') cat = 'node';
-            else if (objType === 'olt') cat = 'olt';
-            else if (objType === 'onu') cat = 'onu';
-            populateModelDatalistForManufacturer(mfr, 'deviceModelsList', cat);
+        if (objType !== 'node') {
+            var mfr = obj.properties.get('manufacturer') || '';
+            if (typeof populateModelDatalistForManufacturer === 'function') {
+                var cat = 'node';
+                if (objType === 'camera') cat = 'camera';
+                else if (objType === 'mediaConverter') cat = 'node';
+                else if (objType === 'olt') cat = 'olt';
+                else if (objType === 'onu') cat = 'onu';
+                populateModelDatalistForManufacturer(mfr, 'deviceModelsList', cat);
+            }
         }
     }
     if (splitterFiberRoutingMode && splitterFiberRoutingData) {
@@ -8832,174 +9080,7 @@ function showObjectInfo(obj) {
     }
 
     if (type === 'node') {
-        const nodeKind = obj.properties.get('nodeKind') || 'network';
-        const manufacturer = obj.properties.get('manufacturer') || '';
-        const model = obj.properties.get('model') || '';
-        const comment = obj.properties.get('comment') || '';
-
-        if (isEditMode) {
-            html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-            html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Редактирование узла</h4>';
-            html += '<div class="form-group" style="margin-bottom: 12px;">';
-            html += '<label for="editNodeName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название узла</label>';
-            html += `<input type="text" id="editNodeName" class="form-input" value="${escapeHtml(name)}" placeholder="Введите название узла">`;
-            html += '</div>';
-            html += '<div class="form-group" style="margin-bottom: 12px;">';
-            html += '<label for="editNodeKind" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Тип узла</label>';
-            html += '<select id="editNodeKind" class="form-select">';
-            html += `<option value="network"${nodeKind === 'network' ? ' selected' : ''}>Узел сети (зелёный)</option>`;
-            html += `<option value="aggregation"${nodeKind === 'aggregation' ? ' selected' : ''}>Узел агрегации (красный)</option>`;
-            html += '</select>';
-            html += '</div>';
-            html += '<div class="form-group" style="margin-bottom: 12px;">';
-            html += '<label for="editNodeManufacturer" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Производитель</label>';
-            html += '<div class="device-combobox" data-catalog="node" data-type="manufacturer" data-value-id="editNodeManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturer ? escapeHtml(manufacturer) : 'Выберите производителя') + '</button><input type="hidden" id="editNodeManufacturer" value="' + escapeHtml(manufacturer) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div>';
-            html += '</div>';
-            html += '<div class="form-group" style="margin-bottom: 12px;">';
-            html += '<label for="editNodeModel" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Модель</label>';
-            html += '<div class="device-combobox" data-catalog="node" data-type="model" data-value-id="editNodeModel" data-manufacturer-id="editNodeManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editNodeModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div>';
-            html += '</div>';
-            html += '<div class="form-group" style="margin-bottom: 12px;">';
-            html += '<label for="editNodeComment" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Комментарий</label>';
-            html += `<textarea id="editNodeComment" class="form-input" rows="3" placeholder="Дополнительные сведения...">${escapeHtml(comment)}</textarea>`;
-            html += '</div>';
-            html += '</div>';
-        } else {
-            html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-            html += '<h4 style="margin: 0 0 8px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Информация</h4>';
-            html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 6px;"><strong>Название узла:</strong> ${escapeHtml(name || 'Не указано')}</div>`;
-            if (manufacturer || model) {
-                html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 6px;"><strong>Устройство:</strong> ${escapeHtml([manufacturer, model].filter(Boolean).join(' ') || '—')}</div>`;
-            }
-            if (comment) {
-                html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 8px; padding: 8px; background: var(--bg-card); border-radius: 4px; white-space: pre-wrap;"><strong>Комментарий:</strong><br>${escapeHtml(comment)}</div>`;
-            }
-            html += '</div>';
-        }
-
-        var attachedList = getNodeAttachedSwitches(obj);
-        var kindOptsNodeSw = ['RJ45 10/100/1000', 'RJ45 PoE', 'SFP', 'SFP+', 'Комбо RJ45/SFP', 'Консоль', 'Uplink/stack'];
-        html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">🔀 Коммутаторы в узле</h4>';
-        html += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 12px;">Коммутатор не является отдельной точкой на карте: медные кабели подключаются к <strong>узлу</strong> (точка на карте), при прокладке меди выбирается коммутатор.</p>';
-        if (isEditMode) {
-            html += '<div style="margin-bottom: 12px; padding: 12px; background: var(--bg-card); border-radius: 6px; border: 1px dashed var(--border-color);">';
-            html += '<div class="form-group" style="margin-bottom: 8px;"><label for="newNodeSwitchName" style="font-size: 0.8125rem;">Подпись коммутатора</label>';
-            html += '<input type="text" id="newNodeSwitchName" class="form-input" placeholder="Необязательно"></div>';
-            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem;">Производитель (справочник коммутаторов)</label>';
-            html += '<div class="device-combobox" data-catalog="switch" data-type="manufacturer" data-value-id="newNodeSwitchManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button><input type="hidden" id="newNodeSwitchManufacturer" value=""><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
-            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem;">Модель</label>';
-            html += '<div class="device-combobox" data-catalog="switch" data-type="model" data-value-id="newNodeSwitchModel" data-manufacturer-id="newNodeSwitchManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button><input type="hidden" id="newNodeSwitchModel" value=""><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
-            html += '<div class="form-group" style="margin-bottom: 8px;"><label for="newNodeSwitchPortCount" style="font-size: 0.8125rem;">Число портов</label>';
-            html += '<input type="number" id="newNodeSwitchPortCount" class="form-input" min="1" max="96" value="24" style="max-width: 100px;"></div>';
-            html += '<div class="form-group" style="margin-bottom: 8px;"><label for="newNodeSwitchPortKind" style="font-size: 0.8125rem;">Тип порта по умолчанию</label>';
-            html += '<select id="newNodeSwitchPortKind" class="form-select">';
-            kindOptsNodeSw.forEach(function(kk) {
-                html += '<option value="' + escapeHtml(kk) + '"' + (kk === 'RJ45 10/100/1000' ? ' selected' : '') + '>' + escapeHtml(kk) + '</option>';
-            });
-            html += '</select></div>';
-            html += '<p style="font-size: 0.7rem; color: var(--text-muted); margin: 0 0 8px 0;">Если для модели в справочнике задано число портов по умолчанию, оно подставится при выборе модели.</p>';
-            html += '<button type="button" id="btnAddNodeSwitch" class="btn-secondary" style="width:100%;">Добавить коммутатор</button>';
-            html += '</div>';
-        }
-        if (attachedList.length === 0) {
-            html += '<p style="font-size: 0.875rem; color: var(--text-muted);">Коммутаторов нет — добавьте для прокладки медных кабелей к узлу.</p>';
-        }
-        attachedList.forEach(function(swRow, six) {
-            var usageN = swRow.copperPortUsage || {};
-            var pts = swRow.switchPortTypes || [];
-            var swMfr = (swRow.manufacturer || '').trim();
-            var swMod = (swRow.model || '').trim();
-            var uidEsc = escapeHtml(swRow.uniqueId);
-            html += '<div style="margin-bottom: 14px; padding: 12px; background: var(--bg-card); border-radius: 6px; border: 1px solid var(--border-color);">';
-            html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">';
-            html += '<span style="font-weight:600; font-size:0.875rem;">' + escapeHtml(swRow.name || ('Коммутатор ' + (six + 1))) + '</span>';
-            if (isEditMode) {
-                html += '<button type="button" class="btn-remove-node-switch btn-danger" data-switch-id="' + uidEsc + '" style="padding:4px 10px;font-size:0.75rem;">Удалить</button>';
-            }
-            html += '</div>';
-            if (!isEditMode && (swMfr || swMod)) {
-                html += '<div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:8px;">Устройство: ' + escapeHtml([swMfr, swMod].filter(Boolean).join(' ') || '—') + '</div>';
-            }
-            if (isEditMode) {
-                html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">';
-                html += '<div class="form-group" style="margin:0;"><label style="font-size:0.7rem;color:var(--text-muted);">Производитель</label><div class="device-combobox" data-catalog="switch" data-type="manufacturer" data-value-id="editNodeSwMfr_' + uidEsc + '"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (swMfr ? escapeHtml(swMfr) : 'Выберите') + '</button><input type="hidden" id="editNodeSwMfr_' + uidEsc + '" value="' + escapeHtml(swMfr) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
-                html += '<div class="form-group" style="margin:0;"><label style="font-size:0.7rem;color:var(--text-muted);">Модель</label><div class="device-combobox" data-catalog="switch" data-type="model" data-value-id="editNodeSwMod_' + uidEsc + '" data-manufacturer-id="editNodeSwMfr_' + uidEsc + '"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (swMod ? escapeHtml(swMod) : 'Выберите') + '</button><input type="hidden" id="editNodeSwMod_' + uidEsc + '" value="' + escapeHtml(swMod) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
-                html += '</div>';
-            }
-            html += '<div style="max-height: 200px; overflow-y: auto;"><table style="width:100%; font-size: 0.75rem; border-collapse: collapse;"><thead><tr><th style="text-align:left;padding:4px;">#</th><th style="text-align:left;padding:4px;">Тип</th><th style="text-align:left;padding:4px;">Назначение</th>' + (isEditMode ? '<th style="text-align:right;padding:4px;white-space:nowrap;"></th>' : '') + '</tr></thead><tbody>';
-            for (var swi = 0; swi < pts.length; swi++) {
-                var pnumSw = swi + 1;
-                var fiberUsageN = swRow.fiberPortUsage || {};
-                var cableUidSw = usageN[String(pnumSw)];
-                var fiberKeySw = fiberUsageN[String(pnumSw)];
-                var cblSw = cableUidSw ? objects.find(function(c) { return c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === cableUidSw; }) : null;
-                var cnameSw = cblSw ? (cblSw.properties.get('cableName') || getCableDescription(cblSw.properties.get('cableType'))) : '';
-                var isSfpPortRow = isSwitchPortSfpFiberType(pts[swi] || '');
-                var assignParts = [];
-                if (cnameSw) assignParts.push('Медь: ' + cnameSw);
-                if (fiberKeySw) assignParts.push('ВОЛС (кросс)');
-                var displayAssign = assignParts.length ? assignParts.join(' · ') : '—';
-                html += '<tr><td style="padding:4px;">' + pnumSw + '</td><td style="padding:4px;">';
-                if (isEditMode) {
-                    html += '<select class="edit-node-switch-port-kind form-select" data-switch-id="' + escapeHtml(swRow.uniqueId) + '" data-idx="' + swi + '" style="font-size:0.7rem;">';
-                    kindOptsNodeSw.forEach(function(ko) {
-                        html += '<option value="' + escapeHtml(ko) + '"' + ((pts[swi] || '') === ko ? ' selected' : '') + '>' + escapeHtml(ko) + '</option>';
-                    });
-                    html += '</select>';
-                } else {
-                    html += escapeHtml(pts[swi] || '—');
-                }
-                html += '</td><td style="padding:4px;">' + escapeHtml(displayAssign) + '</td>';
-                if (isEditMode) {
-                    html += '<td style="padding:4px;text-align:right;">';
-                    if (isSfpPortRow) {
-                        if (fiberKeySw) {
-                            html += '<span style="font-size:0.65rem;color:#0f766e;font-weight:600;" title="Жила с оптического кросса">Назначен</span>';
-                        } else {
-                            html += '<span style="font-size:0.65rem;color:var(--text-muted);" title="Медный кабель к SFP не подключается — жила с кросса">—</span>';
-                        }
-                    } else if (!cableUidSw) {
-                        html += '<button type="button" class="btn-secondary btn-copper-connect-from-node-port" data-switch-id="' + escapeHtml(swRow.uniqueId) + '" data-copper-port="' + pnumSw + '" style="font-size:0.65rem;padding:4px 6px;">Подключить</button>';
-                    } else {
-                        html += '—';
-                    }
-                    html += '</td>';
-                }
-                html += '</tr>';
-            }
-            html += '</tbody></table></div></div>';
-        });
-        html += '</div>';
-
-        const nodeUniqueId = getObjectUniqueId(obj);
-        const connectedFibers = getNodeConnectedFibers(nodeUniqueId);
-        
-        if (connectedFibers.length > 0) {
-            html += '<div class="connected-fibers-section" style="margin-bottom: 20px; padding: 16px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0;">';
-            html += '<h4 style="margin: 0 0 12px 0; color: #166534; font-size: 0.9375rem; font-weight: 600;">🔌 Подключенные жилы</h4>';
-            html += '<div style="display: flex; flex-direction: column; gap: 8px;">';
-            
-            connectedFibers.forEach((conn, index) => {
-                html += `<div class="fiber-connection-item" style="display: flex; align-items: center; justify-content: space-between; padding: 10px; background: var(--bg-card); border-radius: 4px; border: 1px solid #dcfce7;">`;
-                html += `<div style="flex: 1;">`;
-                html += `<div style="font-weight: 600; color: #166534;">Жила ${conn.fiberNumber}</div>`;
-                html += `<div style="font-size: 0.8rem; color: var(--text-secondary);">От кросса: ${escapeHtml(conn.crossName)}</div>`;
-                if (conn.fiberLabel) {
-                    html += `<div style="font-size: 0.75rem; color: #8b5cf6;">📝 ${escapeHtml(conn.fiberLabel)}</div>`;
-                }
-                html += `</div>`;
-                html += `<button class="btn-trace-from-node" data-cross-id="${conn.crossUniqueId}" data-cable-id="${conn.cableId}" data-fiber-number="${conn.fiberNumber}" style="padding: 8px 12px; background: #f59e0b; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">🔍 Трассировка</button>`;
-                html += `</div>`;
-            });
-            
-            html += '</div></div>';
-        } else {
-            html += '<div style="margin-bottom: 20px; padding: 16px; background: #fef3c7; border-radius: 6px; border: 1px solid #fde68a;">';
-            html += '<div style="color: #92400e; font-size: 0.875rem;">⚠️ К этому узлу не подключено ни одной жилы.</div>';
-            html += '<div style="color: #a16207; font-size: 0.8rem; margin-top: 4px;">Подключите жилу через оптический кросс.</div>';
-            html += '</div>';
-        }
+        html += buildNodeCardContent(obj, isEditMode, name);
     }
 
     if (type === 'cross' && !fiberUsesWorkspace) {
@@ -9025,7 +9106,7 @@ function showObjectInfo(obj) {
         }
     }
 
-    if (isEditMode && !fiberUsesWorkspace) {
+    if (isEditMode && !fiberUsesWorkspace && type !== 'node') {
         html += '<div class="object-actions-section" style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 8px;">';
         html += '<button id="saveChangesBtn" class="btn-primary" style="flex: 1; min-width: 140px;">';
         html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>';
@@ -9102,7 +9183,7 @@ function showObjectInfo(obj) {
             });
         }
     }
-    
+
     document.getElementById('modalInfo').innerHTML = html;
 
     const modal = document.getElementById('infoModal');
@@ -9198,17 +9279,6 @@ function showSupportInfo(supportObj) {
         html += '</div></div>';
     }
 
-    if (isEditMode) {
-        html += '<div class="object-actions-section" style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 8px;">';
-        html += '<button id="duplicateCurrentObject" class="btn-secondary" style="flex: 1; min-width: 120px;">';
-        html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
-        html += ' Дублировать</button>';
-        html += '<button id="deleteCurrentObject" class="btn-danger" style="flex: 1; min-width: 120px;">';
-        html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
-        html += ' Удалить</button>';
-        html += '</div>';
-    }
-
     if (connectedCables.length === 0) {
         html += '<div class="no-cables" style="padding: 15px; text-align: center; color: var(--text-muted); font-size: 0.875rem;">' + noCablesMsg + '</div>';
     } else {
@@ -9262,7 +9332,18 @@ function showSupportInfo(supportObj) {
         
         html += '</div>';
     }
-    
+
+    if (isEditMode) {
+        html += '<div class="object-actions-section" style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 8px;">';
+        html += '<button id="duplicateCurrentObject" class="btn-secondary" style="flex: 1; min-width: 120px;">';
+        html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+        html += ' Дублировать</button>';
+        html += '<button id="deleteCurrentObject" class="btn-danger" style="flex: 1; min-width: 120px;">';
+        html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
+        html += ' Удалить</button>';
+        html += '</div>';
+    }
+
     var modalInfoEl = document.getElementById('modalInfo');
     modalInfoEl.innerHTML = html;
     bindCableSplitSleeveFields(modalInfoEl);
@@ -9295,6 +9376,15 @@ function setupEditAndDeleteListeners() {
                 if (!t || !t.id) return;
                 var co = currentModalObject;
                 if (!co || !co.properties || co.properties.get('type') !== 'node') return;
+                if (t.classList && t.classList.contains('edit-node-switch-name')) {
+                    var swIdNm = t.getAttribute('data-switch-id');
+                    if (swIdNm) {
+                        updateAttachedSwitchMeta(co, swIdNm, 'name', t.value.trim());
+                        saveData();
+                        if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
+                    }
+                    return;
+                }
                 var mfrM = /^editNodeSwMfr_(.+)$/.exec(t.id);
                 if (mfrM) {
                     updateAttachedSwitchMeta(co, mfrM[1], 'manufacturer', t.value || '');
@@ -9348,18 +9438,6 @@ function setupEditAndDeleteListeners() {
             updateNodeDisplay();
             saveData();
         });
-    }
-
-    var editNodeManufacturer = document.getElementById('editNodeManufacturer');
-    if (editNodeManufacturer) {
-        if (typeof preventPasswordSuggestions === 'function') preventPasswordSuggestions(editNodeManufacturer);
-        editNodeManufacturer.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'node') { currentModalObject.properties.set('manufacturer', this.value || ''); saveData(); } populateModelDatalistForManufacturer(this.value.trim(), 'deviceModelsList', 'node'); });
-        editNodeManufacturer.addEventListener('change', function() { populateModelDatalistForManufacturer(this.value.trim(), 'deviceModelsList', 'node'); });
-    }
-    var editNodeModel = document.getElementById('editNodeModel');
-    if (editNodeModel) {
-        if (typeof preventPasswordSuggestions === 'function') preventPasswordSuggestions(editNodeModel);
-        editNodeModel.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'node') { currentModalObject.properties.set('model', this.value || ''); saveData(); } });
     }
 
     const editNodeCommentInput = document.getElementById('editNodeComment');
@@ -9730,8 +9808,6 @@ function duplicateObject(obj) {
     var opts = {};
     if (type === 'node') {
         opts.nodeKind = obj.properties.get('nodeKind') || 'network';
-        opts.manufacturer = obj.properties.get('manufacturer') || '';
-        opts.model = obj.properties.get('model') || '';
         opts.comment = obj.properties.get('comment') || '';
     }
     if (type === 'camera' || type === 'mediaConverter') {
