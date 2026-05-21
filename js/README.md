@@ -10,15 +10,17 @@
 | **core/notifications.js** | showToast(), showSuccess(), showError(), showInfo() |
 | **core/confirm-dialog.js** | showConfirm() |
 | **core/network-status.js** | showNetworkError(), hideNetworkError() |
-| **core/updates.js** | checkForUpdates(), openUpdatesModal(), setupUpdatesModalHandlers() |
-| **groups.js** | Группы кроссов/узлов: groupKey, getCrossGroupName, setCrossGroupName |
-| **catalog/device-catalog.js** | Справочник устройств: getDeviceCatalog, комбобоксы, модалка |
-| **map/theme.js** | initTheme(), setTheme(), toggleTheme() |
-| **map/search.js** | setupMapSearch(), searchObjects(), goToSearchResult() |
-| **ui/help.js** | openHelpModal(), getHelpContentHtml(), setupHelpModalHandlers() |
-| **history.js** | ActionTypes, logAction(), getHistory(), openHistoryModal(), setupHistoryModalHandlers(), updateHistoryBadge() |
-| **sync.js** | WebSocket-синхронизация карты, курсоры участников |
+| **core/updates.js** | checkForUpdates(), openUpdatesModal() |
+| **core/cookie-consent.js** | Согласие на cookies (лендинг и приложение) |
+| **core/maintenance-notice.js** | Баннер техработ с сервера |
+| **groups.js** | Группы кроссов/узлов |
+| **catalog/device-catalog.js** | Справочник устройств |
+| **map/theme.js** | Тема интерфейса и карты |
+| **map/search.js** | Поиск объектов на карте |
+| **ui/help.js** | Модальное окно справки |
+| **history.js** | Журнал изменений |
+| **sync.js** | WebSocket-синхронизация, курсоры |
 
-Версию перед релизом синхронно меняют в **core/config.js** (`APP_VERSION`), в **package.json** / **package-lock.json** (поле `version`) и в **README.md** (раздел «История изменений»).
+Версию перед релизом синхронно меняют в **core/config.js** (`APP_VERSION`), в **package.json** / **package-lock.json** и в **README.md** (раздел «История изменений»).
 
-**auth.html** подключает: js/core/config.js, auth.js
+**auth.html** подключает: `js/core/config.js`, `auth.js`, `cookie-consent.js`, `maintenance-notice.js`.

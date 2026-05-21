@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="author" content="Карта оптической сети">
     <meta name="copyright" content="Copyright (c) 2024–2026 Карта оптической сети. Все права защищены.">
-    <meta name="description" content="Интерактивная карта ВОЛС и узлов связи: кроссы, муфты, кабели, GPON (OLT, сплиттер, ONU), камеры и медиаконвертеры с медными линиями к коммутатору. Поиск, фильтры, история изменений и совместная работа.">
+    <meta name="description" content="Интерактивная карта ВОЛС в облаке volsmap.ru: кроссы и муфты со схемой жил, GPON, синхронизация команды, история и бэкапы вашей организации на наших серверах.">
     <title>Карта оптической сети</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <script>
@@ -77,7 +77,7 @@
                 </span>
                 <div class="header-brand-text">
                     <h1 class="header-title">Карта оптической сети</h1>
-                    <p class="header-tagline">Узлы, кабели и GPON на одной карте</p>
+                    <p class="header-tagline">ВОЛС, GPON и медные линии вашей организации</p>
                 </div>
             </div>
             <!-- Поиск по карте -->
@@ -549,10 +549,10 @@
                         </svg>
                     </div>
                     <div class="accordion-content" id="sync-content">
-                        <p class="text-muted-inline" style="font-size: 0.8125rem; margin-bottom: 10px;">Одна карта на всех. Подключитесь к синхронизации — адрес подставится автоматически (тот же сервер, что и приложение).</p>
+                        <p class="text-muted-inline" style="font-size: 0.8125rem; margin-bottom: 10px;">Одна карта организации для всех участников. Подключитесь к синхронизации — используется сервер сервиса (адрес подставится автоматически).</p>
                         <div class="form-group">
-                            <label for="syncServerUrl">Адрес сервера (WebSocket)</label>
-                            <input type="text" id="syncServerUrl" class="form-input" placeholder="ws://.../sync (по умолчанию тот же сервер)">
+                            <label for="syncServerUrl">Адрес сервера синхронизации (WebSocket)</label>
+                            <input type="text" id="syncServerUrl" class="form-input" placeholder="ws://.../sync (по умолчанию сервер сервиса)">
                         </div>
                         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
                             <button id="syncConnectBtn" class="btn-primary" style="flex: 1;">Подключиться</button>
@@ -809,39 +809,40 @@
                 <span class="close" id="welcomeModalCloseBtn" title="Закрыть" role="button" tabindex="0">&times;</span>
             </div>
             <div class="modal-body welcome-modal-body">
-                <p class="home-intro-lead">Здесь отображается инфраструктура ВОЛС: опоры, муфты, кроссы, узлы, кабели, оборудование GPON, камеры и медиаконвертеры. Используйте поиск в шапке и фильтры в боковой панели, чтобы сфокусироваться на нужном.</p>
+                <p class="home-intro-lead">Карта вашей организации: опоры, муфты, кроссы, узлы, ВОЛС и GPON, камеры и медиаконвертеры. Подключитесь к синхронизации в боковой панели — так вы увидите актуальные данные и сможете работать вместе с коллегами.</p>
                 <ul class="home-intro-features" role="list">
                     <li>
                         <span class="home-intro-feature-icon" aria-hidden="true">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
                         </span>
-                        <span><strong>Поиск</strong> — быстрый переход к объекту по названию</span>
+                        <span><strong>Поиск</strong> — переход к объекту по названию</span>
                     </li>
                     <li>
                         <span class="home-intro-feature-icon" aria-hidden="true">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M9 3v18M15 7v10"></path></svg>
                         </span>
-                        <span><strong>Фильтр карты</strong> — показ только нужных типов объектов</span>
+                        <span><strong>Кросс и муфта</strong> — схема и таблица жил, соединения и выводы</span>
                     </li>
                     <li>
                         <span class="home-intro-feature-icon" aria-hidden="true">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="M7 23l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
                         </span>
-                        <span><strong>Режимы</strong> — просмотр для всех, правки для администраторов</span>
+                        <span><strong>Синхронизация</strong> — общая карта и курсоры участников онлайн</span>
                     </li>
                     <li>
                         <span class="home-intro-feature-icon" aria-hidden="true">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                         </span>
-                        <span><strong>История</strong> — журнал изменений и отмена действий</span>
+                        <span><strong>История</strong> — журнал правок, Ctrl+Z / Ctrl+Y</span>
                     </li>
                 </ul>
                 <details class="home-intro-details">
                     <summary>Подсказки по работе</summary>
                     <ul class="home-intro-tips">
-                        <li>Колёсико мыши — масштаб; перетаскивание — сдвиг карты.</li>
-                        <li>Клик по объекту открывает карточку; в режиме редактирования доступны линии и точки.</li>
-                        <li>Кнопка «Справка» (<span class="home-intro-kbd">ℹ</span>) в шапке открывает полное руководство.</li>
+                        <li>Колёсико — масштаб; перетаскивание — сдвиг карты.</li>
+                        <li>Редактирование — на экране шире 768&nbsp;px; на телефоне доступен просмотр.</li>
+                        <li>Клик по кроссу или муфте открывает рабочее место жил; по остальным объектам — карточку с трассировкой.</li>
+                        <li>Аватар в шапке — личный кабинет (тариф и подписка); кнопка «Справка» — полное руководство.</li>
                     </ul>
                 </details>
                 <div class="welcome-modal-actions">
