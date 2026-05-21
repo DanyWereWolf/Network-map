@@ -1298,10 +1298,9 @@ function setupEventListeners() {
                 var m = document.getElementById(modalIds[i]);
                 var modalOpen = m && m.style && m.style.display && m.style.display !== 'none';
                 if (modalOpen) {
-                    if (modalIds[i] === 'infoModal' && typeof pendingCopperRouteFinish !== 'undefined' && pendingCopperRouteFinish) {
-                        pendingCopperRouteFinish = null;
-                    }
-                    if (modalIds[i] === 'deviceCatalogEntryModal' && typeof closeDeviceCatalogEntryModal === 'function') {
+                    if (modalIds[i] === 'infoModal' && typeof closeInfoModal === 'function') {
+                        closeInfoModal();
+                    } else if (modalIds[i] === 'deviceCatalogEntryModal' && typeof closeDeviceCatalogEntryModal === 'function') {
                         closeDeviceCatalogEntryModal();
                     } else if (modalIds[i] === 'deviceCatalogModal' && typeof closeDeviceCatalogModal === 'function') {
                         closeDeviceCatalogModal();
@@ -1494,13 +1493,13 @@ function setupEventListeners() {
     
     if (closeBtn && modal) {
         closeBtn.onclick = function() {
-            modal.style.display = 'none';
+            closeInfoModal();
         };
     }
     
     window.onclick = function(event) {
         if (modal && event.target === modal) {
-            modal.style.display = 'none';
+            closeInfoModal();
         }
     };
 
@@ -4252,8 +4251,7 @@ function deleteObject(obj, opts) {
         var modalTitleEl = document.getElementById('modalTitle');
         var isTraceModal = modalTitleEl && modalTitleEl.textContent && modalTitleEl.textContent.toLowerCase().indexOf('трассировка') !== -1;
         if (currentModalObject === obj || isTraceModal) {
-            infoModal.style.display = 'none';
-            currentModalObject = null;
+            closeInfoModal();
         }
     }
 }
@@ -6499,7 +6497,28 @@ window.applyCopperCablePortSelection = function(cableUniqueId, fromPort, toPort)
     showCableInfo(cab);
 };
 
+function resetInfoModalFiberLayout() {
+    var modal = document.getElementById('infoModal');
+    if (!modal) return;
+    var modalContent = modal.querySelector('.modal-content');
+    if (modalContent) modalContent.classList.remove('fiber-management-modal');
+    modal.classList.remove('fiber-management-modal-open');
+}
+
+function closeInfoModal() {
+    var modal = document.getElementById('infoModal');
+    if (!modal) return;
+    resetInfoModalFiberLayout();
+    if (typeof pendingCopperRouteFinish !== 'undefined' && pendingCopperRouteFinish) {
+        pendingCopperRouteFinish = null;
+    }
+    modal.style.display = 'none';
+    currentModalObject = null;
+    if (typeof clearFiberConnectionLabelSelection === 'function') clearFiberConnectionLabelSelection();
+}
+
 function showCableInfo(cable) {
+    resetInfoModalFiberLayout();
     if (cableSplitSuppressInfoUntil && Date.now() < cableSplitSuppressInfoUntil) {
         return;
     }
@@ -9407,14 +9426,10 @@ function showSupportInfo(supportObj) {
     modalInfoEl.innerHTML = html;
     bindCableSplitSleeveFields(modalInfoEl);
 
-    const modal = document.getElementById('infoModal');
-    const modalContent = modal && modal.querySelector('.modal-content');
-    if (modalContent) modalContent.classList.remove('fiber-management-modal');
-    const infoModalEl = document.getElementById('infoModal');
-    if (infoModalEl) infoModalEl.classList.remove('fiber-management-modal-open');
-    
+    resetInfoModalFiberLayout();
+    var modal = document.getElementById('infoModal');
     setupEditAndDeleteListeners();
-    modal.style.display = 'block';
+    if (modal) modal.style.display = 'block';
 }
 
 /** Обновить карточку объекта: опора и крепление — через showSupportInfo, остальные — showObjectInfo. */
