@@ -80,6 +80,16 @@ html {
         min-width: 0;
     }
 
+    .header-brand-text {
+        min-width: 0;
+    }
+
+    .header-title {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
+
     .header-search {
         grid-area: search;
         width: 100%;

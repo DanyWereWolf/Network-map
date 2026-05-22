@@ -4299,8 +4299,8 @@ button {
         height: 46px;
     }
     
-    .header-brand-text {
-        display: none;
+    .header-title {
+        font-size: 0.9rem;
     }
     
     .header-title-icon {
