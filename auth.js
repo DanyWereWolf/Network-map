@@ -168,7 +168,13 @@ function ensureRegisterPlanPrefetchFromLanding() {
                     var isTrial = String(pick.kind || '').toLowerCase() === 'trial';
                     msgEl.className = 'auth-message info';
                     if (isTrial) {
-                        msgEl.textContent = 'Пробный период 14 дней. Тариф «' + title + '» будет назначен организации. После окончания выберите платный план.';
+                        var d = 14;
+                        if (pick.subscriptionDays != null && pick.subscriptionDays !== '') {
+                            var pn = parseInt(pick.subscriptionDays, 10);
+                            if (!isNaN(pn) && pn >= 1) d = pn;
+                        }
+                        var dw = (d % 10 === 1 && d % 100 !== 11) ? 'день' : ((d % 10 >= 2 && d % 10 <= 4 && (d % 100 < 10 || d % 100 >= 20)) ? 'дня' : 'дней');
+                        msgEl.textContent = 'Пробный период ' + d + ' ' + dw + '. Тариф «' + title + '» будет назначен организации. После окончания выберите платный план.';
                     } else {
                         msgEl.textContent = 'Выбран тариф «' + title + '». После регистрации он будет указан для организации.';
                     }

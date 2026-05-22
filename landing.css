@@ -19,25 +19,8 @@ body.landing-page {
 body {
     font-family: var(--font-display);
     color: #0f172a;
-    background: #c8d4e4;
     padding: 0;
     align-items: stretch;
-}
-[data-theme="light"] .auth-bg-gradient {
-    background:
-        radial-gradient(ellipse 80% 50% at 15% 10%, rgba(59, 130, 246, 0.28) 0%, transparent 55%),
-        radial-gradient(ellipse 60% 45% at 88% 15%, rgba(16, 185, 129, 0.2) 0%, transparent 50%),
-        radial-gradient(ellipse 50% 40% at 50% 95%, rgba(99, 102, 241, 0.12) 0%, transparent 45%),
-        linear-gradient(155deg, #c5d0e0 0%, #b8c8dc 42%, #d0dae8 100%);
-}
-[data-theme="light"] .auth-bg-plexus {
-    opacity: 0.82;
-}
-[data-theme="dark"] .auth-bg-gradient {
-    background:
-        radial-gradient(ellipse 70% 45% at 10% 8%, rgba(59, 130, 246, 0.22) 0%, transparent 55%),
-        radial-gradient(ellipse 55% 40% at 92% 12%, rgba(16, 185, 129, 0.14) 0%, transparent 50%),
-        linear-gradient(160deg, #020617 0%, #0f172a 45%, #0c1222 100%);
 }
 body,
 .auth-card,
@@ -987,10 +970,6 @@ a.contact-card:hover {
 }
 
 /* Темная тема лендинга продаж */
-[data-theme="dark"] body {
-    color: #e2e8f0;
-    background: #01040f;
-}
 [data-theme="dark"] .auth-card.landing-shell {
     background: rgba(8, 14, 28, 0.9);
     border-color: rgba(148, 163, 184, 0.18);

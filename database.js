@@ -499,7 +499,8 @@ function getPricingPlans() {
                 highlighted: false,
                 ctaText: 'Запустить пробный период',
                 kind: 'trial',
-                maxConcurrentUsers: 1
+                maxConcurrentUsers: 1,
+                subscriptionDays: 14
             },
             {
                 id: 'basic',

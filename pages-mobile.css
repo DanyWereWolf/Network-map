@@ -89,7 +89,11 @@
     }
 
     .landing-brand-title {
-        font-size: 0.9rem;
+        display: none;
+    }
+
+    .landing-nav-left > div:not(.landing-nav-logo) {
+        display: none;
     }
 
     .landing-nav-actions {
@@ -304,10 +308,6 @@
         margin-right: calc(-1 * max(10px, env(safe-area-inset-right, 0px)));
         padding-left: max(10px, env(safe-area-inset-left, 0px));
         padding-right: max(10px, env(safe-area-inset-right, 0px));
-    }
-
-    .landing-brand-title {
-        font-size: 0.82rem;
     }
 
     .landing-nav-actions .btn-outline:not(.landing-nav-burger):not(.theme-toggle-btn) {

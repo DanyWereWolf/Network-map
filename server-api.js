@@ -38,6 +38,27 @@ function getMaxConcurrentFromPricingPlan(planId) {
     if (isNaN(n) || n === 0) return null;
     return n;
 }
+function normalizePlanSubscriptionDays(raw, kind) {
+    if (raw === undefined || raw === null || raw === '') {
+        return kind === 'trial' ? 14 : null;
+    }
+    var n = typeof raw === 'number' ? raw : parseInt(raw, 10);
+    if (isNaN(n) || n < 1) return kind === 'trial' ? 14 : null;
+    return Math.min(3650, n);
+}
+
+/** Дней подписки при самостоятельной регистрации — из карточки витрины (поле subscriptionDays). */
+function getSubscriptionDaysForNewOrg(planId) {
+    const plans = db.getPricingPlans();
+    const hit = plans.find(function(p) { return planIdsMatch(planId, p.id); });
+    if (!hit) return 14;
+    var kind = hit.kind === 'trial' || hit.kind === 'contact' ? hit.kind : 'paid';
+    var days = normalizePlanSubscriptionDays(hit.subscriptionDays, kind);
+    if (days != null) return days;
+    if (kind === 'trial') return 14;
+    return 14;
+}
+
 /** Самостоятельная регистрация: planId должен совпадать с карточкой в /api/pricing (витрина). Иначе — basic. */
 function resolveSelfServiceRegisterPlanId(requested) {
     if (requested === undefined || requested === null) return 'basic';
@@ -396,7 +417,11 @@ app.get('/api/pricing', (req, res) => {
                 promoPercent: promoPct,
                 promoStartsAt: p.promoStartsAt ? String(p.promoStartsAt).slice(0, 10) : '',
                 promoEndsAt: p.promoEndsAt ? String(p.promoEndsAt).slice(0, 10) : '',
-                priceBeforePromo: p.priceBeforePromo != null ? String(p.priceBeforePromo) : ''
+                priceBeforePromo: p.priceBeforePromo != null ? String(p.priceBeforePromo) : '',
+                subscriptionDays: normalizePlanSubscriptionDays(
+                    p.subscriptionDays,
+                    p.kind === 'trial' || p.kind === 'contact' ? p.kind : 'paid'
+                )
             };
         });
         res.json({ plans: plans });
@@ -481,7 +506,11 @@ app.put('/api/pricing', (req, res) => {
             promoPercent: promoPct,
             promoStartsAt: p.promoStartsAt ? String(p.promoStartsAt).slice(0, 10) : '',
             promoEndsAt: p.promoEndsAt ? String(p.promoEndsAt).slice(0, 10) : '',
-            priceBeforePromo: p.priceBeforePromo != null ? String(p.priceBeforePromo) : ''
+            priceBeforePromo: p.priceBeforePromo != null ? String(p.priceBeforePromo) : '',
+            subscriptionDays: normalizePlanSubscriptionDays(
+                p.subscriptionDays,
+                p.kind === 'trial' || p.kind === 'contact' ? p.kind : 'paid'
+            )
         };
     });
     try {
@@ -614,11 +643,12 @@ app.post('/api/auth/register', (req, res) => {
     const users = db.getUsers();
     if (users.find(u => u.username.toLowerCase() === username.toLowerCase())) return res.json({ success: false, error: 'Пользователь уже существует' });
     var resolvedPlanId = resolveSelfServiceRegisterPlanId(requestedPlanId);
+    var trialDays = getSubscriptionDaysForNewOrg(resolvedPlanId);
     var organizationId = db.addOrganization({
         name: String(organizationName).trim(),
         planId: resolvedPlanId,
         maxConcurrentUsers: null,
-        subscriptionEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+        subscriptionEndsAt: new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toISOString(),
         status: 'active',
         contactEmail: String(contactEmail).trim()
     });

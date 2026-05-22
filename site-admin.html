@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Панель главного администратора — Карта оптической сети</title>
+    <meta name="description" content="Панель администратора программы «Карта оптической сети» для работы с оптической сетью и ВОЛС.">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Панель администратора — Карта оптической сети</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <script>
         (function() {
@@ -16,6 +18,7 @@
         })();
     </script>
     <link rel="stylesheet" href="auth.css">
+    <link rel="stylesheet" href="site-admin.css">
     <link rel="stylesheet" href="cookie-consent.css">
     <link rel="stylesheet" href="maintenance-notice.css">
     <style>
@@ -26,7 +29,7 @@
             justify-content: center;
         }
         .admin-root {
-            max-width: 1320px;
+            max-width: 1440px;
             width: 100%;
             min-height: 100vh;
         }
@@ -35,13 +38,15 @@
             border: none;
             border-top: none !important;
             border-bottom: none !important;
+            background: rgba(255, 255, 255, 0.78);
+            backdrop-filter: blur(22px) saturate(1.15);
             box-shadow: none;
             animation: none;
         }
         .admin-shell {
             width: 100%;
             min-height: 100vh;
-            padding: 0 42px 36px;
+            padding: 0 clamp(16px, 3vw, 42px) 36px;
             margin: 0;
         }
         .admin-header {
@@ -105,48 +110,6 @@
             justify-content: center;
             gap: 6px;
         }
-        .tabs {
-            display: flex;
-            gap: 6px;
-            border-bottom: 1px solid #e5e7eb;
-            margin-bottom: 6px;
-            flex-wrap: nowrap;
-            overflow-x: auto;
-            overflow-y: hidden;
-            -webkit-overflow-scrolling: touch;
-            padding-bottom: 2px;
-            scrollbar-width: thin;
-        }
-        .tabs::-webkit-scrollbar {
-            height: 4px;
-        }
-        .tabs::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 4px;
-        }
-        .tab {
-            padding: 8px 14px;
-            border-radius: 10px;
-            font-size: 0.8rem;
-            font-weight: 500;
-            cursor: pointer;
-            color: #64748b;
-            white-space: nowrap;
-            flex-shrink: 0;
-            border: 1px solid transparent;
-            transition: background 0.15s, color 0.15s, border-color 0.15s;
-        }
-        .tab.active {
-            background: #0f172a;
-            color: #f8fafc;
-            border-color: #0f172a;
-            box-shadow: 0 4px 14px rgba(15,23,42,0.2);
-        }
-        .tab:not(.active):hover {
-            background: #f1f5f9;
-            color: #0f172a;
-            border-color: #e2e8f0;
-        }
         .tab-content {
             display: none;
             font-size: 0.85rem;
@@ -158,22 +121,6 @@
         }
         .tab-content.active {
             display: block;
-        }
-        .tab.tab-maintenance {
-            position: relative;
-        }
-        .tab-maintenance-dot {
-            display: none;
-            width: 7px;
-            height: 7px;
-            border-radius: 50%;
-            background: #f97316;
-            box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.25);
-            margin-left: 4px;
-            vertical-align: middle;
-        }
-        .tab-maintenance-dot.visible {
-            display: inline-block;
         }
         .maintenance-admin-layout {
             max-width: 960px;
@@ -779,11 +726,8 @@
         }
 
         /* Тёмная тема админ-панели */
-        [data-theme="dark"] body {
-            color: #e2e8f0;
-        }
         [data-theme="dark"] .auth-card.admin-shell {
-            background: rgba(7, 12, 24, 0.9);
+            background: rgba(8, 14, 28, 0.9);
             border: none;
             box-shadow: none;
         }
@@ -902,7 +846,7 @@
     </style>
     <link rel="stylesheet" href="pages-mobile.css">
 </head>
-<body>
+<body class="page-with-bg">
     <script src="js/core/config.js"></script>
     <script src="auth.js"></script>
     <div class="auth-bg" aria-hidden="true">
@@ -922,7 +866,7 @@
                         </div>
                         <div>
                             <div class="admin-title">Панель главного администратора</div>
-                            <div class="admin-subtitle">Единая точка для организаций, лимитов, витрины тарифов и подписок</div>
+                            <div class="admin-subtitle">Организации · тарифы · подписки · витрина</div>
                         </div>
                     </div>
                     <div class="admin-header-actions">
@@ -932,29 +876,74 @@
                     </div>
                 </header>
 
-                <nav class="tabs" role="tablist" aria-label="Разделы панели">
-                    <div class="tab active" role="tab" data-tab="overview">Обзор</div>
-                    <div class="tab" role="tab" data-tab="organizations">Организации</div>
-                    <div class="tab" role="tab" data-tab="pricing">Тарифы и лимиты</div>
-                    <div class="tab" role="tab" data-tab="subscriptions">Подписки</div>
-                    <div class="tab" role="tab" data-tab="landing-pricing">Витрина</div>
-                    <div class="tab tab-maintenance" role="tab" data-tab="maintenance">Уведомления<span class="tab-maintenance-dot" id="maintTabBadge" aria-hidden="true"></span></div>
-                    <div class="tab" role="tab" data-tab="account">Аккаунт</div>
-                </nav>
+                <button type="button" class="admin-nav-toggle" id="adminNavToggle" aria-expanded="false" aria-controls="adminSidebar">☰ Разделы</button>
+                <div class="admin-sidebar-overlay" id="adminSidebarOverlay" aria-hidden="true"></div>
+                <div class="admin-layout">
+                    <aside class="admin-sidebar" id="adminSidebar" aria-label="Разделы панели">
+                        <nav class="admin-nav" role="tablist">
+                            <button type="button" class="admin-nav-item active" role="tab" data-tab="overview" aria-selected="true" id="nav-overview">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg>
+                                <span class="admin-nav-label">Обзор</span>
+                            </button>
+                            <button type="button" class="admin-nav-item" role="tab" data-tab="organizations" id="nav-organizations">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+                                <span class="admin-nav-label">Организации</span>
+                            </button>
+                            <button type="button" class="admin-nav-item" role="tab" data-tab="pricing" id="nav-pricing">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                                <span class="admin-nav-label">Тарифы и лимиты</span>
+                            </button>
+                            <button type="button" class="admin-nav-item" role="tab" data-tab="subscriptions" id="nav-subscriptions">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                                <span class="admin-nav-label">Подписки</span>
+                            </button>
+                            <button type="button" class="admin-nav-item" role="tab" data-tab="landing-pricing" id="nav-landing-pricing">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+                                <span class="admin-nav-label">Витрина</span>
+                            </button>
+                            <button type="button" class="admin-nav-item" role="tab" data-tab="maintenance" id="nav-maintenance">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                                <span class="admin-nav-label">Уведомления</span>
+                                <span class="admin-nav-badge" id="maintTabBadge" aria-hidden="true"></span>
+                            </button>
+                            <button type="button" class="admin-nav-item" role="tab" data-tab="account" id="nav-account">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                <span class="admin-nav-label">Аккаунт</span>
+                            </button>
+                        </nav>
+                    </aside>
+                    <div class="admin-main">
+                        <div class="admin-toolbar">
+                            <h2 class="admin-section-title" id="adminSectionTitle">Обзор</h2>
+                            <div class="admin-toolbar-actions">
+                                <span class="admin-sync-meta" id="adminLastSync">Данные не загружены</span>
+                                <button type="button" class="btn-sm btn-refresh" id="adminRefreshBtn" title="Обновить данные с сервера">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                                    Обновить
+                                </button>
+                            </div>
+                        </div>
+                        <div class="admin-loading" id="adminLoading" hidden>
+                            <span class="admin-loading-spinner" aria-hidden="true"></span>
+                            <span>Загрузка данных…</span>
+                        </div>
+                        <div class="admin-panels">
 
                 <!-- Обзор -->
                 <section id="tab-overview" class="tab-content active">
                     <div class="panel-head">
-                        <h2 class="panel-title">Обзор</h2>
-                        <ul class="fact-list">
+                        <details class="panel-help">
+                            <summary>Справка по разделу</summary>
+                            <ul class="fact-list">
                             <li>Сводка по данным API <code style="font-size:0.76em;">/api/organizations</code> на момент загрузки.</li>
                             <li>Счётчик объектов на картах — узлы, кроссы, муфты и т.д. (кабели не учитываются), как в приложении карты.</li>
                             <li>Счётчики подписок «скоро истекут» зависят от поля «Граница дней» во вкладке «Подписки» (по умолчанию 14).</li>
-                            <li>Здесь нельзя ничего изменить — только просмотр для быстрой оценки состояния.</li>
+                            <li>Здесь нельзя ничего изменить — только просмотр для быстрой оценки состояния. Нажмите на карточку с риском — откроется нужный раздел.</li>
                         </ul>
+                        </details>
                     </div>
                     <div class="cards-row">
-                        <div class="stat-card">
+                        <div class="stat-card stat-card--action" data-admin-goto="organizations" tabindex="0" role="button" title="Открыть список организаций">
                             <div class="stat-label">Всего организаций</div>
                             <div class="stat-value" id="statOrgsTotal">—</div>
                             <div class="stat-extra">Активные / приостановленные: <span id="statOrgsSplit" class="text-muted">—</span></div>
@@ -964,12 +953,12 @@
                             <div class="stat-value" id="statSessionsActive">—</div>
                             <div class="stat-extra">По данным /api/organizations</div>
                         </div>
-                        <div class="stat-card">
+                        <div class="stat-card stat-card--action" data-admin-goto="subscriptions" tabindex="0" role="button" title="Открыть подписки">
                             <div class="stat-label">Подписки, истекают скоро</div>
                             <div class="stat-value" id="statExpiringSoon">—</div>
-                            <div class="stat-extra">В течение 14 дней</div>
+                            <div class="stat-extra" id="statExpiringSoonHint">В течение 14 дней</div>
                         </div>
-                        <div class="stat-card">
+                        <div class="stat-card stat-card--action" data-admin-goto="subscriptions" tabindex="0" role="button" title="Открыть подписки">
                             <div class="stat-label">Просроченные подписки</div>
                             <div class="stat-value danger-text" id="statExpired">—</div>
                             <div class="stat-extra">Нужны действия администратора</div>
@@ -984,7 +973,7 @@
                             <div class="stat-value" id="statAvgSessions">—</div>
                             <div class="stat-extra">Среднее активных сессий на организацию</div>
                         </div>
-                        <div class="stat-card">
+                        <div class="stat-card stat-card--action" data-admin-goto="organizations" data-org-filter="highload" tabindex="0" role="button" title="Открыть организации с высокой загрузкой">
                             <div class="stat-label">Организации с риском по лимиту</div>
                             <div class="stat-value danger-text" id="statHighLoadOrgs">—</div>
                             <div class="stat-extra">С загрузкой лимита 80% и выше</div>
@@ -1052,7 +1041,7 @@
                         <div class="analytics-card">
                             <div class="analytics-title">Качество данных и риски</div>
                             <ul class="legend-list">
-                                <li class="legend-item"><span class="legend-dot warn"></span><span class="legend-item-label">Скоро истекают (до 14 дн.)</span><strong id="riskLegendExpiring">0</strong></li>
+                                <li class="legend-item"><span class="legend-dot warn"></span><span class="legend-item-label" id="riskLegendExpiringLabel">Скоро истекают (до 14 дней)</span><strong id="riskLegendExpiring">0</strong></li>
                                 <li class="legend-item"><span class="legend-dot expired"></span><span class="legend-item-label">Просроченные подписки</span><strong id="riskLegendExpired">0</strong></li>
                                 <li class="legend-item"><span class="legend-dot info"></span><span class="legend-item-label">Без даты подписки</span><strong id="riskLegendNoDate">0</strong></li>
                                 <li class="legend-item"><span class="legend-dot suspended"></span><span class="legend-item-label">Приостановленные</span><strong id="riskLegendSuspended">0</strong></li>
@@ -1072,13 +1061,22 @@
                 <!-- Организации -->
                 <section id="tab-organizations" class="tab-content">
                     <div class="panel-head">
-                        <h2 class="panel-title">Организации</h2>
-                        <ul class="fact-list">
+                        <details class="panel-help">
+                            <summary>Справка по разделу</summary>
+                            <ul class="fact-list">
                             <li>Полный список организаций из хранилища сервера: тариф (planId), лимит сессий, дата подписки, контактная почта, число объектов на карте (узлы, кроссы, муфты и т.д., без кабелей).</li>
                             <li>«Настроить» переключает на вкладку «Тарифы и лимиты» с уже выбранной организацией.</li>
                             <li>«Удалить» безвозвратно удаляет организацию, карту, историю и пользователей этой организации.</li>
                             <li>Роли и список пользователей по-прежнему ведутся в приложении карты (модальное окно «Пользователи»).</li>
                         </ul>
+                        </details>
+                    </div>
+                    <div class="org-filters" id="orgsFilters" role="group" aria-label="Фильтр организаций">
+                        <button type="button" class="org-filter active" data-filter="all">Все</button>
+                        <button type="button" class="org-filter" data-filter="active">Активные</button>
+                        <button type="button" class="org-filter" data-filter="suspended">Приостановленные</button>
+                        <button type="button" class="org-filter" data-filter="expired">Просроченные</button>
+                        <button type="button" class="org-filter" data-filter="highload">Высокая загрузка</button>
                     </div>
                     <div class="org-toolbar">
                         <div class="search-field">
@@ -1112,12 +1110,14 @@
                 <!-- Тарифы и лимиты -->
                 <section id="tab-pricing" class="tab-content">
                     <div class="panel-head">
-                        <h2 class="panel-title">Тарифы и лимиты</h2>
-                        <ul class="fact-list">
+                        <details class="panel-help">
+                            <summary>Справка по разделу</summary>
+                            <ul class="fact-list">
                             <li>Тариф организации (<strong>planId</strong>) — встроенные basic / pro / enterprise и id карточек с вкладки «Витрина тарифов»; лимит сессий и дату подписки можно переопределить отдельно.</li>
                             <li>Приостановка (<strong>приостановлена</strong>) сбрасывает сессии и блокирует вход для всех пользователей организации.</li>
                             <li>Ниже — сброс пароля пользователя организации (завершает его активные сессии).</li>
                         </ul>
+                        </details>
                     </div>
                     <div class="field-row">
                         <div class="field-col">
@@ -1200,12 +1200,15 @@
                 <!-- Тарифы на главной странице -->
                 <section id="tab-landing-pricing" class="tab-content">
                     <div class="panel-head">
-                        <h2 class="panel-title">Витрина тарифов (pricing.html)</h2>
-                        <ul class="fact-list">
+                        <details class="panel-help">
+                            <summary>Справка по разделу</summary>
+                            <ul class="fact-list">
                             <li>Карточки на публичной странице <strong>pricing.html</strong> и на корне сайта (если открыт лендинг) — только отображение и кнопки.</li>
                             <li>Числовой лимит в карточке подхватывается для организаций без ручного лимита, если <strong>ID тарифа</strong> совпадает с <strong>planId</strong> организации.</li>
+                            <li><strong>Срок в днях</strong> — для пробного тарифа задаёт длительность подписки при регистрации и текст на лендинге; для платных — опционально (срок подписки при саморегистрации).</li>
                             <li>Акции и скидки: процент и даты; опционально «цена до скидки» для зачёркивания.</li>
                         </ul>
+                        </details>
                     </div>
                     <div class="field-row">
                         <div class="field-col">
@@ -1217,6 +1220,7 @@
                                             <th>Название</th>
                                             <th>Цена</th>
                                             <th>Лимит</th>
+                                            <th>Дней</th>
                                             <th>Скидка</th>
                                             <th>Порядок</th>
                                             <th>Тип</th>
@@ -1254,8 +1258,13 @@
                             <input id="landingPricingPrice" type="text" placeholder="Например: 1 490 ₽">
                         </div>
                         <div class="field-col">
-                            <label for="landingPricingPeriod">Период</label>
+                            <label for="landingPricingPeriod">Период (текст на карточке)</label>
                             <input id="landingPricingPeriod" type="text" placeholder="/ месяц, / 14 дней и т.п.">
+                        </div>
+                        <div class="field-col" id="landingPricingDaysCol">
+                            <label for="landingPricingSubscriptionDays">Срок подписки, дней</label>
+                            <input id="landingPricingSubscriptionDays" type="number" min="1" max="3650" placeholder="14 — для пробного тарифа">
+                            <div class="hint" id="landingPricingDaysHint">Для типа «Пробный»: длительность при регистрации и подписи на сайте. Кнопка ниже подставит период в карточку.</div>
                         </div>
                         <div class="field-col">
                             <label for="landingPricingOrder">Порядок (целое число)</label>
@@ -1293,6 +1302,9 @@
                             <label for="landingPricingCtaText">Текст кнопки</label>
                             <input id="landingPricingCtaText" type="text" placeholder="Например: Выбрать «Базовый»">
                         </div>
+                        <div class="field-col" style="align-self:flex-end;">
+                            <button type="button" class="btn-sm" id="landingPricingSyncPeriodBtn">Подставить период из дней</button>
+                        </div>
                     </div>
                     <div class="field-row">
                         <div class="field-col">
@@ -1321,21 +1333,36 @@
                 <!-- Подписки -->
                 <section id="tab-subscriptions" class="tab-content">
                     <div class="panel-head">
-                        <h2 class="panel-title">Подписки</h2>
-                        <ul class="fact-list">
+                        <details class="panel-help">
+                            <summary>Справка по разделу</summary>
+                            <ul class="fact-list">
                             <li>Показаны только организации с датой окончания подписки в пределах выбранного горизонта (дней) или уже с истёкшей датой.</li>
-                            <li>Кнопки <strong>+30 дней</strong> и <strong>+1 год</strong> сдвигают дату окончания от текущей даты окончания (или от сегодня, если истекла).</li>
+                            <li>Кнопки продления используют настраиваемое число дней (сохраняется в браузере). Можно задать два быстрых варианта и своё значение в строке таблицы.</li>
                             <li>После продления пользователи снова смогут входить, если организация не приостановлена.</li>
                         </ul>
+                        </details>
                     </div>
-                    <div class="field-row">
+                    <div class="field-row subs-settings-row">
                         <div class="field-col">
                             <label for="subsDays">Граница «скоро истекает», дней</label>
-                            <input id="subsDays" type="number" min="1" value="14">
-                            <div class="hint">Организации с датой окончания подписки в пределах этого количества дней попадут в список.</div>
+                            <input id="subsDays" type="number" min="1" max="3650" value="14">
+                            <div class="hint">Кто попадает в список ниже и в счётчик на обзоре.</div>
+                        </div>
+                        <div class="field-col">
+                            <label for="subsExtendPreset1">Быстрое продление 1, дней</label>
+                            <input id="subsExtendPreset1" type="number" min="1" max="3650" value="30">
+                        </div>
+                        <div class="field-col">
+                            <label for="subsExtendPreset2">Быстрое продление 2, дней</label>
+                            <input id="subsExtendPreset2" type="number" min="1" max="3650" value="365">
+                        </div>
+                        <div class="field-col">
+                            <label for="subsExtendDefault">Дней по умолчанию в строке</label>
+                            <input id="subsExtendDefault" type="number" min="1" max="3650" value="30">
+                            <div class="hint">Поле «+N дн.» у каждой организации в таблице.</div>
                         </div>
                         <div class="field-col" style="align-self:flex-end;">
-                            <button class="btn-sm" id="subsRefreshBtn">Обновить список</button>
+                            <button type="button" class="btn-sm" id="subsRefreshBtn">Обновить список</button>
                         </div>
                     </div>
                     <div class="table-wrap">
@@ -1353,7 +1380,7 @@
                             </tbody>
                         </table>
                     </div>
-                    <div class="hint">Кнопки продления сдвигают дату окончания подписки на указанный период.</div>
+                    <div class="hint">Продление: от текущей даты окончания (или от сегодня, если подписка уже истекла).</div>
                 </section>
 
                 <!-- Уведомления пользователям -->
@@ -1362,11 +1389,13 @@
                         <div class="panel-head">
                             <div class="maintenance-admin-head-row">
                                 <div>
-                                    <h2 class="panel-title">Уведомления пользователям</h2>
-                                    <ul class="fact-list">
+                                    <details class="panel-help" style="margin:0;">
+                                        <summary>Справка по разделу</summary>
+                                        <ul class="fact-list">
                                         <li>Оранжевый баннер вверху страницы: вход, витрина, оплата и приложение карты.</li>
                                         <li>После изменения текста баннер снова появится у тех, кто нажимал «Понятно».</li>
                                     </ul>
+                                    </details>
                                 </div>
                                 <span id="maintLiveBadge" class="maint-live-badge maint-live-badge--off">Выключено</span>
                             </div>
@@ -1422,11 +1451,13 @@
                 <!-- Аккаунт -->
                 <section id="tab-account" class="tab-content">
                     <div class="panel-head">
-                        <h2 class="panel-title">Аккаунт главного администратора</h2>
-                        <ul class="fact-list">
+                        <details class="panel-help">
+                            <summary>Справка по разделу</summary>
+                            <ul class="fact-list">
                             <li>Смена пароля только для учётной записи <strong>admin</strong> (глобальный доступ к этой панели).</li>
                             <li>Минимум 6 символов; после смены используйте новый пароль при следующем входе.</li>
                         </ul>
+                        </details>
                     </div>
                     <div class="field-row">
                         <div class="field-col">
@@ -1445,6 +1476,9 @@
                         </div>
                     </div>
                 </section>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div id="noAccess" class="no-access" style="display:none;">
@@ -1482,18 +1516,93 @@
             });
         }
 
-        // Переключение табов
-        document.addEventListener('click', function(e) {
-            var tab = e.target.closest('.tab');
-            if (!tab) return;
-            var name = tab.getAttribute('data-tab');
-            document.querySelectorAll('.tab').forEach(function(t) {
-                t.classList.toggle('active', t === tab);
+        var ADMIN_SECTION_TITLES = {
+            overview: 'Обзор',
+            organizations: 'Организации',
+            pricing: 'Тарифы и лимиты',
+            subscriptions: 'Подписки',
+            'landing-pricing': 'Витрина тарифов',
+            maintenance: 'Уведомления',
+            account: 'Аккаунт'
+        };
+
+        function closeAdminSidebar() {
+            var sidebar = document.getElementById('adminSidebar');
+            var overlay = document.getElementById('adminSidebarOverlay');
+            var toggle = document.getElementById('adminNavToggle');
+            if (sidebar) sidebar.classList.remove('is-open');
+            if (overlay) overlay.classList.remove('is-open');
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        }
+
+        function openAdminSidebar() {
+            var sidebar = document.getElementById('adminSidebar');
+            var overlay = document.getElementById('adminSidebarOverlay');
+            var toggle = document.getElementById('adminNavToggle');
+            if (sidebar) sidebar.classList.add('is-open');
+            if (overlay) overlay.classList.add('is-open');
+            if (toggle) toggle.setAttribute('aria-expanded', 'true');
+        }
+
+        window.adminSwitchTab = function(name, options) {
+            options = options || {};
+            if (!name || !ADMIN_SECTION_TITLES[name]) return;
+            document.querySelectorAll('.admin-nav-item').forEach(function(t) {
+                var on = t.getAttribute('data-tab') === name;
+                t.classList.toggle('active', on);
+                t.setAttribute('aria-selected', on ? 'true' : 'false');
             });
             document.querySelectorAll('.tab-content').forEach(function(sec) {
                 sec.classList.toggle('active', sec.id === 'tab-' + name);
             });
+            var titleEl = document.getElementById('adminSectionTitle');
+            if (titleEl) titleEl.textContent = ADMIN_SECTION_TITLES[name];
+            if (!options.skipHash) {
+                try { history.replaceState(null, '', '#' + name); } catch (e) {}
+            }
+            closeAdminSidebar();
+            var main = document.querySelector('.admin-main');
+            if (main) main.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        };
+
+        document.addEventListener('click', function(e) {
+            var nav = e.target.closest('.admin-nav-item');
+            if (nav) {
+                adminSwitchTab(nav.getAttribute('data-tab'));
+                return;
+            }
+            var gotoCard = e.target.closest('[data-admin-goto]');
+            if (gotoCard) {
+                var tabName = gotoCard.getAttribute('data-admin-goto');
+                var orgFilter = gotoCard.getAttribute('data-org-filter');
+                if (orgFilter && window.adminSetOrgFilter) window.adminSetOrgFilter(orgFilter);
+                adminSwitchTab(tabName);
+            }
         });
+
+        document.addEventListener('keydown', function(e) {
+            var card = e.target.closest('[data-admin-goto]');
+            if (card && (e.key === 'Enter' || e.key === ' ')) {
+                e.preventDefault();
+                card.click();
+            }
+        });
+
+        var navToggle = document.getElementById('adminNavToggle');
+        var navOverlay = document.getElementById('adminSidebarOverlay');
+        if (navToggle) {
+            navToggle.addEventListener('click', function() {
+                var sidebar = document.getElementById('adminSidebar');
+                if (sidebar && sidebar.classList.contains('is-open')) closeAdminSidebar();
+                else openAdminSidebar();
+            });
+        }
+        if (navOverlay) navOverlay.addEventListener('click', closeAdminSidebar);
+
+        var hashTab = (location.hash || '').replace(/^#/, '');
+        if (hashTab && ADMIN_SECTION_TITLES[hashTab]) {
+            adminSwitchTab(hashTab, { skipHash: true });
+        }
 
         document.getElementById('backToLandingBtn').addEventListener('click', function() {
             window.location.href = 'pricing.html';
@@ -1533,6 +1642,155 @@
         var orgs = [];
         var adminUserId = null;
         var cachedUsers = [];
+        var orgListFilter = 'all';
+        var adminDataLoading = false;
+        var SUBS_SETTINGS_KEYS = {
+            soon: 'networkMap_admin_subsSoonDays',
+            extend1: 'networkMap_admin_subsExtend1',
+            extend2: 'networkMap_admin_subsExtend2',
+            extendDefault: 'networkMap_admin_subsExtendDefault'
+        };
+
+        function clampSubsDays(val, fallback) {
+            var n = parseInt(val, 10);
+            if (isNaN(n) || n < 1) return fallback;
+            if (n > 3650) return 3650;
+            return n;
+        }
+
+        function loadSubsSettings() {
+            try {
+                var soon = localStorage.getItem(SUBS_SETTINGS_KEYS.soon);
+                var e1 = localStorage.getItem(SUBS_SETTINGS_KEYS.extend1);
+                var e2 = localStorage.getItem(SUBS_SETTINGS_KEYS.extend2);
+                var ed = localStorage.getItem(SUBS_SETTINGS_KEYS.extendDefault);
+                var soonEl = document.getElementById('subsDays');
+                var e1El = document.getElementById('subsExtendPreset1');
+                var e2El = document.getElementById('subsExtendPreset2');
+                var edEl = document.getElementById('subsExtendDefault');
+                if (soonEl && soon) soonEl.value = String(clampSubsDays(soon, 14));
+                if (e1El && e1) e1El.value = String(clampSubsDays(e1, 30));
+                if (e2El && e2) e2El.value = String(clampSubsDays(e2, 365));
+                if (edEl && ed) edEl.value = String(clampSubsDays(ed, 30));
+            } catch (e) {}
+        }
+
+        function saveSubsSettings() {
+            try {
+                localStorage.setItem(SUBS_SETTINGS_KEYS.soon, String(getSubsSoonDays()));
+                localStorage.setItem(SUBS_SETTINGS_KEYS.extend1, String(getSubsExtendPresets().preset1));
+                localStorage.setItem(SUBS_SETTINGS_KEYS.extend2, String(getSubsExtendPresets().preset2));
+                localStorage.setItem(SUBS_SETTINGS_KEYS.extendDefault, String(getSubsExtendPresets().rowDefault));
+            } catch (e) {}
+        }
+
+        function getSubsSoonDays() {
+            var el = document.getElementById('subsDays');
+            return clampSubsDays(el && el.value, 14);
+        }
+
+        function getSubsExtendPresets() {
+            var e1 = document.getElementById('subsExtendPreset1');
+            var e2 = document.getElementById('subsExtendPreset2');
+            var ed = document.getElementById('subsExtendDefault');
+            return {
+                preset1: clampSubsDays(e1 && e1.value, 30),
+                preset2: clampSubsDays(e2 && e2.value, 365),
+                rowDefault: clampSubsDays(ed && ed.value, 30)
+            };
+        }
+
+        function daysWord(n) {
+            var mod10 = n % 10;
+            var mod100 = n % 100;
+            if (mod10 === 1 && mod100 !== 11) return 'день';
+            if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'дня';
+            return 'дней';
+        }
+
+        function formatExtendButtonLabel(days) {
+            if (days === 365) return '+1 год';
+            if (days === 30) return '+30 дн.';
+            if (days === 7) return '+7 дн.';
+            return '+' + days + ' дн.';
+        }
+
+        function updateSubsSoonHints() {
+            var d = getSubsSoonDays();
+            var hint = document.getElementById('statExpiringSoonHint');
+            if (hint) hint.textContent = 'В течение ' + d + ' ' + daysWord(d);
+            var riskLabel = document.getElementById('riskLegendExpiringLabel');
+            if (riskLabel) riskLabel.textContent = 'Скоро истекают (до ' + d + ' ' + daysWord(d) + ')';
+        }
+
+        function onSubsSettingsChanged() {
+            saveSubsSettings();
+            updateSubsSoonHints();
+            renderOverview();
+            renderSubscriptionsTable();
+        }
+
+        function extendOrganizationSubscription(orgId, addDays) {
+            var add = clampSubsDays(addDays, 0);
+            if (!add) return;
+            var o = orgs.find(function(x) { return x.id === orgId; });
+            if (!o) return;
+            var base = o.subscriptionEndsAt ? new Date(o.subscriptionEndsAt) : new Date();
+            if (base < new Date()) base = new Date();
+            base.setDate(base.getDate() + add);
+            return patchOrganization(orgId, { subscriptionEndsAt: base.toISOString() }).then(function() {
+                alert('Подписка продлена на ' + add + ' ' + daysWord(add));
+                loadAll();
+            });
+        }
+
+        window.adminSetOrgFilter = function(filter) {
+            orgListFilter = filter || 'all';
+            document.querySelectorAll('.org-filter').forEach(function(btn) {
+                btn.classList.toggle('active', btn.getAttribute('data-filter') === orgListFilter);
+            });
+            renderOrganizationsTable();
+            if (filter && filter !== 'all') adminSwitchTab('organizations');
+        };
+
+        function orgMatchesListFilter(o) {
+            if (!o || orgListFilter === 'all') return true;
+            var now = new Date();
+            var end = o.subscriptionEndsAt ? new Date(o.subscriptionEndsAt) : null;
+            var expired = end && end < now;
+            if (orgListFilter === 'expired') return !!expired;
+            if (orgListFilter === 'suspended') return o.status === 'suspended';
+            if (orgListFilter === 'active') return o.status === 'active' && !expired;
+            if (orgListFilter === 'highload') {
+                var limit = o.effectiveMaxConcurrentUsers != null ? o.effectiveMaxConcurrentUsers :
+                    (o.maxConcurrentUsers != null && o.maxConcurrentUsers > 0 ? o.maxConcurrentUsers : null);
+                var sessions = o.activeSessions != null ? o.activeSessions : 0;
+                if (limit == null || limit <= 0) return false;
+                return (sessions / limit) >= 0.8;
+            }
+            return true;
+        }
+
+        function setAdminLoading(on) {
+            adminDataLoading = !!on;
+            var el = document.getElementById('adminLoading');
+            var btn = document.getElementById('adminRefreshBtn');
+            if (el) el.hidden = !on;
+            if (btn) btn.classList.toggle('is-loading', on);
+        }
+
+        function setAdminSyncTime(ok) {
+            var meta = document.getElementById('adminLastSync');
+            if (!meta) return;
+            if (!ok) {
+                meta.textContent = 'Ошибка загрузки';
+                meta.classList.add('is-stale');
+                return;
+            }
+            meta.classList.remove('is-stale');
+            var d = new Date();
+            meta.textContent = 'Обновлено ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        }
 
         function getAuthToken() {
             try {
@@ -1606,7 +1864,8 @@
             var active = orgs.filter(function(o) { return o.status === 'active'; }).length;
             var suspended = orgs.filter(function(o) { return o.status === 'suspended'; }).length;
             var now = new Date();
-            var soonDays = parseInt(document.getElementById('subsDays').value || '14', 10);
+            var soonDays = getSubsSoonDays();
+            updateSubsSoonHints();
             var soonMs = soonDays * 24 * 60 * 60 * 1000;
             var expiring = 0, expired = 0;
             var sessions = 0;
@@ -1834,8 +2093,9 @@
         function getFilteredOrgs() {
             var inp = document.getElementById('orgsSearchInput');
             var q = (inp && inp.value) ? String(inp.value).trim().toLowerCase() : '';
-            if (!q) return orgs;
             return orgs.filter(function(o) {
+                if (!orgMatchesListFilter(o)) return false;
+                if (!q) return true;
                 var name = (o.name || '').toLowerCase();
                 var mail = (o.contactEmail || '').toLowerCase();
                 var plan = (o.planId || '').toLowerCase();
@@ -1941,7 +2201,8 @@
         }
 
         function renderSubscriptionsTable() {
-            var days = parseInt(document.getElementById('subsDays').value || '14', 10);
+            var days = getSubsSoonDays();
+            var presets = getSubsExtendPresets();
             var tbody = document.getElementById('subsTableBody');
             tbody.innerHTML = '';
             if (!orgs.length) {
@@ -1976,8 +2237,12 @@
                     '<td><span class="pill ' + pillClass + '">' + pillText + '</span></td>' +
                     '<td>' + (item.diff < 0 ? ('+' + Math.abs(diffDays)) : diffDays) + '</td>' +
                     '<td class="actions-cell">' +
-                        '<button data-id="' + o.id + '" data-add="30">+30 дней</button>' +
-                        '<button data-id="' + o.id + '" data-add="365">+1 год</button>' +
+                        '<button type="button" data-id="' + o.id + '" data-add="' + presets.preset1 + '">' + formatExtendButtonLabel(presets.preset1) + '</button>' +
+                        '<button type="button" data-id="' + o.id + '" data-add="' + presets.preset2 + '">' + formatExtendButtonLabel(presets.preset2) + '</button>' +
+                        '<span class="subs-extend-inline">' +
+                            '<input type="number" min="1" max="3650" class="subs-row-days" value="' + presets.rowDefault + '" aria-label="Дней продления">' +
+                            '<button type="button" data-id="' + o.id + '" data-add-custom>+</button>' +
+                        '</span>' +
                     '</td>';
                 tbody.appendChild(tr);
             });
@@ -2064,6 +2329,52 @@
             });
         }
 
+        function parseLandingSubscriptionDays(raw, kind) {
+            var k = String(kind || 'paid').toLowerCase();
+            if (raw === undefined || raw === null || String(raw).trim() === '') {
+                return k === 'trial' ? 14 : '';
+            }
+            var n = parseInt(String(raw).trim(), 10);
+            if (isNaN(n) || n < 1) return k === 'trial' ? 14 : '';
+            return Math.min(3650, n);
+        }
+
+        function daysWordRu(n) {
+            var mod10 = n % 10;
+            var mod100 = n % 100;
+            if (mod10 === 1 && mod100 !== 11) return 'день';
+            if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'дня';
+            return 'дней';
+        }
+
+        function syncLandingPeriodFromDays() {
+            var kindEl = document.getElementById('landingPricingKind');
+            var daysEl = document.getElementById('landingPricingSubscriptionDays');
+            var periodEl = document.getElementById('landingPricingPeriod');
+            if (!daysEl || !periodEl) return;
+            var kind = kindEl ? kindEl.value : 'paid';
+            var days = parseLandingSubscriptionDays(daysEl.value, kind);
+            if (!days) {
+                alert('Укажите число дней (от 1)');
+                return;
+            }
+            periodEl.value = '/ ' + days + ' ' + daysWordRu(days);
+        }
+
+        function updateLandingPricingDaysUi() {
+            var kindEl = document.getElementById('landingPricingKind');
+            var hint = document.getElementById('landingPricingDaysHint');
+            var daysInput = document.getElementById('landingPricingSubscriptionDays');
+            var kind = kindEl ? kindEl.value : 'paid';
+            var isTrial = kind === 'trial';
+            if (daysInput) daysInput.disabled = false;
+            if (hint) {
+                hint.textContent = isTrial
+                    ? 'Обязательно для пробного тарифа: срок при регистрации и на pricing.html.'
+                    : 'Необязательно для платных тарифов: если указано, используется при самостоятельной регистрации с этим planId.';
+            }
+        }
+
         function loadLandingPricing() {
             var opts = { credentials: 'include', headers: {} };
             var token = getAuthToken && getAuthToken();
@@ -2076,7 +2387,7 @@
                     if (!tbody) return;
                     tbody.innerHTML = '';
                     if (!plans.length) {
-                        tbody.innerHTML = '<tr><td colspan="7" class="text-muted">Тарифов пока нет</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="8" class="text-muted">Тарифов пока нет</td></tr>';
                         return;
                     }
                     plans.forEach(function(p, idx) {
@@ -2089,10 +2400,18 @@
                             var n = typeof mcu === 'number' ? mcu : parseInt(mcu, 10);
                             if (!isNaN(n)) limitCell = (n === -1) ? '∞' : String(n);
                         }
+                        var daysCell = '—';
+                        if (p.subscriptionDays != null && p.subscriptionDays !== '') {
+                            var sd = parseInt(p.subscriptionDays, 10);
+                            if (!isNaN(sd) && sd > 0) daysCell = String(sd);
+                        } else if (p.kind === 'trial') {
+                            daysCell = '14';
+                        }
                         tr.innerHTML =
                             '<td>' + (p.title || p.id || '—') + '</td>' +
                             '<td>' + (p.price || '—') + (p.period ? ' ' + p.period : '') + '</td>' +
                             '<td>' + limitCell + '</td>' +
+                            '<td>' + daysCell + '</td>' +
                             '<td>' + promoCell + '</td>' +
                             '<td>' + (typeof p.order === 'number' ? p.order : idx) + '</td>' +
                             '<td>' + (p.kind || 'paid') + '</td>' +
@@ -2289,17 +2608,28 @@
         }
 
         function loadAll() {
-            fetchOrganizations().then(function(body) {
-                if (!body || !body.organizations) return;
+            if (adminDataLoading) return Promise.resolve();
+            setAdminLoading(true);
+            return fetchOrganizations().then(function(body) {
+                if (!body || !body.organizations) {
+                    setAdminSyncTime(false);
+                    return;
+                }
                 orgs = body.organizations;
                 renderOverview();
-                fetchVisitStats().then(renderVisitOverview);
                 renderOrganizationsTable();
                 renderPricingSelector();
                 renderSubscriptionsTable();
                 loadLandingPricing();
                 loadMaintenanceNotice();
+                setAdminSyncTime(true);
+                return fetchVisitStats().then(renderVisitOverview);
+            }).then(function() {
                 return fetchUsersCached();
+            }).catch(function() {
+                setAdminSyncTime(false);
+            }).finally(function() {
+                setAdminLoading(false);
             });
         }
 
@@ -2320,6 +2650,19 @@
         if (orgsSearchInputEl) {
             orgsSearchInputEl.addEventListener('input', function() {
                 renderOrganizationsTable();
+            });
+        }
+
+        document.querySelectorAll('.org-filter').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                adminSetOrgFilter(btn.getAttribute('data-filter'));
+            });
+        });
+
+        var adminRefreshBtn = document.getElementById('adminRefreshBtn');
+        if (adminRefreshBtn) {
+            adminRefreshBtn.addEventListener('click', function() {
+                loadAll();
             });
         }
 
@@ -2376,9 +2719,18 @@
         });
 
         document.getElementById('subsRefreshBtn').addEventListener('click', function() {
-            renderOverview();
-            renderSubscriptionsTable();
+            onSubsSettingsChanged();
         });
+
+        ['subsDays', 'subsExtendPreset1', 'subsExtendPreset2', 'subsExtendDefault'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener('change', onSubsSettingsChanged);
+            el.addEventListener('input', onSubsSettingsChanged);
+        });
+
+        loadSubsSettings();
+        updateSubsSoonHints();
 
         document.getElementById('orgsTableBody').addEventListener('click', function(e) {
             var btn = e.target.closest('button');
@@ -2389,7 +2741,7 @@
                 var select = document.getElementById('pricingOrgSelect');
                 select.value = id;
                 fillPricingFormForOrg(id);
-                document.querySelector('.tab[data-tab="pricing"]').click();
+                adminSwitchTab('pricing');
             } else if (action === 'deleteOrg') {
                 var orgId = btn.getAttribute('data-id');
                 var org = orgs.find(function(o) { return o.id === orgId; });
@@ -2415,20 +2767,22 @@
         document.getElementById('subsTableBody').addEventListener('click', function(e) {
             var btn = e.target.closest('button');
             if (!btn) return;
-            var add = parseInt(btn.getAttribute('data-add') || '0', 10);
             var id = btn.getAttribute('data-id');
-            if (!add || !id) return;
-            var o = orgs.find(function(x) { return x.id === id; });
-            if (!o) return;
-            var base = o.subscriptionEndsAt ? new Date(o.subscriptionEndsAt) : new Date();
-            if (base < new Date()) base = new Date();
-            base.setDate(base.getDate() + add);
-            var dateIso = base.toISOString();
-            patchOrganization(id, { subscriptionEndsAt: dateIso }).then(function() {
-                alert('Подписка продлена');
-                loadAll();
-            }).catch(function(e) {
-                alert('Ошибка: ' + (e.message || e));
+            if (!id) return;
+            var add = 0;
+            if (btn.hasAttribute('data-add-custom')) {
+                var row = btn.closest('tr');
+                var inp = row && row.querySelector('.subs-row-days');
+                add = clampSubsDays(inp && inp.value, 0);
+            } else {
+                add = parseInt(btn.getAttribute('data-add') || '0', 10);
+            }
+            if (!add) {
+                alert('Укажите число дней (от 1)');
+                return;
+            }
+            extendOrganizationSubscription(id, add).catch(function(err) {
+                alert('Ошибка: ' + (err.message || err));
             });
         });
 
@@ -2500,7 +2854,16 @@
             document.getElementById('landingPricingPromoStarts').value = '';
             document.getElementById('landingPricingPromoEnds').value = '';
             document.getElementById('landingPricingPriceBeforePromo').value = '';
+            var daysNew = document.getElementById('landingPricingSubscriptionDays');
+            if (daysNew) daysNew.value = '14';
+            updateLandingPricingDaysUi();
         });
+
+        var landingKindEl = document.getElementById('landingPricingKind');
+        if (landingKindEl) landingKindEl.addEventListener('change', updateLandingPricingDaysUi);
+        var landingSyncPeriodBtn = document.getElementById('landingPricingSyncPeriodBtn');
+        if (landingSyncPeriodBtn) landingSyncPeriodBtn.addEventListener('click', syncLandingPeriodFromDays);
+        updateLandingPricingDaysUi();
 
         var orgPwdSelect = document.getElementById('orgPasswordResetSelect');
         if (orgPwdSelect) {
@@ -2577,6 +2940,12 @@
                 document.getElementById('landingPricingPromoStarts').value = p.promoStartsAt ? String(p.promoStartsAt).slice(0, 10) : '';
                 document.getElementById('landingPricingPromoEnds').value = p.promoEndsAt ? String(p.promoEndsAt).slice(0, 10) : '';
                 document.getElementById('landingPricingPriceBeforePromo').value = p.priceBeforePromo || '';
+                var daysEl = document.getElementById('landingPricingSubscriptionDays');
+                if (daysEl) {
+                    var d = parseLandingSubscriptionDays(p.subscriptionDays, p.kind || 'paid');
+                    daysEl.value = d !== '' ? String(d) : '';
+                }
+                updateLandingPricingDaysUi();
                 return;
             }
 
@@ -2631,6 +3000,15 @@
                     return;
                 }
             }
+            var kindVal = document.getElementById('landingPricingKind').value || 'paid';
+            var daysParsed = parseLandingSubscriptionDays(
+                (document.getElementById('landingPricingSubscriptionDays') || {}).value,
+                kindVal
+            );
+            if (kindVal === 'trial' && (daysParsed === '' || daysParsed < 1)) {
+                alert('Для пробного тарифа укажите срок подписки в днях (от 1).');
+                return;
+            }
             var plan = {
                 id: currentId,
                 title: document.getElementById('landingPricingTitle').value.trim() || currentId,
@@ -2641,12 +3019,13 @@
                 maxConcurrentUsers: mcuVal,
                 order: parseInt(document.getElementById('landingPricingOrder').value || '0', 10) || 0,
                 highlighted: document.getElementById('landingPricingHighlighted').value === 'true',
-                kind: document.getElementById('landingPricingKind').value || 'paid',
+                kind: kindVal,
                 ctaText: document.getElementById('landingPricingCtaText').value.trim(),
                 promoPercent: promoPct,
                 promoStartsAt: document.getElementById('landingPricingPromoStarts').value || '',
                 promoEndsAt: document.getElementById('landingPricingPromoEnds').value || '',
-                priceBeforePromo: document.getElementById('landingPricingPriceBeforePromo').value.trim()
+                priceBeforePromo: document.getElementById('landingPricingPriceBeforePromo').value.trim(),
+                subscriptionDays: daysParsed === '' ? null : daysParsed
             };
             if (existingIdx >= 0) plans[existingIdx] = plan; else plans.push(plan);
             var token = getAuthToken && getAuthToken();
@@ -2667,88 +3046,7 @@
         });
     })();
     </script>
-    <script>
-    (function() {
-        var canvas = document.getElementById('authPlexusCanvas');
-        if (!canvas) return;
-        var ctx = canvas.getContext('2d');
-        var nodes = [];
-        var nodeCount = 80;
-        var maxDist = 170;
-        var lineOpacity = 0.12;
-        var nodeRadius = 1.6;
-        var resize = function() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            if (nodes.length === 0) {
-                for (var i = 0; i < nodeCount; i++) {
-                    nodes.push({
-                        x: Math.random() * canvas.width,
-                        y: Math.random() * canvas.height,
-                        vx: (Math.random() - 0.5) * 0.16,
-                        vy: (Math.random() - 0.5) * 0.16
-                    });
-                }
-            }
-        };
-        var draw = function() {
-            if (!ctx || !canvas.width || !canvas.height) return;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            var i, j, dx, dy, d, op;
-            for (i = 0; i < nodes.length; i++) {
-                for (j = i + 1; j < nodes.length; j++) {
-                    dx = nodes[j].x - nodes[i].x;
-                    dy = nodes[j].y - nodes[i].y;
-                    d = Math.sqrt(dx * dx + dy * dy);
-                    if (d < maxDist) {
-                        op = (1 - d / maxDist) * lineOpacity;
-                        ctx.beginPath();
-                        ctx.moveTo(nodes[i].x, nodes[i].y);
-                        ctx.lineTo(nodes[j].x, nodes[j].y);
-                        ctx.strokeStyle = 'rgba(59, 130, 246, ' + op + ')';
-                        ctx.lineWidth = 0.8;
-                        ctx.stroke();
-                    }
-                }
-            }
-            for (i = 0; i < nodes.length; i++) {
-                var n = nodes[i];
-                var g = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, nodeRadius * 4);
-                g.addColorStop(0, 'rgba(147, 197, 253, 0.9)');
-                g.addColorStop(0.4, 'rgba(59, 130, 246, 0.4)');
-                g.addColorStop(1, 'rgba(59, 130, 246, 0)');
-                ctx.beginPath();
-                ctx.arc(n.x, n.y, nodeRadius * 4, 0, Math.PI * 2);
-                ctx.fillStyle = g;
-                ctx.fill();
-                ctx.beginPath();
-                ctx.arc(n.x, n.y, nodeRadius, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-                ctx.fill();
-            }
-        };
-        var tick = function() {
-            var i, n;
-            for (i = 0; i < nodes.length; i++) {
-                n = nodes[i];
-                n.x += n.vx;
-                n.y += n.vy;
-                if (n.x < 0 || n.x > canvas.width) n.vx *= -1;
-                if (n.y < 0 || n.y > canvas.height) n.vy *= -1;
-                n.x = Math.max(0, Math.min(canvas.width, n.x));
-                n.y = Math.max(0, Math.min(canvas.height, n.y));
-            }
-            draw();
-            requestAnimationFrame(tick);
-        };
-        resize();
-        window.addEventListener('resize', function() {
-            resize();
-            draw();
-        });
-        tick();
-    })();
-    </script>
+    <script src="js/core/page-bg-plexus.js"></script>
     <script src="js/core/cookie-consent.js"></script>
     <script src="js/core/maintenance-notice.js"></script>
 </body>

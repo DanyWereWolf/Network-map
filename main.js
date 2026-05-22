@@ -1654,16 +1654,34 @@ function isMapPanLockedForObjectPlacement() {
     return false;
 }
 
+function isCableLayingWithSource() {
+    return !!(currentCableTool && cableSource && isEditMode);
+}
+
+/** На touch при прокладке кабеля (есть начальная точка) pan отключён; на мыши — ЛКМ перетаскивает карту. */
+function isMapPanLockedForCableTool() {
+    if (!isCableLayingWithSource()) return false;
+    try {
+        if (window.matchMedia('(pointer: coarse)').matches) return true;
+        if (window.matchMedia('(hover: none)').matches) return true;
+    } catch (e) {}
+    return false;
+}
+
+function isMapPanDragTrackingActive() {
+    return objectPlacementMode || isCableLayingWithSource();
+}
+
 /**
  * На сенсорных экранах поведение «перетаскивание» карты перехватывает движение пальца,
  * из‑за чего не срабатывает предпросмотр кабеля / «фантом» при размещении объектов.
  * Пока активны эти режимы, отключаем pan (drag); масштаб жестами и кнопками зума сохраняется.
- * В режиме размещения объектов на мыши pan (ЛКМ + перетаскивание) включён; клик после pan не ставит объект.
+ * На мыши в размещении объектов и прокладке кабеля pan (ЛКМ + перетаскивание) включён; клик после pan не ставит точку.
  */
 function syncMapPanLockForEditTools() {
     if (!myMap || !myMap.behaviors) return;
-    var lockPan = !!(isMapPanLockedForObjectPlacement() || fiberRoutingMode || splitterFiberRoutingMode || cableSplitMode ||
-        (currentCableTool && cableSource));
+    var lockPan = !!(isMapPanLockedForObjectPlacement() || isMapPanLockedForCableTool() ||
+        fiberRoutingMode || splitterFiberRoutingMode || cableSplitMode);
     try {
         if (lockPan) myMap.behaviors.disable('drag');
         else myMap.behaviors.enable('drag');
@@ -1677,7 +1695,7 @@ function setupObjectPlacementPanDrag() {
     el.dataset.placementPanDragBound = '1';
 
     el.addEventListener('mousedown', function(e) {
-        if (e.button !== 0 || !objectPlacementMode) return;
+        if (e.button !== 0 || !isMapPanDragTrackingActive()) return;
         placementPanBlockClickUntil = 0;
         placementPanPointer.down = true;
         placementPanPointer.startX = e.clientX;
@@ -1686,7 +1704,7 @@ function setupObjectPlacementPanDrag() {
     });
 
     document.addEventListener('mousemove', function(e) {
-        if (!placementPanPointer.down || !objectPlacementMode) return;
+        if (!placementPanPointer.down || !isMapPanDragTrackingActive()) return;
         if (!placementPanPointer.moved) {
             var dx = e.clientX - placementPanPointer.startX;
             var dy = e.clientY - placementPanPointer.startY;
@@ -1699,7 +1717,7 @@ function setupObjectPlacementPanDrag() {
     document.addEventListener('mouseup', function() {
         if (!placementPanPointer.down) return;
         placementPanPointer.down = false;
-        if (placementPanPointer.moved && objectPlacementMode) {
+        if (placementPanPointer.moved && isMapPanDragTrackingActive()) {
             placementPanBlockClickUntil = Date.now() + PLACEMENT_PAN_CLICK_BLOCK_MS;
         }
     });
@@ -1928,6 +1946,9 @@ function handleMapClick(e) {
     }
 
     if (currentCableTool && isEditMode) {
+        if (Date.now() < placementPanBlockClickUntil) {
+            return;
+        }
         const coords = e.get('coords');
 
         let clickedCable = null;
@@ -1967,14 +1988,14 @@ function handleMapClick(e) {
             return;
         }
 
-        const clickedObject = findObjectAtCoords(coords);
+        const clickedObject = findObjectAtCoords(coords, getCableSnapTolerance(zoom));
         const cableType = getEffectiveCableLayingType();
         if (isCopperCableType(cableType)) {
             if (clickedObject && clickedObject.geometry) {
                 var otc = clickedObject.properties.get('type');
                 if (handleCopperCablePlacemarkStep(clickedObject, otc, cableType)) return;
             } else if (cableSource) {
-                const autoSelectTolerance = zoom < 12 ? 0.0015 : (zoom < 15 ? 0.001 : 0.0005);
+                const autoSelectTolerance = getCableAutoSelectTolerance(zoom);
                 var nearestCu = null;
                 var minDCu = Infinity;
                 objects.forEach(function(obj) {
@@ -2110,7 +2131,7 @@ function handleMapClick(e) {
             
             if (cableSource) {
                 const currentCableType = getEffectiveCableLayingType();
-                const autoSelectTolerance = zoom < 12 ? 0.0015 : (zoom < 15 ? 0.001 : 0.0005);
+                const autoSelectTolerance = getCableAutoSelectTolerance(zoom);
                 let nearestObject = null;
                 let minDist = Infinity;
                 var validCableEndpoints = ['cross', 'sleeve', 'support', 'attachment', 'olt'];
@@ -2195,7 +2216,7 @@ function handleMapMouseMove(e) {
         var ev = e;
         mapMouseMoveRafId = requestAnimationFrame(function() {
             mapMouseMoveRafId = null;
-            var snapObj = findObjectAtCoords(coords);
+            var snapObj = findObjectAtCoords(coords, getCableSnapTolerance());
             var previewCoords = coords;
             if (snapObj && snapObj !== cableSource) {
                 var t = snapObj.properties.get('type');
@@ -3250,6 +3271,9 @@ function createObject(type, name, coords, options = {}) {
         }
 
         if (currentCableTool && isEditMode) {
+            if (Date.now() < placementPanBlockClickUntil) {
+                return;
+            }
             var cableTypeVal = getEffectiveCableLayingType();
             if (handleCopperCablePlacemarkStep(placemark, type, cableTypeVal)) return;
             if (type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter') {
@@ -3267,6 +3291,7 @@ function createObject(type, name, coords, options = {}) {
                     cableWaypoints = [];
                     clearSelection();
                     selectObject(cableSource);
+                    syncMapPanLockForEditTools();
                     return;
                 }
                 if (placemark === cableSource) {
@@ -3289,6 +3314,7 @@ function createObject(type, name, coords, options = {}) {
                     clearSelection();
                     selectObject(cableSource);
                     removeCablePreview();
+                    syncMapPanLockForEditTools();
                 }
                 return;
             }
@@ -7210,6 +7236,16 @@ function buildCableRoutePointsFromData(refs, item, fromObj, toObj, coords) {
     return null;
 }
 
+function getCableSnapTolerance(zoom) {
+    if (zoom == null) zoom = myMap.getZoom();
+    return zoom < 12 ? 0.00025 : (zoom < 15 ? 0.000125 : 0.0000625);
+}
+
+function getCableAutoSelectTolerance(zoom) {
+    if (zoom == null) zoom = myMap.getZoom();
+    return zoom < 12 ? 0.000375 : (zoom < 15 ? 0.00025 : 0.000125);
+}
+
 function findObjectAtCoords(coords, tolerance = null) {
     
     if (tolerance === null) {
@@ -8437,6 +8473,9 @@ function createObjectFromData(data, opts) {
         }
 
         if (currentCableTool && isEditMode) {
+            if (Date.now() < placementPanBlockClickUntil) {
+                return;
+            }
             var cableTypeVal = getEffectiveCableLayingType();
             if (handleCopperCablePlacemarkStep(placemark, type, cableTypeVal)) return;
             if (type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter') {
@@ -8454,6 +8493,7 @@ function createObjectFromData(data, opts) {
                     cableWaypoints = [];
                     clearSelection();
                     selectObject(cableSource);
+                    syncMapPanLockForEditTools();
                     return;
                 }
                 if (placemark === cableSource) {
@@ -8476,6 +8516,7 @@ function createObjectFromData(data, opts) {
                     clearSelection();
                     selectObject(cableSource);
                     removeCablePreview();
+                    syncMapPanLockForEditTools();
                 }
                 return;
             }
