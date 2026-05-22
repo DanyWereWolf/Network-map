@@ -324,6 +324,152 @@ document.addEventListener('DOMContentLoaded', function() {
     })();
 });
 
+function getAvatarImageSrc(avatarUrl) {
+    if (!avatarUrl) return '';
+    var base = (typeof getApiBase === 'function' ? getApiBase() : '') || '';
+    var path = avatarUrl.charAt(0) === '/' ? avatarUrl : '/' + avatarUrl;
+    var url = base ? (base.replace(/\/$/, '') + path) : path;
+    var token = typeof getAuthToken === 'function' ? getAuthToken() : '';
+    if (token) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(token);
+    return url;
+}
+
+function getUserDisplayInitial(user) {
+    if (!user) return '?';
+    return String(user.fullName || user.username || '?').charAt(0).toUpperCase() || '?';
+}
+
+function applyAvatarToElement(el, user) {
+    if (!el) return;
+    var initial = getUserDisplayInitial(user);
+    var avatarUrl = user && user.avatarUrl;
+    var img = el.querySelector('.avatar-img');
+    if (avatarUrl && getApiBase() && getAuthToken()) {
+        if (!img) {
+            img = document.createElement('img');
+            img.className = 'avatar-img';
+            img.alt = '';
+            el.textContent = '';
+            el.appendChild(img);
+        }
+        img.onerror = function() {
+            img.remove();
+            el.classList.remove('has-avatar-image');
+            el.textContent = initial;
+            el.removeAttribute('aria-label');
+        };
+        img.src = getAvatarImageSrc(avatarUrl);
+        el.classList.add('has-avatar-image');
+        el.setAttribute('aria-label', 'Аватар');
+    } else {
+        if (img) img.remove();
+        el.classList.remove('has-avatar-image');
+        el.textContent = initial;
+        el.removeAttribute('aria-label');
+    }
+}
+
+function buildUserAvatarHtml(user, extraClass) {
+    var initial = getUserDisplayInitial(user);
+    var cls = 'user-item-avatar' + (extraClass ? ' ' + extraClass : '');
+    if (user && user.avatarUrl && getApiBase() && getAuthToken()) {
+        var src = escapeHtml(getAvatarImageSrc(user.avatarUrl));
+        return '<div class="' + cls + ' has-avatar-image"><img class="avatar-img" src="' + src + '" alt=""></div>';
+    }
+    return '<div class="' + cls + '">' + escapeHtml(initial) + '</div>';
+}
+
+function updateCurrentUserAvatarUrl(avatarUrl) {
+    if (!currentUser) return;
+    if (avatarUrl) currentUser.avatarUrl = avatarUrl;
+    else delete currentUser.avatarUrl;
+    try {
+        var raw = sessionStorage.getItem('networkMap_session');
+        var stored = raw ? JSON.parse(raw) : null;
+        if (stored) {
+            if (avatarUrl) stored.avatarUrl = avatarUrl;
+            else delete stored.avatarUrl;
+            sessionStorage.setItem('networkMap_session', JSON.stringify(stored));
+        }
+        if (localStorage.getItem('networkMap_session')) {
+            if (avatarUrl) currentUser.avatarUrl = avatarUrl;
+            localStorage.setItem('networkMap_session', JSON.stringify(currentUser));
+        }
+    } catch (e) {}
+}
+
+function setupProfileAvatarHandlers() {
+    var input = document.getElementById('profileAvatarInput');
+    var removeBtn = document.getElementById('profileAvatarRemoveBtn');
+    if (!input || input._avatarBound) return;
+    input._avatarBound = true;
+    input.addEventListener('change', function() {
+        var file = input.files && input.files[0];
+        input.value = '';
+        if (!file) return;
+        if (!getApiBase() || !getAuthToken()) {
+            if (typeof showWarning === 'function') showWarning('Загрузка аватара доступна только при работе с сервером.');
+            return;
+        }
+        if (file.size > 2 * 1024 * 1024) {
+            if (typeof showError === 'function') showError('Файл больше 2 МБ');
+            return;
+        }
+        var reader = new FileReader();
+        reader.onload = function() {
+            var dataUrl = reader.result;
+            fetch(getApiBase() + '/api/users/me/avatar', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + getAuthToken(),
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ dataUrl: dataUrl })
+            }).then(function(r) { return r.json().then(function(b) { return { ok: r.ok, body: b }; }); })
+              .then(function(res) {
+                if (!res.ok) throw new Error((res.body && res.body.error) || 'Не удалось загрузить');
+                updateCurrentUserAvatarUrl(res.body.avatarUrl);
+                applyAvatarToElement(document.getElementById('userAvatar'), currentUser);
+                renderProfileUserInfo();
+                if (typeof AuthSystem !== 'undefined' && AuthSystem.refreshUsersFromApi) {
+                    AuthSystem.refreshUsersFromApi().then(function() {
+                        if (typeof renderUsersList === 'function') renderUsersList();
+                    });
+                }
+                if (typeof showSuccess === 'function') showSuccess('Фото обновлено');
+              })
+              .catch(function(err) {
+                if (typeof showError === 'function') showError(err.message || 'Ошибка загрузки');
+              });
+        };
+        reader.readAsDataURL(file);
+    });
+    if (removeBtn) {
+        removeBtn.addEventListener('click', function() {
+            if (!getApiBase() || !getAuthToken()) return;
+            fetch(getApiBase() + '/api/users/me/avatar', {
+                method: 'DELETE',
+                headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+            }).then(function(r) { return r.json().then(function(b) { return { ok: r.ok, body: b }; }); })
+              .then(function(res) {
+                if (!res.ok) throw new Error((res.body && res.body.error) || 'Не удалось удалить');
+                updateCurrentUserAvatarUrl(null);
+                applyAvatarToElement(document.getElementById('userAvatar'), currentUser);
+                renderProfileUserInfo();
+                if (typeof AuthSystem !== 'undefined' && AuthSystem.refreshUsersFromApi) {
+                    AuthSystem.refreshUsersFromApi().then(function() {
+                        if (typeof renderUsersList === 'function') renderUsersList();
+                    });
+                }
+                if (typeof showSuccess === 'function') showSuccess('Фото удалено');
+              })
+              .catch(function(err) {
+                if (typeof showError === 'function') showError(err.message || 'Ошибка');
+              });
+        });
+    }
+}
+
 function initUserUI() {
     if (!currentUser) return;
 
@@ -332,7 +478,7 @@ function initUserUI() {
     const userRole = document.getElementById('userRole');
     
     if (userAvatar) {
-        userAvatar.textContent = (currentUser.fullName || currentUser.username).charAt(0).toUpperCase();
+        applyAvatarToElement(userAvatar, currentUser);
         userAvatar.addEventListener('click', openProfileModal);
         userAvatar.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -394,9 +540,6 @@ function initUserUI() {
 
     const infoHelpBtn = document.getElementById('infoHelpBtn');
     if (infoHelpBtn) infoHelpBtn.addEventListener('click', openHelpModal);
-    const updatesBtn = document.getElementById('updatesBtn');
-    if (updatesBtn) updatesBtn.addEventListener('click', openUpdatesModal);
-
     setupUsersModalHandlers();
 
     if (typeof setupHistoryModalHandlers === 'function') setupHistoryModalHandlers();
@@ -407,6 +550,8 @@ function initUserUI() {
     setupDeviceCatalogModalHandlers();
 
     setupSidebarToggle();
+    setupStatsToggle();
+    setupProfileAvatarHandlers();
 
     if (typeof updateHistoryBadge === 'function') updateHistoryBadge();
 }
@@ -541,37 +686,109 @@ function setProfileModalField(id, value) {
     if (el) el.textContent = value != null && value !== '' ? String(value) : '—';
 }
 
-function renderProfileOrganizationInfo(org) {
-    if (!org) {
-        setProfileModalField('profileOrgName', 'Организация: не привязана');
-        setProfileModalField('profileStatus', '—');
-        setProfileModalField('profileMapObjects', '—');
-        setProfileModalField('profileMapLimit', '—');
-        setProfileModalField('profileConcurrentUsers', '—');
-        var unlockBtn = document.getElementById('profileUnlockBtn');
-        if (unlockBtn) unlockBtn.style.display = 'none';
+function setProfileStatusBadge(status) {
+    var el = document.getElementById('profileStatus');
+    if (!el) return;
+    el.classList.remove('profile-status-badge--active', 'profile-status-badge--suspended', 'profile-status-badge--neutral');
+    if (status === 'suspended') {
+        el.textContent = 'Приостановлена';
+        el.classList.add('profile-status-badge--suspended');
+    } else if (status === 'active') {
+        el.textContent = 'Активна';
+        el.classList.add('profile-status-badge--active');
+    } else {
+        el.textContent = status || '—';
+        el.classList.add('profile-status-badge--neutral');
+    }
+}
+
+function setProfileMetricBar(fillId, barId, active, limit, unlimited) {
+    var fill = document.getElementById(fillId);
+    var bar = document.getElementById(barId);
+    if (!fill || !bar) return;
+    fill.classList.remove('profile-metric-bar-fill--warn', 'profile-metric-bar-fill--danger');
+    if (unlimited || limit == null || limit <= 0) {
+        bar.hidden = true;
+        fill.style.width = '0';
         return;
     }
-    var statusText = org.status === 'suspended' ? 'Приостановлена' : 'Активна';
+    bar.hidden = false;
+    var a = Number(active) || 0;
+    var l = Number(limit) || 1;
+    var pct = Math.min(100, Math.round((a / l) * 100));
+    fill.style.width = pct + '%';
+    if (pct >= 98) fill.classList.add('profile-metric-bar-fill--danger');
+    else if (pct >= 85) fill.classList.add('profile-metric-bar-fill--warn');
+}
+
+function renderProfileUserInfo() {
+    var u = currentUser;
+    var nameEl = document.getElementById('profileUserName');
+    var roleEl = document.getElementById('profileUserRole');
+    var avatarEl = document.getElementById('profileUserAvatar');
+    if (!u) {
+        setProfileModalField('profileUserName', '—');
+        if (roleEl) { roleEl.textContent = '—'; roleEl.className = 'profile-user-role'; }
+        if (avatarEl) avatarEl.textContent = '?';
+        return;
+    }
+    var displayName = u.fullName || u.username || '—';
+    setProfileModalField('profileUserName', displayName);
+    if (roleEl) {
+        roleEl.textContent = u.role === 'admin' ? 'Администратор' : 'Пользователь';
+        roleEl.className = 'profile-user-role' + (u.role === 'admin' ? ' admin' : '');
+    }
+    if (avatarEl) applyAvatarToElement(avatarEl, u);
+    var removeBtn = document.getElementById('profileAvatarRemoveBtn');
+    var uploadWrap = document.querySelector('.profile-avatar-controls');
+    if (uploadWrap) uploadWrap.style.display = (getApiBase() && getAuthToken()) ? '' : 'none';
+    if (removeBtn) removeBtn.style.display = (u && u.avatarUrl) ? '' : 'none';
+}
+
+function renderProfileOrganizationInfo(org) {
+    renderProfileUserInfo();
+    if (!org) {
+        setProfileModalField('profileOrgName', 'Не привязана');
+        setProfileStatusBadge('—');
+        setProfileModalField('profileMapObjects', '—');
+        setProfileModalField('profileMapLimit', '');
+        setProfileModalField('profileConcurrentUsers', '—');
+        var cuLimitEmpty = document.getElementById('profileConcurrentLimit');
+        if (cuLimitEmpty) cuLimitEmpty.textContent = '';
+        setProfileMetricBar('profileMapLimitFill', 'profileMapLimitBar', 0, 0, true);
+        setProfileMetricBar('profileConcurrentFill', 'profileConcurrentBar', 0, 0, true);
+        return;
+    }
     var limits = org.mapLimits || mapLimitsCache;
     if (limits) applyMapLimitsCache(limits);
-    var count = limits && limits.count != null ? limits.count : '—';
-    var limitText = (limits && limits.unlocked) ? 'Без ограничений' :
-        (limits && limits.limit != null ? (limits.count + ' / ' + limits.limit) : '—');
-    setProfileModalField('profileOrgName', 'Организация: ' + (org.name || '—'));
-    setProfileModalField('profileStatus', statusText);
-    setProfileModalField('profileMapObjects', String(count));
-    setProfileModalField('profileMapLimit', limitText);
-    var cu = org.concurrentUsers;
-    var cuText = '—';
-    if (cu) {
-        if (cu.unlimited) cuText = (cu.active != null ? cu.active : 0) + ' / без ограничений';
-        else if (cu.limit != null) cuText = (cu.active != null ? cu.active : 0) + ' / ' + cu.limit;
+    var count = limits && limits.count != null ? limits.count : null;
+    setProfileModalField('profileOrgName', org.name || '—');
+    setProfileStatusBadge(org.status === 'suspended' ? 'suspended' : 'active');
+    setProfileModalField('profileMapObjects', count != null ? String(count) : '—');
+    if (limits && limits.unlocked) {
+        setProfileModalField('profileMapLimit', '∞');
+        setProfileMetricBar('profileMapLimitFill', 'profileMapLimitBar', count, 0, true);
+    } else if (limits && limits.limit != null) {
+        setProfileModalField('profileMapLimit', String(limits.limit));
+        setProfileMetricBar('profileMapLimitFill', 'profileMapLimitBar', count, limits.limit, false);
+    } else {
+        setProfileModalField('profileMapLimit', '');
+        setProfileMetricBar('profileMapLimitFill', 'profileMapLimitBar', 0, 0, true);
     }
-    setProfileModalField('profileConcurrentUsers', cuText);
-    var unlockBtn = document.getElementById('profileUnlockBtn');
-    if (unlockBtn) {
-        unlockBtn.style.display = (limits && !limits.unlocked) ? 'inline-flex' : 'none';
+    var cu = org.concurrentUsers;
+    var cuLimitEl = document.getElementById('profileConcurrentLimit');
+    if (cu && cu.unlimited) {
+        setProfileModalField('profileConcurrentUsers', String(cu.active != null ? cu.active : 0));
+        if (cuLimitEl) cuLimitEl.textContent = '∞';
+        setProfileMetricBar('profileConcurrentFill', 'profileConcurrentBar', cu.active, 0, true);
+    } else if (cu && cu.limit != null) {
+        setProfileModalField('profileConcurrentUsers', String(cu.active != null ? cu.active : 0));
+        if (cuLimitEl) cuLimitEl.textContent = String(cu.limit);
+        setProfileMetricBar('profileConcurrentFill', 'profileConcurrentBar', cu.active, cu.limit, false);
+    } else {
+        setProfileModalField('profileConcurrentUsers', '—');
+        if (cuLimitEl) cuLimitEl.textContent = '';
+        setProfileMetricBar('profileConcurrentFill', 'profileConcurrentBar', 0, 0, true);
     }
 }
 
@@ -579,11 +796,12 @@ function openProfileModal() {
     var modal = document.getElementById('profileModal');
     if (!modal) return;
     modal.style.display = 'block';
-    setProfileModalField('profileOrgName', 'Организация: загрузка...');
-    setProfileModalField('profileStatus', 'Загрузка...');
-    setProfileModalField('profileMapObjects', 'Загрузка...');
-    setProfileModalField('profileMapLimit', 'Загрузка...');
-    setProfileModalField('profileConcurrentUsers', 'Загрузка...');
+    renderProfileUserInfo();
+    setProfileModalField('profileOrgName', 'Загрузка…');
+    setProfileStatusBadge('…');
+    setProfileModalField('profileMapObjects', '…');
+    setProfileModalField('profileMapLimit', '');
+    setProfileModalField('profileConcurrentUsers', '…');
 
     if (!getApiBase() || !getAuthToken()) {
         renderProfileOrganizationInfo(currentUser && currentUser.organization ? currentUser.organization : null);
@@ -781,12 +999,11 @@ function renderUsersList() {
             
             let pendingHtml = '';
             pendingUsers.forEach(user => {
-                const initial = (user.fullName || user.username).charAt(0).toUpperCase();
                 const createdDate = user.createdAt ? new Date(user.createdAt).toLocaleDateString('ru-RU') : '';
                 
                 pendingHtml += `
                     <div class="pending-user-item">
-                        <div class="user-item-avatar">${initial}</div>
+                        ${buildUserAvatarHtml(user, '')}
                         <div class="user-item-info">
                             <div class="user-item-name">${escapeHtml(user.fullName || user.username)}</div>
                             <div class="user-item-username">@${escapeHtml(user.username)}</div>
@@ -827,7 +1044,6 @@ function renderUsersList() {
     const onlineIds = (typeof window.syncOnlineUserIds !== 'undefined' && Array.isArray(window.syncOnlineUserIds)) ? window.syncOnlineUserIds : [];
     
     activeUsers.forEach(user => {
-        const initial = (user.fullName || user.username).charAt(0).toUpperCase();
         const roleClass = user.role === 'admin' ? 'admin' : 'user';
         const roleText = user.role === 'admin' ? 'Администратор' : 'Пользователь';
         const createdDate = user.createdAt ? new Date(user.createdAt).toLocaleDateString('ru-RU') : '';
@@ -837,7 +1053,7 @@ function renderUsersList() {
         var orgLine = (user.organizationName ? ' · ' + escapeHtml(user.organizationName) : '');
         html += `
             <div class="user-item">
-                <div class="user-item-avatar ${roleClass}">${initial}</div>
+                ${buildUserAvatarHtml(user, roleClass)}
                 <div class="user-item-info">
                     <div class="user-item-name">${escapeHtml(user.fullName || user.username)}${isCurrentUser ? ' (вы)' : ''}${isOnline ? ' <span class="user-item-online">В сети</span>' : ''}</div>
                     <div class="user-item-username">@${escapeHtml(user.username)}${orgLine}</div>
@@ -865,12 +1081,11 @@ function renderUsersList() {
     });
 
     rejectedUsers.forEach(user => {
-        const initial = (user.fullName || user.username).charAt(0).toUpperCase();
         const createdDate = user.createdAt ? new Date(user.createdAt).toLocaleDateString('ru-RU') : '';
         
         html += `
             <div class="user-item" style="opacity: 0.6;">
-                <div class="user-item-avatar" style="background: #9ca3af;">${initial}</div>
+                ${buildUserAvatarHtml(user, '')}
                 <div class="user-item-info">
                     <div class="user-item-name">${escapeHtml(user.fullName || user.username)}</div>
                     <div class="user-item-username">@${escapeHtml(user.username)}</div>
@@ -1315,9 +1530,11 @@ function setupEventListeners() {
         const cableBtn = this;
         
         if (currentCableTool) {
-            cableBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span>Завершить прокладку</span>';
-            cableBtn.style.background = '#e74c3c';
+            cableBtn.classList.add('btn-add-object--placement');
+            cableBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span class="btn-lay-cable-text">Завершить прокладку</span>';
+            cableBtn.style.background = '';
             copperCableLayingActive = false;
+            if (typeof syncCableTypePickerUI === 'function') syncCableTypePickerUI();
             clearShowOnMapHighlight();
             clearSelection();
             removeCablePreview();
@@ -1330,9 +1547,11 @@ function setupEventListeners() {
             mapEl.style.cursor = 'crosshair';
             mapEl.classList.add('map-crosshair-active');
         } else {
-            cableBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><line x1="12" y1="2" x2="12" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line></svg><span>Проложить кабель</span>';
-            cableBtn.style.background = '#3498db';
+            cableBtn.classList.remove('btn-add-object--placement');
+            cableBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><line x1="12" y1="2" x2="12" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line></svg><span class="btn-lay-cable-text">Проложить кабель</span>';
+            cableBtn.style.background = '';
             copperCableLayingActive = false;
+            if (typeof syncCableTypePickerUI === 'function') syncCableTypePickerUI();
             clearSelection();
             removeCablePreview();
             cableSource = null;
@@ -1356,11 +1575,6 @@ function setupEventListeners() {
     document.getElementById('importFile').addEventListener('change', handleFileImport);
     document.getElementById('exportData').addEventListener('click', exportData);
 
-    const syncConnectBtn = document.getElementById('syncConnectBtn');
-    if (syncConnectBtn && typeof syncConnect === 'function') {
-        syncConnectBtn.addEventListener('click', function() { syncConnect(); });
-    }
-
     var undoBtn = document.getElementById('undoBtn');
     var redoBtn = document.getElementById('redoBtn');
     if (undoBtn) undoBtn.addEventListener('click', function() { performUndo(); });
@@ -1378,13 +1592,7 @@ function setupEventListeners() {
         }
     });
 
-    ['mapFilterNode', 'mapFilterNodeAggregationOnly', 'mapFilterCross', 'mapFilterSleeve', 'mapFilterSupport', 'mapFilterAttachment', 'mapFilterOlt', 'mapFilterSplitter', 'mapFilterOnu', 'mapFilterCamera', 'mapFilterMediaConverter'].forEach(function(id) {
-        var el = document.getElementById(id);
-        if (el) el.addEventListener('change', function() {
-            if (typeof applyMapFilter === 'function') applyMapFilter();
-            if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
-        });
-    });
+    setupMapFilterControls();
 
     var saveMapStartBtn = document.getElementById('saveMapStartBtn');
     if (saveMapStartBtn) {
@@ -1446,9 +1654,14 @@ function setupEventListeners() {
         }
     });
 
+    setupObjectTypePicker();
+    setupCableTypePicker();
+
     const objectTypeSelect = document.getElementById('objectType');
     if (objectTypeSelect) {
         objectTypeSelect.addEventListener('change', function() {
+            if (typeof syncObjectTypePickerUI === 'function') syncObjectTypePickerUI();
+            try { localStorage.setItem(OBJECT_TYPE_STORAGE_KEY, this.value); } catch (e) {}
             const nameInputGroup = document.getElementById('objectNameGroup');
             const sleeveSettingsGroup = document.getElementById('sleeveSettingsGroup');
             const crossSettingsGroup = document.getElementById('crossSettingsGroup');
@@ -1710,12 +1923,7 @@ function handleAddObject() {
                 mapEl.classList.add('map-crosshair-active');
             }
         }
-        const addBtn = document.getElementById('addObject');
-        if (addBtn) {
-            addBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span>Завершить размещение</span>';
-            addBtn.style.background = '#e74c3c';
-            addBtn.onclick = cancelObjectPlacement;
-        }
+        setAddObjectButtonPlacementMode(true);
     } else {
         objectPlacementMode = true;
         currentPlacementType = type;
@@ -1727,12 +1935,7 @@ function handleAddObject() {
                 mapEl.classList.add('map-crosshair-active');
             }
         }
-        const addBtn = document.getElementById('addObject');
-        if (addBtn) {
-            addBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span>Завершить размещение</span>';
-            addBtn.style.background = '#e74c3c';
-            addBtn.onclick = cancelObjectPlacement;
-        }
+        setAddObjectButtonPlacementMode(true);
     }
     } finally {
         syncMapPanLockForEditTools();
@@ -1757,13 +1960,138 @@ function cancelObjectPlacement() {
         }
     }
     
-    const addBtn = document.getElementById('addObject');
-    if (addBtn) {
-        addBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg><span>Добавить на карту</span>';
-        addBtn.style.background = '#3498db';
+    setAddObjectButtonPlacementMode(false);
+    syncMapPanLockForEditTools();
+}
+
+var OBJECT_TYPE_STORAGE_KEY = 'networkMap_objectType';
+var CABLE_TYPE_STORAGE_KEY = 'networkMap_cableType';
+var OBJECT_TYPE_LABELS = {
+    support: 'Опоры',
+    sleeve: 'Муфты',
+    cross: 'Кроссы',
+    attachment: 'Крепления',
+    olt: 'OLT',
+    splitter: 'Сплиттер',
+    onu: 'ONU',
+    node: 'Узел',
+    camera: 'Камера',
+    mediaConverter: 'Медиаконв.'
+};
+
+function getObjectTypeLabel(type) {
+    return OBJECT_TYPE_LABELS[type] || type || '';
+}
+
+function syncObjectTypePickerUI() {
+    var select = document.getElementById('objectType');
+    if (!select) return;
+    var val = select.value;
+    document.querySelectorAll('.object-type-chip').forEach(function(chip) {
+        var active = chip.getAttribute('data-type') === val;
+        chip.classList.toggle('object-type-chip--active', active);
+        chip.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+    var badge = document.getElementById('objectTypeBadge');
+    if (badge) badge.textContent = getObjectTypeLabel(val);
+}
+
+function setupObjectTypePicker() {
+    var select = document.getElementById('objectType');
+    if (!select) return;
+    try {
+        var stored = localStorage.getItem(OBJECT_TYPE_STORAGE_KEY);
+        if (stored && select.querySelector('option[value="' + stored + '"]')) {
+            select.value = stored;
+        }
+    } catch (e) {}
+    document.querySelectorAll('.object-type-chip').forEach(function(chip) {
+        chip.addEventListener('click', function() {
+            var type = chip.getAttribute('data-type');
+            if (!type || select.value === type) return;
+            select.value = type;
+            select.dispatchEvent(new Event('change'));
+        });
+    });
+    syncObjectTypePickerUI();
+}
+
+function getCableTypeLabel(type) {
+    if (window.MapLegendConfig && window.MapLegendConfig.getCableMeta) {
+        var m = window.MapLegendConfig.getCableMeta(type);
+        if (m) return m.short;
+    }
+    return getCableDescription(type);
+}
+
+function syncCableTypePickerUI() {
+    var select = document.getElementById('cableType');
+    var badge = document.getElementById('cableTypeBadge');
+    var copperActive = typeof copperCableLayingActive !== 'undefined' && copperCableLayingActive;
+    if (badge) {
+        badge.textContent = copperActive ? 'Медь' : getCableTypeLabel(select ? select.value : 'fiber4');
+    }
+    if (!select || copperActive) return;
+    var val = select.value;
+    document.querySelectorAll('.cable-type-chip').forEach(function(chip) {
+        chip.classList.toggle('cable-type-chip--active', chip.getAttribute('data-cable') === val);
+    });
+}
+
+function setupCableTypePicker() {
+    if (window.MapLegendConfig) {
+        if (window.MapLegendConfig.renderSidebarLegend) {
+            window.MapLegendConfig.renderSidebarLegend('legend-content');
+        }
+        if (window.MapLegendConfig.renderCableTypePicker) {
+            window.MapLegendConfig.renderCableTypePicker('cableTypePicker');
+        }
+    }
+    var select = document.getElementById('cableType');
+    var picker = document.getElementById('cableTypePicker');
+    if (!select) return;
+    try {
+        var storedCable = localStorage.getItem(CABLE_TYPE_STORAGE_KEY);
+        if (storedCable && select.querySelector('option[value="' + storedCable + '"]')) {
+            select.value = storedCable;
+        }
+    } catch (e) {}
+    syncCableTypePickerUI();
+    if (picker && !picker._cablePickerBound) {
+        picker._cablePickerBound = true;
+        picker.addEventListener('click', function(e) {
+            var chip = e.target.closest('.cable-type-chip');
+            if (!chip) return;
+            if (typeof copperCableLayingActive !== 'undefined' && copperCableLayingActive) return;
+            var cable = chip.getAttribute('data-cable');
+            if (!cable || select.value === cable) return;
+            select.value = cable;
+            select.dispatchEvent(new Event('change'));
+        });
+    }
+    if (!select._cableSelectBound) {
+        select._cableSelectBound = true;
+        select.addEventListener('change', function() {
+            syncCableTypePickerUI();
+            try { localStorage.setItem(CABLE_TYPE_STORAGE_KEY, select.value); } catch (err) {}
+        });
+    }
+}
+
+function setAddObjectButtonPlacementMode(active) {
+    var addBtn = document.getElementById('addObject');
+    if (!addBtn) return;
+    var iconCancel = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+    var iconAdd = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
+    if (active) {
+        addBtn.classList.add('btn-add-object--placement');
+        addBtn.innerHTML = iconCancel + '<span class="btn-add-object-text">Завершить размещение</span>';
+        addBtn.onclick = cancelObjectPlacement;
+    } else {
+        addBtn.classList.remove('btn-add-object--placement');
+        addBtn.innerHTML = iconAdd + '<span class="btn-add-object-text">Добавить на карту</span>';
         addBtn.onclick = null;
     }
-    syncMapPanLockForEditTools();
 }
 
 /** На touch при размещении объектов pan отключён — иначе не двигается «фантом». На мыши pan включён. */
@@ -2050,7 +2378,11 @@ function handleMapClick(e) {
             const name = currentPlacementName || (nameInput ? nameInput.value.trim() : '');
             const manufacturer = (document.getElementById('cameraManufacturer') && document.getElementById('cameraManufacturer').value) ? document.getElementById('cameraManufacturer').value.trim() : '';
             const model = (document.getElementById('cameraModel') && document.getElementById('cameraModel').value) ? document.getElementById('cameraModel').value.trim() : '';
-            createObject(type, name || '', coords, { manufacturer: manufacturer, model: model });
+            var camOpts = { manufacturer: manufacturer, model: model };
+            if (window.CameraPlayer && typeof CameraPlayer.getPlacementStreamOptions === 'function') {
+                Object.assign(camOpts, CameraPlayer.getPlacementStreamOptions());
+            }
+            createObject(type, name || '', coords, camOpts);
             currentPlacementName = name || '';
         } else if (type === 'mediaConverter') {
             const nameInputMc = document.getElementById('objectName');
@@ -2501,129 +2833,18 @@ function updatePhantomPlacemark(type, coords) {
     }
     removePhantomPlacemark();
 
-    let iconSvg, color;
-    let nodeKind = 'network';
-    if (type === 'node') {
-        const nodeKindSelect = document.getElementById('nodeKind');
-        nodeKind = currentPlacementNodeKind || (nodeKindSelect ? nodeKindSelect.value : 'network');
-    }
-    
-    switch(type) {
-        case 'support':
-            color = '#3b82f6';
-            iconSvg = `<svg width="22" height="22" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
-                <rect x="1.5" y="1.5" width="19" height="19" rx="3" fill="${color}" stroke="white" stroke-width="1.5" opacity="0.6"/>
-                <rect x="8" y="5" width="6" height="12" rx="1" fill="white" opacity="0.5"/>
-            </svg>`;
-            break;
-        case 'sleeve':
-            color = '#ef4444';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <polygon points="14,2 24,7 24,17 14,22 4,17 4,7" fill="${color}" stroke="white" stroke-width="2" opacity="0.6"/>
-                <circle cx="14" cy="12" r="3" fill="white" opacity="0.5"/>
-            </svg>`;
-            break;
-        case 'node':
-            color = (nodeKind === 'aggregation') ? '#ef4444' : '#22c55e';
-            iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="16" cy="16" r="14" fill="${color}" stroke="white" stroke-width="2.5" opacity="0.6"/>
-                <circle cx="16" cy="16" r="6" fill="white" opacity="0.5"/>
-                <circle cx="16" cy="16" r="3" fill="${color}" opacity="0.8"/>
-            </svg>`;
-            break;
-        case 'cross':
-            color = '#8b5cf6';
-            iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="4" width="28" height="24" rx="3" fill="${color}" stroke="white" stroke-width="2" opacity="0.6"/>
-                <line x1="10" y1="4" x2="10" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
-                <line x1="16" y1="4" x2="16" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
-                <line x1="22" y1="4" x2="22" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
-                <circle cx="10" cy="12" r="2" fill="white" opacity="0.7"/>
-                <circle cx="16" cy="12" r="2" fill="white" opacity="0.7"/>
-                <circle cx="22" cy="12" r="2" fill="white" opacity="0.7"/>
-            </svg>`;
-            break;
-        case 'attachment':
-            color = '#f59e0b';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="14" cy="14" r="12" fill="${color}" stroke="white" stroke-width="2" opacity="0.6"/>
-                <path d="M10 14 L14 10 L18 14 L14 18 Z" fill="white" opacity="0.6"/>
-            </svg>`;
-            break;
-        case 'olt':
-            color = '#0ea5e9';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="4" width="24" height="20" rx="3" fill="${color}" stroke="white" stroke-width="2" opacity="0.6"/>
-                <rect x="6" y="8" width="4" height="3" rx="1" fill="white" opacity="0.6"/>
-                <rect x="12" y="8" width="4" height="3" rx="1" fill="white" opacity="0.6"/>
-                <rect x="18" y="8" width="4" height="3" rx="1" fill="white" opacity="0.6"/>
-                <line x1="8" y1="16" x2="20" y2="16" stroke="white" stroke-width="1.5" opacity="0.7"/>
-            </svg>`;
-            break;
-        case 'splitter':
-            color = '#a855f7';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="14" cy="8" r="5" fill="${color}" stroke="white" stroke-width="2" opacity="0.6"/>
-                <path d="M14 13 L14 20 M8 20 L20 20 M14 20 L10 24 M14 20 L18 24" stroke="white" stroke-width="1.5" fill="none" opacity="0.7"/>
-                <circle cx="10" cy="24" r="2" fill="white" opacity="0.6"/>
-                <circle cx="14" cy="24" r="2" fill="white" opacity="0.6"/>
-                <circle cx="18" cy="24" r="2" fill="white" opacity="0.6"/>
-            </svg>`;
-            break;
-        case 'onu':
-            color = '#10b981';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="4" y="6" width="20" height="16" rx="2" fill="${color}" stroke="white" stroke-width="2" opacity="0.6"/>
-                <circle cx="14" cy="14" r="3" fill="white" opacity="0.7"/>
-                <rect x="10" y="18" width="8" height="2" rx="1" fill="white" opacity="0.6"/>
-            </svg>`;
-            break;
-        case 'camera':
-            color = '#475569';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="5" y="7" width="18" height="14" rx="2" fill="${color}" stroke="white" stroke-width="2" opacity="0.6"/>
-                <circle cx="14" cy="14" r="4" fill="white" opacity="0.7"/>
-                <circle cx="14" cy="14" r="2" fill="${color}" opacity="0.85"/>
-            </svg>`;
-            break;
-        case 'mediaConverter':
-            color = '#14b8a6';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="4" y="7" width="20" height="14" rx="2" fill="${color}" stroke="white" stroke-width="2" opacity="0.6"/>
-                <path d="M10 14h8M14 10v8" stroke="white" stroke-width="2" stroke-linecap="round"/>
-            </svg>`;
-            break;
-        default:
-            color = '#94a3b8';
-            iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="12" cy="12" r="10" fill="${color}" stroke="white" stroke-width="2" opacity="0.6"/>
-            </svg>`;
-    }
-    
-    const clickableSize = 44;
-    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter') ? 32 : (type === 'support' ? 22 : 28);
-    const iconOffset = (clickableSize - iconSize) / 2;
-    
-    const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
-    
-    const clickableSvg = `<svg width="${clickableSize}" height="${clickableSize}" viewBox="0 0 ${clickableSize} ${clickableSize}" xmlns="http://www.w3.org/2000/svg">
-        <rect x="0" y="0" width="${clickableSize}" height="${clickableSize}" fill="transparent"/>
-        <g transform="translate(${iconOffset}, ${iconOffset})">
-            ${svgContent}
-        </g>
-    </svg>`;
-    
-    const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(clickableSvg)));
-    
+    var phantomIcon = buildMapPlacemarkIcon(type, 'phantom', type === 'node' ? { nodeKind: currentPlacementNodeKind } : null);
+    if (!phantomIcon) return;
+
     phantomPlacemark = new ymaps.Placemark(coords, {
         type: 'phantom',
         phantomType: type,
         balloonContent: 'Предпросмотр объекта'
     }, {
         iconLayout: 'default#image',
-        iconImageHref: svgDataUrl,
-        iconImageSize: [clickableSize, clickableSize],
-        iconImageOffset: [-clickableSize / 2, -clickableSize / 2],
+        iconImageHref: phantomIcon.href,
+        iconImageSize: phantomIcon.iconImageSize,
+        iconImageOffset: phantomIcon.iconImageOffset,
         iconImageOpacity: 0.7, 
         zIndex: 9999, 
         interactive: false, 
@@ -2696,88 +2917,22 @@ function highlightObjectOnHover(obj, e) {
         return;
     }
 
-    let iconSvg;
-    
-    switch(type) {
-        case 'support':
-            iconSvg = `<svg width="26" height="26" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
-                <rect x="1.5" y="1.5" width="19" height="19" rx="3" fill="#3b82f6" stroke="#60a5fa" stroke-width="2"/>
-                <rect x="8" y="5" width="6" height="12" rx="1" fill="white" opacity="0.9"/>
-            </svg>`;
-            break;
-        case 'sleeve':
-            iconSvg = `<svg width="32" height="32" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <polygon points="14,2 24,7 24,17 14,22 4,17 4,7" fill="#ef4444" stroke="#f87171" stroke-width="3"/>
-                <circle cx="14" cy="12" r="3" fill="white" opacity="0.9"/>
-            </svg>`;
-            break;
-        case 'node':
-            iconSvg = `<svg width="36" height="36" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="16" cy="16" r="14" fill="#22c55e" stroke="#4ade80" stroke-width="3"/>
-                <circle cx="16" cy="16" r="6" fill="white" opacity="0.95"/>
-                <circle cx="16" cy="16" r="3" fill="#22c55e"/>
-            </svg>`;
-            break;
-        case 'nodeGroup': {
-            const nodeGroup = obj.properties.get('nodeGroup');
-            const nCount = nodeGroup ? nodeGroup.length : 1;
-            iconSvg = `<svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="20" cy="20" r="18" fill="#22c55e" stroke="#4ade80" stroke-width="3"/>
-                <text x="20" y="24" text-anchor="middle" fill="white" font-size="14" font-weight="bold">${nCount}</text>
-            </svg>`;
-            break;
-        }
-        case 'crossGroup': {
-            const crossGroup = obj.properties.get('crossGroup');
-            const count = crossGroup ? crossGroup.length : 1;
-            iconSvg = `<svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="4" width="36" height="32" rx="4" fill="#8b5cf6" stroke="#a78bfa" stroke-width="3"/>
-                <text x="20" y="24" text-anchor="middle" fill="white" font-size="14" font-weight="bold">${count}</text>
-            </svg>`;
-            break;
-        }
-        case 'cross':
-            iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="4" width="28" height="24" rx="3" fill="#8b5cf6" stroke="#a78bfa" stroke-width="3"/>
-                <line x1="10" y1="4" x2="10" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
-                <line x1="16" y1="4" x2="16" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
-                <line x1="22" y1="4" x2="22" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
-                <circle cx="10" cy="12" r="2" fill="white"/>
-                <circle cx="16" cy="12" r="2" fill="white"/>
-                <circle cx="22" cy="12" r="2" fill="white"/>
-                <circle cx="10" cy="20" r="2" fill="white"/>
-                <circle cx="16" cy="20" r="2" fill="white"/>
-                <circle cx="22" cy="20" r="2" fill="white"/>
-            </svg>`;
-            break;
-        default:
-            return;
-    }
+    var hoverIconTypes = ['support', 'sleeve', 'cross', 'crossGroup', 'nodeGroup', 'olt', 'splitter', 'onu', 'switch', 'camera', 'mediaConverter', 'attachment'];
+    if (hoverIconTypes.indexOf(type) < 0) return;
 
-    const clickableSize = 44;
-    const iconSize = (type === 'node' || type === 'cross') ? 32 : (type === 'crossGroup' || type === 'nodeGroup') ? 40 : (type === 'support' ? 26 : 28);
-    const iconOffset = (clickableSize - iconSize) / 2;
-    
-    const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
-    const clickableSvg = `<svg width="${clickableSize}" height="${clickableSize}" viewBox="0 0 ${clickableSize} ${clickableSize}" xmlns="http://www.w3.org/2000/svg">
-        <rect x="0" y="0" width="${clickableSize}" height="${clickableSize}" fill="transparent"/>
-        <g transform="translate(${iconOffset}, ${iconOffset})">
-            ${svgContent}
-        </g>
-    </svg>`;
-    
-    const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(clickableSvg)));
-    
+    var hoverIcon = buildMapPlacemarkIcon(type, 'hover', obj);
+    if (!hoverIcon) return;
+
     hoveredObjectOriginalIcon = {
         href: obj.options.get('iconImageHref'),
         size: obj.options.get('iconImageSize'),
         offset: obj.options.get('iconImageOffset')
     };
-    
+
     obj.options.set({
-        iconImageHref: svgDataUrl,
-        iconImageSize: [clickableSize, clickableSize],
-        iconImageOffset: [-clickableSize / 2, -clickableSize / 2]
+        iconImageHref: hoverIcon.href,
+        iconImageSize: hoverIcon.iconImageSize,
+        iconImageOffset: hoverIcon.iconImageOffset
     });
     
     showHoverCircle(obj, e);
@@ -3097,6 +3252,138 @@ function getNodeColorByKind(nodeKind) {
     return nodeKind === 'aggregation' ? '#ef4444' : '#22c55e';
 }
 
+function buildMapPlacemarkIcon(type, variant, source) {
+    if (!window.MapIcons) return null;
+    var opts = { variant: variant || 'normal' };
+    if (type === 'node') {
+        if (source && source.properties) {
+            opts.nodeKind = source.properties.get('nodeKind') || 'network';
+        } else if (source && source.nodeKind) {
+            opts.nodeKind = source.nodeKind;
+        } else if (typeof currentPlacementNodeKind === 'string') {
+            opts.nodeKind = currentPlacementNodeKind;
+        } else {
+            var nodeKindSelect = document.getElementById('nodeKind');
+            opts.nodeKind = nodeKindSelect ? nodeKindSelect.value : 'network';
+        }
+    }
+    if (type === 'crossGroup') {
+        if (source && source.properties) {
+            var crossGroup = source.properties.get('crossGroup');
+            opts.groupCount = crossGroup ? crossGroup.length : 1;
+        } else if (source && source.groupCount != null) {
+            opts.groupCount = source.groupCount;
+        }
+    }
+    if (type === 'nodeGroup') {
+        if (source && source.properties) {
+            var nodeGroup = source.properties.get('nodeGroup');
+            opts.groupCount = nodeGroup ? nodeGroup.length : 1;
+            var displayNodes = source.properties.get('displayNodes');
+            if (displayNodes && displayNodes.length) {
+                opts.hasAggregation = displayNodes.some(function (nd) {
+                    return nd.properties && nd.properties.get('nodeKind') === 'aggregation';
+                });
+            }
+        } else if (source) {
+            if (source.groupCount != null) opts.groupCount = source.groupCount;
+            if (source.hasAggregation) opts.hasAggregation = true;
+        }
+    }
+    return MapIcons.buildPlacemarkIcon(type, opts);
+}
+
+function applyMapPlacemarkIcon(target, type, variant, source) {
+    var icon = buildMapPlacemarkIcon(type, variant, source);
+    if (!icon) return null;
+    if (target && target.options) {
+        target.options.set({
+            iconImageHref: icon.href,
+            iconImageSize: icon.iconImageSize,
+            iconImageOffset: icon.iconImageOffset
+        });
+    }
+    return icon;
+}
+
+/** Пересобрать SVG-иконки на карте после смены светлой/тёмной темы. */
+function refreshMapPlacemarkIcons() {
+    if (!window.MapIcons || typeof objects === 'undefined') return;
+
+    var hoverIconTypes = ['support', 'sleeve', 'cross', 'crossGroup', 'nodeGroup', 'olt', 'splitter', 'onu', 'switch', 'camera', 'mediaConverter', 'attachment'];
+
+    objects.forEach(function(obj) {
+        if (!obj || !obj.properties || !obj.options) return;
+        var type = obj.properties.get('type');
+        if (!type || type === 'cable' || type === 'cableLabel') return;
+        var variant = 'normal';
+        if (selectedObjects.indexOf(obj) >= 0) {
+            if (!(isEditMode && type !== 'crossGroup' && type !== 'nodeGroup')) {
+                variant = 'selected';
+            }
+        }
+        if (hoveredObject === obj && hoverIconTypes.indexOf(type) >= 0) {
+            variant = 'hover';
+        }
+        applyMapPlacemarkIcon(obj, type, variant, obj);
+    });
+
+    if (typeof crossGroupPlacemarks !== 'undefined' && Array.isArray(crossGroupPlacemarks)) {
+        crossGroupPlacemarks.forEach(function(pm) {
+            if (!pm || !pm.options) return;
+            var variant = selectedObjects.indexOf(pm) >= 0 ? 'selected' : 'normal';
+            if (hoveredObject === pm) variant = 'hover';
+            applyMapPlacemarkIcon(pm, 'crossGroup', variant, pm);
+        });
+    }
+    if (typeof nodeGroupPlacemarks !== 'undefined' && Array.isArray(nodeGroupPlacemarks)) {
+        nodeGroupPlacemarks.forEach(function(pm) {
+            if (!pm || !pm.options) return;
+            var variant = selectedObjects.indexOf(pm) >= 0 ? 'selected' : 'normal';
+            if (hoveredObject === pm) variant = 'hover';
+            applyMapPlacemarkIcon(pm, 'nodeGroup', variant, pm);
+        });
+    }
+
+    if (phantomPlacemark && phantomPlacemark.properties && phantomPlacemark.options) {
+        var phantomType = phantomPlacemark.properties.get('phantomType');
+        if (phantomType) {
+            var phantomIcon = buildMapPlacemarkIcon(phantomType, 'phantom', phantomType === 'node' ? { nodeKind: currentPlacementNodeKind } : null);
+            if (phantomIcon) {
+                phantomPlacemark.options.set({
+                    iconImageHref: phantomIcon.href,
+                    iconImageSize: phantomIcon.iconImageSize,
+                    iconImageOffset: phantomIcon.iconImageOffset
+                });
+            }
+        }
+    }
+
+    var infoModal = document.getElementById('infoModal');
+    if (currentModalObject && infoModal && infoModal.style.display === 'block' && typeof updateInfoModalChrome === 'function') {
+        var modalType = currentModalObject.properties.get('type');
+        var modalName = currentModalObject.properties.get('name') || '';
+        updateInfoModalChrome(modalType, modalName);
+        var modalBody = document.getElementById('modalInfo');
+        if (modalBody && window.MapIcons) {
+            modalBody.querySelectorAll('.camera-card-hero-icon, .olt-card-hero-icon, .support-card-hero-icon, .node-card-hero-icon, .fiber-ws-head-icon').forEach(function(el) {
+                var card = el.closest('.camera-card, .olt-card, .support-card, .fiber-workspace-sidebar');
+                if (!card) return;
+                var iconType = modalType;
+                if (card.classList.contains('support-card--attachment')) iconType = 'attachment';
+                else if (card.classList.contains('fiber-workspace-sidebar')) {
+                    iconType = currentModalObject.properties.get('type');
+                }
+                var iconOpts = { variant: 'normal' };
+                if (iconType === 'node' && currentModalObject.properties) {
+                    iconOpts.nodeKind = currentModalObject.properties.get('nodeKind') || 'network';
+                }
+                el.innerHTML = MapIcons.buildIconSvg(iconType, iconOpts);
+            });
+        }
+    }
+}
+
 function findNodeByName(name, excludePlacemark) {
     if (!name || typeof name !== 'string') return null;
     var n = (name || '').trim().toLowerCase();
@@ -3114,152 +3401,30 @@ function createObject(type, name, coords, options = {}) {
         notifyMapObjectLimitBlocked();
         return null;
     }
-    let iconSvg, color, balloonContent;
-    
-    switch(type) {
-        case 'support':
-            
-            color = '#3b82f6';
-            iconSvg = `<svg width="22" height="22" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
-                <rect x="1.5" y="1.5" width="19" height="19" rx="3" fill="${color}" stroke="white" stroke-width="1.5"/>
-                <rect x="8" y="5" width="6" height="12" rx="1" fill="white" opacity="0.9"/>
-            </svg>`;
-            balloonContent = name ? 'Опора связи: ' + name : 'Опора связи';
-            break;
-        case 'sleeve':
-            
-            color = '#ef4444';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <polygon points="14,2 24,7 24,17 14,22 4,17 4,7" fill="${color}" stroke="white" stroke-width="2"/>
-                <circle cx="14" cy="12" r="3" fill="white" opacity="0.9"/>
-            </svg>`;
-            balloonContent = name ? 'Кабельная муфта: ' + name : 'Кабельная муфта';
-            break;
-        case 'cross':
-            
-            color = '#8b5cf6';
-            iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="4" width="28" height="24" rx="3" fill="${color}" stroke="white" stroke-width="2"/>
-                <line x1="10" y1="4" x2="10" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
-                <line x1="16" y1="4" x2="16" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
-                <line x1="22" y1="4" x2="22" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
-                <circle cx="10" cy="12" r="2" fill="white"/>
-                <circle cx="16" cy="12" r="2" fill="white"/>
-                <circle cx="22" cy="12" r="2" fill="white"/>
-                <circle cx="10" cy="20" r="2" fill="white"/>
-                <circle cx="16" cy="20" r="2" fill="white"/>
-                <circle cx="22" cy="20" r="2" fill="white"/>
-            </svg>`;
-            balloonContent = `Оптический кросс: ${name}`;
-            break;
-        case 'node':
-            
-            const nodeKind = options.nodeKind || 'network';
-            color = getNodeColorByKind(nodeKind);
-            iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="16" cy="16" r="14" fill="${color}" stroke="white" stroke-width="2.5"/>
-                <circle cx="16" cy="16" r="6" fill="white" opacity="0.95"/>
-                <circle cx="16" cy="16" r="3" fill="${color}"/>
-            </svg>`;
-            balloonContent = `Узел сети: ${name}`;
-            break;
-        case 'attachment':
-            
-            color = '#f59e0b';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="14" cy="14" r="12" fill="${color}" stroke="white" stroke-width="2"/>
-                <path d="M10 14 L14 10 L18 14 L14 18 Z" fill="white" opacity="0.95"/>
-                <circle cx="14" cy="14" r="2" fill="${color}"/>
-            </svg>`;
-            balloonContent = name ? 'Крепление узлов: ' + name : 'Крепление узлов';
-            break;
-        case 'olt':
-            color = '#0ea5e9';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="4" width="24" height="20" rx="3" fill="${color}" stroke="white" stroke-width="2"/>
-                <rect x="6" y="8" width="4" height="3" rx="1" fill="white" opacity="0.9"/>
-                <rect x="12" y="8" width="4" height="3" rx="1" fill="white" opacity="0.9"/>
-                <rect x="18" y="8" width="4" height="3" rx="1" fill="white" opacity="0.9"/>
-                <line x1="8" y1="16" x2="20" y2="16" stroke="white" stroke-width="1.5" opacity="0.8"/>
-            </svg>`;
-            balloonContent = name ? 'OLT: ' + name : 'OLT (GPON)';
-            break;
-        case 'splitter':
-            color = '#a855f7';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="14" cy="8" r="5" fill="${color}" stroke="white" stroke-width="2"/>
-                <path d="M14 13 L14 20 M8 20 L20 20 M14 20 L10 24 M14 20 L18 24" stroke="white" stroke-width="1.5" fill="none"/>
-                <circle cx="10" cy="24" r="2" fill="white" opacity="0.9"/>
-                <circle cx="14" cy="24" r="2" fill="white" opacity="0.9"/>
-                <circle cx="18" cy="24" r="2" fill="white" opacity="0.9"/>
-            </svg>`;
-            balloonContent = name ? 'Сплиттер: ' + name : 'Сплиттер';
-            break;
-        case 'onu':
-            color = '#10b981';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="4" y="6" width="20" height="16" rx="2" fill="${color}" stroke="white" stroke-width="2"/>
-                <circle cx="14" cy="14" r="3" fill="white" opacity="0.95"/>
-                <rect x="10" y="18" width="8" height="2" rx="1" fill="white" opacity="0.7"/>
-            </svg>`;
-            balloonContent = name ? 'ONU: ' + name : 'ONU';
-            break;
-        case 'camera':
-            color = '#475569';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="5" y="7" width="18" height="14" rx="2" fill="${color}" stroke="white" stroke-width="2"/>
-                <circle cx="14" cy="14" r="4" fill="white" opacity="0.9"/>
-                <circle cx="14" cy="14" r="2" fill="${color}"/>
-            </svg>`;
-            balloonContent = name ? 'Камера: ' + name : 'Камера';
-            break;
-        case 'mediaConverter':
-            color = '#14b8a6';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="4" y="7" width="20" height="14" rx="2" fill="${color}" stroke="white" stroke-width="2"/>
-                <path d="M10 14h8M14 10v8" stroke="white" stroke-width="2" stroke-linecap="round"/>
-            </svg>`;
-            balloonContent = name ? 'Медиаконвертер: ' + name : 'Медиаконвертер';
-            break;
-        case 'switch':
-            color = '#ea580c';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="3" y="6" width="22" height="16" rx="2" fill="${color}" stroke="white" stroke-width="2"/>
-                <line x1="8" y1="10" x2="8.01" y2="10" stroke="white" stroke-width="2"/>
-                <line x1="13" y1="10" x2="13.01" y2="10" stroke="white" stroke-width="2"/>
-                <line x1="18" y1="10" x2="18.01" y2="10" stroke="white" stroke-width="2"/>
-                <line x1="8" y1="15" x2="18" y2="15" stroke="white" stroke-width="1.5" opacity="0.85"/>
-            </svg>`;
-            balloonContent = name ? 'Коммутатор: ' + name : 'Коммутатор';
-            break;
-        default:
-            color = '#94a3b8';
-            iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="12" cy="12" r="10" fill="${color}" stroke="white" stroke-width="2"/>
-            </svg>`;
-            balloonContent = 'Объект';
+    var balloonContent;
+    switch (type) {
+        case 'support': balloonContent = name ? 'Опора связи: ' + name : 'Опора связи'; break;
+        case 'sleeve': balloonContent = name ? 'Кабельная муфта: ' + name : 'Кабельная муфта'; break;
+        case 'cross': balloonContent = 'Оптический кросс: ' + name; break;
+        case 'node': balloonContent = 'Узел сети: ' + name; break;
+        case 'attachment': balloonContent = name ? 'Крепление узлов: ' + name : 'Крепление узлов'; break;
+        case 'olt': balloonContent = name ? 'OLT: ' + name : 'OLT (GPON)'; break;
+        case 'splitter': balloonContent = name ? 'Сплиттер: ' + name : 'Сплиттер'; break;
+        case 'onu': balloonContent = name ? 'ONU: ' + name : 'ONU'; break;
+        case 'camera': balloonContent = name ? 'Камера: ' + name : 'Камера'; break;
+        case 'mediaConverter': balloonContent = name ? 'Медиаконвертер: ' + name : 'Медиаконвертер'; break;
+        case 'switch': balloonContent = name ? 'Коммутатор: ' + name : 'Коммутатор'; break;
+        default: balloonContent = 'Объект';
     }
 
-    const clickableSize = 44; 
-    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'switch') ? 32 : (type === 'support' ? 22 : 28);
-    const iconOffset = (clickableSize - iconSize) / 2;
+    var mapIcon = buildMapPlacemarkIcon(type, 'normal', type === 'node' ? { nodeKind: options.nodeKind || 'network' } : null);
+    if (!mapIcon) return null;
 
-    const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
-    
-    const clickableSvg = `<svg width="${clickableSize}" height="${clickableSize}" viewBox="0 0 ${clickableSize} ${clickableSize}" xmlns="http://www.w3.org/2000/svg">
-        <rect x="0" y="0" width="${clickableSize}" height="${clickableSize}" fill="transparent"/>
-        <g transform="translate(${iconOffset}, ${iconOffset})">
-            ${svgContent}
-        </g>
-    </svg>`;
-    
-    const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(clickableSvg)));
-    
     const placemarkOptions = {
         iconLayout: 'default#image',
-        iconImageHref: svgDataUrl,
-        iconImageSize: [clickableSize, clickableSize],
-        iconImageOffset: [-clickableSize / 2, -clickableSize / 2],
+        iconImageHref: mapIcon.href,
+        iconImageSize: mapIcon.iconImageSize,
+        iconImageOffset: mapIcon.iconImageOffset,
         draggable: isEditMode
     };
     
@@ -3313,6 +3478,13 @@ function createObject(type, name, coords, options = {}) {
         if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
         if (options.model) placemarkProperties.model = options.model;
         placemarkProperties.comment = options.comment || '';
+        placemarkProperties.streamType = (options.streamType && window.CameraPlayer)
+            ? CameraPlayer.normalizeStreamType(options.streamType) : (options.streamType || 'none');
+        placemarkProperties.streamUrl = options.streamUrl || '';
+        placemarkProperties.streamUser = options.streamUser || '';
+        placemarkProperties.streamPass = options.streamPass || '';
+        placemarkProperties.streamAutoplay = options.streamAutoplay !== false;
+        placemarkProperties.streamMuted = options.streamMuted !== false;
     }
     if (type === 'mediaConverter') {
         if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
@@ -4426,86 +4598,7 @@ function selectObject(obj) {
             return;
         }
 
-        const clickableSize = 50;
-        const iconSize = (type === 'node' || type === 'cross' || type === 'switch') ? 38 : (type === 'crossGroup' || type === 'nodeGroup') ? 40 : (type === 'support' ? 26 : 34);
-        const iconOffset = (clickableSize - iconSize) / 2;
-        
-        let iconSvg;
-        switch(type) {
-            case 'support':
-                iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="1.5" y="1.5" width="19" height="19" rx="3" fill="#3b82f6" stroke="white" stroke-width="2"/>
-                    <rect x="8" y="5" width="6" height="12" rx="1" fill="white" opacity="0.95"/>
-                </svg>`;
-                break;
-            case 'sleeve':
-                iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 34 34" xmlns="http://www.w3.org/2000/svg">
-                    <polygon points="17,2 31,9 31,25 17,32 3,25 3,9" fill="#ef4444" stroke="white" stroke-width="2"/>
-                    <circle cx="17" cy="17" r="5" fill="white" opacity="0.95"/>
-                </svg>`;
-                break;
-            case 'node':
-                iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 38 38" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="19" cy="19" r="17" fill="#22c55e" stroke="white" stroke-width="2.5"/>
-                    <circle cx="19" cy="19" r="7" fill="white" opacity="0.95"/>
-                    <circle cx="19" cy="19" r="4" fill="#22c55e"/>
-                </svg>`;
-                break;
-            case 'cross':
-                iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 38 38" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="2" y="2" width="34" height="34" rx="5" fill="#f59e0b" stroke="white" stroke-width="2"/>
-                    <rect x="8" y="15" width="22" height="5" rx="1" fill="white" opacity="0.95"/>
-                    <rect x="15" y="7" width="8" height="24" rx="1" fill="white" opacity="0.95"/>
-                </svg>`;
-                break;
-            case 'switch':
-                iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 38 38" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="5" y="10" width="28" height="18" rx="3" fill="#ea580c" stroke="white" stroke-width="2"/>
-                    <line x1="11" y1="16" x2="11.01" y2="16" stroke="white" stroke-width="2"/>
-                    <line x1="18" y1="16" x2="18.01" y2="16" stroke="white" stroke-width="2"/>
-                    <line x1="25" y1="16" x2="25.01" y2="16" stroke="white" stroke-width="2"/>
-                    <line x1="11" y1="22" x2="25" y2="22" stroke="white" stroke-width="1.5"/>
-                </svg>`;
-                break;
-            case 'nodeGroup': {
-                const nodeGroup = obj.properties.get('nodeGroup');
-                const nCount = nodeGroup ? nodeGroup.length : 1;
-                iconSvg = `<svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="20" cy="20" r="18" fill="#22c55e" stroke="white" stroke-width="3"/>
-                    <text x="20" y="24" text-anchor="middle" fill="white" font-size="14" font-weight="bold">${nCount}</text>
-                </svg>`;
-                break;
-            }
-            case 'crossGroup': {
-                const crossGroup = obj.properties.get('crossGroup');
-                const count = crossGroup ? crossGroup.length : 1;
-                iconSvg = `<svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="2" y="4" width="36" height="32" rx="4" fill="#8b5cf6" stroke="white" stroke-width="3"/>
-                    <text x="20" y="24" text-anchor="middle" fill="white" font-size="14" font-weight="bold">${count}</text>
-                </svg>`;
-                break;
-            }
-            default:
-                iconSvg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="15" cy="15" r="13" fill="#94a3b8" stroke="white" stroke-width="2"/>
-                </svg>`;
-        }
-        
-        const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
-        const clickableSvg = `<svg width="${clickableSize}" height="${clickableSize}" viewBox="0 0 ${clickableSize} ${clickableSize}" xmlns="http://www.w3.org/2000/svg">
-            <rect x="0" y="0" width="${clickableSize}" height="${clickableSize}" fill="transparent"/>
-            <g transform="translate(${iconOffset}, ${iconOffset})">
-                ${svgContent}
-            </g>
-        </svg>`;
-        
-        const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(clickableSvg)));
-        
-        obj.options.set({
-            iconImageHref: svgDataUrl,
-            iconImageSize: [clickableSize, clickableSize],
-            iconImageOffset: [-clickableSize / 2, -clickableSize / 2]
-        });
+        applyMapPlacemarkIcon(obj, type, 'selected', obj);
     }
 }
 
@@ -4557,104 +4650,7 @@ function deselectObject(obj) {
         return;
     }
 
-    let iconSvg;
-    
-    switch(type) {
-        case 'support':
-            iconSvg = `<svg width="22" height="22" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
-                <rect x="1.5" y="1.5" width="19" height="19" rx="3" fill="#3b82f6" stroke="white" stroke-width="1.5"/>
-                <rect x="8" y="5" width="6" height="12" rx="1" fill="white" opacity="0.9"/>
-            </svg>`;
-            break;
-        case 'sleeve':
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <polygon points="14,2 24,7 24,17 14,22 4,17 4,7" fill="#ef4444" stroke="white" stroke-width="2"/>
-                <circle cx="14" cy="12" r="3" fill="white" opacity="0.9"/>
-            </svg>`;
-            break;
-        case 'node':
-            iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="16" cy="16" r="14" fill="#22c55e" stroke="white" stroke-width="2.5"/>
-                <circle cx="16" cy="16" r="6" fill="white" opacity="0.95"/>
-                <circle cx="16" cy="16" r="3" fill="#22c55e"/>
-            </svg>`;
-            break;
-        case 'cross':
-            iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="2" width="28" height="28" rx="4" fill="#f59e0b" stroke="white" stroke-width="2"/>
-                <rect x="7" y="12" width="18" height="4" rx="1" fill="white" opacity="0.95"/>
-                <rect x="13" y="6" width="6" height="20" rx="1" fill="white" opacity="0.95"/>
-            </svg>`;
-            break;
-        case 'crossGroup': {
-            const crossGroup = obj.properties.get('crossGroup');
-            const count = crossGroup ? crossGroup.length : 1;
-            iconSvg = `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="4" width="32" height="28" rx="4" fill="#8b5cf6" stroke="#a78bfa" stroke-width="2"/>
-                <text x="18" y="22" text-anchor="middle" fill="white" font-size="14" font-weight="bold">${count}</text>
-            </svg>`;
-            break;
-        }
-        case 'nodeGroup': {
-            const nodeGroup = obj.properties.get('nodeGroup');
-            const nCount = nodeGroup ? nodeGroup.length : 1;
-            iconSvg = `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="18" cy="18" r="16" fill="#22c55e" stroke="#4ade80" stroke-width="2"/>
-                <text x="18" y="22" text-anchor="middle" fill="white" font-size="14" font-weight="bold">${nCount}</text>
-            </svg>`;
-            break;
-        }
-        case 'olt':
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="4" width="24" height="20" rx="3" fill="#0ea5e9" stroke="white" stroke-width="2"/>
-                <rect x="6" y="8" width="4" height="3" rx="1" fill="white" opacity="0.9"/>
-                <rect x="12" y="8" width="4" height="3" rx="1" fill="white" opacity="0.9"/>
-                <rect x="18" y="8" width="4" height="3" rx="1" fill="white" opacity="0.9"/>
-            </svg>`;
-            break;
-        case 'splitter':
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="14" cy="8" r="5" fill="#a855f7" stroke="white" stroke-width="2"/>
-                <path d="M14 13 L14 20 M8 20 L20 20" stroke="white" stroke-width="1.5" fill="none"/>
-            </svg>`;
-            break;
-        case 'onu':
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="4" y="6" width="20" height="16" rx="2" fill="#10b981" stroke="white" stroke-width="2"/>
-                <circle cx="14" cy="14" r="3" fill="white" opacity="0.95"/>
-            </svg>`;
-            break;
-        case 'switch':
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="3" y="6" width="22" height="16" rx="2" fill="#ea580c" stroke="white" stroke-width="2"/>
-                <line x1="8" y1="10" x2="8.01" y2="10" stroke="white" stroke-width="2"/>
-                <line x1="14" y1="10" x2="14.01" y2="10" stroke="white" stroke-width="2"/>
-                <line x1="20" y1="10" x2="20.01" y2="10" stroke="white" stroke-width="2"/>
-            </svg>`;
-            break;
-        default:
-            iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="12" cy="12" r="10" fill="#94a3b8" stroke="white" stroke-width="2"/>
-            </svg>`;
-    }
-
-    const clickableSize = 44;
-    const iconSize = (type === 'node' || type === 'cross') ? 32 : (type === 'crossGroup' || type === 'nodeGroup') ? 36 : (type === 'support' ? 22 : 28);
-    const iconOffset = (clickableSize - iconSize) / 2;
-    
-    const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
-    const clickableSvg = `<svg width="${clickableSize}" height="${clickableSize}" viewBox="0 0 ${clickableSize} ${clickableSize}" xmlns="http://www.w3.org/2000/svg">
-        <rect x="0" y="0" width="${clickableSize}" height="${clickableSize}" fill="transparent"/>
-        <g transform="translate(${iconOffset}, ${iconOffset})">
-            ${svgContent}
-        </g>
-    </svg>`;
-    const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(clickableSvg)));
-    obj.options.set({
-        iconImageHref: svgDataUrl,
-        iconImageSize: [clickableSize, clickableSize],
-        iconImageOffset: [-clickableSize / 2, -clickableSize / 2]
-    });
+    applyMapPlacemarkIcon(obj, type, 'normal', obj);
 }
 
 function clearSelection() {
@@ -5167,18 +5163,26 @@ function updateConnectedCables(obj) {
 }
 
 function getCableColor(type) {
-    switch(type) {
-        case 'fiber4': return '#00FF00'; 
-        case 'fiber8': return '#00AA00'; 
-        case 'fiber16': return '#008800'; 
-        case 'fiber24': return '#006600'; 
+    if (window.MapLegendConfig && window.MapLegendConfig.getCableMeta) {
+        var meta = window.MapLegendConfig.getCableMeta(type);
+        if (meta) return meta.color;
+    }
+    switch (type) {
+        case 'fiber4': return '#00FF00';
+        case 'fiber8': return '#00AA00';
+        case 'fiber16': return '#008800';
+        case 'fiber24': return '#006600';
         case 'copper': return '#b45309';
-        default: return '#64748b'; 
+        default: return '#64748b';
     }
 }
 
 function getCableWidth(type) {
-    switch(type) {
+    if (window.MapLegendConfig && window.MapLegendConfig.getCableMeta) {
+        var metaW = window.MapLegendConfig.getCableMeta(type);
+        if (metaW) return metaW.width;
+    }
+    switch (type) {
         case 'fiber4': return 2;
         case 'fiber8': return 3;
         case 'fiber16': return 4;
@@ -5189,7 +5193,11 @@ function getCableWidth(type) {
 }
 
 function getCableDescription(type) {
-    switch(type) {
+    if (window.MapLegendConfig && window.MapLegendConfig.getCableMeta) {
+        var metaD = window.MapLegendConfig.getCableMeta(type);
+        if (metaD) return metaD.label;
+    }
+    switch (type) {
         case 'fiber4': return 'ВОЛС 4 жилы';
         case 'fiber8': return 'ВОЛС 8 жил';
         case 'fiber16': return 'ВОЛС 16 жил';
@@ -5245,39 +5253,54 @@ function buildNodeCardContent(obj, isEditMode, name) {
     var nodeKind = obj.properties.get('nodeKind') || 'network';
     var comment = obj.properties.get('comment') || '';
     var nodeKindLabel = nodeKind === 'aggregation' ? 'Узел агрегации' : 'Узел сети';
-    var kindDotClass = nodeKind === 'aggregation' ? 'node-kind-dot--aggregation' : 'node-kind-dot--network';
     var attachedList = getNodeAttachedSwitches(obj);
     var swSummary = getNodeSwitchesSummary(obj);
     var kindOptsNodeSw = ['RJ45 10/100/1000', 'RJ45 PoE', 'SFP', 'SFP+', 'Комбо RJ45/SFP', 'Консоль', 'Uplink/stack'];
     var nodeUniqueId = getObjectUniqueId(obj);
     var connectedFibers = getNodeConnectedFibers(nodeUniqueId);
+    var kindMod = nodeKind === 'aggregation' ? 'node-card--aggregation' : 'node-card--network';
 
-    html += '<div class="node-card">';
+    html += '<div class="node-card ' + kindMod + '">';
 
-    html += '<section class="object-card-section">';
+    html += '<section class="object-card-section node-card-hero">';
+    html += '<div class="node-card-hero-row">';
+    if (window.MapIcons) {
+        html += '<div class="node-card-hero-icon" aria-hidden="true">' + MapIcons.buildIconSvg('node', { variant: 'normal', nodeKind: nodeKind }) + '</div>';
+    }
+    html += '<div class="node-card-hero-text">';
+    if (!isEditMode) {
+        html += '<div class="node-card-view-name">' + escapeHtml(name || 'Без названия') + '</div>';
+        html += '<div class="node-card-view-meta"><span class="node-kind-pill node-kind-pill--' + (nodeKind === 'aggregation' ? 'aggregation' : 'network') + '">' + escapeHtml(nodeKindLabel) + '</span></div>';
+        if (comment) {
+            html += '<div class="node-card-comment">' + escapeHtml(comment) + '</div>';
+        }
+    } else {
+        html += '<div class="node-card-view-name">' + escapeHtml(name || 'Новый узел') + '</div>';
+        html += '<p class="object-card-hint node-card-hero-hint">Коммутаторы внутри узла, оптика с кросса на порты <strong>SFP</strong>, медь — на RJ45.</p>';
+    }
+    html += '</div></div>';
+    html += '<dl class="node-card-stats">';
+    html += '<div class="node-card-stat"><dt>Жил с кросса</dt><dd>' + connectedFibers.length + '</dd></div>';
+    html += '<div class="node-card-stat"><dt>Коммутаторов</dt><dd>' + attachedList.length + '</dd></div>';
+    html += '<div class="node-card-stat node-card-stat--wide"><dt>Порты занято</dt><dd>' + (swSummary.swCount > 0 ? (swSummary.busyPorts + ' / ' + swSummary.totalPorts) : '—') + '</dd></div>';
+    html += '</dl></section>';
+
     if (isEditMode) {
-        html += '<h4 class="object-card-section-title">Узел</h4>';
+        html += '<section class="object-card-section">';
+        html += '<h4 class="object-card-section-title">Параметры узла</h4>';
         html += '<div class="node-card-fields-grid">';
         html += '<div class="form-group"><label for="editNodeName" class="object-card-label">Название</label>';
         html += '<input type="text" id="editNodeName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Название узла">';
         html += '</div>';
-        html += '<div class="form-group"><label for="editNodeKind" class="object-card-label">Тип</label>';
+        html += '<div class="form-group"><label for="editNodeKind" class="object-card-label">Тип на карте</label>';
         html += '<select id="editNodeKind" class="form-select">';
         html += '<option value="network"' + (nodeKind === 'network' ? ' selected' : '') + '>Сеть (зелёный)</option>';
         html += '<option value="aggregation"' + (nodeKind === 'aggregation' ? ' selected' : '') + '>Агрегация (красный)</option>';
         html += '</select></div></div>';
         html += '<div class="form-group" style="margin-top:12px;margin-bottom:0;"><label for="editNodeComment" class="object-card-label">Комментарий</label>';
         html += '<textarea id="editNodeComment" class="form-input" rows="2" placeholder="Необязательно">' + escapeHtml(comment) + '</textarea></div>';
-    } else {
-        html += '<div class="node-card-view-header">';
-        html += '<span class="node-kind-dot ' + kindDotClass + '" title="' + escapeHtml(nodeKindLabel) + '"></span>';
-        html += '<div><div class="node-card-view-name">' + escapeHtml(name || 'Без названия') + '</div>';
-        html += '<div class="node-card-view-meta">' + escapeHtml(nodeKindLabel) + '</div></div></div>';
-        if (comment) {
-            html += '<div class="node-card-comment">' + escapeHtml(comment) + '</div>';
-        }
+        html += '</section>';
     }
-    html += '</section>';
 
     html += '<section class="object-card-section object-card-section--fibers">';
     html += '<h4 class="object-card-section-title">Оптика <span class="object-card-badge">' + connectedFibers.length + '</span></h4>';
@@ -5292,12 +5315,12 @@ function buildNodeCardContent(obj, isEditMode, name) {
                 html += '<span class="node-fiber-label">' + escapeHtml(conn.fiberLabel) + '</span>';
             }
             html += '</div>';
-            html += '<button type="button" class="btn-trace-from-node btn-trace-compact" data-cross-id="' + escapeHtml(conn.crossUniqueId) + '" data-cable-id="' + escapeHtml(conn.cableId) + '" data-fiber-number="' + conn.fiberNumber + '">Трассировка</button>';
+            html += '<button type="button" class="btn-trace-from-node btn-node-trace" data-cross-id="' + escapeHtml(conn.crossUniqueId) + '" data-cable-id="' + escapeHtml(conn.cableId) + '" data-fiber-number="' + conn.fiberNumber + '">Трассировка</button>';
             html += '</div>';
         });
         html += '</div>';
     } else {
-        html += '<p class="object-card-hint object-card-hint--warn">Жил с кросса нет — подключите через оптический кросс.</p>';
+        html += '<div class="object-card-callout object-card-callout--warn"><p>Жил с кросса нет — подключите через оптический кросс (порты SFP коммутатора в узле).</p></div>';
     }
     html += '</section>';
 
@@ -5432,9 +5455,9 @@ function buildNodeCardActionsHtml() {
     var dupSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
     var delSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
     return '<div class="node-card-actions object-actions-section">' +
-        '<button type="button" id="saveChangesBtn" class="btn-primary" style="flex:1;min-width:140px;">' + saveSvg + ' Сохранить</button>' +
-        '<button type="button" id="duplicateCurrentObject" class="btn-secondary" style="flex:1;min-width:120px;">' + dupSvg + ' Дублировать</button>' +
-        '<button type="button" id="deleteCurrentObject" class="btn-danger" style="flex:1;min-width:120px;">' + delSvg + ' Удалить</button>' +
+        '<button type="button" id="saveChangesBtn" class="btn-primary node-card-save-btn">' + saveSvg + ' Сохранить</button>' +
+        '<button type="button" id="duplicateCurrentObject" class="btn-secondary">' + dupSvg + ' Дублировать</button>' +
+        '<button type="button" id="deleteCurrentObject" class="btn-danger">' + delSvg + ' Удалить</button>' +
         '</div>';
 }
 
@@ -5748,33 +5771,28 @@ function buildCameraLanTailTraceContext(cameraObj) {
     };
 }
 
+function cameraTraceMapBtn(obj) {
+    if (!obj || !getObjectUniqueId(obj)) return '';
+    return '<button type="button" class="trace-show-on-map-btn btn-map-pin" data-object-id="' + escapeHtml(getObjectUniqueId(obj)) + '" title="Показать на карте">На карте</button>';
+}
+
 function buildCameraLanTailTraceSectionHtml(tailCtx, opts) {
     opts = opts || {};
     if (!tailCtx || !tailCtx.cameraObj || !tailCtx.copperCable) return '';
     var cableName = tailCtx.copperCable.properties.get('cableName') || getCableDescription(tailCtx.copperCable.properties.get('cableType'));
     var camName = tailCtx.cameraObj.properties.get('name') || 'Камера';
     var portPart = (tailCtx.copperPort != null && !isNaN(tailCtx.copperPort))
-        ? '<span class="trace-path-muted"> · порт Ethernet ' + tailCtx.copperPort + '</span>'
+        ? '<span class="trace-path-muted"> · порт ' + tailCtx.copperPort + '</span>'
         : '';
-    var mapBtn = function(obj) {
-        var uid = obj ? getObjectUniqueId(obj) : null;
-        if (!uid) return '';
-        return '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(uid) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>';
-    };
     var swUidForBtn = tailCtx.switchPlacemark ? tailCtx.switchPlacemark : tailCtx.nodeObj;
-    var swRow = '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">🔌</span><div class="trace-path-block trace-path-object"><div><span>🔌 ' + escapeHtml(tailCtx.switchName) + '</span><span class="trace-path-muted"> (коммутатор)</span>' + portPart + '</div>' + mapBtn(swUidForBtn) + '</div></div>';
-    var cableUid = getObjectUniqueId(tailCtx.copperCable);
-    var cableRow = '<div class="trace-step-row"><span class="trace-step-num trace-step-num-cable">➡</span><div class="trace-path-block trace-path-cable" style="border-left-color: #ca8a04;"><div><span>🔶 ' + escapeHtml(cableName) + '</span><span class="trace-path-muted"> (медный кабель)</span></div>' + (cableUid ? mapBtn(tailCtx.copperCable) : '') + '</div></div>';
-    var camRow = '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">📷</span><div class="trace-path-block trace-path-object"><div><span>📷 ' + escapeHtml(camName) + '</span><span class="trace-path-muted"> (камера)</span></div>' + mapBtn(tailCtx.cameraObj) + '</div></div>';
-    var wrapStyle = opts.skipIntro
-        ? 'margin-top: 0; padding-top: 0;'
-        : 'margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-color);';
-    var introP = opts.skipIntro ? '' : '<p style="font-size: 0.8rem; color: var(--text-secondary); margin: 0 0 10px 0;">Камера подключена не жилой с кросса, а медной линией от коммутатора — он указан ниже.</p>';
-    return '<div style="' + wrapStyle + '">' +
-        '<h4 class="trace-path-title" style="margin: 0 0 10px 0; font-size: 0.95rem;">Медный участок до камеры</h4>' +
+    var swRow = '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object" aria-hidden="true">🔌</span><div class="trace-path-block trace-path-object"><div><span class="trace-path-label">' + escapeHtml(tailCtx.switchName) + '</span><span class="trace-path-muted">коммутатор</span>' + portPart + '</div>' + cameraTraceMapBtn(swUidForBtn) + '</div></div>';
+    var cableRow = '<div class="trace-step-row"><span class="trace-step-num trace-step-num-cable" aria-hidden="true">➡</span><div class="trace-path-block trace-path-cable trace-path-cable--copper"><div><span class="trace-path-label">' + escapeHtml(cableName) + '</span><span class="trace-path-muted">медный кабель</span></div>' + cameraTraceMapBtn(tailCtx.copperCable) + '</div></div>';
+    var camRow = '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object" aria-hidden="true">📷</span><div class="trace-path-block trace-path-object"><div><span class="trace-path-label">' + escapeHtml(camName) + '</span><span class="trace-path-muted">камера</span></div>' + cameraTraceMapBtn(tailCtx.cameraObj) + '</div></div>';
+    var introP = opts.skipIntro ? '' : '<p class="object-card-hint camera-lan-intro">Медная линия от коммутатора до камеры (не оптическая жила с кросса).</p>';
+    return '<div class="camera-lan-trace' + (opts.skipIntro ? ' camera-lan-trace--nested' : '') + '">' +
+        '<h4 class="camera-lan-trace-title">Медный участок до камеры</h4>' +
         introP +
-        swRow + cableRow + camRow +
-        '</div>';
+        '<div class="camera-lan-trace-steps">' + swRow + cableRow + camRow + '</div></div>';
 }
 
 function filterNodeFibersBySwitchIfPossible(nodeUniqueId, preferSwitchId) {
@@ -5792,33 +5810,31 @@ function filterNodeFibersBySwitchIfPossible(nodeUniqueId, preferSwitchId) {
 
 function buildCameraTraceSectionHtml(cameraObj) {
     var ctx = getCameraCopperUpstreamTraceContext(cameraObj);
-    var html = '';
+    var html = '<section class="object-card-section object-card-section--trace camera-trace-section">';
+    html += '<h4 class="object-card-section-title">Подключение и трассировка</h4>';
+
     if (ctx.kind === 'none') {
-        html += '<div class="camera-trace-section" style="margin-bottom: 20px; padding: 16px; background: #fef3c7; border-radius: 6px; border: 1px solid #fde68a;">';
-        html += '<h4 style="margin: 0 0 8px 0; color: #92400e; font-size: 0.9375rem; font-weight: 600;">Трассировка</h4>';
-        html += '<div style="color: #92400e; font-size: 0.875rem;">Подключите камеру <strong>медным кабелем</strong> к коммутатору узла сети, к отдельному коммутатору на карте или к медиаконвертеру с оптикой — здесь появятся кнопки трассировки оптического пути.</div>';
-        html += '</div>';
+        html += '<div class="object-card-callout object-card-callout--warn">';
+        html += '<p>Подключите камеру <strong>медным кабелем</strong> к коммутатору узла, к коммутатору на карте или к медиаконвертеру с оптикой — здесь появятся маршрут и кнопки трассировки.</p>';
+        html += '</div></section>';
         return html;
     }
     if (ctx.kind === 'switch_no_parent' || ctx.kind === 'unknown') {
-        html += '<div class="camera-trace-section" style="margin-bottom: 20px; padding: 16px; background: #fef3c7; border-radius: 6px; border: 1px solid #fde68a;">';
-        html += '<h4 style="margin: 0 0 8px 0; color: #92400e; font-size: 0.9375rem; font-weight: 600;">Трассировка</h4>';
-        html += '<div style="color: #92400e; font-size: 0.875rem;">Медный кабель найден, но не удалось определить узел сети для оптических жил. Проверьте привязку коммутатора к узлу.</div>';
-        html += '</div>';
+        html += '<div class="object-card-callout object-card-callout--warn">';
+        html += '<p>Медный кабель найден, но узел сети для оптических жил не определён. Проверьте привязку коммутатора к узлу.</p>';
+        html += '</div></section>';
         return html;
     }
     if (ctx.kind === 'media_converter') {
-        html += '<div class="camera-trace-section" style="margin-bottom: 20px; padding: 16px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0;">';
-        html += '<h4 style="margin: 0 0 8px 0; color: #166534; font-size: 0.9375rem; font-weight: 600;">Трассировка</h4>';
-        html += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 12px;">Камера подключена медным кабелем к <strong>медиаконвертеру</strong>. Оптический путь начинается с входной жилы МК (муфта или кросс).</p>';
+        html += '<p class="object-card-hint">Камера на <strong>меди</strong> к медиаконвертеру. Оптика — с входной жилы МК (муфта или кросс).</p>';
         if (ctx.incomingFiber && ctx.incomingFiber.cableId != null && ctx.incomingFiber.fiberNumber != null) {
             var cid = escapeHtml(String(ctx.incomingFiber.cableId));
             var fn = parseInt(ctx.incomingFiber.fiberNumber, 10);
-            html += '<button type="button" class="btn-trace-camera-mc-incoming" data-cable-id="' + cid + '" data-fiber-number="' + fn + '" style="padding: 10px 14px; background: #f59e0b; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600;">🔍 Трассировка по входной жиле МК</button>';
+            html += '<button type="button" class="btn-primary btn-trace-camera-mc-incoming camera-trace-action" data-cable-id="' + cid + '" data-fiber-number="' + fn + '">Трассировка по жиле МК</button>';
         } else {
-            html += '<div style="color: #92400e; font-size: 0.875rem;">Сначала подключите к медиаконвертеру оптическую жилу с муфты или кросса.</div>';
+            html += '<div class="object-card-callout object-card-callout--warn"><p>Сначала подключите к медиаконвертеру оптическую жилу с муфты или кросса.</p></div>';
         }
-        html += '</div>';
+        html += '</section>';
         return html;
     }
     if (ctx.kind === 'node' && ctx.nodeObj) {
@@ -5826,45 +5842,232 @@ function buildCameraTraceSectionHtml(cameraObj) {
         var nodeTitle = ctx.nodeObj.properties.get('name') || 'Узел сети';
         var fibers = filterNodeFibersBySwitchIfPossible(nodeUid, ctx.copperSwitchId);
         var lanTail = buildCameraLanTailTraceContext(cameraObj);
-        html += '<div class="connected-fibers-section camera-trace-section" style="margin-bottom: 20px; padding: 16px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0;">';
-        html += '<h4 style="margin: 0 0 8px 0; color: #166534; font-size: 0.9375rem; font-weight: 600;">Трассировка</h4>';
+
         if (lanTail) {
-            html += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 12px;">Камера подключена <strong>медным кабелем</strong> к узлу «' + escapeHtml(nodeTitle) + '». Ниже видно, <strong>к какому коммутатору и порту</strong> идёт линия. Оптика с кросса нужна только если у коммутатора есть SFP и жила заведена в карточке кросса.</p>';
-            html += buildCameraLanTailTraceSectionHtml(lanTail, { skipIntro: true });
+            html += '<p class="object-card-hint">Медь к узлу «' + escapeHtml(nodeTitle) + '». Ниже — коммутатор, порт и оптические жилы с кросса (если заведены).</p>';
+            html += buildCameraLanTailTraceSectionHtml(lanTail, { skipIntro: false });
         } else {
-            html += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 12px;">Оптические жилы с кроссов, подключённые к узлу «' + escapeHtml(nodeTitle) + '». Выберите жилу, чтобы просмотреть полную трассу (как в карточке узла).</p>';
+            html += '<p class="object-card-hint">Оптические жилы с кроссов на узел «' + escapeHtml(nodeTitle) + '».</p>';
         }
+
         if (fibers.length > 0) {
             if (lanTail) {
-                html += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin: 16px 0 10px 0; font-weight: 600;">Оптические жилы с кроссов</p>';
+                html += '<h5 class="camera-trace-subtitle">Оптика с кроссов</h5>';
             }
-            html += '<div style="display: flex; flex-direction: column; gap: 8px;">';
+            html += '<div class="camera-fiber-list">';
             fibers.forEach(function(conn) {
-                html += '<div class="fiber-connection-item" style="display: flex; align-items: center; justify-content: space-between; padding: 10px; background: var(--bg-card); border-radius: 4px; border: 1px solid #dcfce7;">';
-                html += '<div style="flex: 1;">';
-                html += '<div style="font-weight: 600; color: #166534;">Жила ' + conn.fiberNumber + '</div>';
-                html += '<div style="font-size: 0.8rem; color: var(--text-secondary);">От кросса: ' + escapeHtml(conn.crossName) + '</div>';
+                html += '<div class="camera-fiber-item">';
+                html += '<div class="camera-fiber-item-main">';
+                html += '<span class="camera-fiber-num">Жила ' + conn.fiberNumber + '</span>';
+                html += '<span class="camera-fiber-cross">' + escapeHtml(conn.crossName) + '</span>';
                 if (conn.fiberLabel) {
-                    html += '<div style="font-size: 0.75rem; color: #8b5cf6;">📝 ' + escapeHtml(conn.fiberLabel) + '</div>';
+                    html += '<span class="camera-fiber-label">' + escapeHtml(conn.fiberLabel) + '</span>';
                 }
                 html += '</div>';
-                html += '<button type="button" class="btn-trace-from-node" data-cross-id="' + escapeHtml(conn.crossUniqueId) + '" data-cable-id="' + escapeHtml(conn.cableId) + '" data-fiber-number="' + conn.fiberNumber + '" style="padding: 8px 12px; background: #f59e0b; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">🔍 Трассировка</button>';
+                html += '<button type="button" class="btn-trace-from-node btn-trace-compact" data-cross-id="' + escapeHtml(conn.crossUniqueId) + '" data-cable-id="' + escapeHtml(conn.cableId) + '" data-fiber-number="' + conn.fiberNumber + '">Трассировка</button>';
                 html += '</div>';
             });
             html += '</div>';
         } else {
-            html += '<div style="padding: 12px; background: #fef3c7; border-radius: 6px; border: 1px solid #fde68a;' + (lanTail ? ' margin-top: 14px;' : '') + '">';
+            html += '<div class="object-card-callout object-card-callout--warn' + (lanTail ? ' object-card-callout--spaced' : '') + '">';
             if (lanTail) {
-                html += '<div style="color: #92400e; font-size: 0.875rem;">С кросса к этому узлу в модели не заведены жилы на коммутатор — <strong>трассировка оптики</strong> по кнопке недоступна. Для камеры на коммутаторе только Ethernet этого не требуется: маршрут указан в блоке «Медный участок до камеры» выше.</div>';
+                html += '<p>Жил с кросса на этот коммутатор нет — трассировка оптики недоступна. Для камеры только по Ethernet маршрут указан выше.</p>';
             } else {
-                html += '<div style="color: #92400e; font-size: 0.875rem;">К этому узлу не подключено жил с кросса — трассировка оптики недоступна.</div>';
-                html += '<div style="color: #a16207; font-size: 0.8rem; margin-top: 4px;">Если на коммутаторе есть SFP, подключите порт к жиле в карточке кросса. Если камера идёт только медью от коммутатора без оптики — укажите коммутатор при прокладке медного кабеля.</div>';
+                html += '<p>К узлу не подключены жилы с кросса. При SFP заведите порт в карточке кросса; при чистой меди — укажите коммутатор при прокладке кабеля.</p>';
             }
             html += '</div>';
         }
-        html += '</div>';
+        html += '</section>';
         return html;
     }
+    html += '</section>';
+    return html;
+}
+
+function buildCameraCardContent(obj, isEditMode, name) {
+    var manufacturer = obj.properties.get('manufacturer') || '';
+    var model = obj.properties.get('model') || '';
+    var comment = obj.properties.get('comment') || '';
+    var deviceLine = [manufacturer, model].filter(Boolean).join(' · ');
+    var streamCfg = window.CameraPlayer ? CameraPlayer.getCameraStreamConfig(obj) : { streamType: 'none', streamUrl: '' };
+    var html = '<div class="camera-card">';
+
+    html += '<section class="object-card-section camera-card-hero">';
+    html += '<div class="camera-card-hero-row">';
+    if (window.MapIcons) {
+        html += '<div class="camera-card-hero-icon" aria-hidden="true">' + MapIcons.buildIconSvg('camera', { variant: 'normal' }) + '</div>';
+    }
+    html += '<div class="camera-card-hero-text">';
+    if (!isEditMode) {
+        html += '<div class="camera-card-view-name">' + escapeHtml(name || 'Без названия') + '</div>';
+        html += '<div class="camera-card-view-meta">' + escapeHtml(deviceLine || 'Камера видеонаблюдения') + '</div>';
+        if (comment) {
+            html += '<div class="camera-card-comment">' + escapeHtml(comment) + '</div>';
+        }
+    } else {
+        html += '<div class="camera-card-view-name">' + escapeHtml(name || 'Новая камера') + '</div>';
+        html += '<p class="object-card-hint camera-card-hero-hint">На карте подключайте только <strong>медным кабелем</strong> к коммутатору узла, отдельному коммутатору или медиаконвертеру с оптикой.</p>';
+    }
+    html += '</div></div></section>';
+
+    if (isEditMode) {
+        html += '<section class="object-card-section">';
+        html += '<h4 class="object-card-section-title">Устройство</h4>';
+        html += '<div class="form-group"><label for="editCameraName" class="object-card-label">Название</label>';
+        html += '<input type="text" id="editCameraName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Например: Камера подъезд 1">';
+        html += '</div>';
+        html += '<div class="form-group"><label class="object-card-label">Производитель</label>';
+        html += '<div class="device-combobox" data-catalog="camera" data-type="manufacturer" data-value-id="editCameraManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturer ? escapeHtml(manufacturer) : 'Выберите производителя') + '</button><input type="hidden" id="editCameraManufacturer" value="' + escapeHtml(manufacturer) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+        html += '<div class="form-group"><label class="object-card-label">Модель</label>';
+        html += '<div class="device-combobox" data-catalog="camera" data-type="model" data-value-id="editCameraModel" data-manufacturer-id="editCameraManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editCameraModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+        html += '<div class="form-group" style="margin-bottom:0;"><label for="editCameraComment" class="object-card-label">Комментарий</label>';
+        html += '<textarea id="editCameraComment" class="form-input" rows="2" placeholder="Необязательно">' + escapeHtml(comment) + '</textarea></div>';
+        html += '</section>';
+    }
+
+    if (window.CameraPlayer) {
+        html += CameraPlayer.buildStreamSettingsHtml(streamCfg, { idPrefix: 'editCamera', isEditMode: isEditMode });
+        if (isEditMode && streamCfg.streamUrl && streamCfg.streamType !== 'none') {
+            html += '<section class="object-card-section object-card-section--player camera-player-section camera-player-section--preview">';
+            html += '<h4 class="object-card-section-title">Предпросмотр</h4>';
+            html += '<div class="camera-player-mount" data-camera-player-preview></div>';
+            html += '</section>';
+        }
+        if (!isEditMode) {
+            html += CameraPlayer.buildPlayerSectionHtml(streamCfg);
+        }
+    }
+
+    html += buildCameraTraceSectionHtml(obj);
+    html += '</div>';
+    return html;
+}
+
+function buildOltIncomingFiberLabel(incomingFiber, cables) {
+    if (!incomingFiber || !incomingFiber.cableId) return '— не задан';
+    var c = cables.find(function(cab) { return (cab.properties.get('uniqueId') || '') === incomingFiber.cableId; });
+    var desc = c ? (c.properties.get('cableName') || getCableDescription(c.properties.get('cableType'))) : incomingFiber.cableId;
+    return desc + ', жила ' + incomingFiber.fiberNumber;
+}
+
+function buildOltPortFiberLabel(ass, cables) {
+    if (!ass || ass.cableId == null) return '—';
+    var c = cables.find(function(cab) { return (cab.properties.get('uniqueId') || '') === ass.cableId; });
+    return c ? (c.properties.get('cableName') || getCableDescription(c.properties.get('cableType'))) + ', ж.' + ass.fiberNumber : ass.cableId + '-' + ass.fiberNumber;
+}
+
+function buildOltCardContent(obj, isEditMode, name) {
+    var ponPorts = Math.max(1, parseInt(obj.properties.get('ponPorts'), 10) || 8);
+    var incomingFiber = obj.properties.get('incomingFiber') || null;
+    var portAssignments = obj.properties.get('portAssignments') || {};
+    var manufacturer = obj.properties.get('manufacturer') || '';
+    var model = obj.properties.get('model') || '';
+    var comment = obj.properties.get('comment') || '';
+    var deviceLine = [manufacturer, model].filter(Boolean).join(' · ');
+    var cables = getConnectedCables(obj);
+    var assignedCount = Object.keys(portAssignments).filter(function(k) {
+        var a = portAssignments[k];
+        return a && a.cableId != null && a.fiberNumber != null;
+    }).length;
+    var incomingLabel = buildOltIncomingFiberLabel(incomingFiber, cables);
+
+    var fiberOptions = [];
+    cables.forEach(function(cable) {
+        var cid = cable.properties.get('uniqueId') || ('cable-' + Date.now());
+        if (!cable.properties.get('uniqueId')) cable.properties.set('uniqueId', cid);
+        var cableName = cable.properties.get('cableName') || getCableDescription(cable.properties.get('cableType'));
+        var n = getFiberCount(cable.properties.get('cableType'));
+        for (var f = 1; f <= n; f++) {
+            fiberOptions.push({ cableId: cid, fiberNumber: f, label: cableName + ', жила ' + f, value: cid + '-' + f });
+        }
+    });
+
+    var html = '<div class="olt-card">';
+
+    html += '<section class="object-card-section olt-card-hero">';
+    html += '<div class="olt-card-hero-row">';
+    if (window.MapIcons) {
+        html += '<div class="olt-card-hero-icon" aria-hidden="true">' + MapIcons.buildIconSvg('olt', { variant: 'normal' }) + '</div>';
+    }
+    html += '<div class="olt-card-hero-text">';
+    if (!isEditMode) {
+        html += '<div class="olt-card-view-name">' + escapeHtml(name || 'Без названия') + '</div>';
+        html += '<div class="olt-card-view-meta">' + escapeHtml(deviceLine || 'OLT · GPON') + '</div>';
+        if (comment) {
+            html += '<div class="olt-card-comment">' + escapeHtml(comment) + '</div>';
+        }
+    } else {
+        html += '<div class="olt-card-view-name">' + escapeHtml(name || 'Новый OLT') + '</div>';
+        html += '<p class="object-card-hint olt-card-hero-hint">Приход от кросса или муфты задаётся кнопкой <strong>«OLT»</strong> у жилы. PON-порты — жилами подключённых кабелей.</p>';
+    }
+    html += '</div></div>';
+    html += '<dl class="olt-card-stats">';
+    html += '<div class="olt-card-stat"><dt>PON-портов</dt><dd>' + ponPorts + '</dd></div>';
+    html += '<div class="olt-card-stat"><dt>Назначено</dt><dd>' + assignedCount + ' / ' + ponPorts + '</dd></div>';
+    html += '<div class="olt-card-stat olt-card-stat--wide"><dt>Приход</dt><dd>' + escapeHtml(incomingLabel) + '</dd></div>';
+    html += '</dl></section>';
+
+    if (isEditMode) {
+        html += '<section class="object-card-section">';
+        html += '<h4 class="object-card-section-title">Устройство</h4>';
+        html += '<div class="form-group"><label for="editOltName" class="object-card-label">Название</label>';
+        html += '<input type="text" id="editOltName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Например: OLT Центральная">';
+        html += '</div>';
+        html += '<div class="form-group"><label class="object-card-label">Производитель</label>';
+        html += '<div class="device-combobox" data-catalog="olt" data-type="manufacturer" data-value-id="editOltManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturer ? escapeHtml(manufacturer) : 'Выберите производителя') + '</button><input type="hidden" id="editOltManufacturer" value="' + escapeHtml(manufacturer) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+        html += '<div class="form-group"><label class="object-card-label">Модель</label>';
+        html += '<div class="device-combobox" data-catalog="olt" data-type="model" data-value-id="editOltModel" data-manufacturer-id="editOltManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editOltModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+        html += '<div class="form-group" style="margin-bottom:0;"><label for="editOltComment" class="object-card-label">Комментарий</label>';
+        html += '<textarea id="editOltComment" class="form-input" rows="2" placeholder="Дополнительные сведения">' + escapeHtml(comment) + '</textarea></div>';
+        html += '</section>';
+    } else if (manufacturer || model || comment) {
+        html += '<section class="object-card-section">';
+        html += '<h4 class="object-card-section-title">Устройство</h4>';
+        if (manufacturer || model) {
+            html += '<p class="olt-card-device-line">' + escapeHtml(deviceLine || '—') + '</p>';
+        }
+        if (comment) {
+            html += '<p class="olt-card-device-comment">' + escapeHtml(comment) + '</p>';
+        }
+        html += '</section>';
+    }
+
+    html += '<section class="object-card-section object-card-section--gpon">';
+    html += '<h4 class="object-card-section-title">GPON</h4>';
+    html += '<p class="object-card-hint olt-card-gpon-hint">Приход от кросса задаётся с кросса или муфты (кнопка «OLT» у жилы). Порты задаются жилами подключённых кабелей.</p>';
+    html += '<div class="olt-card-incoming"><span class="olt-card-incoming-label">Приход от кросса</span><span class="olt-card-incoming-value">' + escapeHtml(incomingLabel) + '</span></div>';
+    html += '<h5 class="olt-card-ports-title">PON-порты</h5>';
+    if (!fiberOptions.length && isEditMode) {
+        html += '<div class="object-card-callout object-card-callout--warn"><p>Подключите кабели к OLT, чтобы назначить жилы на PON-порты.</p></div>';
+    }
+    html += '<div class="olt-ports-table-wrap"><table class="olt-ports-table"><thead><tr><th scope="col">Порт</th><th scope="col">Жила</th><th scope="col" class="olt-ports-table-actions-col"></th></tr></thead><tbody>';
+    for (var p = 1; p <= ponPorts; p++) {
+        var ass = portAssignments[String(p)] || null;
+        var assVal = ass ? (ass.cableId + '-' + ass.fiberNumber) : '';
+        var assLabel = buildOltPortFiberLabel(ass, cables);
+        html += '<tr data-port="' + p + '">';
+        html += '<td class="olt-ports-table-port">' + p + '</td>';
+        if (isEditMode && fiberOptions.length) {
+            html += '<td><select class="olt-port-assign form-input" data-port="' + p + '">';
+            html += '<option value="">—</option>';
+            fiberOptions.forEach(function(opt) {
+                var taken = Object.keys(portAssignments).some(function(k) {
+                    if (k === String(p)) return false;
+                    var a = portAssignments[k];
+                    return a && a.cableId != null && a.fiberNumber != null && (a.cableId + '-' + a.fiberNumber) === opt.value;
+                });
+                html += '<option value="' + escapeHtml(opt.value) + '"' + (opt.value === assVal ? ' selected' : '') + (taken ? ' disabled' : '') + '>' + escapeHtml(opt.label) + (taken ? ' (занято)' : '') + '</option>';
+            });
+            html += '</select></td>';
+        } else {
+            html += '<td class="olt-ports-table-fiber">' + escapeHtml(assLabel) + '</td>';
+        }
+        html += '<td class="olt-ports-table-actions"><button type="button" class="btn-trace-olt-port btn-olt-trace" data-port="' + p + '"' + (ass ? '' : ' disabled') + '>Трассировка</button></td>';
+        html += '</tr>';
+    }
+    html += '</tbody></table></div></section>';
+
+    html += '</div>';
     return html;
 }
 
@@ -6492,6 +6695,7 @@ function startCopperCableFromMediaConverter(mcObj) {
         if (cableBtnMc) cableBtnMc.click();
     }
     copperCableLayingActive = true;
+    if (typeof syncCableTypePickerUI === 'function') syncCableTypePickerUI();
     pendingCopperPortPreset = null;
     cableSource = mcObj;
     cableSourceCopperSwitchId = null;
@@ -6548,6 +6752,7 @@ function startCopperCableFromNodeSwitchPort(nodeObj, switchId, portNum) {
         if (cableBtn2) cableBtn2.click();
     }
     copperCableLayingActive = true;
+    if (typeof syncCableTypePickerUI === 'function') syncCableTypePickerUI();
     pendingCopperPortPreset = { kind: 'node', nodeUid: nodeObj.properties.get('uniqueId'), switchId: switchId, port: p };
     cableSource = nodeObj;
     cableSourceCopperSwitchId = switchId;
@@ -6662,11 +6867,85 @@ function resetInfoModalFiberLayout() {
     var modalContent = modal.querySelector('.modal-content');
     if (modalContent) modalContent.classList.remove('fiber-management-modal');
     modal.classList.remove('fiber-management-modal-open');
+    modal.removeAttribute('data-fiber-workspace');
+    modal.removeAttribute('data-device-card');
+    updateInfoModalChrome(null, '');
+}
+
+var INFO_MODAL_DEVICE_SUBTITLES = {
+    camera: 'Видеопоток · медь · трассировка оптики',
+    node: 'Коммутаторы, оптика и медные порты',
+    olt: 'GPON · приход и порты',
+    onu: 'Подключение по оптике',
+    mediaConverter: 'Оптика и медь к коммутатору',
+    support: 'Промежуточная точка маршрута ВОЛС',
+    attachment: 'Крепление кабеля на маршруте'
+};
+
+function updateInfoModalChrome(type, name) {
+    var modal = document.getElementById('infoModal');
+    var header = document.getElementById('fiberModalHeader');
+    var headerMain = header ? header.querySelector('.fiber-modal-header-main') : null;
+    var headerText = headerMain ? headerMain.querySelector('.fiber-modal-header-text') : null;
+    var iconEl = document.getElementById('fiberModalHeaderIcon');
+    var subEl = document.getElementById('modalTitleSub');
+    var modalContent = modal ? modal.querySelector('.modal-content') : null;
+    if (!modal || !header) return;
+
+    var isWorkspace = type === 'cross' || type === 'sleeve';
+    var isDeviceCard = !!(type && INFO_MODAL_DEVICE_SUBTITLES[type]);
+    var showHeaderIcon = (isWorkspace || isDeviceCard) && window.MapIcons;
+
+    modal.setAttribute('data-fiber-workspace', isWorkspace ? type : '');
+    modal.setAttribute('data-device-card', isDeviceCard && !isWorkspace ? type : '');
+    header.classList.toggle('fiber-modal-header--workspace', isWorkspace);
+    header.classList.toggle('fiber-modal-header--device', isDeviceCard && !isWorkspace);
+    if (modalContent) {
+        modalContent.classList.toggle('modal-content--device-card', isDeviceCard && !isWorkspace);
+    }
+
+    if (showHeaderIcon && headerMain && headerText) {
+        if (!iconEl) {
+            iconEl = document.createElement('div');
+            iconEl.id = 'fiberModalHeaderIcon';
+            iconEl.setAttribute('aria-hidden', 'true');
+            headerMain.insertBefore(iconEl, headerText);
+        }
+        iconEl.className = 'fiber-modal-header-icon fiber-modal-header-icon--' + type;
+        var iconOpts = { variant: 'normal' };
+        if (type === 'node' && currentModalObject && currentModalObject.properties) {
+            iconOpts.nodeKind = currentModalObject.properties.get('nodeKind') || 'network';
+        }
+        iconEl.innerHTML = MapIcons.buildIconSvg(type, iconOpts);
+    } else if (iconEl) {
+        iconEl.remove();
+    }
+
+    if (subEl) {
+        var sub = isWorkspace
+            ? (type === 'cross' ? 'Схема, таблица и соединения жил' : 'Схема, таблица и сращивания волокон')
+            : (INFO_MODAL_DEVICE_SUBTITLES[type] || '');
+        if (sub) {
+            subEl.hidden = false;
+            subEl.textContent = sub;
+        } else {
+            subEl.hidden = true;
+            subEl.textContent = '';
+        }
+    }
+
+    if ((isWorkspace || isDeviceCard) && typeof window.initPanelPlexusCanvases === 'function') {
+        requestAnimationFrame(function () {
+            window.initPanelPlexusCanvases(modal);
+        });
+    }
 }
 
 function closeInfoModal() {
     var modal = document.getElementById('infoModal');
     if (!modal) return;
+    var modalInfo = document.getElementById('modalInfo');
+    if (window.CameraPlayer && modalInfo) CameraPlayer.destroyPlayersInRoot(modalInfo);
     resetInfoModalFiberLayout();
     if (typeof pendingCopperRouteFinish !== 'undefined' && pendingCopperRouteFinish) {
         pendingCopperRouteFinish = null;
@@ -7540,6 +7819,13 @@ function getSerializedData() {
             if (props.manufacturer) result.manufacturer = props.manufacturer;
             if (props.model) result.model = props.model;
             if (props.comment) result.comment = props.comment;
+            if (props.streamType && props.streamType !== 'none') result.streamType = props.streamType;
+            else if (props.streamUrl) result.streamType = props.streamType || 'none';
+            if (props.streamUrl) result.streamUrl = props.streamUrl;
+            if (props.streamUser) result.streamUser = props.streamUser;
+            if (props.streamPass) result.streamPass = props.streamPass;
+            if (props.streamAutoplay === false) result.streamAutoplay = false;
+            if (props.streamMuted === false) result.streamMuted = false;
         }
         if (props.type === 'mediaConverter') {
             if (props.incomingFiber) result.incomingFiber = props.incomingFiber;
@@ -7694,7 +7980,7 @@ function showSyncRequiredOverlay() {
     el = document.createElement('div');
     el.id = 'syncRequiredOverlay';
     el.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.75);color:#fff;display:flex;align-items:center;justify-content:center;z-index:99998;font-family:sans-serif;text-align:center;padding:24px;box-sizing:border-box;';
-    el.innerHTML = '<div><h2 style="margin:0 0 12px;">Общая карта</h2><p style="margin:0 0 8px;">Подключитесь к синхронизации в боковой панели слева,<br>чтобы работать с картой (одна карта на всех).</p><p style="margin:0;font-size:14px;opacity:0.9;">Блок «Синхронизация» → Подключиться</p></div>';
+    el.innerHTML = '<div><h2 style="margin:0 0 12px;">Общая карта</h2><p style="margin:0 0 8px;">Подключение к совместной карте организации…</p><p style="margin:0;font-size:14px;opacity:0.9;">Подождите несколько секунд или обновите страницу.</p></div>';
     wrapper.appendChild(el);
 }
 function hideSyncRequiredOverlay() {
@@ -8278,153 +8564,32 @@ function importData(data, opts) {
 }
 
 function createObjectFromData(data, opts) {
-    const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, fiberPorts, sleeveType, maxFibers, crossPorts, crossCopperPorts, copperPortUsage, nodeConnections, oltConnections, onuConnections, mediaConverterConnections, uniqueId, nodeKind, manufacturer, model, comment, ponPorts, splitRatio, splitterConnections, incomingFiber, portAssignments, inputFiber, outputConnections, parentNodeId, switchPortTypes, attachedSwitches } = data;
+    const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, fiberPorts, sleeveType, maxFibers, crossPorts, crossCopperPorts, copperPortUsage, nodeConnections, oltConnections, onuConnections, mediaConverterConnections, uniqueId, nodeKind, manufacturer, model, comment, ponPorts, splitRatio, splitterConnections, incomingFiber, portAssignments, inputFiber, outputConnections, parentNodeId, switchPortTypes, attachedSwitches, streamType, streamUrl, streamUser, streamPass, streamAutoplay, streamMuted } = data;
     
-    let iconSvg, color, balloonContent;
-    
-    switch(type) {
-        case 'support':
-            
-            color = '#3b82f6';
-            iconSvg = `<svg width="22" height="22" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
-                <rect x="1.5" y="1.5" width="19" height="19" rx="3" fill="${color}" stroke="white" stroke-width="1.5"/>
-                <rect x="8" y="5" width="6" height="12" rx="1" fill="white" opacity="0.9"/>
-            </svg>`;
-            balloonContent = name ? 'Опора связи: ' + name : 'Опора связи';
-            break;
-        case 'sleeve':
-            
-            color = '#ef4444';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <polygon points="14,2 24,7 24,17 14,22 4,17 4,7" fill="${color}" stroke="white" stroke-width="2"/>
-                <circle cx="14" cy="12" r="3" fill="white" opacity="0.9"/>
-            </svg>`;
-            balloonContent = name ? 'Кабельная муфта: ' + name : 'Кабельная муфта';
-            break;
-        case 'cross':
-            
-            color = '#8b5cf6';
-            iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="4" width="28" height="24" rx="3" fill="${color}" stroke="white" stroke-width="2"/>
-                <line x1="10" y1="4" x2="10" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
-                <line x1="16" y1="4" x2="16" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
-                <line x1="22" y1="4" x2="22" y2="28" stroke="white" stroke-width="1.5" opacity="0.7"/>
-                <circle cx="10" cy="12" r="2" fill="white"/>
-                <circle cx="16" cy="12" r="2" fill="white"/>
-                <circle cx="22" cy="12" r="2" fill="white"/>
-                <circle cx="10" cy="20" r="2" fill="white"/>
-                <circle cx="16" cy="20" r="2" fill="white"/>
-                <circle cx="22" cy="20" r="2" fill="white"/>
-            </svg>`;
-            balloonContent = `Оптический кросс: ${name}`;
-            break;
-        case 'node':
-            
-            const effectiveNodeKind = nodeKind || 'network';
-            color = getNodeColorByKind(effectiveNodeKind);
-            iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="16" cy="16" r="14" fill="${color}" stroke="white" stroke-width="2.5"/>
-                <circle cx="16" cy="16" r="6" fill="white" opacity="0.95"/>
-                <circle cx="16" cy="16" r="3" fill="${color}"/>
-            </svg>`;
-            balloonContent = `Узел сети: ${name}`;
-            break;
-        case 'attachment':
-            color = '#f59e0b';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="14" cy="14" r="12" fill="${color}" stroke="white" stroke-width="2"/>
-                <path d="M10 14 L14 10 L18 14 L14 18 Z" fill="white" opacity="0.95"/>
-                <circle cx="14" cy="14" r="2" fill="${color}"/>
-            </svg>`;
-            balloonContent = name ? 'Крепление узлов: ' + name : 'Крепление узлов';
-            break;
-        case 'olt':
-            color = '#0ea5e9';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="4" width="24" height="20" rx="3" fill="${color}" stroke="white" stroke-width="2"/>
-                <rect x="6" y="8" width="4" height="3" rx="1" fill="white" opacity="0.9"/>
-                <rect x="12" y="8" width="4" height="3" rx="1" fill="white" opacity="0.9"/>
-                <rect x="18" y="8" width="4" height="3" rx="1" fill="white" opacity="0.9"/>
-                <line x1="8" y1="16" x2="20" y2="16" stroke="white" stroke-width="1.5" opacity="0.8"/>
-            </svg>`;
-            balloonContent = name ? 'OLT: ' + name : 'OLT (GPON)';
-            break;
-        case 'splitter':
-            color = '#a855f7';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="14" cy="8" r="5" fill="${color}" stroke="white" stroke-width="2"/>
-                <path d="M14 13 L14 20 M8 20 L20 20 M14 20 L10 24 M14 20 L18 24" stroke="white" stroke-width="1.5" fill="none"/>
-                <circle cx="10" cy="24" r="2" fill="white" opacity="0.9"/>
-                <circle cx="14" cy="24" r="2" fill="white" opacity="0.9"/>
-                <circle cx="18" cy="24" r="2" fill="white" opacity="0.9"/>
-            </svg>`;
-            balloonContent = name ? 'Сплиттер: ' + name : 'Сплиттер';
-            break;
-        case 'onu':
-            color = '#10b981';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="4" y="6" width="20" height="16" rx="2" fill="${color}" stroke="white" stroke-width="2"/>
-                <circle cx="14" cy="14" r="3" fill="white" opacity="0.95"/>
-                <rect x="10" y="18" width="8" height="2" rx="1" fill="white" opacity="0.7"/>
-            </svg>`;
-            balloonContent = name ? 'ONU: ' + name : 'ONU';
-            break;
-        case 'camera':
-            color = '#475569';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="5" y="7" width="18" height="14" rx="2" fill="${color}" stroke="white" stroke-width="2"/>
-                <circle cx="14" cy="14" r="4" fill="white" opacity="0.9"/>
-                <circle cx="14" cy="14" r="2" fill="${color}"/>
-            </svg>`;
-            balloonContent = name ? 'Камера: ' + name : 'Камера';
-            break;
-        case 'mediaConverter':
-            color = '#14b8a6';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="4" y="7" width="20" height="14" rx="2" fill="${color}" stroke="white" stroke-width="2"/>
-                <path d="M10 14h8M14 10v8" stroke="white" stroke-width="2" stroke-linecap="round"/>
-            </svg>`;
-            balloonContent = name ? 'Медиаконвертер: ' + name : 'Медиаконвертер';
-            break;
-        case 'switch':
-            color = '#ea580c';
-            iconSvg = `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
-                <rect x="3" y="6" width="22" height="16" rx="2" fill="${color}" stroke="white" stroke-width="2"/>
-                <line x1="8" y1="10" x2="8.01" y2="10" stroke="white" stroke-width="2"/>
-                <line x1="13" y1="10" x2="13.01" y2="10" stroke="white" stroke-width="2"/>
-                <line x1="18" y1="10" x2="18.01" y2="10" stroke="white" stroke-width="2"/>
-                <line x1="8" y1="15" x2="18" y2="15" stroke="white" stroke-width="1.5" opacity="0.85"/>
-            </svg>`;
-            balloonContent = name ? 'Коммутатор: ' + name : 'Коммутатор';
-            break;
-        default:
-            color = '#94a3b8';
-            iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="12" cy="12" r="10" fill="${color}" stroke="white" stroke-width="2"/>
-            </svg>`;
-            balloonContent = 'Объект';
+    var balloonContent;
+    switch (type) {
+        case 'support': balloonContent = name ? 'Опора связи: ' + name : 'Опора связи'; break;
+        case 'sleeve': balloonContent = name ? 'Кабельная муфта: ' + name : 'Кабельная муфта'; break;
+        case 'cross': balloonContent = 'Оптический кросс: ' + name; break;
+        case 'node': balloonContent = 'Узел сети: ' + name; break;
+        case 'attachment': balloonContent = name ? 'Крепление узлов: ' + name : 'Крепление узлов'; break;
+        case 'olt': balloonContent = name ? 'OLT: ' + name : 'OLT (GPON)'; break;
+        case 'splitter': balloonContent = name ? 'Сплиттер: ' + name : 'Сплиттер'; break;
+        case 'onu': balloonContent = name ? 'ONU: ' + name : 'ONU'; break;
+        case 'camera': balloonContent = name ? 'Камера: ' + name : 'Камера'; break;
+        case 'mediaConverter': balloonContent = name ? 'Медиаконвертер: ' + name : 'Медиаконвертер'; break;
+        case 'switch': balloonContent = name ? 'Коммутатор: ' + name : 'Коммутатор'; break;
+        default: balloonContent = 'Объект';
     }
 
-    const clickableSize = 44; 
-    const iconSize = (type === 'node' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'switch') ? 32 : (type === 'support' ? 22 : 28);
-    const iconOffset = (clickableSize - iconSize) / 2;
+    var mapIcon = buildMapPlacemarkIcon(type, 'normal', { nodeKind: nodeKind || 'network' });
+    if (!mapIcon) return null;
 
-    const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
-    
-    const clickableSvg = `<svg width="${clickableSize}" height="${clickableSize}" viewBox="0 0 ${clickableSize} ${clickableSize}" xmlns="http://www.w3.org/2000/svg">
-        <rect x="0" y="0" width="${clickableSize}" height="${clickableSize}" fill="transparent"/>
-        <g transform="translate(${iconOffset}, ${iconOffset})">
-            ${svgContent}
-        </g>
-    </svg>`;
-    
-    const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(clickableSvg)));
-    
     const placemarkOptions = {
         iconLayout: 'default#image',
-        iconImageHref: svgDataUrl,
-        iconImageSize: [clickableSize, clickableSize],
-        iconImageOffset: [-clickableSize / 2, -clickableSize / 2],
+        iconImageHref: mapIcon.href,
+        iconImageSize: mapIcon.iconImageSize,
+        iconImageOffset: mapIcon.iconImageOffset,
         draggable: isEditMode
     };
     
@@ -8550,6 +8715,19 @@ function createObjectFromData(data, opts) {
         if (manufacturer) placemark.properties.set('manufacturer', manufacturer);
         if (model) placemark.properties.set('model', model);
         if (comment) placemark.properties.set('comment', comment);
+        if (window.CameraPlayer) {
+            CameraPlayer.applyCameraStreamConfig(placemark, {
+                streamType: streamType || 'none',
+                streamUrl: streamUrl || '',
+                streamUser: streamUser || '',
+                streamPass: streamPass || '',
+                streamAutoplay: streamAutoplay !== false,
+                streamMuted: streamMuted !== false
+            });
+        } else {
+            placemark.properties.set('streamType', streamType || 'none');
+            if (streamUrl) placemark.properties.set('streamUrl', streamUrl);
+        }
     }
     if (type === 'mediaConverter') {
         placemark.properties.set('incomingFiber', incomingFiber || null);
@@ -8935,6 +9113,14 @@ function clearMap(opts) {
     }
 }
 
+function setStatCount(el, value) {
+    if (!el) return;
+    var n = Number(value) || 0;
+    el.textContent = String(n);
+    var item = el.closest('.stat-item');
+    if (item) item.classList.toggle('stat-item--empty', n === 0);
+}
+
 function updateStats() {
     const networkNodeCount = objects.filter(function(obj) {
         if (!obj.properties || obj.properties.get('type') !== 'node') return false;
@@ -8960,30 +9146,25 @@ function updateStats() {
     });
     const cableCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'cable').length;
 
-    const networkNodeEl = document.getElementById('networkNodeCount');
-    const aggregationNodeEl = document.getElementById('aggregationNodeCount');
-    const supportEl = document.getElementById('supportCount');
-    const sleeveEl = document.getElementById('sleeveCount');
-    const crossEl = document.getElementById('crossCount');
-    const oltEl = document.getElementById('oltCount');
-    const splitterEl = document.getElementById('splitterCount');
-    const onuEl = document.getElementById('onuCount');
-    const cameraEl = document.getElementById('cameraCount');
-    const mediaConverterEl = document.getElementById('mediaConverterCount');
-    const switchEl = document.getElementById('switchCount');
-    const cableEl = document.getElementById('cableCount');
-    if (networkNodeEl) networkNodeEl.textContent = networkNodeCount;
-    if (aggregationNodeEl) aggregationNodeEl.textContent = aggregationNodeCount;
-    if (supportEl) supportEl.textContent = supportCount;
-    if (sleeveEl) sleeveEl.textContent = sleeveCount;
-    if (crossEl) crossEl.textContent = crossCount;
-    if (oltEl) oltEl.textContent = oltCount;
-    if (splitterEl) splitterEl.textContent = splitterCount;
-    if (onuEl) onuEl.textContent = onuCount;
-    if (cameraEl) cameraEl.textContent = cameraCount;
-    if (mediaConverterEl) mediaConverterEl.textContent = mediaConverterCount;
-    if (switchEl) switchEl.textContent = switchCount;
-    if (cableEl) cableEl.textContent = cableCount;
+    setStatCount(document.getElementById('networkNodeCount'), networkNodeCount);
+    setStatCount(document.getElementById('aggregationNodeCount'), aggregationNodeCount);
+    setStatCount(document.getElementById('supportCount'), supportCount);
+    setStatCount(document.getElementById('sleeveCount'), sleeveCount);
+    setStatCount(document.getElementById('crossCount'), crossCount);
+    setStatCount(document.getElementById('oltCount'), oltCount);
+    setStatCount(document.getElementById('splitterCount'), splitterCount);
+    setStatCount(document.getElementById('onuCount'), onuCount);
+    setStatCount(document.getElementById('cameraCount'), cameraCount);
+    setStatCount(document.getElementById('mediaConverterCount'), mediaConverterCount);
+    setStatCount(document.getElementById('switchCount'), switchCount);
+    setStatCount(document.getElementById('cableCount'), cableCount);
+
+    var statsTotalEl = document.getElementById('statsTotal');
+    if (statsTotalEl) {
+        var total = networkNodeCount + aggregationNodeCount + supportCount + sleeveCount + crossCount
+            + oltCount + splitterCount + onuCount + cameraCount + mediaConverterCount + switchCount + cableCount;
+        statsTotalEl.textContent = String(total);
+    }
 }
 
 function showObjectInfo(obj) {
@@ -9048,83 +9229,12 @@ function showObjectInfo(obj) {
     }
     
     document.getElementById('modalTitle').textContent = title;
+    updateInfoModalChrome(type, name);
 
     let html = '';
 
     if (type === 'olt') {
-        const oltId = getObjectUniqueId(obj);
-        const ponPorts = Math.max(1, parseInt(obj.properties.get('ponPorts'), 10) || 8);
-        const incomingFiber = obj.properties.get('incomingFiber') || null;
-        const portAssignments = obj.properties.get('portAssignments') || {};
-        const manufacturer = obj.properties.get('manufacturer') || '';
-        const model = obj.properties.get('model') || '';
-        const comment = obj.properties.get('comment') || '';
-        const cables = getConnectedCables(obj);
-        if (isEditMode) {
-            html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-            html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Устройство</h4>';
-            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Производитель</label><div class="device-combobox" data-catalog="olt" data-type="manufacturer" data-value-id="editOltManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturer ? escapeHtml(manufacturer) : 'Выберите производителя') + '</button><input type="hidden" id="editOltManufacturer" value="' + escapeHtml(manufacturer) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
-            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Модель</label><div class="device-combobox" data-catalog="olt" data-type="model" data-value-id="editOltModel" data-manufacturer-id="editOltManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editOltModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
-            html += '<div class="form-group"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Комментарий</label>';
-            html += '<textarea id="editOltComment" class="form-input" rows="2" placeholder="Дополнительные сведения">' + escapeHtml(comment) + '</textarea></div>';
-            html += '</div>';
-        } else if (manufacturer || model || comment) {
-            html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-            html += '<h4 style="margin: 0 0 8px 0; color: var(--text-primary); font-size: 0.9375rem;">Устройство</h4>';
-            if (manufacturer || model) html += '<div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 6px;">' + escapeHtml([manufacturer, model].filter(Boolean).join(' ') || '—') + '</div>';
-            if (comment) html += '<div style="font-size: 0.875rem; color: var(--text-secondary); white-space: pre-wrap;">' + escapeHtml(comment) + '</div>';
-            html += '</div>';
-        }
-        const fiberOptions = [];
-        cables.forEach(cable => {
-            const cid = cable.properties.get('uniqueId') || ('cable-' + Date.now());
-            if (!cable.properties.get('uniqueId')) cable.properties.set('uniqueId', cid);
-            const cableName = cable.properties.get('cableName') || getCableDescription(cable.properties.get('cableType'));
-            const n = getFiberCount(cable.properties.get('cableType'));
-            for (let f = 1; f <= n; f++) {
-                fiberOptions.push({ cableId: cid, fiberNumber: f, label: cableName + ', жила ' + f, value: cid + '-' + f });
-            }
-        });
-        html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">GPON</h4>';
-        html += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 12px;">Приход от кросса задаётся с кросса или муфты (кнопка «OLT» у жилы). Порты задаются жилами подключённых кабелей.</p>';
-        const incomingLabel = incomingFiber ? (function() {
-            const c = cables.find(c => (c.properties.get('uniqueId') || '') === incomingFiber.cableId);
-            const desc = c ? (c.properties.get('cableName') || getCableDescription(c.properties.get('cableType'))) : incomingFiber.cableId;
-            return desc + ', жила ' + incomingFiber.fiberNumber;
-        }()) : '— не задан';
-        html += '<div style="margin-bottom: 12px;"><strong>Приход от кросса:</strong> ' + escapeHtml(incomingLabel) + '</div>';
-        html += '<h5 style="margin: 12px 0 8px 0; font-size: 0.875rem;">PON-порты</h5>';
-        html += '<div class="olt-ports-table-wrap" style="overflow-x: auto;"><table class="olt-ports-table" style="width: 100%; border-collapse: collapse; font-size: 0.8125rem;">';
-        html += '<thead><tr><th style="text-align: left; padding: 6px 8px;">Порт</th><th style="text-align: left; padding: 6px 8px;">Жила</th>' + (isEditMode ? '' : '') + '<th style="padding: 6px 8px;"></th></tr></thead><tbody>';
-        for (let p = 1; p <= ponPorts; p++) {
-            const ass = portAssignments[String(p)] || null;
-            const assVal = ass ? (ass.cableId + '-' + ass.fiberNumber) : '';
-            const assLabel = ass ? (function() {
-                const c = cables.find(c => (c.properties.get('uniqueId') || '') === ass.cableId);
-                return c ? (c.properties.get('cableName') || getCableDescription(c.properties.get('cableType'))) + ', ж.' + ass.fiberNumber : ass.cableId + '-' + ass.fiberNumber;
-            }()) : '—';
-            html += '<tr data-port="' + p + '">';
-            html += '<td style="padding: 6px 8px;">' + p + '</td>';
-            if (isEditMode && fiberOptions.length) {
-                html += '<td style="padding: 6px 8px;"><select class="olt-port-assign" data-port="' + p + '" style="min-width: 140px;">';
-                html += '<option value="">—</option>';
-                fiberOptions.forEach(opt => {
-                    const taken = Object.keys(portAssignments).some(k => {
-                        if (k === String(p)) return false;
-                        const a = portAssignments[k];
-                        return a && a.cableId != null && a.fiberNumber != null && (a.cableId + '-' + a.fiberNumber) === opt.value;
-                    });
-                    html += '<option value="' + escapeHtml(opt.value) + '"' + (opt.value === assVal ? ' selected' : '') + (taken ? ' disabled' : '') + '>' + escapeHtml(opt.label) + (taken ? ' (занято)' : '') + '</option>';
-                });
-                html += '</select></td>';
-            } else {
-                html += '<td style="padding: 6px 8px;">' + escapeHtml(assLabel) + '</td>';
-            }
-            html += '<td style="padding: 6px 8px;"><button type="button" class="btn-trace-olt-port" data-port="' + p + '" ' + (ass ? '' : 'disabled') + ' style="padding: 4px 10px; font-size: 0.75rem; background: #0ea5e9; color: white; border: none; border-radius: 4px; cursor: pointer;">Трассировка</button></td>';
-            html += '</tr>';
-        }
-        html += '</tbody></table></div></div>';
+        html += buildOltCardContent(obj, isEditMode, name);
     }
 
     if (type === 'splitter') {
@@ -9247,27 +9357,7 @@ function showObjectInfo(obj) {
     }
 
     if (type === 'camera') {
-        const manufacturer = obj.properties.get('manufacturer') || '';
-        const model = obj.properties.get('model') || '';
-        const comment = obj.properties.get('comment') || '';
-        html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Камера</h4>';
-        html += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 12px;">К сети подключайте <strong>только медным кабелем</strong> от порта коммутатора (узел с коммутатором или точка коммутатора на карте).</p>';
-        if (isEditMode) {
-            html += '<div class="form-group" style="margin-bottom: 12px;">';
-            html += '<label for="editCameraName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название</label>';
-            html += '<input type="text" id="editCameraName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Введите название камеры">';
-            html += '</div>';
-            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Производитель</label><div class="device-combobox" data-catalog="camera" data-type="manufacturer" data-value-id="editCameraManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturer ? escapeHtml(manufacturer) : 'Выберите производителя') + '</button><input type="hidden" id="editCameraManufacturer" value="' + escapeHtml(manufacturer) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
-            html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Модель</label><div class="device-combobox" data-catalog="camera" data-type="model" data-value-id="editCameraModel" data-manufacturer-id="editCameraManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editCameraModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
-            html += '<div class="form-group"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Комментарий</label>';
-            html += '<textarea id="editCameraComment" class="form-input" rows="2" placeholder="Дополнительные сведения">' + escapeHtml(comment) + '</textarea></div>';
-        } else if (name) {
-            html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;">Название: ' + escapeHtml(name) + '</div>';
-        }
-        if (manufacturer || model) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 6px;">Устройство: ' + escapeHtml([manufacturer, model].filter(Boolean).join(' ') || '—') + '</div>';
-        if (comment) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; white-space: pre-wrap; margin-top: 6px;">' + escapeHtml(comment) + '</div>';
-        html += '</div>';
+        html += buildCameraCardContent(obj, isEditMode, name);
     }
 
     if (type === 'mediaConverter') {
@@ -9394,9 +9484,8 @@ function showObjectInfo(obj) {
         html += '</div>';
     }
 
-    if (type === 'camera') {
-        html += buildCameraTraceSectionHtml(obj);
-    } else if (connectedCables.length === 0) {
+    if (type !== 'camera' && type !== 'olt' && type !== 'node') {
+    if (connectedCables.length === 0) {
         const noCablesText = 'К этому объекту не подключено кабелей';
         html += '<div class="no-cables" style="padding: 15px; text-align: center; color: var(--text-muted); font-size: 0.875rem;">' + noCablesText + '</div>';
     } else {
@@ -9457,6 +9546,7 @@ function showObjectInfo(obj) {
             });
         }
     }
+    }
 
     document.getElementById('modalInfo').innerHTML = html;
 
@@ -9475,10 +9565,20 @@ function showObjectInfo(obj) {
     setupEditAndDeleteListeners();
     var modalInfo = document.getElementById('modalInfo');
     if (modalInfo) initDeviceComboboxes(modalInfo);
-    if (type === 'camera' && modalInfo && modalInfo.querySelector('.trace-show-on-map-btn')) {
-        attachTraceShowOnMapHandlers(modalInfo);
+    if (type === 'camera' && modalInfo) {
+        if (modalInfo.querySelector('.trace-show-on-map-btn')) attachTraceShowOnMapHandlers(modalInfo);
+        if (window.CameraPlayer) {
+            CameraPlayer.initCameraCard(modalInfo, obj, {
+                isEditMode: isEditMode,
+                getObj: function() { return currentModalObject; }
+            });
+        }
     }
-    modal.style.display = 'block';
+    modal.style.display = 'flex';
+    modal.classList.add('modal--centered');
+    if (typeof window.initPanelPlexusCanvases === 'function') {
+        requestAnimationFrame(function () { window.initPanelPlexusCanvases(modal); });
+    }
 
     if ((type === 'sleeve' || type === 'cross') && savedFiberConnectionsScrollPos) {
         var saved = savedFiberConnectionsScrollPos;
@@ -9494,54 +9594,60 @@ function showObjectInfo(obj) {
     }
 }
 
-function showSupportInfo(supportObj) {
-    currentModalObject = supportObj;
-    
-    const connectedCables = getCablesThroughSupport(supportObj);
-    const supportName = supportObj.properties.get('name') || '';
-    const waypointType = supportObj.properties && supportObj.properties.get('type');
-    const isAttachment = waypointType === 'attachment';
-    const titleIcon = isAttachment ? '🔗' : '📡';
-    const titleKind = isAttachment ? 'Крепление узлов' : 'Опора связи';
-    const infoHeading = isAttachment ? 'Информация о креплении' : 'Информация об опоре';
-    const nameLabelStrong = isAttachment ? 'Название:' : 'Подпись:';
-    const editHeading = isAttachment ? 'Редактирование крепления' : 'Редактирование опоры';
-    const editFieldLabel = isAttachment ? 'Название крепления' : 'Подпись опоры';
-    const editPlaceholder = isAttachment ? 'Например: стена А' : 'Например: № 15';
-    const noCablesMsg = isAttachment ? 'Через это крепление не проходит ни один кабель' : 'Через эту опору не проходит ни один кабель';
-    
-    document.getElementById('modalTitle').textContent = supportName ? titleIcon + ' ' + titleKind + ': ' + supportName : titleIcon + ' ' + titleKind;
-    
-    let html = '';
-    
-    html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-    html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">' + infoHeading + '</h4>';
-    
-    if (supportName) {
-        html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>' + nameLabelStrong + '</strong> ' + escapeHtml(supportName) + '</div>';
+function getSupportWaypointCopy(isAttachment) {
+    return {
+        typeLabel: isAttachment ? 'Крепление узлов' : 'Опора связи',
+        heroHint: isAttachment
+            ? 'Точка крепления на линии кабеля. Можно разрезать ВОЛС и установить муфту.'
+            : 'Промежуточная точка линии ВОЛС. Можно разрезать кабель и установить муфту на маршруте.',
+        nameLabel: isAttachment ? 'Название' : 'Подпись',
+        editPlaceholder: isAttachment ? 'Например: стена А' : 'Например: № 15',
+        noCablesMsg: isAttachment ? 'Через это крепление не проходит ни один кабель' : 'Через эту опору не проходит ни один кабель',
+        splitWaypoint: isAttachment ? 'Крепление' : 'Опора'
+    };
+}
+
+function buildSupportCardContent(supportObj, isEditMode) {
+    var connectedCables = getCablesThroughSupport(supportObj);
+    var supportName = supportObj.properties.get('name') || '';
+    var waypointType = supportObj.properties.get('type');
+    var isAttachment = waypointType === 'attachment';
+    var copy = getSupportWaypointCopy(isAttachment);
+    var mapType = isAttachment ? 'attachment' : 'support';
+    var coords = supportObj.geometry.getCoordinates();
+    var html = '<div class="support-card support-card--' + mapType + '">';
+
+    html += '<section class="object-card-section support-card-hero">';
+    html += '<div class="support-card-hero-row">';
+    if (window.MapIcons) {
+        html += '<div class="support-card-hero-icon" aria-hidden="true">' + MapIcons.buildIconSvg(mapType, { variant: 'normal' }) + '</div>';
     }
-    
-    const coords = supportObj.geometry.getCoordinates();
-    html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Координаты:</strong> ' + coords[0].toFixed(6) + ', ' + coords[1].toFixed(6) + '</div>';
-    html += '<div style="color: var(--text-secondary); font-size: 0.875rem;"><strong>Кабелей проходит:</strong> ' + connectedCables.length + '</div>';
-    html += '</div>';
-    
+    html += '<div class="support-card-hero-text">';
+    html += '<div class="support-card-view-name">' + escapeHtml(supportName || (isAttachment ? 'Без названия' : 'Без подписи')) + '</div>';
+    html += '<div class="support-card-view-meta">' + escapeHtml(copy.typeLabel) + '</div>';
+    html += '<p class="object-card-hint support-card-hero-hint">' + copy.heroHint + '</p>';
+    html += '</div></div>';
+    html += '<dl class="support-card-stats">';
+    html += '<div class="support-card-stat"><dt>Широта</dt><dd>' + coords[0].toFixed(6) + '</dd></div>';
+    html += '<div class="support-card-stat"><dt>Долгота</dt><dd>' + coords[1].toFixed(6) + '</dd></div>';
+    html += '<div class="support-card-stat"><dt>Кабелей</dt><dd>' + connectedCables.length + '</dd></div>';
+    html += '</dl></section>';
+
     if (isEditMode) {
-        html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">' + editHeading + '</h4>';
-        html += '<div class="form-group" style="margin-bottom: 12px;">';
-        html += '<label for="editSupportName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">' + editFieldLabel + '</label>';
-        html += '<input type="text" id="editSupportName" class="form-input" value="' + escapeHtml(supportName) + '" placeholder="' + escapeHtml(editPlaceholder) + '">';
+        html += '<section class="object-card-section">';
+        html += '<h4 class="object-card-section-title">' + (isAttachment ? 'Редактирование' : 'Подпись опоры') + '</h4>';
+        html += '<div class="form-group"><label for="editSupportName" class="object-card-label">' + copy.nameLabel + '</label>';
+        html += '<input type="text" id="editSupportName" class="form-input" value="' + escapeHtml(supportName) + '" placeholder="' + escapeHtml(copy.editPlaceholder) + '">';
         html += '</div>';
-        html += '<button id="saveSupportEdit" class="btn-primary" style="width: 100%; padding: 10px 14px; margin-top: 8px;">Сохранить</button>';
-        html += '</div>';
+        html += '<button type="button" id="saveSupportEdit" class="btn-primary support-card-save-btn">Сохранить</button>';
+        html += '</section>';
     }
 
     var splittableAtSupport = isEditMode ? getSplittableFiberCablesAtWaypoint(supportObj) : [];
     if (splittableAtSupport.length) {
-        html += '<div class="edit-section cable-split-section">';
-        html += '<h4 class="cable-split-section__title">🔴 Муфта на маршруте</h4>';
-        html += '<p class="cable-split-section__desc">Выберите тип муфты и кабель для разделения. ' + (isAttachment ? 'Крепление' : 'Опора') + ' останется в маршруте обоих сегментов.</p>';
+        html += '<section class="object-card-section object-card-section--split cable-split-section">';
+        html += '<h4 class="object-card-section-title cable-split-section__title">Муфта на маршруте</h4>';
+        html += '<p class="object-card-hint cable-split-section__desc">Выберите тип муфты и кабель для разделения. ' + copy.splitWaypoint + ' останется в маршруте обоих сегментов.</p>';
         html += buildCableSplitSleeveFieldsHtml();
         html += '<div class="cable-split-pick-list">';
         splittableAtSupport.forEach(function(cable) {
@@ -9550,82 +9656,101 @@ function showSupportInfo(supportObj) {
             html += 'Разделить: ' + escapeHtml(getCableSplitLabel(cable));
             html += '</button>';
         });
-        html += '</div></div>';
+        html += '</div></section>';
     }
+
+    html += '<section class="object-card-section object-card-section--cables">';
+    html += '<div class="object-card-section-head">';
+    html += '<h4 class="object-card-section-title">Проходящие кабели</h4>';
+    html += '<span class="object-card-badge">' + connectedCables.length + '</span>';
+    html += '</div>';
 
     if (connectedCables.length === 0) {
-        html += '<div class="no-cables" style="padding: 15px; text-align: center; color: var(--text-muted); font-size: 0.875rem;">' + noCablesMsg + '</div>';
+        html += '<p class="object-card-hint object-card-hint--warn">' + copy.noCablesMsg + '</p>';
     } else {
-        html += '<div class="cables-section">';
-        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">📦 Проходящие кабели</h4>';
-        
-        connectedCables.forEach((cable, index) => {
-            const cableType = cable.properties.get('cableType');
-            const cableDescription = getCableDescription(cableType);
-            const cableName = cable.properties.get('cableName') || '';
-            const cableUniqueId = cable.properties.get('uniqueId') || `cable-${index}`;
-            const fiberCount = getFiberCount(cableType);
-            const fibers = getFiberColors(cableType);
-            const distance = cable.properties.get('distance');
+        html += '<div class="support-cable-list">';
+        connectedCables.forEach(function(cable, index) {
+            var cableType = cable.properties.get('cableType');
+            var cableDescription = getCableDescription(cableType);
+            var cableName = cable.properties.get('cableName') || '';
+            var cableColor = getCableColor(cableType);
+            var isCopper = cableType === 'copper';
+            var fibers = isCopper ? [] : getFiberColors(cableType);
+            var distance = cable.properties.get('distance');
+            var fromObj = cable.properties.get('from');
+            var toObj = cable.properties.get('to');
+            var fromName = fromObj ? (fromObj.properties.get('name') || getObjectTypeName(fromObj.properties.get('type'))) : '—';
+            var toName = toObj ? (toObj.properties.get('name') || getObjectTypeName(toObj.properties.get('type'))) : '—';
+            var title = (cableName ? escapeHtml(cableName) : ('Кабель ' + (index + 1))) + ': ' + escapeHtml(cableDescription);
 
-            const fromObj = cable.properties.get('from');
-            const toObj = cable.properties.get('to');
-            const fromName = fromObj ? (fromObj.properties.get('name') || getObjectTypeName(fromObj.properties.get('type'))) : 'Неизвестно';
-            const toName = toObj ? (toObj.properties.get('name') || getObjectTypeName(toObj.properties.get('type'))) : 'Неизвестно';
-
-            let cableColor = '#00AA00';
-            if (cableType === 'fiber4') cableColor = '#00FF00';
-            else if (cableType === 'fiber8') cableColor = '#00AA00';
-            else if (cableType === 'fiber16') cableColor = '#008800';
-            else if (cableType === 'fiber24') cableColor = '#006600';
-            
-            html += `<div class="cable-info" style="margin-bottom: 12px; padding: 16px; background: var(--bg-tertiary); border-radius: 8px; border-left: 4px solid ${cableColor};">`;
-            html += `<div class="cable-header" style="margin-bottom: 10px;">`;
-            html += `<h4 style="margin: 0; color: var(--text-primary); font-size: 0.9375rem;">${cableName ? escapeHtml(cableName) : `Кабель ${index + 1}`}: ${cableDescription}</h4>`;
-            html += `</div>`;
-
-            html += `<div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 8px;">`;
-            html += `<strong>Маршрут:</strong> ${escapeHtml(fromName)} → ${escapeHtml(toName)}`;
-            if (distance) {
-                html += ` <span style="color: var(--text-muted);">(${distance} м)</span>`;
+            html += '<article class="support-cable-item" style="--cable-accent:' + escapeHtml(cableColor) + '">';
+            html += '<div class="support-cable-item-head"><h5 class="support-cable-item-title">' + title + '</h5></div>';
+            html += '<div class="support-cable-route"><span class="support-cable-route-label">Маршрут</span> ';
+            html += '<span class="support-cable-route-path">' + escapeHtml(fromName) + ' → ' + escapeHtml(toName);
+            if (distance) html += ' <span class="support-cable-route-dist">(' + distance + ' м)</span>';
+            html += '</span></div>';
+            if (isCopper) {
+                html += '<p class="support-cable-copper-note">Медный кабель · жилы не отображаются</p>';
+            } else if (fibers.length) {
+                html += '<div class="support-fiber-chips">';
+                fibers.forEach(function(fiber) {
+                    var chipClass = 'support-fiber-chip';
+                    if (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00' || fiber.color === '#FFC0CB') {
+                        chipClass += ' support-fiber-chip--light';
+                    }
+                    html += '<span class="' + chipClass + '" title="' + escapeHtml(fiber.name || '') + '">';
+                    html += '<span class="support-fiber-chip-dot" style="background:' + fiber.color + ';border-color:' + (fiber.hasBlackRing ? '#000' : 'rgba(0,0,0,0.25)') + '"></span>';
+                    html += '<span class="support-fiber-chip-num">' + fiber.number + '</span>';
+                    html += '</span>';
+                });
+                html += '</div>';
             }
-            html += `</div>`;
-
-            html += `<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;">`;
-            fibers.forEach(fiber => {
-                const textColor = (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00' || fiber.color === '#FFC0CB') ? '#000' : '#fff';
-                html += `<div style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: var(--bg-card); border-radius: 4px; border: 1px solid var(--border-color);">`;
-                html += `<div style="width: 12px; height: 12px; border-radius: 50%; background: ${fiber.color}; border: ${fiber.hasBlackRing ? '2px solid #000' : '1px solid #333'};"></div>`;
-                html += `<span style="font-size: 0.75rem; color: var(--text-primary);">${fiber.number}</span>`;
-                html += `</div>`;
-            });
-            html += `</div>`;
-            
-            html += `</div>`;
+            html += '</article>';
         });
-        
         html += '</div>';
     }
+    html += '</section>';
 
     if (isEditMode) {
-        html += '<div class="object-actions-section" style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 8px;">';
-        html += '<button id="duplicateCurrentObject" class="btn-secondary" style="flex: 1; min-width: 120px;">';
+        html += '<div class="object-actions-section support-card-actions">';
+        html += '<button type="button" id="duplicateCurrentObject" class="btn-secondary">';
         html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
         html += ' Дублировать</button>';
-        html += '<button id="deleteCurrentObject" class="btn-danger" style="flex: 1; min-width: 120px;">';
+        html += '<button type="button" id="deleteCurrentObject" class="btn-danger">';
         html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
         html += ' Удалить</button>';
         html += '</div>';
     }
 
+    html += '</div>';
+    return html;
+}
+
+function showSupportInfo(supportObj) {
+    currentModalObject = supportObj;
+
+    var supportName = supportObj.properties.get('name') || '';
+    var waypointType = supportObj.properties.get('type');
+    var isAttachment = waypointType === 'attachment';
+    var copy = getSupportWaypointCopy(isAttachment);
+
+    document.getElementById('modalTitle').textContent = supportName ? (copy.typeLabel + ': ' + supportName) : copy.typeLabel;
+    updateInfoModalChrome(waypointType, supportName);
+
     var modalInfoEl = document.getElementById('modalInfo');
-    modalInfoEl.innerHTML = html;
+    modalInfoEl.innerHTML = buildSupportCardContent(supportObj, isEditMode);
     bindCableSplitSleeveFields(modalInfoEl);
 
     resetInfoModalFiberLayout();
     var modal = document.getElementById('infoModal');
     setupEditAndDeleteListeners();
-    if (modal) modal.style.display = 'block';
+    if (modal) {
+        modal.style.display = 'flex';
+        modal.classList.add('modal--centered');
+        if (typeof window.initPanelPlexusCanvases === 'function') {
+            requestAnimationFrame(function () { window.initPanelPlexusCanvases(modal); });
+        }
+    }
 }
 
 /** Обновить карточку объекта: опора и крепление — через showSupportInfo, остальные — showObjectInfo. */
@@ -9707,6 +9832,18 @@ function setupEditAndDeleteListeners() {
             updateNodeIcon(currentModalObject);
             updateNodeDisplay();
             saveData();
+            if (typeof updateInfoModalChrome === 'function') {
+                updateInfoModalChrome('node', currentModalObject.properties.get('name') || '');
+            }
+            var nodeCard = document.querySelector('.node-card');
+            if (nodeCard) {
+                nodeCard.classList.remove('node-card--network', 'node-card--aggregation');
+                nodeCard.classList.add(newNodeKind === 'aggregation' ? 'node-card--aggregation' : 'node-card--network');
+            }
+            var heroIcon = document.querySelector('.node-card-hero-icon');
+            if (heroIcon && window.MapIcons) {
+                heroIcon.innerHTML = MapIcons.buildIconSvg('node', { variant: 'normal', nodeKind: newNodeKind });
+            }
         });
     }
 
@@ -9719,6 +9856,17 @@ function setupEditAndDeleteListeners() {
         });
     }
 
+    var editOltNameInput = document.getElementById('editOltName');
+    if (editOltNameInput) {
+        editOltNameInput.addEventListener('input', function() {
+            if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
+            var newName = this.value.trim();
+            currentModalObject.properties.set('name', newName);
+            currentModalObject.properties.set('balloonContent', newName ? 'OLT: ' + newName : 'OLT (GPON)');
+            updateObjectLabel(currentModalObject, newName);
+            saveData();
+        });
+    }
     var editOltManufacturer = document.getElementById('editOltManufacturer');
     if (editOltManufacturer) {
         if (typeof preventPasswordSuggestions === 'function') preventPasswordSuggestions(editOltManufacturer);
@@ -10085,6 +10233,15 @@ function duplicateObject(obj) {
         opts.model = obj.properties.get('model') || '';
         opts.comment = obj.properties.get('comment') || '';
     }
+    if (type === 'camera' && window.CameraPlayer) {
+        var sc = CameraPlayer.getCameraStreamConfig(obj);
+        opts.streamType = sc.streamType;
+        opts.streamUrl = sc.streamUrl;
+        opts.streamUser = sc.streamUser;
+        opts.streamPass = sc.streamPass;
+        opts.streamAutoplay = sc.streamAutoplay;
+        opts.streamMuted = sc.streamMuted;
+    }
 
     createObject(type, newName, newCoords, Object.keys(opts).length ? opts : undefined);
 
@@ -10230,35 +10387,47 @@ function updateSupportLabelLegacy(placemark, name) {
 
 function updateNodeIcon(placemark) {
     if (!placemark || !placemark.properties) return;
-    const type = placemark.properties.get('type');
-    if (type !== 'node') return;
-    
-    const nodeKind = placemark.properties.get('nodeKind') || 'network';
-    const color = getNodeColorByKind(nodeKind);
-    
-    const iconSvg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="16" cy="16" r="14" fill="${color}" stroke="white" stroke-width="2.5"/>
-        <circle cx="16" cy="16" r="6" fill="white" opacity="0.95"/>
-        <circle cx="16" cy="16" r="3" fill="${color}"/>
-    </svg>`;
-    
-    const clickableSize = 44;
-    const iconSize = 32;
-    const iconOffset = (clickableSize - iconSize) / 2;
-    
-    const svgContent = iconSvg.replace(/<svg[^>]*>/, '').replace('</svg>', '');
-    const clickableSvg = `<svg width="${clickableSize}" height="${clickableSize}" viewBox="0 0 ${clickableSize} ${clickableSize}" xmlns="http://www.w3.org/2000/svg">
-        <rect x="0" y="0" width="${clickableSize}" height="${clickableSize}" fill="transparent"/>
-        <g transform="translate(${iconOffset}, ${iconOffset})">
-            ${svgContent}
-        </g>
-    </svg>`;
-    
-    const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(clickableSvg)));
-    
-    placemark.options.set('iconImageHref', svgDataUrl);
-    placemark.options.set('iconImageSize', [clickableSize, clickableSize]);
-    placemark.options.set('iconImageOffset', [-clickableSize / 2, -clickableSize / 2]);
+    if (placemark.properties.get('type') !== 'node') return;
+    if (selectedObjects.indexOf(placemark) >= 0) {
+        applyMapPlacemarkIcon(placemark, 'node', 'selected', placemark);
+    } else {
+        applyMapPlacemarkIcon(placemark, 'node', 'normal', placemark);
+    }
+}
+
+var STATS_COLLAPSED_STORAGE_KEY = 'networkMap_statsCollapsed';
+
+function setStatsSectionCollapsed(collapsed) {
+    var section = document.getElementById('statsSection');
+    var toggleBtn = document.getElementById('statsToggleBtn');
+    if (!section) return;
+    section.classList.toggle('stats-section--collapsed', collapsed);
+    if (toggleBtn) {
+        toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        toggleBtn.setAttribute('title', collapsed ? 'Показать статистику' : 'Скрыть статистику');
+        toggleBtn.setAttribute('aria-label', collapsed ? 'Показать статистику' : 'Скрыть статистику');
+    }
+    try {
+        localStorage.setItem(STATS_COLLAPSED_STORAGE_KEY, collapsed ? '1' : '0');
+    } catch (e) {}
+}
+
+function setupStatsToggle() {
+    var toggleBtn = document.getElementById('statsToggleBtn');
+    var section = document.getElementById('statsSection');
+    if (!toggleBtn || !section) return;
+
+    var initiallyCollapsed = true;
+    try {
+        var stored = localStorage.getItem(STATS_COLLAPSED_STORAGE_KEY);
+        if (stored === '0') initiallyCollapsed = false;
+        else if (stored === '1') initiallyCollapsed = true;
+    } catch (e) {}
+    if (initiallyCollapsed) setStatsSectionCollapsed(true);
+
+    toggleBtn.addEventListener('click', function() {
+        setStatsSectionCollapsed(!section.classList.contains('stats-section--collapsed'));
+    });
 }
 
 function setupSidebarToggle() {
@@ -10271,6 +10440,7 @@ function setupSidebarToggle() {
         
         toggleBtn.setAttribute('aria-label', collapsed ? 'Показать панель' : 'Скрыть панель');
         toggleBtn.setAttribute('title', collapsed ? 'Показать панель' : 'Скрыть панель');
+        toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
 
         if (typeof myMap !== 'undefined' && myMap && myMap.container) {
             setTimeout(function() {
@@ -12890,7 +13060,9 @@ function showFiberTrace(cableId, fiberNumber) {
     if (!modal || !modalContent) return;
     
     modalTitle.textContent = 'Трассировка жилы';
-    
+    resetInfoModalFiberLayout();
+    updateInfoModalChrome(null, '');
+
     let html = '<div class="trace-result" style="padding: 10px;">';
     html += '<div style="background: #e0f2fe; padding: 12px; border-radius: 8px; margin-bottom: 15px;">';
     html += '<strong>Маршрут жилы:</strong>';
@@ -12989,7 +13161,8 @@ function showFiberTrace(cableId, fiberNumber) {
     html += '</div>';
     
     modalContent.innerHTML = html;
-    modal.style.display = 'block';
+    modal.style.display = 'flex';
+    modal.classList.add('modal--centered');
 
     window.currentTracePath = path;
 }
@@ -15914,11 +16087,8 @@ function updateCrossDisplay() {
         const n = group.crosses.length;
         const crossGroupName = getCrossGroupName(coords);
         const crossLabelText = crossGroupName || (group.crosses.length + ' кр.');
-        const iconSvg = `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
-            <rect x="2" y="4" width="32" height="28" rx="4" fill="#8b5cf6" stroke="#a78bfa" stroke-width="2"/>
-            <text x="18" y="22" text-anchor="middle" fill="white" font-size="14" font-weight="bold">${n}</text>
-        </svg>`;
-        const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(iconSvg)));
+        const groupIcon = buildMapPlacemarkIcon('crossGroup', 'normal', { groupCount: n });
+        const svgDataUrl = groupIcon ? groupIcon.href : '';
         const crossLabelHtml = '<div class="map-label map-label-group">' + escapeHtml(crossLabelText) + '</div>';
         const crossLabel = new ymaps.Placemark(coords, { iconContent: crossLabelHtml }, {
             iconLayout: 'default#imageWithContent',
@@ -15940,8 +16110,8 @@ function updateCrossDisplay() {
         }, {
             iconLayout: 'default#image',
             iconImageHref: svgDataUrl,
-            iconImageSize: [36, 36],
-            iconImageOffset: [-18, -18],
+            iconImageSize: groupIcon ? groupIcon.iconImageSize : [36, 36],
+            iconImageOffset: groupIcon ? groupIcon.iconImageOffset : [-18, -18],
             zIndex: 2000,
             zIndexHover: 2000,
             hasBalloon: false,
@@ -16164,8 +16334,6 @@ function updateNodeDisplay() {
         const coords = group.coords;
         const n = displayNodes.length;
         const hasAggregation = displayNodes.some(function(nd) { return (nd.properties && nd.properties.get('nodeKind')) === 'aggregation'; });
-        const groupColor = hasAggregation ? '#ef4444' : '#22c55e';
-        const groupStroke = hasAggregation ? '#f87171' : '#4ade80';
         const nodeGroupName = getNodeGroupName(coords);
         const displayName = nodeGroupName || (n + ' уз.');
         const nodeLabelHtml = '<div class="map-label map-label-group">' + escapeHtml(displayName) + '</div>';
@@ -16181,11 +16349,8 @@ function updateNodeDisplay() {
             hasHint: false,
             cursor: 'default'
         });
-        const iconSvg = '<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">' +
-            '<circle cx="18" cy="18" r="16" fill="' + groupColor + '" stroke="' + groupStroke + '" stroke-width="2"/>' +
-            '<text x="18" y="23" text-anchor="middle" fill="white" font-size="14" font-weight="bold">' + n + '</text>' +
-            '</svg>';
-        const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(iconSvg)));
+        const nodeGroupIcon = buildMapPlacemarkIcon('nodeGroup', 'normal', { groupCount: n, hasAggregation: hasAggregation });
+        const svgDataUrl = nodeGroupIcon ? nodeGroupIcon.href : '';
         const groupPlacemark = new ymaps.Placemark(coords, {
             type: 'nodeGroup',
             nodeGroup: group.nodes,
@@ -16195,8 +16360,8 @@ function updateNodeDisplay() {
         }, {
             iconLayout: 'default#image',
             iconImageHref: svgDataUrl,
-            iconImageSize: [36, 36],
-            iconImageOffset: [-18, -18],
+            iconImageSize: nodeGroupIcon ? nodeGroupIcon.iconImageSize : [36, 36],
+            iconImageOffset: nodeGroupIcon ? nodeGroupIcon.iconImageOffset : [-18, -18],
             zIndex: 2000,
             zIndexHover: 2000,
             hasBalloon: false,
@@ -16334,6 +16499,134 @@ function updateNodeDisplay() {
     if (typeof applyMapFilter === 'function') applyMapFilter();
 }
 
+var MAP_FILTER_STORAGE_KEY = 'networkMap_mapFilter';
+var MAP_FILTER_INPUT_IDS = [
+    'mapFilterNode', 'mapFilterNodeAggregationOnly', 'mapFilterCross', 'mapFilterSleeve',
+    'mapFilterSupport', 'mapFilterAttachment', 'mapFilterOlt', 'mapFilterSplitter',
+    'mapFilterOnu', 'mapFilterCamera', 'mapFilterMediaConverter'
+];
+var MAP_FILTER_MAIN_KEYS = ['node', 'cross', 'sleeve', 'support', 'attachment', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter'];
+
+function syncMapFilterChipVisual(el) {
+    if (!el) return;
+    var chip = el.closest('.map-filter-chip');
+    if (!chip) return;
+    chip.classList.toggle('map-filter-chip--off', !el.checked);
+    chip.classList.toggle('map-filter-chip--disabled', !!el.disabled);
+}
+
+function syncMapFilterAggregationOnlyState() {
+    var nodeEl = document.getElementById('mapFilterNode');
+    var aggEl = document.getElementById('mapFilterNodeAggregationOnly');
+    if (!aggEl) return;
+    var nodeOn = nodeEl ? nodeEl.checked : true;
+    aggEl.disabled = !nodeOn;
+    if (!nodeOn) aggEl.checked = false;
+    syncMapFilterChipVisual(aggEl);
+}
+
+function updateMapFilterBadge() {
+    var badge = document.getElementById('mapFilterBadge');
+    if (!badge) return;
+    var state = typeof getMapFilterState === 'function' ? getMapFilterState() : {};
+    var enabled = 0;
+    MAP_FILTER_MAIN_KEYS.forEach(function(key) {
+        if (state[key]) enabled++;
+    });
+    var total = MAP_FILTER_MAIN_KEYS.length;
+    badge.textContent = enabled + '/' + total;
+    badge.classList.remove('map-filter-badge--partial', 'map-filter-badge--none');
+    if (enabled === 0) badge.classList.add('map-filter-badge--none');
+    else if (enabled < total) badge.classList.add('map-filter-badge--partial');
+}
+
+function saveMapFilterToStorage() {
+    try {
+        localStorage.setItem(MAP_FILTER_STORAGE_KEY, JSON.stringify(getMapFilterState()));
+    } catch (e) {}
+}
+
+var MAP_FILTER_KEY_TO_ID = {
+    node: 'mapFilterNode',
+    nodeAggregationOnly: 'mapFilterNodeAggregationOnly',
+    cross: 'mapFilterCross',
+    sleeve: 'mapFilterSleeve',
+    support: 'mapFilterSupport',
+    attachment: 'mapFilterAttachment',
+    olt: 'mapFilterOlt',
+    splitter: 'mapFilterSplitter',
+    onu: 'mapFilterOnu',
+    camera: 'mapFilterCamera',
+    mediaConverter: 'mapFilterMediaConverter'
+};
+
+function loadMapFilterFromStorage() {
+    try {
+        var raw = localStorage.getItem(MAP_FILTER_STORAGE_KEY);
+        if (!raw) return false;
+        var saved = JSON.parse(raw);
+        if (!saved || typeof saved !== 'object') return false;
+        Object.keys(MAP_FILTER_KEY_TO_ID).forEach(function(key) {
+            var el = document.getElementById(MAP_FILTER_KEY_TO_ID[key]);
+            if (el && typeof saved[key] === 'boolean') el.checked = saved[key];
+        });
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function setMapFilterAll(enabled) {
+    MAP_FILTER_INPUT_IDS.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        if (id === 'mapFilterNodeAggregationOnly') {
+            if (!enabled) el.checked = false;
+            return;
+        }
+        el.checked = !!enabled;
+        syncMapFilterChipVisual(el);
+    });
+    syncMapFilterAggregationOnlyState();
+    updateMapFilterBadge();
+    saveMapFilterToStorage();
+    if (typeof applyMapFilter === 'function') applyMapFilter();
+    if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
+}
+
+function onMapFilterChange(changedEl) {
+    if (changedEl && changedEl.id === 'mapFilterNode') syncMapFilterAggregationOnlyState();
+    syncMapFilterChipVisual(changedEl);
+    MAP_FILTER_INPUT_IDS.forEach(function(id) {
+        syncMapFilterChipVisual(document.getElementById(id));
+    });
+    updateMapFilterBadge();
+    saveMapFilterToStorage();
+    if (typeof applyMapFilter === 'function') applyMapFilter();
+    if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
+}
+
+function setupMapFilterControls() {
+    loadMapFilterFromStorage();
+    MAP_FILTER_INPUT_IDS.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        syncMapFilterChipVisual(el);
+        el.addEventListener('change', function() {
+            onMapFilterChange(el);
+        });
+    });
+    syncMapFilterAggregationOnlyState();
+    updateMapFilterBadge();
+
+    var showAllBtn = document.getElementById('mapFilterShowAll');
+    var hideAllBtn = document.getElementById('mapFilterHideAll');
+    if (showAllBtn) showAllBtn.addEventListener('click', function() { setMapFilterAll(true); });
+    if (hideAllBtn) hideAllBtn.addEventListener('click', function() { setMapFilterAll(false); });
+
+    if (typeof applyMapFilter === 'function') applyMapFilter();
+}
+
 function getMapFilterState() {
     var nodeEl = document.getElementById('mapFilterNode');
     var nodeAggEl = document.getElementById('mapFilterNodeAggregationOnly');
@@ -16442,6 +16735,7 @@ function applyMapFilter() {
     if (!myMap || !objects) return;
     var filter = getMapFilterState();
     mapFilter = filter;
+    if (typeof updateMapFilterBadge === 'function') updateMapFilterBadge();
     function isObjVisible(obj) {
         if (!obj || !obj.properties) return false;
         var type = obj.properties.get('type');
@@ -16596,10 +16890,19 @@ function buildFiberWorkspaceSidebarHtml(sleeveObj, isCross, cablesData, fiberCon
     const name = sleeveObj.properties.get('name') || '';
     const typeBadgeClass = isCross ? 'fiber-ws-type-badge--cross' : 'fiber-ws-type-badge--sleeve';
     const typeLabel = isCross ? 'Оптический кросс' : 'Кабельная муфта';
-    let h = '<div class="fiber-ws-card fiber-ws-card-head">';
+    const objType = isCross ? 'cross' : 'sleeve';
+    let iconBlock = '';
+    if (window.MapIcons) {
+        const nodeKind = !isCross && sleeveObj.properties ? (sleeveObj.properties.get('nodeKind') || 'network') : 'network';
+        iconBlock = '<div class="fiber-ws-head-icon">' + MapIcons.buildIconSvg(objType, { variant: 'normal', nodeKind: nodeKind }) + '</div>';
+    }
+    let h = '<div class="fiber-ws-card fiber-ws-card-head fiber-ws-card-head--' + objType + '">';
+    h += '<div class="fiber-ws-card-head-row">';
+    if (iconBlock) h += iconBlock;
+    h += '<div class="fiber-ws-card-head-text">';
     h += '<span class="fiber-ws-type-badge ' + typeBadgeClass + '">' + typeLabel + '</span>';
     h += '<div class="fiber-ws-side-title">' + escapeHtml(name || (isCross ? 'Кросс' : 'Муфта')) + '</div>';
-    h += '</div>';
+    h += '</div></div></div>';
 
     if (isEditMode) {
         h += '<div class="fiber-ws-card"><h4 class="fiber-ws-section-title">Редактирование</h4><div class="fiber-ws-side-edit">';
@@ -17121,7 +17424,8 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     if (isEditMode && fiberConnections.length > 0) {
         html += '<div id="fiber-conn-label-bar" class="fiber-conn-label-modal" hidden aria-hidden="true" role="dialog" aria-labelledby="fiber-conn-label-modal-title">';
         html += '<div class="fiber-conn-label-modal__backdrop" id="fiber-conn-label-bar-backdrop"></div>';
-        html += '<div class="fiber-conn-label-modal__panel">';
+        html += '<div class="fiber-conn-label-modal__panel panel-glass panel-glass--lite">';
+        html += '<div class="panel-glass-bg" aria-hidden="true"><div class="panel-glass-gradient"></div></div>';
         html += '<div class="fiber-conn-label-modal__header">';
         html += '<h3 id="fiber-conn-label-modal-title" class="fiber-conn-label-modal__title">Подпись сращивания</h3>';
         html += '<button type="button" id="fiber-conn-label-bar-close" class="fiber-conn-label-modal__close" title="Закрыть" aria-label="Закрыть">×</button>';

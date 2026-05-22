@@ -1,6 +1,23 @@
+var TOAST_HIDE_MS = 100;
+var TOAST_DEFAULT_MS = 1500;
+var TOAST_MAX_STACK = 2;
+
+function dismissToastElement(toast) {
+    if (!toast || !toast.parentElement || toast.classList.contains('toast-hiding')) return;
+    toast.classList.add('toast-hiding');
+    setTimeout(function() { toast.remove(); }, TOAST_HIDE_MS);
+}
+
+function trimToastStack(container) {
+    var stack = container.querySelectorAll('.toast:not(.toast-hiding)');
+    for (var i = 0; i < stack.length - TOAST_MAX_STACK; i++) {
+        dismissToastElement(stack[i]);
+    }
+}
+
 function showToast(message, type, title, duration) {
     type = type || 'info';
-    duration = duration !== undefined ? duration : 4000;
+    duration = duration !== undefined ? duration : TOAST_DEFAULT_MS;
     const container = document.getElementById('toastContainer');
     if (!container) return;
     const msg = (message == null || message === '') ? 'Произошла ошибка' : String(message);
@@ -19,32 +36,24 @@ function showToast(message, type, title, duration) {
     toast.querySelector('.toast-title').textContent = titleText;
     toast.querySelector('.toast-message').textContent = msg;
     container.appendChild(toast);
+    trimToastStack(container);
 
     var hideTimer = null;
-    var removeTimer = null;
     function scheduleAutoHide() {
         hideTimer = setTimeout(function() {
             hideTimer = null;
-            toast.classList.add('toast-hiding');
-            removeTimer = setTimeout(function() {
-                removeTimer = null;
-                toast.remove();
-            }, 300);
+            dismissToastElement(toast);
         }, duration);
     }
     function closeToast() {
         if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-        if (removeTimer) { clearTimeout(removeTimer); removeTimer = null; }
-        if (toast.parentElement) {
-            toast.classList.add('toast-hiding');
-            setTimeout(function() { toast.remove(); }, 300);
-        }
+        dismissToastElement(toast);
     }
     scheduleAutoHide();
     toast.querySelector('.toast-close').addEventListener('click', closeToast);
 }
 
 function showSuccess(message, title) { showToast(message, 'success', title || null); }
-function showError(message, title) { showToast(message, 'error', title || null, 6000); }
-function showWarning(message, title) { showToast(message, 'warning', title || null, 5000); }
+function showError(message, title) { showToast(message, 'error', title || null, 2400); }
+function showWarning(message, title) { showToast(message, 'warning', title || null, 2000); }
 function showInfo(message, title) { showToast(message, 'info', title || null); }

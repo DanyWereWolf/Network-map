@@ -24,10 +24,14 @@ html {
         flex: 1 1 auto;
         min-height: 0;
         order: 0;
+        padding: 0;
+        background: var(--bg-primary);
     }
 
     .map-area-wrapper .map {
         min-height: 0;
+        border-radius: 0;
+        box-shadow: none;
     }
 
     .sidebar {
@@ -110,7 +114,6 @@ html {
     #undoBtn,
     #redoBtn,
     #deviceCatalogBtn,
-    #updatesBtn,
     #historyBtn {
         display: none !important;
     }
@@ -328,17 +331,70 @@ html {
     .form-input,
     textarea.form-input {
         font-size: 16px;
-        min-height: 48px;
+        min-height: 44px;
+        padding: 10px 12px;
     }
 
-    .form-group textarea {
-        min-height: 100px;
+    .device-combobox-trigger {
+        min-height: 44px;
+        padding: 10px 12px;
+        font-size: 16px;
     }
 
+    .form-group textarea,
+    textarea.form-input {
+        min-height: 88px;
+    }
+
+    .map-filter-chips,
     .map-filter-checkboxes {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 8px 12px;
+        gap: 8px;
+    }
+
+    .map-filter-chip {
+        min-height: 44px;
+        touch-action: manipulation;
+    }
+
+    .map-filter-toolbar-btn {
+        min-height: 44px;
+        touch-action: manipulation;
+    }
+
+    .map-filter-note {
+        font-size: 0.8125rem;
+    }
+
+    .sidebar-controls-card {
+        margin-bottom: 10px;
+    }
+
+    .sidebar-controls-head {
+        padding: 10px;
+    }
+
+    .sidebar-controls-mode {
+        padding: 8px 10px 10px;
+    }
+
+    .map-filter-scroll {
+        max-height: min(240px, 40vh);
+    }
+
+    .accordion-section--embedded.active .accordion-content {
+        max-height: min(420px, 50vh);
+    }
+
+    .object-type-chip {
+        min-height: 44px;
+        touch-action: manipulation;
+    }
+
+    .btn-add-object {
+        min-height: 48px;
+        touch-action: manipulation;
     }
 
     .map-filter-check {
@@ -378,11 +434,12 @@ html {
 
     /* ---------- Toast ---------- */
     .toast-container {
-        left: max(10px, env(safe-area-inset-left, 0px));
-        right: max(10px, env(safe-area-inset-right, 0px));
+        left: 50%;
+        right: auto;
         top: max(10px, env(safe-area-inset-top, 0px));
-        width: auto;
-        align-items: stretch;
+        transform: translateX(-50%);
+        width: min(400px, calc(100vw - 20px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+        align-items: center;
     }
 
     .toast {
@@ -396,15 +453,44 @@ html {
         min-height: 44px;
     }
 
-    /* ---------- История / списки ---------- */
-    .history-modal-content .modal-body,
-    #historyModal .modal-body {
+    /* ---------- Журнал изменений ---------- */
+    .history-modal-content {
+        width: calc(100% - 16px);
+        max-width: 100%;
+    }
+
+    .history-modal-body {
         padding: 12px;
     }
 
-    .history-filter-btn {
+    .history-toolbar {
+        flex-direction: column;
+    }
+
+    .history-clear-btn {
+        width: 100%;
+        justify-content: center;
         min-height: 40px;
+    }
+
+    .history-filter-fields {
+        grid-template-columns: 1fr;
+    }
+
+    .history-category-chip,
+    .history-filter-btn {
+        min-height: 38px;
         padding: 8px 12px;
+    }
+
+    .history-list {
+        max-height: min(48dvh, 360px);
+    }
+
+    .history-item-head {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
     }
 
     /* ---------- Трассировка в модалке ---------- */
@@ -457,7 +543,10 @@ html {
         padding: 14px 12px;
     }
 
-    .map-filter-checkboxes {
+    .map-filter-chips,
+    .map-filter-checkboxes,
+    .object-type-chips,
+    .cable-type-picker {
         grid-template-columns: 1fr;
     }
 

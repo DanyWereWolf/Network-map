@@ -5,6 +5,7 @@ const os = require('os');
 const cors = require('cors');
 const WebSocket = require('ws');
 const db = require('./database');
+const avatars = require('./avatars');
 
 function loadServerConfig() {
     let config = {};
@@ -178,10 +179,8 @@ function getSessionByToken(token) {
     return user ? { userId: user.id, organizationId: user.organizationId != null ? user.organizationId : (ses.organization_id || null) } : null;
 }
 
-function getSessionUser(req) {
-    const auth = req.headers.authorization;
-    if (!auth || !auth.startsWith('Bearer ')) return null;
-    const token = auth.slice(7);
+function getSessionUserFromToken(token) {
+    if (!token) return null;
     const sessions = db.getDb().prepare('SELECT user_id, organization_id FROM sessions WHERE token = ? AND expires_at > datetime(\'now\')').all(token);
     if (sessions.length === 0) return null;
     const users = db.getUsers();
@@ -196,6 +195,7 @@ function getSessionUser(req) {
         fullName: user.fullName || user.full_name,
         role: user.role,
         organizationId: organizationId,
+        avatarUrl: avatars.getAvatarApiPath(user.id, user.avatarUpdatedAt),
         organization: organization ? {
             id: organization.id,
             name: organization.name,
@@ -203,6 +203,36 @@ function getSessionUser(req) {
             mapLimits: mapLimits,
             concurrentUsers: getConcurrentUsersPayload(organizationId)
         } : null
+    };
+}
+
+function getSessionUser(req) {
+    const auth = req.headers.authorization;
+    if (!auth || !auth.startsWith('Bearer ')) return null;
+    return getSessionUserFromToken(auth.slice(7));
+}
+
+function canViewUserAvatar(viewer, targetUserId) {
+    if (!viewer || targetUserId == null) return false;
+    if (String(viewer.userId) === String(targetUserId)) return true;
+    if (viewer.role !== 'admin') return false;
+    const users = db.getUsers();
+    const target = users.find(function(u) { return String(u.id) === String(targetUserId); });
+    if (!target) return false;
+    if (isGlobalAdmin(viewer)) return true;
+    return !!(target.organizationId && viewer.organizationId && target.organizationId === viewer.organizationId);
+}
+
+function userToClientFields(u) {
+    return {
+        id: u.id,
+        username: u.username,
+        fullName: u.fullName || u.full_name,
+        role: u.role,
+        status: u.status || 'approved',
+        createdAt: u.createdAt,
+        organizationId: u.organizationId || null,
+        avatarUrl: avatars.getAvatarApiPath(u.id, u.avatarUpdatedAt)
     };
 }
 
@@ -338,6 +368,7 @@ app.post('/api/auth/login', (req, res) => {
             fullName: user.fullName || user.full_name,
             role: user.role,
             organizationId: organizationId,
+            avatarUrl: avatars.getAvatarApiPath(user.id, user.avatarUpdatedAt),
             organization: organization ? {
                 id: organization.id,
                 name: organization.name,
@@ -834,15 +865,66 @@ app.get('/api/users', (req, res) => {
     const allOrgs = db.getOrganizations();
     const orgs = isGlobal ? allOrgs : allOrgs.filter(o => o.id === user.organizationId);
     const safe = users.map(u => {
-        var o = { id: u.id, username: u.username, fullName: u.fullName || u.full_name, role: u.role, status: u.status || 'approved', createdAt: u.createdAt };
+        var o = userToClientFields(u);
         if (u.organizationId) {
-            o.organizationId = u.organizationId;
             var org = orgs.find(function(x) { return x.id === u.organizationId; });
             o.organizationName = org ? org.name : null;
         }
         return o;
     });
     res.json({ users: safe, organizations: orgs });
+});
+
+function avatarUserIdFromRouteParam(param) {
+    var s = String(param || '');
+    try { s = decodeURIComponent(s); } catch (e) {}
+    return s.replace(/\.(jpe?g|png|webp|gif)$/i, '');
+}
+
+app.get('/api/avatars/:userId', (req, res) => {
+    const token = (req.headers.authorization && req.headers.authorization.startsWith('Bearer '))
+        ? req.headers.authorization.slice(7)
+        : (req.query && req.query.token ? String(req.query.token) : '');
+    const viewer = getSessionUserFromToken(token);
+    if (!viewer) return res.status(401).end();
+    const userId = avatarUserIdFromRouteParam(req.params.userId);
+    if (!canViewUserAvatar(viewer, userId)) return res.status(403).end();
+    const file = avatars.findAvatarFile(userId);
+    if (!file) return res.status(404).end();
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.type(avatars.mimeForExt(path.extname(file)));
+    res.sendFile(path.resolve(file));
+});
+
+app.post('/api/users/me/avatar', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    const parsed = avatars.parseAvatarPayload(req.body);
+    if (!parsed) return res.status(400).json({ error: 'Некорректное изображение. Допустимы JPG, PNG, WebP или GIF до 2 МБ.' });
+    const users = db.getUsers();
+    const i = users.findIndex(function(u) { return String(u.id) === String(user.userId); });
+    if (i === -1) return res.status(404).json({ error: 'Пользователь не найден' });
+    try {
+        avatars.saveUserAvatar(user.userId, parsed.buffer, parsed.ext);
+        users[i].avatarUpdatedAt = Date.now();
+        db.setUsers(users);
+        const avatarUrl = avatars.getAvatarApiPath(users[i].id, users[i].avatarUpdatedAt);
+        res.json({ ok: true, avatarUrl: avatarUrl });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.delete('/api/users/me/avatar', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    const users = db.getUsers();
+    const i = users.findIndex(function(u) { return String(u.id) === String(user.userId); });
+    if (i === -1) return res.status(404).json({ error: 'Пользователь не найден' });
+    avatars.removeAvatarFiles(user.userId);
+    delete users[i].avatarUpdatedAt;
+    db.setUsers(users);
+    res.json({ ok: true, avatarUrl: null });
 });
 
 app.post('/api/users/approve', (req, res) => {

@@ -587,6 +587,27 @@
         tr:last-child td {
             border-bottom: none;
         }
+        .admin-user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #fff;
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            overflow: hidden;
+            vertical-align: middle;
+        }
+        .admin-user-avatar .avatar-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+            display: block;
+        }
         .pill {
             display: inline-flex;
             align-items: center;
@@ -1053,7 +1074,7 @@
                             <li>Список организаций: лимиты объектов и сессий, контактная почта, число объектов на карте (узлы, кроссы, муфты — без кабелей).</li>
                             <li>«Настроить» открывает блок лимитов для выбранной организации ниже.</li>
                             <li>«Удалить» безвозвратно удаляет организацию, карту, историю и пользователей этой организации.</li>
-                            <li>Роли и список пользователей по-прежнему ведутся в приложении карты (модальное окно «Пользователи»).</li>
+                            <li>Роли и редактирование пользователей — в приложении карты (модальное окно «Пользователи»). Ниже — сводный список с аватарами (только просмотр).</li>
                         </ul>
                         </details>
                     </div>
@@ -1127,6 +1148,26 @@
                             </div>
                         </div>
                         <button class="btn-sm-primary" id="pricingSaveBtn">Сохранить лимиты организации</button>
+                    </div>
+                    <div style="margin-top:22px;padding-top:18px;border-top:1px solid rgba(15,23,42,0.08);">
+                        <h3 class="panel-title" style="font-size:0.95rem;margin-bottom:12px;">Пользователи платформы</h3>
+                        <p class="hint" style="margin:0 0 10px;">Аватары загружаются в личном кабинете приложения карты. Здесь — просмотр всех учётных записей.</p>
+                        <div class="table-wrap" style="max-height:320px;overflow:auto;margin-bottom:12px;">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="width:48px;"></th>
+                                        <th>Имя / логин</th>
+                                        <th>Роль</th>
+                                        <th>Организация</th>
+                                        <th>Статус</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="adminUsersTableBody">
+                                    <tr><td colspan="5" class="text-muted">Загрузка…</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                     <div style="margin-top:22px;padding-top:18px;border-top:1px solid rgba(15,23,42,0.08);">
                         <h3 class="panel-title" style="font-size:0.95rem;margin-bottom:12px;">Сброс пароля пользователя</h3>
@@ -2153,6 +2194,56 @@
             });
         }
 
+        function adminAvatarSrc(avatarUrl) {
+            if (!avatarUrl) return '';
+            var path = avatarUrl.charAt(0) === '/' ? avatarUrl : '/' + avatarUrl;
+            var url = path;
+            var token = getAuthToken && getAuthToken();
+            if (token) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(token);
+            return url;
+        }
+
+        function adminUserAvatarCell(u) {
+            var initial = String((u.fullName || u.username || '?')).charAt(0).toUpperCase();
+            if (u.avatarUrl && getAuthToken && getAuthToken()) {
+                return '<span class="admin-user-avatar has-avatar-image"><img class="avatar-img" src="' + escapeHtml(adminAvatarSrc(u.avatarUrl)) + '" alt=""></span>';
+            }
+            return '<span class="admin-user-avatar">' + escapeHtml(initial) + '</span>';
+        }
+
+        function renderAdminUsersTable() {
+            var tbody = document.getElementById('adminUsersTableBody');
+            if (!tbody) return;
+            var list = (cachedUsers || []).slice().sort(function(a, b) {
+                return String(a.username || '').localeCompare(String(b.username || ''), 'ru');
+            });
+            if (!list.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-muted">Нет пользователей</td></tr>';
+                return;
+            }
+            tbody.innerHTML = '';
+            list.forEach(function(u) {
+                var orgName = '—';
+                if (u.organizationId && orgs && orgs.length) {
+                    var o = orgs.find(function(x) { return x.id === u.organizationId; });
+                    orgName = o ? (o.name || u.organizationId) : u.organizationId;
+                } else if (u.organizationName) {
+                    orgName = u.organizationName;
+                }
+                var roleLabel = u.role === 'admin' ? 'Администратор' : 'Пользователь';
+                var status = u.status || 'approved';
+                var statusLabel = status === 'pending' ? 'Ожидает' : (status === 'rejected' ? 'Отклонён' : 'Активен');
+                var tr = document.createElement('tr');
+                tr.innerHTML =
+                    '<td>' + adminUserAvatarCell(u) + '</td>' +
+                    '<td><strong>' + escapeHtml(u.fullName || u.username || '—') + '</strong><br><span class="text-muted">@' + escapeHtml(u.username || '') + '</span></td>' +
+                    '<td>' + escapeHtml(roleLabel) + '</td>' +
+                    '<td>' + escapeHtml(orgName) + '</td>' +
+                    '<td>' + escapeHtml(statusLabel) + '</td>';
+                tbody.appendChild(tr);
+            });
+        }
+
         function fetchUsersCached() {
             var token = getAuthToken && getAuthToken();
             var headers = { 'Content-Type': 'application/json' };
@@ -2161,6 +2252,7 @@
                 .then(function(r) { return r.ok ? r.json() : { users: [] }; })
                 .then(function(body) {
                     cachedUsers = (body && Array.isArray(body.users)) ? body.users : [];
+                    renderAdminUsersTable();
                 });
         }
 

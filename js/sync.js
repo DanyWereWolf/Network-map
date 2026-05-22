@@ -107,6 +107,19 @@
         doApplyPendingState();
     }
 
+    function getSyncUrl() {
+        var urlInput = document.getElementById('syncServerUrl');
+        var url = (urlInput && urlInput.value) ? urlInput.value.trim() : '';
+        if (!url) {
+            try {
+                var saved = sessionStorage.getItem(SYNC_URL_KEY);
+                if (saved && saved.trim()) url = saved.trim();
+            } catch (e) {}
+        }
+        if (!url) url = getDefaultSyncUrl();
+        return url;
+    }
+
     function loadSavedSyncUrl() {
         var urlInput = document.getElementById('syncServerUrl');
         if (!urlInput) return;
@@ -118,9 +131,7 @@
     }
 
     function connect() {
-        var urlInput = document.getElementById('syncServerUrl');
-        var url = (urlInput && urlInput.value) ? urlInput.value.trim() : '';
-        if (!url) url = getDefaultSyncUrl();
+        var url = getSyncUrl();
         if (ws && ws.readyState === WebSocket.OPEN) {
             disconnect();
             return;
