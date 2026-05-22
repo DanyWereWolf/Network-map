@@ -19,6 +19,18 @@
             } catch (e) {}
         })();
     </script>
+    <script>
+        (function(){
+            var base = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : '';
+            if (!base || base === 'null') base = '';
+            fetch(base + '/api/public-config').then(function(r){ return r.json(); }).catch(function(){ return {}; }).then(function(c){
+                var key = (c && c.yandexMapsApiKey) ? String(c.yandexMapsApiKey).trim() : '';
+                var s = document.createElement('script');
+                s.src = 'https://api-maps.yandex.ru/2.1/?apikey=' + encodeURIComponent(key) + '&lang=ru_RU';
+                document.head.appendChild(s);
+            });
+        })();
+    </script>
     <link rel="stylesheet" href="auth.css">
     <link rel="stylesheet" href="cookie-consent.css">
     <link rel="stylesheet" href="maintenance-notice.css">
@@ -133,6 +145,7 @@
                 </button>
 
                 <div class="auth-footer">
+                    <p>Нет аккаунта? <a href="auth.html?register=1">Создать организацию</a></p>
                     <a href="pricing.html" class="auth-main-link">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="15 18 9 12 15 6"></polyline>
@@ -178,7 +191,7 @@
                         </svg>
                         <input type="text" id="regOrganizationName" placeholder="Например, ООО «Провайдер»" required minlength="3">
                     </div>
-                    <small class="hint">Для каждой регистрации создаётся отдельная организация с пробным периодом 14 дней и лимитом 1 одновременного пользователя.</small>
+                    <small class="hint" id="regOrgLimitsHint">Для каждой регистрации создаётся отдельная организация: бесплатно, с лимитами по умолчанию (объекты на карте и одновременные пользователи).</small>
                 </div>
 
                 <div class="form-group">
@@ -191,6 +204,21 @@
                         <input type="email" id="regContactEmail" placeholder="name@company.ru" required autocomplete="email">
                     </div>
                     <small class="hint">Используется для уведомлений и связи по вопросам подписки.</small>
+                </div>
+
+                <div class="form-group reg-map-group">
+                    <label for="regMapPicker">Расположение карты</label>
+                    <p class="hint reg-map-hint">Укажите город или район, где будет ваша карта. Ищите адрес в строке поиска, кликайте по карте или перетаскивайте метку.</p>
+                    <div class="reg-map-picker-wrap">
+                        <div id="regMapPicker" class="reg-map-picker" role="application" aria-label="Выбор расположения карты"></div>
+                    </div>
+                    <div class="reg-map-toolbar">
+                        <button type="button" class="btn-secondary btn-sm" id="regMapGeolocateBtn">Моё местоположение</button>
+                        <span id="regMapCoordsLabel" class="reg-map-coords" aria-live="polite"></span>
+                    </div>
+                    <input type="hidden" id="regMapLat" value="54.663609">
+                    <input type="hidden" id="regMapLon" value="86.162243">
+                    <input type="hidden" id="regMapZoom" value="15">
                 </div>
 
                 <div class="form-group">
@@ -247,5 +275,23 @@
     <script src="js/core/page-bg-plexus.js"></script>
     <script src="js/core/cookie-consent.js"></script>
     <script src="js/core/maintenance-notice.js"></script>
+    <script>
+    (function() {
+        var api = typeof getApiBase === 'function' ? getApiBase() : '';
+        var base = api || (window.location && window.location.origin ? window.location.origin : '');
+        if (!base) return;
+        fetch(base + '/api/pricing', { cache: 'no-store' })
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(body) {
+                var hint = document.getElementById('regOrgLimitsHint');
+                if (!hint || !body) return;
+                var lim = body.freeMapObjectLimit != null ? body.freeMapObjectLimit : 2000;
+                var mc = body.defaultMaxConcurrentUsers != null ? body.defaultMaxConcurrentUsers : 4;
+                hint.textContent = 'Для каждой регистрации создаётся отдельная организация: бесплатно, до ' + lim +
+                    ' объектов на карте и до ' + mc + ' одновременных пользователей.';
+            })
+            .catch(function() {});
+    })();
+    </script>
 </body>
 </html>

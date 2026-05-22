@@ -112,7 +112,184 @@ function loginUser(username, password, rememberMe) {
     }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
 }
 
-function registerUser(username, password, fullName, organizationName, contactEmail, planId) {
+var REGISTER_MAP_DEFAULT = { center: [54.663609, 86.162243], zoom: 15 };
+var registerMapInstance = null;
+var registerMapPlacemark = null;
+var registerMapSyncFromPan = false;
+var registerMapCoordsTimer = null;
+
+function whenYmapsReady(cb) {
+    if (window.ymaps) { window.ymaps.ready(cb); return; }
+    var attempts = 0;
+    var timer = setInterval(function() {
+        attempts++;
+        if (window.ymaps) {
+            clearInterval(timer);
+            window.ymaps.ready(cb);
+        } else if (attempts > 100) {
+            clearInterval(timer);
+        }
+    }, 100);
+}
+
+function normalizeMapCoords(center) {
+    if (!center) return null;
+    var lat = Array.isArray(center) ? center[0] : (center.lat != null ? (typeof center.lat === 'function' ? center.lat() : center.lat) : center[0]);
+    var lon = Array.isArray(center) ? center[1] : (center.lng != null ? (typeof center.lng === 'function' ? center.lng() : center.lng) : center[1]);
+    lat = Number(lat);
+    lon = Number(lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+    return [lat, lon];
+}
+
+function setRegisterMapCoords(coords, zoom) {
+    var normalized = normalizeMapCoords(coords);
+    if (!normalized) return;
+    var latEl = document.getElementById('regMapLat');
+    var lonEl = document.getElementById('regMapLon');
+    var zoomEl = document.getElementById('regMapZoom');
+    var labelEl = document.getElementById('regMapCoordsLabel');
+    if (latEl) latEl.value = String(normalized[0]);
+    if (lonEl) lonEl.value = String(normalized[1]);
+    if (zoomEl && typeof zoom === 'number' && Number.isFinite(zoom)) zoomEl.value = String(Math.max(1, Math.min(21, Math.round(zoom))));
+    if (labelEl) labelEl.textContent = normalized[0].toFixed(5) + ', ' + normalized[1].toFixed(5);
+}
+
+function syncRegisterMapCoordsFromMap() {
+    if (!registerMapInstance) return getRegisterMapStart();
+    var coords = normalizeMapCoords(registerMapInstance.getCenter());
+    var zoom = registerMapInstance.getZoom();
+    if (coords) {
+        if (registerMapPlacemark) registerMapPlacemark.geometry.setCoordinates(coords);
+        setRegisterMapCoords(coords, zoom);
+    }
+    return getRegisterMapStart();
+}
+
+function getRegisterMapStart() {
+    if (registerMapInstance) {
+        var coords = normalizeMapCoords(registerMapInstance.getCenter());
+        var zoom = registerMapInstance.getZoom();
+        if (coords) {
+            setRegisterMapCoords(coords, zoom);
+            return { center: coords, zoom: typeof zoom === 'number' && Number.isFinite(zoom) ? Math.max(1, Math.min(21, zoom)) : 15 };
+        }
+    }
+    var lat = parseFloat(document.getElementById('regMapLat') && document.getElementById('regMapLat').value);
+    var lon = parseFloat(document.getElementById('regMapLon') && document.getElementById('regMapLon').value);
+    var zoomVal = parseInt(document.getElementById('regMapZoom') && document.getElementById('regMapZoom').value, 10);
+    var coordsFromInput = normalizeMapCoords([lat, lon]);
+    if (!coordsFromInput) coordsFromInput = REGISTER_MAP_DEFAULT.center.slice();
+    return {
+        center: coordsFromInput,
+        zoom: Number.isFinite(zoomVal) && zoomVal >= 1 && zoomVal <= 21 ? zoomVal : REGISTER_MAP_DEFAULT.zoom
+    };
+}
+
+function destroyRegisterMapPicker() {
+    if (registerMapInstance) {
+        try { registerMapInstance.destroy(); } catch (e) {}
+        registerMapInstance = null;
+        registerMapPlacemark = null;
+    }
+}
+
+function initRegisterMapPicker() {
+    var container = document.getElementById('regMapPicker');
+    if (!container) return;
+    setRegisterMapCoords(REGISTER_MAP_DEFAULT.center, REGISTER_MAP_DEFAULT.zoom);
+    whenYmapsReady(function() {
+        if (!document.getElementById('regMapPicker') || registerMapInstance) return;
+        var start = getRegisterMapStart();
+        registerMapInstance = new ymaps.Map('regMapPicker', {
+            center: start.center,
+            zoom: start.zoom,
+            controls: ['zoomControl', 'searchControl']
+        });
+        try { registerMapInstance.behaviors.disable('scrollZoom'); } catch (e) {}
+        registerMapPlacemark = new ymaps.Placemark(start.center, {}, {
+            preset: 'islands#blueCircleDotIcon',
+            draggable: true
+        });
+        registerMapInstance.geoObjects.add(registerMapPlacemark);
+        registerMapPlacemark.events.add('dragend', function() {
+            registerMapSyncFromPan = true;
+            var coords = normalizeMapCoords(registerMapPlacemark.geometry.getCoordinates());
+            if (coords) {
+                setRegisterMapCoords(coords, registerMapInstance.getZoom());
+                registerMapInstance.setCenter(coords, registerMapInstance.getZoom(), { duration: 200 });
+            }
+            setTimeout(function() { registerMapSyncFromPan = false; }, 300);
+        });
+        registerMapInstance.events.add('click', function(e) {
+            var coords = normalizeMapCoords(e.get('coords'));
+            if (!coords) return;
+            registerMapPlacemark.geometry.setCoordinates(coords);
+            setRegisterMapCoords(coords, registerMapInstance.getZoom());
+        });
+        registerMapInstance.events.add('actionend', function() {
+            if (registerMapSyncFromPan) return;
+            var coords = normalizeMapCoords(registerMapInstance.getCenter());
+            if (!coords) return;
+            registerMapPlacemark.geometry.setCoordinates(coords);
+            setRegisterMapCoords(coords, registerMapInstance.getZoom());
+        });
+        registerMapInstance.events.add('boundschange', function() {
+            if (registerMapSyncFromPan) return;
+            if (registerMapCoordsTimer) clearTimeout(registerMapCoordsTimer);
+            registerMapCoordsTimer = setTimeout(function() {
+                registerMapCoordsTimer = null;
+                var coords = normalizeMapCoords(registerMapInstance.getCenter());
+                if (!coords) return;
+                if (registerMapPlacemark) registerMapPlacemark.geometry.setCoordinates(coords);
+                setRegisterMapCoords(coords, registerMapInstance.getZoom());
+            }, 200);
+        });
+        setTimeout(function() {
+            try { registerMapInstance.container.fitToViewport(); } catch (e) {}
+        }, 200);
+    });
+}
+
+function moveRegisterMapTo(coords, zoom) {
+    var normalized = normalizeMapCoords(coords);
+    if (!normalized) return;
+    var z = typeof zoom === 'number' && Number.isFinite(zoom) ? zoom : (registerMapInstance ? registerMapInstance.getZoom() : REGISTER_MAP_DEFAULT.zoom);
+    setRegisterMapCoords(normalized, z);
+    if (!registerMapInstance || !registerMapPlacemark) {
+        whenYmapsReady(function() {
+            if (!registerMapInstance) initRegisterMapPicker();
+            var attempts = 0;
+            var wait = setInterval(function() {
+                attempts++;
+                if (registerMapInstance && registerMapPlacemark) {
+                    clearInterval(wait);
+                    registerMapPlacemark.geometry.setCoordinates(normalized);
+                    registerMapInstance.setCenter(normalized, z, { duration: 300 });
+                } else if (attempts > 80) {
+                    clearInterval(wait);
+                }
+            }, 50);
+        });
+        return;
+    }
+    registerMapPlacemark.geometry.setCoordinates(normalized);
+    registerMapInstance.setCenter(normalized, z, { duration: 300 });
+}
+
+function tryRegisterMapGeolocation() {
+    if (!navigator.geolocation) {
+        showMessage('Геолокация недоступна в этом браузере', 'error');
+        return;
+    }
+    navigator.geolocation.getCurrentPosition(function(pos) {
+        moveRegisterMapTo([pos.coords.latitude, pos.coords.longitude], 14);
+    }, function() {
+        showMessage('Не удалось определить местоположение', 'error');
+    }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
+}
+
+function registerUser(username, password, fullName, organizationName, contactEmail, mapStart) {
     if (username.length < 3) return Promise.resolve({ success: false, error: 'Имя пользователя должно быть не менее 3 символов' });
     if (!organizationName || organizationName.trim().length < 3) return Promise.resolve({ success: false, error: 'Укажите название организации (не менее 3 символов)' });
     if (password.length < 6) return Promise.resolve({ success: false, error: 'Пароль должен быть не менее 6 символов' });
@@ -120,8 +297,9 @@ function registerUser(username, password, fullName, organizationName, contactEma
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return Promise.resolve({ success: false, error: 'Укажите корректный e-mail для связи' });
     if (!getApiBase()) return Promise.resolve({ success: false, error: 'Запустите сервер: npm run api, затем откройте http://localhost:3000' });
     var body = { username: username, password: password, fullName: fullName || username, organizationName: String(organizationName).trim(), contactEmail: email };
-    var pid = planId != null && String(planId).trim() ? String(planId).trim() : '';
-    if (pid) body.planId = pid;
+    var start = mapStart && Array.isArray(mapStart.center) && mapStart.center.length >= 2 ? mapStart : null;
+    if (!start) start = getRegisterMapStart();
+    body.mapStart = start;
     return fetch(getApiBase() + '/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -132,7 +310,7 @@ function registerUser(username, password, fullName, organizationName, contactEma
     }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
 }
 
-/** Ссылка с лендинга / checkout: ?trial=1 и/или ?plan=<id тарифа из витрины>. */
+/** Устаревшие параметры URL регистрации с лендинга (?trial=1, ?plan=…) — игнорируются. */
 var registerPlanFromLanding = {
     wantsTrialLink: false,
     planQuery: '',
@@ -370,6 +548,7 @@ function switchForm(formType) {
     const loginForm = document.getElementById('loginForm');
     const registerForm = document.getElementById('registerForm');
     const message = document.getElementById('authMessage');
+    const authContainer = document.querySelector('.auth-container');
     
     message.className = 'auth-message';
     message.textContent = '';
@@ -377,9 +556,13 @@ function switchForm(formType) {
     if (formType === 'login') {
         loginForm.classList.add('active');
         registerForm.classList.remove('active');
+        if (authContainer) authContainer.classList.remove('auth-register-active');
+        destroyRegisterMapPicker();
     } else {
         loginForm.classList.remove('active');
         registerForm.classList.add('active');
+        if (authContainer) authContainer.classList.add('auth-register-active');
+        initRegisterMapPicker();
     }
 }
 
@@ -423,11 +606,23 @@ document.addEventListener('DOMContentLoaded', function() {
             }, {});
             registerPlanFromLanding.wantsTrialLink = search.trial === '1';
             registerPlanFromLanding.planQuery = search.plan ? String(search.plan).trim() : '';
-            if (registerPlanFromLanding.wantsTrialLink || registerPlanFromLanding.planQuery) {
+            var openRegister = search.register === '1' || search.register === 'true' ||
+                registerPlanFromLanding.wantsTrialLink || !!registerPlanFromLanding.planQuery;
+            if (openRegister) {
                 switchForm('register');
-                ensureRegisterPlanPrefetchFromLanding();
+                if (registerPlanFromLanding.planQuery || registerPlanFromLanding.wantsTrialLink) {
+                    ensureRegisterPlanPrefetchFromLanding();
+                }
             }
         } catch (e) {}
+    }
+
+    var regMapGeolocateBtn = document.getElementById('regMapGeolocateBtn');
+    if (regMapGeolocateBtn) {
+        regMapGeolocateBtn.addEventListener('click', function() {
+            if (!registerMapInstance) initRegisterMapPicker();
+            tryRegisterMapGeolocation();
+        });
     }
 
     const loginForm = document.getElementById('loginForm');
@@ -465,11 +660,8 @@ document.addEventListener('DOMContentLoaded', function() {
             var password = document.getElementById('regPassword').value;
             var passwordConfirm = document.getElementById('regPasswordConfirm').value;
             if (password !== passwordConfirm) { showMessage('Пароли не совпадают', 'error'); return; }
-            var regChain = (registerPlanFromLanding.wantsTrialLink || registerPlanFromLanding.planQuery)
-                ? ensureRegisterPlanPrefetchFromLanding().then(function() {
-                    return registerUser(username, password, fullName, organizationName, contactEmail, resolvePlanIdToSendForRegister());
-                })
-                : registerUser(username, password, fullName, organizationName, contactEmail, null);
+            var mapStart = syncRegisterMapCoordsFromMap();
+            var regChain = registerUser(username, password, fullName, organizationName, contactEmail, mapStart);
             Promise.resolve(regChain).then(function(result) {
                 if (result.success) {
                     if (result.organizationId) {

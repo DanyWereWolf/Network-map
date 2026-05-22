@@ -195,6 +195,11 @@ function checkAuth() {
     }
     
     currentUser = session;
+    if (session.organization && session.organization.mapLimits) {
+        applyMapLimitsCache(session.organization.mapLimits);
+    } else {
+        refreshMapLimitsFromServer();
+    }
     return true;
 }
 
@@ -290,6 +295,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 50);
     }
     whenYmapsReady(init);
+    refreshMapLimitsFromServer();
 
     // Авто‑подключение к синхронизации для организации при входе на карту,
     // только если ещё нет сохранённого адреса sync-сервера
@@ -405,26 +411,129 @@ function initUserUI() {
     if (typeof updateHistoryBadge === 'function') updateHistoryBadge();
 }
 
-function getPlanDisplayName(planId) {
-    var names = {
-        trial: 'Пробный',
-        basic: 'Базовый',
-        pro: 'Про',
-        enterprise: 'Корпоративный'
-    };
-    return names[planId] || (planId ? String(planId) : '—');
+var mapLimitsCache = { count: 0, limit: 2000, unlocked: false, remaining: 2000, defaultFreeLimit: 2000 };
+var MAP_LIMIT_WARN_RATIO = 0.98;
+var MAP_LIMIT_BANNER_DISMISS_KEY = 'mapLimitBannerDismissedCount';
+var mapLimitBannerCloseBound = false;
+var OWNER_CONTACT_EMAIL = 'danil.sechin3@gmail.com';
+var OWNER_CONTACT_MAILTO = 'mailto:' + OWNER_CONTACT_EMAIL + '?subject=' + encodeURIComponent('Снятие лимита объектов — Карта оптической сети');
+
+function getOwnerContactPageUrl() {
+    try {
+        var origin = window.location && window.location.origin ? window.location.origin : '';
+        if (origin && origin.indexOf('localhost') === -1 && origin.indexOf('127.0.0.1') === -1) {
+            return origin.replace(/\/$/, '') + '/#contacts';
+        }
+    } catch (e) {}
+    return '/#contacts';
 }
 
-function getSubscriptionRemainingText(isoDate) {
-    if (!isoDate) return 'Без ограничения';
-    var end = new Date(isoDate);
-    if (isNaN(end.getTime())) return '—';
-    var now = new Date();
-    var msPerDay = 24 * 60 * 60 * 1000;
-    var diffDays = Math.ceil((end.getTime() - now.getTime()) / msPerDay);
-    if (diffDays < 0) return 'Истекла';
-    if (diffDays === 0) return 'Меньше 1 дня';
-    return diffDays + ' дн.';
+function applyMapLimitsCache(limits) {
+    if (!limits || typeof limits !== 'object') return;
+    mapLimitsCache.count = limits.count != null ? limits.count : mapLimitsCache.count;
+    mapLimitsCache.limit = limits.limit != null ? limits.limit : (limits.unlocked ? null : mapLimitsCache.limit);
+    mapLimitsCache.unlocked = !!limits.unlocked;
+    mapLimitsCache.remaining = limits.remaining != null ? limits.remaining : mapLimitsCache.remaining;
+    if (limits.defaultFreeLimit != null) mapLimitsCache.defaultFreeLimit = limits.defaultFreeLimit;
+    updateMapLimitBanner();
+}
+
+function refreshMapLimitsFromServer() {
+    if (!getApiBase() || !getAuthToken()) return Promise.resolve();
+    return fetch(getApiBase() + '/api/map-limits', {
+        headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+    }).then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(body) {
+            if (body && body.mapLimits) applyMapLimitsCache(body.mapLimits);
+        })
+        .catch(function() {});
+}
+
+function isMapLimitNearlyFull() {
+    if (mapLimitsCache.unlocked || mapLimitsCache.limit == null) return false;
+    var limit = mapLimitsCache.limit;
+    if (!limit || limit <= 0) return false;
+    var count = mapLimitsCache.count != null ? mapLimitsCache.count : 0;
+    return count / limit >= MAP_LIMIT_WARN_RATIO;
+}
+
+function isMapLimitBannerDismissed() {
+    try {
+        var raw = sessionStorage.getItem(MAP_LIMIT_BANNER_DISMISS_KEY);
+        if (raw == null || raw === '') return false;
+        var data = JSON.parse(raw);
+        if (!data || data.limit !== mapLimitsCache.limit) return false;
+        var count = mapLimitsCache.count != null ? mapLimitsCache.count : 0;
+        return count <= (data.count || 0);
+    } catch (e) {
+        return false;
+    }
+}
+
+function dismissMapLimitBanner() {
+    try {
+        sessionStorage.setItem(MAP_LIMIT_BANNER_DISMISS_KEY, JSON.stringify({
+            count: mapLimitsCache.count != null ? mapLimitsCache.count : 0,
+            limit: mapLimitsCache.limit
+        }));
+    } catch (e) {}
+    updateMapLimitBanner();
+}
+
+function bindMapLimitBannerClose() {
+    if (mapLimitBannerCloseBound) return;
+    var el = document.getElementById('mapLimitBanner');
+    if (!el) return;
+    var btn = el.querySelector('.map-limit-banner__close');
+    if (!btn) return;
+    mapLimitBannerCloseBound = true;
+    btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        dismissMapLimitBanner();
+    });
+}
+
+function updateMapLimitBanner() {
+    var el = document.getElementById('mapLimitBanner');
+    if (!el) return;
+    bindMapLimitBannerClose();
+    var msgEl = el.querySelector('.map-limit-banner__message');
+    if (!isMapLimitNearlyFull() || isMapLimitBannerDismissed()) {
+        el.style.display = 'none';
+        if (msgEl) msgEl.textContent = '';
+        return;
+    }
+    var count = mapLimitsCache.count != null ? mapLimitsCache.count : 0;
+    var limit = mapLimitsCache.limit;
+    var remaining = mapLimitsCache.remaining != null ? mapLimitsCache.remaining : Math.max(0, limit - count);
+    var text = 'Почти исчерпан лимит объектов на карте: ' + count + ' из ' + limit + ' (осталось ' + remaining + '). ';
+    if (msgEl) {
+        msgEl.innerHTML = text + '<a href="' + OWNER_CONTACT_MAILTO + '" style="color:inherit;text-decoration:underline;">Связаться с владельцем</a>';
+    }
+    el.style.display = 'flex';
+}
+
+function onMapObjectLimitError(message, limits) {
+    if (limits) applyMapLimitsCache(limits);
+    var text = message || 'Достигнут лимит объектов на карте. Чтобы снять ограничение, напишите владельцу программы.';
+    if (typeof showWarning === 'function') {
+        showWarning(text + ' <a href="' + OWNER_CONTACT_MAILTO + '" style="color:inherit;">Написать владельцу</a>', 'Лимит объектов');
+    } else {
+        alert(text);
+    }
+}
+window.onMapObjectLimitError = onMapObjectLimitError;
+
+function wouldExceedMapObjectLimit(extraCount) {
+    extraCount = extraCount || 1;
+    if (mapLimitsCache.unlocked || mapLimitsCache.limit == null) return false;
+    var count = mapLimitsCache.count != null ? mapLimitsCache.count : 0;
+    return (count + extraCount) > mapLimitsCache.limit;
+}
+
+function notifyMapObjectLimitBlocked() {
+    onMapObjectLimitError('Достигнут лимит объектов на карте (' + mapLimitsCache.limit + ').');
+    return false;
 }
 
 function setProfileModalField(id, value) {
@@ -435,23 +544,35 @@ function setProfileModalField(id, value) {
 function renderProfileOrganizationInfo(org) {
     if (!org) {
         setProfileModalField('profileOrgName', 'Организация: не привязана');
-        setProfileModalField('profilePlan', '—');
         setProfileModalField('profileStatus', '—');
-        setProfileModalField('profileSubscriptionEndsAt', '—');
-        setProfileModalField('profileSubscriptionLeft', '—');
-        setProfileModalField('profileMaxConcurrentUsers', '—');
+        setProfileModalField('profileMapObjects', '—');
+        setProfileModalField('profileMapLimit', '—');
+        setProfileModalField('profileConcurrentUsers', '—');
+        var unlockBtn = document.getElementById('profileUnlockBtn');
+        if (unlockBtn) unlockBtn.style.display = 'none';
         return;
     }
     var statusText = org.status === 'suspended' ? 'Приостановлена' : 'Активна';
-    var endText = org.subscriptionEndsAt ? new Date(org.subscriptionEndsAt).toLocaleDateString('ru-RU') : 'Без ограничения';
-    var maxConcurrent = org.maxConcurrentUsers;
-    if (maxConcurrent === -1) maxConcurrent = 'Без ограничений';
+    var limits = org.mapLimits || mapLimitsCache;
+    if (limits) applyMapLimitsCache(limits);
+    var count = limits && limits.count != null ? limits.count : '—';
+    var limitText = (limits && limits.unlocked) ? 'Без ограничений' :
+        (limits && limits.limit != null ? (limits.count + ' / ' + limits.limit) : '—');
     setProfileModalField('profileOrgName', 'Организация: ' + (org.name || '—'));
-    setProfileModalField('profilePlan', getPlanDisplayName(org.planId));
     setProfileModalField('profileStatus', statusText);
-    setProfileModalField('profileSubscriptionEndsAt', endText);
-    setProfileModalField('profileSubscriptionLeft', getSubscriptionRemainingText(org.subscriptionEndsAt));
-    setProfileModalField('profileMaxConcurrentUsers', maxConcurrent != null ? maxConcurrent : '—');
+    setProfileModalField('profileMapObjects', String(count));
+    setProfileModalField('profileMapLimit', limitText);
+    var cu = org.concurrentUsers;
+    var cuText = '—';
+    if (cu) {
+        if (cu.unlimited) cuText = (cu.active != null ? cu.active : 0) + ' / без ограничений';
+        else if (cu.limit != null) cuText = (cu.active != null ? cu.active : 0) + ' / ' + cu.limit;
+    }
+    setProfileModalField('profileConcurrentUsers', cuText);
+    var unlockBtn = document.getElementById('profileUnlockBtn');
+    if (unlockBtn) {
+        unlockBtn.style.display = (limits && !limits.unlocked) ? 'inline-flex' : 'none';
+    }
 }
 
 function openProfileModal() {
@@ -459,11 +580,10 @@ function openProfileModal() {
     if (!modal) return;
     modal.style.display = 'block';
     setProfileModalField('profileOrgName', 'Организация: загрузка...');
-    setProfileModalField('profilePlan', 'Загрузка...');
     setProfileModalField('profileStatus', 'Загрузка...');
-    setProfileModalField('profileSubscriptionEndsAt', 'Загрузка...');
-    setProfileModalField('profileSubscriptionLeft', 'Загрузка...');
-    setProfileModalField('profileMaxConcurrentUsers', 'Загрузка...');
+    setProfileModalField('profileMapObjects', 'Загрузка...');
+    setProfileModalField('profileMapLimit', 'Загрузка...');
+    setProfileModalField('profileConcurrentUsers', 'Загрузка...');
 
     if (!getApiBase() || !getAuthToken()) {
         renderProfileOrganizationInfo(currentUser && currentUser.organization ? currentUser.organization : null);
@@ -551,33 +671,27 @@ function fetchOrganizationsAndRender() {
         .then(function(body) {
             if (body && body.organizations) {
                 cachedOrganizationsList = body.organizations;
-                renderOrganizationsList(body.organizations, body.plans || {});
+                renderOrganizationsList(body.organizations);
             }
         })
         .catch(function() {});
 }
-function renderOrganizationsList(organizations, plans) {
+function renderOrganizationsList(organizations) {
     var container = document.getElementById('organizationsList');
     if (!container) return;
     if (!organizations || organizations.length === 0) {
         container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 16px;">Нет организаций. Создайте первую.</div>';
         return;
     }
-    var planNames = { basic: 'Базовый', pro: 'Про', enterprise: 'Корпоративный' };
-    if (plans && typeof plans === 'object') {
-        Object.keys(plans).forEach(function(k) { if (plans[k].name) planNames[k] = plans[k].name; });
-    }
     var html = '';
     organizations.forEach(function(org) {
-        var maxU = org.effectiveMaxConcurrentUsers != null ? org.effectiveMaxConcurrentUsers : (org.maxConcurrentUsers != null && org.maxConcurrentUsers > 0 ? org.maxConcurrentUsers : (plans[org.planId] && plans[org.planId].maxConcurrentUsers >= 0 ? plans[org.planId].maxConcurrentUsers : '∞'));
-        if (maxU === -1) maxU = '∞';
-        var end = org.subscriptionEndsAt ? new Date(org.subscriptionEndsAt).toLocaleDateString('ru-RU') : '—';
+        var limitText = org.mapObjectLimitUnlocked ? 'Без лимита' :
+            ((org.mapObjectCount != null ? org.mapObjectCount : 0) + ' / ' + (org.mapObjectLimit != null ? org.mapObjectLimit : '—'));
         var statusClass = org.status === 'suspended' ? 'rejected' : 'approved';
         html += '<div class="user-item">';
         html += '<div class="user-item-info" style="flex: 1;">';
         html += '<div class="user-item-name">' + escapeHtml(org.name) + '</div>';
-        html += '<div class="user-item-username">Тариф: ' + escapeHtml(planNames[org.planId] || org.planId) + ' · Макс. пользователей: ' + maxU + ' · Активных сессий: ' + (org.activeSessions != null ? org.activeSessions : '—') + '</div>';
-        html += '<div class="user-item-date">Подписка до: ' + end + '</div>';
+        html += '<div class="user-item-username">Объекты: ' + escapeHtml(limitText) + ' · Сессий: ' + (org.activeSessions != null ? org.activeSessions : '—') + '</div>';
         html += '</div>';
         html += '<span class="user-item-role ' + statusClass + '">' + (org.status === 'suspended' ? 'Приостановлена' : 'Активна') + '</span>';
         html += '<div class="user-item-actions"><button class="user-item-btn" title="Редактировать" onclick="editOrganization(\'' + escapeHtml(org.id) + '\')">Изменить</button></div>';
@@ -591,9 +705,8 @@ function editOrganization(orgId) {
     document.getElementById('editOrgId').value = org.id;
     document.getElementById('organizationEditTitle').textContent = 'Редактировать организацию';
     document.getElementById('editOrgName').value = org.name || '';
-    document.getElementById('editOrgPlanId').value = org.planId || 'basic';
-    document.getElementById('editOrgMaxUsers').value = (org.maxConcurrentUsers != null && org.maxConcurrentUsers > 0) ? org.maxConcurrentUsers : '';
-    document.getElementById('editOrgSubscriptionEndsAt').value = org.subscriptionEndsAt ? org.subscriptionEndsAt.slice(0, 10) : '';
+    document.getElementById('editOrgMapLimitUnlocked').checked = !!org.mapObjectLimitUnlocked;
+    document.getElementById('editOrgCustomMapLimit').value = org.customMapObjectLimit != null ? org.customMapObjectLimit : '';
     document.getElementById('editOrgStatus').value = org.status || 'active';
     document.getElementById('organizationEditModal').style.display = 'block';
 }
@@ -601,31 +714,30 @@ function openAddOrganizationForm() {
     document.getElementById('editOrgId').value = '';
     document.getElementById('organizationEditTitle').textContent = 'Добавить организацию';
     document.getElementById('editOrgName').value = '';
-    document.getElementById('editOrgPlanId').value = 'basic';
-    document.getElementById('editOrgMaxUsers').value = '';
-    document.getElementById('editOrgSubscriptionEndsAt').value = '';
+    document.getElementById('editOrgMapLimitUnlocked').checked = false;
+    document.getElementById('editOrgCustomMapLimit').value = '';
     document.getElementById('editOrgStatus').value = 'active';
     document.getElementById('organizationEditModal').style.display = 'block';
 }
 function saveOrganizationFromModal() {
     var id = document.getElementById('editOrgId').value;
     var name = document.getElementById('editOrgName').value.trim() || 'Организация';
-    var planId = document.getElementById('editOrgPlanId').value;
-    var maxUsersRaw = document.getElementById('editOrgMaxUsers').value.trim();
-    var maxUsers;
-    if (maxUsersRaw === '') maxUsers = null;
-    else {
-        var parsed = parseInt(maxUsersRaw, 10);
-        maxUsers = isNaN(parsed) ? null : (parsed === 0 ? null : parsed);
-    }
-    var endsAt = document.getElementById('editOrgSubscriptionEndsAt').value || null;
-    if (endsAt) endsAt = endsAt + 'T23:59:59.000Z';
+    var unlocked = document.getElementById('editOrgMapLimitUnlocked').checked;
+    var customLimitRaw = document.getElementById('editOrgCustomMapLimit').value.trim();
+    var customLimit = customLimitRaw === '' ? null : parseInt(customLimitRaw, 10);
+    if (customLimit != null && isNaN(customLimit)) customLimit = null;
     var status = document.getElementById('editOrgStatus').value;
+    var payload = {
+        name: name,
+        mapObjectLimitUnlocked: unlocked,
+        customMapObjectLimit: customLimit,
+        status: status
+    };
     if (id) {
         fetch(getApiBase() + '/api/organizations/' + encodeURIComponent(id), {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
-            body: JSON.stringify({ name: name, planId: planId, maxConcurrentUsers: maxUsers, subscriptionEndsAt: endsAt, status: status })
+            body: JSON.stringify(payload)
         }).then(function(r) {
             if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
             return fetchOrganizationsAndRender();
@@ -637,7 +749,7 @@ function saveOrganizationFromModal() {
         fetch(getApiBase() + '/api/organizations', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
-            body: JSON.stringify({ name: name, planId: planId, maxConcurrentUsers: maxUsers, subscriptionEndsAt: endsAt, status: status })
+            body: JSON.stringify(payload)
         }).then(function(r) {
             if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
             return fetchOrganizationsAndRender();
@@ -1101,10 +1213,20 @@ function setupUsersModalHandlers() {
 }
 
 function init() {
+    var initialCenter = [54.663609, 86.162243];
+    var initialZoom = 15;
+    if (window._pendingMapStart && Array.isArray(window._pendingMapStart.center)) {
+        initialCenter = window._pendingMapStart.center;
+        initialZoom = window._pendingMapStart.zoom || 15;
+    }
     myMap = new ymaps.Map('map', {
-        center: [54.663609, 86.162243],
-        zoom: 15
+        center: initialCenter,
+        zoom: initialZoom
     });
+    if (window._pendingMapStart) {
+        window._mapStartApplied = true;
+        window._pendingMapStart = null;
+    }
     
     try { myMap.controls.remove('searchControl'); } catch (e) {}
     try { myMap.controls.remove('trafficControl'); } catch (e) {}
@@ -2988,6 +3110,10 @@ function findNodeByName(name, excludePlacemark) {
 }
 
 function createObject(type, name, coords, options = {}) {
+    if (!options.skipAddToObjects && wouldExceedMapObjectLimit(1)) {
+        notifyMapObjectLimitBlocked();
+        return null;
+    }
     let iconSvg, color, balloonContent;
     
     switch(type) {
@@ -3380,6 +3506,13 @@ function createObject(type, name, coords, options = {}) {
 
     attachHoverEventsToObject(placemark);
     objects.push(placemark);
+    if (!options.skipAddToObjects) {
+        mapLimitsCache.count = (mapLimitsCache.count || 0) + 1;
+        if (mapLimitsCache.limit != null) {
+            mapLimitsCache.remaining = Math.max(0, mapLimitsCache.limit - mapLimitsCache.count);
+        }
+        updateMapLimitBanner();
+    }
     if (type === 'cross') {
         updateCrossDisplay();
     } else if (type === 'node') {
@@ -7495,6 +7628,24 @@ function loadDataFromStorage() {
     
 }
 
+function applyMapStartFromSettings(mapStart, force) {
+    if (!mapStart || !Array.isArray(mapStart.center) || mapStart.center.length < 2) return false;
+    if (!force && window._mapStartApplied) return false;
+    if (typeof myMap === 'undefined' || !myMap) {
+        window._pendingMapStart = mapStart;
+        return false;
+    }
+    try {
+        myMap.setCenter(mapStart.center, mapStart.zoom || 15);
+        window._mapStartApplied = true;
+        window._pendingMapStart = null;
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+window.applyMapStartFromSettings = applyMapStartFromSettings;
+
 function loadData() {
     loadGroupNamesFromStorage();
     loadCustomDeviceOptionsFromStorage();
@@ -7525,8 +7676,9 @@ function loadData() {
             }
             if (s.customDeviceOptions && typeof loadCustomDeviceOptions === 'function') loadCustomDeviceOptions(s.customDeviceOptions);
             if (typeof ensureDeviceCatalogsNonEmpty === 'function') ensureDeviceCatalogsNonEmpty();
-            if (s.mapStart && typeof myMap !== 'undefined' && myMap && Array.isArray(s.mapStart.center) && s.mapStart.center.length >= 2) {
-                try { myMap.setCenter(s.mapStart.center, s.mapStart.zoom || 15); } catch (e) {}
+            if (s.mapStart) {
+                window._savedMapStart = s.mapStart;
+                applyMapStartFromSettings(s.mapStart, true);
             }
         }).catch(function() {});
     })();
@@ -7639,6 +7791,9 @@ function applyRemoteState(data) {
             clearMap(opts);
             updateStats();
             lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
+            if (window._savedMapStart && typeof applyMapStartFromSettings === 'function') {
+                applyMapStartFromSettings(window._savedMapStart, true);
+            }
             return;
         }
         importData(data, opts);

@@ -21,77 +21,135 @@ const PORT = parseInt(process.env.PORT || process.argv[2] || serverConfig.port |
 const HOST = process.env.HOST || serverConfig.host || '0.0.0.0';
 const app = express();
 
-var SUBSCRIPTION_PLANS = {
-    basic: { maxConcurrentUsers: 3, name: 'Базовый' },
-    pro: { maxConcurrentUsers: 10, name: 'Про' },
-    enterprise: { maxConcurrentUsers: -1, name: 'Корпоративный' }
-};
+/** Запасной лимит объектов, если в хранилище и конфиге не задано иное. */
+var FALLBACK_FREE_MAP_OBJECT_LIMIT = parseInt(
+    process.env.FREE_MAP_OBJECT_LIMIT || serverConfig.freeMapObjectLimit || '2000',
+    10
+);
+if (isNaN(FALLBACK_FREE_MAP_OBJECT_LIMIT) || FALLBACK_FREE_MAP_OBJECT_LIMIT < 1) {
+    FALLBACK_FREE_MAP_OBJECT_LIMIT = 2000;
+}
+
+function getDefaultFreeMapObjectLimit() {
+    try {
+        var cfg = db.getPlatformLimitsConfig();
+        if (cfg.fromStore && cfg.fromStore.limit) return cfg.defaultFreeMapObjectLimit;
+        return FALLBACK_FREE_MAP_OBJECT_LIMIT;
+    } catch (e) {
+        return FALLBACK_FREE_MAP_OBJECT_LIMIT;
+    }
+}
+
+var FALLBACK_MAX_CONCURRENT_USERS = parseInt(
+    process.env.MAX_CONCURRENT_USERS || serverConfig.maxConcurrentUsers || '4',
+    10
+);
+if (isNaN(FALLBACK_MAX_CONCURRENT_USERS) || FALLBACK_MAX_CONCURRENT_USERS < 1) {
+    FALLBACK_MAX_CONCURRENT_USERS = 4;
+}
+
+function getDefaultMaxConcurrentUsers() {
+    try {
+        var cfg = db.getPlatformLimitsConfig();
+        if (!cfg.fromStore || !cfg.fromStore.concurrent) return FALLBACK_MAX_CONCURRENT_USERS;
+        var c = cfg.defaultMaxConcurrentUsers;
+        return c === -1 ? -1 : (c >= 1 ? c : FALLBACK_MAX_CONCURRENT_USERS);
+    } catch (e) {
+        return FALLBACK_MAX_CONCURRENT_USERS;
+    }
+}
+
+function normalizeMaxConcurrentUsers(raw) {
+    if (raw === undefined || raw === null || raw === '') return null;
+    var n = typeof raw === 'number' ? raw : parseInt(raw, 10);
+    if (isNaN(n)) return null;
+    if (n < 0) return -1;
+    if (n === 0) return null;
+    return Math.min(999, n);
+}
+
+function getMaxConcurrentForOrg(org) {
+    if (!org) return getDefaultMaxConcurrentUsers();
+    var raw = org.maxConcurrentUsers;
+    if (raw === -1 || raw === 999) return -1;
+    if (raw != null && raw !== '') {
+        var n = typeof raw === 'number' ? raw : parseInt(raw, 10);
+        if (!isNaN(n) && n > 0) return n;
+    }
+    return getDefaultMaxConcurrentUsers();
+}
+
+function getConcurrentUsersPayload(orgId) {
+    var org = orgId ? db.getOrganization(orgId) : null;
+    var limitRaw = getMaxConcurrentForOrg(org);
+    var unlimited = limitRaw === -1;
+    var limit = unlimited ? null : limitRaw;
+    var active = orgId ? db.countActiveSessionsForOrganization(orgId) : 0;
+    return {
+        active: active,
+        limit: limit,
+        unlimited: unlimited,
+        remaining: limit != null ? Math.max(0, limit - active) : null,
+        defaultLimit: getDefaultMaxConcurrentUsers() === -1 ? FALLBACK_MAX_CONCURRENT_USERS : getDefaultMaxConcurrentUsers()
+    };
+}
+
+function orgHasUnlimitedMapObjects(org) {
+    return !!(org && org.mapObjectLimitUnlocked);
+}
+
+function getMapObjectLimitForOrg(org) {
+    if (!org || orgHasUnlimitedMapObjects(org)) return null;
+    if (org.customMapObjectLimit != null && org.customMapObjectLimit !== '') {
+        var custom = typeof org.customMapObjectLimit === 'number' ? org.customMapObjectLimit : parseInt(org.customMapObjectLimit, 10);
+        if (!isNaN(custom) && custom > 0) return custom;
+    }
+    return getDefaultFreeMapObjectLimit();
+}
+
+function getMapObjectLimitPayload(orgId) {
+    var org = orgId ? db.getOrganization(orgId) : null;
+    var count = orgId ? db.countMapObjectsForOrganization(orgId) : 0;
+    var limit = getMapObjectLimitForOrg(org);
+    var unlocked = orgHasUnlimitedMapObjects(org);
+    var remaining = limit != null ? Math.max(0, limit - count) : null;
+    return {
+        count: count,
+        limit: limit,
+        unlocked: unlocked,
+        remaining: remaining,
+        defaultFreeLimit: getDefaultFreeMapObjectLimit()
+    };
+}
+
+function validateMapDataObjectLimit(orgId, data) {
+    var org = db.getOrganization(orgId);
+    var limit = getMapObjectLimitForOrg(org);
+    var count = db.countActualMapObjectsInArray(data);
+    if (limit == null) {
+        return { ok: true, count: count, limit: null, unlocked: true };
+    }
+    if (count > limit) {
+        return {
+            ok: false,
+            count: count,
+            limit: limit,
+            unlocked: false,
+            error: 'Достигнут лимит объектов на карте (' + limit + '). Сейчас: ' + count + '. Чтобы снять ограничение, свяжитесь с владельцем программы (контакты на главной странице).'
+        };
+    }
+    return { ok: true, count: count, limit: limit, unlocked: false };
+}
+
 function planIdsMatch(planIdFromOrg, planEntryId) {
     return String(planIdFromOrg || '').trim().toLowerCase() === String(planEntryId || '').trim().toLowerCase();
 }
-function getMaxConcurrentFromPricingPlan(planId) {
-    if (!planId) return null;
-    const plans = db.getPricingPlans();
-    const p = plans.find(function(x) { return planIdsMatch(planId, x.id); });
-    if (!p || p.maxConcurrentUsers === undefined || p.maxConcurrentUsers === null || p.maxConcurrentUsers === '') return null;
-    const n = typeof p.maxConcurrentUsers === 'number' ? p.maxConcurrentUsers : parseInt(p.maxConcurrentUsers, 10);
-    if (isNaN(n) || n === 0) return null;
-    return n;
-}
-function normalizePlanSubscriptionDays(raw, kind) {
-    if (raw === undefined || raw === null || raw === '') {
-        return kind === 'trial' ? 14 : null;
-    }
-    var n = typeof raw === 'number' ? raw : parseInt(raw, 10);
-    if (isNaN(n) || n < 1) return kind === 'trial' ? 14 : null;
-    return Math.min(3650, n);
-}
 
-/** Дней подписки при самостоятельной регистрации — из карточки витрины (поле subscriptionDays). */
-function getSubscriptionDaysForNewOrg(planId) {
+function getUnlockProductFromPricing() {
     const plans = db.getPricingPlans();
-    const hit = plans.find(function(p) { return planIdsMatch(planId, p.id); });
-    if (!hit) return 14;
-    var kind = hit.kind === 'trial' || hit.kind === 'contact' ? hit.kind : 'paid';
-    var days = normalizePlanSubscriptionDays(hit.subscriptionDays, kind);
-    if (days != null) return days;
-    if (kind === 'trial') return 14;
-    return 14;
-}
-
-/** Самостоятельная регистрация: planId должен совпадать с карточкой в /api/pricing (витрина). Иначе — basic. */
-function resolveSelfServiceRegisterPlanId(requested) {
-    if (requested === undefined || requested === null) return 'basic';
-    var raw = String(requested).trim();
-    if (!raw) return 'basic';
-    const plans = db.getPricingPlans();
-    const hit = plans.find(function(p) {
-        return planIdsMatch(raw, p.id);
-    });
-    if (!hit) return 'basic';
-    var id = hit.id != null ? String(hit.id).trim() : '';
-    return id || 'basic';
-}
-/** null / пусто / 0 — не хранить переопределение, лимит брать из тарифа (витрина + базовые планы). */
-function normalizeMaxConcurrentForCreate(raw) {
-    if (raw === undefined || raw === null || raw === '') return null;
-    var n = typeof raw === 'number' ? raw : parseInt(raw, 10);
-    if (isNaN(n) || n === 0) return null;
-    if (n < 0) return 999;
-    return Math.min(999, n);
-}
-function normalizeMaxConcurrentForPatch(raw) {
-    if (raw === undefined) return undefined;
-    return normalizeMaxConcurrentForCreate(raw);
-}
-function getMaxConcurrentForOrg(org) {
-    if (!org) return 1;
-    if (org.maxConcurrentUsers != null && org.maxConcurrentUsers > 0) return org.maxConcurrentUsers;
-    const fromPricing = getMaxConcurrentFromPricingPlan(org.planId);
-    if (fromPricing != null) return fromPricing === -1 ? 999 : fromPricing;
-    var planKey = Object.keys(SUBSCRIPTION_PLANS).find(function(k) { return planIdsMatch(org.planId || 'basic', k); });
-    var plan = planKey ? SUBSCRIPTION_PLANS[planKey] : SUBSCRIPTION_PLANS.basic;
-    return plan ? (plan.maxConcurrentUsers === -1 ? 999 : plan.maxConcurrentUsers) : 3;
+    return plans.find(function(p) { return String(p.kind || '').toLowerCase() === 'unlock'; }) ||
+        plans.find(function(p) { return planIdsMatch(p.id, 'unlock'); }) ||
+        null;
 }
 
 app.use(cors({ origin: true, credentials: true }));
@@ -131,14 +189,20 @@ function getSessionUser(req) {
     if (!user) return null;
     const organizationId = user.organizationId != null ? user.organizationId : (sessions[0].organization_id || null);
     const organization = organizationId ? db.getOrganization(organizationId) : null;
-    const maxConcurrent = organization ? getMaxConcurrentForOrg(organization) : null;
+    const mapLimits = organizationId ? getMapObjectLimitPayload(organizationId) : null;
     return {
         userId: user.id,
         username: user.username,
         fullName: user.fullName || user.full_name,
         role: user.role,
         organizationId: organizationId,
-        organization: organization ? { id: organization.id, name: organization.name, planId: organization.planId, maxConcurrentUsers: maxConcurrent } : null
+        organization: organization ? {
+            id: organization.id,
+            name: organization.name,
+            status: organization.status,
+            mapLimits: mapLimits,
+            concurrentUsers: getConcurrentUsersPayload(organizationId)
+        } : null
     };
 }
 
@@ -182,8 +246,15 @@ app.post('/api/map', (req, res) => {
     try {
         const data = req.body && req.body.data;
         if (!Array.isArray(data)) return res.status(400).json({ error: 'Ожидается массив data' });
+        var validation = validateMapDataObjectLimit(orgId, data);
+        if (!validation.ok) {
+            return res.status(403).json({
+                error: validation.error,
+                mapLimits: { count: validation.count, limit: validation.limit, unlocked: validation.unlocked }
+            });
+        }
         db.setMapData(orgId, data);
-        res.json({ ok: true });
+        res.json({ ok: true, mapLimits: getMapObjectLimitPayload(orgId) });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
     }
@@ -218,16 +289,17 @@ app.post('/api/auth/login', (req, res) => {
         db.deleteExpiredSessionsForUser(user.id);
     }
 
-    if (organization) {
-        if (organization.status !== 'active') return res.json({ success: false, error: 'Подписка организации приостановлена или заблокирована.' });
-        if (organization.subscriptionEndsAt && new Date(organization.subscriptionEndsAt) < new Date()) return res.json({ success: false, error: 'Срок действия подписки истёк. Продлите подписку.' });
+    if (organization && organization.status !== 'active') {
+        return res.json({ success: false, error: 'Организация приостановлена. Обратитесь к администратору сервиса.' });
+    }
+    if (organization && !isMainAdminAccount) {
         var maxConcurrent = getMaxConcurrentForOrg(organization);
         if (maxConcurrent >= 0) {
-            var activeCount = db.countActiveSessionsForOrganization(organizationId);
-            if (activeCount >= maxConcurrent) {
+            var activeOrgSessions = db.countActiveSessionsForOrganization(organizationId);
+            if (activeOrgSessions >= maxConcurrent) {
                 return res.json({
                     success: false,
-                    error: 'Достигнут лимит одновременных пользователей (' + maxConcurrent + '). Попробуйте позже или увеличьте тариф.'
+                    error: 'Достигнут лимит одновременных пользователей (' + maxConcurrent + '). Попробуйте позже или свяжитесь с владельцем программы.'
                 });
             }
         }
@@ -266,7 +338,13 @@ app.post('/api/auth/login', (req, res) => {
             fullName: user.fullName || user.full_name,
             role: user.role,
             organizationId: organizationId,
-            organization: organization ? { id: organization.id, name: organization.name, planId: organization.planId, maxConcurrentUsers: getMaxConcurrentForOrg(organization) } : null
+            organization: organization ? {
+                id: organization.id,
+                name: organization.name,
+                status: organization.status,
+                mapLimits: getMapObjectLimitPayload(organizationId),
+                concurrentUsers: getConcurrentUsersPayload(organizationId)
+            } : null
         }
     });
 });
@@ -354,12 +432,91 @@ app.get('/api/organizations/me', (req, res) => {
         organization: {
             id: org.id,
             name: org.name,
-            planId: org.planId,
-            maxConcurrentUsers: getMaxConcurrentForOrg(org),
-            subscriptionEndsAt: org.subscriptionEndsAt,
-            status: org.status
+            status: org.status,
+            mapObjectLimitUnlocked: orgHasUnlimitedMapObjects(org),
+            mapLimits: getMapObjectLimitPayload(user.organizationId),
+            concurrentUsers: getConcurrentUsersPayload(user.organizationId)
         }
     });
+});
+
+app.get('/api/map-limits', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!user.organizationId) return res.json({ mapLimits: null });
+    res.json({ mapLimits: getMapObjectLimitPayload(user.organizationId) });
+});
+
+app.get('/api/admin/platform-limits', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    try {
+        res.json(db.getPlatformLimitsConfig());
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.put('/api/admin/platform-limits', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    const body = req.body || {};
+    try {
+        var cfg = db.setPlatformLimitsConfig({
+            defaultFreeMapObjectLimit: body.defaultFreeMapObjectLimit,
+            defaultMaxConcurrentUsers: body.defaultMaxConcurrentUsers
+        });
+        res.json({ ok: true, limits: cfg });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.get('/api/admin/showcase', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    try {
+        res.json(db.getShowcaseConfig());
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.put('/api/admin/showcase', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    const body = req.body || {};
+    try {
+        var patch = {};
+        if (body.defaultFreeMapObjectLimit !== undefined || body.defaultMaxConcurrentUsers !== undefined) {
+            patch.defaultFreeMapObjectLimit = body.defaultFreeMapObjectLimit;
+            patch.defaultMaxConcurrentUsers = body.defaultMaxConcurrentUsers;
+        }
+        if (body.freeCard && typeof body.freeCard === 'object') patch.freeCard = body.freeCard;
+        if (Array.isArray(body.plans)) {
+            var cleaned = body.plans.map(function(p, idx) {
+                var kind = String(p.kind || '').toLowerCase();
+                if (kind !== 'unlock' && kind !== 'contact') kind = 'contact';
+                return {
+                    id: String(p.id || ('plan_' + idx)),
+                    title: String(p.title || 'Безлимит объектов'),
+                    short: String(p.short || ''),
+                    price: String(p.price || ''),
+                    period: String(p.period || ''),
+                    maxUsersText: String(p.maxUsersText || ''),
+                    order: typeof p.order === 'number' ? p.order : idx,
+                    highlighted: !!p.highlighted,
+                    ctaText: String(p.ctaText || ''),
+                    kind: kind
+                };
+            });
+            patch.plans = cleaned;
+        }
+        var cfg = db.setShowcaseConfig(patch);
+        res.json({ ok: true, showcase: cfg });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
 });
 
 app.get('/api/organizations', (req, res) => {
@@ -368,21 +525,27 @@ app.get('/api/organizations', (req, res) => {
     try {
         var list = db.getOrganizations().map(function(o) {
             var activeSessions = db.countActiveSessionsForOrganization(o.id);
+            var limits = getMapObjectLimitPayload(o.id);
             return {
                 id: o.id,
                 name: o.name,
-                planId: o.planId,
-                maxConcurrentUsers: o.maxConcurrentUsers,
-                effectiveMaxConcurrentUsers: getMaxConcurrentForOrg(o),
-                subscriptionEndsAt: o.subscriptionEndsAt,
+                mapObjectLimitUnlocked: orgHasUnlimitedMapObjects(o),
+                customMapObjectLimit: o.customMapObjectLimit != null ? o.customMapObjectLimit : null,
+                mapObjectLimit: limits.limit,
+                mapObjectCount: limits.count,
                 status: o.status,
                 contactEmail: o.contactEmail != null ? String(o.contactEmail) : '',
                 createdAt: o.createdAt,
                 activeSessions: activeSessions,
-                mapObjectCount: db.countMapObjectsForOrganization(o.id)
+                maxConcurrentUsers: o.maxConcurrentUsers != null ? o.maxConcurrentUsers : null,
+                effectiveMaxConcurrentUsers: getMaxConcurrentForOrg(o)
             };
         });
-        res.json({ organizations: list, plans: SUBSCRIPTION_PLANS });
+        res.json({
+            organizations: list,
+            defaultFreeMapObjectLimit: getDefaultFreeMapObjectLimit(),
+            defaultMaxConcurrentUsers: getDefaultMaxConcurrentUsers()
+        });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
     }
@@ -395,13 +558,8 @@ app.get('/api/pricing', (req, res) => {
             var promoPct = typeof p.promoPercent === 'number' ? p.promoPercent : parseFloat(p.promoPercent);
             if (isNaN(promoPct) || promoPct < 0) promoPct = 0;
             if (promoPct > 100) promoPct = 100;
-            var mcu = p.maxConcurrentUsers;
-            if (mcu !== undefined && mcu !== null && mcu !== '') {
-                mcu = typeof mcu === 'number' ? mcu : parseInt(mcu, 10);
-                if (isNaN(mcu)) mcu = null;
-            } else {
-                mcu = null;
-            }
+            var kind = String(p.kind || '').toLowerCase();
+            if (kind !== 'unlock' && kind !== 'contact') kind = 'unlock';
             return {
                 id: String(p.id || ('plan_' + idx)),
                 title: p.title,
@@ -409,22 +567,22 @@ app.get('/api/pricing', (req, res) => {
                 price: p.price,
                 period: p.period,
                 maxUsersText: p.maxUsersText,
-                maxConcurrentUsers: mcu,
                 order: typeof p.order === 'number' ? p.order : idx,
                 highlighted: !!p.highlighted,
                 ctaText: p.ctaText,
-                kind: p.kind,
+                kind: kind,
                 promoPercent: promoPct,
                 promoStartsAt: p.promoStartsAt ? String(p.promoStartsAt).slice(0, 10) : '',
                 promoEndsAt: p.promoEndsAt ? String(p.promoEndsAt).slice(0, 10) : '',
-                priceBeforePromo: p.priceBeforePromo != null ? String(p.priceBeforePromo) : '',
-                subscriptionDays: normalizePlanSubscriptionDays(
-                    p.subscriptionDays,
-                    p.kind === 'trial' || p.kind === 'contact' ? p.kind : 'paid'
-                )
+                priceBeforePromo: p.priceBeforePromo != null ? String(p.priceBeforePromo) : ''
             };
         });
-        res.json({ plans: plans });
+        res.json({
+            plans: plans,
+            freeMapObjectLimit: getDefaultFreeMapObjectLimit(),
+            defaultMaxConcurrentUsers: getDefaultMaxConcurrentUsers(),
+            freeCard: db.getFreeCardConfig()
+        });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
     }
@@ -483,34 +641,23 @@ app.put('/api/pricing', (req, res) => {
         var promoPct = typeof p.promoPercent === 'number' ? p.promoPercent : parseFloat(p.promoPercent);
         if (isNaN(promoPct) || promoPct < 0) promoPct = 0;
         if (promoPct > 100) promoPct = 100;
-        var mcuRaw = p.maxConcurrentUsers;
-        var mcu = null;
-        if (mcuRaw !== undefined && mcuRaw !== null && mcuRaw !== '') {
-            mcu = typeof mcuRaw === 'number' ? mcuRaw : parseInt(mcuRaw, 10);
-            if (isNaN(mcu)) mcu = null;
-            else if (mcu === 0) mcu = null;
-            else if (mcu < -1) mcu = null;
-        }
+        var kind = String(p.kind || '').toLowerCase();
+        if (kind !== 'unlock' && kind !== 'contact') kind = 'unlock';
         return {
             id: String(p.id || ('plan_' + idx)),
-            title: String(p.title || 'Тариф'),
+            title: String(p.title || 'Безлимит объектов'),
             short: String(p.short || ''),
             price: String(p.price || ''),
             period: String(p.period || ''),
             maxUsersText: String(p.maxUsersText || ''),
-            maxConcurrentUsers: mcu,
             order: typeof p.order === 'number' ? p.order : idx,
             highlighted: !!p.highlighted,
             ctaText: String(p.ctaText || ''),
-            kind: p.kind === 'trial' || p.kind === 'contact' ? p.kind : 'paid',
+            kind: kind,
             promoPercent: promoPct,
             promoStartsAt: p.promoStartsAt ? String(p.promoStartsAt).slice(0, 10) : '',
             promoEndsAt: p.promoEndsAt ? String(p.promoEndsAt).slice(0, 10) : '',
-            priceBeforePromo: p.priceBeforePromo != null ? String(p.priceBeforePromo) : '',
-            subscriptionDays: normalizePlanSubscriptionDays(
-                p.subscriptionDays,
-                p.kind === 'trial' || p.kind === 'contact' ? p.kind : 'paid'
-            )
+            priceBeforePromo: p.priceBeforePromo != null ? String(p.priceBeforePromo) : ''
         };
     });
     try {
@@ -526,13 +673,11 @@ app.post('/api/organizations', (req, res) => {
     if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Только администратор' });
     var body = req.body || {};
     var name = (body.name && String(body.name).trim()) || 'Организация';
-    var planId = body.planId || 'basic';
-    var maxConcurrentUsers = normalizeMaxConcurrentForCreate(body.maxConcurrentUsers);
     var id = db.addOrganization({
         name: name,
-        planId: planId,
-        maxConcurrentUsers: maxConcurrentUsers,
-        subscriptionEndsAt: body.subscriptionEndsAt || null,
+        mapObjectLimitUnlocked: !!body.mapObjectLimitUnlocked,
+        customMapObjectLimit: body.customMapObjectLimit,
+        maxConcurrentUsers: normalizeMaxConcurrentUsers(body.maxConcurrentUsers),
         status: body.status || 'active',
         contactEmail: body.contactEmail != null ? String(body.contactEmail).trim() : ''
     });
@@ -546,12 +691,9 @@ app.patch('/api/organizations/:id', (req, res) => {
     var body = req.body || {};
     var updates = {};
     if (body.name !== undefined) updates.name = body.name;
-    if (body.planId !== undefined) updates.planId = body.planId;
-    if (body.maxConcurrentUsers !== undefined) {
-        var nrm = normalizeMaxConcurrentForPatch(body.maxConcurrentUsers);
-        if (nrm !== undefined) updates.maxConcurrentUsers = nrm;
-    }
-    if (body.subscriptionEndsAt !== undefined) updates.subscriptionEndsAt = body.subscriptionEndsAt;
+    if (body.mapObjectLimitUnlocked !== undefined) updates.mapObjectLimitUnlocked = !!body.mapObjectLimitUnlocked;
+    if (body.customMapObjectLimit !== undefined) updates.customMapObjectLimit = body.customMapObjectLimit;
+    if (body.maxConcurrentUsers !== undefined) updates.maxConcurrentUsers = normalizeMaxConcurrentUsers(body.maxConcurrentUsers);
     if (body.status !== undefined) updates.status = body.status;
     if (body.contactEmail !== undefined) updates.contactEmail = body.contactEmail;
     var ok = db.updateOrganization(orgId, updates);
@@ -634,21 +776,27 @@ function isValidContactEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t);
 }
 
+function parseMapStartPayload(mapStart) {
+    if (!mapStart || !Array.isArray(mapStart.center) || mapStart.center.length < 2) return null;
+    const lat = Number(mapStart.center[0]);
+    const lon = Number(mapStart.center[1]);
+    const zoomRaw = Number(mapStart.zoom);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+    const zoom = Number.isFinite(zoomRaw) && zoomRaw >= 1 && zoomRaw <= 21 ? zoomRaw : 15;
+    return { center: [lat, lon], zoom: zoom };
+}
+
 app.post('/api/auth/register', (req, res) => {
-    const { username, password, fullName, organizationName, contactEmail, planId: requestedPlanId } = req.body || {};
+    const { username, password, fullName, organizationName, contactEmail, mapStart } = req.body || {};
     if (!username || username.length < 3) return res.status(400).json({ success: false, error: 'Имя не менее 3 символов' });
     if (!organizationName || String(organizationName).trim().length < 3) return res.status(400).json({ success: false, error: 'Укажите название организации (не менее 3 символов)' });
     if (!password || password.length < 6) return res.status(400).json({ success: false, error: 'Пароль не менее 6 символов' });
     if (!contactEmail || !isValidContactEmail(String(contactEmail))) return res.status(400).json({ success: false, error: 'Укажите корректный e-mail для связи' });
     const users = db.getUsers();
     if (users.find(u => u.username.toLowerCase() === username.toLowerCase())) return res.json({ success: false, error: 'Пользователь уже существует' });
-    var resolvedPlanId = resolveSelfServiceRegisterPlanId(requestedPlanId);
-    var trialDays = getSubscriptionDaysForNewOrg(resolvedPlanId);
     var organizationId = db.addOrganization({
         name: String(organizationName).trim(),
-        planId: resolvedPlanId,
-        maxConcurrentUsers: null,
-        subscriptionEndsAt: new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toISOString(),
+        mapObjectLimitUnlocked: false,
         status: 'active',
         contactEmail: String(contactEmail).trim()
     });
@@ -666,6 +814,11 @@ app.post('/api/auth/register', (req, res) => {
     };
     users.push(newUser);
     db.setUsers(users);
+    const parsedMapStart = parseMapStartPayload(mapStart);
+    if (parsedMapStart) {
+        if (organizationId && db.setMapStartForOrg) db.setMapStartForOrg(organizationId, parsedMapStart);
+        if (db.setMapStartForUser) db.setMapStartForUser(newUser.id, parsedMapStart);
+    }
     res.json({ success: true, pending: !organizationId, organizationId: organizationId });
 });
 
@@ -817,8 +970,8 @@ app.get('/api/settings', (req, res) => {
         var user = getSessionUser(req);
         var orgId = (user && user.organizationId) ? user.organizationId : (user && user.role === 'admin' ? (req.query.orgId || (db.getOrganizations().length ? db.getOrganizations()[0].id : null)) : null);
         var settings = db.getSettings(orgId || undefined);
-        if (user && db.getMapStartForUser) {
-            const mapStart = db.getMapStartForUser(user.userId);
+        if (user && db.getMapStartForUserOrOrg) {
+            const mapStart = db.getMapStartForUserOrOrg(user.userId, orgId);
             if (mapStart) settings.mapStart = mapStart;
         }
         res.json(settings);
@@ -833,8 +986,15 @@ app.post('/api/settings', (req, res) => {
     const body = req.body || {};
     var orgId = user.organizationId || (user.role === 'admin' && body.organizationId ? body.organizationId : null);
     try {
-        if (body.mapStart !== undefined && db.setMapStartForUser) {
-            db.setMapStartForUser(user.userId, body.mapStart);
+        if (body.mapStart !== undefined) {
+            const parsedMapStart = parseMapStartPayload(body.mapStart);
+            if (parsedMapStart) {
+                if (db.setMapStartForUser) db.setMapStartForUser(user.userId, parsedMapStart);
+                if (orgId && db.setMapStartForOrg) db.setMapStartForOrg(orgId, parsedMapStart);
+            } else if (db.setMapStartForUser) {
+                db.setMapStartForUser(user.userId, null);
+                if (orgId && db.setMapStartForOrg) db.setMapStartForOrg(orgId, null);
+            }
         }
         var toSave = {};
         if (user.role === 'admin') {
@@ -918,7 +1078,9 @@ app.get('/api/public-config', (req, res) => {
     const publicSiteUrl = serverConfig.publicSiteUrl || process.env.PUBLIC_SITE_URL || getSiteBaseUrl(req);
     res.json({
         yandexMapsApiKey: key,
-        publicSiteUrl: publicSiteUrl ? String(publicSiteUrl).trim().replace(/\/$/, '') : ''
+        publicSiteUrl: publicSiteUrl ? String(publicSiteUrl).trim().replace(/\/$/, '') : '',
+        freeMapObjectLimit: getDefaultFreeMapObjectLimit(),
+        defaultMaxConcurrentUsers: getDefaultMaxConcurrentUsers()
     });
 });
 
@@ -1293,7 +1455,19 @@ wss.on('connection', (ws, req) => {
             if (msg.type === 'op' && msg.op && orgId) {
                 if (!isSyncClientAdmin(clientId)) return;
                 var state = getSyncStateForOrg(orgId);
-                state.data = applyOperationToState(state.data, msg.op);
+                var nextData = applyOperationToState(state.data, msg.op);
+                var validation = validateMapDataObjectLimit(orgId, nextData);
+                if (!validation.ok) {
+                    try {
+                        ws.send(JSON.stringify({
+                            type: 'limit_error',
+                            error: validation.error,
+                            mapLimits: { count: validation.count, limit: validation.limit, unlocked: validation.unlocked }
+                        }));
+                    } catch (eLim) {}
+                    return;
+                }
+                state.data = nextData;
                 state.clientId = msg.clientId || clientId;
                 try {
                     if (orgId) db.setMapData(orgId, state.data);
@@ -1308,7 +1482,19 @@ wss.on('connection', (ws, req) => {
             var justConnected = (Date.now() - (ws.connectedAt || 0)) < 4000;
             if (!justConnected && msg.data && isSyncClientAdmin(clientId) && orgId) {
                 var state = getSyncStateForOrg(orgId);
-                state.data = mergeMapState(state.data, msg.data);
+                var merged = mergeMapState(state.data, msg.data);
+                var validationFull = validateMapDataObjectLimit(orgId, merged);
+                if (!validationFull.ok) {
+                    try {
+                        ws.send(JSON.stringify({
+                            type: 'limit_error',
+                            error: validationFull.error,
+                            mapLimits: { count: validationFull.count, limit: validationFull.limit, unlocked: validationFull.unlocked }
+                        }));
+                    } catch (eLim2) {}
+                    return;
+                }
+                state.data = merged;
                 state.clientId = msg.clientId || clientId;
                 if (msg.groupNames && typeof msg.groupNames === 'object') {
                     syncGroupNamesByOrg[orgId] = msg.groupNames;

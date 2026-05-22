@@ -723,7 +723,50 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     margin-top: 4px;
 }
 
-/* Предупреждение о режиме только для чтения */
+/* Напоминание о почти исчерпанном лимите объектов (≥98%) */
+.map-limit-banner {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 8px 40px 8px 16px;
+    font-size: 0.8125rem;
+    text-align: center;
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--text-primary, #92400e);
+    border-bottom: 1px solid rgba(245, 158, 11, 0.35);
+    position: relative;
+}
+.map-limit-banner__message {
+    margin: 0;
+}
+.map-limit-banner__close {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: none;
+    background: transparent;
+    color: inherit;
+    font-size: 1.25rem;
+    line-height: 1;
+    padding: 4px 8px;
+    cursor: pointer;
+    opacity: 0.75;
+    border-radius: var(--radius-sm, 4px);
+}
+.map-limit-banner__close:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.06);
+}
+[data-theme="dark"] .map-limit-banner {
+    background: rgba(245, 158, 11, 0.12);
+    color: #fcd34d;
+}
+[data-theme="dark"] .map-limit-banner__close:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
 .readonly-warning {
     background: #fef3c7;
     border: 1px solid #fde68a;

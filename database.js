@@ -130,9 +130,7 @@ function migrateToOrganizations() {
     s.organizations = [{
         id: defaultOrgId,
         name: 'По умолчанию',
-        planId: 'basic',
-        maxConcurrentUsers: 3,
-        subscriptionEndsAt: null,
+        mapObjectLimitUnlocked: false,
         status: 'active',
         createdAt: new Date().toISOString()
     }];
@@ -415,13 +413,11 @@ function addOrganization(org) {
     s.organizations.push({
         id: id,
         name: org.name || 'Организация',
-        planId: org.planId || 'basic',
+        mapObjectLimitUnlocked: !!org.mapObjectLimitUnlocked,
+        customMapObjectLimit: org.customMapObjectLimit != null && org.customMapObjectLimit !== '' ? org.customMapObjectLimit : null,
         maxConcurrentUsers: org.maxConcurrentUsers != null && org.maxConcurrentUsers !== '' ? org.maxConcurrentUsers : null,
-        subscriptionEndsAt: org.subscriptionEndsAt || null,
         status: org.status || 'active',
         contactEmail: org.contactEmail != null ? String(org.contactEmail).trim() : '',
-        discountPercent: typeof org.discountPercent === 'number' ? org.discountPercent : 0,
-        customMonthlyPrice: typeof org.customMonthlyPrice === 'number' ? org.customMonthlyPrice : null,
         createdAt: org.createdAt || new Date().toISOString()
     });
     ensureOrgBackupsDir(id);
@@ -434,13 +430,25 @@ function updateOrganization(orgId, updates) {
     const idx = (s.organizations || []).findIndex(function(o) { return organizationIdsMatch(o.id, orgId); });
     if (idx === -1) return false;
     if (updates.name !== undefined) s.organizations[idx].name = updates.name;
-    if (updates.planId !== undefined) s.organizations[idx].planId = updates.planId;
-    if (updates.maxConcurrentUsers !== undefined) s.organizations[idx].maxConcurrentUsers = updates.maxConcurrentUsers;
-    if (updates.subscriptionEndsAt !== undefined) s.organizations[idx].subscriptionEndsAt = updates.subscriptionEndsAt;
+    if (updates.mapObjectLimitUnlocked !== undefined) s.organizations[idx].mapObjectLimitUnlocked = !!updates.mapObjectLimitUnlocked;
+    if (updates.customMapObjectLimit !== undefined) {
+        if (updates.customMapObjectLimit === null || updates.customMapObjectLimit === '') {
+            s.organizations[idx].customMapObjectLimit = null;
+        } else {
+            var lim = typeof updates.customMapObjectLimit === 'number' ? updates.customMapObjectLimit : parseInt(updates.customMapObjectLimit, 10);
+            s.organizations[idx].customMapObjectLimit = (isNaN(lim) || lim < 1) ? null : lim;
+        }
+    }
     if (updates.status !== undefined) s.organizations[idx].status = updates.status;
     if (updates.contactEmail !== undefined) s.organizations[idx].contactEmail = String(updates.contactEmail).trim();
-    if (updates.discountPercent !== undefined) s.organizations[idx].discountPercent = updates.discountPercent;
-    if (updates.customMonthlyPrice !== undefined) s.organizations[idx].customMonthlyPrice = updates.customMonthlyPrice;
+    if (updates.maxConcurrentUsers !== undefined) {
+        if (updates.maxConcurrentUsers === null || updates.maxConcurrentUsers === '') {
+            s.organizations[idx].maxConcurrentUsers = null;
+        } else {
+            var mcu = typeof updates.maxConcurrentUsers === 'number' ? updates.maxConcurrentUsers : parseInt(updates.maxConcurrentUsers, 10);
+            s.organizations[idx].maxConcurrentUsers = (isNaN(mcu) ? null : mcu);
+        }
+    }
     saveStore();
     return true;
 }
@@ -486,59 +494,18 @@ function getSessions() {
 function getPricingPlans() {
     const s = loadStore();
     if (!Array.isArray(s.pricingPlans) || !s.pricingPlans.length) {
-        // Значения по умолчанию для тарифов на главной
+        // Карточка «снять лимит» на лендинге — кнопка ведёт в контакты
         s.pricingPlans = [
             {
-                id: 'trial',
-                title: 'Пробный',
-                short: 'Для знакомства с системой',
-                price: '0 ₽',
-                period: '/ 14 дней',
-                maxUsersText: '1 организация, до 1 одновременного пользователя',
-                order: 0,
-                highlighted: false,
-                ctaText: 'Запустить пробный период',
-                kind: 'trial',
-                maxConcurrentUsers: 1,
-                subscriptionDays: 14
-            },
-            {
-                id: 'basic',
-                title: 'Базовый',
-                short: 'Для небольших команд и пилотов',
-                price: '1 490 ₽',
-                period: '/ месяц',
-                maxUsersText: 'До 3 одновременных пользователей в организации',
-                maxConcurrentUsers: 3,
-                order: 1,
-                highlighted: false,
-                ctaText: 'Выбрать «Базовый»',
-                kind: 'paid'
-            },
-            {
-                id: 'pro',
-                title: 'Про',
-                short: 'Оптимально для провайдера с несколькими инженерами',
-                price: '3 490 ₽',
-                period: '/ месяц',
-                maxUsersText: 'До 10 одновременных пользователей; можно усилить лимит в настройках',
-                maxConcurrentUsers: 10,
-                order: 2,
-                highlighted: true,
-                ctaText: 'Выбрать «Про»',
-                kind: 'paid'
-            },
-            {
-                id: 'enterprise',
-                title: 'Корпоративный',
-                short: 'Индивидуальные условия, SLA и расширенные лимиты',
-                price: 'по запросу',
+                id: 'unlock',
+                title: 'Безлимит объектов',
+                short: 'Снимите лимит для вашей организации — навсегда',
+                price: 'по договорённости',
                 period: '',
-                maxUsersText: 'Неограниченное число одновременных пользователей и гибкие условия',
-                maxConcurrentUsers: -1,
-                order: 3,
-                highlighted: false,
-                ctaText: 'Обсудить корпоративный тариф',
+                maxUsersText: 'Неограниченное число узлов, кроссов, муфт и др. на карте',
+                order: 0,
+                highlighted: true,
+                ctaText: 'Связаться с владельцем',
                 kind: 'contact'
             }
         ];
@@ -659,14 +626,28 @@ function setSettings(obj, orgId) {
     if (obj.customDeviceOptions !== undefined) setSetting('customDeviceOptions', typeof obj.customDeviceOptions === 'string' ? obj.customDeviceOptions : JSON.stringify(obj.customDeviceOptions));
 }
 
+function normalizeMapStartRecord(data) {
+    if (!data) return null;
+    var parsed = data;
+    if (typeof parsed === 'string') {
+        try { parsed = JSON.parse(parsed); } catch (e) { return null; }
+    }
+    if (!parsed || !Array.isArray(parsed.center) || parsed.center.length < 2) return null;
+    var lat = Number(parsed.center[0]);
+    var lon = Number(parsed.center[1]);
+    var zoom = Number(parsed.zoom);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+    if (!Number.isFinite(zoom) || zoom < 1 || zoom > 21) zoom = 15;
+    return { center: [lat, lon], zoom: zoom };
+}
+
 function getMapStartForUser(userId) {
     const raw = getSetting('userMapStarts');
     if (!raw) return null;
     try {
         const map = typeof raw === 'string' ? JSON.parse(raw) : raw;
         const data = map && userId ? map[String(userId)] : null;
-        if (data && Array.isArray(data.center) && data.center.length >= 2 && typeof data.zoom === 'number') return data;
-        return null;
+        return normalizeMapStartRecord(data);
     } catch (e) {
         return null;
     }
@@ -679,13 +660,40 @@ function setMapStartForUser(userId, data) {
     try {
         if (s.settings.userMapStarts) map = typeof s.settings.userMapStarts === 'string' ? JSON.parse(s.settings.userMapStarts) : s.settings.userMapStarts;
     } catch (e) {}
-    if (!data || !Array.isArray(data.center) || data.center.length < 2) {
+    const normalized = normalizeMapStartRecord(data);
+    if (!normalized) {
         if (userId) delete map[String(userId)];
     } else {
-        map[String(userId)] = { center: data.center.slice(0, 2), zoom: typeof data.zoom === 'number' ? data.zoom : 15 };
+        map[String(userId)] = normalized;
     }
     s.settings.userMapStarts = JSON.stringify(map);
     saveStore();
+}
+
+function getMapStartForOrg(orgId) {
+    if (!orgId) return null;
+    const s = loadStore();
+    const byOrg = (s.settingsByOrg || {})[orgId];
+    if (!byOrg || byOrg.mapStart == null) return null;
+    return normalizeMapStartRecord(byOrg.mapStart);
+}
+
+function setMapStartForOrg(orgId, data) {
+    if (!orgId) return;
+    const s = loadStore();
+    if (!s.settingsByOrg) s.settingsByOrg = {};
+    if (!s.settingsByOrg[orgId]) s.settingsByOrg[orgId] = {};
+    const normalized = normalizeMapStartRecord(data);
+    if (!normalized) {
+        delete s.settingsByOrg[orgId].mapStart;
+    } else {
+        s.settingsByOrg[orgId].mapStart = normalized;
+    }
+    saveStore();
+}
+
+function getMapStartForUserOrOrg(userId, orgId) {
+    return getMapStartForOrg(orgId) || getMapStartForUser(userId);
 }
 
 function createDailyBackup() {
@@ -925,6 +933,123 @@ function setMaintenanceNotice(patch) {
     return next;
 }
 
+function getPlatformLimitsConfig() {
+    const s = loadStore();
+    var limit = 2000;
+    var concurrent = 4;
+    var limitFromStore = false;
+    var concurrentFromStore = false;
+    if (s.settings && s.settings.defaultFreeMapObjectLimit != null && s.settings.defaultFreeMapObjectLimit !== '') {
+        var n = parseInt(String(s.settings.defaultFreeMapObjectLimit), 10);
+        if (!isNaN(n) && n >= 1) {
+            limit = Math.min(999999, n);
+            limitFromStore = true;
+        }
+    }
+    if (s.settings && s.settings.defaultMaxConcurrentUsers != null && s.settings.defaultMaxConcurrentUsers !== '') {
+        var c = parseInt(String(s.settings.defaultMaxConcurrentUsers), 10);
+        if (!isNaN(c) && c >= 1) {
+            concurrent = Math.min(999, c);
+            concurrentFromStore = true;
+        } else if (c === -1) {
+            concurrent = -1;
+            concurrentFromStore = true;
+        }
+    }
+    return {
+        defaultFreeMapObjectLimit: limit,
+        defaultMaxConcurrentUsers: concurrent,
+        fromStore: { limit: limitFromStore, concurrent: concurrentFromStore }
+    };
+}
+
+function setPlatformLimitsConfig(patch) {
+    if (!patch || typeof patch !== 'object') return getPlatformLimitsConfig();
+    if (patch.defaultFreeMapObjectLimit !== undefined) {
+        var lim = typeof patch.defaultFreeMapObjectLimit === 'number'
+            ? patch.defaultFreeMapObjectLimit
+            : parseInt(String(patch.defaultFreeMapObjectLimit), 10);
+        if (!isNaN(lim) && lim >= 1) setSetting('defaultFreeMapObjectLimit', String(Math.min(999999, lim)));
+    }
+    if (patch.defaultMaxConcurrentUsers !== undefined) {
+        var cu = typeof patch.defaultMaxConcurrentUsers === 'number'
+            ? patch.defaultMaxConcurrentUsers
+            : parseInt(String(patch.defaultMaxConcurrentUsers), 10);
+        if (!isNaN(cu)) setSetting('defaultMaxConcurrentUsers', String(cu < 0 ? -1 : Math.min(999, cu)));
+    }
+    return getPlatformLimitsConfig();
+}
+
+var DEFAULT_FREE_CARD = {
+    title: 'Бесплатно',
+    short: 'Полный функционал карты в пределах лимита объектов',
+    price: '0 ₽',
+    period: 'навсегда',
+    ctaText: 'Создать организацию',
+    metaLine: ''
+};
+
+function getFreeCardConfig() {
+    const s = loadStore();
+    var card = {
+        title: DEFAULT_FREE_CARD.title,
+        short: DEFAULT_FREE_CARD.short,
+        price: DEFAULT_FREE_CARD.price,
+        period: DEFAULT_FREE_CARD.period,
+        ctaText: DEFAULT_FREE_CARD.ctaText,
+        metaLine: DEFAULT_FREE_CARD.metaLine
+    };
+    if (s.settings) {
+        if (s.settings.freeCardTitle != null && String(s.settings.freeCardTitle).trim() !== '') {
+            card.title = String(s.settings.freeCardTitle).trim().slice(0, 120);
+        }
+        if (s.settings.freeCardShort != null) card.short = String(s.settings.freeCardShort).trim().slice(0, 500);
+        if (s.settings.freeCardPrice != null && String(s.settings.freeCardPrice).trim() !== '') {
+            card.price = String(s.settings.freeCardPrice).trim().slice(0, 80);
+        }
+        if (s.settings.freeCardPeriod != null) card.period = String(s.settings.freeCardPeriod).trim().slice(0, 80);
+        if (s.settings.freeCardCta != null && String(s.settings.freeCardCta).trim() !== '') {
+            card.ctaText = String(s.settings.freeCardCta).trim().slice(0, 80);
+        }
+        if (s.settings.freeCardMeta != null) card.metaLine = String(s.settings.freeCardMeta).trim().slice(0, 300);
+    }
+    return card;
+}
+
+function setFreeCardConfig(patch) {
+    if (!patch || typeof patch !== 'object') return getFreeCardConfig();
+    if (patch.title !== undefined) setSetting('freeCardTitle', String(patch.title || '').trim());
+    if (patch.short !== undefined) setSetting('freeCardShort', String(patch.short || '').trim());
+    if (patch.price !== undefined) setSetting('freeCardPrice', String(patch.price || '').trim());
+    if (patch.period !== undefined) setSetting('freeCardPeriod', String(patch.period || '').trim());
+    if (patch.ctaText !== undefined) setSetting('freeCardCta', String(patch.ctaText || '').trim());
+    if (patch.metaLine !== undefined) setSetting('freeCardMeta', String(patch.metaLine || '').trim());
+    return getFreeCardConfig();
+}
+
+function getShowcaseConfig() {
+    var limits = getPlatformLimitsConfig();
+    return {
+        defaultFreeMapObjectLimit: limits.defaultFreeMapObjectLimit,
+        defaultMaxConcurrentUsers: limits.defaultMaxConcurrentUsers,
+        freeCard: getFreeCardConfig(),
+        plans: getPricingPlans()
+    };
+}
+
+function setShowcaseConfig(patch) {
+    if (!patch || typeof patch !== 'object') return getShowcaseConfig();
+    if (patch.defaultFreeMapObjectLimit !== undefined || patch.defaultMaxConcurrentUsers !== undefined) {
+        setPlatformLimitsConfig({
+            defaultFreeMapObjectLimit: patch.defaultFreeMapObjectLimit,
+            defaultMaxConcurrentUsers: patch.defaultMaxConcurrentUsers
+        });
+    }
+    if (patch.freeCard) setFreeCardConfig(patch.freeCard);
+    if (Array.isArray(patch.plans)) setPricingPlans(patch.plans);
+    return getShowcaseConfig();
+}
+
 function getPublicMaintenanceNotice() {
     const notice = getMaintenanceNotice();
     const active = isMaintenanceNoticeActive(notice);
@@ -954,6 +1079,9 @@ module.exports = {
     setSetting,
     getMapStartForUser,
     setMapStartForUser,
+    getMapStartForOrg,
+    setMapStartForOrg,
+    getMapStartForUserOrOrg,
     createDailyBackup,
     listBackups,
     restoreFromBackup,
@@ -980,5 +1108,11 @@ module.exports = {
     getMaintenanceNotice,
     setMaintenanceNotice,
     getPublicMaintenanceNotice,
-    isMaintenanceNoticeActive
+    isMaintenanceNoticeActive,
+    getPlatformLimitsConfig,
+    setPlatformLimitsConfig,
+    getFreeCardConfig,
+    setFreeCardConfig,
+    getShowcaseConfig,
+    setShowcaseConfig
 };

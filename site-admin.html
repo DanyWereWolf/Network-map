@@ -866,7 +866,7 @@
                         </div>
                         <div>
                             <div class="admin-title">Панель главного администратора</div>
-                            <div class="admin-subtitle">Организации · тарифы · подписки · витрина</div>
+                            <div class="admin-subtitle">Организации · витрина · лимиты</div>
                         </div>
                     </div>
                     <div class="admin-header-actions">
@@ -889,15 +889,7 @@
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
                                 <span class="admin-nav-label">Организации</span>
                             </button>
-                            <button type="button" class="admin-nav-item" role="tab" data-tab="pricing" id="nav-pricing">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                                <span class="admin-nav-label">Тарифы и лимиты</span>
-                            </button>
-                            <button type="button" class="admin-nav-item" role="tab" data-tab="subscriptions" id="nav-subscriptions">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                                <span class="admin-nav-label">Подписки</span>
-                            </button>
-                            <button type="button" class="admin-nav-item" role="tab" data-tab="landing-pricing" id="nav-landing-pricing">
+                            <button type="button" class="admin-nav-item" role="tab" data-tab="showcase" id="nav-showcase">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
                                 <span class="admin-nav-label">Витрина</span>
                             </button>
@@ -937,8 +929,8 @@
                             <ul class="fact-list">
                             <li>Сводка по данным API <code style="font-size:0.76em;">/api/organizations</code> на момент загрузки.</li>
                             <li>Счётчик объектов на картах — узлы, кроссы, муфты и т.д. (кабели не учитываются), как в приложении карты.</li>
-                            <li>Счётчики подписок «скоро истекут» зависят от поля «Граница дней» во вкладке «Подписки» (по умолчанию 14).</li>
-                            <li>Здесь нельзя ничего изменить — только просмотр для быстрой оценки состояния. Нажмите на карточку с риском — откроется нужный раздел.</li>
+                            <li>Бесплатный режим и карточки на сайте — во вкладке «Витрина» (лимиты объектов и пользователей, текст карточек).</li>
+                            <li>Остальные карточки — просмотр; по клику откроется связанный раздел.</li>
                         </ul>
                         </details>
                     </div>
@@ -953,15 +945,10 @@
                             <div class="stat-value" id="statSessionsActive">—</div>
                             <div class="stat-extra">По данным /api/organizations</div>
                         </div>
-                        <div class="stat-card stat-card--action" data-admin-goto="subscriptions" tabindex="0" role="button" title="Открыть подписки">
-                            <div class="stat-label">Подписки, истекают скоро</div>
-                            <div class="stat-value" id="statExpiringSoon">—</div>
-                            <div class="stat-extra" id="statExpiringSoonHint">В течение 14 дней</div>
-                        </div>
-                        <div class="stat-card stat-card--action" data-admin-goto="subscriptions" tabindex="0" role="button" title="Открыть подписки">
-                            <div class="stat-label">Просроченные подписки</div>
-                            <div class="stat-value danger-text" id="statExpired">—</div>
-                            <div class="stat-extra">Нужны действия администратора</div>
+                        <div class="stat-card stat-card--action" data-admin-goto="showcase" tabindex="0" role="button" title="Настроить витрину">
+                            <div class="stat-label">Безлимит объектов</div>
+                            <div class="stat-value" id="statUnlimitedOrgs">—</div>
+                            <div class="stat-extra">организаций с разблокировкой</div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-label">Покрытие лимитов</div>
@@ -973,6 +960,11 @@
                             <div class="stat-value" id="statAvgSessions">—</div>
                             <div class="stat-extra">Среднее активных сессий на организацию</div>
                         </div>
+                        <div class="stat-card stat-card--action" data-admin-goto="showcase" tabindex="0" role="button" title="Настроить бесплатный режим">
+                            <div class="stat-label">Бесплатный тариф (по умолчанию)</div>
+                            <div class="stat-value" id="statFreeDefaultObjects">—</div>
+                            <div class="stat-extra">объектов · одновременно <span id="statFreeDefaultConcurrent" class="text-muted">—</span> польз.</div>
+                        </div>
                         <div class="stat-card stat-card--action" data-admin-goto="organizations" data-org-filter="highload" tabindex="0" role="button" title="Открыть организации с высокой загрузкой">
                             <div class="stat-label">Организации с риском по лимиту</div>
                             <div class="stat-value danger-text" id="statHighLoadOrgs">—</div>
@@ -982,11 +974,6 @@
                             <div class="stat-label">Организации без лимита</div>
                             <div class="stat-value" id="statWithoutLimit">—</div>
                             <div class="stat-extra">Лимит не задан/невалидный</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">Организации без даты подписки</div>
-                            <div class="stat-value" id="statNoSubscriptionDate">—</div>
-                            <div class="stat-extra">Требует проверки условий обслуживания</div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-label">Медиана активных сессий</div>
@@ -1022,13 +1009,13 @@
                                 <ul class="legend-list">
                                     <li class="legend-item"><span class="legend-dot active"></span><span class="legend-item-label">Активные</span><strong id="statusLegendActive">0</strong></li>
                                     <li class="legend-item"><span class="legend-dot suspended"></span><span class="legend-item-label">Приостановленные</span><strong id="statusLegendSuspended">0</strong></li>
-                                    <li class="legend-item"><span class="legend-dot expired"></span><span class="legend-item-label">Просроченная подписка</span><strong id="statusLegendExpired">0</strong></li>
+                                    <li class="legend-item"><span class="legend-dot info"></span><span class="legend-item-label">Безлимит объектов</span><strong id="statusLegendUnlimited">0</strong></li>
                                 </ul>
                             </div>
                         </div>
                         <div class="analytics-card">
-                            <div class="analytics-title">Распределение по тарифам</div>
-                            <div class="bar-chart" id="plansBarChart"></div>
+                            <div class="analytics-title">Лимиты объектов на карте</div>
+                            <div class="bar-chart" id="mapLimitBarChart"></div>
                         </div>
                         <div class="analytics-card">
                             <div class="analytics-title">Топ организаций по загрузке лимита</div>
@@ -1041,9 +1028,8 @@
                         <div class="analytics-card">
                             <div class="analytics-title">Качество данных и риски</div>
                             <ul class="legend-list">
-                                <li class="legend-item"><span class="legend-dot warn"></span><span class="legend-item-label" id="riskLegendExpiringLabel">Скоро истекают (до 14 дней)</span><strong id="riskLegendExpiring">0</strong></li>
-                                <li class="legend-item"><span class="legend-dot expired"></span><span class="legend-item-label">Просроченные подписки</span><strong id="riskLegendExpired">0</strong></li>
-                                <li class="legend-item"><span class="legend-dot info"></span><span class="legend-item-label">Без даты подписки</span><strong id="riskLegendNoDate">0</strong></li>
+                                <li class="legend-item"><span class="legend-dot warn"></span><span class="legend-item-label">Высокая загрузка сессий (≥80%)</span><strong id="riskLegendHighLoad">0</strong></li>
+                                <li class="legend-item"><span class="legend-dot info"></span><span class="legend-item-label">Безлимит объектов</span><strong id="riskLegendUnlimited">0</strong></li>
                                 <li class="legend-item"><span class="legend-dot suspended"></span><span class="legend-item-label">Приостановленные</span><strong id="riskLegendSuspended">0</strong></li>
                             </ul>
                         </div>
@@ -1064,8 +1050,8 @@
                         <details class="panel-help">
                             <summary>Справка по разделу</summary>
                             <ul class="fact-list">
-                            <li>Полный список организаций из хранилища сервера: тариф (planId), лимит сессий, дата подписки, контактная почта, число объектов на карте (узлы, кроссы, муфты и т.д., без кабелей).</li>
-                            <li>«Настроить» переключает на вкладку «Тарифы и лимиты» с уже выбранной организацией.</li>
+                            <li>Список организаций: лимиты объектов и сессий, контактная почта, число объектов на карте (узлы, кроссы, муфты — без кабелей).</li>
+                            <li>«Настроить» открывает блок лимитов для выбранной организации ниже.</li>
                             <li>«Удалить» безвозвратно удаляет организацию, карту, историю и пользователей этой организации.</li>
                             <li>Роли и список пользователей по-прежнему ведутся в приложении карты (модальное окно «Пользователи»).</li>
                         </ul>
@@ -1075,13 +1061,13 @@
                         <button type="button" class="org-filter active" data-filter="all">Все</button>
                         <button type="button" class="org-filter" data-filter="active">Активные</button>
                         <button type="button" class="org-filter" data-filter="suspended">Приостановленные</button>
-                        <button type="button" class="org-filter" data-filter="expired">Просроченные</button>
+                        <button type="button" class="org-filter" data-filter="unlimited">Безлимит</button>
                         <button type="button" class="org-filter" data-filter="highload">Высокая загрузка</button>
                     </div>
                     <div class="org-toolbar">
                         <div class="search-field">
                             <label for="orgsSearchInput" class="sr-only">Поиск организаций</label>
-                            <input type="search" id="orgsSearchInput" placeholder="Поиск: название, e-mail, тариф, ID…" autocomplete="off">
+                            <input type="search" id="orgsSearchInput" placeholder="Поиск: название, e-mail, ID…" autocomplete="off">
                         </div>
                         <span class="org-toolbar-meta" id="orgsSearchMeta">—</span>
                     </div>
@@ -1091,11 +1077,10 @@
                                 <tr>
                                     <th>Организация</th>
                                     <th>Почта</th>
-                                    <th>Тариф</th>
-                                    <th>Лимит пользователей</th>
-                                    <th>Подписка до</th>
+                                    <th>Лимит объектов</th>
+                                    <th>Безлимит</th>
+                                    <th>Сессии / лимит</th>
                                     <th>Статус</th>
-                                    <th>Активных сессий</th>
                                     <th>Объектов на карте</th>
                                     <th></th>
                                 </tr>
@@ -1104,72 +1089,47 @@
                             </tbody>
                         </table>
                     </div>
-                    <div class="hint">Изменения лимитов и подписки сохраняются во вкладке «Тарифы и лимиты».</div>
-                </section>
-
-                <!-- Тарифы и лимиты -->
-                <section id="tab-pricing" class="tab-content">
-                    <div class="panel-head">
-                        <details class="panel-help">
-                            <summary>Справка по разделу</summary>
-                            <ul class="fact-list">
-                            <li>Тариф организации (<strong>planId</strong>) — встроенные basic / pro / enterprise и id карточек с вкладки «Витрина тарифов»; лимит сессий и дату подписки можно переопределить отдельно.</li>
-                            <li>Приостановка (<strong>приостановлена</strong>) сбрасывает сессии и блокирует вход для всех пользователей организации.</li>
-                            <li>Ниже — сброс пароля пользователя организации (завершает его активные сессии).</li>
-                        </ul>
-                        </details>
-                    </div>
-                    <div class="field-row">
-                        <div class="field-col">
-                            <label for="pricingOrgSelect">Организация</label>
-                            <select id="pricingOrgSelect">
-                                <option value="">Выберите организацию…</option>
-                            </select>
-                        </div>
-                        <div class="field-col">
-                            <label for="pricingOrgPlanId">Тариф (planId)</label>
-                            <select id="pricingOrgPlanId" disabled>
-                                <option value="">Сначала выберите организацию…</option>
-                            </select>
-                            <div class="hint">Витрина: вкладка «Витрина тарифов». Если у организации нестандартный id, он появится в списке как «Текущий».</div>
-                        </div>
-                    </div>
-                    <div class="field-row">
-                        <div class="field-col">
-                            <label for="pricingMaxUsers">Максимум одновременных пользователей</label>
-                            <input id="pricingMaxUsers" type="number" min="0" placeholder="0 — брать значение из базового плана">
-                            <div class="hint">0 или пусто — использовать лимит из базового плана.</div>
-                        </div>
-                        <div class="field-col">
-                            <label for="pricingSubscriptionEndsAt">Подписка до</label>
-                            <input id="pricingSubscriptionEndsAt" type="date">
-                            <div class="hint">Пусто — без ограничения по дате (под вашим контролем).</div>
-                        </div>
-                        <div class="field-col">
-                            <label for="pricingStatus">Статус</label>
-                            <select id="pricingStatus">
-                                <option value="active">Активна</option>
-                                <option value="suspended">Приостановлена</option>
-                            </select>
-                            <div class="hint">Приостановленная организация не сможет войти, даже при оплате.</div>
-                        </div>
-                    </div>
-                    <div class="field-row">
-                        <div class="field-col">
-                            <label for="pricingContactEmail">E-mail для связи (организация)</label>
-                            <input id="pricingContactEmail" type="email" placeholder="name@company.ru">
-                            <div class="hint">Указывается при регистрации; можно изменить здесь.</div>
-                        </div>
-                    </div>
-                    <button class="btn-sm-primary" id="pricingSaveBtn">Сохранить изменения по организации</button>
-
                     <div style="margin-top:22px;padding-top:18px;border-top:1px solid rgba(15,23,42,0.08);">
-                        <div class="panel-head" style="margin-bottom:12px;">
-                            <h3 class="panel-title" style="font-size:0.95rem;">Сброс пароля пользователя</h3>
-                            <ul class="fact-list">
-                                <li>Выберите организацию и учётную запись; новый пароль действует сразу, старые сессии этого пользователя завершаются.</li>
-                            </ul>
+                        <h3 class="panel-title" style="font-size:0.95rem;margin-bottom:12px;">Лимиты организации</h3>
+                        <div class="field-row">
+                            <div class="field-col">
+                                <label for="pricingOrgSelect">Организация</label>
+                                <select id="pricingOrgSelect">
+                                    <option value="">Выберите организацию…</option>
+                                </select>
+                            </div>
+                            <div class="field-col">
+                                <label><input type="checkbox" id="pricingMapLimitUnlocked"> Безлимит объектов на карте</label>
+                            </div>
                         </div>
+                        <div class="field-row">
+                            <div class="field-col">
+                                <label for="pricingCustomMapLimit">Свой лимит объектов (пусто = по умолчанию с витрины)</label>
+                                <input id="pricingCustomMapLimit" type="number" min="1" placeholder="по умолчанию">
+                            </div>
+                            <div class="field-col">
+                                <label for="pricingMaxConcurrentUsers">Макс. одновременных пользователей</label>
+                                <input id="pricingMaxConcurrentUsers" type="number" min="-1" placeholder="4">
+                                <div class="hint">Пусто — как на витрине; −1 — без ограничения.</div>
+                            </div>
+                            <div class="field-col">
+                                <label for="pricingStatus">Статус</label>
+                                <select id="pricingStatus">
+                                    <option value="active">Активна</option>
+                                    <option value="suspended">Приостановлена</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <div class="field-col">
+                                <label for="pricingContactEmail">E-mail для связи</label>
+                                <input id="pricingContactEmail" type="email" placeholder="name@company.ru">
+                            </div>
+                        </div>
+                        <button class="btn-sm-primary" id="pricingSaveBtn">Сохранить лимиты организации</button>
+                    </div>
+                    <div style="margin-top:22px;padding-top:18px;border-top:1px solid rgba(15,23,42,0.08);">
+                        <h3 class="panel-title" style="font-size:0.95rem;margin-bottom:12px;">Сброс пароля пользователя</h3>
                         <div class="field-row">
                             <div class="field-col" style="flex:1;min-width:220px;">
                                 <label for="orgPasswordResetSelect">Организация</label>
@@ -1197,190 +1157,132 @@
                     </div>
                 </section>
 
-                <!-- Тарифы на главной странице -->
-                <section id="tab-landing-pricing" class="tab-content">
+                <!-- Витрина: бесплатный режим и карточки -->
+                <section id="tab-showcase" class="tab-content">
                     <div class="panel-head">
                         <details class="panel-help">
                             <summary>Справка по разделу</summary>
                             <ul class="fact-list">
-                            <li>Карточки на публичной странице <strong>pricing.html</strong> и на корне сайта (если открыт лендинг) — только отображение и кнопки.</li>
-                            <li>Числовой лимит в карточке подхватывается для организаций без ручного лимита, если <strong>ID тарифа</strong> совпадает с <strong>planId</strong> организации.</li>
-                            <li><strong>Срок в днях</strong> — для пробного тарифа задаёт длительность подписки при регистрации и текст на лендинге; для платных — опционально (срок подписки при саморегистрации).</li>
-                            <li>Акции и скидки: процент и даты; опционально «цена до скидки» для зачёркивания.</li>
+                            <li>Карточка «Бесплатно» на <strong>pricing.html</strong>: лимиты объектов и пользователей применяются ко всем новым организациям (если не задано иное в разделе «Организации»).</li>
+                            <li>Строка под ценой: если поле «Подпись под ценой» пустое — подставляется текст с числами лимитов автоматически.</li>
+                            <li>Дополнительные карточки — обычно «Снять лимит» с кнопкой в контакты; подписок и пробных периодов больше нет.</li>
                         </ul>
                         </details>
                     </div>
+
+                    <h3 class="panel-title" style="font-size:0.95rem;margin:0 0 12px;">Бесплатное использование</h3>
+                    <p class="hint" style="margin:0 0 14px;">Лимиты для организаций без индивидуальных настроек. Отображаются на карточке «Бесплатно» и при регистрации.</p>
                     <div class="field-row">
                         <div class="field-col">
-                            <label>Список тарифов</label>
-                            <div id="landingPricingList" class="table-wrap" style="max-height:260px;overflow:auto;">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>Название</th>
-                                            <th>Цена</th>
-                                            <th>Лимит</th>
-                                            <th>Дней</th>
-                                            <th>Скидка</th>
-                                            <th>Порядок</th>
-                                            <th>Тип</th>
-                                            <th>Действия</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="landingPricingTableBody">
-                                    </tbody>
-                                </table>
+                            <label for="platformDefaultMapObjectLimit">Объектов на карте (макс.)</label>
+                            <input id="platformDefaultMapObjectLimit" type="number" min="1" max="999999" placeholder="2000">
+                            <div class="hint">Узлы, кроссы, муфты — без кабелей. На сервере: <strong id="adminDefaultFreeLimit">—</strong></div>
+                        </div>
+                        <div class="field-col">
+                            <label for="platformDefaultMaxConcurrent">Пользователей одновременно</label>
+                            <input id="platformDefaultMaxConcurrent" type="number" min="1" max="999" placeholder="4">
+                            <div class="hint">На сервере: <strong id="adminDefaultMaxConcurrent">—</strong></div>
+                        </div>
+                    </div>
+                    <div class="field-row">
+                        <div class="field-col">
+                            <label for="freeCardTitle">Заголовок карточки</label>
+                            <input id="freeCardTitle" type="text" placeholder="Бесплатно">
+                        </div>
+                        <div class="field-col">
+                            <label for="freeCardShort">Краткое описание</label>
+                            <input id="freeCardShort" type="text" placeholder="Полный функционал карты в пределах лимита…">
+                        </div>
+                    </div>
+                    <div class="field-row">
+                        <div class="field-col">
+                            <label for="freeCardPrice">Цена (текст)</label>
+                            <input id="freeCardPrice" type="text" placeholder="0 ₽">
+                        </div>
+                        <div class="field-col">
+                            <label for="freeCardPeriod">Период (текст)</label>
+                            <input id="freeCardPeriod" type="text" placeholder="навсегда">
+                        </div>
+                        <div class="field-col">
+                            <label for="freeCardCta">Текст кнопки</label>
+                            <input id="freeCardCta" type="text" placeholder="Создать организацию">
+                        </div>
+                    </div>
+                    <div class="field-row">
+                        <div class="field-col" style="flex:1 1 100%;">
+                            <label for="freeCardMeta">Подпись под ценой (необязательно)</label>
+                            <input id="freeCardMeta" type="text" placeholder="Пусто — «До N объектов… · до M пользователей…»">
+                        </div>
+                    </div>
+                    <button type="button" class="btn-sm-primary" id="freeShowcaseSaveBtn">Сохранить бесплатный режим</button>
+
+                    <div style="margin-top:28px;padding-top:20px;border-top:1px solid rgba(15,23,42,0.08);">
+                        <h3 class="panel-title" style="font-size:0.95rem;margin:0 0 12px;">Дополнительные карточки на сайте</h3>
+                        <p class="hint" style="margin:0 0 14px;">Например «Безлимит объектов» — кнопка ведёт в раздел контактов. Карточка «Бесплатно» задаётся выше.</p>
+                        <div class="table-wrap" style="max-height:220px;overflow:auto;margin-bottom:12px;">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Название</th>
+                                        <th>Цена</th>
+                                        <th>Порядок</th>
+                                        <th>Выделена</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="landingPricingTableBody"></tbody>
+                            </table>
+                        </div>
+                        <button type="button" class="btn-sm" id="landingPricingAddBtn">Добавить карточку</button>
+                        <div class="field-row" style="margin-top:16px;">
+                            <div class="field-col">
+                                <label for="landingPricingId">ID (латиница)</label>
+                                <input id="landingPricingId" type="text" placeholder="unlock">
+                            </div>
+                            <div class="field-col">
+                                <label for="landingPricingTitle">Название</label>
+                                <input id="landingPricingTitle" type="text" placeholder="Безлимит объектов">
+                            </div>
+                            <div class="field-col">
+                                <label for="landingPricingShort">Описание</label>
+                                <input id="landingPricingShort" type="text" placeholder="Снимите лимит для организации…">
                             </div>
                         </div>
+                        <div class="field-row">
+                            <div class="field-col">
+                                <label for="landingPricingPrice">Цена (текст)</label>
+                                <input id="landingPricingPrice" type="text" placeholder="по договорённости">
+                            </div>
+                            <div class="field-col">
+                                <label for="landingPricingPeriod">Период (текст)</label>
+                                <input id="landingPricingPeriod" type="text" placeholder="">
+                            </div>
+                            <div class="field-col">
+                                <label for="landingPricingOrder">Порядок</label>
+                                <input id="landingPricingOrder" type="number" placeholder="0">
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <div class="field-col">
+                                <label for="landingPricingMaxUsersText">Подпись под ценой</label>
+                                <input id="landingPricingMaxUsersText" type="text" placeholder="Неограниченное число узлов…">
+                            </div>
+                            <div class="field-col">
+                                <label for="landingPricingCtaText">Текст кнопки</label>
+                                <input id="landingPricingCtaText" type="text" placeholder="Связаться с владельцем">
+                            </div>
+                            <div class="field-col">
+                                <label for="landingPricingHighlighted">Выделить карточку</label>
+                                <select id="landingPricingHighlighted">
+                                    <option value="false">Нет</option>
+                                    <option value="true">Да</option>
+                                </select>
+                            </div>
+                        </div>
+                        <input type="hidden" id="landingPricingKind" value="contact">
+                        <button type="button" class="btn-sm-primary" id="landingPricingSaveBtn">Сохранить карточку в список</button>
+                        <button type="button" class="btn-sm-primary" id="showcasePlansPublishBtn" style="margin-left:8px;">Опубликовать все карточки на сайте</button>
                     </div>
-                    <div class="field-row">
-                        <div class="field-col">
-                            <button class="btn-sm" id="landingPricingAddBtn">Добавить тариф</button>
-                        </div>
-                    </div>
-                    <div class="field-row">
-                        <div class="field-col">
-                            <label for="landingPricingId">ID тарифа</label>
-                            <input id="landingPricingId" type="text" placeholder="Например: basic, trial, enterprise">
-                        </div>
-                        <div class="field-col">
-                            <label for="landingPricingTitle">Название</label>
-                            <input id="landingPricingTitle" type="text" placeholder="Наименование тарифа">
-                        </div>
-                        <div class="field-col">
-                            <label for="landingPricingShort">Краткое описание</label>
-                            <input id="landingPricingShort" type="text" placeholder="Для небольших команд...">
-                        </div>
-                    </div>
-                    <div class="field-row">
-                        <div class="field-col">
-                            <label for="landingPricingPrice">Цена (текст)</label>
-                            <input id="landingPricingPrice" type="text" placeholder="Например: 1 490 ₽">
-                        </div>
-                        <div class="field-col">
-                            <label for="landingPricingPeriod">Период (текст на карточке)</label>
-                            <input id="landingPricingPeriod" type="text" placeholder="/ месяц, / 14 дней и т.п.">
-                        </div>
-                        <div class="field-col" id="landingPricingDaysCol">
-                            <label for="landingPricingSubscriptionDays">Срок подписки, дней</label>
-                            <input id="landingPricingSubscriptionDays" type="number" min="1" max="3650" placeholder="14 — для пробного тарифа">
-                            <div class="hint" id="landingPricingDaysHint">Для типа «Пробный»: длительность при регистрации и подписи на сайте. Кнопка ниже подставит период в карточку.</div>
-                        </div>
-                        <div class="field-col">
-                            <label for="landingPricingOrder">Порядок (целое число)</label>
-                            <input id="landingPricingOrder" type="number" placeholder="0, 1, 2...">
-                        </div>
-                    </div>
-                    <div class="field-row">
-                        <div class="field-col">
-                            <label for="landingPricingMaxUsersText">Описание лимита (текст на сайте)</label>
-                            <input id="landingPricingMaxUsersText" type="text" placeholder="До 3 одновременных пользователей...">
-                        </div>
-                        <div class="field-col">
-                            <label for="landingPricingMaxConcurrentUsers">Лимит одновременных пользователей (число)</label>
-                            <input id="landingPricingMaxConcurrentUsers" type="number" min="-1" step="1" placeholder="Пусто — по встроенному плану">
-                            <div class="hint">Целое ≥ 1 или −1 (без ограничения). Пусто — брать лимит из встроенных basic/pro/enterprise по ID.</div>
-                        </div>
-                        <div class="field-col">
-                            <label for="landingPricingKind">Тип тарифа</label>
-                            <select id="landingPricingKind">
-                                <option value="paid">Платный (ведёт на оплату)</option>
-                                <option value="trial">Пробный (переводит на регистрацию)</option>
-                                <option value="contact">Связаться (без оплаты)</option>
-                            </select>
-                        </div>
-                        <div class="field-col">
-                            <label for="landingPricingHighlighted">Выделить как рекомендуемый</label>
-                            <select id="landingPricingHighlighted">
-                                <option value="false">Нет</option>
-                                <option value="true">Да</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="field-row">
-                        <div class="field-col">
-                            <label for="landingPricingCtaText">Текст кнопки</label>
-                            <input id="landingPricingCtaText" type="text" placeholder="Например: Выбрать «Базовый»">
-                        </div>
-                        <div class="field-col" style="align-self:flex-end;">
-                            <button type="button" class="btn-sm" id="landingPricingSyncPeriodBtn">Подставить период из дней</button>
-                        </div>
-                    </div>
-                    <div class="field-row">
-                        <div class="field-col">
-                            <label for="landingPricingPromoPercent">Скидка на время, %</label>
-                            <input id="landingPricingPromoPercent" type="number" min="0" max="100" placeholder="0 — без акции">
-                        </div>
-                        <div class="field-col">
-                            <label for="landingPricingPromoStarts">Начало акции</label>
-                            <input id="landingPricingPromoStarts" type="date">
-                        </div>
-                        <div class="field-col">
-                            <label for="landingPricingPromoEnds">Конец акции</label>
-                            <input id="landingPricingPromoEnds" type="date">
-                        </div>
-                    </div>
-                    <div class="field-row">
-                        <div class="field-col">
-                            <label for="landingPricingPriceBeforePromo">Цена до скидки (текст, необязательно)</label>
-                            <input id="landingPricingPriceBeforePromo" type="text" placeholder="Например: 1 490 ₽ — зачёркнуть при акции">
-                        </div>
-                    </div>
-                    <div class="hint" style="margin-bottom:10px;">Пока даты действуют и указан процент скидки, на странице тарифов показывается бейдж и при необходимости зачёркнутая «старая» цена.</div>
-                    <button class="btn-sm-primary" id="landingPricingSaveBtn">Сохранить тарифы для главной</button>
-                </section>
-
-                <!-- Подписки -->
-                <section id="tab-subscriptions" class="tab-content">
-                    <div class="panel-head">
-                        <details class="panel-help">
-                            <summary>Справка по разделу</summary>
-                            <ul class="fact-list">
-                            <li>Показаны только организации с датой окончания подписки в пределах выбранного горизонта (дней) или уже с истёкшей датой.</li>
-                            <li>Кнопки продления используют настраиваемое число дней (сохраняется в браузере). Можно задать два быстрых варианта и своё значение в строке таблицы.</li>
-                            <li>После продления пользователи снова смогут входить, если организация не приостановлена.</li>
-                        </ul>
-                        </details>
-                    </div>
-                    <div class="field-row subs-settings-row">
-                        <div class="field-col">
-                            <label for="subsDays">Граница «скоро истекает», дней</label>
-                            <input id="subsDays" type="number" min="1" max="3650" value="14">
-                            <div class="hint">Кто попадает в список ниже и в счётчик на обзоре.</div>
-                        </div>
-                        <div class="field-col">
-                            <label for="subsExtendPreset1">Быстрое продление 1, дней</label>
-                            <input id="subsExtendPreset1" type="number" min="1" max="3650" value="30">
-                        </div>
-                        <div class="field-col">
-                            <label for="subsExtendPreset2">Быстрое продление 2, дней</label>
-                            <input id="subsExtendPreset2" type="number" min="1" max="3650" value="365">
-                        </div>
-                        <div class="field-col">
-                            <label for="subsExtendDefault">Дней по умолчанию в строке</label>
-                            <input id="subsExtendDefault" type="number" min="1" max="3650" value="30">
-                            <div class="hint">Поле «+N дн.» у каждой организации в таблице.</div>
-                        </div>
-                        <div class="field-col" style="align-self:flex-end;">
-                            <button type="button" class="btn-sm" id="subsRefreshBtn">Обновить список</button>
-                        </div>
-                    </div>
-                    <div class="table-wrap">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Организация</th>
-                                    <th>Подписка до</th>
-                                    <th>Статус</th>
-                                    <th>Дней до конца</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody id="subsTableBody">
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="hint">Продление: от текущей даты окончания (или от сегодня, если подписка уже истекла).</div>
                 </section>
 
                 <!-- Уведомления пользователям -->
@@ -1392,7 +1294,7 @@
                                     <details class="panel-help" style="margin:0;">
                                         <summary>Справка по разделу</summary>
                                         <ul class="fact-list">
-                                        <li>Оранжевый баннер вверху страницы: вход, витрина, оплата и приложение карты.</li>
+                                        <li>Оранжевый баннер вверху страницы: вход, витрина и приложение карты.</li>
                                         <li>После изменения текста баннер снова появится у тех, кто нажимал «Понятно».</li>
                                     </ul>
                                     </details>
@@ -1519,9 +1421,7 @@
         var ADMIN_SECTION_TITLES = {
             overview: 'Обзор',
             organizations: 'Организации',
-            pricing: 'Тарифы и лимиты',
-            subscriptions: 'Подписки',
-            'landing-pricing': 'Витрина тарифов',
+            showcase: 'Витрина',
             maintenance: 'Уведомления',
             account: 'Аккаунт'
         };
@@ -1600,6 +1500,7 @@
         if (navOverlay) navOverlay.addEventListener('click', closeAdminSidebar);
 
         var hashTab = (location.hash || '').replace(/^#/, '');
+        if (hashTab === 'pricing' || hashTab === 'landing-pricing' || hashTab === 'subscriptions') hashTab = 'showcase';
         if (hashTab && ADMIN_SECTION_TITLES[hashTab]) {
             adminSwitchTab(hashTab, { skipHash: true });
         }
@@ -1644,106 +1545,6 @@
         var cachedUsers = [];
         var orgListFilter = 'all';
         var adminDataLoading = false;
-        var SUBS_SETTINGS_KEYS = {
-            soon: 'networkMap_admin_subsSoonDays',
-            extend1: 'networkMap_admin_subsExtend1',
-            extend2: 'networkMap_admin_subsExtend2',
-            extendDefault: 'networkMap_admin_subsExtendDefault'
-        };
-
-        function clampSubsDays(val, fallback) {
-            var n = parseInt(val, 10);
-            if (isNaN(n) || n < 1) return fallback;
-            if (n > 3650) return 3650;
-            return n;
-        }
-
-        function loadSubsSettings() {
-            try {
-                var soon = localStorage.getItem(SUBS_SETTINGS_KEYS.soon);
-                var e1 = localStorage.getItem(SUBS_SETTINGS_KEYS.extend1);
-                var e2 = localStorage.getItem(SUBS_SETTINGS_KEYS.extend2);
-                var ed = localStorage.getItem(SUBS_SETTINGS_KEYS.extendDefault);
-                var soonEl = document.getElementById('subsDays');
-                var e1El = document.getElementById('subsExtendPreset1');
-                var e2El = document.getElementById('subsExtendPreset2');
-                var edEl = document.getElementById('subsExtendDefault');
-                if (soonEl && soon) soonEl.value = String(clampSubsDays(soon, 14));
-                if (e1El && e1) e1El.value = String(clampSubsDays(e1, 30));
-                if (e2El && e2) e2El.value = String(clampSubsDays(e2, 365));
-                if (edEl && ed) edEl.value = String(clampSubsDays(ed, 30));
-            } catch (e) {}
-        }
-
-        function saveSubsSettings() {
-            try {
-                localStorage.setItem(SUBS_SETTINGS_KEYS.soon, String(getSubsSoonDays()));
-                localStorage.setItem(SUBS_SETTINGS_KEYS.extend1, String(getSubsExtendPresets().preset1));
-                localStorage.setItem(SUBS_SETTINGS_KEYS.extend2, String(getSubsExtendPresets().preset2));
-                localStorage.setItem(SUBS_SETTINGS_KEYS.extendDefault, String(getSubsExtendPresets().rowDefault));
-            } catch (e) {}
-        }
-
-        function getSubsSoonDays() {
-            var el = document.getElementById('subsDays');
-            return clampSubsDays(el && el.value, 14);
-        }
-
-        function getSubsExtendPresets() {
-            var e1 = document.getElementById('subsExtendPreset1');
-            var e2 = document.getElementById('subsExtendPreset2');
-            var ed = document.getElementById('subsExtendDefault');
-            return {
-                preset1: clampSubsDays(e1 && e1.value, 30),
-                preset2: clampSubsDays(e2 && e2.value, 365),
-                rowDefault: clampSubsDays(ed && ed.value, 30)
-            };
-        }
-
-        function daysWord(n) {
-            var mod10 = n % 10;
-            var mod100 = n % 100;
-            if (mod10 === 1 && mod100 !== 11) return 'день';
-            if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'дня';
-            return 'дней';
-        }
-
-        function formatExtendButtonLabel(days) {
-            if (days === 365) return '+1 год';
-            if (days === 30) return '+30 дн.';
-            if (days === 7) return '+7 дн.';
-            return '+' + days + ' дн.';
-        }
-
-        function updateSubsSoonHints() {
-            var d = getSubsSoonDays();
-            var hint = document.getElementById('statExpiringSoonHint');
-            if (hint) hint.textContent = 'В течение ' + d + ' ' + daysWord(d);
-            var riskLabel = document.getElementById('riskLegendExpiringLabel');
-            if (riskLabel) riskLabel.textContent = 'Скоро истекают (до ' + d + ' ' + daysWord(d) + ')';
-        }
-
-        function onSubsSettingsChanged() {
-            saveSubsSettings();
-            updateSubsSoonHints();
-            renderOverview();
-            renderSubscriptionsTable();
-        }
-
-        function extendOrganizationSubscription(orgId, addDays) {
-            var add = clampSubsDays(addDays, 0);
-            if (!add) return;
-            var o = orgs.find(function(x) { return x.id === orgId; });
-            if (!o) return;
-            var base = o.subscriptionEndsAt ? new Date(o.subscriptionEndsAt) : new Date();
-            if (base < new Date()) base = new Date();
-            base.setDate(base.getDate() + add);
-            return patchOrganization(orgId, { subscriptionEndsAt: base.toISOString() }).then(function() {
-                alert('Подписка продлена на ' + add + ' ' + daysWord(add));
-                loadAll();
-            });
-        }
-
         window.adminSetOrgFilter = function(filter) {
             orgListFilter = filter || 'all';
             document.querySelectorAll('.org-filter').forEach(function(btn) {
@@ -1755,12 +1556,9 @@
 
         function orgMatchesListFilter(o) {
             if (!o || orgListFilter === 'all') return true;
-            var now = new Date();
-            var end = o.subscriptionEndsAt ? new Date(o.subscriptionEndsAt) : null;
-            var expired = end && end < now;
-            if (orgListFilter === 'expired') return !!expired;
+            if (orgListFilter === 'unlimited') return !!o.mapObjectLimitUnlocked;
             if (orgListFilter === 'suspended') return o.status === 'suspended';
-            if (orgListFilter === 'active') return o.status === 'active' && !expired;
+            if (orgListFilter === 'active') return o.status === 'active';
             if (orgListFilter === 'highload') {
                 var limit = o.effectiveMaxConcurrentUsers != null ? o.effectiveMaxConcurrentUsers :
                     (o.maxConcurrentUsers != null && o.maxConcurrentUsers > 0 ? o.maxConcurrentUsers : null);
@@ -1863,29 +1661,23 @@
             var total = orgs.length;
             var active = orgs.filter(function(o) { return o.status === 'active'; }).length;
             var suspended = orgs.filter(function(o) { return o.status === 'suspended'; }).length;
-            var now = new Date();
-            var soonDays = getSubsSoonDays();
-            updateSubsSoonHints();
-            var soonMs = soonDays * 24 * 60 * 60 * 1000;
-            var expiring = 0, expired = 0;
+            var unlimitedOrgs = orgs.filter(function(o) { return o.mapObjectLimitUnlocked; }).length;
             var sessions = 0;
             var totalLimit = 0;
-            var expiredSubscriptions = 0;
-            var planCounts = {};
             var orgsWithoutLimit = 0;
-            var orgsNoSubscriptionDate = 0;
             var highLoadOrgs = 0;
             var sessionsArray = [];
             var orgCapacityList = [];
             var orgMapObjectsList = [];
             var mapObjectsTotal = 0;
+            var limitBuckets = { unlimited: 0, withLimit: 0 };
             orgs.forEach(function(o) {
                 var activeSessions = parseInt(o.activeSessions, 10);
                 if (isNaN(activeSessions) || activeSessions < 0) activeSessions = 0;
                 sessions += activeSessions;
                 sessionsArray.push(activeSessions);
-                var planKey = (o.planId || 'basic').toLowerCase();
-                planCounts[planKey] = (planCounts[planKey] || 0) + 1;
+                if (o.mapObjectLimitUnlocked) limitBuckets.unlimited++;
+                else limitBuckets.withLimit++;
                 var rawLimit = parseInt(o.effectiveMaxConcurrentUsers != null ? o.effectiveMaxConcurrentUsers : o.maxConcurrentUsers, 10);
                 if (!isNaN(rawLimit) && rawLimit > 0) {
                     totalLimit += rawLimit;
@@ -1907,30 +1699,18 @@
                     name: o.name || o.id || 'Организация',
                     count: mapObj
                 });
-                if (o.subscriptionEndsAt) {
-                    var end = new Date(o.subscriptionEndsAt);
-                    var diff = end - now;
-                    if (diff < 0) {
-                        expired++;
-                        expiredSubscriptions++;
-                    }
-                    else if (diff <= soonMs) expiring++;
-                } else {
-                    orgsNoSubscriptionDate++;
-                }
             });
             document.getElementById('statOrgsTotal').textContent = total || '0';
             document.getElementById('statOrgsSplit').textContent = active + ' / ' + suspended;
             document.getElementById('statSessionsActive').textContent = sessions || '0';
-            document.getElementById('statExpiringSoon').textContent = expiring || '0';
-            document.getElementById('statExpired').textContent = expired || '0';
+            var statUnl = document.getElementById('statUnlimitedOrgs');
+            if (statUnl) statUnl.textContent = String(unlimitedOrgs);
             var coverage = (totalLimit > 0) ? ((sessions / totalLimit) * 100) : 0;
             document.getElementById('statCapacityCoverage').textContent = (coverage || 0).toFixed(1) + '%';
             document.getElementById('statCapacitySplit').textContent = sessions + ' / ' + totalLimit;
             document.getElementById('statAvgSessions').textContent = total ? (sessions / total).toFixed(1) : '0.0';
             document.getElementById('statHighLoadOrgs').textContent = String(highLoadOrgs);
             document.getElementById('statWithoutLimit').textContent = String(orgsWithoutLimit);
-            document.getElementById('statNoSubscriptionDate').textContent = String(orgsNoSubscriptionDate);
 
             var median = 0;
             if (sessionsArray.length) {
@@ -1979,28 +1759,26 @@
             donutEl.style.setProperty('--donut-b', (activeDeg + suspendedDeg) + 'deg');
             document.getElementById('statusLegendActive').textContent = String(active);
             document.getElementById('statusLegendSuspended').textContent = String(suspended);
-            document.getElementById('statusLegendExpired').textContent = String(expiredSubscriptions);
+            var legUnl = document.getElementById('statusLegendUnlimited');
+            if (legUnl) legUnl.textContent = String(unlimitedOrgs);
 
-            var plansContainer = document.getElementById('plansBarChart');
-            var planEntries = Object.keys(planCounts)
-                .sort(function(a, b) { return planCounts[b] - planCounts[a]; })
-                .slice(0, 5);
-            plansContainer.innerHTML = '';
-            if (!planEntries.length) {
-                plansContainer.innerHTML = '<div class="hint">Нет данных по тарифам</div>';
-            } else {
-                var maxCount = planCounts[planEntries[0]] || 1;
-                planEntries.forEach(function(plan) {
-                    var value = planCounts[plan] || 0;
-                    var pct = Math.round((value / maxCount) * 100);
-                    var planLabel = compactLabel(plan, 18);
+            var limitChart = document.getElementById('mapLimitBarChart');
+            if (limitChart) {
+                limitChart.innerHTML = '';
+                var entries = [
+                    { label: 'С лимитом', value: limitBuckets.withLimit },
+                    { label: 'Безлимит', value: limitBuckets.unlimited }
+                ];
+                var maxB = Math.max(entries[0].value, entries[1].value, 1);
+                entries.forEach(function(item) {
+                    var pct = Math.round((item.value / maxB) * 100);
                     var row = document.createElement('div');
                     row.className = 'bar-row';
                     row.innerHTML =
-                        '<span title="' + escapeHtml(plan) + '">' + escapeHtml(planLabel) + '</span>' +
+                        '<span>' + escapeHtml(item.label) + '</span>' +
                         '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>' +
-                        '<strong>' + value + '</strong>';
-                    plansContainer.appendChild(row);
+                        '<strong>' + item.value + '</strong>';
+                    limitChart.appendChild(row);
                 });
             }
 
@@ -2029,10 +1807,12 @@
                 });
             }
 
-            document.getElementById('riskLegendExpiring').textContent = String(expiring);
-            document.getElementById('riskLegendExpired').textContent = String(expiredSubscriptions);
-            document.getElementById('riskLegendNoDate').textContent = String(orgsNoSubscriptionDate);
-            document.getElementById('riskLegendSuspended').textContent = String(suspended);
+            var riskHl = document.getElementById('riskLegendHighLoad');
+            if (riskHl) riskHl.textContent = String(highLoadOrgs);
+            var riskUnl = document.getElementById('riskLegendUnlimited');
+            if (riskUnl) riskUnl.textContent = String(unlimitedOrgs);
+            var riskSusp = document.getElementById('riskLegendSuspended');
+            if (riskSusp) riskSusp.textContent = String(suspended);
         }
 
         function renderVisitOverview(data) {
@@ -2098,10 +1878,9 @@
                 if (!q) return true;
                 var name = (o.name || '').toLowerCase();
                 var mail = (o.contactEmail || '').toLowerCase();
-                var plan = (o.planId || '').toLowerCase();
                 var id = (o.id || '').toLowerCase();
                 var mapCnt = String(o.mapObjectCount != null ? o.mapObjectCount : '');
-                return name.indexOf(q) >= 0 || mail.indexOf(q) >= 0 || plan.indexOf(q) >= 0 || id.indexOf(q) >= 0 || mapCnt.indexOf(q) >= 0;
+                return name.indexOf(q) >= 0 || mail.indexOf(q) >= 0 || id.indexOf(q) >= 0 || mapCnt.indexOf(q) >= 0;
             });
         }
 
@@ -2116,40 +1895,38 @@
             }
             tbody.innerHTML = '';
             if (!orgs.length) {
-                tbody.innerHTML = '<tr><td colspan="9" class="text-muted">Организаций пока нет</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="text-muted">Организаций пока нет</td></tr>';
                 return;
             }
             if (!list.length) {
-                tbody.innerHTML = '<tr><td colspan="9" class="text-muted">По запросу ничего не найдено — уточните поиск.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="text-muted">По запросу ничего не найдено — уточните поиск.</td></tr>';
                 return;
             }
             var now = new Date();
             list.forEach(function(o) {
                 var tr = document.createElement('tr');
-                var end = o.subscriptionEndsAt ? new Date(o.subscriptionEndsAt) : null;
-                var endStr = end ? end.toLocaleDateString('ru-RU') : '—';
+                var limitStr = o.mapObjectLimitUnlocked ? '∞' :
+                    ((o.mapObjectCount != null ? o.mapObjectCount : 0) + ' / ' + (o.mapObjectLimit != null ? o.mapObjectLimit : '—'));
+                var maxU = o.effectiveMaxConcurrentUsers;
+                if (maxU === -1) maxU = '∞';
+                else if (maxU == null || maxU <= 0) maxU = '4';
                 var pillClass = 'pill-active';
                 var pillText = 'Активна';
                 if (o.status === 'suspended') {
                     pillClass = 'pill-suspended';
                     pillText = 'Приостановлена';
                 }
-                if (end && end < now) {
-                    pillClass = 'pill-expired';
-                    pillText = 'Подписка истекла';
-                }
                 var mail = (o.contactEmail && String(o.contactEmail).trim()) ? String(o.contactEmail).trim() : '—';
                 tr.innerHTML =
                     '<td>' + (o.name || '—') + '</td>' +
                     '<td class="text-muted" style="max-width:160px;word-break:break-all;">' + mail + '</td>' +
-                    '<td>' + (o.planId || 'basic') + '</td>' +
-                    '<td>' + (o.effectiveMaxConcurrentUsers != null ? o.effectiveMaxConcurrentUsers : (o.maxConcurrentUsers != null && o.maxConcurrentUsers > 0 ? o.maxConcurrentUsers : 'по плану')) + '</td>' +
-                    '<td>' + endStr + '</td>' +
+                    '<td>' + limitStr + '</td>' +
+                    '<td>' + (o.mapObjectLimitUnlocked ? 'да' : 'нет') + '</td>' +
+                    '<td>' + (o.activeSessions != null ? o.activeSessions : '0') + ' / ' + maxU + '</td>' +
                     '<td><span class="pill ' + pillClass + '">' + pillText + '</span></td>' +
-                    '<td>' + (o.activeSessions != null ? o.activeSessions : '—') + '</td>' +
                     '<td>' + (o.mapObjectCount != null ? o.mapObjectCount : '0') + '</td>' +
                     '<td class="actions-cell">' +
-                        '<button data-id="' + o.id + '" data-action="selectPricing">Настроить</button>' +
+                        '<button data-id="' + o.id + '" data-action="selectOrgLimits">Настроить</button>' +
                         '<button data-id="' + o.id + '" data-action="deleteOrg" style="margin-left:4px;color:#b91c1c;border-color:#fecaca;">Удалить</button>' +
                     '</td>';
                 tbody.appendChild(tr);
@@ -2200,116 +1977,19 @@
             });
         }
 
-        function renderSubscriptionsTable() {
-            var days = getSubsSoonDays();
-            var presets = getSubsExtendPresets();
-            var tbody = document.getElementById('subsTableBody');
-            tbody.innerHTML = '';
-            if (!orgs.length) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-muted">Организаций пока нет</td></tr>';
-                return;
-            }
-            var now = new Date();
-            var soonMs = days * 24 * 60 * 60 * 1000;
-            var list = [];
-            orgs.forEach(function(o) {
-                if (!o.subscriptionEndsAt) return;
-                var end = new Date(o.subscriptionEndsAt);
-                var diff = end - now;
-                if (diff <= soonMs || diff < 0) {
-                    list.push({ org: o, end: end, diff: diff });
-                }
-            });
-            if (!list.length) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-muted">Скоро истекающих подписок нет</td></tr>';
-                return;
-            }
-            list.sort(function(a, b) { return a.end - b.end; });
-            list.forEach(function(item) {
-                var o = item.org;
-                var diffDays = Math.ceil(item.diff / (24*60*60*1000));
-                var pillClass = item.diff < 0 ? 'pill-expired' : 'pill-active';
-                var pillText = item.diff < 0 ? 'Истекла' : 'Активна';
-                var tr = document.createElement('tr');
-                tr.innerHTML =
-                    '<td>' + (o.name || '—') + '</td>' +
-                    '<td>' + item.end.toLocaleDateString('ru-RU') + '</td>' +
-                    '<td><span class="pill ' + pillClass + '">' + pillText + '</span></td>' +
-                    '<td>' + (item.diff < 0 ? ('+' + Math.abs(diffDays)) : diffDays) + '</td>' +
-                    '<td class="actions-cell">' +
-                        '<button type="button" data-id="' + o.id + '" data-add="' + presets.preset1 + '">' + formatExtendButtonLabel(presets.preset1) + '</button>' +
-                        '<button type="button" data-id="' + o.id + '" data-add="' + presets.preset2 + '">' + formatExtendButtonLabel(presets.preset2) + '</button>' +
-                        '<span class="subs-extend-inline">' +
-                            '<input type="number" min="1" max="3650" class="subs-row-days" value="' + presets.rowDefault + '" aria-label="Дней продления">' +
-                            '<button type="button" data-id="' + o.id + '" data-add-custom>+</button>' +
-                        '</span>' +
-                    '</td>';
-                tbody.appendChild(tr);
-            });
-        }
-
-        function fetchPricingPlansForOrgSelect() {
-            return fetch('api/pricing', { credentials: 'include' })
-                .then(function(r) { return r.ok ? r.json() : { plans: [] }; })
-                .then(function(body) {
-                    return (body && Array.isArray(body.plans)) ? body.plans : [];
-                })
-                .catch(function() { return []; });
-        }
-
-        function buildOrgPlanSelect(selectEl, catalogPlans, currentPlanId) {
-            if (!selectEl) return;
-            selectEl.innerHTML = '';
-            var seen = {};
-            function mark(id) {
-                if (id == null || id === '') return false;
-                var k = String(id).trim().toLowerCase();
-                if (!k || seen[k]) return false;
-                seen[k] = true;
-                return true;
-            }
-            function addOption(id, text) {
-                if (!mark(id)) return;
-                var opt = document.createElement('option');
-                opt.value = String(id).trim();
-                opt.textContent = text;
-                selectEl.appendChild(opt);
-            }
-            addOption('basic', 'Базовый (basic)');
-            addOption('pro', 'Про (pro)');
-            addOption('enterprise', 'Корпоративный (enterprise)');
-            (catalogPlans || []).forEach(function(p) {
-                var id = p.id != null ? String(p.id).trim() : '';
-                if (!id) return;
-                var title = (p.title && String(p.title).trim()) ? String(p.title).trim() : id;
-                var kind = String(p.kind || 'paid').trim() || 'paid';
-                addOption(id, title + ' — ' + id + ' · ' + kind);
-            });
-            var cur = String(currentPlanId != null && currentPlanId !== '' ? currentPlanId : 'basic').trim();
-            if (cur && !seen[cur.toLowerCase()]) {
-                addOption(cur, 'Текущий: ' + cur);
-            }
-            selectEl.value = cur;
-            if (!selectEl.value && selectEl.options.length) {
-                selectEl.selectedIndex = 0;
-            }
-        }
-
         function fillPricingFormForOrg(orgId) {
             var o = orgs.find(function(x) { return x.id === orgId; });
             if (!o) return;
-            var planSel = document.getElementById('pricingOrgPlanId');
-            if (planSel) {
-                planSel.disabled = false;
-                fetchPricingPlansForOrgSelect().then(function(plans) {
-                    if (document.getElementById('pricingOrgSelect').value !== orgId) return;
-                    buildOrgPlanSelect(planSel, plans, o.planId || 'basic');
-                });
+            var unlockedEl = document.getElementById('pricingMapLimitUnlocked');
+            if (unlockedEl) unlockedEl.checked = !!o.mapObjectLimitUnlocked;
+            var customEl = document.getElementById('pricingCustomMapLimit');
+            if (customEl) customEl.value = o.customMapObjectLimit != null ? o.customMapObjectLimit : '';
+            var mcuEl = document.getElementById('pricingMaxConcurrentUsers');
+            if (mcuEl) {
+                if (o.effectiveMaxConcurrentUsers === -1 || o.maxConcurrentUsers === -1) mcuEl.value = '-1';
+                else if (o.maxConcurrentUsers != null && o.maxConcurrentUsers > 0) mcuEl.value = String(o.maxConcurrentUsers);
+                else mcuEl.value = '';
             }
-            document.getElementById('pricingMaxUsers').value =
-                (o.maxConcurrentUsers != null && o.maxConcurrentUsers > 0) ? o.maxConcurrentUsers : '';
-            document.getElementById('pricingSubscriptionEndsAt').value =
-                o.subscriptionEndsAt ? o.subscriptionEndsAt.slice(0, 10) : '';
             document.getElementById('pricingStatus').value = o.status || 'active';
             var pe = document.getElementById('pricingContactEmail');
             if (pe) pe.value = (o.contactEmail != null) ? String(o.contactEmail) : '';
@@ -2329,51 +2009,7 @@
             });
         }
 
-        function parseLandingSubscriptionDays(raw, kind) {
-            var k = String(kind || 'paid').toLowerCase();
-            if (raw === undefined || raw === null || String(raw).trim() === '') {
-                return k === 'trial' ? 14 : '';
-            }
-            var n = parseInt(String(raw).trim(), 10);
-            if (isNaN(n) || n < 1) return k === 'trial' ? 14 : '';
-            return Math.min(3650, n);
-        }
-
-        function daysWordRu(n) {
-            var mod10 = n % 10;
-            var mod100 = n % 100;
-            if (mod10 === 1 && mod100 !== 11) return 'день';
-            if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'дня';
-            return 'дней';
-        }
-
-        function syncLandingPeriodFromDays() {
-            var kindEl = document.getElementById('landingPricingKind');
-            var daysEl = document.getElementById('landingPricingSubscriptionDays');
-            var periodEl = document.getElementById('landingPricingPeriod');
-            if (!daysEl || !periodEl) return;
-            var kind = kindEl ? kindEl.value : 'paid';
-            var days = parseLandingSubscriptionDays(daysEl.value, kind);
-            if (!days) {
-                alert('Укажите число дней (от 1)');
-                return;
-            }
-            periodEl.value = '/ ' + days + ' ' + daysWordRu(days);
-        }
-
-        function updateLandingPricingDaysUi() {
-            var kindEl = document.getElementById('landingPricingKind');
-            var hint = document.getElementById('landingPricingDaysHint');
-            var daysInput = document.getElementById('landingPricingSubscriptionDays');
-            var kind = kindEl ? kindEl.value : 'paid';
-            var isTrial = kind === 'trial';
-            if (daysInput) daysInput.disabled = false;
-            if (hint) {
-                hint.textContent = isTrial
-                    ? 'Обязательно для пробного тарифа: срок при регистрации и на pricing.html.'
-                    : 'Необязательно для платных тарифов: если указано, используется при самостоятельной регистрации с этим planId.';
-            }
-        }
+        var showcasePlansCache = [];
 
         function loadLandingPricing() {
             var opts = { credentials: 'include', headers: {} };
@@ -2382,47 +2018,139 @@
             fetch('api/pricing', opts)
                 .then(function(r) { return r.ok ? r.json() : null; })
                 .then(function(body) {
-                    var plans = body && Array.isArray(body.plans) ? body.plans : [];
+                    showcasePlansCache = body && Array.isArray(body.plans) ? body.plans : [];
                     var tbody = document.getElementById('landingPricingTableBody');
                     if (!tbody) return;
                     tbody.innerHTML = '';
-                    if (!plans.length) {
-                        tbody.innerHTML = '<tr><td colspan="8" class="text-muted">Тарифов пока нет</td></tr>';
+                    if (!showcasePlansCache.length) {
+                        tbody.innerHTML = '<tr><td colspan="5" class="text-muted">Дополнительных карточек нет</td></tr>';
                         return;
                     }
-                    plans.forEach(function(p, idx) {
+                    showcasePlansCache.forEach(function(p, idx) {
                         var tr = document.createElement('tr');
-                        var pct = typeof p.promoPercent === 'number' ? p.promoPercent : 0;
-                        var promoCell = (pct > 0) ? ('-' + pct + '%') : '—';
-                        var mcu = p.maxConcurrentUsers;
-                        var limitCell = '—';
-                        if (mcu !== undefined && mcu !== null && mcu !== '') {
-                            var n = typeof mcu === 'number' ? mcu : parseInt(mcu, 10);
-                            if (!isNaN(n)) limitCell = (n === -1) ? '∞' : String(n);
-                        }
-                        var daysCell = '—';
-                        if (p.subscriptionDays != null && p.subscriptionDays !== '') {
-                            var sd = parseInt(p.subscriptionDays, 10);
-                            if (!isNaN(sd) && sd > 0) daysCell = String(sd);
-                        } else if (p.kind === 'trial') {
-                            daysCell = '14';
-                        }
                         tr.innerHTML =
                             '<td>' + (p.title || p.id || '—') + '</td>' +
                             '<td>' + (p.price || '—') + (p.period ? ' ' + p.period : '') + '</td>' +
-                            '<td>' + limitCell + '</td>' +
-                            '<td>' + daysCell + '</td>' +
-                            '<td>' + promoCell + '</td>' +
                             '<td>' + (typeof p.order === 'number' ? p.order : idx) + '</td>' +
-                            '<td>' + (p.kind || 'paid') + '</td>' +
+                            '<td>' + (p.highlighted ? 'да' : 'нет') + '</td>' +
                             '<td class="actions-cell">' +
                                 '<button data-idx="' + idx + '" data-action="editLandingPlan">Редактировать</button>' +
                                 '<button data-idx="' + idx + '" data-action="deleteLandingPlan" style="margin-left:6px;color:#b91c1c;border-color:#fecaca;">Удалить</button>' +
                             '</td>';
                         tbody.appendChild(tr);
                     });
-                    document.getElementById('landingPricingTableBody').dataset.plans = JSON.stringify(plans);
                 });
+        }
+
+        function loadShowcase() {
+            var token = getAuthToken && getAuthToken();
+            var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+            return fetch('api/admin/showcase', { headers: headers, credentials: 'include' })
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(cfg) {
+                    if (!cfg) return;
+                    applyPlatformLimitsUi(cfg);
+                    applyFreeCardUi(cfg.freeCard);
+                    showcasePlansCache = Array.isArray(cfg.plans) ? cfg.plans : [];
+                    var tbody = document.getElementById('landingPricingTableBody');
+                    if (tbody) {
+                        tbody.innerHTML = '';
+                        if (!showcasePlansCache.length) {
+                            tbody.innerHTML = '<tr><td colspan="5" class="text-muted">Дополнительных карточек нет</td></tr>';
+                        } else {
+                            showcasePlansCache.forEach(function(p, idx) {
+                                var tr = document.createElement('tr');
+                                tr.innerHTML =
+                                    '<td>' + (p.title || p.id || '—') + '</td>' +
+                                    '<td>' + (p.price || '—') + (p.period ? ' ' + p.period : '') + '</td>' +
+                                    '<td>' + (typeof p.order === 'number' ? p.order : idx) + '</td>' +
+                                    '<td>' + (p.highlighted ? 'да' : 'нет') + '</td>' +
+                                    '<td class="actions-cell">' +
+                                        '<button data-idx="' + idx + '" data-action="editLandingPlan">Редактировать</button>' +
+                                        '<button data-idx="' + idx + '" data-action="deleteLandingPlan" style="margin-left:6px;color:#b91c1c;border-color:#fecaca;">Удалить</button>' +
+                                    '</td>';
+                                tbody.appendChild(tr);
+                            });
+                        }
+                    }
+                })
+                .catch(function() {});
+        }
+
+        function applyFreeCardUi(card) {
+            if (!card) return;
+            var set = function(id, val) {
+                var el = document.getElementById(id);
+                if (el && document.activeElement !== el) el.value = val != null ? String(val) : '';
+            };
+            set('freeCardTitle', card.title);
+            set('freeCardShort', card.short);
+            set('freeCardPrice', card.price);
+            set('freeCardPeriod', card.period);
+            set('freeCardCta', card.ctaText);
+            set('freeCardMeta', card.metaLine);
+        }
+
+        function saveShowcaseFree() {
+            var lim = parseInt(document.getElementById('platformDefaultMapObjectLimit').value.trim(), 10);
+            var mc = parseInt(document.getElementById('platformDefaultMaxConcurrent').value.trim(), 10);
+            if (isNaN(lim) || lim < 1) {
+                alert('Укажите лимит объектов (≥ 1)');
+                return Promise.resolve();
+            }
+            if (isNaN(mc) || mc < 1) {
+                alert('Укажите лимит пользователей (≥ 1)');
+                return Promise.resolve();
+            }
+            var token = getAuthToken && getAuthToken();
+            var headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            return fetch('api/admin/showcase', {
+                method: 'PUT',
+                headers: headers,
+                credentials: 'include',
+                body: JSON.stringify({
+                    defaultFreeMapObjectLimit: lim,
+                    defaultMaxConcurrentUsers: mc,
+                    freeCard: {
+                        title: (document.getElementById('freeCardTitle') || {}).value,
+                        short: (document.getElementById('freeCardShort') || {}).value,
+                        price: (document.getElementById('freeCardPrice') || {}).value,
+                        period: (document.getElementById('freeCardPeriod') || {}).value,
+                        ctaText: (document.getElementById('freeCardCta') || {}).value,
+                        metaLine: (document.getElementById('freeCardMeta') || {}).value
+                    }
+                })
+            }).then(function(r) {
+                if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+                return r.json();
+            }).then(function(body) {
+                var cfg = body.showcase || body;
+                applyPlatformLimitsUi(cfg);
+                applyFreeCardUi(cfg.freeCard);
+                alert('Бесплатный режим сохранён');
+                loadAll();
+            }).catch(function(e) {
+                alert('Ошибка: ' + (e.message || e));
+            });
+        }
+
+        function publishShowcasePlans(plans) {
+            var token = getAuthToken && getAuthToken();
+            var headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            return fetch('api/admin/showcase', {
+                method: 'PUT',
+                headers: headers,
+                credentials: 'include',
+                body: JSON.stringify({ plans: plans })
+            }).then(function(r) {
+                if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+                return r.json();
+            }).then(function() {
+                alert('Карточки опубликованы на сайте');
+                loadShowcase();
+            });
         }
 
         function fetchUsersCached() {
@@ -2616,11 +2344,14 @@
                     return;
                 }
                 orgs = body.organizations;
+                applyPlatformLimitsUi({
+                    defaultFreeMapObjectLimit: body.defaultFreeMapObjectLimit,
+                    defaultMaxConcurrentUsers: body.defaultMaxConcurrentUsers
+                });
                 renderOverview();
                 renderOrganizationsTable();
                 renderPricingSelector();
-                renderSubscriptionsTable();
-                loadLandingPricing();
+                loadShowcase();
                 loadMaintenanceNotice();
                 setAdminSyncTime(true);
                 return fetchVisitStats().then(renderVisitOverview);
@@ -2668,14 +2399,7 @@
 
         document.getElementById('pricingOrgSelect').addEventListener('change', function() {
             var id = this.value;
-            var planSel = document.getElementById('pricingOrgPlanId');
             if (!id) {
-                if (planSel) {
-                    planSel.innerHTML = '<option value="">Сначала выберите организацию…</option>';
-                    planSel.disabled = true;
-                }
-                document.getElementById('pricingMaxUsers').value = '';
-                document.getElementById('pricingSubscriptionEndsAt').value = '';
                 document.getElementById('pricingStatus').value = 'active';
                 var pce = document.getElementById('pricingContactEmail');
                 if (pce) pce.value = '';
@@ -2684,29 +2408,74 @@
             fillPricingFormForOrg(id);
         });
 
+        var lastPlatformLimits = { defaultFreeMapObjectLimit: 2000, defaultMaxConcurrentUsers: 4 };
+
+        function applyPlatformLimitsUi(cfg) {
+            if (!cfg) return;
+            var lim = cfg.defaultFreeMapObjectLimit != null ? cfg.defaultFreeMapObjectLimit : 2000;
+            var mc = cfg.defaultMaxConcurrentUsers != null ? cfg.defaultMaxConcurrentUsers : 4;
+            lastPlatformLimits = { defaultFreeMapObjectLimit: lim, defaultMaxConcurrentUsers: mc };
+            var defLimEl = document.getElementById('adminDefaultFreeLimit');
+            var defMcEl = document.getElementById('adminDefaultMaxConcurrent');
+            var inpLim = document.getElementById('platformDefaultMapObjectLimit');
+            var inpMc = document.getElementById('platformDefaultMaxConcurrent');
+            var statObj = document.getElementById('statFreeDefaultObjects');
+            var statMc = document.getElementById('statFreeDefaultConcurrent');
+            if (defLimEl) defLimEl.textContent = String(lim);
+            if (defMcEl) defMcEl.textContent = String(mc);
+            if (statObj) statObj.textContent = String(lim);
+            if (statMc) statMc.textContent = String(mc);
+            if (inpLim && document.activeElement !== inpLim) inpLim.value = String(lim);
+            if (inpMc && document.activeElement !== inpMc) inpMc.value = String(mc);
+        }
+
+        function loadPlatformLimits() {
+            var token = getAuthToken && getAuthToken();
+            var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+            return fetch('api/admin/platform-limits', { headers: headers, credentials: 'include' })
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(cfg) {
+                    if (cfg) applyPlatformLimitsUi(cfg);
+                })
+                .catch(function() {});
+        }
+
+        var freeShowcaseSaveBtn = document.getElementById('freeShowcaseSaveBtn');
+        if (freeShowcaseSaveBtn) {
+            freeShowcaseSaveBtn.addEventListener('click', function() {
+                saveShowcaseFree();
+            });
+        }
+
+        var showcasePlansPublishBtn = document.getElementById('showcasePlansPublishBtn');
+        if (showcasePlansPublishBtn) {
+            showcasePlansPublishBtn.addEventListener('click', function() {
+                publishShowcasePlans(showcasePlansCache);
+            });
+        }
+
         document.getElementById('pricingSaveBtn').addEventListener('click', function() {
             var id = document.getElementById('pricingOrgSelect').value;
             if (!id) {
                 alert('Выберите организацию');
                 return;
             }
-            var maxRaw = document.getElementById('pricingMaxUsers').value.trim();
-            var maxUsers = null;
-            if (maxRaw !== '') {
-                var parsed = parseInt(maxRaw, 10);
-                if (!isNaN(parsed) && parsed > 0) maxUsers = parsed;
+            var unlocked = document.getElementById('pricingMapLimitUnlocked').checked;
+            var customRaw = document.getElementById('pricingCustomMapLimit').value.trim();
+            var customLimit = customRaw === '' ? null : parseInt(customRaw, 10);
+            if (customLimit != null && isNaN(customLimit)) customLimit = null;
+            var maxCuRaw = (document.getElementById('pricingMaxConcurrentUsers') || {}).value.trim();
+            var maxConcurrentUsers = null;
+            if (maxCuRaw !== '') {
+                var parsedCu = parseInt(maxCuRaw, 10);
+                if (!isNaN(parsedCu)) maxConcurrentUsers = parsedCu;
             }
-            var dateRaw = document.getElementById('pricingSubscriptionEndsAt').value;
-            var endsAt = dateRaw ? (dateRaw + 'T23:59:59.000Z') : null;
             var status = document.getElementById('pricingStatus').value;
             var contactEmail = (document.getElementById('pricingContactEmail') || {}).value;
-            var planIdEl = document.getElementById('pricingOrgPlanId');
-            var planId = planIdEl && planIdEl.value ? String(planIdEl.value).trim() : 'basic';
-            if (!planId) planId = 'basic';
             var payload = {
-                planId: planId,
-                maxConcurrentUsers: maxUsers,
-                subscriptionEndsAt: endsAt,
+                mapObjectLimitUnlocked: unlocked,
+                customMapObjectLimit: customLimit,
+                maxConcurrentUsers: maxConcurrentUsers,
                 status: status,
                 contactEmail: contactEmail != null ? String(contactEmail).trim() : ''
             };
@@ -2718,30 +2487,18 @@
             });
         });
 
-        document.getElementById('subsRefreshBtn').addEventListener('click', function() {
-            onSubsSettingsChanged();
-        });
-
-        ['subsDays', 'subsExtendPreset1', 'subsExtendPreset2', 'subsExtendDefault'].forEach(function(id) {
-            var el = document.getElementById(id);
-            if (!el) return;
-            el.addEventListener('change', onSubsSettingsChanged);
-            el.addEventListener('input', onSubsSettingsChanged);
-        });
-
-        loadSubsSettings();
-        updateSubsSoonHints();
-
         document.getElementById('orgsTableBody').addEventListener('click', function(e) {
             var btn = e.target.closest('button');
             if (!btn) return;
             var action = btn.getAttribute('data-action');
-            if (action === 'selectPricing') {
+            if (action === 'selectOrgLimits') {
                 var id = btn.getAttribute('data-id');
                 var select = document.getElementById('pricingOrgSelect');
                 select.value = id;
                 fillPricingFormForOrg(id);
-                adminSwitchTab('pricing');
+                adminSwitchTab('organizations');
+                var block = select.closest('div');
+                if (block) block.scrollIntoView({ behavior: 'smooth', block: 'start' });
             } else if (action === 'deleteOrg') {
                 var orgId = btn.getAttribute('data-id');
                 var org = orgs.find(function(o) { return o.id === orgId; });
@@ -2762,28 +2519,6 @@
                     alert('Ошибка: ' + (err.message || err));
                 });
             }
-        });
-
-        document.getElementById('subsTableBody').addEventListener('click', function(e) {
-            var btn = e.target.closest('button');
-            if (!btn) return;
-            var id = btn.getAttribute('data-id');
-            if (!id) return;
-            var add = 0;
-            if (btn.hasAttribute('data-add-custom')) {
-                var row = btn.closest('tr');
-                var inp = row && row.querySelector('.subs-row-days');
-                add = clampSubsDays(inp && inp.value, 0);
-            } else {
-                add = parseInt(btn.getAttribute('data-add') || '0', 10);
-            }
-            if (!add) {
-                alert('Укажите число дней (от 1)');
-                return;
-            }
-            extendOrganizationSubscription(id, add).catch(function(err) {
-                alert('Ошибка: ' + (err.message || err));
-            });
         });
 
         // Инициализация: проверяем сессию и загружаем данные
@@ -2846,24 +2581,9 @@
             document.getElementById('landingPricingPeriod').value = '';
             document.getElementById('landingPricingOrder').value = '';
             document.getElementById('landingPricingMaxUsersText').value = '';
-            document.getElementById('landingPricingMaxConcurrentUsers').value = '';
-            document.getElementById('landingPricingKind').value = 'paid';
             document.getElementById('landingPricingHighlighted').value = 'false';
             document.getElementById('landingPricingCtaText').value = '';
-            document.getElementById('landingPricingPromoPercent').value = '';
-            document.getElementById('landingPricingPromoStarts').value = '';
-            document.getElementById('landingPricingPromoEnds').value = '';
-            document.getElementById('landingPricingPriceBeforePromo').value = '';
-            var daysNew = document.getElementById('landingPricingSubscriptionDays');
-            if (daysNew) daysNew.value = '14';
-            updateLandingPricingDaysUi();
         });
-
-        var landingKindEl = document.getElementById('landingPricingKind');
-        if (landingKindEl) landingKindEl.addEventListener('change', updateLandingPricingDaysUi);
-        var landingSyncPeriodBtn = document.getElementById('landingPricingSyncPeriodBtn');
-        if (landingSyncPeriodBtn) landingSyncPeriodBtn.addEventListener('click', syncLandingPeriodFromDays);
-        updateLandingPricingDaysUi();
 
         var orgPwdSelect = document.getElementById('orgPasswordResetSelect');
         if (orgPwdSelect) {
@@ -2915,9 +2635,7 @@
             if (!btn) return;
             var action = btn.getAttribute('data-action');
             var idx = parseInt(btn.getAttribute('data-idx') || '0', 10);
-            var raw = this.dataset.plans || '[]';
-            var plans;
-            try { plans = JSON.parse(raw); } catch (e) { plans = []; }
+            var plans = showcasePlansCache.slice();
             var p = plans[idx];
             if (!p) return;
 
@@ -2929,86 +2647,24 @@
                 document.getElementById('landingPricingPeriod').value = p.period || '';
                 document.getElementById('landingPricingOrder').value = typeof p.order === 'number' ? p.order : idx;
                 document.getElementById('landingPricingMaxUsersText').value = p.maxUsersText || '';
-                document.getElementById('landingPricingMaxConcurrentUsers').value =
-                    (p.maxConcurrentUsers !== undefined && p.maxConcurrentUsers !== null && p.maxConcurrentUsers !== '')
-                        ? String(p.maxConcurrentUsers) : '';
-                document.getElementById('landingPricingKind').value = p.kind || 'paid';
                 document.getElementById('landingPricingHighlighted').value = p.highlighted ? 'true' : 'false';
                 document.getElementById('landingPricingCtaText').value = p.ctaText || '';
-                document.getElementById('landingPricingPromoPercent').value =
-                    (typeof p.promoPercent === 'number' && p.promoPercent > 0) ? p.promoPercent : '';
-                document.getElementById('landingPricingPromoStarts').value = p.promoStartsAt ? String(p.promoStartsAt).slice(0, 10) : '';
-                document.getElementById('landingPricingPromoEnds').value = p.promoEndsAt ? String(p.promoEndsAt).slice(0, 10) : '';
-                document.getElementById('landingPricingPriceBeforePromo').value = p.priceBeforePromo || '';
-                var daysEl = document.getElementById('landingPricingSubscriptionDays');
-                if (daysEl) {
-                    var d = parseLandingSubscriptionDays(p.subscriptionDays, p.kind || 'paid');
-                    daysEl.value = d !== '' ? String(d) : '';
-                }
-                updateLandingPricingDaysUi();
                 return;
             }
 
             if (action === 'deleteLandingPlan') {
-                if (!confirm('Удалить тариф «' + (p.title || p.id || '—') + '»?')) return;
-                // Удаляем по индексу текущего списка (как отображается на странице).
+                if (!confirm('Удалить карточку «' + (p.title || p.id || '—') + '»?')) return;
                 plans.splice(idx, 1);
-                var token = getAuthToken && getAuthToken();
-                var headers = { 'Content-Type': 'application/json' };
-                if (token) headers['Authorization'] = 'Bearer ' + token;
-                fetch('api/pricing', {
-                    method: 'PUT',
-                    headers: headers,
-                    credentials: 'include',
-                    body: JSON.stringify({ plans: plans })
-                }).then(function(r) {
-                    if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
-                    alert('Тариф удалён');
-                    loadLandingPricing();
-                }).catch(function(err) {
+                publishShowcasePlans(plans).catch(function(err) {
                     alert('Ошибка: ' + (err.message || err));
                 });
             }
         });
 
         document.getElementById('landingPricingSaveBtn').addEventListener('click', function() {
-            var tbody = document.getElementById('landingPricingTableBody');
-            var raw = tbody.dataset.plans || '[]';
-            var plans;
-            try { plans = JSON.parse(raw); } catch (e) { plans = []; }
+            var plans = showcasePlansCache.slice();
             var currentId = document.getElementById('landingPricingId').value.trim() || 'plan_' + Date.now();
             var existingIdx = plans.findIndex(function(p) { return p.id === currentId; });
-            var promoRaw = document.getElementById('landingPricingPromoPercent').value.trim();
-            var promoPct = promoRaw === '' ? 0 : parseInt(promoRaw, 10);
-            if (isNaN(promoPct) || promoPct < 0) promoPct = 0;
-            if (promoPct > 100) promoPct = 100;
-            var mcuRaw = (document.getElementById('landingPricingMaxConcurrentUsers') || {}).value;
-            var mcuVal = null;
-            if (mcuRaw != null && String(mcuRaw).trim() !== '') {
-                var mn = parseInt(String(mcuRaw).trim(), 10);
-                if (!isNaN(mn) && mn !== 0) mcuVal = mn;
-            }
-            if (promoPct > 0) {
-                var ds = document.getElementById('landingPricingPromoStarts').value;
-                var de = document.getElementById('landingPricingPromoEnds').value;
-                if (!ds || !de) {
-                    alert('Для скидки укажите дату начала и окончания акции.');
-                    return;
-                }
-                if (de < ds) {
-                    alert('Дата окончания акции не может быть раньше даты начала.');
-                    return;
-                }
-            }
-            var kindVal = document.getElementById('landingPricingKind').value || 'paid';
-            var daysParsed = parseLandingSubscriptionDays(
-                (document.getElementById('landingPricingSubscriptionDays') || {}).value,
-                kindVal
-            );
-            if (kindVal === 'trial' && (daysParsed === '' || daysParsed < 1)) {
-                alert('Для пробного тарифа укажите срок подписки в днях (от 1).');
-                return;
-            }
             var plan = {
                 id: currentId,
                 title: document.getElementById('landingPricingTitle').value.trim() || currentId,
@@ -3016,31 +2672,15 @@
                 price: document.getElementById('landingPricingPrice').value.trim(),
                 period: document.getElementById('landingPricingPeriod').value.trim(),
                 maxUsersText: document.getElementById('landingPricingMaxUsersText').value.trim(),
-                maxConcurrentUsers: mcuVal,
                 order: parseInt(document.getElementById('landingPricingOrder').value || '0', 10) || 0,
                 highlighted: document.getElementById('landingPricingHighlighted').value === 'true',
-                kind: kindVal,
-                ctaText: document.getElementById('landingPricingCtaText').value.trim(),
-                promoPercent: promoPct,
-                promoStartsAt: document.getElementById('landingPricingPromoStarts').value || '',
-                promoEndsAt: document.getElementById('landingPricingPromoEnds').value || '',
-                priceBeforePromo: document.getElementById('landingPricingPriceBeforePromo').value.trim(),
-                subscriptionDays: daysParsed === '' ? null : daysParsed
+                kind: 'contact',
+                ctaText: document.getElementById('landingPricingCtaText').value.trim()
             };
-            if (existingIdx >= 0) plans[existingIdx] = plan; else plans.push(plan);
-            var token = getAuthToken && getAuthToken();
-            var headers = { 'Content-Type': 'application/json' };
-            if (token) headers['Authorization'] = 'Bearer ' + token;
-            fetch('api/pricing', {
-                method: 'PUT',
-                headers: headers,
-                credentials: 'include',
-                body: JSON.stringify({ plans: plans })
-            }).then(function(r) {
-                if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
-                alert('Тарифы сохранены');
-                loadLandingPricing();
-            }).catch(function(e) {
+            if (existingIdx >= 0) plans[existingIdx] = plan;
+            else plans.push(plan);
+            showcasePlansCache = plans;
+            publishShowcasePlans(plans).catch(function(e) {
                 alert('Ошибка: ' + (e.message || e));
             });
         });

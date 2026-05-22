@@ -2,5 +2,7 @@
   "port": 3000,
   "host": "0.0.0.0",
   "yandexMapsApiKey": "YOUR_YANDEX_MAPS_API_KEY",
-  "publicSiteUrl": "https://volsmap.ru"
+  "publicSiteUrl": "https://volsmap.ru",
+  "freeMapObjectLimit": 2000,
+  "maxConcurrentUsers": 4
 }

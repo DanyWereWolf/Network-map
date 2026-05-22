@@ -121,12 +121,12 @@
                 <div>
                     <h1 class="landing-hero-title">
                         <span class="hero-line">Вся ваша сеть на одной карте.</span>
-                        <span class="hero-line hero-highlight">С подпиской под ваш рост.</span>
+                        <span class="hero-line hero-highlight">Бесплатно, с лимитом под ваш масштаб.</span>
                     </h1>
                     <p class="landing-hero-subtitle">
                         Оптическая сеть на карте: узлы и коммутаторы, кроссы и муфты со схемой жил, GPON, камеры и медиаконвертеры.
                         Поиск и трассировка, совместная работа в реальном времени, журнал изменений и ежедневные бэкапы
-                        для каждой организации. Тариф — по числу одновременных пользователей на карте.
+                        для каждой организации. Бесплатно до <strong id="heroFreeLimit">2000</strong> объектов и до <strong id="heroMaxConcurrent">4</strong> одновременных пользователей; при росте — через владельца программы.
                     </p>
                     <div class="landing-hero-badges">
                         <span class="badge-pill">Схема жил в кроссе и муфте</span>
@@ -134,11 +134,11 @@
                         <span class="badge-pill">Синхронизация и бэкапы</span>
                     </div>
                     <div class="landing-hero-cta-row">
-                        <button class="btn-primary-hero" id="heroTrialCtaBtn" onclick="window.location.href='auth.html?trial=1&amp;plan=trial'">
-                            Попробовать 14 дней бесплатно
+                        <button class="btn-primary-hero" id="heroTrialCtaBtn" onclick="window.location.href='auth.html?register=1'">
+                            Начать бесплатно
                         </button>
                         <button type="button" class="btn-outline" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">
-                            Смотреть тарифы
+                            Условия и лимиты
                         </button>
                     </div>
                     <div class="landing-hero-meta">
@@ -382,24 +382,24 @@
             <!-- Тарифы -->
             <section id="pricing" class="landing-pricing landing-block">
                 <div class="landing-block-head">
-                    <h2 class="capability-section-title">Тарифы и контроль стоимости</h2>
+                    <h2 class="capability-section-title">Бесплатно и без подписки</h2>
                     <p class="capability-section-lead section-body">
-                        Начните с <strong class="landing-trial-days-inline">бесплатного пробного периода 14 дней</strong> (ограничения по числу одновременных пользователей — как у лёгкого тарифа),
-                        затем перейдите на платный план под размер команды.
+                        Регистрация и работа с картой — <strong>бесплатно</strong>. На бесплатном плане действует лимит объектов на карте (узлы, кроссы, муфты и т.д., без кабелей).
+                        Нужно больше объектов — свяжитесь с владельцем программы; лимит снимается после договорённости.
                     </p>
                 </div>
-                <div class="pricing-section-intro" aria-label="Кратко о подписке">
+                <div class="pricing-section-intro" aria-label="Кратко об условиях">
                     <span>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                        Оплата за одновременных пользователей на карте
+                        <span id="pricingIntroFreeLimit">До 2000 объектов</span> — бесплатно · до <span id="pricingIntroMaxConcurrent">4</span> пользователей одновременно
                     </span>
                     <span>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                        Корпоративные условия — через раздел контактов
+                        Без онлайн-оплаты на сайте
                     </span>
                     <span>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                        Оформление подписки после выбора тарифа на отдельной странице
+                        Снятие лимита — по запросу владельцу сервиса
                     </span>
                 </div>
                 <div id="pricingCards" class="pricing-grid">
@@ -410,7 +410,7 @@
             <section id="faq" class="landing-faq landing-block" aria-labelledby="faq-heading">
                 <div class="landing-block-head">
                     <h2 id="faq-heading" class="capability-section-title">Частые вопросы</h2>
-                    <p class="capability-section-lead section-body">Коротко о сервисе, данных и подписке.</p>
+                    <p class="capability-section-lead section-body">Коротко о сервисе, данных и лимитах.</p>
                 </div>
                 <details class="faq-item">
                     <summary>Где хранятся данные и кто к ним имеет доступ?</summary>
@@ -419,9 +419,12 @@
                     Третьим лицам данные не передаются.</p>
                 </details>
                 <details class="faq-item">
-                    <summary>Чем «одновременные пользователи» отличаются от учётных записей?</summary>
-                    <p>Лимит по тарифу обычно считает, сколько человек может одновременно работать с картой. Учётных записей может быть больше,
-                    но одновременно онлайн — в пределах выбранного плана (точные формулировки смотрите в карточках тарифов ниже).</p>
+                    <summary>Сколько человек могут работать на карте одновременно?</summary>
+                    <p>По умолчанию не больше 4 активных сессий в одной организации (4 разных учётные записи или 4 открытых входа). Одна учётная запись — одно окно/браузер. Увеличить лимит можно через владельца программы.</p>
+                </details>
+                <details class="faq-item">
+                    <summary>Что считается «объектом» в лимите?</summary>
+                    <p>Узлы, кроссы, муфты, опоры, OLT, сплиттеры, ONU и другие точки на карте, включая коммутаторы внутри узла. Кабели в лимит не входят.</p>
                 </details>
                 <details class="faq-item">
                     <summary>Нужен ли отдельный API‑ключ карт?</summary>
@@ -432,8 +435,8 @@
                     <p>На узком экране (до 768&nbsp;px) доступен просмотр: поиск, карточки объектов, трассировка. Добавление объектов, кабелей и правка жил — с компьютера или планшета в альбомной ориентации с большей шириной окна.</p>
                 </details>
                 <details class="faq-item">
-                    <summary>Можно ли перейти на другой тариф позже?</summary>
-                    <p>Да. После пробного периода вы выбираете план; при росте команды можно сменить тариф — условия миграции уточняйте при оплате или у поддержки.</p>
+                    <summary>Как снять лимит объектов?</summary>
+                    <p>Напишите владельцу программы (e-mail, Telegram или ВКонтакте ниже), укажите название организации и e-mail учётной записи. После согласования лимит снимается для вашей организации.</p>
                 </details>
             </section>
 
@@ -442,7 +445,7 @@
                 <div class="landing-block-head">
                     <h2 class="capability-section-title">Связаться с нами</h2>
                     <p class="capability-section-lead section-body">
-                        Корпоративный тариф, подключение организации и технические вопросы — напишите или позвоните.
+                        Снятие лимита объектов, подключение организации и технические вопросы — напишите владельцу программы.
                     </p>
                 </div>
                 <div class="contact-cards">
@@ -478,14 +481,14 @@
             <div class="landing-cta-band" role="region" aria-label="Попробовать сервис">
                 <div>
                     <h2>Готовы перенести сеть на карту?</h2>
-                    <p><span class="landing-trial-days-inline">14 дней бесплатно</span> — полный доступ к платформе. Без установки, данные на наших серверах.</p>
+                    <p>Бесплатная карта с лимитом объектов. Без установки, данные на наших серверах.</p>
                 </div>
                 <div class="landing-cta-band-actions">
-                    <button type="button" class="btn-primary-hero" id="footerTrialCtaBtn" onclick="window.location.href='auth.html?trial=1&amp;plan=trial'">
-                        Начать пробный период
+                    <button type="button" class="btn-primary-hero" id="footerTrialCtaBtn" onclick="window.location.href='auth.html?register=1'">
+                        Зарегистрироваться
                     </button>
                     <button type="button" class="btn-outline" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">
-                        Тарифы
+                        Условия
                     </button>
                 </div>
             </div>
@@ -740,20 +743,48 @@
         function attachHandlers() {
             document.querySelectorAll('.pricing-cta-btn').forEach(function(btn) {
                 btn.addEventListener('click', function() {
-                    var plan = this.getAttribute('data-plan') || 'basic';
-                    var kind = this.getAttribute('data-kind') || 'paid';
-                    if (kind === 'trial') {
-                        window.location.href = 'auth.html?trial=1&plan=' + encodeURIComponent(plan);
+                    var plan = this.getAttribute('data-plan') || 'unlock';
+                    var kind = this.getAttribute('data-kind') || 'unlock';
+                    if (kind === 'free') {
+                        window.location.href = 'auth.html?register=1';
                         return;
                     }
-                    if (kind === 'contact') {
+                    if (kind === 'contact' || kind === 'unlock') {
                         window.location.hash = '#contacts';
-                        document.getElementById('contacts').scrollIntoView({ behavior: 'smooth' });
+                        var contactsEl = document.getElementById('contacts');
+                        if (contactsEl) contactsEl.scrollIntoView({ behavior: 'smooth' });
                         return;
                     }
-                    window.location.href = 'checkout.html?plan=' + encodeURIComponent(plan);
+                    window.location.hash = '#contacts';
                 });
             });
+        }
+
+        function renderFreePricingCard(container, freeLimit, maxConcurrent, freeCard) {
+            maxConcurrent = maxConcurrent != null ? maxConcurrent : 4;
+            freeCard = freeCard && typeof freeCard === 'object' ? freeCard : {};
+            var title = (freeCard.title && String(freeCard.title).trim()) ? String(freeCard.title).trim() : 'Бесплатно';
+            var short = (freeCard.short != null) ? String(freeCard.short) : 'Полный функционал карты в пределах лимита объектов';
+            var price = (freeCard.price && String(freeCard.price).trim()) ? String(freeCard.price).trim() : '0 ₽';
+            var period = (freeCard.period != null) ? String(freeCard.period) : 'навсегда';
+            var cta = (freeCard.ctaText && String(freeCard.ctaText).trim()) ? String(freeCard.ctaText).trim() : 'Создать организацию';
+            var meta = (freeCard.metaLine && String(freeCard.metaLine).trim())
+                ? String(freeCard.metaLine).trim()
+                : ('До ' + freeLimit + ' объектов на карте · до ' + maxConcurrent + ' пользователей одновременно');
+            var card = document.createElement('div');
+            card.className = 'pricing-card';
+            card.innerHTML =
+                '<div class="pricing-card-head"><div>' +
+                    '<div class="pricing-name">' + title + '</div>' +
+                    '<div class="pricing-short">' + short + '</div>' +
+                '</div></div>' +
+                '<div class="pricing-price-row">' +
+                    '<div class="pricing-price">' + price + '</div>' +
+                    (period ? '<div class="pricing-period">' + period + '</div>' : '') +
+                '</div>' +
+                '<div class="pricing-meta">' + meta + '</div>' +
+                '<button class="pricing-cta-btn" data-plan="free" data-kind="free">' + cta + '</button>';
+            container.appendChild(card);
         }
 
         function initPricingCardsNetwork() {
@@ -849,8 +880,20 @@
                 if (!container) return;
                 container.innerHTML = '';
                 var plans = body && Array.isArray(body.plans) ? body.plans : [];
+                var freeLimit = body && body.freeMapObjectLimit != null ? body.freeMapObjectLimit : 2000;
+                var maxConc = body && body.defaultMaxConcurrentUsers != null ? body.defaultMaxConcurrentUsers : 4;
+                var heroLim = document.getElementById('heroFreeLimit');
+                var introLim = document.getElementById('pricingIntroFreeLimit');
+                var introMc = document.getElementById('pricingIntroMaxConcurrent');
+                if (heroLim) heroLim.textContent = String(freeLimit);
+                if (introLim) introLim.textContent = 'До ' + freeLimit + ' объектов';
+                if (introMc) introMc.textContent = String(maxConc);
+                var heroMc = document.getElementById('heroMaxConcurrent');
+                if (heroMc) heroMc.textContent = String(maxConc);
+                renderFreePricingCard(container, freeLimit, maxConc, body && body.freeCard);
                 if (!plans.length) {
-                    container.innerHTML = '<div class="section-body">Тарифы пока не настроены администратором.</div>';
+                    attachHandlers();
+                    initPricingCardsNetwork();
                     return;
                 }
                 plans.forEach(function(p) {
@@ -891,7 +934,7 @@
                         (promoOn && endCaption ? '<div class="pricing-promo-caption">' + endCaption + '</div>' : '') +
                         '<div class="pricing-price-row">' + priceRowHtml + '</div>' +
                         '<div class="pricing-meta">' + formatPricingMetaLine(p) + '</div>' +
-                        '<button class="pricing-cta-btn" data-plan="' + (p.id || '') + '" data-kind="' + (p.kind || 'paid') + '">' +
+                        '<button class="pricing-cta-btn" data-plan="' + (p.id || '') + '" data-kind="' + (p.kind === 'unlock' ? 'contact' : (p.kind || 'contact')) + '">' +
                             (p.ctaText || 'Выбрать') +
                             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
                                 '<line x1="5" y1="12" x2="19" y2="12"></line>' +
@@ -900,7 +943,6 @@
                         '</button>';
                     container.appendChild(card);
                 });
-                applyLandingTrialCopy(plans);
                 attachHandlers();
                 initPricingCardsNetwork();
             })

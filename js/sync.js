@@ -234,6 +234,14 @@
                     }
                     return;
                 }
+                if (msg.type === 'limit_error') {
+                    if (typeof window.onMapObjectLimitError === 'function') {
+                        window.onMapObjectLimitError(msg.error, msg.mapLimits);
+                    } else if (typeof window.showWarning === 'function') {
+                        window.showWarning(msg.error || 'Достигнут лимит объектов на карте', 'Лимит');
+                    }
+                    return;
+                }
                 if (msg.type === 'op' && msg.op && typeof window.applyOperationToMap === 'function') {
                     var op = msg.op;
                     setTimeout(function() {
