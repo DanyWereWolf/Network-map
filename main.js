@@ -7567,11 +7567,22 @@ function normalizeCableGeometry(geom) {
     return flat.length >= 2 ? flat : null;
 }
 
-function findRefClosestToCoord(refs, coord, tolerance, preferCableEndpoint) {
+function findRefClosestToCoord(refs, coord, tolerance, preferCableEndpoint, preferredUniqueId) {
     if (!Array.isArray(refs) || !coord || coord.length < 2) return null;
     tolerance = tolerance || 0.0005;
+    if (preferredUniqueId) {
+        for (var rp = 0; rp < refs.length; rp++) {
+            var op = refs[rp];
+            if (!op || !op.geometry || !op.properties) continue;
+            if (op.properties.get('uniqueId') !== preferredUniqueId) continue;
+            var cp = op.geometry.getCoordinates();
+            if (!cp || cp.length < 2) continue;
+            var dp = Math.sqrt(Math.pow(cp[0] - coord[0], 2) + Math.pow(cp[1] - coord[1], 2));
+            if (dp < tolerance) return op;
+        }
+    }
     var best = null, bestDist = tolerance;
-    var bestEndpoint = null, bestEndpointDist = tolerance; 
+    var bestEndpoint = null, bestEndpointDist = tolerance;
     for (var r = 0; r < refs.length; r++) {
         var o = refs[r];
         if (!o || !o.geometry) continue;
@@ -8173,8 +8184,8 @@ function applyRemoteStateMerged(data) {
                 // Для ВОЛС при коллизии координат предпочитаем кросс/муфту/OLT; для меди концы —
                 // узел, коммутатор, камера, МК. Иначе МК у кросса ошибочно привязывается к кроссу.
                 var preferFiberEndpoint = item.cableType !== 'copper';
-                fromObj = fromObj || findRefClosestToCoord(refs, coords[0], undefined, preferFiberEndpoint);
-                toObj = toObj || findRefClosestToCoord(refs, coords[coords.length - 1], undefined, preferFiberEndpoint);
+                fromObj = fromObj || findRefClosestToCoord(refs, coords[0], undefined, preferFiberEndpoint, item.fromUniqueId);
+                toObj = toObj || findRefClosestToCoord(refs, coords[coords.length - 1], undefined, preferFiberEndpoint, item.toUniqueId);
             }
         }
         if (!fromObj || !toObj) return;
@@ -8345,8 +8356,11 @@ function applyOperationToMap(op) {
         var existingByOp = objects.find(function(o) { return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === op.data.uniqueId; });
         var opCoordsNorm = op.data.geometry && normalizeCableGeometry(op.data.geometry);
         if (existingByOp) {
-            var fE = existingByOp.properties.get('from');
-            var tE = existingByOp.properties.get('to');
+            var fromUidOp = op.data.fromUniqueId, toUidOp = op.data.toUniqueId;
+            var fE = fromUidOp ? objects.find(function(o) { return o.properties && o.properties.get('type') !== 'cable' && o.properties.get('uniqueId') === fromUidOp; }) : existingByOp.properties.get('from');
+            var tE = toUidOp ? objects.find(function(o) { return o.properties && o.properties.get('type') !== 'cable' && o.properties.get('uniqueId') === toUidOp; }) : existingByOp.properties.get('to');
+            if (!fE) fE = existingByOp.properties.get('from');
+            if (!tE) tE = existingByOp.properties.get('to');
             var rE = buildCableRoutePointsFromData(refsOpMap, op.data, fE, tE, opCoordsNorm);
             if (rE && rE.length >= 2) {
                 existingByOp.properties.set('from', rE[0]);
@@ -8479,8 +8493,8 @@ function importData(data, opts) {
             if (!fromObj || !toObj) {
                 if (coords && coords.length >= 2) {
                     var preferFiberEpImp = item.cableType !== 'copper';
-                    fromObj = fromObj || findRefClosestToCoord(refsOnly, coords[0], undefined, preferFiberEpImp);
-                    toObj = toObj || findRefClosestToCoord(refsOnly, coords[coords.length - 1], undefined, preferFiberEpImp);
+                    fromObj = fromObj || findRefClosestToCoord(refsOnly, coords[0], undefined, preferFiberEpImp, item.fromUniqueId);
+                    toObj = toObj || findRefClosestToCoord(refsOnly, coords[coords.length - 1], undefined, preferFiberEpImp, item.toUniqueId);
                 }
             }
             if (!fromObj || !toObj) {
@@ -15874,17 +15888,6 @@ function getFiberCount(cableType) {
     }
 }
 
-function getCrossesAtSameLocation(cross) {
-    if (!cross || !cross.geometry || !cross.properties || cross.properties.get('type') !== 'cross') return [cross];
-    try {
-        const coords = cross.geometry.getCoordinates();
-        const k = groupKey(coords);
-        const groups = getCrossGroups();
-        const group = groups.find(g => groupKey(g.coords) === k);
-        return group ? group.crosses : [cross];
-    } catch (e) { return [cross]; }
-}
-
 /** Кабели через опору или крепление: концы маршрута (from/to) или промежуточная точка (points / геометрия). */
 function getCablesThroughSupport(supportObj) {
     if (!supportObj || !supportObj.geometry) return [];
@@ -15918,25 +15921,15 @@ function getCablesThroughSupport(supportObj) {
 }
 
 function getConnectedCables(obj) {
-    var direct = objects.filter(cable => 
-        cable.properties && 
-        cable.properties.get('type') === 'cable' &&
-        (cable.properties.get('from') === obj || cable.properties.get('to') === obj)
-    );
-    if (obj && obj.properties && obj.properties.get('type') === 'cross') {
-        var sameLocation = getCrossesAtSameLocation(obj);
-        if (sameLocation.length > 1) {
-            sameLocation.forEach(function(other) {
-                if (other === obj) return;
-                objects.filter(function(cable) {
-                    if (!cable.properties || cable.properties.get('type') !== 'cable') return false;
-                    return cable.properties.get('from') === other || cable.properties.get('to') === other;
-                }).forEach(function(c) {
-                    if (direct.indexOf(c) === -1) direct.push(c);
-                });
-            });
-        }
-    }
+    var objUid = obj && obj.properties ? getObjectUniqueId(obj) : null;
+    var direct = objects.filter(function(cable) {
+        if (!cable.properties || cable.properties.get('type') !== 'cable') return false;
+        var from = cable.properties.get('from');
+        var to = cable.properties.get('to');
+        if (from === obj || to === obj) return true;
+        if (!objUid) return false;
+        return (from && getObjectUniqueId(from) === objUid) || (to && getObjectUniqueId(to) === objUid);
+    });
     // Стабильная сортировка по uniqueId кабеля, чтобы порядок не «прыгал» при обновлении (опоры, муфта, кросс)
     direct = direct.slice().sort(function(a, b) {
         var idA = a.properties && a.properties.get('uniqueId');
