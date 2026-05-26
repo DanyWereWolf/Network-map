@@ -49,6 +49,32 @@
         return cfg.streamType !== 'none' && !!(cfg.streamUrl || '').trim();
     }
 
+    function isCameraOnline(obj) {
+        return hasActiveStream(getCameraStreamConfig(obj));
+    }
+
+    function buildStatusBadgeHtml(isOnline) {
+        var online = !!isOnline;
+        return '<span class="camera-status-badge camera-status-badge--' + (online ? 'online' : 'offline') + '" title="' +
+            (online ? 'Онлайн — видеопоток настроен' : 'Офлайн — видеопоток не настроен') + '">' +
+            '<span class="camera-status-badge-dot" aria-hidden="true"></span>' +
+            '<span class="camera-status-badge-text">' + (online ? 'Онлайн' : 'Офлайн') + '</span></span>';
+    }
+
+    function buildMapLabelHtml(displayName, isOnline) {
+        var online = !!isOnline;
+        var statusTitle = online ? 'Онлайн' : 'Офлайн';
+        return '<div class="map-label map-label--camera">' +
+            '<span class="map-label-status map-label-status--' + (online ? 'online' : 'offline') + '" title="' + statusTitle + '" aria-label="' + statusTitle + '"></span>' +
+            displayName + '</div>';
+    }
+
+    function notifyCameraPresentationChanged(obj) {
+        if (typeof global.refreshCameraMapPresentation === 'function') {
+            global.refreshCameraMapPresentation(obj);
+        }
+    }
+
     function getCameraSnapshot(obj) {
         if (!obj || !obj.properties) return '';
         var url = (obj.properties.get('snapshotPhoto') || '').trim();
@@ -325,6 +351,7 @@
                     applyCameraSnapshot(obj, dataUrl);
                     refreshSnapshotUi(root, obj);
                     if (typeof saveData === 'function') saveData();
+                    notifyCameraPresentationChanged(obj);
                     if (typeof showSuccess === 'function') showSuccess('Снимок сохранён');
                 }).catch(function(err) {
                     if (typeof showError === 'function') showError(err.message || 'Ошибка загрузки');
@@ -339,6 +366,7 @@
                 applyCameraSnapshot(obj, '');
                 refreshSnapshotUi(root, obj);
                 if (typeof saveData === 'function') saveData();
+                notifyCameraPresentationChanged(obj);
                 if (typeof showInfo === 'function') showInfo('Снимок удалён');
             });
         }
@@ -560,6 +588,7 @@
             refreshPlayerInRoot(root, obj);
             refreshPreview();
             if (typeof saveData === 'function') saveData();
+            notifyCameraPresentationChanged(obj);
         }
 
         var fields = ['StreamType', 'StreamUrl', 'StreamUser', 'StreamPass', 'StreamAutoplay', 'StreamMuted'];
@@ -573,6 +602,7 @@
                 if (!obj) return;
                 applyCameraStreamConfig(obj, readStreamConfigFromForm(idPrefix));
                 if (typeof saveData === 'function') saveData();
+                notifyCameraPresentationChanged(obj);
                 refreshPreview();
             });
         });
@@ -645,6 +675,10 @@
         normalizeStreamType: normalizeStreamType,
         guessStreamTypeFromUrl: guessStreamTypeFromUrl,
         hasActiveStream: hasActiveStream,
+        isCameraOnline: isCameraOnline,
+        buildStatusBadgeHtml: buildStatusBadgeHtml,
+        buildMapLabelHtml: buildMapLabelHtml,
+        notifyCameraPresentationChanged: notifyCameraPresentationChanged,
         getCameraStreamConfig: getCameraStreamConfig,
         getCameraSnapshot: getCameraSnapshot,
         applyCameraSnapshot: applyCameraSnapshot,

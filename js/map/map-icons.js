@@ -154,6 +154,13 @@
             '<circle cx="21" cy="11" r="1" fill="' + sw + '" opacity="' + wo + '"/>';
     }
 
+    function cameraOnlineIndicator(online) {
+        if (online !== true && online !== false) return '';
+        var color = online ? '#22c55e' : '#94a3b8';
+        return '<circle cx="26.5" cy="5.5" r="4" fill="' + color + '" stroke="#ffffff" stroke-width="1.4"/>' +
+            (online ? '<circle cx="26.5" cy="5.5" r="1.6" fill="#ffffff" opacity="0.45"/>' : '');
+    }
+
     function drawMediaConverter(fill, sw, w, fo, wo) {
         return '<rect x="8" y="9" width="16" height="14" rx="2" fill="' + fill + '" stroke="' + sw + '" stroke-width="' + w + '" opacity="' + fo + '"/>' +
             '<path d="M4 14 L8 14" stroke="#22c55e" stroke-width="1.6" stroke-linecap="round"/>' +
@@ -206,7 +213,9 @@
             case 'olt': body = drawOlt(fill, sw, w, fo, wo); break;
             case 'splitter': body = drawSplitter(fill, sw, w, fo, wo); break;
             case 'onu': body = drawOnu(fill, sw, w, fo, wo); break;
-            case 'camera': body = drawCamera(fill, sw, w, fo, wo); break;
+            case 'camera':
+                body = drawCamera(fill, sw, w, fo, wo) + cameraOnlineIndicator(options.cameraOnline);
+                break;
             case 'mediaConverter': body = drawMediaConverter(fill, sw, w, fo, wo); break;
             case 'switch': body = drawSwitch(fill, sw, w, fo, wo); break;
             case 'crossGroup': body = drawGroup('crossGroup', COLORS.cross, sw, w, fo, options.groupCount); break;

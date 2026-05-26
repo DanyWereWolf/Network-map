@@ -3287,6 +3287,9 @@ function buildMapPlacemarkIcon(type, variant, source) {
             if (source.hasAggregation) opts.hasAggregation = true;
         }
     }
+    if (type === 'camera' && source && source.properties && window.CameraPlayer) {
+        opts.cameraOnline = CameraPlayer.isCameraOnline(source);
+    }
     return MapIcons.buildPlacemarkIcon(type, opts);
 }
 
@@ -3374,6 +3377,9 @@ function refreshMapPlacemarkIcons() {
                 var iconOpts = { variant: 'normal' };
                 if (iconType === 'node' && currentModalObject.properties) {
                     iconOpts.nodeKind = currentModalObject.properties.get('nodeKind') || 'network';
+                }
+                if (iconType === 'camera' && window.CameraPlayer) {
+                    iconOpts.cameraOnline = CameraPlayer.isCameraOnline(currentModalObject);
                 }
                 el.innerHTML = MapIcons.buildIconSvg(iconType, iconOpts);
             });
@@ -3496,6 +3502,7 @@ function createObject(type, name, coords, options = {}) {
     const placemark = new ymaps.Placemark(coords, placemarkProperties, placemarkOptions);
 
     updateObjectLabel(placemark, name);
+    if (type === 'camera') refreshCameraMapPresentation(placemark);
     var objLabel = placemark.properties.get('label');
     if (objLabel) {
         myMap.geoObjects.add(objLabel);
@@ -5955,22 +5962,30 @@ function buildCameraCardContent(obj, isEditMode, name) {
     var comment = obj.properties.get('comment') || '';
     var deviceLine = [manufacturer, model].filter(Boolean).join(' · ');
     var streamCfg = window.CameraPlayer ? CameraPlayer.getCameraStreamConfig(obj) : { streamType: 'none', streamUrl: '' };
+    var cameraOnline = window.CameraPlayer ? CameraPlayer.isCameraOnline(obj) : false;
     var html = '<div class="camera-card">';
 
     html += '<section class="object-card-section camera-card-hero">';
     html += '<div class="camera-card-hero-row">';
     if (window.MapIcons) {
-        html += '<div class="camera-card-hero-icon" aria-hidden="true">' + MapIcons.buildIconSvg('camera', { variant: 'normal' }) + '</div>';
+        html += '<div class="camera-card-hero-icon" aria-hidden="true">' +
+            MapIcons.buildIconSvg('camera', { variant: 'normal', cameraOnline: cameraOnline }) + '</div>';
     }
     html += '<div class="camera-card-hero-text">';
     if (!isEditMode) {
+        html += '<div class="camera-card-view-name-row">';
         html += '<div class="camera-card-view-name">' + escapeHtml(name || 'Без названия') + '</div>';
+        if (window.CameraPlayer) html += CameraPlayer.buildStatusBadgeHtml(cameraOnline);
+        html += '</div>';
         html += '<div class="camera-card-view-meta">' + escapeHtml(deviceLine || 'Камера видеонаблюдения') + '</div>';
         if (comment) {
             html += '<div class="camera-card-comment">' + escapeHtml(comment) + '</div>';
         }
     } else {
+        html += '<div class="camera-card-view-name-row">';
         html += '<div class="camera-card-view-name">' + escapeHtml(name || 'Новая камера') + '</div>';
+        if (window.CameraPlayer) html += CameraPlayer.buildStatusBadgeHtml(cameraOnline);
+        html += '</div>';
         html += '<p class="object-card-hint camera-card-hero-hint">На карте подключайте только <strong>медным кабелем</strong> к коммутатору узла, отдельному коммутатору или медиаконвертеру с оптикой.</p>';
     }
     html += '</div></div></section>';
@@ -9043,7 +9058,8 @@ function createObjectFromData(data, opts) {
     });
 
     updateObjectLabel(placemark, name);
-    
+    if (type === 'camera') refreshCameraMapPresentation(placemark);
+
     attachHoverEventsToObject(placemark);
     if (!(opts && opts.skipAddToObjects)) {
         objects.push(placemark);
@@ -10436,6 +10452,47 @@ function getObjectDefaultName(type) {
     }
 }
 
+function getObjectLabelHtml(type, displayName, placemark) {
+    if (type === 'camera' && window.CameraPlayer && placemark) {
+        return CameraPlayer.buildMapLabelHtml(displayName, CameraPlayer.isCameraOnline(placemark));
+    }
+    return '<div class="map-label">' + displayName + '</div>';
+}
+
+function refreshCameraMapPresentation(cameraObj) {
+    if (!cameraObj || !cameraObj.properties || cameraObj.properties.get('type') !== 'camera') return;
+    var variant = 'normal';
+    if (selectedObjects.indexOf(cameraObj) >= 0) {
+        if (!isEditMode) variant = 'selected';
+    }
+    if (hoveredObject === cameraObj) variant = 'hover';
+    applyMapPlacemarkIcon(cameraObj, 'camera', variant, cameraObj);
+    updateObjectLabel(cameraObj, cameraObj.properties.get('name'));
+    if (typeof refreshMapPlacemarkIcons === 'function' &&
+        currentModalObject === cameraObj &&
+        typeof isInfoModalVisible === 'function' &&
+        isInfoModalVisible(document.getElementById('infoModal'))) {
+        var modalBody = document.getElementById('modalInfo');
+        if (modalBody && window.MapIcons && window.CameraPlayer) {
+            var heroIcon = modalBody.querySelector('.camera-card-hero-icon');
+            if (heroIcon) {
+                heroIcon.innerHTML = MapIcons.buildIconSvg('camera', {
+                    variant: 'normal',
+                    cameraOnline: CameraPlayer.isCameraOnline(cameraObj)
+                });
+            }
+            modalBody.querySelectorAll('.camera-status-badge').forEach(function(badge) {
+                var online = CameraPlayer.isCameraOnline(cameraObj);
+                badge.className = 'camera-status-badge camera-status-badge--' + (online ? 'online' : 'offline');
+                badge.title = online ? 'Онлайн — видеопоток настроен' : 'Офлайн — видеопоток не настроен';
+                var text = badge.querySelector('.camera-status-badge-text');
+                if (text) text.textContent = online ? 'Онлайн' : 'Офлайн';
+            });
+        }
+    }
+}
+window.refreshCameraMapPresentation = refreshCameraMapPresentation;
+
 function updateObjectLabel(placemark, name) {
     if (!placemark || !placemark.properties) return;
     
@@ -10444,6 +10501,7 @@ function updateObjectLabel(placemark, name) {
     
     let label = placemark.properties.get('label');
     const displayName = name ? escapeHtml(name) : getObjectDefaultName(type);
+    const labelHtml = getObjectLabelHtml(type, displayName, placemark);
     const coords = placemark.geometry.getCoordinates();
     
     if (!label) {
@@ -10452,7 +10510,7 @@ function updateObjectLabel(placemark, name) {
             iconImageHref: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==',
             iconImageSize: [1, 1],
             iconImageOffset: [0, 0],
-            iconContent: '<div class="map-label">' + displayName + '</div>',
+            iconContent: labelHtml,
             iconContentOffset: type === 'support' ? [0, 14] : [0, 18],
             zIndex: 1000,
             zIndexHover: 1000,
@@ -10463,7 +10521,7 @@ function updateObjectLabel(placemark, name) {
         placemark.properties.set('label', label);
     } else {
         label.properties.set({
-            iconContent: '<div class="map-label">' + displayName + '</div>'
+            iconContent: labelHtml
         });
         label.geometry.setCoordinates(coords);
     }
