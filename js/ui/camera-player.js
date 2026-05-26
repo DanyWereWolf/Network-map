@@ -212,11 +212,14 @@
         options = options || {};
         var isEditMode = options.isEditMode !== false;
         var cfg = getCameraStreamConfig(obj);
-        if (hasActiveStream(cfg)) return '';
+        var hasStream = hasActiveStream(cfg);
+        if (!isEditMode && hasStream) return '';
         var snapshot = getCameraSnapshot(obj);
+        var isFallback = isEditMode && hasStream;
 
-        var html = '<section class="object-card-section object-card-section--snapshot camera-snapshot-section">';
-        html += '<h4 class="object-card-section-title">Обзор камеры</h4>';
+        var html = '<section class="object-card-section object-card-section--snapshot camera-snapshot-section' +
+            (isFallback ? ' camera-snapshot-section--fallback' : '') + '">';
+        html += '<h4 class="object-card-section-title">' + (isFallback ? 'Запасной снимок' : 'Обзор камеры') + '</h4>';
 
         if (!isEditMode) {
             if (snapshot) {
@@ -228,7 +231,11 @@
             return html;
         }
 
-        html += '<p class="object-card-hint">Без видеопотока загрузите фото, чтобы было понятно, куда смотрит камера.</p>';
+        if (isFallback) {
+            html += '<p class="object-card-hint">Показывается, если видеопоток недоступен. Загрузите фото — куда смотрит камера.</p>';
+        } else {
+            html += '<p class="object-card-hint">Без видеопотока загрузите фото, чтобы было понятно, куда смотрит камера.</p>';
+        }
         html += '<div class="camera-snapshot-preview" data-camera-snapshot-preview>';
         html += buildSnapshotPreviewInner(snapshot, 'Выберите изображение');
         html += '</div>';
@@ -367,6 +374,23 @@
         mount.innerHTML = '<div class="camera-player-message' + (isError ? ' camera-player-message--error' : '') + '">' + escapeHtml(text) + '</div>';
     }
 
+    function showSnapshotFallback(mount, snapshotUrl) {
+        if (!mount || !isValidSnapshotDataUrl(snapshotUrl)) return false;
+        destroyPlayerState(mount);
+        mount.innerHTML =
+            '<div class="camera-player-fallback">' +
+            '<img src="' + snapshotUrl + '" alt="Запасной снимок обзора" class="camera-snapshot-img camera-player-fallback-img">' +
+            '<p class="camera-player-fallback-caption">Поток недоступен · запасной снимок</p>' +
+            '</div>';
+        mount._cameraPlayerState = { type: 'snapshot' };
+        return true;
+    }
+
+    function showPlaybackError(mount, message, snapshotUrl) {
+        if (showSnapshotFallback(mount, snapshotUrl)) return;
+        showPlayerMessage(mount, message, true);
+    }
+
     function destroyPlayerState(mount) {
         if (!mount) return;
         var state = mount._cameraPlayerState;
@@ -388,14 +412,17 @@
         mount.innerHTML = '';
     }
 
-    function mountPlayer(mount, cfg) {
+    function mountPlayer(mount, cfg, snapshotUrl) {
         if (!mount) return;
         destroyPlayerState(mount);
         cfg = cfg || {};
+        snapshotUrl = isValidSnapshotDataUrl(snapshotUrl) ? snapshotUrl : '';
         var type = normalizeStreamType(cfg.streamType);
         var url = (cfg.streamUrl || '').trim();
         if (type === 'none' || !url) {
-            showPlayerMessage(mount, 'Укажите URL и тип потока в настройках.');
+            if (!showSnapshotFallback(mount, snapshotUrl)) {
+                showPlayerMessage(mount, 'Укажите URL и тип потока в настройках.');
+            }
             return;
         }
 
@@ -431,7 +458,7 @@
             img.alt = 'Видеопоток камеры';
             img.src = playUrl;
             img.addEventListener('error', function() {
-                showPlayerMessage(mount, 'Не удалось загрузить MJPEG/JPEG. Проверьте URL и доступность.', true);
+                showPlaybackError(mount, 'Не удалось загрузить MJPEG/JPEG. Проверьте URL и доступность.', snapshotUrl);
             });
             mount.appendChild(img);
             state.img = img;
@@ -450,7 +477,7 @@
         state.video = video;
 
         function onVideoError() {
-            showPlayerMessage(mount, 'Ошибка воспроизведения. Проверьте URL, CORS и тип потока.', true);
+            showPlaybackError(mount, 'Ошибка воспроизведения. Проверьте URL, CORS и тип потока.', snapshotUrl);
         }
 
         if (type === 'hls') {
@@ -473,10 +500,10 @@
                     mount._cameraPlayerState = state;
                     video.play().catch(function() {});
                 } else {
-                    showPlayerMessage(mount, 'HLS не поддерживается в этом браузере.', true);
+                    showPlaybackError(mount, 'HLS не поддерживается в этом браузере.', snapshotUrl);
                 }
             }).catch(function() {
-                showPlayerMessage(mount, 'Не удалось загрузить модуль HLS.', true);
+                showPlaybackError(mount, 'Не удалось загрузить модуль HLS.', snapshotUrl);
             });
             return;
         }
@@ -491,11 +518,12 @@
         if (!root) return;
         var mount = root.querySelector('[data-camera-player-mount]');
         if (!mount) return;
-        mountCameraPlayer(mount, getCameraStreamConfig(obj));
+        mountCameraPlayer(mount, getCameraStreamConfig(obj), obj);
     }
 
-    function mountCameraPlayer(mount, cfg) {
-        mountPlayer(mount, cfg);
+    function mountCameraPlayer(mount, cfg, obj) {
+        var snapshotUrl = obj ? getCameraSnapshot(obj) : '';
+        mountPlayer(mount, cfg, snapshotUrl);
     }
 
     function destroyPlayersInRoot(root) {
@@ -520,7 +548,7 @@
                 preview.innerHTML = '<div class="camera-player-message">Укажите URL и тип потока.</div>';
                 return;
             }
-            mountPlayer(preview, cfg);
+            mountPlayer(preview, cfg, getCameraSnapshot(obj));
         }
 
         function persistAndRefresh() {
@@ -589,7 +617,7 @@
         if (isEdit) {
             var preview = root.querySelector('[data-camera-player-preview]');
             if (preview) {
-                if (hasActiveStream(cfg)) mountPlayer(preview, cfg);
+                if (hasActiveStream(cfg)) mountPlayer(preview, cfg, getCameraSnapshot(getObj()));
                 else showPlayerMessage(preview, 'Укажите URL и тип потока.');
             }
             bindSnapshotHandlers(root, getObj);
