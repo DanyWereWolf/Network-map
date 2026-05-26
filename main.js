@@ -107,7 +107,7 @@ function getSleeveTypeSelectOptionsHtml(selectedValue) {
 
 /** Поля выбора типа муфты при разрезе кабеля (опора / линия кабеля). */
 function buildCableSplitSleeveFieldsHtml(selectedType) {
-    var sel = selectedType || 'SNR-FOSC-12';
+    var sel = selectedType || 'SNR-FOSC-L';
     var html = '<div class="cable-split-sleeve-fields">';
     html += '<div class="form-group cable-split-sleeve-fields__type">';
     html += '<label class="cable-split-sleeve-fields__label">Тип муфты</label>';
@@ -141,7 +141,7 @@ function bindCableSplitSleeveFields(container) {
             var t = typeEl.value;
             if (t === 'custom') {
                 if (maxWrap) maxWrap.style.display = '';
-                if (maxInput && (!maxInput.value || maxInput.value === '0')) maxInput.value = '12';
+                if (maxInput && (!maxInput.value || maxInput.value === '0')) maxInput.value = '96';
             } else {
                 if (maxWrap) maxWrap.style.display = 'none';
                 if (maxInput) maxInput.value = String(getDefaultMaxFibersForSleeveType(t));
@@ -155,7 +155,7 @@ function bindCableSplitSleeveFields(container) {
 function readCableSplitSleeveOptions(container) {
     var root = container && container.querySelector ? container : document;
     var block = root.querySelector ? root.querySelector('.cable-split-sleeve-fields') : null;
-    var sleeveType = 'SNR-FOSC-12';
+    var sleeveType = 'SNR-FOSC-L';
     var sleeveName = '';
     var maxFibers = getDefaultMaxFibersForSleeveType(sleeveType);
     if (!block) return { sleeveType: sleeveType, sleeveName: sleeveName, maxFibers: maxFibers };
@@ -4178,7 +4178,7 @@ function splitCableAt(cable, splitOptions) {
         return false;
     }
 
-    var sleeveType = splitOptions.sleeveType || 'SNR-FOSC-12';
+    var sleeveType = splitOptions.sleeveType || 'SNR-FOSC-L';
     var maxFibers = splitOptions.maxFibers !== undefined && splitOptions.maxFibers !== null
         ? splitOptions.maxFibers
         : getDefaultMaxFibersForSleeveType(sleeveType);
@@ -4307,7 +4307,7 @@ function startCableSplitPickOnCable(cable, sleeveOptions) {
     };
     var modal = document.getElementById('infoModal');
     if (modal) modal.style.display = 'none';
-    var typeHint = sleeveOptions && sleeveOptions.sleeveType ? sleeveOptions.sleeveType : 'SNR-FOSC-12';
+    var typeHint = sleeveOptions && sleeveOptions.sleeveType ? sleeveOptions.sleeveType : 'SNR-FOSC-L';
     showInfo('Кликните по линии кабеля в месте установки муфты. Тип муфты: ' + typeHint + '. Escape — отмена.', 'Установка муфты');
     if (myMap && myMap.container) {
         var mapEl = myMap.container.getElement();
@@ -16131,8 +16131,10 @@ function updateCrossDisplay() {
                 if (currentCableTool && isEditMode) {
                     if (cableSource && cableSource !== crosses[0]) {
                         const cableType = getEffectiveCableLayingType();
-                        if (addCable(cableSource, crosses[0], cableType)) {
+                        const points = [cableSource].concat(cableWaypoints).concat([crosses[0]]);
+                        if (createCableFromPoints(points, cableType)) {
                             cableSource = crosses[0];
+                            cableWaypoints = [];
                             clearSelection();
                             selectObject(cableSource);
                             removeCablePreview();
@@ -16225,8 +16227,10 @@ function updateCrossDisplay() {
                         if (currentCableTool && isEditMode) {
                             if (cableSource && cableSource !== crossObj) {
                                 const cableType = getEffectiveCableLayingType();
-                                if (addCable(cableSource, crossObj, cableType)) {
+                                const points = [cableSource].concat(cableWaypoints).concat([crossObj]);
+                                if (createCableFromPoints(points, cableType)) {
                                     cableSource = crossObj;
+                                    cableWaypoints = [];
                                     clearSelection();
                                     selectObject(cableSource);
                                     removeCablePreview();
