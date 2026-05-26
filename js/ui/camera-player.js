@@ -13,6 +13,9 @@
 
     var HLS_SCRIPT = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js';
     var hlsLoadPromise = null;
+    var SNAPSHOT_MAX_BYTES = 2 * 1024 * 1024;
+    var SNAPSHOT_MAX_DIM = 1920;
+    var SNAPSHOT_JPEG_QUALITY = 0.82;
 
     function escapeHtml(s) {
         if (s == null) return '';
@@ -39,6 +42,32 @@
         if (/\.mjpe?g(\?|$)/i.test(u) || /\/video\.cgi|action=stream|\/stream/i.test(u)) return 'mjpeg';
         if (/^https?:\/\//i.test(u)) return 'http';
         return 'http';
+    }
+
+    function hasActiveStream(cfg) {
+        cfg = cfg || {};
+        return cfg.streamType !== 'none' && !!(cfg.streamUrl || '').trim();
+    }
+
+    function getCameraSnapshot(obj) {
+        if (!obj || !obj.properties) return '';
+        var url = (obj.properties.get('snapshotPhoto') || '').trim();
+        return isValidSnapshotDataUrl(url) ? url : '';
+    }
+
+    function isValidSnapshotDataUrl(url) {
+        return /^data:image\/(jpeg|png|webp|gif);base64,/i.test(url || '');
+    }
+
+    function applyCameraSnapshot(obj, dataUrl) {
+        if (!obj || !obj.properties) return;
+        var url = (dataUrl || '').trim();
+        if (url) {
+            if (!isValidSnapshotDataUrl(url)) return;
+            obj.properties.set('snapshotPhoto', url);
+        } else {
+            obj.properties.unset('snapshotPhoto');
+        }
     }
 
     function getCameraStreamConfig(obj) {
@@ -121,13 +150,19 @@
         var idPrefix = options.idPrefix || 'editCamera';
         var isEditMode = options.isEditMode !== false;
         var cfgSafe = cfg || getCameraStreamConfig(null);
+        var obj = options.obj;
+
+        if (!hasActiveStream(cfgSafe)) {
+            if (!isEditMode) return '';
+            if (obj && getCameraSnapshot(obj)) return '';
+        }
 
         var html = '<section class="object-card-section object-card-section--stream camera-stream-settings">';
         html += '<h4 class="object-card-section-title">Видеопоток</h4>';
 
         if (!isEditMode) {
-            if (cfgSafe.streamType === 'none' || !cfgSafe.streamUrl) {
-                html += '<p class="object-card-hint">Поток не настроен. Включите режим редактирования, чтобы указать адрес.</p>';
+            if (!hasActiveStream(cfgSafe)) {
+                html += '<p class="object-card-hint">Поток не настроен. Включите режим редактирования, чтобы указать адрес или загрузить снимок обзора.</p>';
             } else {
                 html += '<p class="object-card-hint camera-stream-view-meta"><strong>' + escapeHtml(streamTypeLabel(cfgSafe.streamType)) + '</strong>';
                 if (cfgSafe.streamUser) html += ' · авторизация задана';
@@ -166,9 +201,145 @@
         return html;
     }
 
+    function buildSnapshotPreviewInner(snapshot, emptyText) {
+        if (snapshot) {
+            return '<img src="' + snapshot + '" alt="Снимок обзора камеры" class="camera-snapshot-img">';
+        }
+        return '<div class="camera-snapshot-empty">' + escapeHtml(emptyText || 'Снимок не загружен') + '</div>';
+    }
+
+    function buildSnapshotSectionHtml(obj, options) {
+        options = options || {};
+        var isEditMode = options.isEditMode !== false;
+        var cfg = getCameraStreamConfig(obj);
+        if (hasActiveStream(cfg)) return '';
+        var snapshot = getCameraSnapshot(obj);
+
+        var html = '<section class="object-card-section object-card-section--snapshot camera-snapshot-section">';
+        html += '<h4 class="object-card-section-title">Обзор камеры</h4>';
+
+        if (!isEditMode) {
+            if (snapshot) {
+                html += '<div class="camera-snapshot-view">' + buildSnapshotPreviewInner(snapshot) + '</div>';
+            } else {
+                html += '<p class="object-card-hint">Снимок не загружен. В режиме редактирования можно добавить фото — куда смотрит камера.</p>';
+            }
+            html += '</section>';
+            return html;
+        }
+
+        html += '<p class="object-card-hint">Без видеопотока загрузите фото, чтобы было понятно, куда смотрит камера.</p>';
+        html += '<div class="camera-snapshot-preview" data-camera-snapshot-preview>';
+        html += buildSnapshotPreviewInner(snapshot, 'Выберите изображение');
+        html += '</div>';
+        html += '<input type="file" id="editCameraSnapshotInput" class="camera-snapshot-input" accept="image/jpeg,image/png,image/webp,image/gif" hidden>';
+        html += '<div class="camera-snapshot-actions">';
+        html += '<button type="button" class="btn-secondary btn-camera-snapshot-upload">Загрузить фото</button>';
+        html += '<button type="button" class="btn-secondary btn-camera-snapshot-remove"' + (snapshot ? '' : ' hidden') + '>Удалить</button>';
+        html += '</div></section>';
+        return html;
+    }
+
+    function resizeImageToDataUrl(dataUrl) {
+        return new Promise(function(resolve, reject) {
+            var img = new Image();
+            img.onload = function() {
+                var w = img.naturalWidth;
+                var h = img.naturalHeight;
+                if (!w || !h) {
+                    reject(new Error('Пустое изображение'));
+                    return;
+                }
+                var scale = 1;
+                if (w > SNAPSHOT_MAX_DIM || h > SNAPSHOT_MAX_DIM) {
+                    scale = SNAPSHOT_MAX_DIM / Math.max(w, h);
+                }
+                var cw = Math.max(1, Math.round(w * scale));
+                var ch = Math.max(1, Math.round(h * scale));
+                var canvas = document.createElement('canvas');
+                canvas.width = cw;
+                canvas.height = ch;
+                var ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, cw, ch);
+                resolve(canvas.toDataURL('image/jpeg', SNAPSHOT_JPEG_QUALITY));
+            };
+            img.onerror = function() { reject(new Error('Не удалось прочитать изображение')); };
+            img.src = dataUrl;
+        });
+    }
+
+    function processSnapshotFile(file) {
+        if (!file || !/^image\//i.test(file.type)) {
+            return Promise.reject(new Error('Выберите файл изображения (JPEG, PNG, WebP)'));
+        }
+        if (file.size > SNAPSHOT_MAX_BYTES) {
+            return Promise.reject(new Error('Файл больше 2 МБ'));
+        }
+        return new Promise(function(resolve, reject) {
+            var reader = new FileReader();
+            reader.onload = function() {
+                resizeImageToDataUrl(reader.result).then(resolve).catch(reject);
+            };
+            reader.onerror = function() { reject(new Error('Не удалось прочитать файл')); };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function refreshSnapshotUi(root, obj) {
+        if (!root || !obj) return;
+        var preview = root.querySelector('[data-camera-snapshot-preview]');
+        if (!preview) return;
+        var snapshot = getCameraSnapshot(obj);
+        preview.innerHTML = buildSnapshotPreviewInner(snapshot, 'Выберите изображение');
+        var removeBtn = root.querySelector('.btn-camera-snapshot-remove');
+        if (removeBtn) removeBtn.hidden = !snapshot;
+    }
+
+    function bindSnapshotHandlers(root, getObj) {
+        if (!root || !getObj) return;
+        var uploadBtn = root.querySelector('.btn-camera-snapshot-upload');
+        var removeBtn = root.querySelector('.btn-camera-snapshot-remove');
+        var input = root.querySelector('#editCameraSnapshotInput');
+        if (!uploadBtn || !input) return;
+
+        if (!uploadBtn._cameraSnapshotBound) {
+            uploadBtn._cameraSnapshotBound = true;
+            uploadBtn.addEventListener('click', function() { input.click(); });
+        }
+        if (!input._cameraSnapshotBound) {
+            input._cameraSnapshotBound = true;
+            input.addEventListener('change', function() {
+                var file = input.files && input.files[0];
+                input.value = '';
+                if (!file) return;
+                var obj = getObj();
+                if (!obj || obj.properties.get('type') !== 'camera') return;
+                processSnapshotFile(file).then(function(dataUrl) {
+                    applyCameraSnapshot(obj, dataUrl);
+                    refreshSnapshotUi(root, obj);
+                    if (typeof saveData === 'function') saveData();
+                    if (typeof showSuccess === 'function') showSuccess('Снимок сохранён');
+                }).catch(function(err) {
+                    if (typeof showError === 'function') showError(err.message || 'Ошибка загрузки');
+                });
+            });
+        }
+        if (removeBtn && !removeBtn._cameraSnapshotBound) {
+            removeBtn._cameraSnapshotBound = true;
+            removeBtn.addEventListener('click', function() {
+                var obj = getObj();
+                if (!obj || obj.properties.get('type') !== 'camera') return;
+                applyCameraSnapshot(obj, '');
+                refreshSnapshotUi(root, obj);
+                if (typeof saveData === 'function') saveData();
+                if (typeof showInfo === 'function') showInfo('Снимок удалён');
+            });
+        }
+    }
+
     function buildPlayerSectionHtml(cfg) {
         cfg = cfg || {};
-        if (cfg.streamType === 'none' || !cfg.streamUrl) return '';
+        if (!hasActiveStream(cfg)) return '';
         return '<section class="object-card-section object-card-section--player camera-player-section">' +
             '<div class="camera-player-section-head">' +
             '<h4 class="object-card-section-title">Просмотр</h4>' +
@@ -412,15 +583,16 @@
         var cfg = getCameraStreamConfig(obj);
         var isEdit = !!options.isEditMode;
         var getObj = options.getObj || function() { return obj; };
-        if (!isEdit && cfg.streamType !== 'none' && cfg.streamUrl) {
+        if (!isEdit && hasActiveStream(cfg)) {
             refreshPlayerInRoot(root, getObj());
         }
         if (isEdit) {
             var preview = root.querySelector('[data-camera-player-preview]');
             if (preview) {
-                if (cfg.streamUrl && cfg.streamType !== 'none') mountPlayer(preview, cfg);
+                if (hasActiveStream(cfg)) mountPlayer(preview, cfg);
                 else showPlayerMessage(preview, 'Укажите URL и тип потока.');
             }
+            bindSnapshotHandlers(root, getObj);
         }
         bindStreamForm(root, getObj, options.onUpdated, 'editCamera');
     }
@@ -444,10 +616,14 @@
         STREAM_TYPES: STREAM_TYPES,
         normalizeStreamType: normalizeStreamType,
         guessStreamTypeFromUrl: guessStreamTypeFromUrl,
+        hasActiveStream: hasActiveStream,
         getCameraStreamConfig: getCameraStreamConfig,
+        getCameraSnapshot: getCameraSnapshot,
+        applyCameraSnapshot: applyCameraSnapshot,
         applyCameraStreamConfig: applyCameraStreamConfig,
         readStreamConfigFromForm: readStreamConfigFromForm,
         buildStreamSettingsHtml: buildStreamSettingsHtml,
+        buildSnapshotSectionHtml: buildSnapshotSectionHtml,
         buildPlayerSectionHtml: buildPlayerSectionHtml,
         mountCameraPlayer: mountCameraPlayer,
         destroyPlayersInRoot: destroyPlayersInRoot,

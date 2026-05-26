@@ -1293,6 +1293,17 @@ function cableEndpointUniqueIdsFromSerialized(fullState, cable) {
     return { fromUid: fu, toUid: tu };
 }
 
+function copyOpticalFiberFieldsToCableData(cableData, c) {
+    if (!cableData || !c || c.cableType === 'copper') return;
+    if (c.fiberCount != null && c.fiberCount !== '') {
+        var fc = parseInt(c.fiberCount, 10);
+        if (!isNaN(fc) && fc > 0) cableData.fiberCount = fc;
+    }
+    if (Array.isArray(c.fiberPalette) && c.fiberPalette.length) {
+        cableData.fiberPalette = c.fiberPalette;
+    }
+}
+
 function mergeMapState(current, incoming) {
     if (!Array.isArray(incoming)) return current;
     if (incoming.length === 0) return incoming;
@@ -1334,6 +1345,7 @@ function mergeMapState(current, incoming) {
                 if (c.copperPortFrom != null && c.copperPortFrom !== '') cableData.copperPortFrom = c.copperPortFrom;
                 if (c.copperPortTo != null && c.copperPortTo !== '') cableData.copperPortTo = c.copperPortTo;
             }
+            copyOpticalFiberFieldsToCableData(cableData, c);
             mergedCables.push(cableData);
         }
     }
@@ -1357,6 +1369,7 @@ function mergeMapState(current, incoming) {
             if (c.copperPortFrom != null && c.copperPortFrom !== '') cableData.copperPortFrom = c.copperPortFrom;
             if (c.copperPortTo != null && c.copperPortTo !== '') cableData.copperPortTo = c.copperPortTo;
         }
+        copyOpticalFiberFieldsToCableData(cableData, c);
         existing = mergedCables.findIndex(function(x) { return x.uniqueId === c.uniqueId; });
         if (existing >= 0) mergedCables[existing] = cableData; else mergedCables.push(cableData);
     }
@@ -1425,6 +1438,7 @@ function applyOperationToState(state, op) {
                 if (op.data.copperPortFrom != null && op.data.copperPortFrom !== '') c.copperPortFrom = op.data.copperPortFrom;
                 if (op.data.copperPortTo != null && op.data.copperPortTo !== '') c.copperPortTo = op.data.copperPortTo;
             }
+            copyOpticalFiberFieldsToCableData(c, op.data);
             if (op.data.uniqueId != null && op.data.uniqueId !== '') {
                 var dupIdx = state.findIndex(function(i) { return i.type === 'cable' && i.uniqueId === op.data.uniqueId; });
                 if (dupIdx >= 0) {

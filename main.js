@@ -2017,6 +2017,10 @@ function setupObjectTypePicker() {
 }
 
 function getCableTypeLabel(type) {
+    if (window.FiberCableConfig && window.FiberCableConfig.isOpticalCableType(type)) {
+        var n = window.FiberCableConfig.getLayFiberCount();
+        return 'ВОЛС, ' + n + ' ж.';
+    }
     if (window.MapLegendConfig && window.MapLegendConfig.getCableMeta) {
         var m = window.MapLegendConfig.getCableMeta(type);
         if (m) return m.short;
@@ -2047,34 +2051,27 @@ function setupCableTypePicker() {
             window.MapLegendConfig.renderCableTypePicker('cableTypePicker');
         }
     }
-    var select = document.getElementById('cableType');
-    var picker = document.getElementById('cableTypePicker');
-    if (!select) return;
-    try {
-        var storedCable = localStorage.getItem(CABLE_TYPE_STORAGE_KEY);
-        if (storedCable && select.querySelector('option[value="' + storedCable + '"]')) {
-            select.value = storedCable;
-        }
-    } catch (e) {}
-    syncCableTypePickerUI();
-    if (picker && !picker._cablePickerBound) {
-        picker._cablePickerBound = true;
-        picker.addEventListener('click', function(e) {
-            var chip = e.target.closest('.cable-type-chip');
-            if (!chip) return;
-            if (typeof copperCableLayingActive !== 'undefined' && copperCableLayingActive) return;
-            var cable = chip.getAttribute('data-cable');
-            if (!cable || select.value === cable) return;
-            select.value = cable;
-            select.dispatchEvent(new Event('change'));
-        });
+    if (window.FiberCableConfig && window.FiberCableConfig.setupLayFiberControls) {
+        window.FiberCableConfig.setupLayFiberControls();
     }
+    var select = document.getElementById('cableType');
+    if (!select) return;
+    if (!select.querySelector('option[value="fiber"]')) {
+        select.innerHTML = '<option value="fiber">ВОЛС</option>';
+    }
+    select.value = 'fiber';
+    syncCableTypePickerUI();
     if (!select._cableSelectBound) {
         select._cableSelectBound = true;
         select.addEventListener('change', function() {
             syncCableTypePickerUI();
-            try { localStorage.setItem(CABLE_TYPE_STORAGE_KEY, select.value); } catch (err) {}
         });
+    }
+    var layCount = document.getElementById('layFiberCount');
+    if (layCount && !layCount._badgeSyncBound) {
+        layCount._badgeSyncBound = true;
+        layCount.addEventListener('change', syncCableTypePickerUI);
+        layCount.addEventListener('input', syncCableTypePickerUI);
     }
 }
 
@@ -3360,7 +3357,7 @@ function refreshMapPlacemarkIcons() {
     }
 
     var infoModal = document.getElementById('infoModal');
-    if (currentModalObject && infoModal && infoModal.style.display === 'block' && typeof updateInfoModalChrome === 'function') {
+    if (currentModalObject && isInfoModalVisible(infoModal) && typeof updateInfoModalChrome === 'function') {
         var modalType = currentModalObject.properties.get('type');
         var modalName = currentModalObject.properties.get('name') || '';
         updateInfoModalChrome(modalType, modalName);
@@ -3485,6 +3482,7 @@ function createObject(type, name, coords, options = {}) {
         placemarkProperties.streamPass = options.streamPass || '';
         placemarkProperties.streamAutoplay = options.streamAutoplay !== false;
         placemarkProperties.streamMuted = options.streamMuted !== false;
+        if (options.snapshotPhoto) placemarkProperties.snapshotPhoto = options.snapshotPhoto;
     }
     if (type === 'mediaConverter') {
         if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
@@ -4578,7 +4576,7 @@ function deleteObject(obj, opts) {
     updateStats();
     
     var infoModal = document.getElementById('infoModal');
-    if (infoModal && infoModal.style.display === 'block') {
+    if (isInfoModalVisible(infoModal)) {
         var modalTitleEl = document.getElementById('modalTitle');
         var isTraceModal = modalTitleEl && modalTitleEl.textContent && modalTitleEl.textContent.toLowerCase().indexOf('трассировка') !== -1;
         if (currentModalObject === obj || isTraceModal) {
@@ -4705,8 +4703,74 @@ function applySerializedCopperMetadataToCable(cable, item) {
 
 function getEffectiveCableLayingType() {
     if (typeof copperCableLayingActive !== 'undefined' && copperCableLayingActive) return 'copper';
-    var el = document.getElementById('cableType');
-    return el && el.value ? el.value : 'fiber4';
+    return 'fiber';
+}
+
+function applyNewCableFiberProps(cable) {
+    if (!cable || !cable.properties || !window.FiberCableConfig) return;
+    if (!window.FiberCableConfig.isOpticalCableType(cable.properties.get('cableType'))) return;
+    var count = window.FiberCableConfig.getLayFiberCount();
+    cable.properties.set('fiberCount', count);
+    cable.properties.set('cableType', 'fiber');
+    var pal = window.FiberCableConfig.getLayFiberPalette();
+    if (pal && pal.length) cable.properties.set('fiberPalette', pal);
+    else cable.properties.unset('fiberPalette');
+    window.FiberCableConfig.applyOpticalMapStyle(cable);
+}
+
+function applyImportedCableFiberProps(cable, item) {
+    if (!cable || !cable.properties || !item || item.cableType === 'copper') return;
+    if (!window.FiberCableConfig) return;
+    if (item.fiberCount != null && item.fiberCount !== '') {
+        cable.properties.set('fiberCount', parseInt(item.fiberCount, 10));
+    } else if (window.FiberCableConfig.LEGACY_TYPE_COUNTS[item.cableType]) {
+        cable.properties.set('fiberCount', window.FiberCableConfig.LEGACY_TYPE_COUNTS[item.cableType]);
+    }
+    if (Array.isArray(item.fiberPalette) && item.fiberPalette.length) {
+        cable.properties.set('fiberPalette', item.fiberPalette);
+    }
+    if (window.FiberCableConfig.isOpticalCableType(cable.properties.get('cableType'))) {
+        window.FiberCableConfig.applyOpticalMapStyle(cable);
+    }
+}
+
+function disableCableMapBalloon(cable) {
+    if (!cable) return;
+    if (cable.properties) {
+        cable.properties.unset('balloonContent');
+        cable.properties.unset('hintContent');
+    }
+    if (cable.options) {
+        cable.options.set({ hasBalloon: false, hasHint: false });
+    }
+}
+
+function updateCableFiberSettings(cableUniqueId, fiberCount, fiberPalette) {
+    var cable = objects.find(function(obj) {
+        return obj.properties && obj.properties.get('type') === 'cable' && obj.properties.get('uniqueId') === cableUniqueId;
+    });
+    if (!cable || !window.FiberCableConfig) return;
+    var oldCount = getFiberCount(cable);
+    var newCount = Math.max(1, Math.min(window.FiberCableConfig.MAX_FIBERS, parseInt(fiberCount, 10) || 1));
+    if (newCount < oldCount) {
+        var fromObj = cable.properties.get('from');
+        var toObj = cable.properties.get('to');
+        [fromObj, toObj].forEach(function(obj) {
+            if (!obj) return;
+            var usedFibersData = obj.properties.get('usedFibers');
+            if (usedFibersData && usedFibersData[cableUniqueId]) {
+                usedFibersData[cableUniqueId] = usedFibersData[cableUniqueId].filter(function(n) { return n <= newCount; });
+                obj.properties.set('usedFibers', usedFibersData);
+            }
+        });
+    }
+    window.FiberCableConfig.applyCableFiberSettings(cable, newCount, fiberPalette);
+    disableCableMapBalloon(cable);
+    saveData();
+    if (currentModalObject) {
+        if (currentModalObject === cable) showCableInfo(cable);
+        else refreshObjectModal(currentModalObject);
+    }
 }
 
 /** Без uniqueId op add_cable на сервере не находит концы — кабель не попадает в сохранённое состояние. */
@@ -4793,7 +4857,9 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     const polyline = new ymaps.Polyline(coords, {}, {
         strokeColor: cableColor,
         strokeWidth: cableWidth,
-        strokeOpacity: 0.8
+        strokeOpacity: 0.8,
+        hasBalloon: false,
+        hasHint: false
     });
     
     polyline.properties.set({
@@ -4831,6 +4897,8 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
             polyline.properties.set('copperPortFrom', parseInt(cpFromMeta, 10));
         }
         applyCopperCableOccupancyFromCable(polyline);
+    } else if (isOpticalCableType(cableType) && !existingCableId) {
+        applyNewCableFiberProps(polyline);
     }
 
     polyline.events.add('click', function(e) {
@@ -4859,6 +4927,7 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
         return false;
     });
     
+    disableCableMapBalloon(polyline);
     attachHoverEventsToObject(polyline);
     objects.push(polyline);
     myMap.geoObjects.add(polyline);
@@ -4923,6 +4992,12 @@ function buildAddCableSyncOp(polyline, points) {
             cableName: polyline.properties.get('cableName') || null
         }
     };
+    if (!isCopperCableType(cableType)) {
+        var fcOp = polyline.properties.get('fiberCount');
+        if (fcOp != null && fcOp !== '') addCableOp.data.fiberCount = parseInt(fcOp, 10);
+        var fpOp = polyline.properties.get('fiberPalette');
+        if (Array.isArray(fpOp) && fpOp.length) addCableOp.data.fiberPalette = fpOp;
+    }
     if (points.length > 2) {
         var ridAdd = [];
         for (var piAdd = 0; piAdd < points.length; piAdd++) {
@@ -5163,52 +5238,42 @@ function updateConnectedCables(obj) {
 }
 
 function getCableColor(type) {
+    if (window.FiberCableConfig) return window.FiberCableConfig.getCableMapColor(type);
     if (window.MapLegendConfig && window.MapLegendConfig.getCableMeta) {
         var meta = window.MapLegendConfig.getCableMeta(type);
         if (meta) return meta.color;
     }
-    switch (type) {
-        case 'fiber4': return '#00FF00';
-        case 'fiber8': return '#00AA00';
-        case 'fiber16': return '#008800';
-        case 'fiber24': return '#006600';
-        case 'copper': return '#b45309';
-        default: return '#64748b';
-    }
+    return '#64748b';
 }
 
 function getCableWidth(type) {
-    if (window.MapLegendConfig && window.MapLegendConfig.getCableMeta) {
-        var metaW = window.MapLegendConfig.getCableMeta(type);
-        if (metaW) return metaW.width;
-    }
-    switch (type) {
-        case 'fiber4': return 2;
-        case 'fiber8': return 3;
-        case 'fiber16': return 4;
-        case 'fiber24': return 5;
-        case 'copper': return 3;
-        default: return 2;
-    }
+    if (window.FiberCableConfig) return window.FiberCableConfig.getCableMapWidth(type);
+    return 2;
 }
 
-function getCableDescription(type) {
+function getCableDescription(type, cable) {
+    if (cable && cable.properties && window.FiberCableConfig) {
+        return window.FiberCableConfig.getCableLabel(cable);
+    }
+    if (window.FiberCableConfig && window.FiberCableConfig.isOpticalCableType(type)) {
+        return window.FiberCableConfig.getCableLabel(type);
+    }
     if (window.MapLegendConfig && window.MapLegendConfig.getCableMeta) {
         var metaD = window.MapLegendConfig.getCableMeta(type);
         if (metaD) return metaD.label;
     }
-    switch (type) {
-        case 'fiber4': return 'ВОЛС 4 жилы';
-        case 'fiber8': return 'ВОЛС 8 жил';
-        case 'fiber16': return 'ВОЛС 16 жил';
-        case 'fiber24': return 'ВОЛС 24 жилы';
-        case 'copper': return 'Медный кабель';
-        default: return 'Кабель';
-    }
+    if (type === 'copper') return 'Медный кабель';
+    return 'Кабель';
 }
 
 function isCopperCableType(cableType) {
     return cableType === 'copper';
+}
+
+function isOpticalCableType(cableType) {
+    return window.FiberCableConfig
+        ? window.FiberCableConfig.isOpticalCableType(cableType)
+        : (cableType && cableType !== 'copper');
 }
 
 function buildSwitchPortTypesArray(count, defaultKind) {
@@ -5926,8 +5991,9 @@ function buildCameraCardContent(obj, isEditMode, name) {
     }
 
     if (window.CameraPlayer) {
-        html += CameraPlayer.buildStreamSettingsHtml(streamCfg, { idPrefix: 'editCamera', isEditMode: isEditMode });
-        if (isEditMode && streamCfg.streamUrl && streamCfg.streamType !== 'none') {
+        html += CameraPlayer.buildStreamSettingsHtml(streamCfg, { idPrefix: 'editCamera', isEditMode: isEditMode, obj: obj });
+        html += CameraPlayer.buildSnapshotSectionHtml(obj, { isEditMode: isEditMode });
+        if (isEditMode && CameraPlayer.hasActiveStream(streamCfg)) {
             html += '<section class="object-card-section object-card-section--player camera-player-section camera-player-section--preview">';
             html += '<h4 class="object-card-section-title">Предпросмотр</h4>';
             html += '<div class="camera-player-mount" data-camera-player-preview></div>';
@@ -5976,7 +6042,7 @@ function buildOltCardContent(obj, isEditMode, name) {
         var cid = cable.properties.get('uniqueId') || ('cable-' + Date.now());
         if (!cable.properties.get('uniqueId')) cable.properties.set('uniqueId', cid);
         var cableName = cable.properties.get('cableName') || getCableDescription(cable.properties.get('cableType'));
-        var n = getFiberCount(cable.properties.get('cableType'));
+        var n = getFiberCount(cable);
         for (var f = 1; f <= n; f++) {
             fiberOptions.push({ cableId: cid, fiberNumber: f, label: cableName + ', жила ' + f, value: cid + '-' + f });
         }
@@ -6941,6 +7007,12 @@ function updateInfoModalChrome(type, name) {
     }
 }
 
+function isInfoModalVisible(modal) {
+    if (!modal) return false;
+    var display = modal.style.display;
+    return display === 'flex' || display === 'block';
+}
+
 function closeInfoModal() {
     var modal = document.getElementById('infoModal');
     if (!modal) return;
@@ -6993,10 +7065,10 @@ function showCableInfo(cable) {
     const toObj = cable.properties.get('to');
     const uniqueId = cable.properties.get('uniqueId');
     const cableName = cable.properties.get('cableName') || '';
-    const fiberCount = getFiberCount(cableType);
-    const fibers = getFiberColors(cableType);
+    const fiberCount = getFiberCount(cable);
+    const fibers = getFiberColors(cable);
     
-    const cableDescription = getCableDescription(cableType);
+    const cableDescription = getCableDescription(cableType, cable);
 
     const fromUniqueId = fromObj ? fromObj.properties.get('uniqueId') : null;
     const toUniqueId = toObj ? toObj.properties.get('uniqueId') : null;
@@ -7110,11 +7182,7 @@ function showCableInfo(cable) {
 
     modalTitle.textContent = '🔌 Информация о кабеле';
 
-    let cableColor = '#00AA00';
-    if (cableType === 'fiber4') cableColor = '#e74c3c';
-    else if (cableType === 'fiber8') cableColor = '#e67e22';
-    else if (cableType === 'fiber16') cableColor = '#9b59b6';
-    else if (cableType === 'fiber24') cableColor = '#1abc9c';
+    var cableColor = getCableColor(cableType);
     
     let html = '<div class="info-section">';
 
@@ -7133,6 +7201,16 @@ function showCableInfo(cable) {
         html += `<div style="padding: 10px 12px; background: var(--bg-tertiary); border-radius: 6px; font-size: 0.875rem; border: 1px solid var(--border-color); color: var(--text-primary);">${cableName ? escapeHtml(cableName) : '<span style="color: var(--text-muted); font-style: italic;">Не задано</span>'}</div>`;
     }
     html += '</div>';
+
+    if (isEditMode) {
+        html += '<div class="cable-fiber-settings-row form-group">';
+        html += '<label>Число жил и цвета</label>';
+        html += '<div class="cable-fiber-settings-toolbar">';
+        html += '<input type="number" id="cableFiberCountInput" class="form-input cable-fiber-count-input" min="1" max="96" value="' + fiberCount + '" aria-label="Число жил">';
+        html += '<button type="button" class="btn-secondary btn-cable-palette-edit" id="cableFiberPaletteBtn">' + (window.FiberCableConfig && window.FiberCableConfig.cablePaletteButtonHtml ? window.FiberCableConfig.cablePaletteButtonHtml() : 'Цвета') + '</button>';
+        html += '<button type="button" class="btn-primary btn-inline" id="cableFiberCountSaveBtn">Применить</button>';
+        html += '</div></div>';
+    }
 
     html += '<div style="margin-bottom: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 8px; border: 1px solid var(--border-color);">';
     html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.875rem; font-weight: 600;">📍 Маршрут</h4>';
@@ -7190,15 +7268,10 @@ function showCableInfo(cable) {
         parallelCables.forEach((pCable, idx) => {
             const pType = pCable.properties.get('cableType');
             const pName = pCable.properties.get('cableName') || '';
-            const pDesc = getCableDescription(pType);
-            const pFibers = getFiberCount(pType);
+            const pDesc = getCableDescription(pType, pCable);
+            const pFibers = getFiberCount(pCable);
             const pId = pCable.properties.get('uniqueId');
-            
-            let pColor = '#00AA00';
-            if (pType === 'fiber4') pColor = '#e74c3c';
-            else if (pType === 'fiber8') pColor = '#e67e22';
-            else if (pType === 'fiber16') pColor = '#9b59b6';
-            else if (pType === 'fiber24') pColor = '#1abc9c';
+            const pColor = getCableColor(pType);
             
             html += `<div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--bg-card); border-radius: 6px; border-left: 3px solid ${pColor}; cursor: pointer;" onclick="showCableInfoById('${pId}')">`;
             html += `<div style="width: 8px; height: 8px; border-radius: 50%; background: ${pColor};"></div>`;
@@ -7242,6 +7315,26 @@ function showCableInfo(cable) {
     
     modalContent.innerHTML = html;
     bindCableSplitSleeveFields(modalContent);
+    var fiberCountSaveBtn = modalContent.querySelector('#cableFiberCountSaveBtn');
+    var fiberCountInput = modalContent.querySelector('#cableFiberCountInput');
+    var fiberPaletteBtn = modalContent.querySelector('#cableFiberPaletteBtn');
+    if (fiberCountSaveBtn && fiberCountInput) {
+        fiberCountSaveBtn.addEventListener('click', function() {
+            updateCableFiberSettings(uniqueId, fiberCountInput.value, undefined);
+        });
+    }
+    if (fiberPaletteBtn && window.FiberCableConfig) {
+        fiberPaletteBtn.addEventListener('click', function() {
+            window.FiberCableConfig.openFiberPaletteEditor({
+                title: 'Цвета жил кабеля',
+                fiberCount: getFiberCount(cable),
+                palette: window.FiberCableConfig.getFiberPaletteForCable(cable),
+                onSave: function(r) {
+                    updateCableFiberSettings(uniqueId, r.fiberCount, r.palette);
+                }
+            });
+        });
+    }
     var saveCableBtn = modalContent.querySelector('#saveCableChangesBtn');
     if (saveCableBtn) {
         saveCableBtn.addEventListener('click', function() {
@@ -7756,6 +7849,12 @@ function getSerializedData() {
             if (props.uniqueId) result.uniqueId = props.uniqueId;
             if (props.distance !== undefined) result.distance = props.distance;
             result.cableName = props.cableName ?? null;
+            if (!isCopperCableType(props.cableType)) {
+                var fcSer = props.fiberCount;
+                if (fcSer != null && fcSer !== '') result.fiberCount = parseInt(fcSer, 10);
+                var fpSer = props.fiberPalette;
+                if (Array.isArray(fpSer) && fpSer.length) result.fiberPalette = fpSer;
+            }
             var ptsRoute = props.points;
             if (Array.isArray(ptsRoute) && ptsRoute.length > 2) {
                 var routeIds = [];
@@ -7837,6 +7936,7 @@ function getSerializedData() {
             if (props.streamPass) result.streamPass = props.streamPass;
             if (props.streamAutoplay === false) result.streamAutoplay = false;
             if (props.streamMuted === false) result.streamMuted = false;
+            if (props.snapshotPhoto) result.snapshotPhoto = props.snapshotPhoto;
         }
         if (props.type === 'mediaConverter') {
             if (props.incomingFiber) result.incomingFiber = props.incomingFiber;
@@ -8217,6 +8317,7 @@ function applyRemoteStateMerged(data) {
             if (item.distance !== undefined) existingCable.properties.set('distance', item.distance);
             if (item.cableName != null) existingCable.properties.set('cableName', item.cableName);
             applySerializedCopperMetadataToCable(existingCable, item);
+            applyImportedCableFiberProps(existingCable, item);
         } else {
             var points = buildCableRoutePointsFromData(refs, item, fromObj, toObj, coords);
             if (!points || points.length < 2) {
@@ -8242,6 +8343,7 @@ function applyRemoteStateMerged(data) {
                 } else if (cable.geometry && coords && coords.length >= 2) cable.geometry.setCoordinates(coords);
                 if (item.distance !== undefined) cable.properties.set('distance', item.distance);
                 if (item.cableName != null) cable.properties.set('cableName', item.cableName);
+                applyImportedCableFiberProps(cable, item);
             }
         }
     });
@@ -8384,6 +8486,7 @@ function applyOperationToMap(op) {
                 existingByOp.properties.set('copperPortTo', opCuMeta.copperPortTo != null ? opCuMeta.copperPortTo : null);
                 applyCopperCableOccupancyFromCable(existingByOp);
             }
+            applyImportedCableFiberProps(existingByOp, op.data);
             updateCableVisualization();
             updateAllConnectionLines();
             updateStats();
@@ -8419,6 +8522,7 @@ function applyOperationToMap(op) {
                 } else if (cable.geometry && opCoordsNorm && opCoordsNorm.length >= 2) cable.geometry.setCoordinates(opCoordsNorm);
                 if (op.data.distance !== undefined) cable.properties.set('distance', op.data.distance);
                 if (op.data.cableName != null) cable.properties.set('cableName', op.data.cableName);
+                applyImportedCableFiberProps(cable, op.data);
             }
             updateCableVisualization();
             updateAllConnectionLines();
@@ -8433,6 +8537,7 @@ function applyOperationToMap(op) {
             if (cable.geometry && opCoords && opCoords.length >= 2) cable.geometry.setCoordinates(opCoords);
             if (op.data.distance !== undefined) cable.properties.set('distance', op.data.distance);
             if (op.data.cableName != null) cable.properties.set('cableName', op.data.cableName);
+            applyImportedCableFiberProps(cable, op.data);
             updateAllConnectionLines();
             updateStats();
         }
@@ -8526,6 +8631,7 @@ function importData(data, opts) {
                 if (item && 'cableName' in item) existingCableImport.properties.set('cableName', item.cableName);
                 if (item.distance !== undefined) existingCableImport.properties.set('distance', item.distance);
                 applySerializedCopperMetadataToCable(existingCableImport, item);
+                applyImportedCableFiberProps(existingCableImport, item);
                 return;
             }
             var routePts = buildCableRoutePointsFromData(refsOnly, item, fromObj, toObj, coords);
@@ -8563,10 +8669,12 @@ function importData(data, opts) {
                     cable.properties.set('distance', distance);
                 }
                 if (item && 'cableName' in item) cable.properties.set('cableName', item.cableName);
+                applyImportedCableFiberProps(cable, item);
             }
     });
 
     validateAndFixCableGeometryOnLoad();
+    applyAllOpticalCableMapStyles();
     ensureNodeLabelsVisible();
     updateCableVisualization();
     updateCrossDisplay();
@@ -8578,7 +8686,7 @@ function importData(data, opts) {
 }
 
 function createObjectFromData(data, opts) {
-    const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, fiberPorts, sleeveType, maxFibers, crossPorts, crossCopperPorts, copperPortUsage, nodeConnections, oltConnections, onuConnections, mediaConverterConnections, uniqueId, nodeKind, manufacturer, model, comment, ponPorts, splitRatio, splitterConnections, incomingFiber, portAssignments, inputFiber, outputConnections, parentNodeId, switchPortTypes, attachedSwitches, streamType, streamUrl, streamUser, streamPass, streamAutoplay, streamMuted } = data;
+    const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, fiberPorts, sleeveType, maxFibers, crossPorts, crossCopperPorts, copperPortUsage, nodeConnections, oltConnections, onuConnections, mediaConverterConnections, uniqueId, nodeKind, manufacturer, model, comment, ponPorts, splitRatio, splitterConnections, incomingFiber, portAssignments, inputFiber, outputConnections, parentNodeId, switchPortTypes, attachedSwitches, streamType, streamUrl, streamUser, streamPass, streamAutoplay, streamMuted, snapshotPhoto } = data;
     
     var balloonContent;
     switch (type) {
@@ -8741,6 +8849,12 @@ function createObjectFromData(data, opts) {
         } else {
             placemark.properties.set('streamType', streamType || 'none');
             if (streamUrl) placemark.properties.set('streamUrl', streamUrl);
+        }
+        if (snapshotPhoto) {
+            if (window.CameraPlayer) CameraPlayer.applyCameraSnapshot(placemark, snapshotPhoto);
+            else if (/^data:image\/(jpeg|png|webp|gif);base64,/i.test(snapshotPhoto)) {
+                placemark.properties.set('snapshotPhoto', snapshotPhoto);
+            }
         }
     }
     if (type === 'mediaConverter') {
@@ -9261,7 +9375,7 @@ function showObjectInfo(obj) {
             const cid = cable.properties.get('uniqueId') || ('cable-' + Date.now());
             if (!cable.properties.get('uniqueId')) cable.properties.set('uniqueId', cid);
             const cableName = cable.properties.get('cableName') || getCableDescription(cable.properties.get('cableType'));
-            const n = getFiberCount(cable.properties.get('cableType'));
+            const n = getFiberCount(cable);
             for (var fi = 1; fi <= n; fi++) {
                 splitterFiberOptions.push({ cableId: cid, fiberNumber: fi, label: cableName + ', жила ' + fi, value: cid + '-' + fi });
             }
@@ -9510,8 +9624,9 @@ function showObjectInfo(obj) {
             
             connectedCables.forEach((cable, index) => {
                 const cableType = cable.properties.get('cableType');
-                const cableDescription = getCableDescription(cableType);
-                const fibers = getFiberColors(cableType);
+                const cableDescription = getCableDescription(cableType, cable);
+                const fibers = getFiberColors(cable);
+                const cableFiberN = getFiberCount(cable);
                 
                 let cableUniqueId = cable.properties.get('uniqueId');
                 if (!cableUniqueId) {
@@ -9524,12 +9639,7 @@ function showObjectInfo(obj) {
                         <div class="cable-header">
                             <h4>Кабель ${index + 1}: ${cableDescription}</h4>
                             <div class="cable-actions">
-                                ${isEditMode ? (cableType === 'copper' ? `<span style="font-size: 0.875rem; color: var(--text-secondary);">${escapeHtml(cableDescription)}</span>` : `<select class="cable-type-select" data-cable-id="${cableUniqueId}">
-                                    <option value="fiber4" ${cableType === 'fiber4' ? 'selected' : ''}>ВОЛС 4 жилы</option>
-                                    <option value="fiber8" ${cableType === 'fiber8' ? 'selected' : ''}>ВОЛС 8 жил</option>
-                                    <option value="fiber16" ${cableType === 'fiber16' ? 'selected' : ''}>ВОЛС 16 жил</option>
-                                    <option value="fiber24" ${cableType === 'fiber24' ? 'selected' : ''}>ВОЛС 24 жилы</option>
-                                </select>`) : `<span style="font-size: 0.875rem; color: var(--text-secondary);">${cableDescription}</span>`}
+                                ${isEditMode ? (cableType === 'copper' ? `<span class="cable-type-label-muted">${escapeHtml(cableDescription)}</span>` : `<span class="cable-actions-toolbar"><input type="number" class="cable-fiber-count-input form-input" data-cable-id="${cableUniqueId}" min="1" max="96" value="${cableFiberN}" title="Число жил" aria-label="Число жил"><button type="button" class="btn-secondary btn-cable-palette-edit" data-cable-id="${cableUniqueId}" title="Цвета жил">${window.FiberCableConfig && window.FiberCableConfig.cablePaletteButtonHtml ? window.FiberCableConfig.cablePaletteButtonHtml() : 'Цвета'}</button></span>`) : `<span class="cable-type-label-muted">${escapeHtml(cableDescription)}</span>`}
                                 ${isEditMode ? `<button class="btn-delete-cable" data-cable-id="${cableUniqueId}" title="Удалить кабель">✕</button>` : ''}
                             </div>
                         </div>
@@ -9685,11 +9795,11 @@ function buildSupportCardContent(supportObj, isEditMode) {
         html += '<div class="support-cable-list">';
         connectedCables.forEach(function(cable, index) {
             var cableType = cable.properties.get('cableType');
-            var cableDescription = getCableDescription(cableType);
+            var cableDescription = getCableDescription(cableType, cable);
             var cableName = cable.properties.get('cableName') || '';
             var cableColor = getCableColor(cableType);
             var isCopper = cableType === 'copper';
-            var fibers = isCopper ? [] : getFiberColors(cableType);
+            var fibers = isCopper ? [] : getFiberColors(cable);
             var distance = cable.properties.get('distance');
             var fromObj = cable.properties.get('from');
             var toObj = cable.properties.get('to');
@@ -10205,10 +10315,11 @@ function setupEditAndDeleteListeners() {
             }
             (async function() {
                 if (!(await showConfirm(msg, 'Удаление объекта', { confirmText: 'Удалить' }))) return;
-                deleteObject(currentModalObject);
-                var modal = document.getElementById('infoModal');
-                modal.style.display = 'none';
-                currentModalObject = null;
+                var objToDelete = currentModalObject;
+                deleteObject(objToDelete);
+                if (currentModalObject === objToDelete) {
+                    closeInfoModal();
+                }
             })();
         });
     }
@@ -10255,6 +10366,8 @@ function duplicateObject(obj) {
         opts.streamPass = sc.streamPass;
         opts.streamAutoplay = sc.streamAutoplay;
         opts.streamMuted = sc.streamMuted;
+        var snap = CameraPlayer.getCameraSnapshot(obj);
+        if (snap) opts.snapshotPhoto = snap;
     }
 
     createObject(type, newName, newCoords, Object.keys(opts).length ? opts : undefined);
@@ -10479,8 +10592,32 @@ function setupModalEventListeners() {
         document.querySelectorAll('.cable-type-select').forEach(select => {
             select.addEventListener('change', function() {
                 const cableUniqueId = this.getAttribute('data-cable-id');
-                const newCableType = this.value;
-                changeCableType(cableUniqueId, newCableType);
+                changeCableType(cableUniqueId, this.value);
+            });
+        });
+
+        document.querySelectorAll('.cable-fiber-count-input').forEach(function(inp) {
+            inp.addEventListener('change', function() {
+                changeCableType(inp.getAttribute('data-cable-id'), inp.value);
+            });
+        });
+
+        document.querySelectorAll('.btn-cable-palette-edit').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var uid = btn.getAttribute('data-cable-id');
+                var cableObj = objects.find(function(o) {
+                    return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === uid;
+                });
+                if (!cableObj || !window.FiberCableConfig) return;
+                window.FiberCableConfig.openFiberPaletteEditor({
+                    title: 'Цвета жил кабеля',
+                    fiberCount: getFiberCount(cableObj),
+                    palette: window.FiberCableConfig.getFiberPaletteForCable(cableObj),
+                    onSave: function(r) {
+                        updateCableFiberSettings(uid, r.fiberCount, r.palette);
+                    }
+                });
             });
         });
 
@@ -13119,7 +13256,7 @@ function showFiberTrace(cableId, fiberNumber) {
             html += `</div>`;
         } else if (item.type === 'cable') {
             
-            const fiberColors = getFiberColors(item.cable.properties.get('cableType'));
+            const fiberColors = getFiberColors(item.cable);
             const fiber = fiberColors.find(f => f.number === item.fiberNumber);
             const fiberColor = fiber ? fiber.color : '#888';
             const fiberName = fiber ? fiber.name : `Жила ${item.fiberNumber}`;
@@ -13135,8 +13272,10 @@ function showFiberTrace(cableId, fiberNumber) {
             html += `</div>`;
         } else if (item.type === 'connection') {
             
-            const fromFiberColors = item.fromCableType ? getFiberColors(item.fromCableType) : [];
-            const toFiberColors = item.toCableType ? getFiberColors(item.toCableType) : [];
+            const fromCableObj = item.fromCable || (item.fromCableId ? objects.find(function(o) { return o.properties && o.properties.get('uniqueId') === item.fromCableId; }) : null);
+            const toCableObj = item.toCable || (item.toCableId ? objects.find(function(o) { return o.properties && o.properties.get('uniqueId') === item.toCableId; }) : null);
+            const fromFiberColors = fromCableObj ? getFiberColors(fromCableObj) : (item.fromCableType ? getFiberColors(item.fromCableType) : []);
+            const toFiberColors = toCableObj ? getFiberColors(toCableObj) : (item.toCableType ? getFiberColors(item.toCableType) : []);
             const fromFiber = fromFiberColors.find(f => f.number === item.fromFiberNumber);
             const toFiber = toFiberColors.find(f => f.number === item.toFiberNumber);
             const fromColor = fromFiber ? fromFiber.color : '#6366f1';
@@ -15432,7 +15571,8 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
             var cableObjId = item.cable ? getObjectUniqueId(item.cable) : null;
             var cableShowBtn = cableObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(cableObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
             var cableType = item.cable ? item.cable.properties.get('cableType') : null;
-            var fiberColors = cableType ? getFiberColors(cableType) : [];
+            var traceCableObj = item.cable || null;
+            var fiberColors = traceCableObj ? getFiberColors(traceCableObj) : (cableType ? getFiberColors(cableType) : []);
             var fiber = fiberColors.find(function(f) { return f.number === item.fiberNumber; });
             var fiberColor = fiber ? fiber.color : '#3b82f6';
             var fiberName = fiber ? fiber.name : '';
@@ -15440,8 +15580,10 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
             html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-cable">➡</span><div class="trace-path-block trace-path-cable" style="border-left-color: ' + fiberColor + ';"><div style="display: flex; align-items: center; flex-wrap: wrap;"><span>📡 ' + escapeHtml(item.cableName) + '</span><span style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;"><span style="width: 16px; height: 16px; border-radius: 50%; background: ' + fiberColor + '; border: 1px solid #333; display: inline-block;"></span><span style="background: ' + fiberColor + '; color: ' + fiberTextColor + '; padding: 2px 8px; border-radius: 4px; font-weight: 600;">Жила ' + item.fiberNumber + (fiberName ? ': ' + fiberName : '') + '</span></span></div>' + cableShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'connection') {
-            var fromFiberColors = item.fromCableType ? getFiberColors(item.fromCableType) : [];
-            var toFiberColors = item.toCableType ? getFiberColors(item.toCableType) : [];
+            var fromCableTrace = item.fromCable || (item.fromCableId ? objects.find(function(o) { return o.properties && o.properties.get('uniqueId') === item.fromCableId; }) : null);
+            var toCableTrace = item.toCable || (item.toCableId ? objects.find(function(o) { return o.properties && o.properties.get('uniqueId') === item.toCableId; }) : null);
+            var fromFiberColors = fromCableTrace ? getFiberColors(fromCableTrace) : (item.fromCableType ? getFiberColors(item.fromCableType) : []);
+            var toFiberColors = toCableTrace ? getFiberColors(toCableTrace) : (item.toCableType ? getFiberColors(item.toCableType) : []);
             var fromFiber = fromFiberColors.find(function(f) { return f.number === item.fromFiberNumber; });
             var toFiber = toFiberColors.find(function(f) { return f.number === item.toFiberNumber; });
             var fromColor = fromFiber ? fromFiber.color : '#f59e0b';
@@ -15789,12 +15931,11 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
     updateAllConnectionLines();
 
     const modal = document.getElementById('infoModal');
-    if (modal && modal.style.display === 'block') {
+    if (isInfoModalVisible(modal)) {
         var modalTitleEl = document.getElementById('modalTitle');
         var isTraceModal = modalTitleEl && modalTitleEl.textContent && modalTitleEl.textContent.toLowerCase().indexOf('трассировка') !== -1;
         if (currentModalObject === cable || isTraceModal) {
-            modal.style.display = 'none';
-            currentModalObject = null;
+            closeInfoModal();
         }
     }
     
@@ -15819,73 +15960,16 @@ function removeCableFromUsedFibers(obj, cableUniqueId) {
     }
 }
 
-function changeCableType(cableUniqueId, newCableType) {
-    const cable = objects.find(obj => 
-        obj.properties && 
-        obj.properties.get('type') === 'cable' &&
-        obj.properties.get('uniqueId') === cableUniqueId
-    );
-    
-    if (!cable) return;
-    
-    const oldCableType = cable.properties.get('cableType');
-    if ((isCopperCableType(oldCableType) || isCopperCableType(newCableType)) && oldCableType !== newCableType) {
-        if (typeof showError === 'function') showError('Медный кабель нельзя сменить на оптический и наоборот. Удалите кабель и проложите заново.', 'Недопустимое действие');
-        if (currentModalObject) refreshObjectModal(currentModalObject);
-        return;
-    }
-    
-    const oldFiberCount = getFiberCount(oldCableType);
-    const newFiberCount = getFiberCount(newCableType);
-
-    if (newFiberCount < oldFiberCount) {
-        const fromObj = cable.properties.get('from');
-        const toObj = cable.properties.get('to');
-        
-        [fromObj, toObj].forEach(obj => {
-            if (obj) {
-                let usedFibersData = obj.properties.get('usedFibers');
-                if (usedFibersData && usedFibersData[cableUniqueId]) {
-                    
-                    usedFibersData[cableUniqueId] = usedFibersData[cableUniqueId].filter(
-                        fiberNum => fiberNum <= newFiberCount
-                    );
-                    obj.properties.set('usedFibers', usedFibersData);
-                }
-            }
-        });
-    }
-
-    cable.properties.set('cableType', newCableType);
-
-    const cableColor = getCableColor(newCableType);
-    const cableWidth = getCableWidth(newCableType);
-    
-    cable.options.set({
-        strokeColor: cableColor,
-        strokeWidth: cableWidth,
-        strokeOpacity: 0.8
-    });
-
-    const cableDescription = getCableDescription(newCableType);
-    cable.properties.set('balloonContent', cableDescription);
-    
-    saveData();
-
-    if (currentModalObject) {
-        refreshObjectModal(currentModalObject);
-    }
+function changeCableType(cableUniqueId, newValue) {
+    var count = parseInt(newValue, 10);
+    if (isNaN(count)) count = getFiberCount(newValue);
+    updateCableFiberSettings(cableUniqueId, count, undefined);
 }
 
-function getFiberCount(cableType) {
-    switch(cableType) {
-        case 'fiber4': return 4;
-        case 'fiber8': return 8;
-        case 'fiber16': return 16;
-        case 'fiber24': return 24;
-        case 'copper': return 1;
-        default: return 0;
-    }
+function getFiberCount(arg) {
+    if (window.FiberCableConfig) return window.FiberCableConfig.getFiberCount(arg);
+    if (arg === 'copper') return 1;
+    return 0;
 }
 
 /** Кабели через опору или крепление: концы маршрута (from/to) или промежуточная точка (points / геометрия). */
@@ -15958,7 +16042,7 @@ function crossHasFiberForConnection(crossObj, cableId, fiberNumber) {
     const cables = getConnectedCables(crossObj);
     const cable = cables.find(c => c.properties && c.properties.get('uniqueId') === cableId);
     if (!cable) return false;
-    const n = getFiberCount(cable.properties.get('cableType'));
+    const n = getFiberCount(cable);
     return fiberNumber >= 1 && fiberNumber <= n;
 }
 
@@ -16656,6 +16740,21 @@ function getMapFilterState() {
 const EXPERT_ZOOM_HIDE_LABELS_BELOW = 15;
 const EXPERT_ZOOM_HIDE_OBJECTS_BELOW = 12;
 
+function forEachConnectionLine(callback) {
+    [nodeConnectionLines, onuConnectionLines, oltConnectionLines, splitterConnectionLines, splitterOutputConnectionLines].forEach(function(arr) {
+        if (!Array.isArray(arr)) return;
+        arr.forEach(function(line) {
+            if (line && line.options) callback(line);
+        });
+    });
+}
+
+function setAllConnectionLinesVisible(visible) {
+    forEachConnectionLine(function(line) {
+        try { line.options.set('visible', !!visible); } catch (e) {}
+    });
+}
+
 function applyExpertZoomVisibility() {
     if (!myMap || typeof myMap.getZoom !== 'function') return;
     if (!Array.isArray(objects)) return;
@@ -16694,6 +16793,7 @@ function applyExpertZoomVisibility() {
             if (!obj || !obj.options) return;
             try { obj.options.set('visible', false); } catch (e) {}
         });
+        setAllConnectionLinesVisible(false);
     }
 
     const crossPlacemarks = (typeof crossGroupPlacemarks !== 'undefined' && Array.isArray(crossGroupPlacemarks))
@@ -16792,6 +16892,9 @@ function applyMapFilter() {
         var lbl = pm.properties && pm.properties.get('nodeGroupLabel');
         try { if (lbl && lbl.options) lbl.options.set('visible', visible); } catch (e) {}
     });
+
+    // Линии связи (ONU, медиаконвертер, OLT, сплиттер, кросс–узел) — отдельные polyline, не в objects.
+    try { setAllConnectionLinesVisible(true); } catch (e) {}
 
     // Доп. скрытие по зуму (поверх фильтра).
     try { applyExpertZoomVisibility(); } catch (e) {}
@@ -17006,9 +17109,9 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
 
     const cablesData = connectedCables.map((cable, index) => {
         const cableType = cable.properties.get('cableType');
-        const cableDescription = getCableDescription(cableType);
+        const cableDescription = getCableDescription(cableType, cable);
         const cableName = cable.properties.get('cableName') || '';
-        const fibers = getFiberColors(cableType);
+        const fibers = getFiberColors(cable);
         let cableUniqueId = cable.properties.get('uniqueId');
         if (!cableUniqueId) {
             cableUniqueId = `cable-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -17396,7 +17499,9 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         html += '<th><div class="cross-fiber-th">';
         html += `<span class="cross-fiber-th-title">${escapeHtml(cableTitle)}</span><span class="cross-fiber-th-desc">${cableData.cableDescription}</span>${cableData.isFromSleeve ? ' <span class="cross-fiber-th-dir">← от муфты</span>' : ' <span class="cross-fiber-th-dir">→ к муфте</span>'}`;
         if (isEditMode) {
-            html += `<div class="cross-fiber-th-actions"><select class="cable-type-select form-input" data-cable-id="${cableData.cableUniqueId}" style="padding: 4px 6px; font-size: 0.75rem;"><option value="fiber4" ${cableData.cableType === 'fiber4' ? 'selected' : ''}>4 жилы</option><option value="fiber8" ${cableData.cableType === 'fiber8' ? 'selected' : ''}>8</option><option value="fiber16" ${cableData.cableType === 'fiber16' ? 'selected' : ''}>16</option><option value="fiber24" ${cableData.cableType === 'fiber24' ? 'selected' : ''}>24</option></select><button class="btn-delete-cable" data-cable-id="${cableData.cableUniqueId}" title="Удалить кабель" style="padding: 4px 8px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">✕</button></div>`;
+            var crossFiberN = getFiberCount(cableData.cable);
+            var palBtnHtml = window.FiberCableConfig && window.FiberCableConfig.cablePaletteButtonHtml ? window.FiberCableConfig.cablePaletteButtonHtml() : 'Цвета';
+            html += `<div class="cross-fiber-th-actions"><input type="number" class="cable-fiber-count-input cross-cable-fiber-count form-input" data-cable-id="${cableData.cableUniqueId}" min="1" max="96" value="${crossFiberN}" title="Число жил" aria-label="Число жил"><button type="button" class="btn-secondary btn-cable-palette-edit" data-cable-id="${cableData.cableUniqueId}" title="Цвета жил">${palBtnHtml}</button><button type="button" class="btn-delete-cable" data-cable-id="${cableData.cableUniqueId}" title="Удалить кабель" aria-label="Удалить кабель">✕</button></div>`;
         }
         html += '</div></th>';
     });
@@ -17500,33 +17605,29 @@ function showMergeCablesDialog(sleeveObj) {
     let totalFibers = 0;
     const cablesInfo = connectedCables.map(cable => {
         const cableType = cable.properties.get('cableType');
-        const fiberCount = getFiberCount(cableType);
+        const fiberCount = getFiberCount(cable);
         totalFibers += fiberCount;
-        const cableDescription = getCableDescription(cableType);
+        const cableDescription = getCableDescription(cableType, cable);
         return { cable, cableType, fiberCount, cableDescription };
     });
 
-    let newCableType = 'fiber4';
-    if (totalFibers <= 4) newCableType = 'fiber4';
-    else if (totalFibers <= 8) newCableType = 'fiber8';
-    else if (totalFibers <= 16) newCableType = 'fiber16';
-    else if (totalFibers <= 24) newCableType = 'fiber24';
-    else {
-        showError(`Общее количество жил (${totalFibers}) превышает максимальную вместимость кабеля (24). Невозможно объединить.`, 'Объединение кабелей');
+    var maxMergeFibers = window.FiberCableConfig ? window.FiberCableConfig.MAX_FIBERS : 96;
+    if (totalFibers > maxMergeFibers) {
+        showError('Общее количество жил (' + totalFibers + ') превышает максимум (' + maxMergeFibers + '). Невозможно объединить.', 'Объединение кабелей');
         return;
     }
 
     const maxFibers = sleeveObj.properties.get('maxFibers');
     if (maxFibers && maxFibers > 0) {
         const usedFibersCount = getTotalUsedFibersInSleeve(sleeveObj);
-        if (usedFibersCount - totalFibers + getFiberCount(newCableType) > maxFibers) {
+        if (usedFibersCount - totalFibers + totalFibers > maxFibers) {
             showError('Объединение невозможно: новый кабель превысит максимальную вместимость муфты!', 'Переполнение муфты');
             return;
         }
     }
 
     const cablesList = cablesInfo.map(c => `- ${c.cableDescription} (${c.fiberCount} жил)`).join('\n');
-    const confirmMsg = 'Объединить кабели в один?\n\n' + cablesList + '\n\nИтого: ' + totalFibers + ' жил → ' + getCableDescription(newCableType);
+    const confirmMsg = 'Объединить кабели в один?\n\n' + cablesList + '\n\nИтого: ' + totalFibers + ' жил';
     
     (async function() {
         if (!(await showConfirm(confirmMsg, 'Объединить кабели', { confirmText: 'Объединить' }))) return;
@@ -17546,7 +17647,7 @@ function showMergeCablesDialog(sleeveObj) {
     
     const targetObj = Array.from(targetObjects)[0];
 
-    const success = addCable(sleeveObj, targetObj, newCableType);
+    const success = addCable(sleeveObj, targetObj, 'fiber');
     if (!success) {
         return;
     }
@@ -17563,6 +17664,8 @@ function showMergeCablesDialog(sleeveObj) {
         return;
     }
 
+    updateCableFiberSettings(newCable.properties.get('uniqueId'), totalFibers, undefined);
+
     cablesInfo.forEach(info => {
         deleteCableByUniqueId(info.cable.properties.get('uniqueId'));
     });
@@ -17570,7 +17673,7 @@ function showMergeCablesDialog(sleeveObj) {
     document.getElementById('infoModal').style.display = 'none';
     showObjectInfo(sleeveObj);
     
-    showSuccess('Кабели успешно объединены в ' + getCableDescription(newCableType), 'Объединение кабелей');
+    showSuccess('Кабели успешно объединены: ВОЛС, ' + totalFibers + ' жил', 'Объединение кабелей');
     })();
 }
 
@@ -17716,47 +17819,17 @@ function layoutFiberSchemeReference(cablesData, svgWidth, opts) {
     return { fiberPositions: fiberPositions, blocks: blocks, svgHeight: svgHeight };
 }
 
-function getFiberColors(cableType) {
-    // Цветовая кодировка оптического волокна по стандарту Инкаб (https://incab.ru/useful-information/optic-cable-and-fiber/color/)
-    // 1–12: основные цвета; 13–24: те же цвета с черным кольцом (hasBlackRing для отрисовки обводки)
-    const baseColors = [
-        { name: 'Синий', color: '#0000FF' },
-        { name: 'Оранжевый', color: '#FF8C00' },
-        { name: 'Зеленый', color: '#00FF00' },
-        { name: 'Коричневый', color: '#8B4513' },
-        { name: 'Серый', color: '#808080' },
-        { name: 'Белый', color: '#FFFFFF' },
-        { name: 'Красный', color: '#FF0000' },
-        { name: 'Черный', color: '#000000' },
-        { name: 'Желтый', color: '#FFFF00' },
-        { name: 'Фиолетовый', color: '#800080' },
-        { name: 'Розовый', color: '#FFC0CB' },
-        { name: 'Бирюзовый', color: '#00CED1' }
-    ];
-    const fiberColors = [];
-    for (let i = 0; i < 24; i++) {
-        const base = baseColors[i % 12];
-        const withRing = i >= 12;
-        fiberColors.push({
-            number: i + 1,
-            name: withRing ? (base.name + ' (с черн. кольцом)') : base.name,
-            color: base.color,
-            hasBlackRing: withRing
-        });
-    }
+function getFiberColors(arg) {
+    if (window.FiberCableConfig) return window.FiberCableConfig.getFiberColors(arg);
+    return [];
+}
 
-    let fiberCount = 0;
-    switch(cableType) {
-        case 'fiber4': fiberCount = 4; break;
-        case 'fiber8': fiberCount = 8; break;
-        case 'fiber16': fiberCount = 16; break;
-        case 'fiber24': fiberCount = 24; break;
-        case 'copper':
-            return [{ number: 1, name: 'Линия', color: '#b45309', hasBlackRing: false }];
-        default: return [];
-    }
-
-    return fiberColors.slice(0, fiberCount);
+function applyAllOpticalCableMapStyles() {
+    objects.forEach(function(obj) {
+        if (!obj.properties || obj.properties.get('type') !== 'cable') return;
+        disableCableMapBalloon(obj);
+        if (window.FiberCableConfig) window.FiberCableConfig.applyOpticalMapStyle(obj);
+    });
 }
 
 function setupBackupsSection() {

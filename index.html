@@ -669,17 +669,28 @@
                     </div>
                     <div class="accordion-content" id="cables-content">
                         <div class="cables-panel">
-                            <p class="cables-panel-hint">Выберите тип ВОЛС, нажмите «Проложить кабель» и укажите точки на карте: начало, при необходимости опоры или крепления, конец. Двойной клик или «Завершить» — закончить трассу.</p>
-                            <div class="cable-type-section">
-                                <p class="cable-type-section-label">Тип ВОЛС</p>
-                                <div class="cable-type-picker" id="cableTypePicker" role="group" aria-label="Тип прокладываемого кабеля">
-                                    <!-- Чипы подставляются из js/map-legend.js -->
+                            <p class="cables-panel-hint">Укажите число жил и при необходимости цвета, нажмите «Проложить кабель» и отметьте точки на карте. Двойной клик или «Завершить» — закончить трассу.</p>
+                            <div class="cable-type-section cable-fiber-config-card">
+                                <p class="cable-type-section-label">ВОЛС</p>
+                                <div class="cable-type-picker" id="cableTypePicker" role="group" aria-label="Вид кабеля на карте">
+                                    <!-- Превью линии — js/fiber-cable-config.js -->
                                 </div>
+                                <div class="cable-fiber-lay-row">
+                                    <label class="cable-fiber-lay-label" for="layFiberCount">Жил</label>
+                                    <input type="number" id="layFiberCount" class="form-input cable-fiber-count-input" min="1" max="96" value="4" aria-label="Число жил">
+                                    <div class="cable-fiber-presets" role="group" aria-label="Быстрый выбор числа жил">
+                                        <button type="button" class="cable-fiber-preset cable-fiber-preset--active" data-count="4">4</button>
+                                        <button type="button" class="cable-fiber-preset" data-count="8">8</button>
+                                        <button type="button" class="cable-fiber-preset" data-count="16">16</button>
+                                        <button type="button" class="cable-fiber-preset" data-count="24">24</button>
+                                    </div>
+                                </div>
+                                <button type="button" id="layFiberPaletteBtn" class="btn-secondary cable-fiber-palette-btn">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 0 20 10 10 0 0 1 0-20z" fill="currentColor" opacity="0.15"></path><circle cx="8" cy="10" r="2" fill="#3b82f6"></circle><circle cx="14" cy="8" r="2" fill="#f59e0b"></circle><circle cx="15" cy="14" r="2" fill="#22c55e"></circle></svg>
+                                    Цвета жил
+                                </button>
                                 <select id="cableType" class="cable-type-select-native" aria-hidden="true" tabindex="-1">
-                                    <option value="fiber4">ВОЛС 4 жилы</option>
-                                    <option value="fiber8">ВОЛС 8 жил</option>
-                                    <option value="fiber16">ВОЛС 16 жил</option>
-                                    <option value="fiber24">ВОЛС 24 жилы</option>
+                                    <option value="fiber" selected>ВОЛС</option>
                                 </select>
                             </div>
                             <p class="cables-copper-note">
@@ -1482,6 +1493,36 @@
         </div>
     </div>
 
+    <!-- Модальное окно: цвета жил кабеля -->
+    <div id="fiberPaletteModal" class="modal modal--centered" style="display: none;" role="dialog" aria-labelledby="fiberPaletteModalTitle" aria-modal="true" aria-hidden="true">
+        <div class="modal-content fiber-palette-modal-content panel-glass">
+            <div class="panel-glass-bg" aria-hidden="true">
+                <div class="panel-glass-gradient"></div>
+                <canvas class="panel-plexus-canvas"></canvas>
+            </div>
+            <div class="modal-header">
+                <h2 id="fiberPaletteModalTitle">Цвета жил кабеля</h2>
+                <span class="close close-fiber-palette" title="Закрыть" role="button" tabindex="0">&times;</span>
+            </div>
+            <div class="modal-body fiber-palette-modal-body">
+                <p class="form-hint fiber-palette-modal__hint">Стандарт Инкаб: 1–12 основные цвета, 13–24 с чёрным кольцом. Можно задать свои названия и оттенки.</p>
+                <div class="fiber-palette-modal__count-row">
+                    <div class="form-group">
+                        <label for="fiberPaletteCountInput">Число жил</label>
+                        <input type="number" id="fiberPaletteCountInput" class="form-input" min="1" max="96" value="4">
+                    </div>
+                    <button type="button" class="btn-secondary fiber-palette-modal__std-btn" id="fiberPaletteStdBtn">Сбросить к стандарту</button>
+                </div>
+                <div class="fiber-palette-modal__list" id="fiberPaletteList"></div>
+                <div class="form-group fiber-palette-modal__actions">
+                    <button type="button" class="btn-secondary" id="fiberPaletteAddBtn">+ Добавить жилу</button>
+                    <button type="button" class="btn-secondary" id="fiberPaletteCancelBtn">Отмена</button>
+                    <button type="button" class="btn-primary" id="fiberPaletteSaveBtn">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Модальное окно справки / информация о программе -->
     <div id="helpModal" class="modal help-modal" role="dialog" aria-labelledby="helpModalTitle" aria-modal="true">
         <div class="modal-content help-modal-content panel-glass">
@@ -1775,6 +1816,7 @@
     <script src="js/ui/camera-player.js"></script>
     <script src="js/map/search.js"></script>
     <script src="js/ui/help.js"></script>
+    <script src="js/fiber-cable-config.js"></script>
     <script src="js/map-legend.js"></script>
     <script src="js/history.js"></script>
     <script src="main.js"></script>

@@ -2,11 +2,15 @@
  * Типы кабелей и цвета маршрутов жил — единый источник для карты, сайдбара и легенды.
  */
 (function(global) {
+    var FIBER_MAP_COLOR = '#00aa00';
+    var FIBER_MAP_WIDTH = 3;
+
     var CABLE_TYPES = [
-        { id: 'fiber4', label: 'ВОЛС 4 жилы', short: '4 жилы', color: '#00FF00', width: 2, tone: 'fiber4' },
-        { id: 'fiber8', label: 'ВОЛС 8 жил', short: '8 жил', color: '#00AA00', width: 3, tone: 'fiber8' },
-        { id: 'fiber16', label: 'ВОЛС 16 жил', short: '16 жил', color: '#008800', width: 4, tone: 'fiber16' },
-        { id: 'fiber24', label: 'ВОЛС 24 жилы', short: '24 жилы', color: '#006600', width: 5, tone: 'fiber24' },
+        { id: 'fiber', label: 'ВОЛС', short: 'ВОЛС', color: FIBER_MAP_COLOR, width: FIBER_MAP_WIDTH, tone: 'fiber' },
+        { id: 'fiber4', label: 'ВОЛС 4 жилы', short: '4 жилы', color: FIBER_MAP_COLOR, width: FIBER_MAP_WIDTH, tone: 'fiber4', layViaUi: false },
+        { id: 'fiber8', label: 'ВОЛС 8 жил', short: '8 жил', color: FIBER_MAP_COLOR, width: FIBER_MAP_WIDTH, tone: 'fiber8', layViaUi: false },
+        { id: 'fiber16', label: 'ВОЛС 16 жил', short: '16 жил', color: FIBER_MAP_COLOR, width: FIBER_MAP_WIDTH, tone: 'fiber16', layViaUi: false },
+        { id: 'fiber24', label: 'ВОЛС 24 жилы', short: '24 жилы', color: FIBER_MAP_COLOR, width: FIBER_MAP_WIDTH, tone: 'fiber24', layViaUi: false },
         { id: 'copper', label: 'Медный кабель', short: 'Медь', color: '#b45309', width: 3, tone: 'copper', layViaUi: false }
     ];
 
@@ -20,6 +24,9 @@
     ];
 
     function getCableMeta(type) {
+        if (global.FiberCableConfig && global.FiberCableConfig.isOpticalCableType(type)) {
+            return { id: 'fiber', label: 'ВОЛС', short: 'ВОЛС', color: FIBER_MAP_COLOR, width: FIBER_MAP_WIDTH, tone: 'fiber' };
+        }
         for (var i = 0; i < CABLE_TYPES.length; i++) {
             if (CABLE_TYPES[i].id === type) return CABLE_TYPES[i];
         }
@@ -43,12 +50,10 @@
 
         html += '<div class="legend-group">';
         html += '<p class="legend-group-title">Магистраль (ВОЛС)</p>';
-        html += '<p class="legend-group-hint">Сплошная линия; толщина растёт с числом жил</p>';
-        getCableTypesForPicker().forEach(function(t) {
-            html += '<div class="legend-item legend-item--cable">' +
-                '<span class="legend-line legend-line--solid" style="--legend-color:' + t.color + ';--legend-width:' + Math.min(t.width + 1, 6) + 'px" aria-hidden="true"></span>' +
-                '<span class="legend-text">' + escapeLegendHtml(t.label) + '</span></div>';
-        });
+        html += '<p class="legend-group-hint">На карте все ВОЛС одного вида; число жил и цвета настраиваются при прокладке и в карточке кабеля</p>';
+        html += '<div class="legend-item legend-item--cable">' +
+            '<span class="legend-line legend-line--solid" style="--legend-color:var(--fiber-map-line);--legend-width:' + (FIBER_MAP_WIDTH + 1) + 'px" aria-hidden="true"></span>' +
+            '<span class="legend-text">ВОЛС</span></div>';
         html += '</div>';
 
         var copper = getCableMeta('copper');
@@ -78,21 +83,13 @@
     }
 
     function renderCableTypePicker(containerId) {
+        if (global.FiberCableConfig && global.FiberCableConfig.renderCableLayPanel) {
+            global.FiberCableConfig.renderCableLayPanel();
+            return;
+        }
         var root = document.getElementById(containerId || 'cableTypePicker');
-        var select = document.getElementById('cableType');
-        if (!root || !select) return;
-        root.innerHTML = '';
-        getCableTypesForPicker().forEach(function(t) {
-            var btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'cable-type-chip cable-type-chip--' + t.tone + (select.value === t.id ? ' cable-type-chip--active' : '');
-            btn.setAttribute('data-cable', t.id);
-            btn.setAttribute('title', t.label);
-            btn.innerHTML =
-                '<span class="cable-type-chip-line" style="--cable-color:' + t.color + ';--cable-width:' + t.width + 'px" aria-hidden="true"></span>' +
-                '<span class="cable-type-chip-text">' + escapeLegendHtml(t.short) + '</span>';
-            root.appendChild(btn);
-        });
+        if (!root) return;
+        root.innerHTML = '<div class="cable-lay-fiber-visual"><span class="cable-lay-fiber-line"></span><span class="cable-lay-fiber-label">ВОЛС</span></div>';
     }
 
     global.MapLegendConfig = {
