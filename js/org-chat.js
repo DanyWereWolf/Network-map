@@ -15,6 +15,51 @@
     var mentionQuery = '';
     var mentionActiveIndex = 0;
     var MENTION_LIST_LIMIT = 15;
+    var mentionedNotifiedIds = {};
+    var MOBILE_CHAT_MQ = typeof window !== 'undefined' && window.matchMedia
+        ? window.matchMedia('(max-width: 768px)')
+        : null;
+
+    function isMobileChat() {
+        return MOBILE_CHAT_MQ ? MOBILE_CHAT_MQ.matches : false;
+    }
+
+    function syncChatMobileUi() {
+        var panel = document.getElementById('orgChatPanel');
+        if (panel) panel.classList.toggle('org-chat-panel--mobile', isMobileChat());
+        syncChatInputPlaceholder();
+    }
+
+    function syncChatInputPlaceholder() {
+        var input = document.getElementById('orgChatInput');
+        if (!input) return;
+        input.placeholder = isMobileChat()
+            ? 'Сообщение…'
+            : 'Сообщение… Enter — отправить';
+    }
+
+    function updateChatBackdrop() {
+        var backdrop = document.getElementById('orgChatBackdrop');
+        if (!backdrop) return;
+        var show = isMobileChat() && panelOpen;
+        backdrop.hidden = !show;
+        backdrop.setAttribute('aria-hidden', show ? 'false' : 'true');
+        backdrop.classList.toggle('org-chat-backdrop--visible', show);
+    }
+
+    function updateChatBodyLock() {
+        if (typeof document === 'undefined' || !document.body) return;
+        if (isMobileChat() && panelOpen) {
+            document.body.classList.add('org-chat-mobile-open');
+        } else {
+            document.body.classList.remove('org-chat-mobile-open');
+        }
+    }
+
+    function syncChatOpenState() {
+        updateChatBackdrop();
+        updateChatBodyLock();
+    }
 
     function getChatSeenStorageKey() {
         var orgId = (typeof currentUser !== 'undefined' && currentUser && currentUser.organizationId != null)
@@ -135,15 +180,122 @@
         return msg.mentions.some(function(m) { return m && String(m.userId) === uid; });
     }
 
+    function getChatNotifAskedStorageKey() {
+        return 'networkMap:chatNotifPermissionAsked';
+    }
+
+    function canUseChatBrowserNotifications() {
+        return typeof Notification !== 'undefined' && Notification.permission === 'granted';
+    }
+
+    function getChatNotificationIcon() {
+        var origin = (typeof window !== 'undefined' && window.location && window.location.origin)
+            ? window.location.origin
+            : '';
+        return origin ? origin + '/favicon.svg' : '/favicon.svg';
+    }
+
+    function buildMentionPreview(msg) {
+        if (!msg) return 'Сообщение';
+        if (msg.text) return String(msg.text).trim().slice(0, 120);
+        if (msg.mediaKind === 'sticker') return 'Стикер';
+        if (msg.mediaKind === 'gif') return 'GIF';
+        if (msg.mediaId || msg.mediaUrl) return 'Вложение';
+        return 'Сообщение';
+    }
+
+    function wasMentionNotified(msg) {
+        return !!(msg && msg.id && mentionedNotifiedIds[msg.id]);
+    }
+
+    function markMentionNotified(msg) {
+        if (msg && msg.id) mentionedNotifiedIds[msg.id] = true;
+    }
+
+    function requestChatNotificationPermission() {
+        if (typeof Notification === 'undefined') {
+            return Promise.resolve('unsupported');
+        }
+        if (Notification.permission !== 'default') {
+            return Promise.resolve(Notification.permission);
+        }
+        try {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem(getChatNotifAskedStorageKey(), '1');
+            }
+            return Notification.requestPermission();
+        } catch (e) {
+            return Promise.resolve('denied');
+        }
+    }
+
+    function ensureChatNotificationPermission() {
+        if (typeof Notification === 'undefined') {
+            return Promise.resolve('unsupported');
+        }
+        if (Notification.permission !== 'default') {
+            return Promise.resolve(Notification.permission);
+        }
+        try {
+            if (typeof localStorage !== 'undefined' && localStorage.getItem(getChatNotifAskedStorageKey())) {
+                return Promise.resolve(Notification.permission);
+            }
+        } catch (e) {}
+        return requestChatNotificationPermission();
+    }
+
+    function showMentionBrowserNotification(msg, title, body) {
+        if (!canUseChatBrowserNotifications()) return false;
+        if (wasMentionNotified(msg)) return false;
+        var opts = {
+            body: body || buildMentionPreview(msg),
+            icon: getChatNotificationIcon(),
+            tag: 'networkmap-org-chat-mention',
+            renotify: true
+        };
+        try {
+            var notification = new Notification(title || 'Упоминание в чате', opts);
+            notification.onclick = function() {
+                try {
+                    window.focus();
+                    notification.close();
+                    openPanel();
+                } catch (e) {}
+            };
+            markMentionNotified(msg);
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function deliverMentionNotification(msg, title, body) {
+        if (!msg || panelOpen) return;
+        if (showMentionBrowserNotification(msg, title, body)) return;
+        if (!document.hidden && typeof showInfo === 'function') {
+            showInfo((body || buildMentionPreview(msg)), title || 'Чат');
+            markMentionNotified(msg);
+        }
+    }
+
     function notifyIfMentioned(msg) {
         if (!msg || !isMentionedInMessage(msg)) return;
         var uid = getCurrentUserId();
         if (uid && msg.userId != null && String(msg.userId) === uid) return;
         if (panelOpen) return;
-        var preview = msg.text ? String(msg.text).trim().slice(0, 100) : 'вложение';
-        if (typeof showInfo === 'function') {
-            showInfo((msg.userName || 'Участник') + ' упомянул(а) вас: ' + preview, 'Чат');
+        if (wasMentionNotified(msg)) return;
+
+        var who = msg.userName || 'Участник';
+        var title = who + ' упомянул(а) вас';
+        var body = buildMentionPreview(msg);
+
+        if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+            ensureChatNotificationPermission().then(function() {
+                if (!wasMentionNotified(msg)) deliverMentionNotification(msg, title, body);
+            });
+            return;
         }
+        deliverMentionNotification(msg, title, body);
     }
 
     /** Уведомление об упоминаниях, пока пользователь был офлайн. */
@@ -154,17 +306,32 @@
         var pending = messages.filter(function(m) {
             if (!m || !isMentionedInMessage(m)) return false;
             if (m.userId != null && String(m.userId) === uid) return false;
-            return isMessageUnread(m);
+            if (!isMessageUnread(m)) return false;
+            return !wasMentionNotified(m);
         });
         if (!pending.length) return;
+
         var latest = pending[pending.length - 1];
         var who = latest.userName || 'Участник';
+        var title = 'Чат команды';
         var body = pending.length === 1
-            ? who + ' упомянул(а) вас' + (latest.text ? ': ' + String(latest.text).trim().slice(0, 80) : '')
-            : 'Вас упомянули в чате (' + pending.length + ' сообщ.)';
-        if (typeof showInfo === 'function') {
-            showInfo(body, 'Чат');
+            ? who + ' упомянул(а) вас: ' + buildMentionPreview(latest)
+            : who + ' и ещё ' + (pending.length - 1) + ' — упоминания в чате';
+
+        function send() {
+            if (!showMentionBrowserNotification(latest, title, body) &&
+                !document.hidden &&
+                typeof showInfo === 'function') {
+                showInfo(body, title);
+            }
+            pending.forEach(markMentionNotified);
         }
+
+        if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+            ensureChatNotificationPermission().then(send);
+            return;
+        }
+        send();
     }
 
     function formatMessageTextHtml(msg) {
@@ -531,6 +698,8 @@
         panel.setAttribute('aria-hidden', 'false');
         if (btn) btn.setAttribute('aria-expanded', 'true');
         panelOpen = true;
+        syncChatOpenState();
+        ensureChatNotificationPermission();
         setLastChatSeenAt(new Date());
         unreadCount = 0;
         updateUnreadBadge();
@@ -539,8 +708,10 @@
             scrollMessagesToBottom();
             startPolling();
         });
-        var input = document.getElementById('orgChatInput');
-        if (input) setTimeout(function() { input.focus(); }, 80);
+        if (!isMobileChat()) {
+            var input = document.getElementById('orgChatInput');
+            if (input) setTimeout(function() { input.focus(); }, 80);
+        }
     }
 
     function closePanel() {
@@ -553,6 +724,7 @@
         panel.setAttribute('aria-hidden', 'true');
         if (btn) btn.setAttribute('aria-expanded', 'false');
         panelOpen = false;
+        syncChatOpenState();
         unreadCount = 0;
         updateUnreadBadge();
         stopPolling();
@@ -693,12 +865,18 @@
         input.focus();
     }
 
+    function syncAttachPickerLayout() {
+        var compose = document.querySelector('.org-chat-compose');
+        if (compose) compose.classList.toggle('org-chat-compose--picker-open', attachPickerOpen);
+    }
+
     function closeAttachPicker() {
         var picker = document.getElementById('orgChatEmojiPicker');
         var attachBtn = document.getElementById('orgChatEmojiBtn');
         if (picker) picker.hidden = true;
         if (attachBtn) attachBtn.setAttribute('aria-expanded', 'false');
         attachPickerOpen = false;
+        syncAttachPickerLayout();
     }
 
     function toggleAttachPicker() {
@@ -708,11 +886,14 @@
         attachPickerOpen = !attachPickerOpen;
         picker.hidden = !attachPickerOpen;
         if (attachBtn) attachBtn.setAttribute('aria-expanded', attachPickerOpen ? 'true' : 'false');
+        syncAttachPickerLayout();
         if (attachPickerOpen) {
             if (activeAttachTab === 'sticker') loadMediaLibrary('sticker');
             else if (activeAttachTab === 'gif') loadMediaLibrary('gif');
-            var input = document.getElementById('orgChatInput');
-            if (input) input.focus();
+            if (!isMobileChat()) {
+                var input = document.getElementById('orgChatInput');
+                if (input) input.focus();
+            }
         }
     }
 
@@ -925,6 +1106,25 @@
         var fileAttach = document.getElementById('orgChatFileAttach');
 
         buildEmojiGrid();
+        syncChatMobileUi();
+        if (MOBILE_CHAT_MQ) {
+            var onMqChange = function() {
+                syncChatMobileUi();
+                syncChatOpenState();
+            };
+            if (typeof MOBILE_CHAT_MQ.addEventListener === 'function') {
+                MOBILE_CHAT_MQ.addEventListener('change', onMqChange);
+            } else if (typeof MOBILE_CHAT_MQ.addListener === 'function') {
+                MOBILE_CHAT_MQ.addListener(onMqChange);
+            }
+        }
+
+        var backdrop = document.getElementById('orgChatBackdrop');
+        if (backdrop) {
+            backdrop.addEventListener('click', function() {
+                if (isMobileChat() && panelOpen) closePanel();
+            });
+        }
 
         document.querySelectorAll('.org-chat-attach-tab').forEach(function(tabBtn) {
             tabBtn.addEventListener('click', function() {
@@ -1026,6 +1226,7 @@
         });
     }
 
+    window.orgChatRequestNotificationPermission = requestChatNotificationPermission;
     window.orgChatOnMessage = onIncomingMessage;
     window.orgChatOnHistory = function(messages) {
         if (panelOpen) {

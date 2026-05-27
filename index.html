@@ -1776,11 +1776,14 @@
     </div>
 
     <!-- Чат организации -->
+    <div id="orgChatBackdrop" class="org-chat-backdrop" hidden aria-hidden="true"></div>
     <aside id="orgChatPanel" class="org-chat-panel panel-glass" aria-hidden="true" aria-label="Чат организации">
         <div class="panel-glass-bg" aria-hidden="true">
             <div class="panel-glass-gradient"></div>
         </div>
         <header class="org-chat-header">
+            <span class="org-chat-mobile-handle" aria-hidden="true"></span>
+            <div class="org-chat-header-main">
             <div class="org-chat-header-brand">
                 <span class="org-chat-header-icon" aria-hidden="true">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1798,6 +1801,7 @@
                     <line x1="6" y1="6" x2="18" y2="18"></line>
                 </svg>
             </button>
+            </div>
         </header>
         <div id="orgChatMessages" class="org-chat-messages" role="log" aria-live="polite" aria-relevant="additions">
             <div class="org-chat-empty">
