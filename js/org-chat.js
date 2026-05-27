@@ -10,6 +10,11 @@
     var pollTimer = null;
     var unreadCount = 0;
     var mediaCache = { sticker: null, gif: null };
+    var chatMembers = [];
+    var membersLoading = false;
+    var mentionQuery = '';
+    var mentionActiveIndex = 0;
+    var MENTION_LIST_LIMIT = 15;
 
     function getChatSeenStorageKey() {
         var orgId = (typeof currentUser !== 'undefined' && currentUser && currentUser.organizationId != null)
@@ -99,6 +104,115 @@
         return typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin';
     }
 
+    function getMemberById(userId) {
+        if (userId == null) return null;
+        return chatMembers.find(function(m) { return m && String(m.id) === String(userId); }) || null;
+    }
+
+    function getAvatarSrc(avatarUrl) {
+        if (!avatarUrl) return '';
+        if (typeof getAvatarImageSrc === 'function') return getAvatarImageSrc(avatarUrl);
+        return getAuthMediaSrc(avatarUrl);
+    }
+
+    function getDisplayInitial(name) {
+        return String(name || '?').charAt(0).toUpperCase() || '?';
+    }
+
+    function buildAvatarHtml(msg) {
+        var member = getMemberById(msg.userId);
+        var avatarUrl = msg.avatarUrl || (member && member.avatarUrl);
+        var name = msg.userName || (member && (member.fullName || member.username)) || '?';
+        if (avatarUrl && getAvatarSrc(avatarUrl)) {
+            return '<div class="org-chat-message-avatar"><img src="' + escapeHtml(getAvatarSrc(avatarUrl)) + '" alt=""></div>';
+        }
+        return '<div class="org-chat-message-avatar" aria-hidden="true">' + escapeHtml(getDisplayInitial(name)) + '</div>';
+    }
+
+    function isMentionedInMessage(msg) {
+        var uid = getCurrentUserId();
+        if (!uid || !msg || !Array.isArray(msg.mentions)) return false;
+        return msg.mentions.some(function(m) { return m && String(m.userId) === uid; });
+    }
+
+    function notifyIfMentioned(msg) {
+        if (!msg || !isMentionedInMessage(msg)) return;
+        var uid = getCurrentUserId();
+        if (uid && msg.userId != null && String(msg.userId) === uid) return;
+        if (panelOpen) return;
+        var preview = msg.text ? String(msg.text).trim().slice(0, 100) : 'вложение';
+        if (typeof showInfo === 'function') {
+            showInfo((msg.userName || 'Участник') + ' упомянул(а) вас: ' + preview, 'Чат');
+        }
+    }
+
+    /** Уведомление об упоминаниях, пока пользователь был офлайн. */
+    function notifyPendingMentions(messages) {
+        if (panelOpen || !Array.isArray(messages) || !messages.length) return;
+        var uid = getCurrentUserId();
+        if (!uid) return;
+        var pending = messages.filter(function(m) {
+            if (!m || !isMentionedInMessage(m)) return false;
+            if (m.userId != null && String(m.userId) === uid) return false;
+            return isMessageUnread(m);
+        });
+        if (!pending.length) return;
+        var latest = pending[pending.length - 1];
+        var who = latest.userName || 'Участник';
+        var body = pending.length === 1
+            ? who + ' упомянул(а) вас' + (latest.text ? ': ' + String(latest.text).trim().slice(0, 80) : '')
+            : 'Вас упомянули в чате (' + pending.length + ' сообщ.)';
+        if (typeof showInfo === 'function') {
+            showInfo(body, 'Чат');
+        }
+    }
+
+    function formatMessageTextHtml(msg) {
+        if (!msg || !msg.text) return '';
+        var text = escapeHtml(msg.text);
+        var tokens = {};
+        if (Array.isArray(msg.mentions)) {
+            msg.mentions.forEach(function(m) {
+                if (m && m.username) tokens[String(m.username).toLowerCase()] = true;
+            });
+        }
+        return text.replace(/@([a-zA-Z0-9_.\u0400-\u04FF-]+)/g, function(match, name) {
+            if (tokens[name.toLowerCase()]) {
+                return '<span class="org-chat-mention">' + match + '</span>';
+            }
+            return match;
+        });
+    }
+
+    function loadChatMembers() {
+        var token = typeof getAuthToken === 'function' ? getAuthToken() : '';
+        if (!token || typeof getApiBase !== 'function') return Promise.resolve();
+        if (membersLoading) {
+            return new Promise(function(resolve) {
+                var t = setInterval(function() {
+                    if (!membersLoading) { clearInterval(t); resolve(); }
+                }, 50);
+            });
+        }
+        membersLoading = true;
+        return fetch(getApiBase() + '/api/chat/members', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        })
+            .then(function(r) { return r.json(); })
+            .then(function(body) {
+                chatMembers = (body && Array.isArray(body.members)) ? body.members : [];
+            })
+            .catch(function() { chatMembers = []; })
+            .finally(function() {
+                membersLoading = false;
+            });
+    }
+
+    function setMentionListExpanded(open) {
+        var input = document.getElementById('orgChatInput');
+        if (input) input.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
     function getAuthMediaSrc(url) {
         if (!url) return '';
         var base = (typeof getApiBase === 'function' ? getApiBase() : '') || '';
@@ -177,7 +291,7 @@
             }
         }
         if (msg.text) {
-            html += '<div class="org-chat-message-text">' + escapeHtml(msg.text) + '</div>';
+            html += '<div class="org-chat-message-text">' + formatMessageTextHtml(msg) + '</div>';
         }
         return html || '<div class="org-chat-message-text org-chat-message-text--empty">—</div>';
     }
@@ -198,15 +312,23 @@
         var el = document.createElement('div');
         el.className = 'org-chat-message' + (isOwn ? ' org-chat-message--own' : '');
         if (msg.mediaId) el.classList.add('org-chat-message--media');
+        if (isMentionedInMessage(msg)) el.classList.add('org-chat-message--mention-me');
         el.dataset.messageId = msg.id;
+        var timeStr = escapeHtml(formatChatTime(msg.createdAt));
+        var timeIso = escapeHtml(msg.createdAt || '');
+        var metaHtml = isOwn
+            ? ''
+            : '<div class="org-chat-message-meta"><span class="org-chat-message-author">' +
+                escapeHtml(msg.userName || 'Участник') + '</span></div>';
         el.innerHTML =
-            '<div class="org-chat-message-meta">' +
-                '<span class="org-chat-message-author">' + escapeHtml(msg.userName || 'Участник') + '</span>' +
-                '<time class="org-chat-message-time" datetime="' + escapeHtml(msg.createdAt || '') + '">' +
-                    escapeHtml(formatChatTime(msg.createdAt)) +
-                '</time>' +
-            '</div>' +
-            buildMessageBodyHtml(msg);
+            buildAvatarHtml(msg) +
+            '<div class="org-chat-message-col">' +
+                metaHtml +
+                '<div class="org-chat-message-bubble">' +
+                    buildMessageBodyHtml(msg) +
+                    '<time class="org-chat-message-time" datetime="' + timeIso + '">' + timeStr + '</time>' +
+                '</div>' +
+            '</div>';
         list.appendChild(el);
 
         if (options.scroll !== false) scrollMessagesToBottom();
@@ -220,6 +342,17 @@
             if (list) list.innerHTML = '';
         }
         messages.forEach(function(m) { renderMessage(m, { scroll: false }); });
+        if (replace) {
+            var listEl = document.getElementById('orgChatMessages');
+            if (listEl && !listEl.querySelector('.org-chat-message')) {
+                listEl.innerHTML =
+                    '<div class="org-chat-empty">' +
+                        '<span class="org-chat-empty-icon" aria-hidden="true">💬</span>' +
+                        '<p class="org-chat-empty-title">Пока тихо</p>' +
+                        '<p class="org-chat-empty-hint">Напишите первым или упомяните коллегу через @</p>' +
+                    '</div>';
+            }
+        }
         scrollMessagesToBottom();
     }
 
@@ -238,6 +371,7 @@
     function onIncomingMessage(msg) {
         var wasKnown = msg && msg.id && knownMessageIds[msg.id];
         renderMessage(msg);
+        if (!wasKnown) notifyIfMentioned(msg);
         if (!wasKnown && !panelOpen && isMessageUnread(msg)) {
             unreadCount++;
             updateUnreadBadge();
@@ -261,9 +395,7 @@
 
     function setSendEnabled(enabled) {
         var input = document.getElementById('orgChatInput');
-        var btn = document.getElementById('orgChatSend');
         if (input) input.disabled = !enabled;
-        if (btn) btn.disabled = !enabled;
     }
 
     function sendChatPayload(payload) {
@@ -402,6 +534,7 @@
         setLastChatSeenAt(new Date());
         unreadCount = 0;
         updateUnreadBadge();
+        loadChatMembers();
         loadHistory().then(function() {
             scrollMessagesToBottom();
             startPolling();
@@ -423,6 +556,126 @@
         unreadCount = 0;
         updateUnreadBadge();
         stopPolling();
+    }
+
+    function getMentionContext() {
+        var input = document.getElementById('orgChatInput');
+        if (!input) return null;
+        var pos = input.selectionStart != null ? input.selectionStart : input.value.length;
+        var before = input.value.slice(0, pos);
+        var at = before.lastIndexOf('@');
+        if (at < 0) return null;
+        if (at > 0 && !/\s/.test(before.charAt(at - 1))) return null;
+        var query = before.slice(at + 1);
+        if (/\s/.test(query)) return null;
+        return { start: at, end: pos, query: query };
+    }
+
+    function getFilteredMentionMembers() {
+        var q = mentionQuery.toLowerCase();
+        var uid = getCurrentUserId();
+        return chatMembers.filter(function(m) {
+            if (!m || uid && String(m.id) === uid) return false;
+            if (!q) return true;
+            var un = String(m.username || '').toLowerCase();
+            var fn = String(m.fullName || '').toLowerCase();
+            return un.indexOf(q) >= 0 || fn.indexOf(q) >= 0;
+        });
+    }
+
+    function hideMentionList() {
+        var list = document.getElementById('orgChatMentionList');
+        if (list) list.hidden = true;
+        mentionQuery = '';
+        mentionActiveIndex = 0;
+        setMentionListExpanded(false);
+    }
+
+    function renderMentionList() {
+        var listEl = document.getElementById('orgChatMentionList');
+        if (!listEl) return;
+
+        if (membersLoading) {
+            listEl.hidden = false;
+            setMentionListExpanded(true);
+            listEl.innerHTML = '<p class="org-chat-mention-hint">Загрузка участников…</p>';
+            return;
+        }
+
+        var items = getFilteredMentionMembers().slice(0, MENTION_LIST_LIMIT);
+        if (!chatMembers.length) {
+            listEl.hidden = false;
+            setMentionListExpanded(true);
+            listEl.innerHTML = '<p class="org-chat-mention-hint">Участники не найдены</p>';
+            return;
+        }
+        if (!items.length) {
+            listEl.hidden = false;
+            setMentionListExpanded(true);
+            listEl.innerHTML = '<p class="org-chat-mention-hint">Никого не найдено. Уточните имя или логин.</p>';
+            return;
+        }
+
+        listEl.hidden = false;
+        setMentionListExpanded(true);
+        listEl.innerHTML = '<p class="org-chat-mention-hint org-chat-mention-hint--title">Упомянуть участника</p>';
+        items.forEach(function(m, idx) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'org-chat-mention-option' + (idx === mentionActiveIndex ? ' org-chat-mention-option--active' : '');
+            btn.setAttribute('role', 'option');
+            var ava = m.avatarUrl && getAvatarSrc(m.avatarUrl)
+                ? '<img src="' + escapeHtml(getAvatarSrc(m.avatarUrl)) + '" alt="">'
+                : escapeHtml(getDisplayInitial(m.fullName || m.username));
+            btn.innerHTML =
+                '<span class="org-chat-mention-option-avatar">' + ava + '</span>' +
+                '<span><span class="org-chat-mention-option-name">' + escapeHtml(m.fullName || m.username) + '</span>' +
+                '<span class="org-chat-mention-option-user">@' + escapeHtml(m.username) + '</span></span>';
+            btn.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                insertMention(m);
+            });
+            listEl.appendChild(btn);
+        });
+    }
+
+    function insertMention(member) {
+        var input = document.getElementById('orgChatInput');
+        var ctx = getMentionContext();
+        if (!input || !ctx || !member) return;
+        var insert = '@' + member.username + ' ';
+        var next = input.value.slice(0, ctx.start) + insert + input.value.slice(ctx.end);
+        if (next.length > input.maxLength) next = next.slice(0, input.maxLength);
+        input.value = next;
+        var pos = ctx.start + insert.length;
+        input.setSelectionRange(pos, pos);
+        hideMentionList();
+        input.focus();
+    }
+
+    function updateMentionAutocomplete() {
+        var ctx = getMentionContext();
+        if (!ctx) {
+            hideMentionList();
+            return;
+        }
+        mentionQuery = ctx.query;
+        mentionActiveIndex = 0;
+        if (!chatMembers.length && !membersLoading) {
+            loadChatMembers().then(function() { renderMentionList(); });
+        } else {
+            renderMentionList();
+        }
+    }
+
+    function ensureMembersThenShowMentionList() {
+        if (chatMembers.length) {
+            updateMentionAutocomplete();
+            return;
+        }
+        loadChatMembers().then(function() {
+            updateMentionAutocomplete();
+        });
     }
 
     function insertEmojiAtCursor(emoji) {
@@ -665,7 +918,6 @@
     function init() {
         var btn = document.getElementById('orgChatBtn');
         var closeBtn = document.getElementById('orgChatClose');
-        var sendBtn = document.getElementById('orgChatSend');
         var attachBtn = document.getElementById('orgChatEmojiBtn');
         var input = document.getElementById('orgChatInput');
         var stickerUpload = document.getElementById('orgChatStickerUpload');
@@ -682,17 +934,55 @@
 
         if (btn) btn.addEventListener('click', togglePanel);
         if (closeBtn) closeBtn.addEventListener('click', closePanel);
-        if (sendBtn) sendBtn.addEventListener('click', sendMessage);
         if (attachBtn) attachBtn.addEventListener('click', function(e) {
             e.stopPropagation();
             toggleAttachPicker();
         });
+        if (typeof getAuthToken === 'function' && getAuthToken()) {
+            loadChatMembers();
+            checkOfflineMentions();
+        }
         if (input) {
+            input.addEventListener('input', updateMentionAutocomplete);
             input.addEventListener('keydown', function(e) {
+                if (e.key === '@' || (e.key === '2' && e.shiftKey) || (e.code === 'Digit2' && e.shiftKey)) {
+                    setTimeout(ensureMembersThenShowMentionList, 0);
+                }
+                var listEl = document.getElementById('orgChatMentionList');
+                var mentionOpen = listEl && !listEl.hidden;
+                if (mentionOpen) {
+                    var items = getFilteredMentionMembers().slice(0, MENTION_LIST_LIMIT);
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        mentionActiveIndex = Math.min(mentionActiveIndex + 1, items.length - 1);
+                        renderMentionList();
+                        return;
+                    }
+                    if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        mentionActiveIndex = Math.max(mentionActiveIndex - 1, 0);
+                        renderMentionList();
+                        return;
+                    }
+                    if (e.key === 'Enter' && items[mentionActiveIndex]) {
+                        e.preventDefault();
+                        insertMention(items[mentionActiveIndex]);
+                        return;
+                    }
+                    if (e.key === 'Escape') {
+                        e.preventDefault();
+                        hideMentionList();
+                        return;
+                    }
+                }
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
+                    hideMentionList();
                     sendMessage();
                 }
+            });
+            input.addEventListener('blur', function() {
+                setTimeout(hideMentionList, 150);
             });
         }
         if (stickerUpload) {
@@ -748,8 +1038,27 @@
             });
             ensureChatSeenBaseline(messages);
             recalcUnreadFromMessages(messages);
+            notifyPendingMentions(messages);
         }
     };
+
+    function checkOfflineMentions() {
+        if (panelOpen) return;
+        var token = typeof getAuthToken === 'function' ? getAuthToken() : '';
+        if (!token || typeof getApiBase !== 'function') return;
+        fetch(getApiBase() + '/api/chat?limit=100', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        })
+            .then(function(r) { return r.json(); })
+            .then(function(body) {
+                if (body && Array.isArray(body.messages)) {
+                    ensureChatSeenBaseline(body.messages);
+                    notifyPendingMentions(body.messages);
+                    recalcUnreadFromMessages(body.messages);
+                }
+            })
+            .catch(function() {});
+    }
 
     if (typeof document !== 'undefined') {
         if (document.readyState === 'loading') {

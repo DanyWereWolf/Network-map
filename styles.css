@@ -1,8 +1,8 @@
-/* ==================== CSS Переменные (тема) ==================== */
+/* ==================== CSS РџРµСЂРµРјРµРЅРЅС‹Рµ (С‚РµРјР°) ==================== */
 :root {
     --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 
-    /* Светлая тема */
+    /* РЎРІРµС‚Р»Р°СЏ С‚РµРјР° */
     --bg-primary: #eef2f7;
     --bg-secondary: #ffffff;
     --bg-tertiary: #f1f5f9;
@@ -61,7 +61,7 @@
     --panel-glass-blur-sm: blur(12px) saturate(1.1);
 }
 
-/* Тёмная тема */
+/* РўС‘РјРЅР°СЏ С‚РµРјР° */
 [data-theme="dark"] {
     --bg-primary: #0f172a;
     --bg-secondary: #1e293b;
@@ -98,12 +98,12 @@
     --panel-glass-border: rgba(148, 163, 184, 0.18);
 }
 
-/* ==================== Основные стили ==================== */
+/* ==================== РћСЃРЅРѕРІРЅС‹Рµ СЃС‚РёР»Рё ==================== */
 * {
     box-sizing: border-box;
 }
 
-/* Без скролла корня: иначе на iOS шапка «плывёт» при overscroll и смене высоты панели браузера */
+/* Р‘РµР· СЃРєСЂРѕР»Р»Р° РєРѕСЂРЅСЏ: РёРЅР°С‡Рµ РЅР° iOS С€Р°РїРєР° В«РїР»С‹РІС‘С‚В» РїСЂРё overscroll Рё СЃРјРµРЅРµ РІС‹СЃРѕС‚С‹ РїР°РЅРµР»Рё Р±СЂР°СѓР·РµСЂР° */
 html {
     height: 100%;
     overflow: hidden;
@@ -125,7 +125,7 @@ body {
     transition: background var(--transition-normal), color var(--transition-normal);
 }
 
-/* Стекло + градиент/plexus на панелях карты */
+/* РЎС‚РµРєР»Рѕ + РіСЂР°РґРёРµРЅС‚/plexus РЅР° РїР°РЅРµР»СЏС… РєР°СЂС‚С‹ */
 .panel-glass {
     position: relative;
     overflow: hidden;
@@ -173,7 +173,7 @@ body {
     z-index: 1;
 }
 
-/* Стеклянные модальные окна */
+/* РЎС‚РµРєР»СЏРЅРЅС‹Рµ РјРѕРґР°Р»СЊРЅС‹Рµ РѕРєРЅР° */
 .modal.modal--centered,
 .modal.help-modal {
     align-items: center;
@@ -223,7 +223,7 @@ body {
     background: transparent;
 }
 
-/* Балуны выбора узла / ONU / OLT */
+/* Р‘Р°Р»СѓРЅС‹ РІС‹Р±РѕСЂР° СѓР·Р»Р° / ONU / OLT */
 .modal-content.node-selection-modal-content .node-selection-balloon.panel-glass,
 .modal-content.node-selection-modal-content .network-map-balloon.panel-glass {
     background: var(--panel-glass-bg) !important;
@@ -270,7 +270,7 @@ body {
     background: color-mix(in srgb, var(--panel-glass-surface) 85%, transparent);
 }
 
-/* ==================== Верхняя панель ==================== */
+/* ==================== Р’РµСЂС…РЅСЏСЏ РїР°РЅРµР»СЊ ==================== */
 .top-header {
     background: var(--header-bg);
     color: white;
@@ -428,7 +428,7 @@ body {
     }
 }
 
-/* ==================== Поиск по карте ==================== */
+/* ==================== РџРѕРёСЃРє РїРѕ РєР°СЂС‚Рµ ==================== */
 .header-search {
     flex: 1;
     max-width: 400px;
@@ -587,7 +587,7 @@ body {
     overflow: hidden;
 }
 
-/* ==================== Боковая панель ==================== */
+/* ==================== Р‘РѕРєРѕРІР°СЏ РїР°РЅРµР»СЊ ==================== */
 .sidebar {
     position: relative;
     left: 0;
@@ -617,7 +617,7 @@ body {
     overflow: visible;
 }
 
-/* Кнопка-закладка — в .container, на правом краю сайдбара */
+/* РљРЅРѕРїРєР°-Р·Р°РєР»Р°РґРєР° вЂ” РІ .container, РЅР° РїСЂР°РІРѕРј РєСЂР°СЋ СЃР°Р№РґР±Р°СЂР° */
 .sidebar-toggle {
     position: absolute;
     top: 12px;
@@ -762,7 +762,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     display: block;
 }
 
-/* Переключатель темы */
+/* РџРµСЂРµРєР»СЋС‡Р°С‚РµР»СЊ С‚РµРјС‹ */
 .theme-toggle {
     position: relative;
     overflow: hidden;
@@ -780,7 +780,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     display: block !important;
 }
 
-/* ==================== Панель пользователя ==================== */
+/* ==================== РџР°РЅРµР»СЊ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ ==================== */
 .user-panel {
     display: flex;
     align-items: center;
@@ -888,7 +888,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     height: 18px;
 }
 
-/* ==================== Список пользователей ==================== */
+/* ==================== РЎРїРёСЃРѕРє РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№ ==================== */
 .users-actions {
     margin-bottom: 16px;
 }
@@ -1012,7 +1012,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     margin-top: 4px;
 }
 
-/* Напоминание о почти исчерпанном лимите объектов (≥98%) */
+/* РќР°РїРѕРјРёРЅР°РЅРёРµ Рѕ РїРѕС‡С‚Рё РёСЃС‡РµСЂРїР°РЅРЅРѕРј Р»РёРјРёС‚Рµ РѕР±СЉРµРєС‚РѕРІ (в‰Ґ98%) */
 .map-limit-banner {
     display: none;
     align-items: center;
@@ -1069,7 +1069,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     font-size: 13px;
 }
 
-/* ==================== Секция заявок на регистрацию ==================== */
+/* ==================== РЎРµРєС†РёСЏ Р·Р°СЏРІРѕРє РЅР° СЂРµРіРёСЃС‚СЂР°С†РёСЋ ==================== */
 .pending-users-section {
     background: color-mix(in srgb, #fef3c7 75%, var(--panel-glass-surface));
     border: 1px solid #fde68a;
@@ -1187,7 +1187,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     color: #d97706;
 }
 
-/* ==================== Журнал изменений ==================== */
+/* ==================== Р–СѓСЂРЅР°Р» РёР·РјРµРЅРµРЅРёР№ ==================== */
 .history-badge {
     position: absolute;
     top: -4px;
@@ -1739,7 +1739,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     border-radius: var(--radius-md);
 }
 
-/* Карточка: режим + фильтр */
+/* РљР°СЂС‚РѕС‡РєР°: СЂРµР¶РёРј + С„РёР»СЊС‚СЂ */
 .sidebar-controls-card {
     margin-bottom: 12px;
     background: var(--panel-glass-surface);
@@ -1808,7 +1808,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     margin-bottom: 0;
 }
 
-/* Приветственное окно (первый вход, центр экрана) */
+/* РџСЂРёРІРµС‚СЃС‚РІРµРЅРЅРѕРµ РѕРєРЅРѕ (РїРµСЂРІС‹Р№ РІС…РѕРґ, С†РµРЅС‚СЂ СЌРєСЂР°РЅР°) */
 .welcome-modal {
     z-index: 30000;
 }
@@ -1995,7 +1995,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     opacity: 0.85;
 }
 
-/* ==================== Переключатель режимов ==================== */
+/* ==================== РџРµСЂРµРєР»СЋС‡Р°С‚РµР»СЊ СЂРµР¶РёРјРѕРІ ==================== */
 .control-section {
     margin-bottom: 12px;
 }
@@ -2057,7 +2057,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     line-height: 1.2;
 }
 
-/* ==================== Аккордеон ==================== */
+/* ==================== РђРєРєРѕСЂРґРµРѕРЅ ==================== */
 .accordion-section {
     margin-bottom: 10px;
     background: var(--panel-glass-surface);
@@ -2206,7 +2206,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     padding: 12px;
 }
 
-/* Фильтр карты */
+/* Р¤РёР»СЊС‚СЂ РєР°СЂС‚С‹ */
 #mapfilter-content.accordion-content {
     padding: 0;
 }
@@ -2463,7 +2463,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
 .map-filter-chip--slate { --filter-tone: #64748b; }
 .map-filter-chip--teal { --filter-tone: #14b8a6; }
 
-/* Совместимость со старыми классами (мобильные переопределения) */
+/* РЎРѕРІРјРµСЃС‚РёРјРѕСЃС‚СЊ СЃРѕ СЃС‚Р°СЂС‹РјРё РєР»Р°СЃСЃР°РјРё (РјРѕР±РёР»СЊРЅС‹Рµ РїРµСЂРµРѕРїСЂРµРґРµР»РµРЅРёСЏ) */
 .map-filter-checkboxes {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -2483,7 +2483,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     margin: 0;
 }
 
-/* Панель добавления объектов */
+/* РџР°РЅРµР»СЊ РґРѕР±Р°РІР»РµРЅРёСЏ РѕР±СЉРµРєС‚РѕРІ */
 .objects-panel-hint {
     margin: 0 0 12px;
     font-size: 0.75rem;
@@ -2667,7 +2667,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     gap: 8px;
 }
 
-/* ==================== Формы ==================== */
+/* ==================== Р¤РѕСЂРјС‹ ==================== */
 .form-group {
     margin-bottom: 12px;
 }
@@ -2686,7 +2686,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     letter-spacing: 0.4px;
 }
 
-/* Поле производитель/модель: input + кнопка «добавить» */
+/* РџРѕР»Рµ РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЊ/РјРѕРґРµР»СЊ: input + РєРЅРѕРїРєР° В«РґРѕР±Р°РІРёС‚СЊВ» */
 .device-field-row {
     display: flex;
     gap: 8px;
@@ -2724,7 +2724,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     color: var(--accent-primary);
 }
 
-/* Выпадающий список с поиском (производитель / модель) */
+/* Р’С‹РїР°РґР°СЋС‰РёР№ СЃРїРёСЃРѕРє СЃ РїРѕРёСЃРєРѕРј (РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЊ / РјРѕРґРµР»СЊ) */
 .device-combobox {
     position: relative;
     width: 100%;
@@ -2867,7 +2867,7 @@ textarea.form-input {
     cursor: pointer;
 }
 
-/* ==================== Кнопки ==================== */
+/* ==================== РљРЅРѕРїРєРё ==================== */
 button {
     font-family: inherit;
 }
@@ -2946,7 +2946,7 @@ button {
     transform: translateY(-2px);
 }
 
-/* Компактные кнопки в тулбарах (кабель, кросс) */
+/* РљРѕРјРїР°РєС‚РЅС‹Рµ РєРЅРѕРїРєРё РІ С‚СѓР»Р±Р°СЂР°С… (РєР°Р±РµР»СЊ, РєСЂРѕСЃСЃ) */
 .btn-inline,
 .cables-panel .btn-secondary.btn-inline,
 .cable-fiber-settings-toolbar .btn-primary,
@@ -2969,7 +2969,7 @@ button {
     flex-shrink: 0;
 }
 
-/* Кнопки в панелях Файлы, Резервные копии, Фильтр карты — чуть заметнее */
+/* РљРЅРѕРїРєРё РІ РїР°РЅРµР»СЏС… Р¤Р°Р№Р»С‹, Р РµР·РµСЂРІРЅС‹Рµ РєРѕРїРёРё, Р¤РёР»СЊС‚СЂ РєР°СЂС‚С‹ вЂ” С‡СѓС‚СЊ Р·Р°РјРµС‚РЅРµРµ */
 #files-content .btn-secondary,
 #backups-content .btn-secondary,
 #backups-content .backups-refresh-btn,
@@ -3011,7 +3011,7 @@ button {
     border-color: #475569;
 }
 
-/* ==================== Кабели (сайдбар) ==================== */
+/* ==================== РљР°Р±РµР»Рё (СЃР°Р№РґР±Р°СЂ) ==================== */
 .cables-panel {
     display: flex;
     flex-direction: column;
@@ -3046,7 +3046,7 @@ button {
     border: 0;
 }
 
-/* —— ВОЛС: прокладка, палитра жил, настройки в карточках —— */
+/* вЂ”вЂ” Р’РћР›РЎ: РїСЂРѕРєР»Р°РґРєР°, РїР°Р»РёС‚СЂР° Р¶РёР», РЅР°СЃС‚СЂРѕР№РєРё РІ РєР°СЂС‚РѕС‡РєР°С… вЂ”вЂ” */
 .cable-fiber-config-card {
     padding: 10px 12px;
     margin-bottom: 4px;
@@ -3226,7 +3226,7 @@ button {
     font-size: 1rem;
 }
 
-/* Модальное окно палитры жил — общая разметка .modal + .panel-glass */
+/* РњРѕРґР°Р»СЊРЅРѕРµ РѕРєРЅРѕ РїР°Р»РёС‚СЂС‹ Р¶РёР» вЂ” РѕР±С‰Р°СЏ СЂР°Р·РјРµС‚РєР° .modal + .panel-glass */
 .fiber-palette-modal-content {
     width: min(560px, 100%);
     max-width: 560px;
@@ -3469,7 +3469,7 @@ button {
     border-color: transparent;
 }
 
-/* ==================== Легенда ==================== */
+/* ==================== Р›РµРіРµРЅРґР° ==================== */
 .legend-panel {
     padding-top: 2px;
 }
@@ -3562,7 +3562,7 @@ button {
     vertical-align: middle;
 }
 
-/* ==================== Статистика ==================== */
+/* ==================== РЎС‚Р°С‚РёСЃС‚РёРєР° ==================== */
 .stats-section {
     margin-top: 12px;
     padding: 0;
@@ -3805,12 +3805,12 @@ button {
     opacity: 0.5;
 }
 
-/* ==================== Действия ==================== */
+/* ==================== Р”РµР№СЃС‚РІРёСЏ ==================== */
 .actions-section {
     margin-top: 16px;
 }
 
-/* Опасные действия — свёрнутый блок внизу, чтобы не нажать случайно */
+/* РћРїР°СЃРЅС‹Рµ РґРµР№СЃС‚РІРёСЏ вЂ” СЃРІС‘СЂРЅСѓС‚С‹Р№ Р±Р»РѕРє РІРЅРёР·Сѓ, С‡С‚РѕР±С‹ РЅРµ РЅР°Р¶Р°С‚СЊ СЃР»СѓС‡Р°Р№РЅРѕ */
 .accordion-section-danger .accordion-header {
     color: var(--accent-warning);
 }
@@ -3828,7 +3828,7 @@ button {
 
 
 
-/* ==================== Карта ==================== */
+/* ==================== РљР°СЂС‚Р° ==================== */
 .map-area-wrapper {
     position: relative;
     flex: 1;
@@ -3850,7 +3850,7 @@ button {
     transition: box-shadow var(--transition-normal), border-radius var(--transition-normal);
 }
 
-/* ==================== Скроллбар ==================== */
+/* ==================== РЎРєСЂРѕР»Р»Р±Р°СЂ ==================== */
 .sidebar-content::-webkit-scrollbar {
     width: 8px;
 }
@@ -3868,7 +3868,7 @@ button {
     background: var(--text-muted);
 }
 
-/* Синхронизация (совместная работа) */
+/* РЎРёРЅС…СЂРѕРЅРёР·Р°С†РёСЏ (СЃРѕРІРјРµСЃС‚РЅР°СЏ СЂР°Р±РѕС‚Р°) */
 .sync-status {
     font-size: 0.75rem;
     font-weight: 500;
@@ -4002,7 +4002,7 @@ button {
     cursor: not-allowed;
 }
 
-/* ==================== Модальные окна ==================== */
+/* ==================== РњРѕРґР°Р»СЊРЅС‹Рµ РѕРєРЅР° ==================== */
 #confirmModal {
     z-index: 3500;
 }
@@ -4033,7 +4033,7 @@ button {
     backdrop-filter: blur(20px);
 }
 
-/* Кросс / муфта: полноэкранное рабочее место жил */
+/* РљСЂРѕСЃСЃ / РјСѓС„С‚Р°: РїРѕР»РЅРѕСЌРєСЂР°РЅРЅРѕРµ СЂР°Р±РѕС‡РµРµ РјРµСЃС‚Рѕ Р¶РёР» */
 #infoModal.fiber-management-modal-open {
     padding: 0;
     align-items: stretch;
@@ -4978,7 +4978,7 @@ button {
     text-align: center;
 }
 
-/* Область схемы: прокрутка + масштаб */
+/* РћР±Р»Р°СЃС‚СЊ СЃС…РµРјС‹: РїСЂРѕРєСЂСѓС‚РєР° + РјР°СЃС€С‚Р°Р± */
 .fiber-scheme-viewport {
     flex: 1;
     min-height: 220px;
@@ -5182,7 +5182,7 @@ button {
     pointer-events: none;
 }
 
-/* Скрыть / Показать схему */
+/* РЎРєСЂС‹С‚СЊ / РџРѕРєР°Р·Р°С‚СЊ СЃС…РµРјСѓ */
 .fiber-scheme-toggle-row {
     margin-bottom: 6px;
 }
@@ -5202,7 +5202,7 @@ button {
     color: var(--text-primary);
 }
 
-/* Переключатель Схема / Список соединений */
+/* РџРµСЂРµРєР»СЋС‡Р°С‚РµР»СЊ РЎС…РµРјР° / РЎРїРёСЃРѕРє СЃРѕРµРґРёРЅРµРЅРёР№ */
 .fiber-view-toggle {
     display: flex;
     gap: 0;
@@ -5233,7 +5233,7 @@ button {
     color: white;
 }
 
-/* Список соединений (альтернатива схеме) */
+/* РЎРїРёСЃРѕРє СЃРѕРµРґРёРЅРµРЅРёР№ (Р°Р»СЊС‚РµСЂРЅР°С‚РёРІР° СЃС…РµРјРµ) */
 .fiber-connections-list-wrap {
     max-height: 42vh;
     min-height: 120px;
@@ -5467,7 +5467,7 @@ button {
     overflow-y: auto;
 }
 
-/* Модальное окно справки */
+/* РњРѕРґР°Р»СЊРЅРѕРµ РѕРєРЅРѕ СЃРїСЂР°РІРєРё */
 .help-modal-content {
     width: min(720px, 100%);
     max-width: 720px;
@@ -5675,7 +5675,7 @@ button {
     width: min(400px, 100%);
 }
 
-/* Окно обновлений */
+/* РћРєРЅРѕ РѕР±РЅРѕРІР»РµРЅРёР№ */
 .updates-modal-content {
     max-width: 420px;
     width: min(420px, 100%);
@@ -5695,7 +5695,7 @@ button {
     -webkit-backdrop-filter: var(--panel-glass-blur-sm);
 }
 
-/* Личный кабинет */
+/* Р›РёС‡РЅС‹Р№ РєР°Р±РёРЅРµС‚ */
 .profile-modal-content {
     max-width: 440px;
     width: min(440px, 100%);
@@ -6103,7 +6103,7 @@ button {
     color: var(--text-primary);
 }
 
-/* Стили для остальных элементов модальных окон */
+/* РЎС‚РёР»Рё РґР»СЏ РѕСЃС‚Р°Р»СЊРЅС‹С… СЌР»РµРјРµРЅС‚РѕРІ РјРѕРґР°Р»СЊРЅС‹С… РѕРєРѕРЅ */
 .cable-info {
     margin-bottom: 20px;
     padding: 16px;
@@ -6242,7 +6242,7 @@ button {
     color: #991b1b;
 }
 
-/* Секция таблицы кабелей и жил */
+/* РЎРµРєС†РёСЏ С‚Р°Р±Р»РёС†С‹ РєР°Р±РµР»РµР№ Рё Р¶РёР» */
 .cross-fiber-table-section {
     margin-top: 10px;
 }
@@ -6254,7 +6254,7 @@ button {
     color: var(--text-primary);
 }
 
-/* Таблица кабелей/жил в кроссе: максимум видимой области, фиксированный заголовок, прокрутка */
+/* РўР°Р±Р»РёС†Р° РєР°Р±РµР»РµР№/Р¶РёР» РІ РєСЂРѕСЃСЃРµ: РјР°РєСЃРёРјСѓРј РІРёРґРёРјРѕР№ РѕР±Р»Р°СЃС‚Рё, С„РёРєСЃРёСЂРѕРІР°РЅРЅС‹Р№ Р·Р°РіРѕР»РѕРІРѕРє, РїСЂРѕРєСЂСѓС‚РєР° */
 .cross-fiber-table-wrap {
     max-height: 55vh;
     min-height: 180px;
@@ -6265,7 +6265,7 @@ button {
     background: var(--bg-card);
 }
 
-/* Когда схема и список соединений скрыты — таблица занимает почти всё место */
+/* РљРѕРіРґР° СЃС…РµРјР° Рё СЃРїРёСЃРѕРє СЃРѕРµРґРёРЅРµРЅРёР№ СЃРєСЂС‹С‚С‹ вЂ” С‚Р°Р±Р»РёС†Р° Р·Р°РЅРёРјР°РµС‚ РїРѕС‡С‚Рё РІСЃС‘ РјРµСЃС‚Рѕ */
 .fiber-connections-container.scheme-hidden .cross-fiber-table-wrap {
     max-height: 82vh;
     min-height: 400px;
@@ -6280,7 +6280,7 @@ button {
     max-height: 55vh;
 }
 
-/* legacy: cross-edit-mode больше не используется в workspace */
+/* legacy: cross-edit-mode Р±РѕР»СЊС€Рµ РЅРµ РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РІ workspace */
 .fiber-connections-container.cross-edit-mode .cross-fiber-table-wrap {
     max-height: none;
     min-height: 0;
@@ -6360,7 +6360,7 @@ button {
     background: var(--bg-card);
 }
 
-/* Компактные ячейки жил — больше строк и столбцов видно */
+/* РљРѕРјРїР°РєС‚РЅС‹Рµ СЏС‡РµР№РєРё Р¶РёР» вЂ” Р±РѕР»СЊС€Рµ СЃС‚СЂРѕРє Рё СЃС‚РѕР»Р±С†РѕРІ РІРёРґРЅРѕ */
 .cross-fiber-table .fiber-item {
     cursor: pointer;
     padding: 3px 4px !important;
@@ -6409,7 +6409,7 @@ button {
     padding: 4px 6px;
 }
 
-/* Используемые жилы в кроссе — ярко красные */
+/* РСЃРїРѕР»СЊР·СѓРµРјС‹Рµ Р¶РёР»С‹ РІ РєСЂРѕСЃСЃРµ вЂ” СЏСЂРєРѕ РєСЂР°СЃРЅС‹Рµ */
 .cross-fiber-table .fiber-item.cross-fiber-used,
 .cross-fiber-table .fiber-item.fiber-used {
     background: #fecaca !important;
@@ -6423,7 +6423,7 @@ button {
     font-weight: 600;
 }
 
-/* Выбранная жила для соединения (в таблице кроссе) */
+/* Р’С‹Р±СЂР°РЅРЅР°СЏ Р¶РёР»Р° РґР»СЏ СЃРѕРµРґРёРЅРµРЅРёСЏ (РІ С‚Р°Р±Р»РёС†Рµ РєСЂРѕСЃСЃРµ) */
 .cross-fiber-table .fiber-item.fiber-selected {
     box-shadow: 0 0 0 2px #f59e0b;
     background: #fffbeb !important;
@@ -6440,7 +6440,7 @@ button {
     border-color: #dc2626 !important;
 }
 
-/* Панель выбора жилы в кроссе */
+/* РџР°РЅРµР»СЊ РІС‹Р±РѕСЂР° Р¶РёР»С‹ РІ РєСЂРѕСЃСЃРµ */
 .fiber-selection-bar {
     padding: 8px 12px;
     margin: 0;
@@ -6477,7 +6477,7 @@ button {
     background: #d97706;
 }
 
-/* Сворачиваемая инструкция в кроссе */
+/* РЎРІРѕСЂР°С‡РёРІР°РµРјР°СЏ РёРЅСЃС‚СЂСѓРєС†РёСЏ РІ РєСЂРѕСЃСЃРµ */
 .cross-instruction-details summary::-webkit-details-marker {
     display: none;
 }
@@ -6517,7 +6517,7 @@ button {
     padding: 20px;
 }
 
-/* ==================== Модальное окно выбора узла (как балун групп — одна карточка, без двойного балуна) ==================== */
+/* ==================== РњРѕРґР°Р»СЊРЅРѕРµ РѕРєРЅРѕ РІС‹Р±РѕСЂР° СѓР·Р»Р° (РєР°Рє Р±Р°Р»СѓРЅ РіСЂСѓРїРї вЂ” РѕРґРЅР° РєР°СЂС‚РѕС‡РєР°, Р±РµР· РґРІРѕР№РЅРѕРіРѕ Р±Р°Р»СѓРЅР°) ==================== */
 .modal-content.node-selection-modal-content {
     max-width: 500px;
     width: auto;
@@ -6690,7 +6690,7 @@ button {
     margin-bottom: 0;
 }
 
-/* Подсветка поиска */
+/* РџРѕРґСЃРІРµС‚РєР° РїРѕРёСЃРєР° */
 .node-list-item-name mark {
     background: #fef08a;
     color: inherit;
@@ -6702,7 +6702,7 @@ button {
     background: rgba(255, 255, 255, 0.3);
 }
 
-/* ==================== Уведомления (Toast) ==================== */
+/* ==================== РЈРІРµРґРѕРјР»РµРЅРёСЏ (Toast) ==================== */
 .toast-container {
     position: fixed;
     top: 20px;
@@ -6834,9 +6834,9 @@ button {
     }
 }
 
-/* ==================== Адаптивность ==================== */
+/* ==================== РђРґР°РїС‚РёРІРЅРѕСЃС‚СЊ ==================== */
 
-/* Средние экраны (планшеты) */
+/* РЎСЂРµРґРЅРёРµ СЌРєСЂР°РЅС‹ (РїР»Р°РЅС€РµС‚С‹) */
 @media (max-width: 1024px) {
     :root {
         --sidebar-width: 300px;
@@ -6888,7 +6888,7 @@ button {
     }
 }
 
-/* Маленькие экраны (большие телефоны, маленькие планшеты) */
+/* РњР°Р»РµРЅСЊРєРёРµ СЌРєСЂР°РЅС‹ (Р±РѕР»СЊС€РёРµ С‚РµР»РµС„РѕРЅС‹, РјР°Р»РµРЅСЊРєРёРµ РїР»Р°РЅС€РµС‚С‹) */
 @media (max-width: 768px) {
     .top-header {
         padding: 0 12px;
@@ -7076,8 +7076,8 @@ button {
         font-size: 1.125rem;
     }
     
-    /* На мобильных убираем блок статистики из панели,
-       чтобы инструменты и фильтры были ближе к верху */
+    /* РќР° РјРѕР±РёР»СЊРЅС‹С… СѓР±РёСЂР°РµРј Р±Р»РѕРє СЃС‚Р°С‚РёСЃС‚РёРєРё РёР· РїР°РЅРµР»Рё,
+       С‡С‚РѕР±С‹ РёРЅСЃС‚СЂСѓРјРµРЅС‚С‹ Рё С„РёР»СЊС‚СЂС‹ Р±С‹Р»Рё Р±Р»РёР¶Рµ Рє РІРµСЂС…Сѓ */
     .stats-section {
         display: none;
     }
@@ -7156,7 +7156,7 @@ button {
         grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
     }
 
-    /* Журнал */
+    /* Р–СѓСЂРЅР°Р» */
     .history-filter-fields {
         grid-template-columns: 1fr;
     }
@@ -7175,7 +7175,7 @@ button {
         font-size: 14px;
     }
     
-    /* Пользователи */
+    /* РџРѕР»СЊР·РѕРІР°С‚РµР»Рё */
     .user-item {
         flex-wrap: wrap;
         gap: 8px;
@@ -7202,7 +7202,7 @@ button {
     }
 }
 
-/* Очень маленькие экраны (телефоны) */
+/* РћС‡РµРЅСЊ РјР°Р»РµРЅСЊРєРёРµ СЌРєСЂР°РЅС‹ (С‚РµР»РµС„РѕРЅС‹) */
 @media (max-width: 480px) {
     .top-header {
         padding: 0 8px;
@@ -7318,7 +7318,7 @@ button {
         font-size: 0.75rem;
     }
     
-    /* Модальные окна */
+    /* РњРѕРґР°Р»СЊРЅС‹Рµ РѕРєРЅР° */
     .modal-content {
         margin: 2% auto;
         max-height: 96vh;
@@ -7340,7 +7340,7 @@ button {
     }
 }
 
-/* ==================== Балун карты (Яндекс.Карты) — тема приложения ==================== */
+/* ==================== Р‘Р°Р»СѓРЅ РєР°СЂС‚С‹ (РЇРЅРґРµРєСЃ.РљР°СЂС‚С‹) вЂ” С‚РµРјР° РїСЂРёР»РѕР¶РµРЅРёСЏ ==================== */
 [class*="ymaps"][class*="balloon"] {
     font-family: var(--font-sans) !important;
 }
@@ -7359,11 +7359,11 @@ button {
     border-color: var(--border-color) !important;
 }
 
-/* Всплывающая подсказка (hint) карты — опускаем чуть ниже метки */
+/* Р’СЃРїР»С‹РІР°СЋС‰Р°СЏ РїРѕРґСЃРєР°Р·РєР° (hint) РєР°СЂС‚С‹ вЂ” РѕРїСѓСЃРєР°РµРј С‡СѓС‚СЊ РЅРёР¶Рµ РјРµС‚РєРё */
 #map [class*="hint"] {
     transform: translateY(10px) !important;
 }
-/* Когда внутри наш балун выбора группы — убираем обёртку API (один балун, не два) */
+/* РљРѕРіРґР° РІРЅСѓС‚СЂРё РЅР°С€ Р±Р°Р»СѓРЅ РІС‹Р±РѕСЂР° РіСЂСѓРїРїС‹ вЂ” СѓР±РёСЂР°РµРј РѕР±С‘СЂС‚РєСѓ API (РѕРґРёРЅ Р±Р°Р»СѓРЅ, РЅРµ РґРІР°) */
 [class*="balloon__content"]:has(.network-map-balloon),
 [class*="balloon-panel"]:has(.network-map-balloon) {
     padding: 0 !important;
@@ -7374,7 +7374,7 @@ button {
 [class*="balloon__layout"]:has(.network-map-balloon) [class*="balloon__tail"] {
     display: none !important;
 }
-/* Балун выбора группы — карточка с чёткой структурой */
+/* Р‘Р°Р»СѓРЅ РІС‹Р±РѕСЂР° РіСЂСѓРїРїС‹ вЂ” РєР°СЂС‚РѕС‡РєР° СЃ С‡С‘С‚РєРѕР№ СЃС‚СЂСѓРєС‚СѓСЂРѕР№ */
 .network-map-balloon {
     background: var(--bg-card) !important;
     color: var(--text-primary) !important;
@@ -7403,13 +7403,13 @@ button {
     background: var(--bg-hover) !important;
 }
 
-/* Список элементов группы — прокрутка при большом количестве */
+/* РЎРїРёСЃРѕРє СЌР»РµРјРµРЅС‚РѕРІ РіСЂСѓРїРїС‹ вЂ” РїСЂРѕРєСЂСѓС‚РєР° РїСЂРё Р±РѕР»СЊС€РѕРј РєРѕР»РёС‡РµСЃС‚РІРµ */
 .group-balloon-list {
     max-height: 220px;
     overflow-y: auto;
 }
 
-/* Шапка балуна — отдельный блок, контрастная кнопка закрытия */
+/* РЁР°РїРєР° Р±Р°Р»СѓРЅР° вЂ” РѕС‚РґРµР»СЊРЅС‹Р№ Р±Р»РѕРє, РєРѕРЅС‚СЂР°СЃС‚РЅР°СЏ РєРЅРѕРїРєР° Р·Р°РєСЂС‹С‚РёСЏ */
 .group-balloon-header {
     display: flex;
     align-items: center;
@@ -7463,7 +7463,7 @@ button {
     color: #fff;
 }
 
-/* Блок «Название группы» — явное поле и акцентная кнопка */
+/* Р‘Р»РѕРє В«РќР°Р·РІР°РЅРёРµ РіСЂСѓРїРїС‹В» вЂ” СЏРІРЅРѕРµ РїРѕР»Рµ Рё Р°РєС†РµРЅС‚РЅР°СЏ РєРЅРѕРїРєР° */
 .group-name-row {
     padding: 12px 14px;
     border-bottom: 1px solid var(--border-color);
@@ -7533,7 +7533,7 @@ button {
     color: var(--text-primary);
 }
 
-/* Элемент группы: название + кнопка «Переместить» */
+/* Р­Р»РµРјРµРЅС‚ РіСЂСѓРїРїС‹: РЅР°Р·РІР°РЅРёРµ + РєРЅРѕРїРєР° В«РџРµСЂРµРјРµСЃС‚РёС‚СЊВ» */
 .cross-group-item,
 .node-group-item {
     display: flex;
@@ -7563,7 +7563,7 @@ button {
     color: var(--accent-primary);
 }
 
-/* Подписи объектов на карте (все типы): компактно и по центру под объектом */
+/* РџРѕРґРїРёСЃРё РѕР±СЉРµРєС‚РѕРІ РЅР° РєР°СЂС‚Рµ (РІСЃРµ С‚РёРїС‹): РєРѕРјРїР°РєС‚РЅРѕ Рё РїРѕ С†РµРЅС‚СЂСѓ РїРѕРґ РѕР±СЉРµРєС‚РѕРј */
 .map-label,
 #map .map-label,
 [class*="ymaps"] .map-label {
@@ -7586,7 +7586,7 @@ button {
     backdrop-filter: blur(6px);
 }
 
-/* Подпись на карте: лёгкая обводка для читаемости на любом фоне */
+/* РџРѕРґРїРёСЃСЊ РЅР° РєР°СЂС‚Рµ: Р»С‘РіРєР°СЏ РѕР±РІРѕРґРєР° РґР»СЏ С‡РёС‚Р°РµРјРѕСЃС‚Рё РЅР° Р»СЋР±РѕРј С„РѕРЅРµ */
 [data-theme="light"] .map-label,
 [data-theme="light"] #map .map-label,
 [data-theme="light"] [class*="ymaps"] .map-label {
@@ -7622,7 +7622,7 @@ button {
     background: #94a3b8;
 }
 
-/* Курсор-прицел на карте: хорошо виден в светлой и тёмной теме */
+/* РљСѓСЂСЃРѕСЂ-РїСЂРёС†РµР» РЅР° РєР°СЂС‚Рµ: С…РѕСЂРѕС€Рѕ РІРёРґРµРЅ РІ СЃРІРµС‚Р»РѕР№ Рё С‚С‘РјРЅРѕР№ С‚РµРјРµ */
 #map.map-crosshair-active {
     cursor: crosshair;
 }
@@ -7630,7 +7630,7 @@ button {
     cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cline x1='16' y1='2' x2='16' y2='12' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='16' y1='20' x2='16' y2='30' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='2' y1='16' x2='12' y2='16' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='20' y1='16' x2='30' y2='16' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='3' fill='none' stroke='%23fff' stroke-width='1.5'/%3E%3C/svg%3E") 16 16, crosshair;
 }
 
-/* Разрез кабеля / установка муфты на маршруте */
+/* Р Р°Р·СЂРµР· РєР°Р±РµР»СЏ / СѓСЃС‚Р°РЅРѕРІРєР° РјСѓС„С‚С‹ РЅР° РјР°СЂС€СЂСѓС‚Рµ */
 .cable-split-section {
     margin-bottom: 20px;
     padding: 16px;
@@ -7791,13 +7791,13 @@ html.cable-split-mode-active #map {
     color: #60a5fa;
 }
 
-/* Тёмная тема для подложки карты: инверсия только слоя с тайлами (объекты и кабели в других слоях не затрагиваются) */
+/* РўС‘РјРЅР°СЏ С‚РµРјР° РґР»СЏ РїРѕРґР»РѕР¶РєРё РєР°СЂС‚С‹: РёРЅРІРµСЂСЃРёСЏ С‚РѕР»СЊРєРѕ СЃР»РѕСЏ СЃ С‚Р°Р№Р»Р°РјРё (РѕР±СЉРµРєС‚С‹ Рё РєР°Р±РµР»Рё РІ РґСЂСѓРіРёС… СЃР»РѕСЏС… РЅРµ Р·Р°С‚СЂР°РіРёРІР°СЋС‚СЃСЏ) */
 [data-theme="dark"] #map [class*="ground-pane"] {
     filter: invert(1) hue-rotate(180deg);
     -webkit-filter: invert(1) hue-rotate(180deg);
 }
 
-/* Трассировка: совместимость со светлой и тёмной темой */
+/* РўСЂР°СЃСЃРёСЂРѕРІРєР°: СЃРѕРІРјРµСЃС‚РёРјРѕСЃС‚СЊ СЃРѕ СЃРІРµС‚Р»РѕР№ Рё С‚С‘РјРЅРѕР№ С‚РµРјРѕР№ */
 .trace-path-title {
     margin: 0 0 12px 0;
     font-size: 1rem;
@@ -7848,7 +7848,7 @@ html.cable-split-mode-active #map {
 .trace-path-block .trace-path-muted { margin-left: 6px; }
 .trace-port-badge { background: var(--bg-accent); color: var(--text-primary); padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
 
-/* Кнопки "Показать на карте" в трассировке */
+/* РљРЅРѕРїРєРё "РџРѕРєР°Р·Р°С‚СЊ РЅР° РєР°СЂС‚Рµ" РІ С‚СЂР°СЃСЃРёСЂРѕРІРєРµ */
 .trace-show-on-map-btn {
     transition: background-color 0.2s, transform 0.1s;
 }
@@ -7861,7 +7861,7 @@ html.cable-split-mode-active #map {
     transform: scale(0.95);
 }
 
-/* Выделение жил, подключенных к сплиттеру */
+/* Р’С‹РґРµР»РµРЅРёРµ Р¶РёР», РїРѕРґРєР»СЋС‡РµРЅРЅС‹С… Рє СЃРїР»РёС‚С‚РµСЂСѓ */
 .fiber-splitter-connected {
     background-color: var(--bg-accent) !important;
     border-color: var(--accent-warning) !important;
@@ -7872,7 +7872,7 @@ html.cable-split-mode-active #map {
     font-weight: 600;
 }
 
-/* Справочник устройств — полноэкранное окно */
+/* РЎРїСЂР°РІРѕС‡РЅРёРє СѓСЃС‚СЂРѕР№СЃС‚РІ вЂ” РїРѕР»РЅРѕСЌРєСЂР°РЅРЅРѕРµ РѕРєРЅРѕ */
 #deviceCatalogModal.device-catalog-modal-open {
     padding: 0;
     display: flex;
@@ -8417,7 +8417,7 @@ html.cable-split-mode-active #map {
     flex-shrink: 0;
 }
 
-/* Окно добавления производителя / модели */
+/* РћРєРЅРѕ РґРѕР±Р°РІР»РµРЅРёСЏ РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЏ / РјРѕРґРµР»Рё */
 .device-catalog-entry-modal {
     z-index: 2100;
 }
@@ -8595,7 +8595,7 @@ html.cable-split-mode-active #map {
     }
 }
 
-/* Карточка узла сети */
+/* РљР°СЂС‚РѕС‡РєР° СѓР·Р»Р° СЃРµС‚Рё */
 .node-card {
     display: flex;
     flex-direction: column;
@@ -8926,7 +8926,7 @@ html.cable-split-mode-active #map {
     transform: translateY(-1px);
 }
 
-/* Карточка камеры */
+/* РљР°СЂС‚РѕС‡РєР° РєР°РјРµСЂС‹ */
 .camera-card {
     display: flex;
     flex-direction: column;
@@ -9051,7 +9051,7 @@ html.cable-split-mode-active #map {
     margin-bottom: 0;
 }
 
-/* Видеопоток камеры */
+/* Р’РёРґРµРѕРїРѕС‚РѕРє РєР°РјРµСЂС‹ */
 .camera-card .object-card-section--stream {
     border-color: color-mix(in srgb, #475569 32%, var(--panel-glass-border));
 }
@@ -9433,7 +9433,7 @@ html.cable-split-mode-active #map {
     filter: brightness(1.08);
 }
 
-/* Карточка опоры / крепления */
+/* РљР°СЂС‚РѕС‡РєР° РѕРїРѕСЂС‹ / РєСЂРµРїР»РµРЅРёСЏ */
 .support-card {
     display: flex;
     flex-direction: column;
@@ -9673,7 +9673,7 @@ html.cable-split-mode-active #map {
     }
 }
 
-/* Карточка OLT */
+/* РљР°СЂС‚РѕС‡РєР° OLT */
 .olt-card {
     display: flex;
     flex-direction: column;
@@ -10161,20 +10161,23 @@ html.cable-split-mode-active #map {
 /* ——— Чат организации ——— */
 .org-chat-panel {
     position: fixed;
-    right: 16px;
-    bottom: 16px;
+    right: 20px;
+    bottom: 20px;
     z-index: 9500;
-    width: min(380px, calc(100vw - 32px));
-    height: min(520px, calc(100vh - 120px));
+    width: min(480px, calc(100vw - 32px));
+    height: min(680px, calc(100vh - 88px));
     display: flex;
     flex-direction: column;
-    border-radius: 16px;
-    box-shadow: 0 12px 40px rgba(15, 23, 42, 0.22);
-    transform: translateY(12px) scale(0.98);
+    border-radius: 20px;
+    box-shadow:
+        0 24px 64px rgba(15, 23, 42, 0.28),
+        0 0 0 1px color-mix(in srgb, var(--border-color) 80%, transparent);
+    transform: translateY(16px) scale(0.97);
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
-    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+    transition: opacity 0.22s ease, transform 0.22s ease, visibility 0.22s;
+    overflow: hidden;
 }
 
 .org-chat-panel--open {
@@ -10186,39 +10189,63 @@ html.cable-split-mode-active #map {
 
 .org-chat-header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 14px 16px 10px;
-    border-bottom: 1px solid var(--border-color);
+    padding: 16px 18px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
     position: relative;
-    z-index: 1;
+    z-index: 2;
+    flex-shrink: 0;
+}
+
+.org-chat-header-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.org-chat-header-icon {
+    flex-shrink: 0;
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--accent-primary) 16%, var(--bg-secondary));
+    color: var(--accent-primary);
 }
 
 .org-chat-title {
     margin: 0;
-    font-size: 1rem;
-    font-weight: 600;
+    font-size: 1.05rem;
+    font-weight: 650;
     color: var(--text-primary);
+    letter-spacing: -0.02em;
 }
 
 .org-chat-subtitle {
-    margin: 4px 0 0;
-    font-size: 0.75rem;
+    margin: 2px 0 0;
+    font-size: 0.78rem;
     color: var(--text-muted);
+    line-height: 1.35;
 }
 
 .org-chat-close {
     flex-shrink: 0;
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     border: none;
-    border-radius: 8px;
+    border-radius: 10px;
     background: transparent;
     color: var(--text-secondary);
-    font-size: 1.4rem;
-    line-height: 1;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
 }
 
 .org-chat-close:hover {
@@ -10229,82 +10256,197 @@ html.cable-split-mode-active #map {
 .org-chat-messages {
     flex: 1;
     overflow-y: auto;
-    padding: 12px 14px;
+    overflow-x: hidden;
+    padding: 16px 18px 20px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 14px;
     position: relative;
     z-index: 1;
+    background:
+        linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 35%, transparent) 0%, transparent 120px),
+        color-mix(in srgb, var(--bg-primary) 50%, transparent);
+    scroll-behavior: smooth;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--text-muted) 40%, transparent) transparent;
+}
+
+.org-chat-messages::-webkit-scrollbar {
+    width: 6px;
+}
+
+.org-chat-messages::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--text-muted) 35%, transparent);
+    border-radius: 6px;
 }
 
 .org-chat-empty {
-    margin: auto 0;
+    margin: auto;
+    padding: 32px 20px;
     text-align: center;
-    font-size: 0.85rem;
+    max-width: 260px;
+}
+
+.org-chat-empty-icon {
+    display: block;
+    font-size: 2.5rem;
+    line-height: 1;
+    margin-bottom: 12px;
+    opacity: 0.85;
+}
+
+.org-chat-empty-title {
+    margin: 0 0 6px;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.org-chat-empty-hint {
+    margin: 0;
+    font-size: 0.82rem;
+    line-height: 1.45;
     color: var(--text-muted);
 }
 
 .org-chat-message {
-    max-width: 92%;
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    max-width: 82%;
     align-self: flex-start;
-    padding: 8px 12px;
-    border-radius: 12px 12px 12px 4px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
+    animation: org-chat-msg-in 0.2s ease;
+}
+
+@keyframes org-chat-msg-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .org-chat-message--own {
+    flex-direction: row-reverse;
     align-self: flex-end;
-    border-radius: 12px 12px 4px 12px;
-    background: color-mix(in srgb, var(--accent-primary) 14%, var(--bg-secondary));
-    border-color: color-mix(in srgb, var(--accent-primary) 35%, var(--border-color));
+}
+
+.org-chat-message-col {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.org-chat-message-avatar {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: var(--bg-secondary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--bg-primary) 80%, transparent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.org-chat-message-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.org-chat-message-bubble {
+    position: relative;
+    min-width: 0;
+    padding: 10px 14px 22px;
+    border-radius: 16px 16px 16px 6px;
+    background: var(--bg-secondary);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.org-chat-message--own .org-chat-message-bubble {
+    border-radius: 16px 16px 6px 16px;
+    background: color-mix(in srgb, var(--accent-primary) 18%, var(--bg-secondary));
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--accent-primary) 15%, transparent);
+}
+
+.org-chat-message--mention-me .org-chat-message-bubble {
+    box-shadow:
+        0 0 0 2px color-mix(in srgb, var(--accent-primary) 35%, transparent),
+        0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
 .org-chat-message-meta {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 4px;
+    padding: 0 4px;
 }
 
 .org-chat-message-author {
-    font-size: 0.72rem;
+    font-size: 0.75rem;
     font-weight: 600;
     color: var(--accent-primary);
 }
 
-.org-chat-message--own .org-chat-message-author {
-    color: var(--text-secondary);
-}
-
 .org-chat-message-time {
+    position: absolute;
+    right: 10px;
+    bottom: 6px;
     font-size: 0.65rem;
     color: var(--text-muted);
     white-space: nowrap;
+    opacity: 0.85;
+}
+
+.org-chat-message--own .org-chat-message-time {
+    color: color-mix(in srgb, var(--text-primary) 55%, transparent);
 }
 
 .org-chat-message-text {
-    font-size: 0.875rem;
-    line-height: 1.45;
+    font-size: 0.9rem;
+    line-height: 1.5;
     color: var(--text-primary);
     white-space: pre-wrap;
     word-break: break-word;
     font-family: inherit, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
 }
 
+.org-chat-message-text--empty {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.org-chat-mention {
+    color: var(--accent-primary);
+    font-weight: 600;
+    background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+    border-radius: 4px;
+    padding: 0 3px;
+}
+
 .org-chat-footer {
-    padding: 10px 12px 12px;
-    border-top: 1px solid var(--border-color);
+    padding: 0;
+    border-top: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
     position: relative;
     z-index: 2;
+    overflow: visible;
+    flex-shrink: 0;
+    background: color-mix(in srgb, var(--bg-primary) 92%, transparent);
 }
 
 .org-chat-compose {
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 0;
+    overflow: visible;
+    padding: 12px 14px 14px;
+}
+
+.org-chat-input-area {
+    position: relative;
+    overflow: visible;
 }
 
 .org-chat-attach-picker,
@@ -10312,18 +10454,19 @@ html.cable-split-mode-active #map {
     position: absolute;
     left: 0;
     right: 0;
-    bottom: calc(100% + 6px);
-    padding: 8px;
-    border-radius: 12px;
+    bottom: calc(100% + 8px);
+    padding: 10px;
+    border-radius: 14px;
     background: var(--panel-glass-bg, var(--bg-primary));
     border: 1px solid var(--border-color);
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.2);
     backdrop-filter: var(--panel-glass-blur-sm, blur(12px));
     -webkit-backdrop-filter: var(--panel-glass-blur-sm, blur(12px));
     max-height: 280px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    z-index: 25;
 }
 
 .org-chat-attach-picker[hidden] {
@@ -10332,31 +10475,35 @@ html.cable-split-mode-active #map {
 
 .org-chat-attach-tabs {
     display: flex;
-    gap: 4px;
-    margin-bottom: 8px;
+    gap: 6px;
+    margin-bottom: 10px;
     flex-shrink: 0;
+    padding: 4px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--bg-secondary) 80%, transparent);
 }
 
 .org-chat-attach-tab {
     flex: 1;
     border: none;
     border-radius: 8px;
-    padding: 6px 4px;
-    font-size: 0.72rem;
+    padding: 7px 6px;
+    font-size: 0.74rem;
     font-weight: 600;
     cursor: pointer;
     background: transparent;
     color: var(--text-muted);
+    transition: background 0.15s, color 0.15s;
 }
 
 .org-chat-attach-tab:hover {
-    background: var(--bg-secondary);
     color: var(--text-primary);
 }
 
 .org-chat-attach-tab--active {
-    background: color-mix(in srgb, var(--accent-primary) 14%, var(--bg-primary));
+    background: var(--bg-primary);
     color: var(--accent-primary);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
 .org-chat-attach-panel {
@@ -10365,7 +10512,7 @@ html.cable-split-mode-active #map {
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
 }
 
 .org-chat-attach-panel[hidden] {
@@ -10380,24 +10527,27 @@ html.cable-split-mode-active #map {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 6px 10px;
-    border-radius: 8px;
-    border: 1px dashed var(--border-color);
-    font-size: 0.72rem;
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px dashed color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
+    font-size: 0.78rem;
     font-weight: 600;
     color: var(--accent-primary);
     cursor: pointer;
-    background: var(--bg-secondary);
+    background: color-mix(in srgb, var(--accent-primary) 6%, var(--bg-secondary));
+    transition: border-color 0.15s, background 0.15s;
 }
 
 .org-chat-upload-btn:hover {
     border-color: var(--accent-primary);
+    background: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-secondary));
 }
 
 .org-chat-media-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 6px;
+    gap: 8px;
     flex: 1;
     min-height: 80px;
     align-content: start;
@@ -10411,17 +10561,18 @@ html.cable-split-mode-active #map {
 .org-chat-media-item {
     width: 100%;
     height: 100%;
-    padding: 4px;
-    border: 1px solid var(--border-color);
-    border-radius: 10px;
-    background: var(--bg-primary);
+    padding: 6px;
+    border: none;
+    border-radius: 12px;
+    background: var(--bg-secondary);
     cursor: pointer;
     overflow: hidden;
+    transition: transform 0.12s, box-shadow 0.12s;
 }
 
 .org-chat-media-item:hover {
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-primary) 20%, transparent);
+    transform: scale(1.03);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
 }
 
 .org-chat-media-item img {
@@ -10434,13 +10585,13 @@ html.cable-split-mode-active #map {
 
 .org-chat-media-delete {
     position: absolute;
-    top: 2px;
-    right: 2px;
-    width: 20px;
-    height: 20px;
+    top: 4px;
+    right: 4px;
+    width: 22px;
+    height: 22px;
     border: none;
     border-radius: 50%;
-    background: rgba(15, 23, 42, 0.75);
+    background: rgba(15, 23, 42, 0.8);
     color: #fff;
     font-size: 14px;
     line-height: 1;
@@ -10457,7 +10608,7 @@ html.cable-split-mode-active #map {
 
 .org-chat-media-empty,
 .org-chat-media-hint {
-    font-size: 0.7rem;
+    font-size: 0.72rem;
     color: var(--text-muted);
     text-align: center;
     margin: 4px 0 0;
@@ -10468,57 +10619,54 @@ html.cable-split-mode-active #map {
 }
 
 .org-chat-message--media .org-chat-message-text {
-    margin-top: 6px;
+    margin-top: 8px;
 }
 
 .org-chat-message-media {
     line-height: 0;
+    border-radius: 10px;
+    overflow: hidden;
 }
 
 .org-chat-message-img {
-    max-width: 160px;
-    max-height: 160px;
+    max-width: 100%;
+    max-height: 200px;
     border-radius: 10px;
     object-fit: contain;
     display: block;
 }
 
 .org-chat-message-img--sticker {
-    max-width: 128px;
-    max-height: 128px;
+    max-height: 140px;
 }
 
 .org-chat-message-img--gif {
-    max-width: 200px;
     max-height: 200px;
 }
 
 .org-chat-message-img--file-image {
-    max-width: 220px;
     max-height: 220px;
 }
 
 .org-chat-file-card {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    border-radius: 10px;
-    border: 1px solid var(--border-color);
-    background: var(--bg-primary);
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--bg-primary) 60%, transparent);
     text-decoration: none;
     color: inherit;
-    max-width: 260px;
-    transition: border-color 0.15s, background 0.15s;
+    max-width: 280px;
+    transition: background 0.15s;
 }
 
 .org-chat-file-card:hover {
-    border-color: var(--accent-primary);
-    background: color-mix(in srgb, var(--accent-primary) 8%, var(--bg-primary));
+    background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-primary));
 }
 
 .org-chat-file-card-icon {
-    font-size: 1.5rem;
+    font-size: 1.6rem;
     line-height: 1;
     flex-shrink: 0;
 }
@@ -10531,7 +10679,7 @@ html.cable-split-mode-active #map {
 }
 
 .org-chat-file-card-name {
-    font-size: 0.8rem;
+    font-size: 0.82rem;
     font-weight: 600;
     color: var(--text-primary);
     overflow: hidden;
@@ -10540,14 +10688,14 @@ html.cable-split-mode-active #map {
 }
 
 .org-chat-file-card-size {
-    font-size: 0.68rem;
+    font-size: 0.7rem;
     color: var(--text-muted);
 }
 
 .org-chat-emoji-grid {
     display: grid;
     grid-template-columns: repeat(8, 1fr);
-    gap: 2px;
+    gap: 4px;
 }
 
 .org-chat-emoji-item {
@@ -10555,17 +10703,19 @@ html.cable-split-mode-active #map {
     aspect-ratio: 1;
     min-width: 0;
     border: none;
-    border-radius: 8px;
+    border-radius: 10px;
     background: transparent;
-    font-size: 1.25rem;
+    font-size: 1.35rem;
     line-height: 1;
     cursor: pointer;
     padding: 0;
+    transition: background 0.12s, transform 0.12s;
     font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
 }
 
 .org-chat-emoji-item:hover {
     background: var(--bg-secondary);
+    transform: scale(1.08);
 }
 
 .org-chat-emoji-item:focus-visible {
@@ -10573,88 +10723,189 @@ html.cable-split-mode-active #map {
     outline-offset: 1px;
 }
 
+.org-chat-input-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    align-self: stretch;
+}
+
+.org-chat-mention-list {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(100% + 8px);
+    max-height: 240px;
+    overflow-y: auto;
+    border-radius: 14px;
+    border: 1px solid var(--border-color);
+    background: var(--panel-glass-bg, var(--bg-primary));
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22);
+    z-index: 30;
+    padding: 6px 0;
+}
+
+.org-chat-mention-hint {
+    margin: 0;
+    padding: 10px 14px;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.org-chat-mention-hint--title {
+    text-align: left;
+    padding: 8px 14px 6px;
+    font-weight: 600;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+}
+
+.org-chat-mention-list[hidden] {
+    display: none !important;
+}
+
+.org-chat-mention-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    border: none;
+    background: transparent;
+    padding: 9px 14px;
+    cursor: pointer;
+    text-align: left;
+    color: inherit;
+    transition: background 0.12s;
+}
+
+.org-chat-mention-option:hover,
+.org-chat-mention-option--active {
+    background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-secondary));
+}
+
+.org-chat-mention-option-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    overflow: hidden;
+    background: var(--bg-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.org-chat-mention-option-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.org-chat-mention-option-name {
+    font-size: 0.84rem;
+    font-weight: 600;
+}
+
+.org-chat-mention-option-user {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
 .org-chat-input-row {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     gap: 8px;
+    padding: 6px 10px;
+    min-height: 50px;
+    border-radius: 16px;
+    background: var(--bg-secondary);
+    border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+    transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.org-chat-emoji-btn,
-.org-chat-file-btn {
-    flex-shrink: 0;
-    width: 42px;
-    height: 42px;
-    border: 1px solid var(--border-color);
-    border-radius: 10px;
-    background: var(--bg-primary);
-    font-size: 1.25rem;
-    line-height: 1;
+.org-chat-input-row:focus-within {
+    border-color: color-mix(in srgb, var(--accent-primary) 50%, var(--border-color));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 12%, transparent);
+}
+
+.org-chat-tool-btn {
+    width: 38px;
+    height: 38px;
+    border: none;
+    border-radius: 11px;
+    background: transparent;
+    color: var(--text-secondary);
     cursor: pointer;
     padding: 0;
-    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
-}
-
-.org-chat-file-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--border-color);
-    border-radius: 10px;
-    background: var(--bg-primary);
-    color: var(--text-secondary);
-    cursor: pointer;
-    margin: 0;
-    padding: 0;
+    transition: background 0.15s, color 0.15s;
 }
 
-.org-chat-file-btn:hover {
-    background: var(--bg-secondary);
-    border-color: color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
+.org-chat-tool-btn:hover {
+    background: color-mix(in srgb, var(--bg-primary) 80%, transparent);
     color: var(--accent-primary);
 }
 
-.org-chat-emoji-btn:hover {
-    background: var(--bg-secondary);
-    border-color: color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
+.org-chat-tool-btn[aria-expanded="true"] {
+    background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+    color: var(--accent-primary);
 }
 
-.org-chat-emoji-btn[aria-expanded="true"] {
-    background: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-primary));
-    border-color: var(--accent-primary);
+.org-chat-tool-emoji {
+    font-size: 1.2rem;
+    line-height: 1;
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
+
+.org-chat-tool-btn--file {
+    margin: 0;
+    flex-shrink: 0;
+}
+
+.org-chat-tool-btn--emoji {
+    flex-shrink: 0;
+}
+
+.org-chat-input-wrap .org-chat-input {
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .org-chat-input {
     flex: 1;
-    min-height: 40px;
-    max-height: 120px;
-    resize: vertical;
-    padding: 8px 10px;
-    border-radius: 10px;
-    border: 1px solid var(--border-color);
-    background: var(--bg-primary);
+    width: 100%;
+    min-height: 38px;
+    max-height: 140px;
+    resize: none;
+    margin: 0;
+    padding: 9px 6px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
     color: var(--text-primary);
     font-family: inherit, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
-    font-size: 0.875rem;
+    font-size: 0.9rem;
+    line-height: 1.35;
+    vertical-align: middle;
 }
 
 .org-chat-input:focus {
     outline: none;
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-primary) 25%, transparent);
-}
-
-.org-chat-send {
-    flex-shrink: 0;
-    width: 42px;
-    height: 42px;
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
 }
 
 .org-chat-badge {
     background: var(--accent-primary);
+    box-shadow: 0 0 0 2px var(--bg-primary);
 }
 
 @media (max-width: 768px) {
@@ -10662,7 +10913,12 @@ html.cable-split-mode-active #map {
         right: 8px;
         bottom: 8px;
         width: calc(100vw - 16px);
-        height: min(70vh, calc(100vh - 80px));
+        height: min(82vh, calc(100vh - 64px));
+        border-radius: 16px 16px 0 0;
+    }
+
+    .org-chat-message {
+        max-width: 90%;
     }
 
     .org-chat-emoji-grid {

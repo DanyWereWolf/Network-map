@@ -1052,6 +1052,62 @@ app.post('/api/history', (req, res) => {
 const MAX_CHAT_TEXT_LENGTH = 2000;
 const CHAT_HISTORY_DEFAULT_LIMIT = 100;
 
+function getOrgApprovedUsers(orgId) {
+    return db.getUsers().filter(function(u) {
+        return u.organizationId && String(u.organizationId) === String(orgId) &&
+            (u.status || 'approved') === 'approved';
+    });
+}
+
+function parseMentionsFromText(text, orgId, explicitIds) {
+    var mentions = [];
+    var seen = {};
+    function addUser(u) {
+        if (!u || seen[String(u.id)]) return;
+        seen[String(u.id)] = true;
+        mentions.push({
+            userId: u.id,
+            username: u.username,
+            fullName: (u.fullName || u.full_name || '').toString().trim()
+        });
+    }
+    if (Array.isArray(explicitIds)) {
+        var all = db.getUsers();
+        explicitIds.forEach(function(id) {
+            var u = all.find(function(x) { return String(x.id) === String(id); });
+            if (u && u.organizationId && String(u.organizationId) === String(orgId)) addUser(u);
+        });
+    }
+    if (!text) return mentions;
+    var orgUsers = getOrgApprovedUsers(orgId);
+    var re = /@([a-zA-Z0-9_.\u0400-\u04FF-]+)/g;
+    var m;
+    while ((m = re.exec(text))) {
+        var token = m[1].toLowerCase();
+        var u = orgUsers.find(function(x) {
+            return String(x.username || '').toLowerCase() === token;
+        });
+        if (!u) {
+            u = orgUsers.find(function(x) {
+                var fn = (x.fullName || x.full_name || '').toString().trim().toLowerCase();
+                if (!fn) return false;
+                var compact = fn.replace(/\s+/g, '');
+                return compact.indexOf(token) === 0 || fn.split(/\s+/)[0] === token;
+            });
+        }
+        if (u) addUser(u);
+    }
+    return mentions;
+}
+
+function resolveSenderAvatarUrl(user) {
+    if (user && user.avatarUrl) return user.avatarUrl;
+    if (!user || user.userId == null) return null;
+    var users = db.getUsers();
+    var u = users.find(function(x) { return String(x.id) === String(user.userId); });
+    return u ? avatars.getAvatarApiPath(u.id, u.avatarUpdatedAt) : null;
+}
+
 function buildChatMessage(user, content) {
     var name = (user.fullName || user.username || 'Участник').toString().trim().slice(0, 100) || 'Участник';
     var text = content && content.text != null ? String(content.text).trim() : '';
@@ -1060,9 +1116,13 @@ function buildChatMessage(user, content) {
         id: 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
         userId: user.userId,
         userName: name,
+        avatarUrl: resolveSenderAvatarUrl(user),
         text: text || null,
         createdAt: new Date().toISOString()
     };
+    if (content && Array.isArray(content.mentions) && content.mentions.length) {
+        msg.mentions = content.mentions;
+    }
     if (content && content.mediaId) {
         msg.mediaId = String(content.mediaId);
         msg.mediaKind = content.mediaKind || null;
@@ -1110,8 +1170,10 @@ function createOrgChatMessage(user, payload) {
         if (!mediaItem) return { error: 'Стикер или GIF не найден', status: 404 };
     }
 
+    var mentions = parseMentionsFromText(text, orgId, payload && payload.mentionUserIds);
     var message = buildChatMessage(user, {
         text: text || null,
+        mentions: mentions,
         mediaId: mediaItem ? mediaItem.id : null,
         mediaKind: mediaItem ? mediaItem.kind : null,
         mediaUrl: mediaItem ? chatMedia.getMediaApiPath(mediaItem.id, mediaItem.ext) : null,
@@ -1124,6 +1186,25 @@ function createOrgChatMessage(user, payload) {
     broadcastOrgChat(orgId, message);
     return { ok: true, message: message };
 }
+
+app.get('/api/chat/members', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!user.organizationId) return res.status(403).json({ error: 'Чат доступен только участникам организации' });
+    try {
+        var members = getOrgApprovedUsers(user.organizationId).map(function(u) {
+            return {
+                id: u.id,
+                username: u.username,
+                fullName: (u.fullName || u.full_name || '').toString().trim(),
+                avatarUrl: avatars.getAvatarApiPath(u.id, u.avatarUpdatedAt)
+            };
+        });
+        res.json({ members: members });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
 
 app.get('/api/chat', (req, res) => {
     const user = getSessionUser(req);
@@ -1765,9 +1846,14 @@ wss.on('connection', (ws, req) => {
                     userId: uChat.id,
                     username: uChat.username,
                     fullName: uChat.fullName || uChat.full_name,
-                    organizationId: orgIdChat
+                    organizationId: orgIdChat,
+                    avatarUrl: avatars.getAvatarApiPath(uChat.id, uChat.avatarUpdatedAt)
                 };
-                createOrgChatMessage(chatUser, { text: msg.text, mediaId: msg.mediaId });
+                createOrgChatMessage(chatUser, {
+                    text: msg.text,
+                    mediaId: msg.mediaId,
+                    mentionUserIds: msg.mentionUserIds
+                });
                 return;
             }
             if (msg.type === 'cursor') {
