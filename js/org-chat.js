@@ -1,5 +1,7 @@
 (function() {
     var CHAT_POLL_MS = 5000;
+    var CHAT_POLL_HIDDEN_MS = 12000;
+    var CHAT_POLL_BACKGROUND_MS = 15000;
     var STICKER_MAX_BYTES = 2 * 1024 * 1024;
     var GIF_MAX_BYTES = 8 * 1024 * 1024;
     var FILE_MAX_BYTES = 15 * 1024 * 1024;
@@ -8,6 +10,7 @@
     var activeAttachTab = 'emoji';
     var knownMessageIds = {};
     var pollTimer = null;
+    var backgroundWatchTimer = null;
     var unreadCount = 0;
     var mediaCache = { sticker: null, gif: null };
     var chatMembers = [];
@@ -192,7 +195,8 @@
         var origin = (typeof window !== 'undefined' && window.location && window.location.origin)
             ? window.location.origin
             : '';
-        return origin ? origin + '/favicon.svg' : '/favicon.svg';
+        if (origin) return origin + '/icons/chat-notification-192.png';
+        return '/icons/chat-notification-192.png';
     }
 
     function buildMentionPreview(msg) {
@@ -212,6 +216,14 @@
         if (msg && msg.id) mentionedNotifiedIds[msg.id] = true;
     }
 
+    function storeChatNotificationPermissionResult(result) {
+        try {
+            if (typeof localStorage !== 'undefined' && result) {
+                localStorage.setItem(getChatNotifAskedStorageKey(), result);
+            }
+        } catch (e) {}
+    }
+
     function requestChatNotificationPermission() {
         if (typeof Notification === 'undefined') {
             return Promise.resolve('unsupported');
@@ -220,27 +232,32 @@
             return Promise.resolve(Notification.permission);
         }
         try {
-            if (typeof localStorage !== 'undefined') {
-                localStorage.setItem(getChatNotifAskedStorageKey(), '1');
-            }
-            return Notification.requestPermission();
+            return Notification.requestPermission().then(function(result) {
+                storeChatNotificationPermissionResult(result);
+                return result;
+            });
         } catch (e) {
             return Promise.resolve('denied');
         }
     }
 
-    function ensureChatNotificationPermission() {
+    /** @param {{ force?: boolean }} opts — force: запрос по клику (открытие чата) */
+    function ensureChatNotificationPermission(opts) {
+        opts = opts || {};
         if (typeof Notification === 'undefined') {
             return Promise.resolve('unsupported');
         }
         if (Notification.permission !== 'default') {
             return Promise.resolve(Notification.permission);
         }
-        try {
-            if (typeof localStorage !== 'undefined' && localStorage.getItem(getChatNotifAskedStorageKey())) {
-                return Promise.resolve(Notification.permission);
-            }
-        } catch (e) {}
+        if (!opts.force) {
+            try {
+                var stored = typeof localStorage !== 'undefined'
+                    ? localStorage.getItem(getChatNotifAskedStorageKey())
+                    : null;
+                if (stored === 'denied') return Promise.resolve('denied');
+            } catch (e) {}
+        }
         return requestChatNotificationPermission();
     }
 
@@ -250,8 +267,10 @@
         var opts = {
             body: body || buildMentionPreview(msg),
             icon: getChatNotificationIcon(),
+            badge: getChatNotificationIcon(),
             tag: 'networkmap-org-chat-mention',
-            renotify: true
+            renotify: true,
+            requireInteraction: false
         };
         try {
             var notification = new Notification(title || 'Упоминание в чате', opts);
@@ -272,7 +291,7 @@
     function deliverMentionNotification(msg, title, body) {
         if (!msg || panelOpen) return;
         if (showMentionBrowserNotification(msg, title, body)) return;
-        if (!document.hidden && typeof showInfo === 'function') {
+        if (typeof showInfo === 'function') {
             showInfo((body || buildMentionPreview(msg)), title || 'Чат');
             markMentionNotified(msg);
         }
@@ -319,9 +338,7 @@
             : who + ' и ещё ' + (pending.length - 1) + ' — упоминания в чате';
 
         function send() {
-            if (!showMentionBrowserNotification(latest, title, body) &&
-                !document.hidden &&
-                typeof showInfo === 'function') {
+            if (!showMentionBrowserNotification(latest, title, body) && typeof showInfo === 'function') {
                 showInfo(body, title);
             }
             pending.forEach(markMentionNotified);
@@ -546,18 +563,88 @@
     }
 
     function loadHistory() {
+        return fetchChatMessages()
+            .then(function(messages) {
+                if (Array.isArray(messages)) renderMessages(messages, true);
+            });
+    }
+
+    function fetchChatMessages() {
         var token = typeof getAuthToken === 'function' ? getAuthToken() : '';
-        if (!token || typeof getApiBase !== 'function') return Promise.resolve();
+        if (!token || typeof getApiBase !== 'function') return Promise.resolve(null);
         return fetch(getApiBase() + '/api/chat?limit=100', {
             headers: { 'Authorization': 'Bearer ' + token }
         })
             .then(function(r) { return r.json(); })
             .then(function(body) {
-                if (body && Array.isArray(body.messages)) {
-                    renderMessages(body.messages, true);
-                }
+                return (body && Array.isArray(body.messages)) ? body.messages : null;
             })
-            .catch(function() {});
+            .catch(function() { return null; });
+    }
+
+    function processChatMessagesFromPoll(messages) {
+        if (!Array.isArray(messages)) return;
+        if (panelOpen) {
+            renderMessages(messages, true);
+            return;
+        }
+        var hadNew = false;
+        messages.forEach(function(m) {
+            if (!m || !m.id) return;
+            var known = !!knownMessageIds[m.id];
+            knownMessageIds[m.id] = true;
+            if (!known) {
+                hadNew = true;
+                notifyIfMentioned(m);
+                if (isMessageUnread(m)) unreadCount++;
+            }
+        });
+        if (hadNew) updateUnreadBadge();
+    }
+
+    function fetchChatForNotifications() {
+        return fetchChatMessages().then(function(messages) {
+            if (messages) processChatMessagesFromPoll(messages);
+            return messages;
+        });
+    }
+
+    function getBackgroundPollIntervalMs() {
+        if (typeof document !== 'undefined' && document.hidden) return CHAT_POLL_HIDDEN_MS;
+        if (panelOpen && !window.syncIsConnected) return CHAT_POLL_MS;
+        return CHAT_POLL_BACKGROUND_MS;
+    }
+
+    function shouldRunBackgroundChatWatch() {
+        return typeof getAuthToken === 'function' && !!getAuthToken();
+    }
+
+    function backgroundChatWatchTick() {
+        if (!shouldRunBackgroundChatWatch()) return;
+        if (panelOpen && window.syncIsConnected) return;
+        fetchChatForNotifications();
+    }
+
+    function startBackgroundChatWatch() {
+        stopBackgroundChatWatch();
+        if (!shouldRunBackgroundChatWatch()) return;
+        backgroundChatWatchTick();
+        backgroundWatchTimer = setInterval(backgroundChatWatchTick, getBackgroundPollIntervalMs());
+    }
+
+    function stopBackgroundChatWatch() {
+        if (backgroundWatchTimer) {
+            clearInterval(backgroundWatchTimer);
+            backgroundWatchTimer = null;
+        }
+    }
+
+    function restartBackgroundChatWatch() {
+        if (!shouldRunBackgroundChatWatch()) {
+            stopBackgroundChatWatch();
+            return;
+        }
+        startBackgroundChatWatch();
     }
 
     function setSendEnabled(enabled) {
@@ -676,11 +763,7 @@
     }
 
     function startPolling() {
-        stopPolling();
-        if (window.syncIsConnected) return;
-        pollTimer = setInterval(function() {
-            if (panelOpen && !window.syncIsConnected) loadHistory();
-        }, CHAT_POLL_MS);
+        restartBackgroundChatWatch();
     }
 
     function stopPolling() {
@@ -699,7 +782,7 @@
         if (btn) btn.setAttribute('aria-expanded', 'true');
         panelOpen = true;
         syncChatOpenState();
-        ensureChatNotificationPermission();
+        ensureChatNotificationPermission({ force: true });
         setLastChatSeenAt(new Date());
         unreadCount = 0;
         updateUnreadBadge();
@@ -727,7 +810,7 @@
         syncChatOpenState();
         unreadCount = 0;
         updateUnreadBadge();
-        stopPolling();
+        restartBackgroundChatWatch();
     }
 
     function getMentionContext() {
@@ -1132,7 +1215,14 @@
             });
         });
 
-        if (btn) btn.addEventListener('click', togglePanel);
+        if (btn) {
+            btn.addEventListener('click', function() {
+                if (!panelOpen && typeof Notification !== 'undefined' && Notification.permission === 'default') {
+                    ensureChatNotificationPermission({ force: true });
+                }
+                togglePanel();
+            });
+        }
         if (closeBtn) closeBtn.addEventListener('click', closePanel);
         if (attachBtn) attachBtn.addEventListener('click', function(e) {
             e.stopPropagation();
@@ -1141,7 +1231,22 @@
         if (typeof getAuthToken === 'function' && getAuthToken()) {
             loadChatMembers();
             checkOfflineMentions();
+            startBackgroundChatWatch();
         }
+
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                fetchChatForNotifications();
+                if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+                    ensureChatNotificationPermission({ force: false });
+                }
+            }
+            restartBackgroundChatWatch();
+        });
+
+        window.addEventListener('focus', function() {
+            fetchChatForNotifications();
+        });
         if (input) {
             input.addEventListener('input', updateMentionAutocomplete);
             input.addEventListener('keydown', function(e) {
@@ -1227,6 +1332,7 @@
     }
 
     window.orgChatRequestNotificationPermission = requestChatNotificationPermission;
+    window.orgChatStartBackgroundWatch = startBackgroundChatWatch;
     window.orgChatOnMessage = onIncomingMessage;
     window.orgChatOnHistory = function(messages) {
         if (panelOpen) {
@@ -1245,21 +1351,19 @@
 
     function checkOfflineMentions() {
         if (panelOpen) return;
-        var token = typeof getAuthToken === 'function' ? getAuthToken() : '';
-        if (!token || typeof getApiBase !== 'function') return;
-        fetch(getApiBase() + '/api/chat?limit=100', {
-            headers: { 'Authorization': 'Bearer ' + token }
-        })
-            .then(function(r) { return r.json(); })
-            .then(function(body) {
-                if (body && Array.isArray(body.messages)) {
-                    ensureChatSeenBaseline(body.messages);
-                    notifyPendingMentions(body.messages);
-                    recalcUnreadFromMessages(body.messages);
-                }
-            })
-            .catch(function() {});
+        if (!shouldRunBackgroundChatWatch()) return;
+        fetchChatMessages().then(function(messages) {
+            if (!messages) return;
+            messages.forEach(function(m) {
+                if (m && m.id) knownMessageIds[m.id] = true;
+            });
+            ensureChatSeenBaseline(messages);
+            notifyPendingMentions(messages);
+            recalcUnreadFromMessages(messages);
+        });
     }
+
+    window.orgChatRefreshNotifications = fetchChatForNotifications;
 
     if (typeof document !== 'undefined') {
         if (document.readyState === 'loading') {

@@ -7340,6 +7340,12 @@ button {
     }
 }
 
+/* Копирайт и промо Яндекс.Карт */
+#map [class*="copyrights-pane"],
+#map [class*="map-copyrights-promo"] {
+    display: none !important;
+}
+
 /* ==================== Р‘Р°Р»СѓРЅ РєР°СЂС‚С‹ (РЇРЅРґРµРєСЃ.РљР°СЂС‚С‹) вЂ” С‚РµРјР° РїСЂРёР»РѕР¶РµРЅРёСЏ ==================== */
 [class*="ymaps"][class*="balloon"] {
     font-family: var(--font-sans) !important;

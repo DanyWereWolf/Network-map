@@ -1427,6 +1427,18 @@ function setupUsersModalHandlers() {
     if (profileModalEl) profileModalEl.addEventListener('click', function(e) { if (e.target === profileModalEl) closeProfileModal(); });
 }
 
+function hidePanoramaLayerMenuItem() {
+    var mapEl = document.getElementById('map');
+    if (!mapEl) return;
+    var items = mapEl.querySelectorAll('[class*="listbox__list-item"]');
+    for (var i = 0; i < items.length; i++) {
+        var text = (items[i].textContent || '').trim();
+        if (text === 'Панорамы' || text === 'Panoramas') {
+            items[i].style.display = 'none';
+        }
+    }
+}
+
 function init() {
     var initialCenter = [54.663609, 86.162243];
     var initialZoom = 15;
@@ -1436,7 +1448,8 @@ function init() {
     }
     myMap = new ymaps.Map('map', {
         center: initialCenter,
-        zoom: initialZoom
+        zoom: initialZoom,
+        controls: ['zoomControl']
     });
     if (window._pendingMapStart) {
         window._mapStartApplied = true;
@@ -1446,6 +1459,24 @@ function init() {
     try { myMap.controls.remove('searchControl'); } catch (e) {}
     try { myMap.controls.remove('trafficControl'); } catch (e) {}
     try { myMap.controls.remove('geolocationControl'); } catch (e) {}
+    try { myMap.controls.remove('rulerControl'); } catch (e) {}
+    try { myMap.controls.remove('fullscreenControl'); } catch (e) {}
+    try { myMap.controls.remove('typeSelector'); } catch (e) {}
+    try {
+        var mapLayerSelector = new ymaps.control.TypeSelector(
+            ['yandex#map', 'yandex#satellite', 'yandex#hybrid'],
+            {
+                panoramas: 'off',
+                panoramasItemMode: 'off'
+            }
+        );
+        myMap.controls.add(mapLayerSelector, { float: 'right' });
+        if (mapLayerSelector.events) {
+            mapLayerSelector.events.add(['click', 'expand'], hidePanoramaLayerMenuItem);
+        }
+        hidePanoramaLayerMenuItem();
+        setTimeout(hidePanoramaLayerMenuItem, 300);
+    } catch (e) {}
     try { myMap.behaviors.disable('rightMouseButtonMagnifier'); } catch (e) {}
 
     createCursorIndicator();
