@@ -49,23 +49,51 @@
         return cfg.streamType !== 'none' && !!(cfg.streamUrl || '').trim();
     }
 
-    function isCameraOnline(obj) {
-        return hasActiveStream(getCameraStreamConfig(obj));
+    function setCameraStreamLive(obj, live) {
+        if (!obj || !obj.properties) return;
+        var prev = obj.properties.get('streamLive');
+        if (live === true) {
+            if (prev === true) return;
+            obj.properties.set('streamLive', true);
+        } else if (live === false) {
+            if (prev === false) return;
+            obj.properties.set('streamLive', false);
+        } else {
+            if (prev === undefined || prev === null) return;
+            obj.properties.unset('streamLive');
+        }
+        notifyCameraPresentationChanged(obj);
     }
 
-    function buildStatusBadgeHtml(isOnline) {
+    function isCameraOnline(obj) {
+        if (!obj || !obj.properties) return false;
+        if (!hasActiveStream(getCameraStreamConfig(obj))) return false;
+        return obj.properties.get('streamLive') === true;
+    }
+
+    function getCameraStatusTitle(obj) {
+        if (!obj || !obj.properties) return 'Офлайн — видеопоток не настроен';
+        if (!hasActiveStream(getCameraStreamConfig(obj))) return 'Офлайн — видеопоток не настроен';
+        if (isCameraOnline(obj)) return 'Онлайн — видеопоток доступен';
+        if (obj.properties.get('streamLive') === undefined || obj.properties.get('streamLive') === null) {
+            return 'Проверка потока…';
+        }
+        return 'Офлайн — поток недоступен';
+    }
+
+    function buildStatusBadgeHtml(isOnline, statusTitle) {
         var online = !!isOnline;
-        return '<span class="camera-status-badge camera-status-badge--' + (online ? 'online' : 'offline') + '" title="' +
-            (online ? 'Онлайн — видеопоток настроен' : 'Офлайн — видеопоток не настроен') + '">' +
+        var title = statusTitle || (online ? 'Онлайн — видеопоток доступен' : 'Офлайн — видеопоток не настроен');
+        return '<span class="camera-status-badge camera-status-badge--' + (online ? 'online' : 'offline') + '" title="' + escapeHtml(title) + '">' +
             '<span class="camera-status-badge-dot" aria-hidden="true"></span>' +
             '<span class="camera-status-badge-text">' + (online ? 'Онлайн' : 'Офлайн') + '</span></span>';
     }
 
-    function buildMapLabelHtml(displayName, isOnline) {
+    function buildMapLabelHtml(displayName, isOnline, statusTitle) {
         var online = !!isOnline;
-        var statusTitle = online ? 'Онлайн' : 'Офлайн';
+        var title = statusTitle || (online ? 'Онлайн' : 'Офлайн');
         return '<div class="map-label map-label--camera">' +
-            '<span class="map-label-status map-label-status--' + (online ? 'online' : 'offline') + '" title="' + statusTitle + '" aria-label="' + statusTitle + '"></span>' +
+            '<span class="map-label-status map-label-status--' + (online ? 'online' : 'offline') + '" title="' + escapeHtml(title) + '" aria-label="' + escapeHtml(title) + '"></span>' +
             displayName + '</div>';
     }
 
@@ -125,6 +153,7 @@
         obj.properties.set('streamPass', (cfg.streamPass || '').trim());
         obj.properties.set('streamAutoplay', cfg.streamAutoplay !== false);
         obj.properties.set('streamMuted', cfg.streamMuted !== false);
+        obj.properties.unset('streamLive');
     }
 
     function readStreamConfigFromForm(idPrefix) {
@@ -414,9 +443,23 @@
         return true;
     }
 
-    function showPlaybackError(mount, message, snapshotUrl) {
+    function showPlaybackError(mount, message, snapshotUrl, obj) {
+        if (!obj && mount) obj = mount._cameraPlayerObj;
+        if (obj) setCameraStreamLive(obj, false);
         if (showSnapshotFallback(mount, snapshotUrl)) return;
         showPlayerMessage(mount, message, true);
+    }
+
+    function bindStreamLiveEvents(mediaEl, obj, onError) {
+        if (!mediaEl || !obj) return;
+        function markLive() { setCameraStreamLive(obj, true); }
+        function markDead() {
+            setCameraStreamLive(obj, false);
+            if (typeof onError === 'function') onError();
+        }
+        mediaEl.addEventListener('load', markLive);
+        mediaEl.addEventListener('playing', markLive);
+        mediaEl.addEventListener('error', markDead);
     }
 
     function destroyPlayerState(mount) {
@@ -440,19 +483,23 @@
         mount.innerHTML = '';
     }
 
-    function mountPlayer(mount, cfg, snapshotUrl) {
+    function mountPlayer(mount, cfg, snapshotUrl, obj) {
         if (!mount) return;
         destroyPlayerState(mount);
+        mount._cameraPlayerObj = obj || null;
         cfg = cfg || {};
         snapshotUrl = isValidSnapshotDataUrl(snapshotUrl) ? snapshotUrl : '';
         var type = normalizeStreamType(cfg.streamType);
         var url = (cfg.streamUrl || '').trim();
         if (type === 'none' || !url) {
+            if (obj) setCameraStreamLive(obj, false);
             if (!showSnapshotFallback(mount, snapshotUrl)) {
                 showPlayerMessage(mount, 'Укажите URL и тип потока в настройках.');
             }
             return;
         }
+
+        if (obj) setCameraStreamLive(obj, false);
 
         if (type === 'rtsp') {
             var rtspEsc = escapeHtml(url);
@@ -467,6 +514,10 @@
         var playUrl = resolvePlaybackUrl(cfg);
         var state = { type: type };
 
+        function onPlaybackFail(message) {
+            showPlaybackError(mount, message, snapshotUrl, obj);
+        }
+
         if (type === 'iframe') {
             var iframe = document.createElement('iframe');
             iframe.className = 'camera-player-iframe';
@@ -474,6 +525,7 @@
             iframe.title = 'Видеопоток камеры';
             iframe.setAttribute('allow', 'autoplay; fullscreen; encrypted-media');
             iframe.setAttribute('loading', 'lazy');
+            iframe.addEventListener('load', function() { if (obj) setCameraStreamLive(obj, true); });
             mount.appendChild(iframe);
             state.iframe = iframe;
             mount._cameraPlayerState = state;
@@ -485,8 +537,8 @@
             img.className = 'camera-player-mjpeg';
             img.alt = 'Видеопоток камеры';
             img.src = playUrl;
-            img.addEventListener('error', function() {
-                showPlaybackError(mount, 'Не удалось загрузить MJPEG/JPEG. Проверьте URL и доступность.', snapshotUrl);
+            bindStreamLiveEvents(img, obj, function() {
+                onPlaybackFail('Не удалось загрузить MJPEG/JPEG. Проверьте URL и доступность.');
             });
             mount.appendChild(img);
             state.img = img;
@@ -504,9 +556,9 @@
         mount.appendChild(video);
         state.video = video;
 
-        function onVideoError() {
-            showPlaybackError(mount, 'Ошибка воспроизведения. Проверьте URL, CORS и тип потока.', snapshotUrl);
-        }
+        bindStreamLiveEvents(video, obj, function() {
+            onPlaybackFail('Ошибка воспроизведения. Проверьте URL, CORS и тип потока.');
+        });
 
         if (type === 'hls') {
             loadHlsJs().then(function(Hls) {
@@ -515,7 +567,7 @@
                     hls.loadSource(playUrl);
                     hls.attachMedia(video);
                     hls.on(Hls.Events.ERROR, function(ev, data) {
-                        if (data && data.fatal) onVideoError();
+                        if (data && data.fatal) onPlaybackFail('Ошибка воспроизведения. Проверьте URL, CORS и тип потока.');
                     });
                     state.hls = hls;
                     mount._cameraPlayerState = state;
@@ -524,20 +576,18 @@
                     }
                 } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                     video.src = playUrl;
-                    video.addEventListener('error', onVideoError);
                     mount._cameraPlayerState = state;
                     video.play().catch(function() {});
                 } else {
-                    showPlaybackError(mount, 'HLS не поддерживается в этом браузере.', snapshotUrl);
+                    onPlaybackFail('HLS не поддерживается в этом браузере.');
                 }
             }).catch(function() {
-                showPlaybackError(mount, 'Не удалось загрузить модуль HLS.', snapshotUrl);
+                onPlaybackFail('Не удалось загрузить модуль HLS.');
             });
             return;
         }
 
         video.src = playUrl;
-        video.addEventListener('error', onVideoError);
         mount._cameraPlayerState = state;
         if (cfg.streamAutoplay) video.play().catch(function() {});
     }
@@ -551,7 +601,7 @@
 
     function mountCameraPlayer(mount, cfg, obj) {
         var snapshotUrl = obj ? getCameraSnapshot(obj) : '';
-        mountPlayer(mount, cfg, snapshotUrl);
+        mountPlayer(mount, cfg, snapshotUrl, obj);
     }
 
     function destroyPlayersInRoot(root) {
@@ -576,7 +626,7 @@
                 preview.innerHTML = '<div class="camera-player-message">Укажите URL и тип потока.</div>';
                 return;
             }
-            mountPlayer(preview, cfg, getCameraSnapshot(obj));
+            mountPlayer(preview, cfg, getCameraSnapshot(obj), obj);
         }
 
         function persistAndRefresh() {
@@ -647,7 +697,7 @@
         if (isEdit) {
             var preview = root.querySelector('[data-camera-player-preview]');
             if (preview) {
-                if (hasActiveStream(cfg)) mountPlayer(preview, cfg, getCameraSnapshot(getObj()));
+                if (hasActiveStream(cfg)) mountPlayer(preview, cfg, getCameraSnapshot(getObj()), getObj());
                 else showPlayerMessage(preview, 'Укажите URL и тип потока.');
             }
             bindSnapshotHandlers(root, getObj);
@@ -670,12 +720,172 @@
         };
     }
 
+    var STREAM_CHECK_INTERVAL_MS = 90000;
+    var STREAM_PROBE_TIMEOUT_MS = 12000;
+    var STREAM_PROBE_STAGGER_MS = 600;
+    var streamMonitorTimer = null;
+    var streamMonitorRunning = false;
+    var streamMonitorVisibilityBound = false;
+
+    function getMapObjects() {
+        if (typeof objects !== 'undefined' && Array.isArray(objects)) return objects;
+        if (global.objects && Array.isArray(global.objects)) return global.objects;
+        return [];
+    }
+
+    function probeUrlWithImage(url) {
+        return new Promise(function(resolve) {
+            var img = new Image();
+            var settled = false;
+            function finish(ok) {
+                if (settled) return;
+                settled = true;
+                img.onload = img.onerror = null;
+                resolve(!!ok);
+            }
+            var timer = setTimeout(function() { finish(false); }, STREAM_PROBE_TIMEOUT_MS);
+            img.onload = function() { clearTimeout(timer); finish(true); };
+            img.onerror = function() { clearTimeout(timer); finish(false); };
+            try {
+                var parsed = new URL(url, global.location.href);
+                parsed.searchParams.set('_ncprobe', String(Date.now()));
+                img.src = parsed.href;
+            } catch (e) {
+                img.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + '_ncprobe=' + Date.now();
+            }
+        });
+    }
+
+    function probeUrlWithFetch(url) {
+        return new Promise(function(resolve) {
+            if (typeof fetch !== 'function') {
+                resolve(false);
+                return;
+            }
+            var settled = false;
+            function finish(ok) {
+                if (settled) return;
+                settled = true;
+                resolve(!!ok);
+            }
+            var timer = setTimeout(function() { finish(false); }, STREAM_PROBE_TIMEOUT_MS);
+            fetch(url, { method: 'GET', mode: 'cors', cache: 'no-store', credentials: 'omit' }).then(function(res) {
+                clearTimeout(timer);
+                finish(res && res.ok);
+            }).catch(function() {
+                clearTimeout(timer);
+                finish(false);
+            });
+        });
+    }
+
+    function isCameraStreamCheckedInModal(obj) {
+        if (typeof currentModalObject === 'undefined' || currentModalObject !== obj) return false;
+        var modal = document.getElementById('infoModal');
+        if (!modal) return false;
+        return modal.style.display === 'flex';
+    }
+
+    function getCamerasForMonitor() {
+        return getMapObjects().filter(function(o) {
+            return o && o.properties && o.properties.get('type') === 'camera' &&
+                hasActiveStream(getCameraStreamConfig(o));
+        });
+    }
+
+    function probeCameraStream(obj) {
+        if (!obj || !obj.properties) return Promise.resolve(false);
+        var cfg = getCameraStreamConfig(obj);
+        if (!hasActiveStream(cfg)) {
+            setCameraStreamLive(obj, false);
+            return Promise.resolve(false);
+        }
+        var type = normalizeStreamType(cfg.streamType);
+        if (type === 'rtsp' || type === 'iframe') {
+            setCameraStreamLive(obj, false);
+            return Promise.resolve(false);
+        }
+        var playUrl = resolvePlaybackUrl(cfg);
+        if (!playUrl) {
+            setCameraStreamLive(obj, false);
+            return Promise.resolve(false);
+        }
+        if (type === 'mjpeg' || /\.(jpe?g|png|gif|webp)(\?|$)/i.test(playUrl)) {
+            return probeUrlWithImage(playUrl).then(function(ok) {
+                setCameraStreamLive(obj, ok);
+                return ok;
+            });
+        }
+        if (type === 'hls') {
+            return probeUrlWithFetch(playUrl).then(function(ok) {
+                if (ok) {
+                    setCameraStreamLive(obj, true);
+                    return true;
+                }
+                return probeUrlWithImage(playUrl).then(function(imgOk) {
+                    setCameraStreamLive(obj, imgOk);
+                    return imgOk;
+                });
+            });
+        }
+        return probeUrlWithFetch(playUrl).then(function(ok) {
+            setCameraStreamLive(obj, ok);
+            return ok;
+        });
+    }
+
+    function runStreamMonitorCycle() {
+        if (streamMonitorRunning) return;
+        if (typeof document !== 'undefined' && document.hidden) return;
+        var cameras = getCamerasForMonitor();
+        if (!cameras.length) return;
+        streamMonitorRunning = true;
+        var index = 0;
+        function next() {
+            if (index >= cameras.length) {
+                streamMonitorRunning = false;
+                return;
+            }
+            var cam = cameras[index++];
+            if (isCameraStreamCheckedInModal(cam)) {
+                setTimeout(next, 50);
+                return;
+            }
+            probeCameraStream(cam).finally(function() {
+                setTimeout(next, STREAM_PROBE_STAGGER_MS);
+            });
+        }
+        next();
+    }
+
+    function startStreamMonitor() {
+        stopStreamMonitor();
+        setTimeout(runStreamMonitorCycle, 2000);
+        streamMonitorTimer = setInterval(runStreamMonitorCycle, STREAM_CHECK_INTERVAL_MS);
+        if (!streamMonitorVisibilityBound && typeof document !== 'undefined') {
+            streamMonitorVisibilityBound = true;
+            document.addEventListener('visibilitychange', function() {
+                if (!document.hidden) runStreamMonitorCycle();
+            });
+        }
+    }
+
+    function stopStreamMonitor() {
+        if (streamMonitorTimer) {
+            clearInterval(streamMonitorTimer);
+            streamMonitorTimer = null;
+        }
+        streamMonitorRunning = false;
+    }
+
     global.CameraPlayer = {
         STREAM_TYPES: STREAM_TYPES,
         normalizeStreamType: normalizeStreamType,
         guessStreamTypeFromUrl: guessStreamTypeFromUrl,
         hasActiveStream: hasActiveStream,
         isCameraOnline: isCameraOnline,
+        setCameraStreamLive: setCameraStreamLive,
+        getCameraStatusTitle: getCameraStatusTitle,
         buildStatusBadgeHtml: buildStatusBadgeHtml,
         buildMapLabelHtml: buildMapLabelHtml,
         notifyCameraPresentationChanged: notifyCameraPresentationChanged,
@@ -692,6 +902,10 @@
         refreshPlayerInRoot: refreshPlayerInRoot,
         bindStreamForm: bindStreamForm,
         initCameraCard: initCameraCard,
-        getPlacementStreamOptions: getPlacementStreamOptions
+        getPlacementStreamOptions: getPlacementStreamOptions,
+        probeCameraStream: probeCameraStream,
+        startStreamMonitor: startStreamMonitor,
+        stopStreamMonitor: stopStreamMonitor,
+        runStreamMonitorCycle: runStreamMonitorCycle
     };
 })(typeof window !== 'undefined' ? window : this);

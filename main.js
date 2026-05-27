@@ -5975,7 +5975,7 @@ function buildCameraCardContent(obj, isEditMode, name) {
     if (!isEditMode) {
         html += '<div class="camera-card-view-name-row">';
         html += '<div class="camera-card-view-name">' + escapeHtml(name || 'Без названия') + '</div>';
-        if (window.CameraPlayer) html += CameraPlayer.buildStatusBadgeHtml(cameraOnline);
+        if (window.CameraPlayer) html += CameraPlayer.buildStatusBadgeHtml(cameraOnline, CameraPlayer.getCameraStatusTitle(obj));
         html += '</div>';
         html += '<div class="camera-card-view-meta">' + escapeHtml(deviceLine || 'Камера видеонаблюдения') + '</div>';
         if (comment) {
@@ -5984,7 +5984,7 @@ function buildCameraCardContent(obj, isEditMode, name) {
     } else {
         html += '<div class="camera-card-view-name-row">';
         html += '<div class="camera-card-view-name">' + escapeHtml(name || 'Новая камера') + '</div>';
-        if (window.CameraPlayer) html += CameraPlayer.buildStatusBadgeHtml(cameraOnline);
+        if (window.CameraPlayer) html += CameraPlayer.buildStatusBadgeHtml(cameraOnline, CameraPlayer.getCameraStatusTitle(obj));
         html += '</div>';
         html += '<p class="object-card-hint camera-card-hero-hint">На карте подключайте только <strong>медным кабелем</strong> к коммутатору узла, отдельному коммутатору или медиаконвертеру с оптикой.</p>';
     }
@@ -8698,6 +8698,7 @@ function importData(data, opts) {
     migrateStandaloneSwitchesIntoNodes();
     if (migrateNodeLevelSwitchMetaToAttached()) saveData();
     rebuildAllCopperPortUsageFromCables();
+    if (window.CameraPlayer && CameraPlayer.startStreamMonitor) CameraPlayer.startStreamMonitor();
 }
 
 function createObjectFromData(data, opts) {
@@ -9240,6 +9241,7 @@ function exportData() {
 
 function clearMap(opts) {
     opts = opts || {};
+    if (window.CameraPlayer && CameraPlayer.stopStreamMonitor) CameraPlayer.stopStreamMonitor();
     const count = objects.length;
     myMap.geoObjects.removeAll();
     objects = [];
@@ -10454,7 +10456,11 @@ function getObjectDefaultName(type) {
 
 function getObjectLabelHtml(type, displayName, placemark) {
     if (type === 'camera' && window.CameraPlayer && placemark) {
-        return CameraPlayer.buildMapLabelHtml(displayName, CameraPlayer.isCameraOnline(placemark));
+        return CameraPlayer.buildMapLabelHtml(
+            displayName,
+            CameraPlayer.isCameraOnline(placemark),
+            CameraPlayer.getCameraStatusTitle(placemark)
+        );
     }
     return '<div class="map-label">' + displayName + '</div>';
 }
@@ -10484,7 +10490,7 @@ function refreshCameraMapPresentation(cameraObj) {
             modalBody.querySelectorAll('.camera-status-badge').forEach(function(badge) {
                 var online = CameraPlayer.isCameraOnline(cameraObj);
                 badge.className = 'camera-status-badge camera-status-badge--' + (online ? 'online' : 'offline');
-                badge.title = online ? 'Онлайн — видеопоток настроен' : 'Офлайн — видеопоток не настроен';
+                badge.title = CameraPlayer.getCameraStatusTitle(cameraObj);
                 var text = badge.querySelector('.camera-status-badge-text');
                 if (text) text.textContent = online ? 'Онлайн' : 'Офлайн';
             });
