@@ -6,6 +6,7 @@ const cors = require('cors');
 const WebSocket = require('ws');
 const db = require('./database');
 const avatars = require('./avatars');
+const chatMedia = require('./chat-media');
 
 function loadServerConfig() {
     let config = {};
@@ -787,6 +788,7 @@ app.delete('/api/organizations/:id', (req, res) => {
     if (!org) return res.status(404).json({ error: 'Организация не найдена' });
     try {
         db.deleteOrganization(orgId);
+        try { chatMedia.removeOrgStorage(orgId); } catch (e) {}
         // Отключаем WebSocket‑клиентов удалённой организации
         try {
             wss.clients.forEach(function(client) {
@@ -1045,6 +1047,234 @@ app.post('/api/history', (req, res) => {
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
     }
+});
+
+const MAX_CHAT_TEXT_LENGTH = 2000;
+const CHAT_HISTORY_DEFAULT_LIMIT = 100;
+
+function buildChatMessage(user, content) {
+    var name = (user.fullName || user.username || 'Участник').toString().trim().slice(0, 100) || 'Участник';
+    var text = content && content.text != null ? String(content.text).trim() : '';
+    if (text.length > MAX_CHAT_TEXT_LENGTH) text = text.slice(0, MAX_CHAT_TEXT_LENGTH);
+    var msg = {
+        id: 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
+        userId: user.userId,
+        userName: name,
+        text: text || null,
+        createdAt: new Date().toISOString()
+    };
+    if (content && content.mediaId) {
+        msg.mediaId = String(content.mediaId);
+        msg.mediaKind = content.mediaKind || null;
+        if (content.mediaUrl) msg.mediaUrl = content.mediaUrl;
+        if (content.mediaName) msg.mediaName = content.mediaName;
+        if (content.mediaExt) msg.mediaExt = content.mediaExt;
+        if (content.mediaMime) msg.mediaMime = content.mediaMime;
+        if (content.mediaSize != null) msg.mediaSize = content.mediaSize;
+    }
+    return msg;
+}
+
+function broadcastOrgChat(orgId, message) {
+    if (!orgId || !wss) return;
+    wss.clients.forEach(function(client) {
+        if (client.readyState === WebSocket.OPEN && client.orgId === orgId) {
+            try { client.send(JSON.stringify({ type: 'chat', message: message })); } catch (e) {}
+        }
+    });
+}
+
+function sendOrgChatHistory(ws, orgId, limit) {
+    var messages = db.getOrgChat(orgId, limit || CHAT_HISTORY_DEFAULT_LIMIT);
+    try { ws.send(JSON.stringify({ type: 'chat_history', messages: messages })); } catch (e) {}
+}
+
+function createOrgChatMessage(user, payload) {
+    var orgId = user.organizationId;
+    if (!orgId) return { error: 'Укажите организацию', status: 403 };
+
+    var text = '';
+    var mediaId = '';
+    if (payload != null && typeof payload === 'object') {
+        text = payload.text != null ? String(payload.text).trim() : '';
+        mediaId = payload.mediaId != null ? String(payload.mediaId).trim() : '';
+    } else if (payload != null) {
+        text = String(payload).trim();
+    }
+
+    if (!text && !mediaId) return { error: 'Пустое сообщение', status: 400 };
+
+    var mediaItem = null;
+    if (mediaId) {
+        mediaItem = db.getChatMediaItem(orgId, mediaId);
+        if (!mediaItem) return { error: 'Стикер или GIF не найден', status: 404 };
+    }
+
+    var message = buildChatMessage(user, {
+        text: text || null,
+        mediaId: mediaItem ? mediaItem.id : null,
+        mediaKind: mediaItem ? mediaItem.kind : null,
+        mediaUrl: mediaItem ? chatMedia.getMediaApiPath(mediaItem.id, mediaItem.ext) : null,
+        mediaName: mediaItem ? (mediaItem.name || null) : null,
+        mediaExt: mediaItem ? mediaItem.ext : null,
+        mediaMime: mediaItem ? (mediaItem.mime || chatMedia.mimeForExt(mediaItem.ext)) : null,
+        mediaSize: mediaItem && mediaItem.size != null ? mediaItem.size : null
+    });
+    db.addOrgChatMessage(orgId, message);
+    broadcastOrgChat(orgId, message);
+    return { ok: true, message: message };
+}
+
+app.get('/api/chat', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!user.organizationId) return res.status(403).json({ error: 'Чат доступен только участникам организации' });
+    try {
+        var limit = parseInt(req.query.limit, 10);
+        if (isNaN(limit) || limit < 1) limit = CHAT_HISTORY_DEFAULT_LIMIT;
+        if (limit > 500) limit = 500;
+        var messages = db.getOrgChat(user.organizationId, limit);
+        res.json({ messages: messages });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/chat', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    try {
+        var body = req.body || {};
+        var result = createOrgChatMessage(user, { text: body.text, mediaId: body.mediaId });
+        if (result.error) return res.status(result.status || 400).json({ error: result.error });
+        res.json({ ok: true, message: result.message });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.get('/api/chat/media', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!user.organizationId) return res.status(403).json({ error: 'Чат доступен только участникам организации' });
+    try {
+        var kind = null;
+        if (req.query.kind === 'gif') kind = 'gif';
+        else if (req.query.kind === 'sticker') kind = 'sticker';
+        else if (req.query.kind === 'file') kind = 'file';
+        var items = db.getChatMedia(user.organizationId, kind);
+        var media = items.map(function(item) {
+            return {
+                id: item.id,
+                kind: item.kind,
+                name: item.name,
+                ext: item.ext,
+                mime: item.mime || chatMedia.mimeForExt(item.ext),
+                size: item.size != null ? item.size : null,
+                url: chatMedia.getMediaApiPath(item.id, item.ext),
+                uploadedBy: item.uploadedBy,
+                uploadedByName: item.uploadedByName,
+                createdAt: item.createdAt
+            };
+        });
+        res.json({ media: media });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/chat/media', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!user.organizationId) return res.status(403).json({ error: 'Чат доступен только участникам организации' });
+    var kind = 'sticker';
+    if (req.body && req.body.kind === 'gif') kind = 'gif';
+    else if (req.body && req.body.kind === 'file') kind = 'file';
+    var parsed = chatMedia.parseMediaPayload(req.body, kind);
+    if (!parsed) {
+        var limitMb = kind === 'gif' ? '8' : (kind === 'file' ? '15' : '2');
+        var errText = kind === 'gif'
+            ? 'Некорректный GIF. Допустим только GIF до ' + limitMb + ' МБ.'
+            : (kind === 'file'
+                ? 'Некорректный файл. Допустимы PDF, Office, архивы, изображения и текстовые файлы до ' + limitMb + ' МБ.'
+                : 'Некорректное изображение. Допустимы JPG, PNG, WebP или GIF до ' + limitMb + ' МБ.');
+        return res.status(400).json({ error: errText });
+    }
+    try {
+        var orgId = user.organizationId;
+        var mediaId = 'cm_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+        chatMedia.saveOrgMedia(orgId, mediaId, parsed.buffer, parsed.ext);
+        var name = (req.body && req.body.name) ? String(req.body.name).trim().slice(0, 120) : '';
+        if (!name && kind === 'file') name = 'file' + parsed.ext;
+        var item = {
+            id: mediaId,
+            kind: parsed.kind,
+            ext: parsed.ext,
+            mime: parsed.mime,
+            size: parsed.size,
+            name: name,
+            uploadedBy: user.userId,
+            uploadedByName: (user.fullName || user.username || '').toString().trim().slice(0, 100),
+            createdAt: new Date().toISOString()
+        };
+        db.addChatMedia(orgId, item);
+        res.json({
+            ok: true,
+            media: {
+                id: item.id,
+                kind: item.kind,
+                name: item.name,
+                ext: item.ext,
+                mime: item.mime,
+                size: item.size,
+                url: chatMedia.getMediaApiPath(item.id, item.ext),
+                uploadedBy: item.uploadedBy,
+                uploadedByName: item.uploadedByName,
+                createdAt: item.createdAt
+            }
+        });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.delete('/api/chat/media/:mediaId', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!user.organizationId) return res.status(403).json({ error: 'Чат доступен только участникам организации' });
+    var mediaId = chatMedia.mediaIdFromRouteParam(req.params.mediaId);
+    var item = db.getChatMediaItem(user.organizationId, mediaId);
+    if (!item) return res.status(404).json({ error: 'Файл не найден' });
+    var canDelete = String(item.uploadedBy) === String(user.userId) || user.role === 'admin';
+    if (!canDelete) return res.status(403).json({ error: 'Можно удалять только свои вложения' });
+    try {
+        chatMedia.removeMediaFile(user.organizationId, mediaId, item.ext);
+        db.removeChatMedia(user.organizationId, mediaId);
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.get('/api/chat/media/file/:mediaId', (req, res) => {
+    const token = (req.headers.authorization && req.headers.authorization.startsWith('Bearer '))
+        ? req.headers.authorization.slice(7)
+        : (req.query && req.query.token ? String(req.query.token) : '');
+    const viewer = getSessionUserFromToken(token);
+    if (!viewer || !viewer.organizationId) return res.status(401).end();
+    var mediaId = chatMedia.mediaIdFromRouteParam(req.params.mediaId);
+    var item = db.getChatMediaItem(viewer.organizationId, mediaId);
+    if (!item) return res.status(404).end();
+    const file = chatMedia.findMediaFile(viewer.organizationId, mediaId, item.ext);
+    if (!file) return res.status(404).end();
+    var mime = item.mime || chatMedia.mimeForExt(path.extname(file));
+    var downloadName = chatMedia.safeDownloadName(item.name, item.ext || path.extname(file));
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.type(mime);
+    if (!chatMedia.shouldInlineFile(item)) {
+        res.setHeader('Content-Disposition', 'attachment; filename="' + downloadName.replace(/"/g, '') + '"');
+    }
+    res.sendFile(path.resolve(file));
 });
 
 app.get('/api/settings', (req, res) => {
@@ -1520,8 +1750,24 @@ wss.on('connection', (ws, req) => {
                     var statePayload = { type: 'state', clientId: state.clientId, data: state.data };
                     if (groupNames && (groupNames.cross || groupNames.node)) statePayload.groupNames = groupNames;
                     try { ws.send(JSON.stringify(statePayload)); } catch (e) {}
+                    sendOrgChatHistory(ws, orgId);
                 }
                 setImmediate(function() { broadcastSyncClients(orgId); });
+                return;
+            }
+            if (msg.type === 'chat' && (msg.text != null || msg.mediaId != null)) {
+                var orgIdChat = ws.orgId;
+                if (!orgIdChat || !ws.userId) return;
+                var usersChat = db.getUsers();
+                var uChat = usersChat.find(function(u) { return String(u.id) === String(ws.userId); });
+                if (!uChat || String(uChat.organizationId) !== String(orgIdChat)) return;
+                var chatUser = {
+                    userId: uChat.id,
+                    username: uChat.username,
+                    fullName: uChat.fullName || uChat.full_name,
+                    organizationId: orgIdChat
+                };
+                createOrgChatMessage(chatUser, { text: msg.text, mediaId: msg.mediaId });
                 return;
             }
             if (msg.type === 'cursor') {

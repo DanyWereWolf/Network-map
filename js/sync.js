@@ -267,6 +267,14 @@
                     try { window.applyGroupNames(msg.groupNames); } catch (e) {}
                     return;
                 }
+                if (msg.type === 'chat' && msg.message && typeof window.orgChatOnMessage === 'function') {
+                    try { window.orgChatOnMessage(msg.message); } catch (e) {}
+                    return;
+                }
+                if (msg.type === 'chat_history' && Array.isArray(msg.messages) && typeof window.orgChatOnHistory === 'function') {
+                    try { window.orgChatOnHistory(msg.messages); } catch (e) {}
+                    return;
+                }
                 if (msg.type === 'state' && Array.isArray(msg.data) && typeof applyRemoteState === 'function') {
                     var data = msg.data;
                     if (sendTimer) { clearTimeout(sendTimer); sendTimer = null; }
@@ -409,9 +417,32 @@
         }
     }
 
+    function sendChat(payload) {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+        var text = '';
+        var mediaId = null;
+        if (payload != null && typeof payload === 'object') {
+            text = payload.text != null ? String(payload.text).trim() : '';
+            mediaId = payload.mediaId != null ? String(payload.mediaId).trim() : null;
+        } else if (payload != null) {
+            text = String(payload).trim();
+        }
+        if (!text && !mediaId) return false;
+        try {
+            var msg = { type: 'chat' };
+            if (text) msg.text = text;
+            if (mediaId) msg.mediaId = mediaId;
+            ws.send(JSON.stringify(msg));
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
     window.syncSendState = sendState;
     window.syncSendGroupNames = sendGroupNames;
     window.syncSendOp = sendOp;
+    window.syncSendChat = sendChat;
     window.syncSendCursor = sendCursorPosition;
     window.syncConnect = connect;
     window.syncDisconnect = disconnect;

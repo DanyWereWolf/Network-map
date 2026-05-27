@@ -1623,7 +1623,18 @@ function setupEventListeners() {
 
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
-            var modalIds = ['deviceCatalogEntryModal', 'infoModal', 'nodeSelectionModal', 'onuSelectionModal', 'splitterSelectionModal', 'splitterOutputOnuModal', 'splitterOutputSplitterModal', 'oltSelectionModal', 'usersModal', 'userEditModal', 'organizationsModal', 'organizationEditModal', 'updatesModal', 'profileModal', 'deviceCatalogModal', 'confirmModal'];
+            if (typeof window.isConfirmModalBlockingEscape === 'function' && window.isConfirmModalBlockingEscape()) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                return;
+            }
+            if (typeof window.isConfirmModalOpen === 'function' && window.isConfirmModalOpen()) {
+                if (typeof window.cancelConfirmModal === 'function') window.cancelConfirmModal();
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+            var modalIds = ['deviceCatalogEntryModal', 'infoModal', 'nodeSelectionModal', 'onuSelectionModal', 'splitterSelectionModal', 'splitterOutputOnuModal', 'splitterOutputSplitterModal', 'oltSelectionModal', 'usersModal', 'userEditModal', 'organizationsModal', 'organizationEditModal', 'updatesModal', 'profileModal', 'deviceCatalogModal'];
             for (var i = 0; i < modalIds.length; i++) {
                 var m = document.getElementById(modalIds[i]);
                 var modalOpen = m && m.style && m.style.display && m.style.display !== 'none';
@@ -4752,24 +4763,340 @@ function disableCableMapBalloon(cable) {
     }
 }
 
-function updateCableFiberSettings(cableUniqueId, fiberCount, fiberPalette) {
+function parseFiberConnectionKey(key) {
+    if (!key || typeof key !== 'string') return null;
+    var parts = key.split('-');
+    var fiberNumber = parseInt(parts.pop(), 10);
+    if (isNaN(fiberNumber)) return null;
+    var cableId = parts.join('-');
+    if (!cableId) return null;
+    return { cableId: cableId, fiberNumber: fiberNumber };
+}
+
+function isCableFiberBeyondMax(cableId, fiberNumber, targetCableId, maxFiber) {
+    return cableId === targetCableId && fiberNumber > maxFiber;
+}
+
+function countConnectionsLostOnCableFiberReduction(cableUniqueId, maxFiber) {
+    var stats = { splices: 0, assignments: 0, external: 0 };
+    objects.forEach(function(slot) {
+        if (!slot.properties) return;
+        var t = slot.properties.get('type');
+
+        if (t === 'cross' || t === 'sleeve') {
+            ['oltConnections', 'onuConnections', 'mediaConverterConnections', 'splitterConnections', 'nodeConnections'].forEach(function(prop) {
+                var conn = slot.properties.get(prop);
+                if (!conn) return;
+                Object.keys(conn).forEach(function(key) {
+                    var parsed = parseFiberConnectionKey(key);
+                    if (parsed && isCableFiberBeyondMax(parsed.cableId, parsed.fiberNumber, cableUniqueId, maxFiber)) {
+                        stats.assignments++;
+                    }
+                });
+            });
+            var fiberConn = slot.properties.get('fiberConnections');
+            if (Array.isArray(fiberConn)) {
+                fiberConn.forEach(function(conn) {
+                    if (!conn) return;
+                    var fromHit = conn.from && isCableFiberBeyondMax(conn.from.cableId, conn.from.fiberNumber, cableUniqueId, maxFiber);
+                    var toHit = conn.to && isCableFiberBeyondMax(conn.to.cableId, conn.to.fiberNumber, cableUniqueId, maxFiber);
+                    if (fromHit || toHit) stats.splices++;
+                });
+            }
+        }
+        if (t === 'olt') {
+            var incomingFiber = slot.properties.get('incomingFiber');
+            if (incomingFiber && incomingFiber.cableId === cableUniqueId && incomingFiber.fiberNumber > maxFiber) {
+                stats.external++;
+            }
+            var portAssignments = slot.properties.get('portAssignments') || {};
+            Object.keys(portAssignments).forEach(function(portKey) {
+                var a = portAssignments[portKey];
+                if (a && a.cableId === cableUniqueId && a.fiberNumber > maxFiber) stats.external++;
+            });
+        }
+        if (t === 'splitter') {
+            var inputFiber = slot.properties.get('inputFiber');
+            if (inputFiber && inputFiber.cableId === cableUniqueId && inputFiber.fiberNumber > maxFiber) {
+                stats.external++;
+            }
+            var outputConnections = slot.properties.get('outputConnections');
+            if (outputConnections && Array.isArray(outputConnections)) {
+                outputConnections.forEach(function(conn) {
+                    if (conn && conn.cableId === cableUniqueId && conn.fiberNumber > maxFiber) stats.external++;
+                });
+            }
+        }
+        if (t === 'onu' || t === 'mediaConverter') {
+            var inc = slot.properties.get('incomingFiber');
+            if (inc && inc.cableId === cableUniqueId && inc.fiberNumber > maxFiber) stats.external++;
+        }
+    });
+    stats.total = stats.splices + stats.assignments + stats.external;
+    return stats;
+}
+
+function formatCableFiberReductionLossMessage(oldCount, newCount, lost) {
+    var lines = [
+        'Число жил будет уменьшено с ' + oldCount + ' до ' + newCount + '.',
+        'Жилы ' + (newCount + 1) + '–' + oldCount + ' исчезнут с схемы кросса и муфты.'
+    ];
+    var parts = [];
+    if (lost.splices) parts.push(lost.splices + ' сращивани' + (lost.splices === 1 ? 'е' : (lost.splices < 5 ? 'я' : 'й')));
+    if (lost.assignments) parts.push(lost.assignments + ' подключени' + (lost.assignments === 1 ? 'е' : (lost.assignments < 5 ? 'я' : 'й')) + ' жил');
+    if (lost.external) parts.push(lost.external + ' назначени' + (lost.external === 1 ? 'е' : (lost.external < 5 ? 'я' : 'й')) + ' на OLT/ONU/сплиттер');
+    if (parts.length) lines.push('Будут сброшены: ' + parts.join(', ') + '.');
+    lines.push('Продолжить?');
+    return lines.join('\n\n');
+}
+
+function pruneConnectionsForRemovedCableFibers(cableUniqueId, maxFiber) {
+    objects.forEach(function(slot) {
+        if (!slot.properties) return;
+        var t = slot.properties.get('type');
+
+        if (t === 'cross' || t === 'sleeve') {
+            var nodeConn = slot.properties.get('nodeConnections');
+            if (nodeConn) {
+                Object.keys(nodeConn).forEach(function(key) {
+                    var parsed = parseFiberConnectionKey(key);
+                    if (!parsed || !isCableFiberBeyondMax(parsed.cableId, parsed.fiberNumber, cableUniqueId, maxFiber)) return;
+                    var conn = nodeConn[key];
+                    if (conn && conn.nodeId && conn.switchId != null && conn.switchPort != null) {
+                        var nodeObj = objects.find(function(n) {
+                            return n.properties && n.properties.get('type') === 'node' && n.properties.get('uniqueId') === conn.nodeId;
+                        });
+                        if (nodeObj) clearNodeSwitchFiberPortOccupied(nodeObj, conn.switchId, conn.switchPort);
+                    }
+                    removeNodeConnectionLine(slot, parsed.cableId, parsed.fiberNumber);
+                    delete nodeConn[key];
+                });
+                slot.properties.set('nodeConnections', nodeConn);
+            }
+
+            var oltConn = slot.properties.get('oltConnections');
+            if (oltConn) {
+                Object.keys(oltConn).slice().forEach(function(key) {
+                    var parsed = parseFiberConnectionKey(key);
+                    if (!parsed || !isCableFiberBeyondMax(parsed.cableId, parsed.fiberNumber, cableUniqueId, maxFiber)) return;
+                    var conn = oltConn[key];
+                    if (conn && conn.oltId) {
+                        var oltObj = objects.find(function(o) {
+                            return o.properties && o.properties.get('type') === 'olt' && o.properties.get('uniqueId') === conn.oltId;
+                        });
+                        if (oltObj) {
+                            if (conn.incoming) {
+                                oltObj.properties.set('incomingFiber', null);
+                            } else if (conn.portNumber != null) {
+                                var portAssignments = oltObj.properties.get('portAssignments') || {};
+                                delete portAssignments[String(conn.portNumber)];
+                                oltObj.properties.set('portAssignments', portAssignments);
+                            }
+                        }
+                    }
+                    removeOltConnectionLine(slot, parsed.cableId, parsed.fiberNumber);
+                    delete oltConn[key];
+                });
+                slot.properties.set('oltConnections', oltConn);
+            }
+
+            var onuConn = slot.properties.get('onuConnections');
+            if (onuConn) {
+                Object.keys(onuConn).slice().forEach(function(key) {
+                    var parsed = parseFiberConnectionKey(key);
+                    if (!parsed || !isCableFiberBeyondMax(parsed.cableId, parsed.fiberNumber, cableUniqueId, maxFiber)) return;
+                    var conn = onuConn[key];
+                    if (conn && conn.onuId) {
+                        var onuObj = objects.find(function(o) {
+                            return o.properties && o.properties.get('type') === 'onu' && getObjectUniqueId(o) === conn.onuId;
+                        });
+                        if (onuObj) {
+                            var if_ = onuObj.properties.get('incomingFiber');
+                            if (if_ && if_.cableId === cableUniqueId && if_.fiberNumber === parsed.fiberNumber) {
+                                onuObj.properties.set('incomingFiber', null);
+                            }
+                        }
+                    }
+                    removeOnuConnectionLine(slot, parsed.cableId, parsed.fiberNumber);
+                    delete onuConn[key];
+                });
+                slot.properties.set('onuConnections', onuConn);
+            }
+
+            var mcConn = slot.properties.get('mediaConverterConnections');
+            if (mcConn) {
+                Object.keys(mcConn).slice().forEach(function(key) {
+                    var parsed = parseFiberConnectionKey(key);
+                    if (!parsed || !isCableFiberBeyondMax(parsed.cableId, parsed.fiberNumber, cableUniqueId, maxFiber)) return;
+                    var conn = mcConn[key];
+                    if (conn && conn.mediaConverterId) {
+                        var mcObj = objects.find(function(o) {
+                            return o.properties && o.properties.get('type') === 'mediaConverter' && getObjectUniqueId(o) === conn.mediaConverterId;
+                        });
+                        if (mcObj) {
+                            var ifMc = mcObj.properties.get('incomingFiber');
+                            if (ifMc && ifMc.cableId === cableUniqueId && ifMc.fiberNumber === parsed.fiberNumber) {
+                                mcObj.properties.set('incomingFiber', null);
+                            }
+                        }
+                    }
+                    removeOnuConnectionLine(slot, parsed.cableId, parsed.fiberNumber);
+                    delete mcConn[key];
+                });
+                slot.properties.set('mediaConverterConnections', mcConn);
+            }
+
+            var splitterConn = slot.properties.get('splitterConnections');
+            if (splitterConn) {
+                Object.keys(splitterConn).slice().forEach(function(key) {
+                    var parsed = parseFiberConnectionKey(key);
+                    if (!parsed || !isCableFiberBeyondMax(parsed.cableId, parsed.fiberNumber, cableUniqueId, maxFiber)) return;
+                    var conn = splitterConn[key];
+                    if (conn && conn.splitterId) {
+                        var splitterObj = objects.find(function(o) {
+                            return o.properties && o.properties.get('type') === 'splitter' && o.properties.get('uniqueId') === conn.splitterId;
+                        });
+                        if (splitterObj) {
+                            var inputFiber = splitterObj.properties.get('inputFiber');
+                            if (inputFiber && inputFiber.cableId === cableUniqueId && inputFiber.fiberNumber === parsed.fiberNumber) {
+                                splitterObj.properties.set('inputFiber', null);
+                            }
+                        }
+                    }
+                    removeSplitterConnectionLine(slot, parsed.cableId, parsed.fiberNumber);
+                    delete splitterConn[key];
+                });
+                slot.properties.set('splitterConnections', splitterConn);
+            }
+
+            var fiberConn = slot.properties.get('fiberConnections');
+            if (Array.isArray(fiberConn)) {
+                var newFiberConn = fiberConn.filter(function(conn) {
+                    if (!conn) return false;
+                    var fromHit = conn.from && isCableFiberBeyondMax(conn.from.cableId, conn.from.fiberNumber, cableUniqueId, maxFiber);
+                    var toHit = conn.to && isCableFiberBeyondMax(conn.to.cableId, conn.to.fiberNumber, cableUniqueId, maxFiber);
+                    return !fromHit && !toHit;
+                });
+                if (newFiberConn.length !== fiberConn.length) {
+                    slot.properties.set('fiberConnections', newFiberConn);
+                }
+            }
+
+            var fiberLabels = slot.properties.get('fiberLabels');
+            if (fiberLabels) {
+                Object.keys(fiberLabels).forEach(function(key) {
+                    var parsed = parseFiberConnectionKey(key);
+                    if (parsed && isCableFiberBeyondMax(parsed.cableId, parsed.fiberNumber, cableUniqueId, maxFiber)) {
+                        delete fiberLabels[key];
+                    }
+                });
+                slot.properties.set('fiberLabels', fiberLabels);
+            }
+
+            var fiberPorts = slot.properties.get('fiberPorts');
+            if (fiberPorts) {
+                Object.keys(fiberPorts).forEach(function(key) {
+                    var parsed = parseFiberConnectionKey(key);
+                    if (parsed && isCableFiberBeyondMax(parsed.cableId, parsed.fiberNumber, cableUniqueId, maxFiber)) {
+                        delete fiberPorts[key];
+                    }
+                });
+                slot.properties.set('fiberPorts', fiberPorts);
+            }
+        }
+
+        if (t === 'olt') {
+            var incomingFiberOlt = slot.properties.get('incomingFiber');
+            if (incomingFiberOlt && incomingFiberOlt.cableId === cableUniqueId && incomingFiberOlt.fiberNumber > maxFiber) {
+                slot.properties.set('incomingFiber', null);
+            }
+            var portAssignmentsOlt = slot.properties.get('portAssignments') || {};
+            var paChanged = false;
+            Object.keys(portAssignmentsOlt).forEach(function(portKey) {
+                var a = portAssignmentsOlt[portKey];
+                if (a && a.cableId === cableUniqueId && a.fiberNumber > maxFiber) {
+                    delete portAssignmentsOlt[portKey];
+                    paChanged = true;
+                }
+            });
+            if (paChanged) slot.properties.set('portAssignments', portAssignmentsOlt);
+        }
+        if (t === 'splitter') {
+            var inputFiberSp = slot.properties.get('inputFiber');
+            if (inputFiberSp && inputFiberSp.cableId === cableUniqueId && inputFiberSp.fiberNumber > maxFiber) {
+                slot.properties.set('inputFiber', null);
+            }
+            var outputConnections = slot.properties.get('outputConnections');
+            if (outputConnections && Array.isArray(outputConnections)) {
+                var outChanged = false;
+                var newOutputConn = outputConnections.map(function(conn) {
+                    if (conn && conn.cableId === cableUniqueId && conn.fiberNumber > maxFiber) {
+                        outChanged = true;
+                        return { onuId: conn.onuId, splitterId: conn.splitterId };
+                    }
+                    return conn;
+                });
+                if (outChanged) slot.properties.set('outputConnections', newOutputConn);
+            }
+        }
+        if (t === 'onu' || t === 'mediaConverter') {
+            var incEnd = slot.properties.get('incomingFiber');
+            if (incEnd && incEnd.cableId === cableUniqueId && incEnd.fiberNumber > maxFiber) {
+                slot.properties.set('incomingFiber', null);
+            }
+        }
+
+        var usedFibersData = slot.properties.get('usedFibers');
+        if (usedFibersData && usedFibersData[cableUniqueId]) {
+            usedFibersData[cableUniqueId] = usedFibersData[cableUniqueId].filter(function(n) { return n <= maxFiber; });
+            slot.properties.set('usedFibers', usedFibersData);
+        }
+    });
+    updateAllConnectionLines();
+    updateOltConnectionLines();
+    updateSplitterConnectionLines();
+}
+
+function revertCableFiberCountInputs(cableUniqueId) {
     var cable = objects.find(function(obj) {
         return obj.properties && obj.properties.get('type') === 'cable' && obj.properties.get('uniqueId') === cableUniqueId;
     });
-    if (!cable || !window.FiberCableConfig) return;
+    if (!cable) return;
+    var count = String(getFiberCount(cable));
+    document.querySelectorAll('.cable-fiber-count-input').forEach(function(inp) {
+        if (inp.getAttribute('data-cable-id') === cableUniqueId) inp.value = count;
+    });
+    var mainInput = document.getElementById('cableFiberCountInput');
+    if (mainInput && cable === currentModalObject) mainInput.value = count;
+}
+
+async function updateCableFiberSettings(cableUniqueId, fiberCount, fiberPalette) {
+    var cable = objects.find(function(obj) {
+        return obj.properties && obj.properties.get('type') === 'cable' && obj.properties.get('uniqueId') === cableUniqueId;
+    });
+    if (!cable || !window.FiberCableConfig) return false;
     var oldCount = getFiberCount(cable);
     var newCount = Math.max(1, Math.min(window.FiberCableConfig.MAX_FIBERS, parseInt(fiberCount, 10) || 1));
+    var removedConnections = 0;
     if (newCount < oldCount) {
-        var fromObj = cable.properties.get('from');
-        var toObj = cable.properties.get('to');
-        [fromObj, toObj].forEach(function(obj) {
-            if (!obj) return;
-            var usedFibersData = obj.properties.get('usedFibers');
-            if (usedFibersData && usedFibersData[cableUniqueId]) {
-                usedFibersData[cableUniqueId] = usedFibersData[cableUniqueId].filter(function(n) { return n <= newCount; });
-                obj.properties.set('usedFibers', usedFibersData);
+        var lost = countConnectionsLostOnCableFiberReduction(cableUniqueId, newCount);
+        var ok = await showConfirm(
+            formatCableFiberReductionLossMessage(oldCount, newCount, lost),
+            'Изменение числа жил',
+            {
+                confirmText: 'Применить',
+                cancelText: 'Отмена',
+                closeOnBackdrop: false,
+                closeOnEscape: false,
+                allowCloseButton: false
             }
-        });
+        );
+        if (!ok) {
+            revertCableFiberCountInputs(cableUniqueId);
+            return false;
+        }
+        removedConnections = lost.total;
+        pruneConnectionsForRemovedCableFibers(cableUniqueId, newCount);
     }
     window.FiberCableConfig.applyCableFiberSettings(cable, newCount, fiberPalette);
     disableCableMapBalloon(cable);
@@ -4778,6 +5105,7 @@ function updateCableFiberSettings(cableUniqueId, fiberCount, fiberPalette) {
         if (currentModalObject === cable) showCableInfo(cable);
         else refreshObjectModal(currentModalObject);
     }
+    return true;
 }
 
 /** Без uniqueId op add_cable на сервере не находит концы — кабель не попадает в сохранённое состояние. */
@@ -7029,6 +7357,9 @@ function isInfoModalVisible(modal) {
 }
 
 function closeInfoModal() {
+    if (typeof window.isConfirmModalOpen === 'function' && window.isConfirmModalOpen()) {
+        return;
+    }
     var modal = document.getElementById('infoModal');
     if (!modal) return;
     var modalInfo = document.getElementById('modalInfo');
@@ -7334,8 +7665,8 @@ function showCableInfo(cable) {
     var fiberCountInput = modalContent.querySelector('#cableFiberCountInput');
     var fiberPaletteBtn = modalContent.querySelector('#cableFiberPaletteBtn');
     if (fiberCountSaveBtn && fiberCountInput) {
-        fiberCountSaveBtn.addEventListener('click', function() {
-            updateCableFiberSettings(uniqueId, fiberCountInput.value, undefined);
+        fiberCountSaveBtn.addEventListener('click', async function() {
+            await updateCableFiberSettings(uniqueId, fiberCountInput.value, undefined);
         });
     }
     if (fiberPaletteBtn && window.FiberCableConfig) {
@@ -7344,8 +7675,8 @@ function showCableInfo(cable) {
                 title: 'Цвета жил кабеля',
                 fiberCount: getFiberCount(cable),
                 palette: window.FiberCableConfig.getFiberPaletteForCable(cable),
-                onSave: function(r) {
-                    updateCableFiberSettings(uniqueId, r.fiberCount, r.palette);
+                onSave: async function(r) {
+                    await updateCableFiberSettings(uniqueId, r.fiberCount, r.palette);
                 }
             });
         });
@@ -10654,15 +10985,15 @@ function setupModalEventListeners() {
         });
 
         document.querySelectorAll('.cable-type-select').forEach(select => {
-            select.addEventListener('change', function() {
+            select.addEventListener('change', async function() {
                 const cableUniqueId = this.getAttribute('data-cable-id');
-                changeCableType(cableUniqueId, this.value);
+                await changeCableType(cableUniqueId, this.value);
             });
         });
 
         document.querySelectorAll('.cable-fiber-count-input').forEach(function(inp) {
-            inp.addEventListener('change', function() {
-                changeCableType(inp.getAttribute('data-cable-id'), inp.value);
+            inp.addEventListener('change', async function() {
+                await changeCableType(inp.getAttribute('data-cable-id'), inp.value);
             });
         });
 
@@ -10678,8 +11009,8 @@ function setupModalEventListeners() {
                     title: 'Цвета жил кабеля',
                     fiberCount: getFiberCount(cableObj),
                     palette: window.FiberCableConfig.getFiberPaletteForCable(cableObj),
-                    onSave: function(r) {
-                        updateCableFiberSettings(uid, r.fiberCount, r.palette);
+                    onSave: async function(r) {
+                        await updateCableFiberSettings(uid, r.fiberCount, r.palette);
                     }
                 });
             });
@@ -16024,10 +16355,10 @@ function removeCableFromUsedFibers(obj, cableUniqueId) {
     }
 }
 
-function changeCableType(cableUniqueId, newValue) {
+async function changeCableType(cableUniqueId, newValue) {
     var count = parseInt(newValue, 10);
     if (isNaN(count)) count = getFiberCount(newValue);
-    updateCableFiberSettings(cableUniqueId, count, undefined);
+    return updateCableFiberSettings(cableUniqueId, count, undefined);
 }
 
 function getFiberCount(arg) {

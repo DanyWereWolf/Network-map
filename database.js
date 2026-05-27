@@ -53,6 +53,8 @@ function loadStore() {
             mapDataByOrg: {},
             historyByOrg: {},
             settingsByOrg: {},
+            chatByOrg: {},
+            chatMediaByOrg: {},
             pricingPlans: [],
             visitLogs: []
         };
@@ -62,7 +64,7 @@ function loadStore() {
     try {
         store = JSON.parse(fs.readFileSync(STORE_PATH, 'utf8'));
     } catch (e) {
-        store = { mapData: [], users: [], history: [], settings: {}, sessions: [], organizations: [], mapDataByOrg: {}, historyByOrg: {}, settingsByOrg: {}, pricingPlans: [], visitLogs: [] };
+        store = { mapData: [], users: [], history: [], settings: {}, sessions: [], organizations: [], mapDataByOrg: {}, historyByOrg: {}, settingsByOrg: {}, chatByOrg: {}, chatMediaByOrg: {}, pricingPlans: [], visitLogs: [] };
         saveStore();
     }
     if (!store.sessions) store.sessions = [];
@@ -71,6 +73,8 @@ function loadStore() {
     if (typeof store.mapDataByOrg !== 'object') store.mapDataByOrg = {};
     if (typeof store.historyByOrg !== 'object') store.historyByOrg = {};
     if (typeof store.settingsByOrg !== 'object') store.settingsByOrg = {};
+    if (typeof store.chatByOrg !== 'object') store.chatByOrg = {};
+    if (typeof store.chatMediaByOrg !== 'object') store.chatMediaByOrg = {};
     if (!Array.isArray(store.pricingPlans)) store.pricingPlans = [];
     if (!Array.isArray(store.visitLogs)) store.visitLogs = [];
     migrateToOrganizations();
@@ -315,6 +319,81 @@ function setHistory(orgId, history) {
     saveStore();
 }
 
+const MAX_ORG_CHAT_MESSAGES = 500;
+
+function getOrgChat(orgId, limit) {
+    if (!orgId) return [];
+    const s = loadStore();
+    const byOrg = s.chatByOrg || {};
+    const key = String(orgId);
+    var list = Array.isArray(byOrg[key]) ? byOrg[key] : [];
+    if (limit != null && limit > 0 && list.length > limit) {
+        return list.slice(list.length - limit);
+    }
+    return list;
+}
+
+function addOrgChatMessage(orgId, message) {
+    if (!orgId) throw new Error('orgId required');
+    if (!message || typeof message !== 'object') throw new Error('message required');
+    const s = loadStore();
+    if (!s.chatByOrg) s.chatByOrg = {};
+    const key = String(orgId);
+    if (!Array.isArray(s.chatByOrg[key])) s.chatByOrg[key] = [];
+    s.chatByOrg[key].push(message);
+    if (s.chatByOrg[key].length > MAX_ORG_CHAT_MESSAGES) {
+        s.chatByOrg[key] = s.chatByOrg[key].slice(s.chatByOrg[key].length - MAX_ORG_CHAT_MESSAGES);
+    }
+    saveStore();
+    return message;
+}
+
+const MAX_CHAT_MEDIA_PER_ORG = 150;
+
+function getChatMedia(orgId, kind) {
+    if (!orgId) return [];
+    const s = loadStore();
+    const key = String(orgId);
+    const list = (s.chatMediaByOrg && Array.isArray(s.chatMediaByOrg[key])) ? s.chatMediaByOrg[key] : [];
+    if (!kind) return list.slice();
+    return list.filter(function(item) { return item && item.kind === kind; });
+}
+
+function getChatMediaItem(orgId, mediaId) {
+    if (!orgId || !mediaId) return null;
+    const list = getChatMedia(orgId);
+    return list.find(function(item) { return item && String(item.id) === String(mediaId); }) || null;
+}
+
+function addChatMedia(orgId, item) {
+    if (!orgId) throw new Error('orgId required');
+    if (!item || !item.id) throw new Error('item.id required');
+    const s = loadStore();
+    if (!s.chatMediaByOrg) s.chatMediaByOrg = {};
+    const key = String(orgId);
+    if (!Array.isArray(s.chatMediaByOrg[key])) s.chatMediaByOrg[key] = [];
+    s.chatMediaByOrg[key].push(item);
+    if (s.chatMediaByOrg[key].length > MAX_CHAT_MEDIA_PER_ORG) {
+        s.chatMediaByOrg[key] = s.chatMediaByOrg[key].slice(s.chatMediaByOrg[key].length - MAX_CHAT_MEDIA_PER_ORG);
+    }
+    saveStore();
+    return item;
+}
+
+function removeChatMedia(orgId, mediaId) {
+    if (!orgId || !mediaId) return false;
+    const s = loadStore();
+    if (!s.chatMediaByOrg || !Array.isArray(s.chatMediaByOrg[String(orgId)])) return false;
+    const key = String(orgId);
+    const before = s.chatMediaByOrg[key].length;
+    s.chatMediaByOrg[key] = s.chatMediaByOrg[key].filter(function(item) {
+        return item && String(item.id) !== String(mediaId);
+    });
+    if (s.chatMediaByOrg[key].length === before) return false;
+    saveStore();
+    return true;
+}
+
 function getSetting(key) {
     const s = loadStore();
     if (!s.settings || s.settings[key] === undefined) return null;
@@ -469,6 +548,16 @@ function deleteOrganization(orgId) {
     if (s.settingsByOrg && typeof s.settingsByOrg === 'object') {
         Object.keys(s.settingsByOrg).forEach(function(k) {
             if (organizationIdsMatch(k, orgId)) delete s.settingsByOrg[k];
+        });
+    }
+    if (s.chatByOrg && typeof s.chatByOrg === 'object') {
+        Object.keys(s.chatByOrg).forEach(function(k) {
+            if (organizationIdsMatch(k, orgId)) delete s.chatByOrg[k];
+        });
+    }
+    if (s.chatMediaByOrg && typeof s.chatMediaByOrg === 'object') {
+        Object.keys(s.chatMediaByOrg).forEach(function(k) {
+            if (organizationIdsMatch(k, orgId)) delete s.chatMediaByOrg[k];
         });
     }
     // Удаляем всех пользователей этой организации (кроме глобального админа без organizationId)
@@ -1073,6 +1162,12 @@ module.exports = {
     setUsers,
     getHistory,
     setHistory,
+    getOrgChat,
+    addOrgChatMessage,
+    getChatMedia,
+    getChatMediaItem,
+    addChatMedia,
+    removeChatMedia,
     getSettings,
     setSettings,
     getSetting,
