@@ -401,8 +401,8 @@ function releaseDragObjectLock(uid) {
 
 window.onSyncOpConflict = function(payload) {
     if (!payload || !payload.uniqueId) return;
-    var isOwnStale = payload.editorClientId && window.syncMyClientId &&
-        payload.editorClientId === window.syncMyClientId;
+    var isOtherEditor = !!(payload.editorClientId && window.syncMyClientId &&
+        payload.editorClientId !== window.syncMyClientId);
     if (payload.data) {
         var conflictObj = objects.find(function(o) {
             return o.properties && o.properties.get('uniqueId') === payload.uniqueId;
@@ -413,9 +413,10 @@ window.onSyncOpConflict = function(payload) {
             else populatePlacemarkFromSerializedData(conflictObj, payload.data);
         }
     }
-    if (!isOwnStale && currentModalObject && getObjectUniqueId(currentModalObject) === payload.uniqueId) {
+    if (!isOtherEditor) return;
+    if (currentModalObject && getObjectUniqueId(currentModalObject) === payload.uniqueId) {
         if (typeof showWarning === 'function') {
-            showWarning('Объект изменён другим пользователем. Карточка будет обновлена.', 'Конфликт версии');
+            showWarning('Пока вы редактировали, объект изменил другой участник. Карточка обновлена.', 'Обновление с сервера');
         }
         refreshObjectModal(currentModalObject);
     }
