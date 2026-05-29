@@ -125,6 +125,120 @@ function canEdit() {
     return currentUser && currentUser.role === 'admin';
 }
 
+var myHeldObjectLockId = null;
+var infoModalEditMode = true;
+var infoModalEditModeSession = false;
+
+function isObjectLockedByOther(uniqueId) {
+    if (!uniqueId || !window.syncIsConnected) return false;
+    var locks = window.syncRemoteObjectLocks || {};
+    var lock = locks[uniqueId];
+    if (!lock || !lock.clientId) return false;
+    var myId = window.syncMyClientId;
+    return myId ? lock.clientId !== myId : true;
+}
+
+function modalIsEditMode() {
+    if (!isEditMode) return false;
+    if (infoModalEditModeSession) return !!infoModalEditMode;
+    return true;
+}
+
+function releaseHeldObjectLock() {
+    if (!myHeldObjectLockId) return;
+    if (typeof window.syncReleaseObjectLock === 'function') {
+        window.syncReleaseObjectLock(myHeldObjectLockId);
+    }
+    myHeldObjectLockId = null;
+}
+
+function applyModalEditModeForObject(obj, callback) {
+    infoModalEditModeSession = true;
+    if (!isEditMode) {
+        infoModalEditMode = false;
+        if (typeof callback === 'function') callback();
+        return;
+    }
+    if (!window.syncIsConnected || typeof window.syncRequestObjectLock !== 'function') {
+        infoModalEditMode = true;
+        if (typeof callback === 'function') callback();
+        return;
+    }
+    var uid = getObjectUniqueId(obj);
+    if (!uid) {
+        infoModalEditMode = true;
+        if (typeof callback === 'function') callback();
+        return;
+    }
+    if (myHeldObjectLockId && myHeldObjectLockId !== uid) {
+        releaseHeldObjectLock();
+    }
+    window.syncRequestObjectLock(uid, function(ok, lockedBy) {
+        if (ok) {
+            myHeldObjectLockId = uid;
+            infoModalEditMode = true;
+        } else {
+            infoModalEditMode = false;
+            if (lockedBy && typeof showWarning === 'function') {
+                showWarning('Сейчас редактирует: ' + lockedBy, 'Объект занят');
+            }
+        }
+        if (typeof callback === 'function') callback();
+    });
+}
+
+function updateModalLockBanner(uniqueId) {
+    var el = document.getElementById('modalLockBanner');
+    if (!el) return;
+    var locks = window.syncRemoteObjectLocks || {};
+    var lock = uniqueId ? locks[uniqueId] : null;
+    var myId = window.syncMyClientId;
+    if (lock && myId && lock.clientId !== myId) {
+        el.hidden = false;
+        el.textContent = 'Редактирует: ' + (lock.displayName || 'другой пользователь');
+        el.className = 'object-lock-banner object-lock-banner--remote';
+        return;
+    }
+    if (uniqueId && myHeldObjectLockId === uniqueId && infoModalEditMode) {
+        el.hidden = false;
+        el.textContent = 'Вы редактируете этот объект';
+        el.className = 'object-lock-banner object-lock-banner--mine';
+        return;
+    }
+    if (!infoModalEditMode && uniqueId && lock) {
+        el.hidden = false;
+        el.textContent = 'Только просмотр — редактирует ' + (lock.displayName || 'другой пользователь');
+        el.className = 'object-lock-banner object-lock-banner--remote';
+        return;
+    }
+    el.hidden = true;
+    el.textContent = '';
+}
+
+function applyObjectLocksToMapDraggable() {
+    if (!isEditMode) return;
+    objects.forEach(function(o) {
+        if (!o || !o.properties || !o.options) return;
+        var t = o.properties.get('type');
+        if (t === 'cable' || t === 'cableLabel' || t === 'crossGroup' || t === 'nodeGroup') return;
+        var uid = getObjectUniqueId(o);
+        var locked = uid && isObjectLockedByOther(uid);
+        try { o.options.set('draggable', !locked); } catch (e) {}
+    });
+}
+
+window.onSyncObjectLocks = function() {
+    applyObjectLocksToMapDraggable();
+    if (currentModalObject) {
+        var uid = getObjectUniqueId(currentModalObject);
+        updateModalLockBanner(uid);
+        if (uid && isObjectLockedByOther(uid) && myHeldObjectLockId !== uid && infoModalEditModeSession) {
+            infoModalEditMode = false;
+            refreshObjectModal(currentModalObject);
+        }
+    }
+};
+
 var WELCOME_DISMISSED_KEY = 'networkMap_welcomeDismissed';
 
 function getWelcomeDismissedKeyForCurrentUser() {
@@ -3857,6 +3971,10 @@ function createObject(type, name, coords, options = {}) {
         if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
         ensurePlacemarkUniqueIdForSync(placemark);
         var uid = placemark.properties.get('uniqueId');
+        if (uid && isObjectLockedByOther(uid)) {
+            if (typeof showWarning === 'function') showWarning('Объект редактирует другой пользователь', 'Перемещение недоступно');
+            return;
+        }
         if (typeof window.syncSendOp === 'function' && uid) {
             window.syncSendOp({ type: 'update_object', uniqueId: uid, data: { geometry: placemark.geometry.getCoordinates(), name: placemark.properties.get('name') } });
         }
@@ -4596,6 +4714,11 @@ function deleteObject(obj, opts) {
     const objType = obj.properties.get('type');
     const objName = obj.properties.get('name') || '';
     const objUniqueId = obj.properties.get('uniqueId');
+
+    if (!(opts && opts.skipSync) && objUniqueId && isObjectLockedByOther(objUniqueId)) {
+        if (typeof showWarning === 'function') showWarning('Объект редактирует другой пользователь', 'Удаление недоступно');
+        return;
+    }
 
     if (objType === 'node' && objUniqueId) {
         objects.forEach(function(crossObj) {
@@ -7536,6 +7659,9 @@ function updateInfoModalChrome(type, name) {
             window.initPanelPlexusCanvases(modal);
         });
     }
+    if (currentModalObject) {
+        updateModalLockBanner(getObjectUniqueId(currentModalObject));
+    }
 }
 
 function isInfoModalVisible(modal) {
@@ -7558,6 +7684,14 @@ function closeInfoModal() {
     }
     modal.style.display = 'none';
     currentModalObject = null;
+    infoModalEditModeSession = false;
+    infoModalEditMode = true;
+    releaseHeldObjectLock();
+    var lockBanner = document.getElementById('modalLockBanner');
+    if (lockBanner) {
+        lockBanner.hidden = true;
+        lockBanner.textContent = '';
+    }
     if (typeof clearFiberConnectionLabelSelection === 'function') clearFiberConnectionLabelSelection();
 }
 
@@ -7594,6 +7728,12 @@ function showCableInfo(cable) {
         cancelFiberRouting();
     }
     
+    applyModalEditModeForObject(cable, function() {
+        showCableInfoBody(cable);
+    });
+}
+
+function showCableInfoBody(cable) {
     const cableType = cable.properties.get('cableType');
     const fromObj = cable.properties.get('from');
     const toObj = cable.properties.get('to');
@@ -7683,7 +7823,7 @@ function showCableInfo(cable) {
         htmlCu += '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;"><span>' + fromInfoCu.icon + '</span><div><strong>' + escapeHtml(fromInfoCu.type) + '</strong>' + (fromInfoCu.name ? '<br><span style="font-size: 0.8rem; color: var(--text-secondary);">' + escapeHtml(fromInfoCu.name) + '</span>' : '') + '</div></div>';
         htmlCu += '<div style="margin-left: 14px; padding-left: 14px; border-left: 2px dashed ' + copperColor + '; margin-bottom: 8px;"><span style="font-size: 0.75rem; color: var(--text-muted);">↓</span></div>';
         htmlCu += '<div style="display: flex; align-items: center; gap: 8px;"><span>' + toInfoCu.icon + '</span><div><strong>' + escapeHtml(toInfoCu.type) + '</strong>' + (toInfoCu.name ? '<br><span style="font-size: 0.8rem; color: var(--text-secondary);">' + escapeHtml(toInfoCu.name) + '</span>' : '') + '</div></div></div>';
-        if (isEditMode) {
+        if (modalIsEditMode()) {
             htmlCu += '<div class="form-group" style="margin-bottom: 12px;"><label style="font-size: 0.8125rem;">Порт на начале маршрута (' + escapeHtml(fromInfoCu.type) + ')</label>';
             htmlCu += '<select id="copperPortFromSel" class="form-select">' + buildCopperPortOptions(fromObj, pf, swFromCable) + '</select></div>';
             htmlCu += '<div class="form-group" style="margin-bottom: 12px;"><label style="font-size: 0.8125rem;">Порт на конце маршрута (' + escapeHtml(toInfoCu.type) + ')</label>';
@@ -7695,7 +7835,7 @@ function showCableInfo(cable) {
         }
         htmlCu += '<div style="margin-top: 12px; font-size: 0.8125rem; color: var(--text-muted);">Длина по маршруту: ' + (distCu != null ? distCu + ' м' : '—') + '</div>';
         htmlCu += '</div>';
-        if (isEditMode) {
+        if (modalIsEditMode()) {
             htmlCu += '<div style="padding-top: 16px; border-top: 1px solid var(--border-color);"><button class="btn-danger" onclick="deleteCableByUniqueId(\'' + uniqueId + '\')">Удалить кабель</button></div>';
         }
         modalContent.innerHTML = htmlCu;
@@ -7711,6 +7851,8 @@ function showCableInfo(cable) {
         }
         modal.style.display = 'block';
         currentModalObject = cable;
+        updateModalLockBanner(uniqueId);
+        applyObjectLocksToMapDraggable();
         return;
     }
 
@@ -7728,7 +7870,7 @@ function showCableInfo(cable) {
 
     html += '<div class="form-group" style="margin-bottom: 16px;">';
     html += '<label style="display: block; margin-bottom: 6px; font-weight: 600; color: var(--text-primary); font-size: 0.8125rem;">Название кабеля</label>';
-    if (isEditMode) {
+    if (modalIsEditMode()) {
         html += `<input type="text" id="cableNameInput" class="form-input" value="${escapeHtml(cableName)}" placeholder="Введите название кабеля" 
             oninput="updateCableName('${uniqueId}', this.value)" onchange="updateCableName('${uniqueId}', this.value)">`;
     } else {
@@ -7736,7 +7878,7 @@ function showCableInfo(cable) {
     }
     html += '</div>';
 
-    if (isEditMode) {
+    if (modalIsEditMode()) {
         html += '<div class="cable-fiber-settings-row form-group">';
         html += '<label>Число жил и цвета</label>';
         html += '<div class="cable-fiber-settings-toolbar">';
@@ -7832,7 +7974,7 @@ function showCableInfo(cable) {
     });
     html += '</div></div>';
 
-    if (isEditMode) {
+    if (modalIsEditMode()) {
         html += '<div class="cable-split-toolbar">';
         html += '<div class="cable-split-toolbar__sleeve">' + buildCableSplitSleeveFieldsHtml() + '</div>';
         html += '<button type="button" id="btnSplitCableSleeve" class="btn-cable-split-start">🔴 Установить муфту на кабеле</button>';
@@ -7886,6 +8028,8 @@ function showCableInfo(cable) {
     }
     modal.style.display = 'block';
     currentModalObject = cable;
+    updateModalLockBanner(uniqueId);
+    applyObjectLocksToMapDraggable();
 }
 
 function showCableInfoById(cableUniqueId) {
@@ -8495,6 +8639,7 @@ function getSerializedData() {
 }
 
 function saveData() {
+    if (currentModalObject && infoModalEditModeSession && !infoModalEditMode) return;
     if (!inUndoRedo && lastSavedState !== null) {
         undoStack.push(JSON.parse(JSON.stringify(lastSavedState)));
         if (undoStack.length > UNDO_MAX) undoStack.shift();
@@ -9891,6 +10036,12 @@ function showObjectInfo(obj) {
         }
     }
     
+    applyModalEditModeForObject(obj, function() {
+        showObjectInfoBody(obj);
+    });
+}
+
+function showObjectInfoBody(obj) {
     currentModalObject = obj;
     const type = obj.properties.get('type');
     const name = obj.properties.get('name') || '';
@@ -9924,7 +10075,7 @@ function showObjectInfo(obj) {
     let html = '';
 
     if (type === 'olt') {
-        html += buildOltCardContent(obj, isEditMode, name);
+        html += buildOltCardContent(obj, modalIsEditMode(), name);
     }
 
     if (type === 'splitter') {
@@ -9959,7 +10110,7 @@ function showObjectInfo(obj) {
         if (outputsPadded.length > splitRatio) outputsPadded = outputsPadded.slice(0, splitRatio);
         html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
         html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Сплиттер</h4>';
-        if (isEditMode) {
+        if (modalIsEditMode()) {
             html += '<div class="form-group" style="margin-bottom: 12px;">';
             html += '<label for="editSplitterName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название сплиттера</label>';
             html += '<input type="text" id="editSplitterName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Введите название сплиттера">';
@@ -9970,7 +10121,7 @@ function showObjectInfo(obj) {
         html += '<div style="color: var(--text-secondary); font-size: 0.875rem;">Коэффициент деления: 1:' + splitRatio + '</div>';
         if (effectiveInputFiber) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 6px;"><strong>Входная жила:</strong> кабель ' + escapeHtml(String(effectiveInputFiber.cableId).substring(0, 12)) + '…, жила ' + effectiveInputFiber.fiberNumber + '</div>';
         html += '</div>';
-        if (isEditMode) {
+        if (modalIsEditMode()) {
             html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
             html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Вход и выходы</h4>';
             if (effectiveInputFiber) {
@@ -10028,7 +10179,7 @@ function showObjectInfo(obj) {
         const comment = obj.properties.get('comment') || '';
         html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
         html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">ONU</h4>';
-        if (isEditMode) {
+        if (modalIsEditMode()) {
             html += '<div class="form-group" style="margin-bottom: 12px;">';
             html += '<label for="editOnuName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название ONU</label>';
             html += '<input type="text" id="editOnuName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Введите название ONU">';
@@ -10047,7 +10198,7 @@ function showObjectInfo(obj) {
     }
 
     if (type === 'camera') {
-        html += buildCameraCardContent(obj, isEditMode, name);
+        html += buildCameraCardContent(obj, modalIsEditMode(), name);
     }
 
     if (type === 'mediaConverter') {
@@ -10058,7 +10209,7 @@ function showObjectInfo(obj) {
         html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
         html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Медиаконвертер</h4>';
         html += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 12px;">Оптический медиаконвертер на карте. Медный кабель к коммутатору — кнопка ниже (доступна после подключения оптической жилы с муфты или кросса). Волокно — кнопка «⇄ МК» у жилы в карточке муфты или кросса.</p>';
-        if (isEditMode) {
+        if (modalIsEditMode()) {
             html += '<div class="form-group" style="margin-bottom: 12px;">';
             html += '<label for="editMediaConverterName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название</label>';
             html += '<input type="text" id="editMediaConverterName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Название медиаконвертера">';
@@ -10079,7 +10230,7 @@ function showObjectInfo(obj) {
             const mcDesc = cMc ? (cMc.properties.get('cableName') || getCableDescription(cMc.properties.get('cableType'))) : String(mcIncoming.cableId).substring(0, 12) + '…';
             html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 8px;">Входная жила (от муфты/кросса): ' + escapeHtml(mcDesc) + ', жила ' + mcIncoming.fiberNumber + '</div>';
         }
-        if (isEditMode && mcIncoming && mcIncoming.cableId && !cameraHasCopperCable(obj)) {
+        if (modalIsEditMode() && mcIncoming && mcIncoming.cableId && !cameraHasCopperCable(obj)) {
             html += '<div style="margin-top: 16px; padding: 14px; background: linear-gradient(135deg, #0d9488 0%, #14b8a6 50%, #2dd4bf 100%); border-radius: 10px; border: 2px solid #0f766e; box-shadow: 0 4px 14px rgba(20, 184, 166, 0.45);">';
             html += '<div style="font-size: 0.8125rem; color: #ecfdf5; margin-bottom: 10px; font-weight: 600;">Медный кабель к коммутатору или камере</div>';
             html += '<button type="button" class="btn-copper-connect-from-media-converter" style="width: 100%; padding: 12px 16px; font-size: 0.9375rem; font-weight: 700; color: #0f172a; background: #f0fdfa; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.12);">🔌 Начать прокладку медного кабеля</button>';
@@ -10117,7 +10268,7 @@ function showObjectInfo(obj) {
         }
         
         html += '</div>';
-        if (isEditMode) {
+        if (modalIsEditMode()) {
             html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
             html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Редактирование муфты</h4>';
             html += '<div class="form-group" style="margin-bottom: 12px;">';
@@ -10134,7 +10285,7 @@ function showObjectInfo(obj) {
     }
 
     if (type === 'node') {
-        html += buildNodeCardContent(obj, isEditMode, name);
+        html += buildNodeCardContent(obj, modalIsEditMode(), name);
     }
 
     if (type === 'cross' && !fiberUsesWorkspace) {
@@ -10149,7 +10300,7 @@ function showObjectInfo(obj) {
         html += `<div style="color: var(--text-secondary); font-size: 0.875rem;"><strong>Использовано:</strong> <span style="color: ${statusColor}; font-weight: 600;">${usedPorts}/${crossPorts} портов</span> (${usagePercent}%)</div>`;
         html += '</div>';
 
-        if (isEditMode) {
+        if (modalIsEditMode()) {
             html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
             html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Редактирование кросса</h4>';
             html += '<div class="form-group" style="margin-bottom: 12px;">';
@@ -10160,7 +10311,7 @@ function showObjectInfo(obj) {
         }
     }
 
-    if (isEditMode && !fiberUsesWorkspace && type !== 'node') {
+    if (modalIsEditMode() && !fiberUsesWorkspace && type !== 'node') {
         html += '<div class="object-actions-section" style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 8px;">';
         html += '<button id="saveChangesBtn" class="btn-primary" style="flex: 1; min-width: 140px;">';
         html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>';
@@ -10201,8 +10352,8 @@ function showObjectInfo(obj) {
                         <div class="cable-header">
                             <h4>Кабель ${index + 1}: ${cableDescription}</h4>
                             <div class="cable-actions">
-                                ${isEditMode ? (cableType === 'copper' ? `<span class="cable-type-label-muted">${escapeHtml(cableDescription)}</span>` : `<span class="cable-actions-toolbar"><input type="number" class="cable-fiber-count-input form-input" data-cable-id="${cableUniqueId}" min="1" max="96" value="${cableFiberN}" title="Число жил" aria-label="Число жил"><button type="button" class="btn-secondary btn-cable-palette-edit" data-cable-id="${cableUniqueId}" title="Цвета жил">${window.FiberCableConfig && window.FiberCableConfig.cablePaletteButtonHtml ? window.FiberCableConfig.cablePaletteButtonHtml() : 'Цвета'}</button></span>`) : `<span class="cable-type-label-muted">${escapeHtml(cableDescription)}</span>`}
-                                ${isEditMode ? `<button class="btn-delete-cable" data-cable-id="${cableUniqueId}" title="Удалить кабель">✕</button>` : ''}
+                                ${modalIsEditMode() ? (cableType === 'copper' ? `<span class="cable-type-label-muted">${escapeHtml(cableDescription)}</span>` : `<span class="cable-actions-toolbar"><input type="number" class="cable-fiber-count-input form-input" data-cable-id="${cableUniqueId}" min="1" max="96" value="${cableFiberN}" title="Число жил" aria-label="Число жил"><button type="button" class="btn-secondary btn-cable-palette-edit" data-cable-id="${cableUniqueId}" title="Цвета жил">${window.FiberCableConfig && window.FiberCableConfig.cablePaletteButtonHtml ? window.FiberCableConfig.cablePaletteButtonHtml() : 'Цвета'}</button></span>`) : `<span class="cable-type-label-muted">${escapeHtml(cableDescription)}</span>`}
+                                ${modalIsEditMode() ? `<button class="btn-delete-cable" data-cable-id="${cableUniqueId}" title="Удалить кабель">✕</button>` : ''}
                             </div>
                         </div>
                         <div class="fibers-list">
@@ -10220,7 +10371,7 @@ function showObjectInfo(obj) {
                                 <div class="fiber-color" style="background-color: ${fiber.color}; ${isUsed ? 'opacity: 0.5; border: 2px dashed #dc2626;' : (fiber.hasBlackRing ? 'border: 2px solid #000;' : '')}"></div>
                                 <span class="fiber-label">Жила ${fiber.number}: ${fiber.name} ${isUsed ? '<span class="fiber-status">(используется)</span>' : '<span class="fiber-status fiber-free-text">(свободна)</span>'}</span>
                             </div>
-                            ${!isUsed && isEditMode && type !== 'sleeve' && type !== 'cross' && type !== 'olt' && type !== 'splitter' && type !== 'onu' && type !== 'camera' && type !== 'mediaConverter' ? `<button class="btn-continue-cable" data-cable-id="${cableUniqueId}" data-fiber-number="${fiber.number}" title="Продолжить кабель с этой жилой">→</button>` : ''}
+                            ${!isUsed && modalIsEditMode() && type !== 'sleeve' && type !== 'cross' && type !== 'olt' && type !== 'splitter' && type !== 'onu' && type !== 'camera' && type !== 'mediaConverter' ? `<button class="btn-continue-cable" data-cable-id="${cableUniqueId}" data-fiber-number="${fiber.number}" title="Продолжить кабель с этой жилой">→</button>` : ''}
                         </div>
                     `;
                 });
@@ -10255,13 +10406,15 @@ function showObjectInfo(obj) {
         if (modalInfo.querySelector('.trace-show-on-map-btn')) attachTraceShowOnMapHandlers(modalInfo);
         if (window.CameraPlayer) {
             CameraPlayer.initCameraCard(modalInfo, obj, {
-                isEditMode: isEditMode,
+                isEditMode: modalIsEditMode(),
                 getObj: function() { return currentModalObject; }
             });
         }
     }
     modal.style.display = 'flex';
     modal.classList.add('modal--centered');
+    updateModalLockBanner(getObjectUniqueId(obj));
+    applyObjectLocksToMapDraggable();
     if (typeof window.initPanelPlexusCanvases === 'function') {
         requestAnimationFrame(function () { window.initPanelPlexusCanvases(modal); });
     }
@@ -10413,6 +10566,12 @@ function buildSupportCardContent(supportObj, isEditMode) {
 }
 
 function showSupportInfo(supportObj) {
+    applyModalEditModeForObject(supportObj, function() {
+        showSupportInfoBody(supportObj);
+    });
+}
+
+function showSupportInfoBody(supportObj) {
     currentModalObject = supportObj;
 
     var supportName = supportObj.properties.get('name') || '';
@@ -10424,7 +10583,7 @@ function showSupportInfo(supportObj) {
     updateInfoModalChrome(waypointType, supportName);
 
     var modalInfoEl = document.getElementById('modalInfo');
-    modalInfoEl.innerHTML = buildSupportCardContent(supportObj, isEditMode);
+    modalInfoEl.innerHTML = buildSupportCardContent(supportObj, modalIsEditMode());
     bindCableSplitSleeveFields(modalInfoEl);
 
     resetInfoModalFiberLayout();
@@ -10433,6 +10592,8 @@ function showSupportInfo(supportObj) {
     if (modal) {
         modal.style.display = 'flex';
         modal.classList.add('modal--centered');
+        updateModalLockBanner(getObjectUniqueId(supportObj));
+        applyObjectLocksToMapDraggable();
         if (typeof window.initPanelPlexusCanvases === 'function') {
             requestAnimationFrame(function () { window.initPanelPlexusCanvases(modal); });
         }
@@ -16470,6 +16631,11 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
     );
     
     if (!cable) return;
+
+    if (!(opts && opts.skipSync) && cableUniqueId && isObjectLockedByOther(cableUniqueId)) {
+        if (typeof showWarning === 'function') showWarning('Кабель редактирует другой пользователь', 'Удаление недоступно');
+        return;
+    }
 
     clearCopperCableOccupancyForCableId(cableUniqueId);
 

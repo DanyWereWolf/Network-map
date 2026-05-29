@@ -4242,6 +4242,36 @@ button {
     opacity: 0.9;
 }
 
+.object-lock-banner {
+    margin: 8px 0 0;
+    padding: 6px 10px;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+
+.object-lock-banner--mine {
+    border-color: rgba(34, 197, 94, 0.35);
+    background: rgba(34, 197, 94, 0.12);
+    color: var(--text-primary);
+}
+
+.object-lock-banner--remote {
+    border-color: rgba(245, 158, 11, 0.4);
+    background: rgba(245, 158, 11, 0.12);
+    color: var(--text-primary);
+}
+
+.fiber-modal-header--workspace .object-lock-banner,
+.fiber-modal-header--device .object-lock-banner {
+    color: rgba(255, 255, 255, 0.95);
+    border-color: rgba(255, 255, 255, 0.25);
+    background: rgba(0, 0, 0, 0.2);
+}
+
 .fiber-modal-header--workspace .fiber-modal-header-text h2,
 .fiber-modal-header--workspace .fiber-modal-header-sub,
 .fiber-modal-header--workspace .close {

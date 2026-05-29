@@ -1786,6 +1786,92 @@ const wss = new WebSocket.Server({ server, path: '/sync' });
 const syncClientNames = new Map();
 const syncClientUserIds = new Map();
 const syncClientOrgIds = new Map();
+const objectLocksByOrg = {};
+const OBJECT_LOCK_TTL_MS = 3 * 60 * 1000;
+
+function getOrgObjectLocks(orgId) {
+    if (!orgId) return null;
+    if (!objectLocksByOrg[orgId]) objectLocksByOrg[orgId] = {};
+    return objectLocksByOrg[orgId];
+}
+
+function pruneStaleObjectLocks(orgId) {
+    var locks = getOrgObjectLocks(orgId);
+    if (!locks) return;
+    var now = Date.now();
+    Object.keys(locks).forEach(function(uid) {
+        var lock = locks[uid];
+        if (!lock || now - (lock.at || 0) > OBJECT_LOCK_TTL_MS) delete locks[uid];
+    });
+}
+
+function collectObjectLocksList(orgId) {
+    pruneStaleObjectLocks(orgId);
+    var locks = getOrgObjectLocks(orgId);
+    if (!locks) return [];
+    return Object.keys(locks).map(function(uid) {
+        var lock = locks[uid];
+        return {
+            uniqueId: uid,
+            clientId: lock.clientId,
+            userId: lock.userId != null ? lock.userId : null,
+            displayName: lock.displayName || 'Участник',
+            at: lock.at
+        };
+    });
+}
+
+function broadcastObjectLocks(orgId) {
+    if (!orgId) return;
+    var list = collectObjectLocksList(orgId);
+    wss.clients.forEach(function(client) {
+        if (client.readyState !== WebSocket.OPEN || client.orgId !== orgId) return;
+        try {
+            client.send(JSON.stringify({ type: 'object_locks', locks: list }));
+        } catch (e) {}
+    });
+}
+
+function releaseObjectLocksForClient(clientId, orgId) {
+    if (!orgId) return false;
+    var locks = getOrgObjectLocks(orgId);
+    if (!locks) return false;
+    var changed = false;
+    Object.keys(locks).forEach(function(uid) {
+        if (locks[uid] && locks[uid].clientId === clientId) {
+            delete locks[uid];
+            changed = true;
+        }
+    });
+    return changed;
+}
+
+function tryAcquireObjectLock(orgId, clientId, uniqueId, meta) {
+    if (!orgId || !clientId || !uniqueId) return { ok: false };
+    pruneStaleObjectLocks(orgId);
+    var locks = getOrgObjectLocks(orgId);
+    var existing = locks[uniqueId];
+    var now = Date.now();
+    if (existing && existing.clientId !== clientId && now - (existing.at || 0) <= OBJECT_LOCK_TTL_MS) {
+        return { ok: false, lock: existing };
+    }
+    locks[uniqueId] = {
+        clientId: clientId,
+        userId: meta.userId != null ? meta.userId : null,
+        displayName: meta.displayName || 'Участник',
+        at: now
+    };
+    return { ok: true, lock: locks[uniqueId] };
+}
+
+function tryReleaseObjectLock(orgId, clientId, uniqueId) {
+    if (!orgId || !clientId || !uniqueId) return false;
+    var locks = getOrgObjectLocks(orgId);
+    var existing = locks[uniqueId];
+    if (!existing || existing.clientId !== clientId) return false;
+    delete locks[uniqueId];
+    return true;
+}
 
 function isSyncClientAdmin(clientId) {
     const userId = syncClientUserIds.get(clientId);
@@ -2043,6 +2129,9 @@ wss.on('connection', (ws, req) => {
                     var statePayload = { type: 'state', clientId: state.clientId, data: state.data };
                     if (groupNames && (groupNames.cross || groupNames.node)) statePayload.groupNames = groupNames;
                     try { ws.send(JSON.stringify(statePayload)); } catch (e) {}
+                    try {
+                        ws.send(JSON.stringify({ type: 'object_locks', locks: collectObjectLocksList(orgId) }));
+                    } catch (eLocks) {}
                     sendOrgChatHistory(ws, orgId);
                 }
                 setImmediate(function() { broadcastSyncClients(orgId); });
@@ -2090,6 +2179,33 @@ wss.on('connection', (ws, req) => {
                         try { client.send(JSON.stringify({ type: 'groupNames', groupNames: msg.groupNames })); } catch (e) {}
                     }
                 });
+                return;
+            }
+            if (msg.type === 'lock_object' && msg.uniqueId && orgId) {
+                if (!isSyncClientAdmin(clientId)) return;
+                var lockUid = String(msg.uniqueId).trim();
+                if (!lockUid) return;
+                var lockMeta = {
+                    userId: syncClientUserIds.get(clientId) || null,
+                    displayName: syncClientNames.get(clientId) || 'Участник'
+                };
+                var lockResult = tryAcquireObjectLock(orgId, clientId, lockUid, lockMeta);
+                try {
+                    ws.send(JSON.stringify({
+                        type: 'lock_result',
+                        uniqueId: lockUid,
+                        ok: !!lockResult.ok,
+                        lockedBy: lockResult.ok ? null : (lockResult.lock && lockResult.lock.displayName) || 'Участник'
+                    }));
+                } catch (eLockRes) {}
+                if (lockResult.ok) broadcastObjectLocks(orgId);
+                return;
+            }
+            if (msg.type === 'unlock_object' && msg.uniqueId && orgId) {
+                if (!isSyncClientAdmin(clientId)) return;
+                var unlockUid = String(msg.uniqueId).trim();
+                if (!unlockUid) return;
+                if (tryReleaseObjectLock(orgId, clientId, unlockUid)) broadcastObjectLocks(orgId);
                 return;
             }
             if (msg.type === 'op' && msg.op && orgId) {
@@ -2152,6 +2268,10 @@ wss.on('connection', (ws, req) => {
         });
     });
     ws.on('close', function() {
+        var closedOrgId = ws.orgId;
+        if (closedOrgId && releaseObjectLocksForClient(clientId, closedOrgId)) {
+            setImmediate(function() { broadcastObjectLocks(closedOrgId); });
+        }
         syncClientNames.delete(clientId);
         syncClientUserIds.delete(clientId);
         syncClientOrgIds.delete(clientId);

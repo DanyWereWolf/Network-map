@@ -24,6 +24,8 @@
     var SUPPRESS_STATE_AFTER_OP_MS = 1200;
     var renderUsersListTimer = null;
     var RENDER_USERS_DEBOUNCE_MS = 80;
+    var pendingLockRequests = {};
+    var remoteObjectLocks = {};
 
     function getDefaultSyncUrl() {
         if (typeof window !== 'undefined' && window.location && window.location.host) {
@@ -203,6 +205,14 @@
             }
             pendingCursorsUi = null;
             window.syncOnlineUserIds = [];
+            remoteObjectLocks = {};
+            window.syncRemoteObjectLocks = remoteObjectLocks;
+            Object.keys(pendingLockRequests).forEach(function(uid) {
+                var cb = pendingLockRequests[uid];
+                delete pendingLockRequests[uid];
+                if (cb) cb(false, null);
+            });
+            if (typeof window.onSyncObjectLocks === 'function') window.onSyncObjectLocks(remoteObjectLocks);
             if (typeof window.updateCollaboratorCursors === 'function') window.updateCollaboratorCursors([]);
             updateSyncUIStatus(false);
             updateSyncOnlineList([]);
@@ -226,6 +236,24 @@
                 var msg = JSON.parse(raw);
                 if (msg.type === 'yourId' && msg.clientId) {
                     myClientId = msg.clientId;
+                    window.syncMyClientId = myClientId;
+                    return;
+                }
+                if (msg.type === 'object_locks' && Array.isArray(msg.locks)) {
+                    remoteObjectLocks = {};
+                    msg.locks.forEach(function(lock) {
+                        if (lock && lock.uniqueId) remoteObjectLocks[lock.uniqueId] = lock;
+                    });
+                    window.syncRemoteObjectLocks = remoteObjectLocks;
+                    if (typeof window.onSyncObjectLocks === 'function') window.onSyncObjectLocks(remoteObjectLocks);
+                    return;
+                }
+                if (msg.type === 'lock_result' && msg.uniqueId != null) {
+                    var lockCb = pendingLockRequests[msg.uniqueId];
+                    if (lockCb) {
+                        delete pendingLockRequests[msg.uniqueId];
+                        lockCb(!!msg.ok, msg.lockedBy || null);
+                    }
                     return;
                 }
                 if (msg.type === 'clients' && Array.isArray(msg.clients)) {
@@ -426,6 +454,38 @@
         }
     }
 
+    function requestObjectLock(uniqueId, callback) {
+        if (!uniqueId || typeof callback !== 'function') return;
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            callback(true, null);
+            return;
+        }
+        var existing = remoteObjectLocks[uniqueId];
+        if (existing && existing.clientId && existing.clientId !== myClientId) {
+            callback(false, existing.displayName || 'Участник');
+            return;
+        }
+        pendingLockRequests[uniqueId] = callback;
+        try {
+            ws.send(JSON.stringify({ type: 'lock_object', uniqueId: uniqueId }));
+        } catch (e) {
+            delete pendingLockRequests[uniqueId];
+            callback(false, null);
+        }
+        setTimeout(function() {
+            if (!pendingLockRequests[uniqueId]) return;
+            delete pendingLockRequests[uniqueId];
+            callback(false, null);
+        }, 8000);
+    }
+
+    function releaseObjectLock(uniqueId) {
+        if (!uniqueId || !ws || ws.readyState !== WebSocket.OPEN) return;
+        try {
+            ws.send(JSON.stringify({ type: 'unlock_object', uniqueId: uniqueId }));
+        } catch (e) {}
+    }
+
     function sendChat(payload) {
         if (!ws || ws.readyState !== WebSocket.OPEN) return false;
         var text = '';
@@ -457,6 +517,10 @@
     window.syncSendOp = sendOp;
     window.syncSendChat = sendChat;
     window.syncSendCursor = sendCursorPosition;
+    window.syncRequestObjectLock = requestObjectLock;
+    window.syncReleaseObjectLock = releaseObjectLock;
+    window.syncRemoteObjectLocks = remoteObjectLocks;
+    window.syncMyClientId = myClientId;
     window.syncConnect = connect;
     window.syncDisconnect = disconnect;
     window.syncAutoConnectIfSaved = autoConnectIfSaved;
