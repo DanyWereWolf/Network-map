@@ -1703,6 +1703,13 @@ app.get('/pricing.html', (req, res) => {
     res.redirect(301, '/');
 });
 
+// Браузеры по умолчанию запрашивают /favicon.ico; в репозитории только favicon.svg
+app.get('/favicon.ico', (req, res) => {
+    res.type('image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.sendFile(path.join(__dirname, 'favicon.svg'));
+});
+
 // Раздача JS с явным Content-Type (избегаем text/html от прокси/404)
 app.use('/js', express.static(path.join(__dirname, 'js'), {
     setHeaders: function (res, filePath) {
