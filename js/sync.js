@@ -86,7 +86,9 @@
         var runApply = function() {
             window.syncMapIsApplying = true;
             try {
-                if (typeof applyRemoteState === 'function') applyRemoteState(data);
+                var applyFn = typeof applyRemoteState === 'function' ? applyRemoteState
+                    : (typeof window.applyRemoteState === 'function' ? window.applyRemoteState : null);
+                if (applyFn) applyFn(data);
                 updateSyncUIStatus(true);
                 if (typeof window.hideSyncRequiredOverlay === 'function') window.hideSyncRequiredOverlay();
             } catch (e) { updateSyncUIStatus(true); }
@@ -438,6 +440,10 @@
             return false;
         }
     }
+
+    window.syncShouldSendFullState = function() {
+        return !lastOpSendTime || (Date.now() - lastOpSendTime) >= SUPPRESS_STATE_AFTER_OP_MS;
+    };
 
     window.syncSendState = sendState;
     window.syncSendGroupNames = sendGroupNames;

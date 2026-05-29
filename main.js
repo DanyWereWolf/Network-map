@@ -15,96 +15,6 @@ function clearShowOnMapHighlight() {
     }
 }
 
-/** Макс. волокон по типу муфты (0 = без лимита / пользовательская). Список совпадает с формой добавления объекта. */
-function getDefaultMaxFibersForSleeveType(sleeveType) {
-    if (!sleeveType) return 0;
-    const sleeveMaxFibersMap = {
-        'SNR-FOSC-04': 4,
-        'SNR-FOSC-X': 12,
-        'SNR-FOSC-12': 12,
-        'SNR-FOSC-D': 24,
-        'SNR-FOSC-M': 48,
-        'SNR-FOSC-G': 72,
-        'SNR-FOSC-L': 96,
-        'SNR-FOSC-B': 144,
-        'SNR-FOSC-UF2': 144,
-        'SNR-FOSC-CV018': 36,
-        'SNR-FOSC-CV019': 36,
-        'SNR-FOSC-CV021': 96,
-        'SNR-FOSC-CV028A': 36,
-        'SNR-FOSC-CV037': 36,
-        'SNR-FOSC-Q-T': 36,
-        'SNR-FOSC-D-T': 24,
-        'SNR-FOSC-CH009': 24,
-        'SNR-FOSC-CH018': 36,
-        'SNR-FOSC-CH019': 36,
-        'SNR-FOSC-CH025': 24,
-        'SNR-FT-E': 12,
-        'МВОТ-108-3-Т-1-36': 108,
-        'МВОТ-216-4-Т-1-36': 216,
-        'МВОТ-3611-22-32-2К16': 32,
-        'МОГ-У-33-1К4845': 33,
-        'МКО-Ц8/С09-5SC': 18,
-        'МТОК-Ф3/216-1КТ3645-К': 216,
-        'KSC-MURR': 12,
-        '101-01-18': 18,
-        'custom': 0
-    };
-    return sleeveMaxFibersMap[sleeveType] || 0;
-}
-
-/** HTML option-элементов для селекта типа муфты (как в index.html). */
-function getSleeveTypeSelectOptionsHtml(selectedValue) {
-    var rows = [
-        ['SNR-FOSC-04', 'SNR-FOSC-04 (4 волокна)'],
-        ['SNR-FOSC-X', 'SNR-FOSC-X (компактная)'],
-        ['SNR-FOSC-12', 'SNR-FOSC-12 (12 волокон)'],
-        ['SNR-FOSC-D', 'SNR-FOSC-D (до 24 волокон)'],
-        ['SNR-FOSC-M', 'SNR-FOSC-M (до 48 волокон)'],
-        ['SNR-FOSC-G', 'SNR-FOSC-G (до 72 волокон)'],
-        ['SNR-FOSC-L', 'SNR-FOSC-L (до 96 волокон)'],
-        ['SNR-FOSC-B', 'SNR-FOSC-B (до 144 волокон)'],
-        ['SNR-FOSC-UF2', 'SNR-FOSC-UF2 (универсальная)'],
-        ['SNR-FOSC-CV018', 'SNR-FOSC-CV018 (купольная)'],
-        ['SNR-FOSC-CV019', 'SNR-FOSC-CV019 (тупиковая)'],
-        ['SNR-FOSC-CV021', 'SNR-FOSC-CV021 (96 волокон)'],
-        ['SNR-FOSC-CV028A', 'SNR-FOSC-CV028A'],
-        ['SNR-FOSC-CV037', 'SNR-FOSC-CV037'],
-        ['SNR-FOSC-Q-T', 'SNR-FOSC-Q-T'],
-        ['SNR-FOSC-D-T', 'SNR-FOSC-D-T'],
-        ['SNR-FOSC-CH009', 'SNR-FOSC-CH009 (проходная)'],
-        ['SNR-FOSC-CH018', 'SNR-FOSC-CH018 (проходная)'],
-        ['SNR-FOSC-CH019', 'SNR-FOSC-CH019 (проходная)'],
-        ['SNR-FOSC-CH025', 'SNR-FOSC-CH025 (проходная)'],
-        ['SNR-FT-E', 'SNR-FT-E'],
-        ['МВОТ-108-3-Т-1-36', 'МВОТ-108-3-Т-1-36 (108 волокон)'],
-        ['МВОТ-216-4-Т-1-36', 'МВОТ-216-4-Т-1-36 (216 волокон)'],
-        ['МВОТ-3611-22-32-2К16', 'МВОТ-3611-22-32-2К16'],
-        ['МОГ-У-33-1К4845', 'МОГ-У-33-1К4845 ССД'],
-        ['МКО-Ц8/С09-5SC', 'МКО-Ц8/С09-5SC (кросс-муфта)'],
-        ['МТОК-Ф3/216-1КТ3645-К', 'МТОК-Ф3/216-1КТ3645-К'],
-        ['KSC-MURR', 'KSC LIGHT PON МУРР (до 12 волокон)'],
-        ['101-01-18', '101-01-18 (кросс-муфта FTTH, до 18SC)'],
-        ['custom', 'Пользовательская']
-    ];
-    var sel = (selectedValue != null && selectedValue !== '') ? String(selectedValue) : '';
-    var html = '';
-    if (!sel) {
-        html += '<option value="" selected>— Не указано —</option>';
-    }
-    var found = false;
-    for (var i = 0; i < rows.length; i++) {
-        var v = rows[i][0];
-        var lab = rows[i][1];
-        if (v === sel) found = true;
-        html += '<option value="' + escapeHtml(v) + '"' + (v === sel ? ' selected' : '') + '>' + escapeHtml(lab) + '</option>';
-    }
-    if (sel && !found) {
-        html += '<option value="' + escapeHtml(sel) + '" selected>' + escapeHtml(sel) + '</option>';
-    }
-    return html;
-}
-
 /** Поля выбора типа муфты при разрезе кабеля (опора / линия кабеля). */
 function buildCableSplitSleeveFieldsHtml(selectedType) {
     var sel = selectedType || 'SNR-FOSC-L';
@@ -864,6 +774,125 @@ function openUsersModal() {
     const modal = document.getElementById('usersModal');
     modal.style.display = 'block';
     renderUsersList();
+    loadOrgSecurityPanel();
+}
+
+var orgSecurityPendingSecret = '';
+
+function isOrgMapAdmin() {
+    return !!(currentUser && currentUser.role === 'admin' && currentUser.organizationId);
+}
+
+function loadOrgSecurityPanel() {
+    var section = document.getElementById('orgSecuritySection');
+    if (!section) return;
+    if (!isOrgMapAdmin() || !getApiBase()) {
+        section.style.display = 'none';
+        return;
+    }
+    section.style.display = 'block';
+    var statusEl = document.getElementById('orgSecurityStatus');
+    if (statusEl) statusEl.textContent = 'Загрузка…';
+    fetch(getApiBase() + '/api/organizations/me/security', {
+        headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+    }).then(function(r) { return r.json(); })
+    .then(function(body) {
+        if (body.error) throw new Error(body.error);
+        renderOrgSecurityPanel(!!body.twoFactorEnabled);
+    }).catch(function(e) {
+        if (statusEl) statusEl.textContent = e.message || 'Не удалось загрузить настройки';
+    });
+}
+
+function renderOrgSecurityPanel(enabled) {
+    var statusEl = document.getElementById('orgSecurityStatus');
+    var setupBtn = document.getElementById('org2faSetupBtn');
+    var disableBtn = document.getElementById('org2faDisableBtn');
+    var setupPanel = document.getElementById('orgSecuritySetup');
+    var disablePanel = document.getElementById('org2faDisablePanel');
+    orgSecurityPendingSecret = '';
+    if (setupPanel) setupPanel.style.display = 'none';
+    if (disablePanel) disablePanel.style.display = 'none';
+    if (statusEl) {
+        statusEl.textContent = enabled
+            ? '2FA включена: при входе все пользователи организации вводят код из общего приложения-аутентификатора.'
+            : '2FA выключена.';
+        statusEl.className = 'org-security-status' + (enabled ? ' is-on' : '');
+    }
+    if (setupBtn) setupBtn.style.display = enabled ? 'none' : 'inline-flex';
+    if (disableBtn) disableBtn.style.display = enabled ? 'inline-flex' : 'none';
+}
+
+function startOrg2faSetup() {
+    if (!getApiBase()) return;
+    fetch(getApiBase() + '/api/organizations/me/security/2fa/setup', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + getAuthToken(), 'Content-Type': 'application/json' }
+    }).then(function(r) { return r.json(); })
+    .then(function(body) {
+        if (body.error) throw new Error(body.error);
+        orgSecurityPendingSecret = body.secret || '';
+        var setupPanel = document.getElementById('orgSecuritySetup');
+        var qr = document.getElementById('org2faQr');
+        var secretEl = document.getElementById('org2faSecret');
+        if (setupPanel) setupPanel.style.display = 'block';
+        if (qr) {
+            qr.src = body.qrCodeUrl || '';
+            qr.style.display = body.qrCodeUrl ? 'block' : 'none';
+        }
+        if (secretEl) secretEl.textContent = orgSecurityPendingSecret;
+        var codeEl = document.getElementById('org2faEnableCode');
+        if (codeEl) { codeEl.value = ''; codeEl.focus(); }
+    }).catch(function(e) {
+        if (typeof showError === 'function') showError(e.message || 'Ошибка настройки 2FA');
+    });
+}
+
+function enableOrg2fa() {
+    var code = (document.getElementById('org2faEnableCode') && document.getElementById('org2faEnableCode').value || '').replace(/\s/g, '');
+    if (!orgSecurityPendingSecret || !/^\d{6,8}$/.test(code)) {
+        if (typeof showWarning === 'function') showWarning('Введите код из приложения после сканирования QR', '2FA');
+        return;
+    }
+    fetch(getApiBase() + '/api/organizations/me/security/2fa/enable', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + getAuthToken(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secret: orgSecurityPendingSecret, totpCode: code })
+    }).then(function(r) { return r.json().then(function(b) { return { ok: r.ok, body: b }; }); })
+    .then(function(res) {
+        if (!res.ok) throw new Error((res.body && res.body.error) || 'Ошибка');
+        if (typeof showSuccess === 'function') showSuccess('Двухфакторная аутентификация включена');
+        renderOrgSecurityPanel(true);
+    }).catch(function(e) {
+        if (typeof showError === 'function') showError(e.message || 'Не удалось включить 2FA');
+    });
+}
+
+function disableOrg2fa() {
+    var panel = document.getElementById('org2faDisablePanel');
+    if (panel) panel.style.display = 'block';
+    var codeEl = document.getElementById('org2faDisableCode');
+    if (codeEl) { codeEl.value = ''; codeEl.focus(); }
+}
+
+function confirmDisableOrg2fa() {
+    var code = (document.getElementById('org2faDisableCode') && document.getElementById('org2faDisableCode').value || '').replace(/\s/g, '');
+    if (!/^\d{6,8}$/.test(code)) {
+        if (typeof showWarning === 'function') showWarning('Введите текущий код 2FA', '2FA');
+        return;
+    }
+    fetch(getApiBase() + '/api/organizations/me/security/2fa/disable', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + getAuthToken(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ totpCode: code })
+    }).then(function(r) { return r.json().then(function(b) { return { ok: r.ok, body: b }; }); })
+    .then(function(res) {
+        if (!res.ok) throw new Error((res.body && res.body.error) || 'Ошибка');
+        if (typeof showSuccess === 'function') showSuccess('2FA отключена');
+        renderOrgSecurityPanel(false);
+    }).catch(function(e) {
+        if (typeof showError === 'function') showError(e.message || 'Не удалось отключить 2FA');
+    });
 }
 
 function closeUsersModal() {
@@ -1406,6 +1435,35 @@ function setupUsersModalHandlers() {
         cancelUserEditBtn.addEventListener('click', closeUserEditModal);
     }
 
+    var org2faSetupBtn = document.getElementById('org2faSetupBtn');
+    if (org2faSetupBtn) org2faSetupBtn.addEventListener('click', startOrg2faSetup);
+    var org2faEnableBtn = document.getElementById('org2faEnableBtn');
+    if (org2faEnableBtn) org2faEnableBtn.addEventListener('click', enableOrg2fa);
+    var org2faCancelSetupBtn = document.getElementById('org2faCancelSetupBtn');
+    if (org2faCancelSetupBtn) {
+        org2faCancelSetupBtn.addEventListener('click', function() {
+            orgSecurityPendingSecret = '';
+            var setupPanel = document.getElementById('orgSecuritySetup');
+            if (setupPanel) setupPanel.style.display = 'none';
+        });
+    }
+    var org2faDisableBtn = document.getElementById('org2faDisableBtn');
+    if (org2faDisableBtn) org2faDisableBtn.addEventListener('click', disableOrg2fa);
+    var org2faConfirmDisableBtn = document.getElementById('org2faConfirmDisableBtn');
+    if (org2faConfirmDisableBtn) org2faConfirmDisableBtn.addEventListener('click', confirmDisableOrg2fa);
+    var org2faCopySecretBtn = document.getElementById('org2faCopySecretBtn');
+    if (org2faCopySecretBtn) {
+        org2faCopySecretBtn.addEventListener('click', function() {
+            var secret = orgSecurityPendingSecret || (document.getElementById('org2faSecret') && document.getElementById('org2faSecret').textContent) || '';
+            if (!secret) return;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(secret).then(function() {
+                    if (typeof showSuccess === 'function') showSuccess('Секрет скопирован');
+                }).catch(function() {});
+            }
+        });
+    }
+
     var closeOrganizationsBtn = document.querySelector('.close-organizations');
     if (closeOrganizationsBtn) closeOrganizationsBtn.addEventListener('click', closeOrganizationsModal);
     var organizationsModalEl = document.getElementById('organizationsModal');
@@ -1770,7 +1828,9 @@ function setupEventListeners() {
     const objectNameInput = document.getElementById('objectName');
     if (objectNameInput) {
         objectNameInput.addEventListener('input', function() {
-            if (objectPlacementMode && (currentPlacementType === 'node' || currentPlacementType === 'sleeve')) {
+            if (!objectPlacementMode || !currentPlacementType) return;
+            var typesWithPlacementName = ['node', 'cross', 'sleeve', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter'];
+            if (typesWithPlacementName.indexOf(currentPlacementType) !== -1) {
                 currentPlacementName = this.value.trim();
             }
         });
@@ -1825,6 +1885,9 @@ function setupEventListeners() {
     }
 
     setupAccordions();
+
+    if (typeof loadCustomDeviceOptionsFromStorage === 'function') loadCustomDeviceOptionsFromStorage();
+    if (typeof refreshAllSleeveTypeSelects === 'function') refreshAllSleeveTypeSelects();
 
     initDeviceComboboxes(document);
 
@@ -1889,6 +1952,12 @@ let objectPlacementMode = false;
 let currentPlacementType = null;
 let currentPlacementName = null;
 let currentPlacementNodeKind = 'network';
+
+/** Имя из поля боковой панели (актуальное), иначе кэш при старте режима размещения. */
+function getPlacementObjectName() {
+    var inp = document.getElementById('objectName');
+    return (inp ? inp.value.trim() : '') || currentPlacementName || '';
+}
 let placementPanBlockClickUntil = 0;
 const placementPanPointer = { down: false, startX: 0, startY: 0, moved: false };
 const PLACEMENT_PAN_DRAG_THRESHOLD_PX = 5;
@@ -2358,8 +2427,7 @@ function handleMapClick(e) {
         const type = currentPlacementType || document.getElementById('objectType').value;
         
         if (type === 'node') {
-            
-            const name = currentPlacementName || document.getElementById('objectName').value.trim();
+            const name = getPlacementObjectName();
             if (name && findNodeByName(name)) {
                 if (typeof showError === 'function') showError('Узел сети с таким названием уже существует. Задайте другое название.', 'Дубликат узла');
                 else alert('Узел сети с таким названием уже существует. Задайте другое название.');
@@ -2372,12 +2440,12 @@ function handleMapClick(e) {
             currentPlacementName = name || '';
             currentPlacementNodeKind = nodeKind;
         } else if (type === 'sleeve') {
-            const sleeveName = currentPlacementName || (document.getElementById('objectName') && document.getElementById('objectName').value.trim()) || '';
+            const sleeveName = getPlacementObjectName();
             const sleeveType = document.getElementById('sleeveType').value;
             const maxFibers = parseInt(document.getElementById('sleeveMaxFibers').value) || 0;
             createObject(type, sleeveName || '', coords, { sleeveType: sleeveType, maxFibers: maxFibers });
         } else if (type === 'cross') {
-            const name = currentPlacementName || document.getElementById('objectName').value.trim();
+            const name = getPlacementObjectName();
             const crossPorts = parseInt(document.getElementById('crossPorts').value) || 24;
             var ccpElPl = document.getElementById('crossCopperPorts');
             var crossCopperPortsPl = ccpElPl ? (parseInt(ccpElPl.value, 10) || 0) : 0;
@@ -2390,8 +2458,7 @@ function handleMapClick(e) {
             const name = document.getElementById('objectName').value.trim();
             createObject(type, name || '', coords);
         } else if (type === 'olt') {
-            const nameInput = document.getElementById('objectName');
-            const name = currentPlacementName || (nameInput ? nameInput.value.trim() : '');
+            const name = getPlacementObjectName();
             const oltPortsEl = document.getElementById('oltPonPorts');
             const ponPorts = oltPortsEl ? (parseInt(oltPortsEl.value, 10) || 8) : 8;
             const manufacturer = (document.getElementById('oltManufacturer') && document.getElementById('oltManufacturer').value) ? document.getElementById('oltManufacturer').value.trim() : '';
@@ -2399,22 +2466,19 @@ function handleMapClick(e) {
             createObject(type, name || '', coords, { ponPorts: ponPorts, manufacturer: manufacturer, model: model });
             currentPlacementName = name || '';
         } else if (type === 'splitter') {
-            const nameInput = document.getElementById('objectName');
-            const name = currentPlacementName || (nameInput ? nameInput.value.trim() : '');
+            const name = getPlacementObjectName();
             const ratioEl = document.getElementById('splitterRatio');
             const splitRatio = ratioEl ? (parseInt(ratioEl.value, 10) || 8) : 8;
             createObject(type, name || '', coords, { splitRatio: splitRatio });
             currentPlacementName = name || '';
         } else if (type === 'onu') {
-            const nameInput = document.getElementById('objectName');
-            const name = currentPlacementName || (nameInput ? nameInput.value.trim() : '');
+            const name = getPlacementObjectName();
             const manufacturer = (document.getElementById('onuManufacturer') && document.getElementById('onuManufacturer').value) ? document.getElementById('onuManufacturer').value.trim() : '';
             const model = (document.getElementById('onuModel') && document.getElementById('onuModel').value) ? document.getElementById('onuModel').value.trim() : '';
             createObject(type, name || '', coords, { manufacturer: manufacturer, model: model });
             currentPlacementName = name || '';
         } else if (type === 'camera') {
-            const nameInput = document.getElementById('objectName');
-            const name = currentPlacementName || (nameInput ? nameInput.value.trim() : '');
+            const name = getPlacementObjectName();
             const manufacturer = (document.getElementById('cameraManufacturer') && document.getElementById('cameraManufacturer').value) ? document.getElementById('cameraManufacturer').value.trim() : '';
             const model = (document.getElementById('cameraModel') && document.getElementById('cameraModel').value) ? document.getElementById('cameraModel').value.trim() : '';
             var camOpts = { manufacturer: manufacturer, model: model };
@@ -2424,8 +2488,7 @@ function handleMapClick(e) {
             createObject(type, name || '', coords, camOpts);
             currentPlacementName = name || '';
         } else if (type === 'mediaConverter') {
-            const nameInputMc = document.getElementById('objectName');
-            const nameMc = currentPlacementName || (nameInputMc ? nameInputMc.value.trim() : '');
+            const nameMc = getPlacementObjectName();
             const manufacturerMc = (document.getElementById('mediaConverterManufacturer') && document.getElementById('mediaConverterManufacturer').value) ? document.getElementById('mediaConverterManufacturer').value.trim() : '';
             const modelMc = (document.getElementById('mediaConverterModel') && document.getElementById('mediaConverterModel').value) ? document.getElementById('mediaConverterModel').value.trim() : '';
             createObject(type, nameMc || '', coords, { manufacturer: manufacturerMc, model: modelMc });
@@ -7573,7 +7636,7 @@ function showCableInfo(cable) {
     html += '<label style="display: block; margin-bottom: 6px; font-weight: 600; color: var(--text-primary); font-size: 0.8125rem;">Название кабеля</label>';
     if (isEditMode) {
         html += `<input type="text" id="cableNameInput" class="form-input" value="${escapeHtml(cableName)}" placeholder="Введите название кабеля" 
-            onchange="updateCableName('${uniqueId}', this.value)">`;
+            oninput="updateCableName('${uniqueId}', this.value)" onchange="updateCableName('${uniqueId}', this.value)">`;
     } else {
         html += `<div style="padding: 10px 12px; background: var(--bg-tertiary); border-radius: 6px; font-size: 0.875rem; border: 1px solid var(--border-color); color: var(--text-primary);">${cableName ? escapeHtml(cableName) : '<span style="color: var(--text-muted); font-style: italic;">Не задано</span>'}</div>`;
     }
@@ -8807,7 +8870,19 @@ function applyOperationToMap(op) {
         });
         if (obj) {
             if (op.data.geometry && obj.geometry) obj.geometry.setCoordinates(op.data.geometry);
-            if (op.data.name != null) obj.properties.set('name', op.data.name);
+            if (op.data.name != null) {
+                var opName = op.data.name;
+                obj.properties.set('name', opName);
+                var opType = obj.properties.get('type');
+                if (opType === 'cross') {
+                    obj.properties.set('balloonContent', opName ? 'Оптический кросс: ' + opName : 'Оптический кросс');
+                } else if (opType === 'sleeve') {
+                    obj.properties.set('balloonContent', opName ? 'Кабельная муфта: ' + opName : 'Кабельная муфта');
+                } else if (opType === 'node') {
+                    obj.properties.set('balloonContent', opName ? 'Узел сети: ' + opName : 'Узел сети');
+                }
+                if (typeof updateObjectLabel === 'function') updateObjectLabel(obj, opName);
+            }
             var lbl = obj.properties.get('label');
             if (lbl && lbl.geometry && op.data.geometry) lbl.geometry.setCoordinates(op.data.geometry);
             updateConnectedCables(obj);
@@ -10266,10 +10341,11 @@ function refreshObjectModal(obj) {
 }
 
 function setupEditAndDeleteListeners() {
+    bindModalObjectNameEditors();
     if (!window._modalSwitchCatalogDelegates) {
-        window._modalSwitchCatalogDelegates = true;
-        var modalRoot = document.getElementById('modalInfo');
+        var modalRoot = document.getElementById('infoModal');
         if (modalRoot) {
+            window._modalSwitchCatalogDelegates = true;
             modalRoot.addEventListener('input', function(e) {
                 var t = e.target;
                 if (!t || !t.id) return;
@@ -10308,25 +10384,10 @@ function setupEditAndDeleteListeners() {
                 var mod = (t.value || '').trim();
                 var n = typeof getSwitchModelDefaultPortCount === 'function' ? getSwitchModelDefaultPortCount(mfr, mod) : null;
                 if (n != null && n >= 1 && n <= 96 && pcEl) pcEl.value = String(n);
-            });
+            }, true);
         }
     }
 
-    const editNodeNameInput = document.getElementById('editNodeName');
-    if (editNodeNameInput) {
-        editNodeNameInput.addEventListener('input', function() {
-            if (!currentModalObject) return;
-            const newName = this.value.trim();
-            if (newName && findNodeByName(newName, currentModalObject)) {
-                return;
-            }
-            currentModalObject.properties.set('name', newName);
-            currentModalObject.properties.set('balloonContent', newName ? `Узел сети: ${newName}` : 'Узел сети');
-            updateNodeLabel(currentModalObject, newName);
-            saveData();
-        });
-    }
-    
     const editNodeKindSelect = document.getElementById('editNodeKind');
     if (editNodeKindSelect) {
         editNodeKindSelect.addEventListener('change', function() {
@@ -10360,17 +10421,6 @@ function setupEditAndDeleteListeners() {
         });
     }
 
-    var editOltNameInput = document.getElementById('editOltName');
-    if (editOltNameInput) {
-        editOltNameInput.addEventListener('input', function() {
-            if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
-            var newName = this.value.trim();
-            currentModalObject.properties.set('name', newName);
-            currentModalObject.properties.set('balloonContent', newName ? 'OLT: ' + newName : 'OLT (GPON)');
-            updateObjectLabel(currentModalObject, newName);
-            saveData();
-        });
-    }
     var editOltManufacturer = document.getElementById('editOltManufacturer');
     if (editOltManufacturer) {
         if (typeof preventPasswordSuggestions === 'function') preventPasswordSuggestions(editOltManufacturer);
@@ -10398,17 +10448,6 @@ function setupEditAndDeleteListeners() {
     var editOnuComment = document.getElementById('editOnuComment');
     if (editOnuComment) editOnuComment.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'onu') { currentModalObject.properties.set('comment', this.value || ''); saveData(); } });
 
-    var editCameraNameInput = document.getElementById('editCameraName');
-    if (editCameraNameInput) {
-        editCameraNameInput.addEventListener('input', function() {
-            if (!currentModalObject || currentModalObject.properties.get('type') !== 'camera') return;
-            const newName = this.value.trim();
-            currentModalObject.properties.set('name', newName);
-            currentModalObject.properties.set('balloonContent', newName ? 'Камера: ' + newName : 'Камера');
-            updateObjectLabel(currentModalObject, newName);
-            saveData();
-        });
-    }
     var editCameraManufacturer = document.getElementById('editCameraManufacturer');
     if (editCameraManufacturer) {
         if (typeof preventPasswordSuggestions === 'function') preventPasswordSuggestions(editCameraManufacturer);
@@ -10423,17 +10462,6 @@ function setupEditAndDeleteListeners() {
     var editCameraComment = document.getElementById('editCameraComment');
     if (editCameraComment) editCameraComment.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'camera') { currentModalObject.properties.set('comment', this.value || ''); saveData(); } });
 
-    var editMediaConverterNameInput = document.getElementById('editMediaConverterName');
-    if (editMediaConverterNameInput) {
-        editMediaConverterNameInput.addEventListener('input', function() {
-            if (!currentModalObject || currentModalObject.properties.get('type') !== 'mediaConverter') return;
-            const newNameMc = this.value.trim();
-            currentModalObject.properties.set('name', newNameMc);
-            currentModalObject.properties.set('balloonContent', newNameMc ? 'Медиаконвертер: ' + newNameMc : 'Медиаконвертер');
-            updateObjectLabel(currentModalObject, newNameMc);
-            saveData();
-        });
-    }
     var editMediaConverterManufacturer = document.getElementById('editMediaConverterManufacturer');
     if (editMediaConverterManufacturer) {
         if (typeof preventPasswordSuggestions === 'function') preventPasswordSuggestions(editMediaConverterManufacturer);
@@ -10447,18 +10475,6 @@ function setupEditAndDeleteListeners() {
     }
     var editMediaConverterComment = document.getElementById('editMediaConverterComment');
     if (editMediaConverterComment) editMediaConverterComment.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'mediaConverter') { currentModalObject.properties.set('comment', this.value || ''); saveData(); } });
-
-    const editCrossNameInput = document.getElementById('editCrossName');
-    if (editCrossNameInput) {
-        editCrossNameInput.addEventListener('input', function() {
-            if (!currentModalObject) return;
-            const newName = this.value.trim();
-            currentModalObject.properties.set('name', newName);
-            currentModalObject.properties.set('balloonContent', newName ? `Оптический кросс: ${newName}` : 'Оптический кросс');
-            updateNodeLabel(currentModalObject, newName);
-            saveData();
-        });
-    }
 
     var editCrossCopperPortsEl = document.getElementById('editCrossCopperPorts');
     if (editCrossCopperPortsEl) {
@@ -10482,20 +10498,6 @@ function setupEditAndDeleteListeners() {
             currentModalObject.properties.set('crossCopperPorts', newVal);
             saveData();
             if (typeof rebuildAllCopperPortUsageFromCables === 'function') rebuildAllCopperPortUsageFromCables();
-            if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
-        });
-    }
-
-    const editSleeveNameInput = document.getElementById('editSleeveName');
-    if (editSleeveNameInput) {
-        editSleeveNameInput.addEventListener('input', function() {
-            if (!currentModalObject) return;
-            if (currentModalObject.properties.get('type') !== 'sleeve') return;
-            const newName = this.value.trim();
-            currentModalObject.properties.set('name', newName);
-            currentModalObject.properties.set('balloonContent', newName ? 'Кабельная муфта: ' + newName : 'Кабельная муфта');
-            updateObjectLabel(currentModalObject, newName);
-            saveData();
             if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
         });
     }
@@ -10530,32 +10532,6 @@ function setupEditAndDeleteListeners() {
         });
     }
     
-    const editSplitterNameInput = document.getElementById('editSplitterName');
-    if (editSplitterNameInput) {
-        editSplitterNameInput.addEventListener('input', function() {
-            if (!currentModalObject) return;
-            if (currentModalObject.properties.get('type') !== 'splitter') return;
-            const newName = this.value.trim();
-            currentModalObject.properties.set('name', newName);
-            currentModalObject.properties.set('balloonContent', newName ? 'Сплиттер: ' + newName : 'Сплиттер');
-            updateObjectLabel(currentModalObject, newName);
-            saveData();
-        });
-    }
-    
-    const editOnuNameInput = document.getElementById('editOnuName');
-    if (editOnuNameInput) {
-        editOnuNameInput.addEventListener('input', function() {
-            if (!currentModalObject) return;
-            if (currentModalObject.properties.get('type') !== 'onu') return;
-            const newName = this.value.trim();
-            currentModalObject.properties.set('name', newName);
-            currentModalObject.properties.set('balloonContent', newName ? 'ONU: ' + newName : 'ONU');
-            updateObjectLabel(currentModalObject, newName);
-            saveData();
-        });
-    }
-
     var btnAddNodeSwitch = document.getElementById('btnAddNodeSwitch');
     if (btnAddNodeSwitch) {
         btnAddNodeSwitch.addEventListener('click', function() {
@@ -10618,21 +10594,7 @@ function setupEditAndDeleteListeners() {
             if (!currentModalObject) return;
             var wt = currentModalObject.properties.get('type');
             if (wt !== 'support' && wt !== 'attachment') return;
-            var newName = (document.getElementById('editSupportName') && document.getElementById('editSupportName').value) ? document.getElementById('editSupportName').value.trim() : '';
-            currentModalObject.properties.set('name', newName);
-            if (wt === 'attachment') {
-                currentModalObject.properties.set('balloonContent', newName ? 'Крепление узлов: ' + newName : 'Крепление узлов');
-            } else {
-                currentModalObject.properties.set('balloonContent', newName ? 'Опора связи: ' + newName : 'Опора связи');
-            }
-            updateSupportLabel(currentModalObject, newName);
-            var lbl = currentModalObject.properties.get('label');
-            if (lbl && newName) {
-                try { myMap.geoObjects.add(lbl); } catch (e) {}
-            } else if (lbl && !newName) {
-                try { myMap.geoObjects.remove(lbl); } catch (e) {}
-            }
-            saveData();
+            flushNameFieldIfChanged('editSupportName', applySupportNameChange);
             showSupportInfo(currentModalObject);
         });
     }
@@ -10640,6 +10602,7 @@ function setupEditAndDeleteListeners() {
     const saveChangesBtn = document.getElementById('saveChangesBtn');
     if (saveChangesBtn) {
         saveChangesBtn.addEventListener('click', function() {
+            flushModalNamesFromEditor();
             saveData();
             if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
             showInfo('Изменения сохранены', 'Сохранено');
@@ -10797,6 +10760,199 @@ function duplicateObject(obj) {
 
 function updateNodeLabel(placemark, name) {
     updateObjectLabel(placemark, name);
+}
+
+function syncObjectNameOp(obj, trimmed) {
+    if (!obj || !obj.properties) return;
+    var uid = typeof getObjectUniqueId === 'function' ? getObjectUniqueId(obj) : obj.properties.get('uniqueId');
+    if (uid && typeof window.syncSendOp === 'function') {
+        window.syncSendOp({ type: 'update_object', uniqueId: uid, data: { name: trimmed } });
+    }
+    if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
+}
+
+function flushNameFieldIfChanged(inputId, applyFn) {
+    var inp = document.getElementById(inputId);
+    if (!inp || !currentModalObject || !currentModalObject.properties) return;
+    var trimmed = (inp.value || '').trim();
+    var cur = (currentModalObject.properties.get('name') || '').trim();
+    if (trimmed !== cur) applyFn(trimmed);
+}
+
+function applyCrossNameChange(newName) {
+    if (!currentModalObject || currentModalObject.properties.get('type') !== 'cross') return;
+    var trimmed = (newName || '').trim();
+    currentModalObject.properties.set('name', trimmed);
+    currentModalObject.properties.set('balloonContent', trimmed ? 'Оптический кросс: ' + trimmed : 'Оптический кросс');
+    updateObjectLabel(currentModalObject, trimmed);
+    if (typeof updateCrossDisplay === 'function') updateCrossDisplay();
+    var modalTitle = document.getElementById('modalTitle');
+    if (modalTitle) modalTitle.textContent = trimmed ? 'Оптический кросс: ' + trimmed : 'Оптический кросс';
+    var sideTitle = document.querySelector('.fiber-ws-side-title');
+    if (sideTitle) sideTitle.textContent = trimmed || 'Кросс';
+    saveData();
+    syncObjectNameOp(currentModalObject, trimmed);
+}
+
+function applySleeveNameChange(newName) {
+    if (!currentModalObject || currentModalObject.properties.get('type') !== 'sleeve') return;
+    var trimmed = (newName || '').trim();
+    currentModalObject.properties.set('name', trimmed);
+    currentModalObject.properties.set('balloonContent', trimmed ? 'Кабельная муфта: ' + trimmed : 'Кабельная муфта');
+    updateObjectLabel(currentModalObject, trimmed);
+    var modalTitle = document.getElementById('modalTitle');
+    if (modalTitle) modalTitle.textContent = trimmed ? 'Кабельная муфта: ' + trimmed : 'Кабельная муфта';
+    var sideTitle = document.querySelector('.fiber-ws-side-title');
+    if (sideTitle) sideTitle.textContent = trimmed || 'Муфта';
+    saveData();
+    syncObjectNameOp(currentModalObject, trimmed);
+}
+
+function applyNodeNameChange(newName) {
+    if (!currentModalObject || currentModalObject.properties.get('type') !== 'node') return;
+    var trimmed = (newName || '').trim();
+    if (trimmed && typeof findNodeByName === 'function' && findNodeByName(trimmed, currentModalObject)) return;
+    currentModalObject.properties.set('name', trimmed);
+    currentModalObject.properties.set('balloonContent', trimmed ? 'Узел сети: ' + trimmed : 'Узел сети');
+    updateNodeLabel(currentModalObject, trimmed);
+    if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
+    var modalTitle = document.getElementById('modalTitle');
+    if (modalTitle) modalTitle.textContent = trimmed ? 'Узел сети: ' + trimmed : 'Узел сети';
+    var cardName = document.querySelector('.node-card-view-name');
+    if (cardName) cardName.textContent = trimmed || 'Новый узел';
+    saveData();
+    syncObjectNameOp(currentModalObject, trimmed);
+}
+
+function applyOltNameChange(newName) {
+    if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
+    var trimmed = (newName || '').trim();
+    currentModalObject.properties.set('name', trimmed);
+    currentModalObject.properties.set('balloonContent', trimmed ? 'OLT: ' + trimmed : 'OLT (GPON)');
+    updateObjectLabel(currentModalObject, trimmed);
+    var modalTitle = document.getElementById('modalTitle');
+    if (modalTitle) modalTitle.textContent = trimmed ? 'OLT: ' + trimmed : 'OLT (GPON)';
+    var cardName = document.querySelector('.olt-card-view-name');
+    if (cardName) cardName.textContent = trimmed || 'Новый OLT';
+    saveData();
+    syncObjectNameOp(currentModalObject, trimmed);
+}
+
+function applySplitterNameChange(newName) {
+    if (!currentModalObject || currentModalObject.properties.get('type') !== 'splitter') return;
+    var trimmed = (newName || '').trim();
+    currentModalObject.properties.set('name', trimmed);
+    currentModalObject.properties.set('balloonContent', trimmed ? 'Сплиттер: ' + trimmed : 'Сплиттер');
+    updateObjectLabel(currentModalObject, trimmed);
+    var modalTitle = document.getElementById('modalTitle');
+    if (modalTitle) modalTitle.textContent = trimmed ? 'Сплиттер: ' + trimmed : 'Сплиттер';
+    saveData();
+    syncObjectNameOp(currentModalObject, trimmed);
+}
+
+function applyOnuNameChange(newName) {
+    if (!currentModalObject || currentModalObject.properties.get('type') !== 'onu') return;
+    var trimmed = (newName || '').trim();
+    currentModalObject.properties.set('name', trimmed);
+    currentModalObject.properties.set('balloonContent', trimmed ? 'ONU: ' + trimmed : 'ONU');
+    updateObjectLabel(currentModalObject, trimmed);
+    var modalTitle = document.getElementById('modalTitle');
+    if (modalTitle) modalTitle.textContent = trimmed ? 'ONU: ' + trimmed : 'ONU';
+    saveData();
+    syncObjectNameOp(currentModalObject, trimmed);
+}
+
+function applyCameraNameChange(newName) {
+    if (!currentModalObject || currentModalObject.properties.get('type') !== 'camera') return;
+    var trimmed = (newName || '').trim();
+    currentModalObject.properties.set('name', trimmed);
+    currentModalObject.properties.set('balloonContent', trimmed ? 'Камера: ' + trimmed : 'Камера');
+    updateObjectLabel(currentModalObject, trimmed);
+    if (typeof refreshCameraMapPresentation === 'function') refreshCameraMapPresentation(currentModalObject);
+    var modalTitle = document.getElementById('modalTitle');
+    if (modalTitle) modalTitle.textContent = trimmed ? 'Камера: ' + trimmed : 'Камера';
+    var cardName = document.querySelector('.camera-card-view-name');
+    if (cardName) cardName.textContent = trimmed || 'Новая камера';
+    saveData();
+    syncObjectNameOp(currentModalObject, trimmed);
+}
+
+function applyMediaConverterNameChange(newName) {
+    if (!currentModalObject || currentModalObject.properties.get('type') !== 'mediaConverter') return;
+    var trimmed = (newName || '').trim();
+    currentModalObject.properties.set('name', trimmed);
+    currentModalObject.properties.set('balloonContent', trimmed ? 'Медиаконвертер: ' + trimmed : 'Медиаконвертер');
+    updateObjectLabel(currentModalObject, trimmed);
+    var modalTitle = document.getElementById('modalTitle');
+    if (modalTitle) modalTitle.textContent = trimmed ? 'Медиаконвертер: ' + trimmed : 'Медиаконвертер';
+    saveData();
+    syncObjectNameOp(currentModalObject, trimmed);
+}
+
+function applySupportNameChange(newName) {
+    if (!currentModalObject) return;
+    var wt = currentModalObject.properties.get('type');
+    if (wt !== 'support' && wt !== 'attachment') return;
+    var trimmed = (newName || '').trim();
+    currentModalObject.properties.set('name', trimmed);
+    if (wt === 'attachment') {
+        currentModalObject.properties.set('balloonContent', trimmed ? 'Крепление узлов: ' + trimmed : 'Крепление узлов');
+    } else {
+        currentModalObject.properties.set('balloonContent', trimmed ? 'Опора связи: ' + trimmed : 'Опора связи');
+    }
+    updateSupportLabel(currentModalObject, trimmed);
+    var lbl = currentModalObject.properties.get('label');
+    if (lbl && trimmed) {
+        try { myMap.geoObjects.add(lbl); } catch (e) {}
+    } else if (lbl && !trimmed) {
+        try { myMap.geoObjects.remove(lbl); } catch (e) {}
+    }
+    var copy = typeof getSupportWaypointCopy === 'function' ? getSupportWaypointCopy(wt === 'attachment') : { typeLabel: 'Объект' };
+    var modalTitle = document.getElementById('modalTitle');
+    if (modalTitle) modalTitle.textContent = trimmed ? (copy.typeLabel + ': ' + trimmed) : copy.typeLabel;
+    saveData();
+    syncObjectNameOp(currentModalObject, trimmed);
+}
+
+function bindModalNameField(inputId, applyFn) {
+    var el = document.getElementById(inputId);
+    if (!el) return;
+    el.oninput = function() { applyFn(this.value); };
+    el.onchange = function() { applyFn(this.value); };
+}
+
+function bindModalObjectNameEditors() {
+    bindModalNameField('editCrossName', applyCrossNameChange);
+    bindModalNameField('editSleeveName', applySleeveNameChange);
+    bindModalNameField('editNodeName', applyNodeNameChange);
+    bindModalNameField('editOltName', applyOltNameChange);
+    bindModalNameField('editSplitterName', applySplitterNameChange);
+    bindModalNameField('editOnuName', applyOnuNameChange);
+    bindModalNameField('editCameraName', applyCameraNameChange);
+    bindModalNameField('editMediaConverterName', applyMediaConverterNameChange);
+    bindModalNameField('editSupportName', applySupportNameChange);
+}
+
+function flushCrossNameFromEditor() {
+    flushNameFieldIfChanged('editCrossName', applyCrossNameChange);
+}
+
+function flushSleeveNameFromEditor() {
+    flushNameFieldIfChanged('editSleeveName', applySleeveNameChange);
+}
+
+function flushModalNamesFromEditor() {
+    if (!currentModalObject || !currentModalObject.properties) return;
+    var t = currentModalObject.properties.get('type');
+    if (t === 'cross') flushCrossNameFromEditor();
+    else if (t === 'sleeve') flushSleeveNameFromEditor();
+    else if (t === 'node') flushNameFieldIfChanged('editNodeName', applyNodeNameChange);
+    else if (t === 'olt') flushNameFieldIfChanged('editOltName', applyOltNameChange);
+    else if (t === 'splitter') flushNameFieldIfChanged('editSplitterName', applySplitterNameChange);
+    else if (t === 'onu') flushNameFieldIfChanged('editOnuName', applyOnuNameChange);
+    else if (t === 'camera') flushNameFieldIfChanged('editCameraName', applyCameraNameChange);
+    else if (t === 'mediaConverter') flushNameFieldIfChanged('editMediaConverterName', applyMediaConverterNameChange);
+    else if (t === 'support' || t === 'attachment') flushNameFieldIfChanged('editSupportName', applySupportNameChange);
 }
 
 function getObjectDefaultName(type) {
@@ -11780,6 +11936,7 @@ function setupFiberConnectionHandlers() {
     });
 
     setupFiberWorkspaceUI();
+    bindModalObjectNameEditors();
 
     document.querySelectorAll('.fiber-conn-delete').forEach(function(btn) {
         btn.addEventListener('click', function(e) {
@@ -17163,8 +17320,8 @@ function getMapFilterState() {
 
 // "Vols expert" style: при отдалении сначала скрываются подписи, потом сами объекты.
 // Настройка порогов: при уменьшении зума значение растет к "ближе" и скрытие уходит обратно.
-const EXPERT_ZOOM_HIDE_LABELS_BELOW = 15;
-const EXPERT_ZOOM_HIDE_OBJECTS_BELOW = 12;
+const EXPERT_ZOOM_HIDE_LABELS_BELOW = 17;
+const EXPERT_ZOOM_HIDE_OBJECTS_BELOW = 16;
 
 function forEachConnectionLine(callback) {
     [nodeConnectionLines, onuConnectionLines, oltConnectionLines, splitterConnectionLines, splitterOutputConnectionLines].forEach(function(arr) {

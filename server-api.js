@@ -7,6 +7,7 @@ const WebSocket = require('ws');
 const db = require('./database');
 const avatars = require('./avatars');
 const chatMedia = require('./chat-media');
+const security = require('./lib/security');
 
 function loadServerConfig() {
     let config = {};
@@ -252,6 +253,115 @@ function getClientIp(req) {
     return String(req.ip || req.socket && req.socket.remoteAddress || '');
 }
 
+function getAuthRateLimitOptions() {
+    var windowMs = parseInt(process.env.AUTH_RATE_LIMIT_WINDOW_MS || serverConfig.authRateLimitWindowMs || '900000', 10);
+    var maxAttempts = parseInt(process.env.AUTH_RATE_LIMIT_MAX || serverConfig.authRateLimitMax || '20', 10);
+    if (isNaN(windowMs) || windowMs < 60000) windowMs = 900000;
+    if (isNaN(maxAttempts) || maxAttempts < 3) maxAttempts = 20;
+    return { windowMs: windowMs, maxAttempts: maxAttempts };
+}
+
+function isOrgAdmin(user) {
+    return !!(user && user.role === 'admin' && user.organizationId);
+}
+
+function buildLoginUserPayload(user, organizationId, organization) {
+    return {
+        userId: user.id,
+        username: user.username,
+        fullName: user.fullName || user.full_name,
+        role: user.role,
+        organizationId: organizationId,
+        avatarUrl: avatars.getAvatarApiPath(user.id, user.avatarUpdatedAt),
+        organization: organization ? {
+            id: organization.id,
+            name: organization.name,
+            status: organization.status,
+            mapLimits: getMapObjectLimitPayload(organizationId),
+            concurrentUsers: getConcurrentUsersPayload(organizationId)
+        } : null
+    };
+}
+
+function completeUserLogin(req, res, user, organizationId, organization) {
+    var isMainAdminAccount = isGlobalAdmin({ role: user.role, organizationId: user.organizationId });
+
+    if (isMainAdminAccount) {
+        db.deleteSessionsForUser(user.id);
+    } else {
+        if (db.countActiveSessionsForUser(user.id) > 0) {
+            return res.json({
+                success: false,
+                error: 'Сессия занята: эта учётная запись уже используется. Завершите работу в другом окне или нажмите «Выйти» там.'
+            });
+        }
+        db.deleteExpiredSessionsForUser(user.id);
+    }
+
+    if (organization && organization.status !== 'active') {
+        return res.json({ success: false, error: 'Организация приостановлена. Обратитесь к администратору сервиса.' });
+    }
+    if (organization && !isMainAdminAccount) {
+        var maxConcurrent = getMaxConcurrentForOrg(organization);
+        if (maxConcurrent >= 0) {
+            var activeOrgSessions = db.countActiveSessionsForOrganization(organizationId);
+            if (activeOrgSessions >= maxConcurrent) {
+                return res.json({
+                    success: false,
+                    error: 'Достигнут лимит одновременных пользователей (' + maxConcurrent + '). Попробуйте позже или свяжитесь с владельцем программы.'
+                });
+            }
+        }
+    }
+
+    const token = generateToken();
+    const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    var stmt = db.getDb().prepare('INSERT INTO sessions (token, user_id, expires_at, organization_id) VALUES (?, ?, ?, ?)');
+    stmt.run(token, user.id, expires, organizationId);
+
+    if (!isMainAdminAccount && db.countActiveSessionsForUser(user.id) > 1) {
+        db.getDb().prepare('DELETE FROM sessions WHERE token = ?').run(token);
+        return res.json({
+            success: false,
+            error: 'Сессия занята: эта учётная запись уже используется. Завершите работу в другом окне или нажмите «Выйти» там.'
+        });
+    }
+
+    try {
+        db.addVisitLog({
+            at: new Date().toISOString(),
+            username: user.username,
+            userId: user.id,
+            organizationId: organizationId || '',
+            ip: getClientIp(req),
+            source: getClientIp(req) || 'unknown',
+            userAgent: String(req.headers['user-agent'] || '')
+        });
+    } catch (e) {}
+
+    res.json({
+        success: true,
+        token: token,
+        user: buildLoginUserPayload(user, organizationId, organization)
+    });
+}
+
+function validateCredentials(username, password) {
+    if (!username || !password) return { ok: false, error: 'Укажите имя и пароль', status: 400 };
+    const users = db.getUsers();
+    const user = users.find(u => u.username.toLowerCase() === String(username).toLowerCase());
+    if (!user) return { ok: false, error: 'Пользователь не найден' };
+    if (user.password !== hashPassword(password)) return { ok: false, error: 'Неверный пароль' };
+    if (user.status === 'pending') return { ok: false, error: 'Заявка ожидает одобрения' };
+    if (user.status === 'rejected') return { ok: false, error: 'Заявка отклонена' };
+    var organizationId = user.organizationId || null;
+    if (user.role !== 'admin' && !organizationId) {
+        return { ok: false, error: 'Учётная запись не привязана к организации. Обратитесь к администратору.' };
+    }
+    var organization = organizationId ? db.getOrganization(organizationId) : null;
+    return { ok: true, user: user, organizationId: organizationId, organization: organization };
+}
+
 app.get('/api/map', (req, res) => {
     try {
         var user = getSessionUser(req);
@@ -291,94 +401,74 @@ app.post('/api/map', (req, res) => {
     }
 });
 
-app.post('/api/auth/login', (req, res) => {
-    const { username, password } = req.body || {};
-    if (!username || !password) return res.status(400).json({ success: false, error: 'Укажите имя и пароль' });
-    const users = db.getUsers();
-    const user = users.find(u => u.username.toLowerCase() === username.toLowerCase());
-    if (!user) return res.json({ success: false, error: 'Пользователь не найден' });
-    if (user.password !== hashPassword(password)) return res.json({ success: false, error: 'Неверный пароль' });
-    if (user.status === 'pending') return res.json({ success: false, error: 'Заявка ожидает одобрения' });
-    if (user.status === 'rejected') return res.json({ success: false, error: 'Заявка отклонена' });
-    var organizationId = user.organizationId || null;
-    var organization = organizationId ? db.getOrganization(organizationId) : null;
-    if (user.role !== 'admin' && !organizationId) return res.json({ success: false, error: 'Учётная запись не привязана к организации. Обратитесь к администратору.' });
+app.post('/api/auth/login', function(req, res) {
+    var ip = getClientIp(req);
+    var rate = security.checkRateLimit('auth:' + ip, getAuthRateLimitOptions());
+    if (!rate.ok) {
+        return res.status(429).json({
+            success: false,
+            error: 'Слишком много попыток входа. Повторите через ' + rate.retryAfterSec + ' с.'
+        });
+    }
+    var body = req.body || {};
+    security.verifyTurnstile(body.captchaToken, ip, serverConfig).then(function(captcha) {
+        if (!captcha.ok) {
+            return res.status(400).json({ success: false, error: captcha.error || 'Ошибка капчи' });
+        }
+        var cred = validateCredentials(body.username, body.password);
+        if (!cred.ok) {
+            if (cred.status === 400) return res.status(400).json({ success: false, error: cred.error });
+            return res.json({ success: false, error: cred.error });
+        }
+        var user = cred.user;
+        var organizationId = cred.organizationId;
+        var organization = cred.organization;
+        var isMainAdminAccount = isGlobalAdmin({ role: user.role, organizationId: user.organizationId });
 
-    var isMainAdminAccount = isGlobalAdmin({ role: user.role, organizationId: user.organizationId });
-
-    // Главный админ панели: новый вход с другого места завершает предыдущую сессию.
-    // Остальные: одна активная сессия — иначе отказ («сессия занята»).
-    if (isMainAdminAccount) {
-        db.deleteSessionsForUser(user.id);
-    } else {
-        if (db.countActiveSessionsForUser(user.id) > 0) {
+        if (!isMainAdminAccount && security.orgRequiresTotp(organization)) {
+            var pendingId = security.createPendingLogin({ userId: user.id, organizationId: organizationId });
             return res.json({
                 success: false,
-                error: 'Сессия занята: эта учётная запись уже используется. Завершите работу в другом окне или нажмите «Выйти» там.'
+                requiresTotp: true,
+                pendingLoginId: pendingId,
+                organizationName: organization ? organization.name : ''
             });
         }
-        db.deleteExpiredSessionsForUser(user.id);
-    }
-
-    if (organization && organization.status !== 'active') {
-        return res.json({ success: false, error: 'Организация приостановлена. Обратитесь к администратору сервиса.' });
-    }
-    if (organization && !isMainAdminAccount) {
-        var maxConcurrent = getMaxConcurrentForOrg(organization);
-        if (maxConcurrent >= 0) {
-            var activeOrgSessions = db.countActiveSessionsForOrganization(organizationId);
-            if (activeOrgSessions >= maxConcurrent) {
-                return res.json({
-                    success: false,
-                    error: 'Достигнут лимит одновременных пользователей (' + maxConcurrent + '). Попробуйте позже или свяжитесь с владельцем программы.'
-                });
-            }
-        }
-    }
-    const token = generateToken();
-    const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    var stmt = db.getDb().prepare('INSERT INTO sessions (token, user_id, expires_at, organization_id) VALUES (?, ?, ?, ?)');
-    stmt.run(token, user.id, expires, organizationId);
-    // Два параллельных входа (не главный админ): оставляем первого, второго откатываем
-    if (!isMainAdminAccount && db.countActiveSessionsForUser(user.id) > 1) {
-        db.getDb().prepare('DELETE FROM sessions WHERE token = ?').run(token);
-        return res.json({
-            success: false,
-            error: 'Сессия занята: эта учётная запись уже используется. Завершите работу в другом окне или нажмите «Выйти» там.'
-        });
-    }
-    try {
-        var ip = getClientIp(req);
-        var userAgent = String(req.headers['user-agent'] || '');
-        db.addVisitLog({
-            at: new Date().toISOString(),
-            username: user.username,
-            userId: user.id,
-            organizationId: organizationId || '',
-            ip: ip,
-            source: ip || 'unknown',
-            userAgent: userAgent
-        });
-    } catch (e) {}
-    res.json({
-        success: true,
-        token,
-        user: {
-            userId: user.id,
-            username: user.username,
-            fullName: user.fullName || user.full_name,
-            role: user.role,
-            organizationId: organizationId,
-            avatarUrl: avatars.getAvatarApiPath(user.id, user.avatarUpdatedAt),
-            organization: organization ? {
-                id: organization.id,
-                name: organization.name,
-                status: organization.status,
-                mapLimits: getMapObjectLimitPayload(organizationId),
-                concurrentUsers: getConcurrentUsersPayload(organizationId)
-            } : null
-        }
+        completeUserLogin(req, res, user, organizationId, organization);
     });
+});
+
+app.post('/api/auth/verify-totp', function(req, res) {
+    var ip = getClientIp(req);
+    var rate = security.checkRateLimit('totp:' + ip, getAuthRateLimitOptions());
+    if (!rate.ok) {
+        return res.status(429).json({
+            success: false,
+            error: 'Слишком много попыток. Повторите через ' + rate.retryAfterSec + ' с.'
+        });
+    }
+    var body = req.body || {};
+    var pendingId = body.pendingLoginId;
+    var totpCode = body.totpCode || body.code;
+    if (!pendingId || !totpCode) {
+        return res.status(400).json({ success: false, error: 'Укажите код двухфакторной аутентификации' });
+    }
+    var pending = security.consumePendingLogin(pendingId);
+    if (!pending) {
+        return res.json({ success: false, error: 'Сессия входа истекла. Введите логин и пароль снова.' });
+    }
+    var users = db.getUsers();
+    var user = users.find(function(u) { return String(u.id) === String(pending.userId); });
+    if (!user) return res.json({ success: false, error: 'Пользователь не найден' });
+    var organizationId = user.organizationId || pending.organizationId || null;
+    var organization = organizationId ? db.getOrganization(organizationId) : null;
+    if (!security.orgRequiresTotp(organization)) {
+        return res.json({ success: false, error: 'Двухфакторная аутентификация не включена для организации' });
+    }
+    if (!security.verifyTotpCode(organization.twoFactorSecret, totpCode)) {
+        return res.json({ success: false, error: 'Неверный код. Проверьте приложение-аутентификатор и время на устройстве.' });
+    }
+    completeUserLogin(req, res, user, organizationId, organization);
 });
 
 app.get('/api/admin/visits', (req, res) => {
@@ -467,7 +557,8 @@ app.get('/api/organizations/me', (req, res) => {
             status: org.status,
             mapObjectLimitUnlocked: orgHasUnlimitedMapObjects(org),
             mapLimits: getMapObjectLimitPayload(user.organizationId),
-            concurrentUsers: getConcurrentUsersPayload(user.organizationId)
+            concurrentUsers: getConcurrentUsersPayload(user.organizationId),
+            twoFactorEnabled: !!org.twoFactorEnabled
         }
     });
 });
@@ -585,7 +676,9 @@ app.get('/api/organizations', (req, res) => {
 
 app.get('/api/pricing', (req, res) => {
     try {
-        const raw = db.getPricingPlans();
+        const raw = db.getPricingPlans().filter(function(p) {
+            return String(p.kind || '').toLowerCase() !== 'trial';
+        });
         const plans = raw.map(function(p, idx) {
             var promoPct = typeof p.promoPercent === 'number' ? p.promoPercent : parseFloat(p.promoPercent);
             if (isNaN(promoPct) || promoPct < 0) promoPct = 0;
@@ -819,8 +912,26 @@ function parseMapStartPayload(mapStart) {
     return { center: [lat, lon], zoom: zoom };
 }
 
-app.post('/api/auth/register', (req, res) => {
-    const { username, password, fullName, organizationName, contactEmail, mapStart } = req.body || {};
+app.post('/api/auth/register', function(req, res) {
+    var ip = getClientIp(req);
+    var rate = security.checkRateLimit('register:' + ip, getAuthRateLimitOptions());
+    if (!rate.ok) {
+        return res.status(429).json({
+            success: false,
+            error: 'Слишком много попыток регистрации. Повторите через ' + rate.retryAfterSec + ' с.'
+        });
+    }
+    var body = req.body || {};
+    security.verifyTurnstile(body.captchaToken, ip, serverConfig).then(function(captcha) {
+        if (!captcha.ok) {
+            return res.status(400).json({ success: false, error: captcha.error || 'Ошибка капчи' });
+        }
+        handleAuthRegister(req, res, body);
+    });
+});
+
+function handleAuthRegister(req, res, body) {
+    const { username, password, fullName, organizationName, contactEmail, mapStart } = body || {};
     if (!username || username.length < 3) return res.status(400).json({ success: false, error: 'Имя не менее 3 символов' });
     if (!organizationName || String(organizationName).trim().length < 3) return res.status(400).json({ success: false, error: 'Укажите название организации (не менее 3 символов)' });
     if (!password || password.length < 6) return res.status(400).json({ success: false, error: 'Пароль не менее 6 символов' });
@@ -848,11 +959,77 @@ app.post('/api/auth/register', (req, res) => {
     users.push(newUser);
     db.setUsers(users);
     const parsedMapStart = parseMapStartPayload(mapStart);
-    if (parsedMapStart) {
-        if (organizationId && db.setMapStartForOrg) db.setMapStartForOrg(organizationId, parsedMapStart);
-        if (db.setMapStartForUser) db.setMapStartForUser(newUser.id, parsedMapStart);
+    if (parsedMapStart && db.setMapStartForUser) {
+        db.setMapStartForUser(newUser.id, parsedMapStart);
     }
     res.json({ success: true, pending: !organizationId, organizationId: organizationId });
+}
+
+app.get('/api/organizations/me/security', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+    var org = db.getOrganization(user.organizationId);
+    if (!org) return res.status(404).json({ error: 'Организация не найдена' });
+    res.json({
+        twoFactorEnabled: !!org.twoFactorEnabled,
+        captchaEnabled: security.isTurnstileConfigured(serverConfig)
+    });
+});
+
+app.post('/api/organizations/me/security/2fa/setup', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+    var org = db.getOrganization(user.organizationId);
+    if (!org) return res.status(404).json({ error: 'Организация не найдена' });
+    var label = (org.name || 'Организация') + ' (volsmap)';
+    var generated = security.generateTotpSecret(label);
+    res.json({
+        secret: generated.base32,
+        otpauthUrl: generated.otpauthUrl,
+        qrCodeUrl: generated.otpauthUrl
+            ? ('https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(generated.otpauthUrl))
+            : ''
+    });
+});
+
+app.post('/api/organizations/me/security/2fa/enable', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+    var body = req.body || {};
+    var secret = body.secret ? String(body.secret).trim() : '';
+    var code = body.totpCode || body.code;
+    if (!secret) return res.status(400).json({ error: 'Секрет не указан. Начните настройку заново.' });
+    if (!security.verifyTotpCode(secret, code)) {
+        return res.status(400).json({ error: 'Неверный код. Проверьте приложение и повторите.' });
+    }
+    var ok = db.updateOrganization(user.organizationId, {
+        twoFactorEnabled: true,
+        twoFactorSecret: secret
+    });
+    if (!ok) return res.status(404).json({ error: 'Организация не найдена' });
+    res.json({ ok: true, twoFactorEnabled: true });
+});
+
+app.post('/api/organizations/me/security/2fa/disable', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+    var org = db.getOrganization(user.organizationId);
+    if (!org || !org.twoFactorEnabled) {
+        return res.json({ ok: true, twoFactorEnabled: false });
+    }
+    var code = (req.body || {}).totpCode || (req.body || {}).code;
+    if (!security.verifyTotpCode(org.twoFactorSecret, code)) {
+        return res.status(400).json({ error: 'Неверный код. Введите текущий код из приложения.' });
+    }
+    db.updateOrganization(user.organizationId, {
+        twoFactorEnabled: false,
+        twoFactorSecret: null
+    });
+    res.json({ ok: true, twoFactorEnabled: false });
 });
 
 app.get('/api/users', (req, res) => {
@@ -1383,10 +1560,8 @@ app.post('/api/settings', (req, res) => {
             const parsedMapStart = parseMapStartPayload(body.mapStart);
             if (parsedMapStart) {
                 if (db.setMapStartForUser) db.setMapStartForUser(user.userId, parsedMapStart);
-                if (orgId && db.setMapStartForOrg) db.setMapStartForOrg(orgId, parsedMapStart);
             } else if (db.setMapStartForUser) {
                 db.setMapStartForUser(user.userId, null);
-                if (orgId && db.setMapStartForOrg) db.setMapStartForOrg(orgId, null);
             }
         }
         var toSave = {};
@@ -1469,11 +1644,14 @@ function getSiteBaseUrl(req) {
 app.get('/api/public-config', (req, res) => {
     const key = serverConfig.yandexMapsApiKey || process.env.YANDEX_MAPS_API_KEY || '';
     const publicSiteUrl = serverConfig.publicSiteUrl || process.env.PUBLIC_SITE_URL || getSiteBaseUrl(req);
+    const turnstileSiteKey = security.getTurnstileSiteKey(serverConfig);
     res.json({
         yandexMapsApiKey: key,
         publicSiteUrl: publicSiteUrl ? String(publicSiteUrl).trim().replace(/\/$/, '') : '',
         freeMapObjectLimit: getDefaultFreeMapObjectLimit(),
-        defaultMaxConcurrentUsers: getDefaultMaxConcurrentUsers()
+        defaultMaxConcurrentUsers: getDefaultMaxConcurrentUsers(),
+        turnstileSiteKey: turnstileSiteKey,
+        captchaEnabled: security.isTurnstileConfigured(serverConfig)
     });
 });
 
@@ -1515,7 +1693,7 @@ app.get('/api/public-stats', (req, res) => {
     }
 });
 
-// Лицевая страница по умолчанию — тарифы
+// Лицевая страница по умолчанию — условия (pricing.html)
 app.get('/', (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(__dirname, 'pricing.html'));
@@ -1566,6 +1744,33 @@ try {
     if (s && s.groupNames && typeof s.groupNames === 'object') syncGroupNames = s.groupNames;
 } catch (e) {}
 var syncCurrentStateByOrg = {};
+var mapDbSaveTimersByOrg = {};
+var MAP_DB_SAVE_DEBOUNCE_MS = 1500;
+
+function scheduleMapDbSave(orgId) {
+    if (!orgId) return;
+    if (mapDbSaveTimersByOrg[orgId]) clearTimeout(mapDbSaveTimersByOrg[orgId]);
+    mapDbSaveTimersByOrg[orgId] = setTimeout(function() {
+        mapDbSaveTimersByOrg[orgId] = null;
+        try {
+            var state = syncCurrentStateByOrg[orgId];
+            if (state && state.data) db.setMapData(orgId, state.data);
+        } catch (e) {}
+    }, MAP_DB_SAVE_DEBOUNCE_MS);
+}
+
+function flushMapDbSave(orgId) {
+    if (!orgId) return;
+    if (mapDbSaveTimersByOrg[orgId]) {
+        clearTimeout(mapDbSaveTimersByOrg[orgId]);
+        mapDbSaveTimersByOrg[orgId] = null;
+    }
+    try {
+        var state = syncCurrentStateByOrg[orgId];
+        if (state && state.data) db.setMapData(orgId, state.data);
+    } catch (e) {}
+}
+
 var defaultOrgIdForSync = (function() {
     var orgs = db.getOrganizations();
     return orgs.length ? orgs[0].id : null;
@@ -1897,9 +2102,7 @@ wss.on('connection', (ws, req) => {
                 }
                 state.data = nextData;
                 state.clientId = msg.clientId || clientId;
-                try {
-                    if (orgId) db.setMapData(orgId, state.data);
-                } catch (eDb) {}
+                scheduleMapDbSave(orgId);
                 wss.clients.forEach(function(client) {
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.orgId === orgId) {
                         try { client.send(JSON.stringify({ type: 'op', op: msg.op })); } catch (e) {}
@@ -1928,9 +2131,7 @@ wss.on('connection', (ws, req) => {
                     syncGroupNamesByOrg[orgId] = msg.groupNames;
                     try { db.setSettings({ groupNames: msg.groupNames }, orgId); } catch (e) {}
                 }
-                try {
-                    if (orgId) db.setMapData(orgId, state.data);
-                } catch (eDb2) {}
+                scheduleMapDbSave(orgId);
                 var statePayload = { type: 'state', clientId: state.clientId, data: state.data };
                 var gn = syncGroupNamesByOrg[orgId] || syncGroupNames;
                 if (gn && (gn.cross || gn.node)) statePayload.groupNames = gn;
@@ -1948,6 +2149,7 @@ wss.on('connection', (ws, req) => {
         syncClientUserIds.delete(clientId);
         syncClientOrgIds.delete(clientId);
         ws.cursor = null;
+        if (ws.orgId) flushMapDbSave(ws.orgId);
         setImmediate(function() {
             broadcastSyncClients();
             broadcastCursors();

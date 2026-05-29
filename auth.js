@@ -11,7 +11,7 @@ function hashPassword(password) {
 
 function initUserSystem() {
     if (typeof getApiBase !== 'function' || !getApiBase()) return;
-    // Панель главного администратора (`site-admin.html`) управляет организациями/тарифами,
+    // Панель главного администратора (`site-admin.html`) управляет организациями и витриной,
     // а эндпоинт `/api/users` может давать 403 в случаях, когда пользователь не является глобальным админом.
     // Чтобы не спамить запросами и ошибками, отключаем загрузку пользователей на этой странице.
     if (document.getElementById('adminContent')) return;
@@ -82,34 +82,159 @@ function getStoredSession() {
     } catch (e) { return null; }
 }
 
-function loginUser(username, password, rememberMe) {
+var authPublicConfig = null;
+var authCaptchaEnabled = false;
+var authTurnstileSiteKey = '';
+var turnstileWidgets = { login: null, register: null };
+var pendingLoginId = null;
+var pendingLoginRememberMe = false;
+
+function loadAuthPublicConfig() {
+    if (!getApiBase()) return Promise.resolve(null);
+    return fetch(getApiBase() + '/api/public-config', { cache: 'no-store' })
+        .then(function(r) { return r.json(); })
+        .then(function(cfg) {
+            authPublicConfig = cfg || {};
+            authCaptchaEnabled = !!(cfg && cfg.captchaEnabled && cfg.turnstileSiteKey);
+            authTurnstileSiteKey = authCaptchaEnabled ? String(cfg.turnstileSiteKey) : '';
+            return cfg;
+        })
+        .catch(function() { return null; });
+}
+
+function whenTurnstileReady(cb) {
+    if (window.turnstile) { cb(); return; }
+    var attempts = 0;
+    var timer = setInterval(function() {
+        attempts++;
+        if (window.turnstile) {
+            clearInterval(timer);
+            cb();
+        } else if (attempts > 80) {
+            clearInterval(timer);
+        }
+    }, 100);
+}
+
+function renderAuthCaptcha(formKey, containerId, wrapId) {
+    if (!authCaptchaEnabled || !authTurnstileSiteKey) return;
+    var wrap = document.getElementById(wrapId);
+    var el = document.getElementById(containerId);
+    if (!wrap || !el) return;
+    wrap.style.display = 'block';
+    whenTurnstileReady(function() {
+        if (turnstileWidgets[formKey]) {
+            try { window.turnstile.remove(turnstileWidgets[formKey]); } catch (e) {}
+            turnstileWidgets[formKey] = null;
+        }
+        el.innerHTML = '';
+        turnstileWidgets[formKey] = window.turnstile.render('#' + containerId, {
+            sitekey: authTurnstileSiteKey,
+            theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'
+        });
+    });
+}
+
+function resetAuthCaptcha(formKey) {
+    if (turnstileWidgets[formKey] && window.turnstile) {
+        try { window.turnstile.reset(turnstileWidgets[formKey]); } catch (e) {}
+    }
+}
+
+function getCaptchaToken(formKey) {
+    if (!authCaptchaEnabled) return '';
+    if (!turnstileWidgets[formKey] || !window.turnstile) return '';
+    try {
+        return window.turnstile.getResponse(turnstileWidgets[formKey]) || '';
+    } catch (e) {
+        return '';
+    }
+}
+
+function storeAuthSession(body, rememberMe) {
+    if (rememberMe) {
+        var expiry = Date.now() + REMEMBER_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+        localStorage.setItem('networkMap_token', body.token);
+        localStorage.setItem('networkMap_session', JSON.stringify(body.user));
+        localStorage.setItem('networkMap_tokenExpiry', String(expiry));
+        sessionStorage.removeItem('networkMap_token');
+        sessionStorage.removeItem('networkMap_session');
+    } else {
+        sessionStorage.setItem('networkMap_token', body.token);
+        sessionStorage.setItem('networkMap_session', JSON.stringify(body.user));
+        localStorage.removeItem('networkMap_token');
+        localStorage.removeItem('networkMap_session');
+        localStorage.removeItem('networkMap_tokenExpiry');
+    }
+}
+
+function loginUser(username, password, rememberMe, captchaToken) {
     if (!getApiBase()) {
         return Promise.resolve({ success: false, error: 'Запустите сервер: npm run api, затем откройте http://localhost:3000' });
     }
+    var payload = { username: username, password: password };
+    if (captchaToken) payload.captchaToken = captchaToken;
     return fetch(getApiBase() + '/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username, password: password })
-    }).then(function(r) { return r.json(); }).then(function(body) {
+        body: JSON.stringify(payload)
+    }).then(function(r) { return r.json().then(function(body) { return { status: r.status, body: body }; }); })
+    .then(function(res) {
+        var body = res.body || {};
         if (body.success && body.token && body.user) {
-            if (rememberMe) {
-                var expiry = Date.now() + REMEMBER_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
-                localStorage.setItem('networkMap_token', body.token);
-                localStorage.setItem('networkMap_session', JSON.stringify(body.user));
-                localStorage.setItem('networkMap_tokenExpiry', String(expiry));
-                sessionStorage.removeItem('networkMap_token');
-                sessionStorage.removeItem('networkMap_session');
-            } else {
-                sessionStorage.setItem('networkMap_token', body.token);
-                sessionStorage.setItem('networkMap_session', JSON.stringify(body.user));
-                localStorage.removeItem('networkMap_token');
-                localStorage.removeItem('networkMap_session');
-                localStorage.removeItem('networkMap_tokenExpiry');
-            }
+            storeAuthSession(body, rememberMe);
             return { success: true, user: body.user };
         }
-        return { success: false, error: body.error || 'Ошибка входа' };
+        if (body.requiresTotp && body.pendingLoginId) {
+            return {
+                success: false,
+                requiresTotp: true,
+                pendingLoginId: body.pendingLoginId,
+                organizationName: body.organizationName || ''
+            };
+        }
+        return { success: false, error: body.error || 'Ошибка входа', status: res.status };
     }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
+}
+
+function verifyLoginTotp(pendingId, totpCode, rememberMe) {
+    if (!getApiBase()) return Promise.resolve({ success: false, error: 'Сервер недоступен' });
+    return fetch(getApiBase() + '/api/auth/verify-totp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pendingLoginId: pendingId, totpCode: totpCode })
+    }).then(function(r) { return r.json(); }).then(function(body) {
+        if (body.success && body.token && body.user) {
+            storeAuthSession(body, rememberMe);
+            return { success: true, user: body.user };
+        }
+        return { success: false, error: body.error || 'Неверный код' };
+    }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
+}
+
+function showTotpStep(organizationName) {
+    var loginForm = document.getElementById('loginForm');
+    var registerForm = document.getElementById('registerForm');
+    var totpForm = document.getElementById('totpForm');
+    if (loginForm) loginForm.classList.remove('active');
+    if (registerForm) registerForm.classList.remove('active');
+    if (totpForm) totpForm.classList.add('active');
+    var hint = document.getElementById('totpOrgHint');
+    if (hint) {
+        hint.textContent = organizationName
+            ? ('Организация «' + organizationName + '». Введите 6-значный код из приложения-аутентификатора.')
+            : 'Введите 6-значный код из приложения-аутентификатора вашей организации.';
+    }
+    var codeEl = document.getElementById('loginTotpCode');
+    if (codeEl) { codeEl.value = ''; codeEl.focus(); }
+}
+
+function hideTotpStep() {
+    pendingLoginId = null;
+    var totpForm = document.getElementById('totpForm');
+    var loginForm = document.getElementById('loginForm');
+    if (totpForm) totpForm.classList.remove('active');
+    if (loginForm) loginForm.classList.add('active');
 }
 
 var REGISTER_MAP_DEFAULT = { center: [54.663609, 86.162243], zoom: 15 };
@@ -289,7 +414,7 @@ function tryRegisterMapGeolocation() {
     }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
 }
 
-function registerUser(username, password, fullName, organizationName, contactEmail, mapStart) {
+function registerUser(username, password, fullName, organizationName, contactEmail, mapStart, captchaToken) {
     if (username.length < 3) return Promise.resolve({ success: false, error: 'Имя пользователя должно быть не менее 3 символов' });
     if (!organizationName || organizationName.trim().length < 3) return Promise.resolve({ success: false, error: 'Укажите название организации (не менее 3 символов)' });
     if (password.length < 6) return Promise.resolve({ success: false, error: 'Пароль должен быть не менее 6 символов' });
@@ -300,6 +425,7 @@ function registerUser(username, password, fullName, organizationName, contactEma
     var start = mapStart && Array.isArray(mapStart.center) && mapStart.center.length >= 2 ? mapStart : null;
     if (!start) start = getRegisterMapStart();
     body.mapStart = start;
+    if (captchaToken) body.captchaToken = captchaToken;
     return fetch(getApiBase() + '/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -308,73 +434,6 @@ function registerUser(username, password, fullName, organizationName, contactEma
         if (!res.success) return { success: false, error: res.error || 'Ошибка' };
         return { success: true, pending: res.pending, organizationId: res.organizationId };
     }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
-}
-
-/** Устаревшие параметры URL регистрации с лендинга (?trial=1, ?plan=…) — игнорируются. */
-var registerPlanFromLanding = {
-    wantsTrialLink: false,
-    planQuery: '',
-    resolvedCatalogPlanId: null,
-    prefetchPromise: null
-};
-
-function ensureRegisterPlanPrefetchFromLanding() {
-    if (registerPlanFromLanding.prefetchPromise) return registerPlanFromLanding.prefetchPromise;
-    if (!getApiBase()) {
-        registerPlanFromLanding.prefetchPromise = Promise.resolve();
-        return registerPlanFromLanding.prefetchPromise;
-    }
-    registerPlanFromLanding.prefetchPromise = fetch(getApiBase() + '/api/pricing')
-        .then(function(r) { return r.ok ? r.json() : null; })
-        .then(function(data) {
-            var plans = (data && data.plans) || [];
-            var trialPlans = plans.filter(function(p) {
-                return String(p.kind || '').toLowerCase() === 'trial';
-            });
-            var pick = null;
-            if (registerPlanFromLanding.planQuery) {
-                var low = registerPlanFromLanding.planQuery.toLowerCase();
-                pick = plans.find(function(p) { return String(p.id).toLowerCase() === low; }) || null;
-            } else if (registerPlanFromLanding.wantsTrialLink && trialPlans.length) {
-                pick = trialPlans[0];
-            }
-            registerPlanFromLanding.resolvedCatalogPlanId = pick ? String(pick.id) : null;
-            var msgEl = document.getElementById('authMessage');
-            if (msgEl && (registerPlanFromLanding.wantsTrialLink || registerPlanFromLanding.planQuery)) {
-                if (pick) {
-                    var title = (pick.title && String(pick.title).trim()) ? pick.title : pick.id;
-                    var isTrial = String(pick.kind || '').toLowerCase() === 'trial';
-                    msgEl.className = 'auth-message info';
-                    if (isTrial) {
-                        var d = 14;
-                        if (pick.subscriptionDays != null && pick.subscriptionDays !== '') {
-                            var pn = parseInt(pick.subscriptionDays, 10);
-                            if (!isNaN(pn) && pn >= 1) d = pn;
-                        }
-                        var dw = (d % 10 === 1 && d % 100 !== 11) ? 'день' : ((d % 10 >= 2 && d % 10 <= 4 && (d % 100 < 10 || d % 100 >= 20)) ? 'дня' : 'дней');
-                        msgEl.textContent = 'Пробный период ' + d + ' ' + dw + '. Тариф «' + title + '» будет назначен организации. После окончания выберите платный план.';
-                    } else {
-                        msgEl.textContent = 'Выбран тариф «' + title + '». После регистрации он будет указан для организации.';
-                    }
-                } else if (registerPlanFromLanding.planQuery) {
-                    msgEl.className = 'auth-message error';
-                    msgEl.textContent = 'Тариф с таким кодом на сайте не найден. Регистрация без выбора — будет назначен стандартный план.';
-                } else if (registerPlanFromLanding.wantsTrialLink) {
-                    msgEl.className = 'auth-message info';
-                    msgEl.textContent = 'Пробный доступ: 14 дней. В каталоге нет пробного тарифа — при регистрации может быть назначен стандартный план; уточните у администратора.';
-                }
-            }
-        })
-        .catch(function() {});
-    return registerPlanFromLanding.prefetchPromise;
-}
-
-function resolvePlanIdToSendForRegister() {
-    if (!registerPlanFromLanding.wantsTrialLink && !registerPlanFromLanding.planQuery) return null;
-    if (registerPlanFromLanding.resolvedCatalogPlanId) return registerPlanFromLanding.resolvedCatalogPlanId;
-    if (registerPlanFromLanding.planQuery) return registerPlanFromLanding.planQuery;
-    if (registerPlanFromLanding.wantsTrialLink) return 'trial';
-    return null;
 }
 
 function approveUser(userId) {
@@ -553,16 +612,22 @@ function switchForm(formType) {
     message.className = 'auth-message';
     message.textContent = '';
     
+    var totpForm = document.getElementById('totpForm');
+    if (totpForm) totpForm.classList.remove('active');
+    pendingLoginId = null;
+
     if (formType === 'login') {
         loginForm.classList.add('active');
         registerForm.classList.remove('active');
         if (authContainer) authContainer.classList.remove('auth-register-active');
         destroyRegisterMapPicker();
+        renderAuthCaptcha('login', 'loginCaptcha', 'loginCaptchaWrap');
     } else {
         loginForm.classList.remove('active');
         registerForm.classList.add('active');
         if (authContainer) authContainer.classList.add('auth-register-active');
         initRegisterMapPicker();
+        renderAuthCaptcha('register', 'registerCaptcha', 'registerCaptchaWrap');
     }
 }
 
@@ -594,8 +659,8 @@ document.addEventListener('DOMContentLoaded', function() {
         window.location.href = 'index.html';
         return;
     }
-    
-    // Обработка параметров URL (например, trial=1)
+
+    // Открыть форму регистрации по ссылке с лендинга (?register=1)
     if (isAuthPage) {
         try {
             var search = window.location.search.replace(/^\?/, '').split('&').reduce(function(acc, part) {
@@ -604,15 +669,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 acc[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || '');
                 return acc;
             }, {});
-            registerPlanFromLanding.wantsTrialLink = search.trial === '1';
-            registerPlanFromLanding.planQuery = search.plan ? String(search.plan).trim() : '';
-            var openRegister = search.register === '1' || search.register === 'true' ||
-                registerPlanFromLanding.wantsTrialLink || !!registerPlanFromLanding.planQuery;
-            if (openRegister) {
+            if (search.register === '1' || search.register === 'true') {
                 switchForm('register');
-                if (registerPlanFromLanding.planQuery || registerPlanFromLanding.wantsTrialLink) {
-                    ensureRegisterPlanPrefetchFromLanding();
-                }
             }
         } catch (e) {}
     }
@@ -625,14 +683,39 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    const loginForm = document.getElementById('loginForm');
-    if (loginForm) {
-        loginForm.addEventListener('submit', function(e) {
+    loadAuthPublicConfig().then(function() {
+        var registerForm = document.getElementById('registerForm');
+        if (registerForm && registerForm.classList.contains('active')) {
+            renderAuthCaptcha('register', 'registerCaptcha', 'registerCaptchaWrap');
+        } else {
+            renderAuthCaptcha('login', 'loginCaptcha', 'loginCaptchaWrap');
+        }
+    });
+
+    var totpBackBtn = document.getElementById('totpBackBtn');
+    if (totpBackBtn) {
+        totpBackBtn.addEventListener('click', function() {
+            hideTotpStep();
+            resetAuthCaptcha('login');
+            showMessage('', '');
+        });
+    }
+
+    var totpForm = document.getElementById('totpForm');
+    if (totpForm) {
+        totpForm.addEventListener('submit', function(e) {
             e.preventDefault();
-            var username = document.getElementById('loginUsername').value.trim();
-            var password = document.getElementById('loginPassword').value;
-            var rememberMe = document.getElementById('loginRememberMe') ? document.getElementById('loginRememberMe').checked : false;
-            Promise.resolve(loginUser(username, password, rememberMe)).then(function(result) {
+            if (!pendingLoginId) {
+                showMessage('Сессия входа истекла. Введите логин и пароль снова.', 'error');
+                hideTotpStep();
+                return;
+            }
+            var code = (document.getElementById('loginTotpCode') && document.getElementById('loginTotpCode').value || '').replace(/\s/g, '');
+            if (!/^\d{6,8}$/.test(code)) {
+                showMessage('Введите 6-значный код', 'error');
+                return;
+            }
+            Promise.resolve(verifyLoginTotp(pendingLoginId, code, pendingLoginRememberMe)).then(function(result) {
                 if (result.success) {
                     showMessage('Вход выполнен успешно! Перенаправление...', 'success');
                     setTimeout(function() {
@@ -649,6 +732,42 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
+
+    const loginForm = document.getElementById('loginForm');
+    if (loginForm) {
+        loginForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var username = document.getElementById('loginUsername').value.trim();
+            var password = document.getElementById('loginPassword').value;
+            var rememberMe = document.getElementById('loginRememberMe') ? document.getElementById('loginRememberMe').checked : false;
+            var captchaToken = getCaptchaToken('login');
+            if (authCaptchaEnabled && !captchaToken) {
+                showMessage('Подтвердите, что вы не робот', 'error');
+                return;
+            }
+            Promise.resolve(loginUser(username, password, rememberMe, captchaToken)).then(function(result) {
+                if (result.success) {
+                    showMessage('Вход выполнен успешно! Перенаправление...', 'success');
+                    setTimeout(function() {
+                        var u = result.user || {};
+                        if (u.role === 'admin' && (u.username || '').toLowerCase() === 'admin') {
+                            window.location.href = 'site-admin.html';
+                        } else {
+                            window.location.href = 'index.html';
+                        }
+                    }, 1000);
+                } else if (result.requiresTotp && result.pendingLoginId) {
+                    pendingLoginId = result.pendingLoginId;
+                    pendingLoginRememberMe = rememberMe;
+                    showTotpStep(result.organizationName);
+                    showMessage('', '');
+                } else {
+                    showMessage(result.error, 'error');
+                    resetAuthCaptcha('login');
+                }
+            });
+        });
+    }
     const registerForm = document.getElementById('registerForm');
     if (registerForm) {
         registerForm.addEventListener('submit', function(e) {
@@ -661,7 +780,12 @@ document.addEventListener('DOMContentLoaded', function() {
             var passwordConfirm = document.getElementById('regPasswordConfirm').value;
             if (password !== passwordConfirm) { showMessage('Пароли не совпадают', 'error'); return; }
             var mapStart = syncRegisterMapCoordsFromMap();
-            var regChain = registerUser(username, password, fullName, organizationName, contactEmail, mapStart);
+            var captchaToken = getCaptchaToken('register');
+            if (authCaptchaEnabled && !captchaToken) {
+                showMessage('Подтвердите, что вы не робот', 'error');
+                return;
+            }
+            var regChain = registerUser(username, password, fullName, organizationName, contactEmail, mapStart, captchaToken);
             Promise.resolve(regChain).then(function(result) {
                 if (result.success) {
                     if (result.organizationId) {
@@ -672,6 +796,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     setTimeout(function() { switchForm('login'); }, 2500);
                 } else {
                     showMessage(result.error, 'error');
+                    resetAuthCaptcha('register');
                 }
             });
         });

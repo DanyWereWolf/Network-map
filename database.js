@@ -497,6 +497,8 @@ function addOrganization(org) {
         maxConcurrentUsers: org.maxConcurrentUsers != null && org.maxConcurrentUsers !== '' ? org.maxConcurrentUsers : null,
         status: org.status || 'active',
         contactEmail: org.contactEmail != null ? String(org.contactEmail).trim() : '',
+        twoFactorEnabled: !!org.twoFactorEnabled,
+        twoFactorSecret: org.twoFactorSecret ? String(org.twoFactorSecret) : null,
         createdAt: org.createdAt || new Date().toISOString()
     });
     ensureOrgBackupsDir(id);
@@ -527,6 +529,10 @@ function updateOrganization(orgId, updates) {
             var mcu = typeof updates.maxConcurrentUsers === 'number' ? updates.maxConcurrentUsers : parseInt(updates.maxConcurrentUsers, 10);
             s.organizations[idx].maxConcurrentUsers = (isNaN(mcu) ? null : mcu);
         }
+    }
+    if (updates.twoFactorEnabled !== undefined) s.organizations[idx].twoFactorEnabled = !!updates.twoFactorEnabled;
+    if (updates.twoFactorSecret !== undefined) {
+        s.organizations[idx].twoFactorSecret = updates.twoFactorSecret ? String(updates.twoFactorSecret) : null;
     }
     saveStore();
     return true;
@@ -782,7 +788,11 @@ function setMapStartForOrg(orgId, data) {
 }
 
 function getMapStartForUserOrOrg(userId, orgId) {
-    return getMapStartForOrg(orgId) || getMapStartForUser(userId);
+    const userStart = getMapStartForUser(userId);
+    if (userStart) return userStart;
+    const orgStart = orgId ? getMapStartForOrg(orgId) : null;
+    if (orgStart && userId) setMapStartForUser(userId, orgStart);
+    return orgStart;
 }
 
 function createDailyBackup() {

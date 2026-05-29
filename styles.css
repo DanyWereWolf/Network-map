@@ -1012,6 +1012,69 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     margin-top: 4px;
 }
 
+.org-security-section {
+    margin-bottom: 20px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+}
+
+.org-security-hint {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    margin: 8px 0 12px;
+    line-height: 1.45;
+}
+
+.org-security-status {
+    font-size: 0.875rem;
+    margin-bottom: 12px;
+    color: var(--text-secondary);
+}
+
+.org-security-status.is-on {
+    color: var(--accent-success, #059669);
+    font-weight: 600;
+}
+
+.org-security-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.org-security-setup {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border-color);
+}
+
+.org-2fa-qr {
+    display: block;
+    margin: 0 auto 12px;
+    border-radius: 8px;
+    background: #fff;
+    padding: 8px;
+}
+
+.org-2fa-secret-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.org-2fa-secret {
+    font-size: 0.8rem;
+    word-break: break-all;
+    padding: 6px 8px;
+    background: var(--bg-card);
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+}
+
 /* РќР°РїРѕРјРёРЅР°РЅРёРµ Рѕ РїРѕС‡С‚Рё РёСЃС‡РµСЂРїР°РЅРЅРѕРј Р»РёРјРёС‚Рµ РѕР±СЉРµРєС‚РѕРІ (в‰Ґ98%) */
 .map-limit-banner {
     display: none;
@@ -8040,6 +8103,27 @@ html.cable-split-mode-active #map {
 .device-catalog-tab--cyan { --tab-tone: #06b6d4; }
 .device-catalog-tab--slate { --tab-tone: #64748b; }
 .device-catalog-tab--teal { --tab-tone: #14b8a6; }
+.device-catalog-tab--green { --tab-tone: #22c55e; }
+
+.device-catalog-sleeve-row .device-catalog-mfr-title {
+    flex-wrap: wrap;
+    gap: 6px 12px;
+}
+.device-catalog-sleeve-label {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    flex: 1 1 100%;
+}
+.device-catalog-sleeve-badge {
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    opacity: 0.85;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--bg-tertiary, rgba(128, 128, 128, 0.12));
+}
 
 .device-catalog-tab:hover {
     border-color: color-mix(in srgb, var(--tab-tone) 40%, var(--border-color));

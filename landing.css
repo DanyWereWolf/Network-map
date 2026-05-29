@@ -1336,7 +1336,7 @@ a.contact-card:hover .contact-card-value {
     position: relative;
 }
 #pricingCards:empty::after {
-    content: 'Загрузка тарифов…';
+    content: 'Загрузка условий…';
     position: absolute;
     inset: 0;
     display: flex;

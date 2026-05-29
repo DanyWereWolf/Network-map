@@ -92,7 +92,7 @@
                     <a href="#home">Главная</a>
                     <a href="#capabilities">Возможности</a>
                     <a href="#about">О продукте</a>
-                    <a href="#pricing">Тарифы</a>
+                    <a href="#pricing">Условия</a>
                     <a href="#faq">Вопросы</a>
                     <a href="#contacts">Контакты</a>
                 </nav>
@@ -134,7 +134,7 @@
                         <span class="badge-pill">Синхронизация и бэкапы</span>
                     </div>
                     <div class="landing-hero-cta-row">
-                        <button class="btn-primary-hero" id="heroTrialCtaBtn" onclick="window.location.href='auth.html?register=1'">
+                        <button class="btn-primary-hero" id="heroRegisterCtaBtn" onclick="window.location.href='auth.html?register=1'">
                             Начать бесплатно
                         </button>
                         <button type="button" class="btn-outline" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">
@@ -379,7 +379,7 @@
                 </div>
             </section>
 
-            <!-- Тарифы -->
+            <!-- Условия использования -->
             <section id="pricing" class="landing-pricing landing-block">
                 <div class="landing-block-head">
                     <h2 class="capability-section-title">Бесплатно и без подписки</h2>
@@ -403,7 +403,7 @@
                     </span>
                 </div>
                 <div id="pricingCards" class="pricing-grid">
-                    <!-- Карточки тарифов подставляются с сервера -->
+                    <!-- Карточки витрины подставляются с сервера -->
                 </div>
             </section>
 
@@ -484,7 +484,7 @@
                     <p>Бесплатная карта с лимитом объектов. Без установки, данные на наших серверах.</p>
                 </div>
                 <div class="landing-cta-band-actions">
-                    <button type="button" class="btn-primary-hero" id="footerTrialCtaBtn" onclick="window.location.href='auth.html?register=1'">
+                    <button type="button" class="btn-primary-hero" id="footerRegisterCtaBtn" onclick="window.location.href='auth.html?register=1'">
                         Зарегистрироваться
                     </button>
                     <button type="button" class="btn-outline" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">
@@ -503,7 +503,7 @@
                     <span aria-hidden="true">·</span>
                     <a href="#about">О продукте</a>
                     <span aria-hidden="true">·</span>
-                    <a href="#pricing">Тарифы</a>
+                    <a href="#pricing">Условия</a>
                     <span aria-hidden="true">·</span>
                     <a href="#faq">Вопросы</a>
                     <span aria-hidden="true">·</span>
@@ -687,59 +687,6 @@
             return now >= st && now <= en;
         }
 
-        function daysWordLanding(n) {
-            var mod10 = n % 10;
-            var mod100 = n % 100;
-            if (mod10 === 1 && mod100 !== 11) return 'день';
-            if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'дня';
-            return 'дней';
-        }
-
-        function getTrialDaysFromPlans(plans) {
-            var trial = (plans || []).find(function(p) {
-                return String(p.kind || '').toLowerCase() === 'trial';
-            });
-            var days = 14;
-            if (trial && trial.subscriptionDays != null && trial.subscriptionDays !== '') {
-                var n = parseInt(trial.subscriptionDays, 10);
-                if (!isNaN(n) && n >= 1) days = n;
-            }
-            return days;
-        }
-
-        function applyLandingTrialCopy(plans) {
-            var days = getTrialDaysFromPlans(plans);
-            var dw = daysWordLanding(days);
-            var trialPlan = (plans || []).find(function(p) {
-                return String(p.kind || '').toLowerCase() === 'trial';
-            });
-            var planId = (trialPlan && trialPlan.id) ? trialPlan.id : 'trial';
-            var heroBtn = document.getElementById('heroTrialCtaBtn');
-            if (heroBtn) {
-                heroBtn.textContent = 'Попробовать ' + days + ' ' + dw + ' бесплатно';
-                heroBtn.onclick = function() {
-                    window.location.href = 'auth.html?trial=1&plan=' + encodeURIComponent(planId);
-                };
-            }
-            var footerBtn = document.getElementById('footerTrialCtaBtn');
-            if (footerBtn) {
-                footerBtn.onclick = function() {
-                    window.location.href = 'auth.html?trial=1&plan=' + encodeURIComponent(planId);
-                };
-            }
-            document.querySelectorAll('.landing-trial-days-inline').forEach(function(el) {
-                if (el.tagName === 'STRONG') {
-                    el.textContent = 'бесплатного пробного периода ' + days + ' ' + dw;
-                } else {
-                    el.textContent = days + ' ' + dw + ' бесплатно';
-                }
-            });
-            document.querySelectorAll('[data-trial-days-static]').forEach(function(el) {
-                var tpl = el.getAttribute('data-trial-days-static') || '';
-                el.textContent = tpl.replace(/\{days\}/g, String(days)).replace(/\{daysWord\}/g, dw);
-            });
-        }
-
         function attachHandlers() {
             document.querySelectorAll('.pricing-cta-btn').forEach(function(btn) {
                 btn.addEventListener('click', function() {
@@ -897,6 +844,7 @@
                     return;
                 }
                 plans.forEach(function(p) {
+                    if (String(p.kind || '').toLowerCase() === 'trial') return;
                     var promoOn = isLandingPromoActive(p);
                     var pct = promoPercentValue(p);
                     var endCaption = '';
@@ -927,7 +875,7 @@
                         ribbonHtml +
                         '<div class="pricing-card-head">' +
                             '<div>' +
-                                '<div class="pricing-name">' + (p.title || p.id || 'Тариф') + '</div>' +
+                                '<div class="pricing-name">' + (p.title || p.id || 'Вариант') + '</div>' +
                                 '<div class="pricing-short">' + (p.short || '') + '</div>' +
                             '</div>' +
                         '</div>' +

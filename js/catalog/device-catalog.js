@@ -97,6 +97,163 @@ var SWITCH_CATALOG_DEFAULT = {
     'Huawei': ['S5735-L24T4S-A1', 'S6730-H48X6C']
 };
 
+/** Встроенные типы муфт: id, подпись в списке, макс. волокон (0 — без лимита). */
+var SLEEVE_TYPES_BUILTIN = [
+    { id: 'SNR-FOSC-04', label: 'SNR-FOSC-04 (4 волокна)', maxFibers: 4 },
+    { id: 'SNR-FOSC-X', label: 'SNR-FOSC-X (компактная)', maxFibers: 12 },
+    { id: 'SNR-FOSC-12', label: 'SNR-FOSC-12 (12 волокон)', maxFibers: 12 },
+    { id: 'SNR-FOSC-D', label: 'SNR-FOSC-D (до 24 волокон)', maxFibers: 24 },
+    { id: 'SNR-FOSC-M', label: 'SNR-FOSC-M (до 48 волокон)', maxFibers: 48 },
+    { id: 'SNR-FOSC-G', label: 'SNR-FOSC-G (до 72 волокон)', maxFibers: 72 },
+    { id: 'SNR-FOSC-L', label: 'SNR-FOSC-L (до 96 волокон)', maxFibers: 96 },
+    { id: 'SNR-FOSC-B', label: 'SNR-FOSC-B (до 144 волокон)', maxFibers: 144 },
+    { id: 'SNR-FOSC-UF2', label: 'SNR-FOSC-UF2 (универсальная)', maxFibers: 144 },
+    { id: 'SNR-FOSC-CV018', label: 'SNR-FOSC-CV018 (купольная)', maxFibers: 36 },
+    { id: 'SNR-FOSC-CV019', label: 'SNR-FOSC-CV019 (тупиковая)', maxFibers: 36 },
+    { id: 'SNR-FOSC-CV021', label: 'SNR-FOSC-CV021 (96 волокон)', maxFibers: 96 },
+    { id: 'SNR-FOSC-CV028A', label: 'SNR-FOSC-CV028A', maxFibers: 36 },
+    { id: 'SNR-FOSC-CV037', label: 'SNR-FOSC-CV037', maxFibers: 36 },
+    { id: 'SNR-FOSC-Q-T', label: 'SNR-FOSC-Q-T', maxFibers: 36 },
+    { id: 'SNR-FOSC-D-T', label: 'SNR-FOSC-D-T', maxFibers: 24 },
+    { id: 'SNR-FOSC-CH009', label: 'SNR-FOSC-CH009 (проходная)', maxFibers: 24 },
+    { id: 'SNR-FOSC-CH018', label: 'SNR-FOSC-CH018 (проходная)', maxFibers: 36 },
+    { id: 'SNR-FOSC-CH019', label: 'SNR-FOSC-CH019 (проходная)', maxFibers: 36 },
+    { id: 'SNR-FOSC-CH025', label: 'SNR-FOSC-CH025 (проходная)', maxFibers: 24 },
+    { id: 'SNR-FT-E', label: 'SNR-FT-E', maxFibers: 12 },
+    { id: 'МВОТ-108-3-Т-1-36', label: 'МВОТ-108-3-Т-1-36 (108 волокон)', maxFibers: 108 },
+    { id: 'МВОТ-216-4-Т-1-36', label: 'МВОТ-216-4-Т-1-36 (216 волокон)', maxFibers: 216 },
+    { id: 'МВОТ-3611-22-32-2К16', label: 'МВОТ-3611-22-32-2К16', maxFibers: 32 },
+    { id: 'МОГ-У-33-1К4845', label: 'МОГ-У-33-1К4845 ССД', maxFibers: 33 },
+    { id: 'МКО-Ц8/С09-5SC', label: 'МКО-Ц8/С09-5SC (кросс-муфта)', maxFibers: 18 },
+    { id: 'МТОК-Ф3/216-1КТ3645-К', label: 'МТОК-Ф3/216-1КТ3645-К', maxFibers: 216 },
+    { id: 'KSC-MURR', label: 'KSC LIGHT PON МУРР (до 12 волокон)', maxFibers: 12 },
+    { id: '101-01-18', label: '101-01-18 (кросс-муфта FTTH, до 18SC)', maxFibers: 18 },
+    { id: 'custom', label: 'Пользовательская (вручную на карте)', maxFibers: 0 }
+];
+
+/** Дополнительные типы муфт из справочника: { id, label, maxFibers }. */
+var customSleeveTypes = [];
+
+function normalizeSleeveTypeId(id) {
+    return (id || '').trim();
+}
+
+function normalizeSleeveMaxFibers(n) {
+    var v = parseInt(n, 10);
+    if (isNaN(v) || v < 0) return 0;
+    return Math.min(288, v);
+}
+
+function getBuiltinSleeveTypes() {
+    return SLEEVE_TYPES_BUILTIN.slice();
+}
+
+function getCustomSleeveTypes() {
+    return (customSleeveTypes || []).slice();
+}
+
+function findSleeveTypeById(id) {
+    var sid = normalizeSleeveTypeId(id);
+    if (!sid) return null;
+    var i;
+    for (i = 0; i < SLEEVE_TYPES_BUILTIN.length; i++) {
+        if (SLEEVE_TYPES_BUILTIN[i].id === sid) return Object.assign({ builtin: true }, SLEEVE_TYPES_BUILTIN[i]);
+    }
+    for (i = 0; i < (customSleeveTypes || []).length; i++) {
+        if (customSleeveTypes[i].id === sid) return Object.assign({ builtin: false }, customSleeveTypes[i]);
+    }
+    return null;
+}
+
+function getAllSleeveTypes() {
+    var out = [];
+    SLEEVE_TYPES_BUILTIN.forEach(function(t) {
+        out.push(Object.assign({ builtin: true }, t));
+    });
+    (customSleeveTypes || []).forEach(function(t) {
+        out.push(Object.assign({ builtin: false }, t));
+    });
+    return out;
+}
+
+function getDefaultMaxFibersForSleeveType(sleeveType) {
+    var found = findSleeveTypeById(sleeveType);
+    if (found) return found.maxFibers;
+    return 0;
+}
+
+function formatSleeveMaxFibersHint(maxFibers) {
+    if (!maxFibers) return 'без лимита';
+    return maxFibers + ' волокон';
+}
+
+function getSleeveTypeSelectOptionsHtml(selectedValue) {
+    var sel = (selectedValue != null && selectedValue !== '') ? String(selectedValue) : '';
+    var html = '';
+    if (!sel) {
+        html += '<option value="" selected>— Не указано —</option>';
+    }
+    var found = false;
+    getAllSleeveTypes().forEach(function(t) {
+        if (t.id === sel) found = true;
+        html += '<option value="' + escapeHtml(t.id) + '"' + (t.id === sel ? ' selected' : '') + '>' + escapeHtml(t.label) + '</option>';
+    });
+    if (sel && !found) {
+        html += '<option value="' + escapeHtml(sel) + '" selected>' + escapeHtml(sel) + '</option>';
+    }
+    return html;
+}
+
+function populateSleeveTypeSelect(selectEl, selectedValue) {
+    if (!selectEl) return;
+    var prev = selectedValue != null ? selectedValue : selectEl.value;
+    selectEl.innerHTML = getSleeveTypeSelectOptionsHtml(prev);
+}
+
+function refreshAllSleeveTypeSelects() {
+    populateSleeveTypeSelect(document.getElementById('sleeveType'));
+    document.querySelectorAll('.cable-split-sleeve-type').forEach(function(el) {
+        populateSleeveTypeSelect(el, el.value);
+        if (typeof bindCableSplitSleeveFields === 'function') bindCableSplitSleeveFields(el.closest('.cable-split-sleeve-fields') || el.parentElement);
+    });
+    var editSel = document.getElementById('editSleeveType');
+    if (editSel) populateSleeveTypeSelect(editSel, editSel.value);
+}
+
+function addCustomSleeveType(id, label, maxFibers) {
+    id = normalizeSleeveTypeId(id);
+    if (!id) return false;
+    if (findSleeveTypeById(id)) return false;
+    label = (label || '').trim() || id;
+    customSleeveTypes.push({
+        id: id,
+        label: label,
+        maxFibers: normalizeSleeveMaxFibers(maxFibers)
+    });
+    customSleeveTypes.sort(function(a, b) {
+        return String(a.label).localeCompare(String(b.label), 'ru');
+    });
+    saveDeviceCatalog();
+    return true;
+}
+
+function removeCustomSleeveType(id) {
+    id = normalizeSleeveTypeId(id);
+    var idx = -1;
+    (customSleeveTypes || []).forEach(function(t, i) {
+        if (t.id === id) idx = i;
+    });
+    if (idx === -1) return false;
+    customSleeveTypes.splice(idx, 1);
+    saveDeviceCatalog();
+    return true;
+}
+
+function resetCustomSleeveTypes() {
+    customSleeveTypes = [];
+    saveDeviceCatalog();
+}
+
 var nodeDeviceCatalog = {};
 var oltDeviceCatalog = {};
 var onuDeviceCatalog = {};
@@ -127,6 +284,10 @@ var DEVICE_CATALOG_TAB_META = {
     node: {
         label: 'Медиаконвертер',
         desc: 'Оптические медиаконвертеры на карте (отдельно от коммутаторов узла сети).'
+    },
+    sleeve: {
+        label: 'Муфты',
+        desc: 'Типы кабельных муфт для списка при добавлении и редактировании. Встроенные типы нельзя удалить; свои — добавляются кнопкой «Добавить».'
     }
 };
 
@@ -135,7 +296,8 @@ var DEVICE_CATALOG_TAB_TONE = {
     olt: '#0ea5e9',
     onu: '#06b6d4',
     camera: '#64748b',
-    node: '#14b8a6'
+    node: '#14b8a6',
+    sleeve: '#22c55e'
 };
 
 function syncDeviceCatalogTabButtons() {
@@ -152,9 +314,15 @@ function syncDeviceCatalogTabButtons() {
     }
 }
 
-var DEVICE_CATALOG_ALLOWED_TABS = { node: 1, olt: 1, onu: 1, camera: 1, switch: 1 };
+var DEVICE_CATALOG_ALLOWED_TABS = { node: 1, olt: 1, onu: 1, camera: 1, switch: 1, sleeve: 1 };
 
 function getDeviceCatalogStats(kind) {
+    if (kind === 'sleeve') {
+        return {
+            manufacturers: getBuiltinSleeveTypes().length,
+            models: getCustomSleeveTypes().length
+        };
+    }
     var catalog = getCatalogObjectRef(kind);
     var mfrs = Object.keys(catalog || {});
     var models = 0;
@@ -191,8 +359,20 @@ function updateDeviceCatalogChrome() {
 
     var tabStatsEl = document.getElementById('deviceCatalogTabStats');
     if (tabStatsEl) {
-        tabStatsEl.textContent = stats.manufacturers + ' / ' + stats.models;
-        tabStatsEl.title = stats.manufacturers + ' производителей, ' + stats.models + ' моделей в разделе';
+        if (tab === 'sleeve') {
+            tabStatsEl.textContent = stats.manufacturers + ' / ' + stats.models;
+            tabStatsEl.title = stats.manufacturers + ' встроенных типов, ' + stats.models + ' добавленных вами';
+        } else {
+            tabStatsEl.textContent = stats.manufacturers + ' / ' + stats.models;
+            tabStatsEl.title = stats.manufacturers + ' производителей, ' + stats.models + ' моделей в разделе';
+        }
+    }
+
+    var searchInp = document.getElementById('deviceCatalogSearch');
+    if (searchInp) {
+        searchInp.placeholder = tab === 'sleeve'
+            ? 'Поиск типа муфты…'
+            : 'Поиск производителя или модели…';
     }
 
     var globalEl = document.getElementById('deviceCatalogGlobalStats');
@@ -216,7 +396,9 @@ function updateDeviceCatalogChrome() {
         if (!k || !DEVICE_CATALOG_ALLOWED_TABS[k]) return;
         var s = getDeviceCatalogStats(k);
         badge.textContent = s.manufacturers + ' / ' + s.models;
-        badge.title = s.manufacturers + ' производителей, ' + s.models + ' моделей';
+        badge.title = k === 'sleeve'
+            ? (s.manufacturers + ' встроенных, ' + s.models + ' своих')
+            : (s.manufacturers + ' производителей, ' + s.models + ' моделей');
     });
 }
 
@@ -224,14 +406,16 @@ function applyDeviceCatalogSearchFilter() {
     var q = getDeviceCatalogSearchQuery();
     var list = document.getElementById('deviceCatalogList');
     if (!list) return;
-    var cards = list.querySelectorAll('.device-catalog-mfr');
+    var cards = list.querySelectorAll('.device-catalog-mfr, .device-catalog-sleeve-row');
     var visible = 0;
     cards.forEach(function(card) {
-        var mfr = card.getAttribute('data-mfr') || '';
+        var mfr = card.getAttribute('data-mfr') || card.getAttribute('data-sleeve-id') || '';
         var models = [];
         card.querySelectorAll('.device-catalog-model-name').forEach(function(el) {
             models.push(el.textContent);
         });
+        var labelEl = card.querySelector('.device-catalog-sleeve-label');
+        if (labelEl) models.push(labelEl.textContent);
         var show = catalogEntryMatchesSearch(mfr, models, q);
         card.classList.toggle('is-hidden-by-search', !show);
         if (show) visible++;
@@ -345,7 +529,9 @@ function resetDeviceCatalogToDefault() {
     cameraDeviceCatalog = cloneDeepCatalog(CAMERA_CATALOG_DEFAULT);
     switchDeviceCatalog = cloneDeepCatalog(SWITCH_CATALOG_DEFAULT);
     switchModelDefaultPorts = {};
+    customSleeveTypes = [];
     saveDeviceCatalog();
+    refreshAllSleeveTypeSelects();
 }
 
 function resetDeviceCatalogTabToDefault(kind) {
@@ -358,6 +544,10 @@ function resetDeviceCatalogTabToDefault(kind) {
     else if (kind === 'switch') {
         switchDeviceCatalog = cloneDeepCatalog(def);
         switchModelDefaultPorts = {};
+    } else if (kind === 'sleeve') {
+        resetCustomSleeveTypes();
+        refreshAllSleeveTypeSelects();
+        return;
     }
     saveDeviceCatalog();
 }
@@ -520,7 +710,8 @@ function saveDeviceCatalog() {
         onuDeviceCatalog: cloneDeepCatalog(onuDeviceCatalog),
         cameraDeviceCatalog: cloneDeepCatalog(cameraDeviceCatalog),
         switchDeviceCatalog: cloneDeepCatalog(switchDeviceCatalog),
-        switchModelDefaultPorts: JSON.parse(JSON.stringify(switchModelDefaultPorts || {}))
+        switchModelDefaultPorts: JSON.parse(JSON.stringify(switchModelDefaultPorts || {})),
+        customSleeveTypes: getCustomSleeveTypes()
     };
     try { localStorage.setItem(CUSTOM_DEVICE_OPTIONS_STORAGE_KEY, JSON.stringify(payload)); } catch (e) {}
     if (getApiBase() && getAuthToken()) {
@@ -569,7 +760,9 @@ function loadDeviceCatalog(opts) {
         } else {
             switchModelDefaultPorts = {};
         }
+        applyCustomSleeveTypesFromOpts(opts);
         saveDeviceCatalog();
+        refreshAllSleeveTypeSelects();
         return;
     }
 
@@ -621,7 +814,27 @@ function loadDeviceCatalog(opts) {
         switchModelDefaultPorts = {};
     }
 
+    applyCustomSleeveTypesFromOpts(opts);
+
     if (mergeNodeCatalogIntoSwitch()) saveDeviceCatalog();
+    refreshAllSleeveTypeSelects();
+}
+
+function applyCustomSleeveTypesFromOpts(opts) {
+    opts = opts || {};
+    if (!('customSleeveTypes' in opts)) return;
+    if (!Array.isArray(opts.customSleeveTypes)) {
+        customSleeveTypes = [];
+        return;
+    }
+    customSleeveTypes = opts.customSleeveTypes.map(function(t) {
+        if (!t || !t.id) return null;
+        return {
+            id: normalizeSleeveTypeId(t.id),
+            label: (t.label || t.id || '').trim() || normalizeSleeveTypeId(t.id),
+            maxFibers: normalizeSleeveMaxFibers(t.maxFibers)
+        };
+    }).filter(Boolean);
 }
 
 function loadCustomDeviceOptions(opts) {
@@ -634,6 +847,7 @@ function loadCustomDeviceOptionsFromStorage() {
         if (!raw) return;
         var parsed = JSON.parse(raw);
         if (parsed && typeof parsed === 'object') loadDeviceCatalog(parsed);
+        else refreshAllSleeveTypeSelects();
     } catch (e) {}
 }
 
@@ -914,17 +1128,66 @@ function setDeviceComboboxValue(valueId, value) {
     if (trigger) trigger.textContent = value || (wrapper.dataset.type === 'model' ? 'Выберите модель' : 'Выберите производителя');
 }
 
+function renderSleeveCatalogList(container, searchQ) {
+    var types = getAllSleeveTypes();
+    var html = '';
+    var visibleCount = 0;
+    types.forEach(function(t) {
+        var models = [t.label, formatSleeveMaxFibersHint(t.maxFibers)];
+        var matches = catalogEntryMatchesSearch(t.id, models, searchQ);
+        if (matches) visibleCount++;
+        html += '<article class="device-catalog-sleeve-row device-catalog-mfr' + (matches ? '' : ' is-hidden-by-search') + '" data-sleeve-id="' + escapeHtml(t.id) + '">';
+        html += '<header class="device-catalog-mfr-header">';
+        html += '<div class="device-catalog-mfr-title">';
+        html += '<span class="device-catalog-mfr-name device-catalog-model-name">' + escapeHtml(t.id) + '</span>';
+        html += '<span class="device-catalog-sleeve-label">' + escapeHtml(t.label) + '</span>';
+        html += '<span class="device-catalog-mfr-count">' + escapeHtml(formatSleeveMaxFibersHint(t.maxFibers)) + '</span>';
+        if (t.builtin) {
+            html += '<span class="device-catalog-sleeve-badge">встроенный</span>';
+        }
+        html += '</div>';
+        if (!t.builtin) {
+            html += '<div class="device-catalog-mfr-actions">';
+            html += '<button type="button" class="device-catalog-remove-sleeve device-catalog-btn-remove-mfr" data-sleeve-id="' + escapeHtml(t.id) + '" title="Удалить тип">Удалить</button>';
+            html += '</div>';
+        }
+        html += '</header></article>';
+    });
+    if (searchQ && visibleCount === 0) {
+        html += '<p class="device-catalog-no-results">Ничего не найдено по запросу «' + escapeHtml(searchQ) + '».</p>';
+    }
+    container.innerHTML = html;
+    container.querySelectorAll('.device-catalog-remove-sleeve').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var sid = btn.getAttribute('data-sleeve-id');
+            (async function() {
+                if (!(await showConfirm('Удалить тип муфты «' + sid + '» из справочника?', 'Удалить тип', { confirmText: 'Удалить' }))) return;
+                if (removeCustomSleeveType(sid)) {
+                    renderDeviceCatalogList();
+                    refreshAllSleeveTypeSelects();
+                    if (typeof showInfo === 'function') showInfo('Тип муфты удалён', '');
+                }
+            })();
+        });
+    });
+}
+
 function renderDeviceCatalogList() {
     var container = document.getElementById('deviceCatalogList');
     if (!container) return;
     var tab = window.deviceCatalogActiveTab || 'switch';
     if (!DEVICE_CATALOG_ALLOWED_TABS[tab]) tab = 'switch';
 
-    var catalog = getCatalogObjectRef(tab);
     var searchQ = getDeviceCatalogSearchQuery();
-
-    var mfrs = Object.keys(catalog).sort();
     updateDeviceCatalogChrome();
+
+    if (tab === 'sleeve') {
+        renderSleeveCatalogList(container, searchQ);
+        return;
+    }
+
+    var catalog = getCatalogObjectRef(tab);
+    var mfrs = Object.keys(catalog).sort();
 
     if (mfrs.length === 0) {
         container.innerHTML =
@@ -1028,8 +1291,20 @@ function getActiveDeviceCatalogTab() {
 }
 
 function setDeviceCatalogEntryType(entryType) {
+    var tab = getActiveDeviceCatalogTab();
     var mfrPanel = document.getElementById('deviceCatalogEntryMfrPanel');
     var modelPanel = document.getElementById('deviceCatalogEntryModelPanel');
+    var sleevePanel = document.getElementById('deviceCatalogEntrySleevePanel');
+    var typeTabs = document.querySelector('.device-catalog-entry-type-tabs');
+    if (tab === 'sleeve') {
+        if (typeTabs) typeTabs.hidden = true;
+        if (mfrPanel) mfrPanel.hidden = true;
+        if (modelPanel) modelPanel.hidden = true;
+        if (sleevePanel) sleevePanel.hidden = false;
+        return;
+    }
+    if (typeTabs) typeTabs.hidden = false;
+    if (sleevePanel) sleevePanel.hidden = true;
     var isMfr = entryType === 'manufacturer';
     document.querySelectorAll('.device-catalog-entry-type').forEach(function(btn) {
         var active = btn.getAttribute('data-entry-type') === entryType;
@@ -1063,29 +1338,41 @@ function updateDeviceCatalogEntryModalChrome() {
     var portsGroup = document.getElementById('deviceCatalogEntryPortsGroup');
     if (hint) hint.textContent = 'Раздел: «' + meta.label + '». ' + meta.desc;
     if (portsGroup) portsGroup.hidden = tab !== 'switch';
+    setDeviceCatalogEntryType(tab === 'sleeve' ? 'sleeve' : (document.querySelector('.device-catalog-entry-type-active') || {}).getAttribute('data-entry-type') || 'manufacturer');
 }
 
 function openDeviceCatalogEntryModal(entryType, presetMfr) {
     var modal = document.getElementById('deviceCatalogEntryModal');
     if (!modal) return;
+    var tab = getActiveDeviceCatalogTab();
     entryType = entryType === 'model' ? 'model' : 'manufacturer';
     updateDeviceCatalogEntryModalChrome();
     refreshDeviceCatalogEntryMfrSelect(presetMfr || '');
-    setDeviceCatalogEntryType(entryType);
+    if (tab !== 'sleeve') setDeviceCatalogEntryType(entryType);
 
     var mfrNameInp = document.getElementById('deviceCatalogEntryMfrName');
     var modelNameInp = document.getElementById('deviceCatalogEntryModelName');
     var portsInp = document.getElementById('deviceCatalogEntryDefaultPorts');
+    var sleeveIdInp = document.getElementById('deviceCatalogEntrySleeveId');
+    var sleeveLabelInp = document.getElementById('deviceCatalogEntrySleeveLabel');
+    var sleeveMaxInp = document.getElementById('deviceCatalogEntrySleeveMaxFibers');
     if (mfrNameInp) mfrNameInp.value = '';
     if (modelNameInp) modelNameInp.value = '';
     if (portsInp) portsInp.value = '';
+    if (sleeveIdInp) sleeveIdInp.value = '';
+    if (sleeveLabelInp) sleeveLabelInp.value = '';
+    if (sleeveMaxInp) sleeveMaxInp.value = '96';
     if (entryType === 'model' && presetMfr) {
         var sel = document.getElementById('deviceCatalogEntryMfrSelect');
         if (sel) sel.value = presetMfr;
     }
 
     var titleEl = document.getElementById('deviceCatalogEntryModalTitle');
-    if (titleEl) titleEl.textContent = entryType === 'model' ? 'Добавить модель' : 'Добавить производителя';
+    if (titleEl) {
+        titleEl.textContent = tab === 'sleeve'
+            ? 'Добавить тип муфты'
+            : (entryType === 'model' ? 'Добавить модель' : 'Добавить производителя');
+    }
 
     modal.style.display = 'flex';
     requestAnimationFrame(function () {
@@ -1093,9 +1380,11 @@ function openDeviceCatalogEntryModal(entryType, presetMfr) {
             window.initPanelPlexusCanvases(modal);
         }
     });
-    var focusEl = entryType === 'model'
-        ? (document.getElementById('deviceCatalogEntryModelName') || document.getElementById('deviceCatalogEntryMfrSelect'))
-        : document.getElementById('deviceCatalogEntryMfrName');
+    var focusEl = tab === 'sleeve'
+        ? document.getElementById('deviceCatalogEntrySleeveId')
+        : (entryType === 'model'
+            ? (document.getElementById('deviceCatalogEntryModelName') || document.getElementById('deviceCatalogEntryMfrSelect'))
+            : document.getElementById('deviceCatalogEntryMfrName'));
     if (focusEl) setTimeout(function() { focusEl.focus(); }, 50);
 }
 
@@ -1104,8 +1393,41 @@ function closeDeviceCatalogEntryModal() {
     if (modal) modal.style.display = 'none';
 }
 
+function saveDeviceCatalogEntrySleeve() {
+    var idInp = document.getElementById('deviceCatalogEntrySleeveId');
+    var labelInp = document.getElementById('deviceCatalogEntrySleeveLabel');
+    var maxInp = document.getElementById('deviceCatalogEntrySleeveMaxFibers');
+    var id = idInp ? idInp.value.trim() : '';
+    if (!id) {
+        if (typeof showError === 'function') showError('Введите код типа муфты', '');
+        return;
+    }
+    if (id === 'custom') {
+        if (typeof showError === 'function') showError('Код «custom» зарезервирован для ручного ввода на карте', '');
+        return;
+    }
+    var label = labelInp ? labelInp.value.trim() : '';
+    var maxFibers = maxInp ? normalizeSleeveMaxFibers(maxInp.value) : 0;
+    if (findSleeveTypeById(id)) {
+        if (typeof showError === 'function') showError('Такой тип муфты уже есть в справочнике', '');
+        return;
+    }
+    if (!addCustomSleeveType(id, label, maxFibers)) {
+        if (typeof showError === 'function') showError('Не удалось добавить тип муфты', '');
+        return;
+    }
+    closeDeviceCatalogEntryModal();
+    renderDeviceCatalogList();
+    refreshAllSleeveTypeSelects();
+    if (typeof showInfo === 'function') showInfo('Тип муфты добавлен', '');
+}
+
 function saveDeviceCatalogEntry() {
     var tab = getActiveDeviceCatalogTab();
+    if (tab === 'sleeve') {
+        saveDeviceCatalogEntrySleeve();
+        return;
+    }
     var entryType = document.querySelector('.device-catalog-entry-type-active');
     var type = entryType ? entryType.getAttribute('data-entry-type') : 'manufacturer';
 
@@ -1182,7 +1504,7 @@ function setupDeviceCatalogEntryHandlers() {
         if (e.target === entryModal) closeDeviceCatalogEntryModal();
     });
 
-    ['deviceCatalogEntryMfrName', 'deviceCatalogEntryModelName'].forEach(function(id) {
+    ['deviceCatalogEntryMfrName', 'deviceCatalogEntryModelName', 'deviceCatalogEntrySleeveId', 'deviceCatalogEntrySleeveLabel', 'deviceCatalogEntrySleeveMaxFibers'].forEach(function(id) {
         var inp = document.getElementById(id);
         if (inp) {
             inp.addEventListener('keydown', function(e) {
@@ -1232,14 +1554,14 @@ function setupDeviceCatalogHandlers() {
             (async function() {
                 var tab = getActiveDeviceCatalogTab();
                 var meta = DEVICE_CATALOG_TAB_META[tab] || DEVICE_CATALOG_TAB_META.switch;
-                if (!(await showConfirm(
-                    'Сбросить раздел «' + meta.label + '» к заводским значениям? Ваши правки в этом разделе будут заменены.',
-                    'Сброс раздела',
-                    { confirmText: 'Сбросить' }
-                ))) return;
+                var resetMsg = tab === 'sleeve'
+                    ? 'Удалить все добавленные вами типы муфт? Встроенный список останется без изменений.'
+                    : 'Сбросить раздел «' + meta.label + '» к заводским значениям? Ваши правки в этом разделе будут заменены.';
+                if (!(await showConfirm(resetMsg, 'Сброс раздела', { confirmText: 'Сбросить' }))) return;
                 resetDeviceCatalogTabToDefault(tab);
                 renderDeviceCatalogList();
                 populateDeviceDatalists();
+                if (tab === 'sleeve') refreshAllSleeveTypeSelects();
                 if (typeof showInfo === 'function') showInfo('Раздел «' + meta.label + '» сброшен', '');
             })();
         });

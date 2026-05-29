@@ -4,5 +4,9 @@
   "yandexMapsApiKey": "YOUR_YANDEX_MAPS_API_KEY",
   "publicSiteUrl": "https://volsmap.ru",
   "freeMapObjectLimit": 2000,
-  "maxConcurrentUsers": 4
+  "maxConcurrentUsers": 4,
+  "turnstileSiteKey": "1x00000000000000000000AA",
+  "turnstileSecretKey": "1x0000000000000000000000000000000AA",
+  "authRateLimitWindowMs": 900000,
+  "authRateLimitMax": 20
 }
