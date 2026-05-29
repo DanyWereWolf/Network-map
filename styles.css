@@ -1871,9 +1871,12 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     margin-bottom: 0;
 }
 
-/* РџСЂРёРІРµС‚СЃС‚РІРµРЅРЅРѕРµ РѕРєРЅРѕ (РїРµСЂРІС‹Р№ РІС…РѕРґ, С†РµРЅС‚СЂ СЌРєСЂР°РЅР°) */
+/* Приветственное окно (первый вход, центр экрана) */
 .welcome-modal {
     z-index: 30000;
+    align-items: center;
+    justify-content: center;
+    padding: max(12px, env(safe-area-inset-top, 0px)) 12px max(12px, env(safe-area-inset-bottom, 0px));
 }
 
 .welcome-modal.modal--centered,
@@ -3911,6 +3914,61 @@ button {
     background: var(--bg-secondary);
     box-shadow: var(--shadow-map), inset 0 0 0 1px var(--border-color);
     transition: box-shadow var(--transition-normal), border-radius var(--transition-normal);
+}
+
+.map-loading-overlay {
+    position: absolute;
+    top: var(--map-frame-padding);
+    right: var(--map-frame-padding);
+    bottom: var(--map-frame-padding);
+    left: var(--map-frame-padding);
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--map-radius);
+    background: var(--bg-secondary);
+    box-shadow: var(--shadow-map), inset 0 0 0 1px var(--border-color);
+    transition: opacity 0.35s ease, visibility 0.35s ease;
+}
+
+.map-loading-overlay.is-hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.map-loading-overlay[hidden] {
+    display: none !important;
+}
+
+.map-loading-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 24px;
+    text-align: center;
+}
+
+.map-loading-spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid var(--accent-primary-soft);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: mapLoadingSpin 0.75s linear infinite;
+}
+
+.map-loading-text {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+@keyframes mapLoadingSpin {
+    to { transform: rotate(360deg); }
 }
 
 /* ==================== РЎРєСЂРѕР»Р»Р±Р°СЂ ==================== */
@@ -7072,6 +7130,15 @@ button {
         width: 100%;
         flex: 1;
         min-height: 300px;
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+    .map-loading-overlay {
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
         border-radius: 0;
         box-shadow: none;
     }

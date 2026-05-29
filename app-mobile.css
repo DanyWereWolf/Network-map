@@ -505,7 +505,7 @@ html {
 
     .welcome-modal .modal-content.welcome-modal-content {
         max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px);
-        margin: 12px auto;
+        margin: 0;
     }
 
     #nodeSelectionModal .modal-content.node-selection-modal-content,
