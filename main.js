@@ -257,13 +257,47 @@ function shouldUseIncrementalSync(opts) {
     return !!(window.syncIsConnected && typeof window.syncSendOp === 'function');
 }
 
-function syncPushObjectUpdate(obj) {
+var syncPushDebounceTimers = {};
+
+function flushSyncPushForUid(uniqueId) {
+    if (!uniqueId) return;
+    var entry = syncPushDebounceTimers[uniqueId];
+    if (!entry) return;
+    if (entry.timer) {
+        clearTimeout(entry.timer);
+        entry.timer = null;
+    }
+    var target = entry.target;
+    syncPushDebounceTimers[uniqueId] = null;
+    if (!target || !target.properties) return;
+    var t = target.properties.get('type');
+    if (t === 'cable') syncPushCableUpdate(target, true);
+    else syncPushObjectUpdate(target, true);
+}
+
+function scheduleSyncPushForObject(obj) {
+    if (!obj || !obj.properties) return;
+    var uid = getObjectUniqueId(obj);
+    if (!uid) return;
+    var prev = syncPushDebounceTimers[uid];
+    if (prev && prev.timer) clearTimeout(prev.timer);
+    syncPushDebounceTimers[uid] = { target: obj, timer: setTimeout(function() {
+        flushSyncPushForUid(uid);
+    }, 350) };
+}
+
+function syncPushObjectUpdate(obj, immediate) {
     if (!obj || !obj.properties) return false;
     var t = obj.properties.get('type');
     if (!t || t === 'cable' || t === 'cableLabel') return false;
+    if (!immediate) {
+        scheduleSyncPushForObject(obj);
+        return true;
+    }
     var data = serializeMapItemFromObject(obj);
     if (!data || !data.uniqueId) return false;
     var baseRevision = getMapRevision(obj);
+    delete data.revision;
     if (typeof window.syncSendOp === 'function') {
         window.syncSendOp({
             type: 'update_object',
@@ -271,16 +305,22 @@ function syncPushObjectUpdate(obj) {
             baseRevision: baseRevision,
             data: data
         });
+        setMapRevision(obj, baseRevision + 1);
         return true;
     }
     return false;
 }
 
-function syncPushCableUpdate(cable) {
+function syncPushCableUpdate(cable, immediate) {
     if (!cable || !cable.properties || cable.properties.get('type') !== 'cable') return false;
+    if (!immediate) {
+        scheduleSyncPushForObject(cable);
+        return true;
+    }
     var data = serializeMapItemFromObject(cable);
     if (!data || !data.uniqueId) return false;
     var baseRevision = getMapRevision(cable);
+    delete data.revision;
     if (typeof window.syncSendOp === 'function') {
         window.syncSendOp({
             type: 'update_cable',
@@ -288,6 +328,7 @@ function syncPushCableUpdate(cable) {
             baseRevision: baseRevision,
             data: data
         });
+        setMapRevision(cable, baseRevision + 1);
         return true;
     }
     return false;
@@ -308,25 +349,25 @@ function pushSaveDataToSync(opts) {
         return;
     }
     if (opts && opts.object) {
-        syncPushObjectUpdate(opts.object);
+        syncPushObjectUpdate(opts.object, !!opts.syncImmediate);
         return;
     }
     if (opts && opts.cable) {
-        syncPushCableUpdate(opts.cable);
+        syncPushCableUpdate(opts.cable, !!opts.syncImmediate);
         return;
     }
     if (opts && opts.objects && opts.objects.length) {
-        for (var i = 0; i < opts.objects.length; i++) syncPushObjectUpdate(opts.objects[i]);
+        for (var i = 0; i < opts.objects.length; i++) syncPushObjectUpdate(opts.objects[i], !!opts.syncImmediate);
         return;
     }
     if (opts && opts.cables && opts.cables.length) {
-        for (var j = 0; j < opts.cables.length; j++) syncPushCableUpdate(opts.cables[j]);
+        for (var j = 0; j < opts.cables.length; j++) syncPushCableUpdate(opts.cables[j], !!opts.syncImmediate);
         return;
     }
     if (currentModalObject && currentModalObject.properties) {
         var mt = currentModalObject.properties.get('type');
-        if (mt === 'cable') syncPushCableUpdate(currentModalObject);
-        else syncPushObjectUpdate(currentModalObject);
+        if (mt === 'cable') syncPushCableUpdate(currentModalObject, !!opts.syncImmediate);
+        else syncPushObjectUpdate(currentModalObject, !!opts.syncImmediate);
         return;
     }
 }
@@ -360,6 +401,8 @@ function releaseDragObjectLock(uid) {
 
 window.onSyncOpConflict = function(payload) {
     if (!payload || !payload.uniqueId) return;
+    var isOwnStale = payload.editorClientId && window.syncMyClientId &&
+        payload.editorClientId === window.syncMyClientId;
     if (payload.data) {
         var conflictObj = objects.find(function(o) {
             return o.properties && o.properties.get('uniqueId') === payload.uniqueId;
@@ -370,7 +413,7 @@ window.onSyncOpConflict = function(payload) {
             else populatePlacemarkFromSerializedData(conflictObj, payload.data);
         }
     }
-    if (currentModalObject && getObjectUniqueId(currentModalObject) === payload.uniqueId) {
+    if (!isOwnStale && currentModalObject && getObjectUniqueId(currentModalObject) === payload.uniqueId) {
         if (typeof showWarning === 'function') {
             showWarning('Объект изменён другим пользователем. Карточка будет обновлена.', 'Конфликт версии');
         }
@@ -4120,7 +4163,7 @@ function createObject(type, name, coords, options = {}) {
         updateSelectionPulsePosition(placemark);
         if (type === 'cross') updateCrossDisplay(); 
         if (type === 'node') updateNodeDisplay();
-        saveData({ object: placemark });
+        saveData({ object: placemark, syncImmediate: true });
         releaseDragObjectLock(uid);
     });
     
@@ -7805,6 +7848,10 @@ function closeInfoModal() {
     if (typeof window.isConfirmModalOpen === 'function' && window.isConfirmModalOpen()) {
         return;
     }
+    if (currentModalObject) {
+        var flushUid = getObjectUniqueId(currentModalObject);
+        if (flushUid) flushSyncPushForUid(flushUid);
+    }
     var modal = document.getElementById('infoModal');
     if (!modal) return;
     var modalInfo = document.getElementById('modalInfo');
@@ -9867,7 +9914,7 @@ function createObjectFromData(data, opts) {
             }
             updateAllConnectionLines();
             updateSelectionPulsePosition(placemark);
-            saveData({ object: placemark });
+            saveData({ object: placemark, syncImmediate: true });
             releaseDragObjectLock(uid);
         });
 

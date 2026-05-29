@@ -2024,12 +2024,25 @@ function applyOperationToState(state, op) {
         if (idx >= 0) {
             cur = state[idx];
             baseRev = op.baseRevision;
-            if (baseRev != null && getItemRevision(cur) !== Number(baseRev)) {
-                return { state: state, conflict: { uniqueId: op.uniqueId, revision: getItemRevision(cur), data: cur } };
+            if (baseRev != null && Number(baseRev) !== getItemRevision(cur)) {
+                var sameEditor = cur._syncEditor && cur._syncEditor === op._clientId;
+                if (!sameEditor && Number(baseRev) < getItemRevision(cur)) {
+                    return {
+                        state: state,
+                        conflict: {
+                            uniqueId: op.uniqueId,
+                            revision: getItemRevision(cur),
+                            data: cur,
+                            editorClientId: cur._syncEditor || null
+                        }
+                    };
+                }
             }
             state = state.slice();
             merged = Object.assign({}, cur, op.data);
+            delete merged.revision;
             merged.revision = getItemRevision(cur) + 1;
+            merged._syncEditor = op._clientId || cur._syncEditor || null;
             state[idx] = merged;
             op.data = merged;
         }
@@ -2089,12 +2102,25 @@ function applyOperationToState(state, op) {
         if (idx >= 0) {
             cur = state[idx];
             baseRev = op.baseRevision;
-            if (baseRev != null && getItemRevision(cur) !== Number(baseRev)) {
-                return { state: state, conflict: { uniqueId: op.uniqueId, revision: getItemRevision(cur), data: cur } };
+            if (baseRev != null && Number(baseRev) !== getItemRevision(cur)) {
+                var sameEditorCable = cur._syncEditor && cur._syncEditor === op._clientId;
+                if (!sameEditorCable && Number(baseRev) < getItemRevision(cur)) {
+                    return {
+                        state: state,
+                        conflict: {
+                            uniqueId: op.uniqueId,
+                            revision: getItemRevision(cur),
+                            data: cur,
+                            editorClientId: cur._syncEditor || null
+                        }
+                    };
+                }
             }
             state = state.slice();
             merged = Object.assign({}, cur, op.data);
+            delete merged.revision;
             merged.revision = getItemRevision(cur) + 1;
+            merged._syncEditor = op._clientId || cur._syncEditor || null;
             state[idx] = merged;
             op.data = merged;
         }
@@ -2243,6 +2269,7 @@ wss.on('connection', (ws, req) => {
             if (msg.type === 'op' && msg.op && orgId) {
                 if (!isSyncClientAdmin(clientId)) return;
                 var state = getSyncStateForOrg(orgId);
+                msg.op._clientId = msg.clientId || clientId;
                 var applyResult = applyOperationToState(state.data, msg.op);
                 if (applyResult.conflict) {
                     try {
@@ -2265,9 +2292,6 @@ wss.on('connection', (ws, req) => {
                 state.data = nextData;
                 state.clientId = msg.clientId || clientId;
                 scheduleMapDbSave(orgId);
-                try {
-                    ws.send(JSON.stringify({ type: 'op', op: msg.op }));
-                } catch (eOpSelf) {}
                 wss.clients.forEach(function(client) {
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.orgId === orgId) {
                         try { client.send(JSON.stringify({ type: 'op', op: msg.op })); } catch (e) {}
