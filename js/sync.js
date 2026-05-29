@@ -76,9 +76,21 @@
         }
     }
 
+    function shouldDeferRemoteFullState() {
+        if (typeof window.syncDragInProgress !== 'undefined' && window.syncDragInProgress) return true;
+        if (typeof window.infoModalEditModeSession !== 'undefined' && window.infoModalEditModeSession) return true;
+        return false;
+    }
+
     function doApplyPendingState() {
         if (!pendingApplyState || !Array.isArray(pendingApplyState)) return;
-        if (typeof window.syncDragInProgress !== 'undefined' && window.syncDragInProgress) return;
+        if (shouldDeferRemoteFullState()) {
+            applyStateTimer = setTimeout(function() {
+                applyStateTimer = null;
+                doApplyPendingState();
+            }, 400);
+            return;
+        }
         if (window.syncMapIsApplying) {
             applyStateTimer = setTimeout(doApplyPendingState, 80);
             return;
@@ -288,6 +300,10 @@
                     } else if (typeof window.showWarning === 'function') {
                         window.showWarning(msg.error || 'Достигнут лимит объектов на карте', 'Лимит');
                     }
+                    return;
+                }
+                if (msg.type === 'op_conflict' && msg.conflict && typeof window.onSyncOpConflict === 'function') {
+                    try { window.onSyncOpConflict(msg.conflict); } catch (eCf) {}
                     return;
                 }
                 if (msg.type === 'op' && msg.op && typeof window.applyOperationToMap === 'function') {

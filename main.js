@@ -239,6 +239,145 @@ window.onSyncObjectLocks = function() {
     }
 };
 
+var dragHeldLockId = null;
+
+function getMapRevision(obj) {
+    if (!obj || !obj.properties) return 0;
+    var r = obj.properties.get('mapRevision');
+    return r != null && !isNaN(Number(r)) ? Number(r) : 0;
+}
+
+function setMapRevision(obj, revision) {
+    if (!obj || !obj.properties) return;
+    obj.properties.set('mapRevision', revision != null && !isNaN(Number(revision)) ? Number(revision) : 0);
+}
+
+function shouldUseIncrementalSync(opts) {
+    if (opts && (opts.syncFull || opts.skipSync)) return false;
+    return !!(window.syncIsConnected && typeof window.syncSendOp === 'function');
+}
+
+function syncPushObjectUpdate(obj) {
+    if (!obj || !obj.properties) return false;
+    var t = obj.properties.get('type');
+    if (!t || t === 'cable' || t === 'cableLabel') return false;
+    var data = serializeMapItemFromObject(obj);
+    if (!data || !data.uniqueId) return false;
+    var baseRevision = getMapRevision(obj);
+    if (typeof window.syncSendOp === 'function') {
+        window.syncSendOp({
+            type: 'update_object',
+            uniqueId: data.uniqueId,
+            baseRevision: baseRevision,
+            data: data
+        });
+        return true;
+    }
+    return false;
+}
+
+function syncPushCableUpdate(cable) {
+    if (!cable || !cable.properties || cable.properties.get('type') !== 'cable') return false;
+    var data = serializeMapItemFromObject(cable);
+    if (!data || !data.uniqueId) return false;
+    var baseRevision = getMapRevision(cable);
+    if (typeof window.syncSendOp === 'function') {
+        window.syncSendOp({
+            type: 'update_cable',
+            uniqueId: data.uniqueId,
+            baseRevision: baseRevision,
+            data: data
+        });
+        return true;
+    }
+    return false;
+}
+
+function pushSaveDataToSync(opts) {
+    opts = opts || {};
+    if (opts.syncFull) {
+        if (typeof window.syncSendState === 'function') {
+            window.syncSendState(opts.state || getSerializedData());
+        }
+        return;
+    }
+    if (!shouldUseIncrementalSync(opts)) {
+        if (!opts.skipSync && typeof window.syncSendState === 'function') {
+            window.syncSendState(getSerializedData());
+        }
+        return;
+    }
+    if (opts && opts.object) {
+        syncPushObjectUpdate(opts.object);
+        return;
+    }
+    if (opts && opts.cable) {
+        syncPushCableUpdate(opts.cable);
+        return;
+    }
+    if (opts && opts.objects && opts.objects.length) {
+        for (var i = 0; i < opts.objects.length; i++) syncPushObjectUpdate(opts.objects[i]);
+        return;
+    }
+    if (opts && opts.cables && opts.cables.length) {
+        for (var j = 0; j < opts.cables.length; j++) syncPushCableUpdate(opts.cables[j]);
+        return;
+    }
+    if (currentModalObject && currentModalObject.properties) {
+        var mt = currentModalObject.properties.get('type');
+        if (mt === 'cable') syncPushCableUpdate(currentModalObject);
+        else syncPushObjectUpdate(currentModalObject);
+        return;
+    }
+}
+
+function acquireDragObjectLock(obj) {
+    if (!obj || !window.syncIsConnected || typeof window.syncRequestObjectLock !== 'function') return;
+    var uid = getObjectUniqueId(obj);
+    if (!uid || isObjectLockedByOther(uid)) return;
+    if (myHeldObjectLockId === uid) {
+        dragHeldLockId = uid;
+        return;
+    }
+    window.syncRequestObjectLock(uid, function(ok) {
+        if (ok) {
+            dragHeldLockId = uid;
+            if (!myHeldObjectLockId) myHeldObjectLockId = uid;
+        }
+    });
+}
+
+function releaseDragObjectLock(uid) {
+    if (!uid) return;
+    var modal = document.getElementById('infoModal');
+    if (currentModalObject && getObjectUniqueId(currentModalObject) === uid && isInfoModalVisible(modal)) {
+        dragHeldLockId = null;
+        return;
+    }
+    if (dragHeldLockId === uid) dragHeldLockId = null;
+    if (myHeldObjectLockId === uid) releaseHeldObjectLock();
+}
+
+window.onSyncOpConflict = function(payload) {
+    if (!payload || !payload.uniqueId) return;
+    if (payload.data) {
+        var conflictObj = objects.find(function(o) {
+            return o.properties && o.properties.get('uniqueId') === payload.uniqueId;
+        });
+        if (conflictObj) {
+            var t = conflictObj.properties.get('type');
+            if (t === 'cable') applySerializedCableToMap(conflictObj, payload.data);
+            else populatePlacemarkFromSerializedData(conflictObj, payload.data);
+        }
+    }
+    if (currentModalObject && getObjectUniqueId(currentModalObject) === payload.uniqueId) {
+        if (typeof showWarning === 'function') {
+            showWarning('Объект изменён другим пользователем. Карточка будет обновлена.', 'Конфликт версии');
+        }
+        refreshObjectModal(currentModalObject);
+    }
+};
+
 var WELCOME_DISMISSED_KEY = 'networkMap_welcomeDismissed';
 
 function getWelcomeDismissedKeyForCurrentUser() {
@@ -3429,8 +3568,7 @@ function handleFileImport(e) {
             clearMap();
             importData(data);
             // После импорта фиксируем состояние, чтобы оно не терялось при перезагрузке.
-            saveData();
-            if (typeof window.syncForceSendState === 'function') window.syncForceSendState();
+            saveData({ syncFull: true });
             showSuccess('Карта импортирована (' + data.length + ' объектов)', 'Импорт');
             logAction(ActionTypes.IMPORT_DATA, { count: data.length });
         } catch (error) {
@@ -3975,9 +4113,6 @@ function createObject(type, name, coords, options = {}) {
             if (typeof showWarning === 'function') showWarning('Объект редактирует другой пользователь', 'Перемещение недоступно');
             return;
         }
-        if (typeof window.syncSendOp === 'function' && uid) {
-            window.syncSendOp({ type: 'update_object', uniqueId: uid, data: { geometry: placemark.geometry.getCoordinates(), name: placemark.properties.get('name') } });
-        }
         updateConnectedCables(placemark);
         const label = placemark.properties.get('label');
         if (label) label.geometry.setCoordinates(placemark.geometry.getCoordinates());
@@ -3985,14 +4120,15 @@ function createObject(type, name, coords, options = {}) {
         updateSelectionPulsePosition(placemark);
         if (type === 'cross') updateCrossDisplay(); 
         if (type === 'node') updateNodeDisplay();
-        saveData();
-        if (typeof window.syncForceSendState === 'function' && typeof getSerializedData === 'function') {
-            window.syncForceSendState(getSerializedData());
-        }
+        saveData({ object: placemark });
+        releaseDragObjectLock(uid);
     });
     
     placemark.events.add('drag', function() {
-        if (!window.syncDragInProgress) window.syncDragInProgress = true;
+        if (!window.syncDragInProgress) {
+            window.syncDragInProgress = true;
+            acquireDragObjectLock(placemark);
+        }
         const label = placemark.properties.get('label');
         if (label) { try { myMap.geoObjects.remove(label); } catch (e) {} } 
         scheduleDragUpdate(placemark);
@@ -4569,12 +4705,7 @@ function splitCableAt(cable, splitOptions) {
         if (opB) window.syncSendOp(opB);
     }
 
-    saveData();
-    if (typeof window.syncForceSendState === 'function' && typeof getSerializedData === 'function') {
-        window.syncForceSendState(getSerializedData());
-    } else if (typeof window.syncSendState === 'function') {
-        window.syncSendState(getSerializedData());
-    }
+    saveData({ syncFull: true });
 
     updateCableVisualization();
     updateAllConnectionLines();
@@ -8015,7 +8146,6 @@ function showCableInfoBody(cable) {
     if (saveCableBtn) {
         saveCableBtn.addEventListener('click', function() {
             saveData();
-            if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
             showInfo('Изменения сохранены', 'Сохранено');
         });
     }
@@ -8268,8 +8398,7 @@ function setupRectSelection() {
                     }
                 });
                 if (toDelete.length) {
-                    saveData();
-                    if (typeof window.syncForceSendState === 'function') window.syncForceSendState();
+                    saveData({ syncFull: true });
                     if (typeof showInfo === 'function') showInfo('Удалено объектов: ' + toDelete.length, 'Удаление');
                 }
                 panel.style.display = 'none';
@@ -8500,15 +8629,16 @@ function serializeOneObject(obj) {
     return arr[idx] || null;
 }
 
-function getSerializedData() {
-    return objects.map(obj => {
-        if (obj.properties) {
-            var t0 = obj.properties.get('type');
-            if (t0 && t0 !== 'cable' && t0 !== 'cableLabel') ensurePlacemarkUniqueIdForSync(obj);
-        }
-        const props = obj.properties.getAll();
-        var geometry = obj.geometry.getCoordinates();
-        if (props.type === 'cable') {
+function serializeMapItemFromObject(obj) {
+    if (!obj || !obj.properties || !obj.geometry) return null;
+    if (obj.properties) {
+        var t0 = obj.properties.get('type');
+        if (t0 && t0 !== 'cable' && t0 !== 'cableLabel') ensurePlacemarkUniqueIdForSync(obj);
+    }
+    const props = obj.properties.getAll();
+    var geometry = obj.geometry.getCoordinates();
+    var revision = getMapRevision(obj);
+    if (props.type === 'cable') {
             var cableGeom = normalizeCableGeometry(geometry) || geometry;
             const fromObj = props.from, toObj = props.to;
             const result = {
@@ -8553,12 +8683,14 @@ function getSerializedData() {
                 if (props.copperSwitchFromId) result.copperSwitchFromId = props.copperSwitchFromId;
                 if (props.copperSwitchToId) result.copperSwitchToId = props.copperSwitchToId;
             }
+            result.revision = revision;
             return result;
         }
         const result = {
             type: props.type,
             name: props.name,
-            geometry: geometry
+            geometry: geometry,
+            revision: revision
         };
         if (props.uniqueId) result.uniqueId = props.uniqueId;
         if (props.usedFibers) result.usedFibers = props.usedFibers;
@@ -8571,6 +8703,7 @@ function getSerializedData() {
         if (props.type === 'cross') {
             if (props.crossPorts) result.crossPorts = props.crossPorts;
             if (props.crossCopperPorts !== undefined && props.crossCopperPorts !== null) result.crossCopperPorts = props.crossCopperPorts;
+            if (props.copperPortUsage) result.copperPortUsage = props.copperPortUsage;
             if (props.nodeConnections) result.nodeConnections = props.nodeConnections;
             if (props.fiberPorts) result.fiberPorts = props.fiberPorts;
             if (props.oltConnections) result.oltConnections = props.oltConnections;
@@ -8631,14 +8764,18 @@ function getSerializedData() {
         if (props.type === 'switch') {
             if (props.parentNodeId) result.parentNodeId = props.parentNodeId;
             if (props.switchPortTypes) result.switchPortTypes = props.switchPortTypes;
+            if (props.copperPortUsage) result.copperPortUsage = props.copperPortUsage;
             if (props.manufacturer) result.manufacturer = props.manufacturer;
             if (props.model) result.model = props.model;
         }
         return result;
-    });
 }
 
-function saveData() {
+function getSerializedData() {
+    return objects.map(function(obj) { return serializeMapItemFromObject(obj); }).filter(Boolean);
+}
+
+function saveData(opts) {
     if (currentModalObject && infoModalEditModeSession && !infoModalEditMode) return;
     if (!inUndoRedo && lastSavedState !== null) {
         undoStack.push(JSON.parse(JSON.stringify(lastSavedState)));
@@ -8647,7 +8784,7 @@ function saveData() {
     }
     var data = getSerializedData();
     lastSavedState = JSON.parse(JSON.stringify(data));
-    if (typeof window.syncSendState === 'function') window.syncSendState(data);
+    if (!(opts && opts.skipSync) && !inUndoRedo) pushSaveDataToSync(opts || {});
     if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
 }
 
@@ -8661,7 +8798,7 @@ function performUndo() {
         clearMap({ skipSave: true, skipHistory: true });
         importData(stateToRestore, { skipSave: true, skipHistory: true });
         lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
-        if (typeof window.syncSendState === 'function') window.syncSendState(lastSavedState);
+        pushSaveDataToSync({ syncFull: true, state: lastSavedState });
         updateUndoRedoButtons();
         if (typeof showSuccess === 'function') showSuccess('Действие отменено', 'Отмена');
     } finally {
@@ -8679,7 +8816,7 @@ function performRedo() {
         clearMap({ skipSave: true, skipHistory: true });
         importData(stateToRestore, { skipSave: true, skipHistory: true });
         lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
-        if (typeof window.syncSendState === 'function') window.syncSendState(lastSavedState);
+        pushSaveDataToSync({ syncFull: true, state: lastSavedState });
         updateUndoRedoButtons();
         if (typeof showSuccess === 'function') showSuccess('Действие повторено', 'Повтор');
     } finally {
@@ -9093,10 +9230,7 @@ function applyOperationToMap(op) {
                 return t && t !== 'cable' && t !== 'cableLabel' && o.properties.get('uniqueId') === addUid;
             });
             if (existingAdd) {
-                if (op.data.geometry && existingAdd.geometry) existingAdd.geometry.setCoordinates(op.data.geometry);
-                if (op.data.name != null) existingAdd.properties.set('name', op.data.name);
-                var lblAdd = existingAdd.properties.get('label');
-                if (lblAdd && lblAdd.geometry && op.data.geometry) lblAdd.geometry.setCoordinates(op.data.geometry);
+                populatePlacemarkFromSerializedData(existingAdd, op.data);
                 updateConnectedCables(existingAdd);
                 updateCrossDisplay();
                 updateNodeDisplay();
@@ -9116,32 +9250,18 @@ function applyOperationToMap(op) {
         return;
     }
     if (op.type === 'update_object' && op.uniqueId != null && op.data) {
-        var obj = objects.find(function(o) {
+        var objUp = objects.find(function(o) {
             var t = o.properties && o.properties.get('type');
             return t && t !== 'cable' && t !== 'cableLabel' && o.properties.get('uniqueId') === op.uniqueId;
         });
-        if (obj) {
-            if (op.data.geometry && obj.geometry) obj.geometry.setCoordinates(op.data.geometry);
-            if (op.data.name != null) {
-                var opName = op.data.name;
-                obj.properties.set('name', opName);
-                var opType = obj.properties.get('type');
-                if (opType === 'cross') {
-                    obj.properties.set('balloonContent', opName ? 'Оптический кросс: ' + opName : 'Оптический кросс');
-                } else if (opType === 'sleeve') {
-                    obj.properties.set('balloonContent', opName ? 'Кабельная муфта: ' + opName : 'Кабельная муфта');
-                } else if (opType === 'node') {
-                    obj.properties.set('balloonContent', opName ? 'Узел сети: ' + opName : 'Узел сети');
-                }
-                if (typeof updateObjectLabel === 'function') updateObjectLabel(obj, opName);
-            }
-            var lbl = obj.properties.get('label');
-            if (lbl && lbl.geometry && op.data.geometry) lbl.geometry.setCoordinates(op.data.geometry);
-            updateConnectedCables(obj);
+        if (objUp) {
+            populatePlacemarkFromSerializedData(objUp, op.data);
+            updateConnectedCables(objUp);
             updateCrossDisplay();
             updateNodeDisplay();
             updateAllConnectionLines();
             updateStats();
+            if (currentModalObject === objUp && typeof refreshObjectModal === 'function') refreshObjectModal(objUp);
         }
         return;
     }
@@ -9235,15 +9355,11 @@ function applyOperationToMap(op) {
         return;
     }
     if (op.type === 'update_cable' && op.uniqueId != null && op.data) {
-        var cable = objects.find(function(o) { return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === op.uniqueId; });
-        if (cable) {
-            var opCoords = normalizeCableGeometry(op.data.geometry);
-            if (cable.geometry && opCoords && opCoords.length >= 2) cable.geometry.setCoordinates(opCoords);
-            if (op.data.distance !== undefined) cable.properties.set('distance', op.data.distance);
-            if (op.data.cableName != null) cable.properties.set('cableName', op.data.cableName);
-            applyImportedCableFiberProps(cable, op.data);
-            updateAllConnectionLines();
+        var cableUp = objects.find(function(o) { return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === op.uniqueId; });
+        if (cableUp) {
+            applySerializedCableToMap(cableUp, op.data);
             updateStats();
+            if (currentModalObject === cableUp && typeof showCableInfo === 'function') showCableInfo(cableUp);
         }
         return;
     }
@@ -9390,6 +9506,158 @@ function importData(data, opts) {
     if (window.CameraPlayer && CameraPlayer.startStreamMonitor) CameraPlayer.startStreamMonitor();
 }
 
+function populatePlacemarkFromSerializedData(placemark, data) {
+    if (!placemark || !data || !data.type) return;
+    var type = data.type;
+    if (data.geometry && placemark.geometry) placemark.geometry.setCoordinates(data.geometry);
+    if (data.name != null) {
+        placemark.properties.set('name', data.name);
+        var opName = data.name;
+        if (type === 'cross') {
+            placemark.properties.set('balloonContent', opName ? 'Оптический кросс: ' + opName : 'Оптический кросс');
+        } else if (type === 'sleeve') {
+            placemark.properties.set('balloonContent', opName ? 'Кабельная муфта: ' + opName : 'Кабельная муфта');
+        } else if (type === 'node') {
+            placemark.properties.set('balloonContent', opName ? 'Узел сети: ' + opName : 'Узел сети');
+        }
+        if (typeof updateObjectLabel === 'function') updateObjectLabel(placemark, opName);
+    }
+    if (data.revision != null) setMapRevision(placemark, data.revision);
+    if (data.usedFibers) placemark.properties.set('usedFibers', data.usedFibers);
+    if (data.fiberConnections) placemark.properties.set('fiberConnections', data.fiberConnections);
+    if (data.fiberLabels) placemark.properties.set('fiberLabels', data.fiberLabels);
+    if (type === 'node') {
+        placemark.properties.set('nodeKind', data.nodeKind || 'network');
+        if (data.comment) placemark.properties.set('comment', data.comment);
+        if (Array.isArray(data.attachedSwitches) && data.attachedSwitches.length) {
+            placemark.properties.set('attachedSwitches', JSON.parse(JSON.stringify(data.attachedSwitches)));
+        } else {
+            placemark.properties.set('attachedSwitches', placemark.properties.get('attachedSwitches') || []);
+        }
+    }
+    if (type === 'sleeve') {
+        if (data.sleeveType) placemark.properties.set('sleeveType', data.sleeveType);
+        if (data.maxFibers !== undefined) placemark.properties.set('maxFibers', data.maxFibers);
+        if (data.oltConnections) placemark.properties.set('oltConnections', data.oltConnections);
+        if (data.onuConnections) placemark.properties.set('onuConnections', data.onuConnections);
+        if (data.mediaConverterConnections) placemark.properties.set('mediaConverterConnections', data.mediaConverterConnections);
+        if (data.splitterConnections) placemark.properties.set('splitterConnections', data.splitterConnections);
+    }
+    if (type === 'cross') {
+        if (data.crossPorts) placemark.properties.set('crossPorts', data.crossPorts);
+        var ccp = data.crossCopperPorts !== undefined && data.crossCopperPorts !== null ? parseInt(data.crossCopperPorts, 10) : 0;
+        placemark.properties.set('crossCopperPorts', isNaN(ccp) ? 0 : Math.max(0, ccp));
+        placemark.properties.set('copperPortUsage', data.copperPortUsage && typeof data.copperPortUsage === 'object' ? data.copperPortUsage : {});
+        if (data.nodeConnections) placemark.properties.set('nodeConnections', data.nodeConnections);
+        if (data.fiberPorts) placemark.properties.set('fiberPorts', data.fiberPorts);
+        if (data.oltConnections) placemark.properties.set('oltConnections', data.oltConnections);
+        if (data.onuConnections) placemark.properties.set('onuConnections', data.onuConnections);
+        if (data.mediaConverterConnections) placemark.properties.set('mediaConverterConnections', data.mediaConverterConnections);
+        if (data.splitterConnections) placemark.properties.set('splitterConnections', data.splitterConnections);
+    }
+    if (type === 'olt') {
+        placemark.properties.set('ponPorts', data.ponPorts || 8);
+        placemark.properties.set('incomingFiber', data.incomingFiber || null);
+        placemark.properties.set('portAssignments', data.portAssignments || {});
+        if (data.manufacturer) placemark.properties.set('manufacturer', data.manufacturer);
+        if (data.model) placemark.properties.set('model', data.model);
+        if (data.comment != null) placemark.properties.set('comment', data.comment || '');
+    }
+    if (type === 'splitter') {
+        placemark.properties.set('splitRatio', data.splitRatio || 8);
+        placemark.properties.set('inputFiber', data.inputFiber || null);
+        placemark.properties.set('outputConnections', data.outputConnections || []);
+    }
+    if (type === 'onu') {
+        placemark.properties.set('incomingFiber', data.incomingFiber || null);
+        if (data.manufacturer) placemark.properties.set('manufacturer', data.manufacturer);
+        if (data.model) placemark.properties.set('model', data.model);
+        if (data.comment != null) placemark.properties.set('comment', data.comment || '');
+    }
+    if (type === 'camera') {
+        if (data.manufacturer) placemark.properties.set('manufacturer', data.manufacturer);
+        if (data.model) placemark.properties.set('model', data.model);
+        if (data.comment != null) placemark.properties.set('comment', data.comment || '');
+        if (window.CameraPlayer) {
+            CameraPlayer.applyCameraStreamConfig(placemark, {
+                streamType: data.streamType || 'none',
+                streamUrl: data.streamUrl || '',
+                streamUser: data.streamUser || '',
+                streamPass: data.streamPass || '',
+                streamAutoplay: data.streamAutoplay !== false,
+                streamMuted: data.streamMuted !== false
+            });
+        } else {
+            placemark.properties.set('streamType', data.streamType || 'none');
+            if (data.streamUrl) placemark.properties.set('streamUrl', data.streamUrl);
+        }
+        if (data.snapshotPhoto) {
+            if (window.CameraPlayer) CameraPlayer.applyCameraSnapshot(placemark, data.snapshotPhoto);
+            else if (/^data:image\/(jpeg|png|webp|gif);base64,/i.test(data.snapshotPhoto)) {
+                placemark.properties.set('snapshotPhoto', data.snapshotPhoto);
+            }
+        }
+    }
+    if (type === 'mediaConverter') {
+        placemark.properties.set('incomingFiber', data.incomingFiber || null);
+        if (data.manufacturer) placemark.properties.set('manufacturer', data.manufacturer);
+        if (data.model) placemark.properties.set('model', data.model);
+        if (data.comment != null) placemark.properties.set('comment', data.comment || '');
+    }
+    if (type === 'switch') {
+        placemark.properties.set('parentNodeId', data.parentNodeId || '');
+        placemark.properties.set('switchPortTypes', Array.isArray(data.switchPortTypes) && data.switchPortTypes.length
+            ? data.switchPortTypes.slice()
+            : buildSwitchPortTypesArray(24, 'RJ45 10/100/1000'));
+        placemark.properties.set('copperPortUsage', data.copperPortUsage && typeof data.copperPortUsage === 'object' ? data.copperPortUsage : {});
+        if (data.manufacturer) placemark.properties.set('manufacturer', data.manufacturer);
+        if (data.model) placemark.properties.set('model', data.model);
+    }
+}
+
+function applySerializedCableToMap(cable, data) {
+    if (!cable || !data || data.type !== 'cable') return;
+    var opCuMeta = copperSerializedMetaFromItem(data);
+    var refsOpMap = objects.filter(function(o) {
+        var t = o.properties && o.properties.get('type');
+        return t && t !== 'cable' && t !== 'cableLabel';
+    });
+    var opCoordsNorm = data.geometry && normalizeCableGeometry(data.geometry);
+    var fromUid = data.fromUniqueId;
+    var toUid = data.toUniqueId;
+    var fromObj = fromUid ? objects.find(function(o) { return o.properties && o.properties.get('type') !== 'cable' && o.properties.get('uniqueId') === fromUid; }) : cable.properties.get('from');
+    var toObj = toUid ? objects.find(function(o) { return o.properties && o.properties.get('type') !== 'cable' && o.properties.get('uniqueId') === toUid; }) : cable.properties.get('to');
+    if (!fromObj) fromObj = cable.properties.get('from');
+    if (!toObj) toObj = cable.properties.get('to');
+    var routePts = buildCableRoutePointsFromData(refsOpMap, data, fromObj, toObj, opCoordsNorm);
+    if (routePts && routePts.length >= 2) {
+        cable.properties.set('from', routePts[0]);
+        cable.properties.set('to', routePts[routePts.length - 1]);
+        cable.properties.set('points', routePts);
+        try {
+            var lin = routePts.map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; }).filter(function(c) { return c && c.length >= 2; });
+            if (cable.geometry && lin.length >= 2) cable.geometry.setCoordinates(lin);
+        } catch (eR) {}
+    } else if (cable.geometry && opCoordsNorm && opCoordsNorm.length >= 2) {
+        cable.geometry.setCoordinates(opCoordsNorm);
+    }
+    if (data.distance !== undefined) cable.properties.set('distance', data.distance);
+    if (data.cableName != null) cable.properties.set('cableName', data.cableName);
+    if (data.cableType === 'copper' && opCuMeta) {
+        if (opCuMeta.copperSwitchFromId) cable.properties.set('copperSwitchFromId', opCuMeta.copperSwitchFromId);
+        else cable.properties.set('copperSwitchFromId', null);
+        if (opCuMeta.copperSwitchToId) cable.properties.set('copperSwitchToId', opCuMeta.copperSwitchToId);
+        else cable.properties.set('copperSwitchToId', null);
+        cable.properties.set('copperPortFrom', opCuMeta.copperPortFrom != null ? opCuMeta.copperPortFrom : null);
+        cable.properties.set('copperPortTo', opCuMeta.copperPortTo != null ? opCuMeta.copperPortTo : null);
+        applyCopperCableOccupancyFromCable(cable);
+    }
+    applyImportedCableFiberProps(cable, data);
+    if (data.revision != null) setMapRevision(cable, data.revision);
+    updateCableVisualization();
+    updateAllConnectionLines();
+}
+
 function createObjectFromData(data, opts) {
     const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, fiberPorts, sleeveType, maxFibers, crossPorts, crossCopperPorts, copperPortUsage, nodeConnections, oltConnections, onuConnections, mediaConverterConnections, uniqueId, nodeKind, manufacturer, model, comment, ponPorts, splitRatio, splitterConnections, incomingFiber, portAssignments, inputFiber, outputConnections, parentNodeId, switchPortTypes, attachedSwitches, streamType, streamUrl, streamUser, streamPass, streamAutoplay, streamMuted, snapshotPhoto } = data;
     
@@ -9425,16 +9693,6 @@ function createObjectFromData(data, opts) {
         name: name,
         balloonContent: balloonContent
     }, placemarkOptions);
-    
-    if (type === 'node') {
-        placemark.properties.set('nodeKind', nodeKind || 'network');
-        if (comment) placemark.properties.set('comment', comment);
-        if (Array.isArray(attachedSwitches) && attachedSwitches.length) {
-            placemark.properties.set('attachedSwitches', JSON.parse(JSON.stringify(attachedSwitches)));
-        } else {
-            placemark.properties.set('attachedSwitches', []);
-        }
-    }
 
     if (type === 'node' || type === 'cross' || type === 'switch') {
         placemark.events.add('dragend', function() {
@@ -9453,130 +9711,8 @@ function createObjectFromData(data, opts) {
     } else {
         ensurePlacemarkUniqueIdForSync(placemark);
     }
-
-    if (usedFibers) {
-        placemark.properties.set('usedFibers', usedFibers);
-    }
-
-    if (fiberConnections) {
-        placemark.properties.set('fiberConnections', fiberConnections);
-    }
-
-    if (fiberLabels) {
-        placemark.properties.set('fiberLabels', fiberLabels);
-    }
-
-    if (type === 'sleeve') {
-        if (sleeveType) {
-            placemark.properties.set('sleeveType', sleeveType);
-        }
-        if (maxFibers !== undefined) {
-            placemark.properties.set('maxFibers', maxFibers);
-        }
-    }
-
-    if (type === 'cross') {
-        if (crossPorts) {
-            placemark.properties.set('crossPorts', crossPorts);
-        }
-        var ccpImp = crossCopperPorts !== undefined && crossCopperPorts !== null ? parseInt(crossCopperPorts, 10) : 0;
-        placemark.properties.set('crossCopperPorts', isNaN(ccpImp) ? 0 : Math.max(0, ccpImp));
-        if (copperPortUsage && typeof copperPortUsage === 'object') {
-            placemark.properties.set('copperPortUsage', copperPortUsage);
-        } else {
-            placemark.properties.set('copperPortUsage', {});
-        }
-        if (nodeConnections) {
-            placemark.properties.set('nodeConnections', nodeConnections);
-        }
-        if (fiberPorts) {
-            placemark.properties.set('fiberPorts', fiberPorts);
-        }
-        if (oltConnections) {
-            placemark.properties.set('oltConnections', oltConnections);
-        }
-        if (onuConnections) {
-            placemark.properties.set('onuConnections', onuConnections);
-        }
-        if (mediaConverterConnections) {
-            placemark.properties.set('mediaConverterConnections', mediaConverterConnections);
-        }
-        if (splitterConnections) {
-            placemark.properties.set('splitterConnections', splitterConnections);
-        }
-    }
-    if (type === 'sleeve') {
-        if (oltConnections) {
-            placemark.properties.set('oltConnections', oltConnections);
-        }
-        if (onuConnections) {
-            placemark.properties.set('onuConnections', onuConnections);
-        }
-        if (mediaConverterConnections) {
-            placemark.properties.set('mediaConverterConnections', mediaConverterConnections);
-        }
-        if (splitterConnections) {
-            placemark.properties.set('splitterConnections', splitterConnections);
-        }
-    }
-    if (type === 'olt') {
-        placemark.properties.set('ponPorts', ponPorts || 8);
-        placemark.properties.set('incomingFiber', incomingFiber || null);
-        placemark.properties.set('portAssignments', portAssignments || {});
-        if (manufacturer) placemark.properties.set('manufacturer', manufacturer);
-        if (model) placemark.properties.set('model', model);
-        if (comment) placemark.properties.set('comment', comment);
-    }
-    if (type === 'splitter') {
-        placemark.properties.set('splitRatio', splitRatio || 8);
-        placemark.properties.set('inputFiber', inputFiber || null);
-        placemark.properties.set('outputConnections', outputConnections || []);
-    }
-    if (type === 'onu') {
-        placemark.properties.set('incomingFiber', incomingFiber || null);
-        if (manufacturer) placemark.properties.set('manufacturer', manufacturer);
-        if (model) placemark.properties.set('model', model);
-        if (comment) placemark.properties.set('comment', comment);
-    }
-    if (type === 'camera') {
-        if (manufacturer) placemark.properties.set('manufacturer', manufacturer);
-        if (model) placemark.properties.set('model', model);
-        if (comment) placemark.properties.set('comment', comment);
-        if (window.CameraPlayer) {
-            CameraPlayer.applyCameraStreamConfig(placemark, {
-                streamType: streamType || 'none',
-                streamUrl: streamUrl || '',
-                streamUser: streamUser || '',
-                streamPass: streamPass || '',
-                streamAutoplay: streamAutoplay !== false,
-                streamMuted: streamMuted !== false
-            });
-        } else {
-            placemark.properties.set('streamType', streamType || 'none');
-            if (streamUrl) placemark.properties.set('streamUrl', streamUrl);
-        }
-        if (snapshotPhoto) {
-            if (window.CameraPlayer) CameraPlayer.applyCameraSnapshot(placemark, snapshotPhoto);
-            else if (/^data:image\/(jpeg|png|webp|gif);base64,/i.test(snapshotPhoto)) {
-                placemark.properties.set('snapshotPhoto', snapshotPhoto);
-            }
-        }
-    }
-    if (type === 'mediaConverter') {
-        placemark.properties.set('incomingFiber', incomingFiber || null);
-        if (manufacturer) placemark.properties.set('manufacturer', manufacturer);
-        if (model) placemark.properties.set('model', model);
-        if (comment) placemark.properties.set('comment', comment);
-    }
-    if (type === 'switch') {
-        placemark.properties.set('parentNodeId', parentNodeId || '');
-        placemark.properties.set('switchPortTypes', Array.isArray(switchPortTypes) && switchPortTypes.length
-            ? switchPortTypes.slice()
-            : buildSwitchPortTypesArray(24, 'RJ45 10/100/1000'));
-        placemark.properties.set('copperPortUsage', copperPortUsage && typeof copperPortUsage === 'object' ? copperPortUsage : {});
-        if (manufacturer) placemark.properties.set('manufacturer', manufacturer);
-        if (model) placemark.properties.set('model', model);
-    }
+    if (!data.revision) data.revision = 0;
+    populatePlacemarkFromSerializedData(placemark, data);
 
     placemark.events.add('click', function(e) {
         e.preventDefault();
@@ -9723,9 +9859,6 @@ function createObjectFromData(data, opts) {
             if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
             ensurePlacemarkUniqueIdForSync(placemark);
             var uid = placemark.properties.get('uniqueId');
-            if (typeof window.syncSendOp === 'function' && uid) {
-                window.syncSendOp({ type: 'update_object', uniqueId: uid, data: { geometry: placemark.geometry.getCoordinates(), name: placemark.properties.get('name') } });
-            }
             updateConnectedCables(placemark);
             const label = placemark.properties.get('label');
             if (label) {
@@ -9734,14 +9867,15 @@ function createObjectFromData(data, opts) {
             }
             updateAllConnectionLines();
             updateSelectionPulsePosition(placemark);
-            saveData();
-            if (typeof window.syncForceSendState === 'function' && typeof getSerializedData === 'function') {
-                window.syncForceSendState(getSerializedData());
-            }
+            saveData({ object: placemark });
+            releaseDragObjectLock(uid);
         });
 
     placemark.events.add('drag', function() {
-        if (!window.syncDragInProgress) window.syncDragInProgress = true;
+        if (!window.syncDragInProgress) {
+            window.syncDragInProgress = true;
+            acquireDragObjectLock(placemark);
+        }
         const label = placemark.properties.get('label');
         if (label) { try { myMap.geoObjects.remove(label); } catch (e) {} }
         scheduleDragUpdate(placemark);
@@ -9938,8 +10072,7 @@ function clearMap(opts) {
     crossGroupPlacemarks = [];
     nodeGroupPlacemarks = [];
     if (!opts.skipSave) {
-        saveData();
-        if (typeof window.syncForceSendState === 'function') window.syncForceSendState();
+        saveData({ syncFull: true });
     }
     updateStats();
     
@@ -10624,7 +10757,6 @@ function setupEditAndDeleteListeners() {
                     if (swIdNm) {
                         updateAttachedSwitchMeta(co, swIdNm, 'name', t.value.trim());
                         saveData();
-                        if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
                     }
                     return;
                 }
@@ -10633,14 +10765,12 @@ function setupEditAndDeleteListeners() {
                     updateAttachedSwitchMeta(co, mfrM[1], 'manufacturer', t.value || '');
                     if (typeof populateModelDatalistForManufacturer === 'function') populateModelDatalistForManufacturer((t.value || '').trim(), 'deviceModelsList', 'switch');
                     saveData();
-                    if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
                     return;
                 }
                 var modM = /^editNodeSwMod_(.+)$/.exec(t.id);
                 if (modM) {
                     updateAttachedSwitchMeta(co, modM[1], 'model', t.value || '');
                     saveData();
-                    if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
                 }
             });
             modalRoot.addEventListener('change', function(e) {
@@ -10766,7 +10896,6 @@ function setupEditAndDeleteListeners() {
             currentModalObject.properties.set('crossCopperPorts', newVal);
             saveData();
             if (typeof rebuildAllCopperPortUsageFromCables === 'function') rebuildAllCopperPortUsageFromCables();
-            if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
         });
     }
 
@@ -10795,7 +10924,6 @@ function setupEditAndDeleteListeners() {
                 currentModalObject.properties.set('maxFibers', newMax);
             }
             saveData();
-            if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
             refreshObjectModal(currentModalObject);
         });
     }
@@ -10817,7 +10945,6 @@ function setupEditAndDeleteListeners() {
             var mod = modEl ? modEl.value.trim() : '';
             addAttachedSwitchToNode(currentModalObject, nm, pc, pk, mfr, mod);
             saveData();
-            if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
             refreshObjectModal(currentModalObject);
         });
     }
@@ -10828,7 +10955,6 @@ function setupEditAndDeleteListeners() {
             if (!sid) return;
             if (removeAttachedSwitchFromNode(currentModalObject, sid)) {
                 saveData();
-                if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
                 refreshObjectModal(currentModalObject);
             }
         });
@@ -10872,7 +10998,6 @@ function setupEditAndDeleteListeners() {
         saveChangesBtn.addEventListener('click', function() {
             flushModalNamesFromEditor();
             saveData();
-            if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
             showInfo('Изменения сохранены', 'Сохранено');
         });
     }
@@ -11032,11 +11157,9 @@ function updateNodeLabel(placemark, name) {
 
 function syncObjectNameOp(obj, trimmed) {
     if (!obj || !obj.properties) return;
-    var uid = typeof getObjectUniqueId === 'function' ? getObjectUniqueId(obj) : obj.properties.get('uniqueId');
-    if (uid && typeof window.syncSendOp === 'function') {
-        window.syncSendOp({ type: 'update_object', uniqueId: uid, data: { name: trimmed } });
-    }
-    if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
+    obj.properties.set('name', trimmed);
+    if (typeof updateObjectLabel === 'function') updateObjectLabel(obj, trimmed);
+    saveData({ object: obj });
 }
 
 function flushNameFieldIfChanged(inputId, applyFn) {
@@ -11583,7 +11706,6 @@ function setupModalEventListeners() {
                 }
                 currentModalObject.properties.set('portAssignments', portAssignments);
                 saveData();
-                if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
                 updateAllConnectionLines();
                 const traceBtn = modalInfo.querySelector('.btn-trace-olt-port[data-port="' + portNum + '"]');
                 if (traceBtn) traceBtn.disabled = !val;
@@ -14726,7 +14848,6 @@ function connectFiberToSplitter(sleeveObj, cableId, fiberNumber, splitterObj) {
     sleeveObj.properties.set('splitterConnections', splitterConnections);
     createSplitterConnectionLine(sleeveObj, splitterObj, cableId, fiberNumber);
     saveData();
-    if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
     showObjectInfo(sleeveObj);
 }
 
@@ -14753,7 +14874,6 @@ function disconnectFiberFromSplitter(sleeveObj, cableId, fiberNumber) {
     delete splitterConnections[key];
     sleeveObj.properties.set('splitterConnections', splitterConnections);
     saveData();
-    if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
     showObjectInfo(sleeveObj);
 }
 
@@ -14789,7 +14909,6 @@ function connectFiberToSplitterWithRoute(sleeveObj, cableId, fiberNumber, splitt
     sleeveObj.properties.set('splitterConnections', splitterConnections);
     createSplitterConnectionLine(sleeveObj, splitterObj, cableId, fiberNumber, routeIds);
     saveData();
-    if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
 }
 
 function initSplitterSelectionModal() {
@@ -15004,7 +15123,6 @@ function completeSplitterFiberRouting() {
     
     sp.properties.set('outputConnections', outputs);
     saveData();
-    if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
     
     if (splitterFiberPreviewLine) {
         myMap.geoObjects.remove(splitterFiberPreviewLine);
@@ -15382,7 +15500,6 @@ function deleteSplitterOutput(splitterObj, outIdx) {
     outputs[outIdx] = null;
     splitterObj.properties.set('outputConnections', outputs);
     saveData();
-    if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
     updateSplitterOutputConnectionLines();
     if (currentModalObject && currentModalObject.properties.get('type') === 'splitter') showObjectInfo(currentModalObject);
 }
@@ -15510,7 +15627,6 @@ function connectFiberToOlt(sleeveObj, cableId, fiberNumber, oltObj) {
     sleeveObj.properties.set('oltConnections', oltConnections);
     createOltConnectionLine(sleeveObj, oltObj, cableId, fiberNumber);
     saveData();
-    if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
     showObjectInfo(sleeveObj);
 }
 
@@ -15538,7 +15654,6 @@ function disconnectFiberFromOlt(sleeveObj, cableId, fiberNumber) {
     delete oltConnections[key];
     sleeveObj.properties.set('oltConnections', oltConnections);
     saveData();
-    if (typeof window.syncSendState === 'function') window.syncSendState(getSerializedData());
     showObjectInfo(sleeveObj);
 }
 

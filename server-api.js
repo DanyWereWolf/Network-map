@@ -1985,40 +1985,59 @@ function mergeMapState(current, incoming) {
     return mergedObjs.concat(mergedCables);
 }
 
+function getItemRevision(item) {
+    if (!item || item.revision == null) return 0;
+    var r = Number(item.revision);
+    return isNaN(r) ? 0 : r;
+}
+
 function applyOperationToState(state, op) {
-    if (!Array.isArray(state)) return state;
+    if (!Array.isArray(state)) return { state: state, conflict: null };
     var objCount = state.filter(function(i) { return i.type !== 'cable'; }).length;
-    var i, idx, fromIdx, toIdx, fromUid, toUid, c;
+    var i, idx, fromIdx, toIdx, fromUid, toUid, c, cur, baseRev, merged;
     if (op.type === 'add_object' && op.data) {
         var addUid = op.data.uniqueId;
         if (addUid != null && addUid !== '') {
             idx = state.findIndex(function(i) { return i.type !== 'cable' && i.uniqueId === addUid; });
             if (idx >= 0) {
                 state = state.slice();
-                state[idx] = Object.assign({}, state[idx], op.data);
-                return state;
+                merged = Object.assign({}, state[idx], op.data);
+                merged.revision = getItemRevision(state[idx]) + 1;
+                state[idx] = merged;
+                op.data = merged;
+                return { state: state, conflict: null };
             }
         }
-        state = state.slice(0, objCount).concat([op.data]).concat(state.slice(objCount));
+        var addData = Object.assign({}, op.data, { revision: 1 });
+        op.data = addData;
+        state = state.slice(0, objCount).concat([addData]).concat(state.slice(objCount));
         state = state.map(function(item) {
             if (item.type !== 'cable') return item;
             var from = item.from, to = item.to;
             if (from >= objCount) from++; if (to >= objCount) to++;
             return Object.assign({}, item, { from: from, to: to });
         });
-        return state;
+        return { state: state, conflict: null };
     }
     if (op.type === 'update_object' && op.uniqueId != null && op.data) {
         idx = state.findIndex(function(i) { return i.type !== 'cable' && i.uniqueId === op.uniqueId; });
         if (idx >= 0) {
+            cur = state[idx];
+            baseRev = op.baseRevision;
+            if (baseRev != null && getItemRevision(cur) !== Number(baseRev)) {
+                return { state: state, conflict: { uniqueId: op.uniqueId, revision: getItemRevision(cur), data: cur } };
+            }
             state = state.slice();
-            state[idx] = Object.assign({}, state[idx], op.data);
+            merged = Object.assign({}, cur, op.data);
+            merged.revision = getItemRevision(cur) + 1;
+            state[idx] = merged;
+            op.data = merged;
         }
-        return state;
+        return { state: state, conflict: null };
     }
     if (op.type === 'delete_object' && op.uniqueId != null) {
         idx = state.findIndex(function(i) { return i.type !== 'cable' && i.uniqueId === op.uniqueId; });
-        if (idx < 0) return state;
+        if (idx < 0) return { state: state, conflict: null };
         state = state.filter(function(_, i) { return i !== idx; });
         state = state.map(function(item, i) {
             if (item.type !== 'cable') return item;
@@ -2027,7 +2046,7 @@ function applyOperationToState(state, op) {
             if (from > idx) from--; if (to > idx) to--;
             return Object.assign({}, item, { from: from, to: to });
         }).filter(Boolean);
-        return state;
+        return { state: state, conflict: null };
     }
     if (op.type === 'add_cable' && op.data) {
         fromUid = op.data.fromUniqueId; toUid = op.data.toUniqueId;
@@ -2052,26 +2071,39 @@ function applyOperationToState(state, op) {
                 var dupIdx = state.findIndex(function(i) { return i.type === 'cable' && i.uniqueId === op.data.uniqueId; });
                 if (dupIdx >= 0) {
                     state = state.slice();
-                    state[dupIdx] = c;
-                    return state;
+                    merged = Object.assign({}, state[dupIdx], c);
+                    merged.revision = getItemRevision(state[dupIdx]) + 1;
+                    state[dupIdx] = merged;
+                    op.data = merged;
+                    return { state: state, conflict: null };
                 }
             }
-            return state.concat([c]);
+            c.revision = 1;
+            op.data = c;
+            return { state: state.concat([c]), conflict: null };
         }
-        return state;
+        return { state: state, conflict: null };
     }
     if (op.type === 'update_cable' && op.uniqueId != null && op.data) {
         idx = state.findIndex(function(i) { return i.type === 'cable' && i.uniqueId === op.uniqueId; });
         if (idx >= 0) {
+            cur = state[idx];
+            baseRev = op.baseRevision;
+            if (baseRev != null && getItemRevision(cur) !== Number(baseRev)) {
+                return { state: state, conflict: { uniqueId: op.uniqueId, revision: getItemRevision(cur), data: cur } };
+            }
             state = state.slice();
-            state[idx] = Object.assign({}, state[idx], op.data);
+            merged = Object.assign({}, cur, op.data);
+            merged.revision = getItemRevision(cur) + 1;
+            state[idx] = merged;
+            op.data = merged;
         }
-        return state;
+        return { state: state, conflict: null };
     }
     if (op.type === 'delete_cable' && op.uniqueId != null) {
-        return state.filter(function(i) { return !(i.type === 'cable' && i.uniqueId === op.uniqueId); });
+        return { state: state.filter(function(i) { return !(i.type === 'cable' && i.uniqueId === op.uniqueId); }), conflict: null };
     }
-    return state;
+    return { state: state, conflict: null };
 }
 
 function broadcastSyncClients(onlyOrgId) {
@@ -2211,7 +2243,14 @@ wss.on('connection', (ws, req) => {
             if (msg.type === 'op' && msg.op && orgId) {
                 if (!isSyncClientAdmin(clientId)) return;
                 var state = getSyncStateForOrg(orgId);
-                var nextData = applyOperationToState(state.data, msg.op);
+                var applyResult = applyOperationToState(state.data, msg.op);
+                if (applyResult.conflict) {
+                    try {
+                        ws.send(JSON.stringify({ type: 'op_conflict', conflict: applyResult.conflict }));
+                    } catch (eConf) {}
+                    return;
+                }
+                var nextData = applyResult.state;
                 var validation = validateMapDataObjectLimit(orgId, nextData);
                 if (!validation.ok) {
                     try {
@@ -2226,6 +2265,9 @@ wss.on('connection', (ws, req) => {
                 state.data = nextData;
                 state.clientId = msg.clientId || clientId;
                 scheduleMapDbSave(orgId);
+                try {
+                    ws.send(JSON.stringify({ type: 'op', op: msg.op }));
+                } catch (eOpSelf) {}
                 wss.clients.forEach(function(client) {
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.orgId === orgId) {
                         try { client.send(JSON.stringify({ type: 'op', op: msg.op })); } catch (e) {}
