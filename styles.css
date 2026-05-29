@@ -3922,7 +3922,7 @@ button {
     right: var(--map-frame-padding);
     bottom: var(--map-frame-padding);
     left: var(--map-frame-padding);
-    z-index: 50;
+    z-index: 100001;
     display: flex;
     align-items: center;
     justify-content: center;

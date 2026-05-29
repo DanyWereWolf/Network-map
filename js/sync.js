@@ -86,12 +86,19 @@
         var runApply = function() {
             window.syncMapIsApplying = true;
             try {
+                if (data.length > 0 && typeof window.setMapLoadingOverlayText === 'function') {
+                    window.setMapLoadingOverlayText('Загрузка объектов…');
+                }
                 var applyFn = typeof applyRemoteState === 'function' ? applyRemoteState
                     : (typeof window.applyRemoteState === 'function' ? window.applyRemoteState : null);
                 if (applyFn) applyFn(data);
+                else if (typeof window.markMapDataReady === 'function') window.markMapDataReady();
                 updateSyncUIStatus(true);
                 if (typeof window.hideSyncRequiredOverlay === 'function') window.hideSyncRequiredOverlay();
-            } catch (e) { updateSyncUIStatus(true); }
+            } catch (e) {
+                updateSyncUIStatus(true);
+                if (typeof window.markMapDataReady === 'function') window.markMapDataReady();
+            }
             window.syncMapIsApplying = false;
         };
         if (typeof requestIdleCallback !== 'undefined') {
