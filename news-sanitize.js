@@ -1,7 +1,17 @@
 /**
  * Санитизация HTML-тела новостного поста.
  */
-const sanitizeHtml = require('sanitize-html');
+// Файл рассчитан на сервер (Node.js), но иногда его по ошибке пытаются
+// загрузить в среде без `require` (например, в браузере или бандлером).
+// Чтобы "ошибка при загрузке" не роняла приложение — делаем загрузку
+// `sanitize-html` опциональной и используем безопасный фолбэк.
+let sanitizeHtml = null;
+try {
+    // eslint-disable-next-line no-undef
+    sanitizeHtml = require('sanitize-html');
+} catch (e) {
+    sanitizeHtml = null;
+}
 
 const ALLOWED_IFRAME_HOSTS = [
     'www.youtube.com', 'youtube.com', 'www.youtube-nocookie.com',
@@ -32,6 +42,10 @@ function sanitizeNewsBody(html) {
     if (raw.indexOf('<') === -1) {
         return plainTextToHtml(raw);
     }
+    // Если по какой-то причине `sanitize-html` недоступен — возвращаем
+    // безопасный вариант без HTML-тегов.
+    if (!sanitizeHtml) return plainTextToHtml(raw);
+
     return sanitizeHtml(raw, {
         allowedTags: [
             'p', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike',
