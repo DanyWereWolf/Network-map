@@ -9,6 +9,7 @@
     var attachPickerOpen = false;
     var activeAttachTab = 'emoji';
     var knownMessageIds = {};
+    var knownMessagesById = {};
     var pollTimer = null;
     var backgroundWatchTimer = null;
     var unreadCount = 0;
@@ -19,6 +20,8 @@
     var mentionActiveIndex = 0;
     var MENTION_LIST_LIMIT = 15;
     var mentionedNotifiedIds = {};
+    var chatContextMenuState = { open: false, message: null };
+    var activeInlineEditMessageId = null;
     var MOBILE_CHAT_MQ = typeof window !== 'undefined' && window.matchMedia
         ? window.matchMedia('(max-width: 768px)')
         : null;
@@ -480,11 +483,231 @@
         return html || '<div class="org-chat-message-text org-chat-message-text--empty">—</div>';
     }
 
+    function buildMessageTimeHtml(msg) {
+        var timeStr = escapeHtml(formatChatTime(msg && msg.createdAt));
+        var timeIso = escapeHtml((msg && msg.createdAt) || '');
+        var editedLabel = (msg && msg.editedAt)
+            ? ' <span class="org-chat-message-edited">(изменено)</span>'
+            : '';
+        return '<time class="org-chat-message-time" datetime="' + timeIso + '">' + timeStr + editedLabel + '</time>';
+    }
+
+    function updateMessageInUi(message) {
+        if (!message || !message.id) return;
+        knownMessagesById[message.id] = message;
+        var list = document.getElementById('orgChatMessages');
+        if (!list) return;
+        var row = list.querySelector('.org-chat-message[data-message-id="' + String(message.id).replace(/"/g, '\\"') + '"]');
+        if (!row) return;
+        var bubble = row.querySelector('.org-chat-message-bubble');
+        if (!bubble) return;
+        var bodyHtml = buildMessageBodyHtml(message);
+        bubble.innerHTML = bodyHtml + buildMessageTimeHtml(message);
+    }
+
+    function closeChatContextMenu() {
+        var menu = document.getElementById('orgChatMessageMenu');
+        if (!menu) return;
+        menu.hidden = true;
+        chatContextMenuState.open = false;
+        chatContextMenuState.message = null;
+    }
+
+    function ensureChatContextMenu() {
+        if (typeof document === 'undefined' || !document.body) return null;
+        var menu = document.getElementById('orgChatMessageMenu');
+        if (menu) return menu;
+        menu = document.createElement('div');
+        menu.id = 'orgChatMessageMenu';
+        menu.className = 'org-chat-context-menu';
+        menu.hidden = true;
+        menu.innerHTML =
+            '<button type="button" class="org-chat-context-menu-item" data-action="edit">Изменить</button>' +
+            '<button type="button" class="org-chat-context-menu-item org-chat-context-menu-item--danger" data-action="delete">Удалить</button>';
+        menu.addEventListener('click', function(e) {
+            var action = e.target && e.target.getAttribute ? e.target.getAttribute('data-action') : '';
+            var current = chatContextMenuState.message;
+            closeChatContextMenu();
+            if (!current || !action) return;
+            if (action === 'delete') {
+                deleteOwnMessage(current.id);
+                return;
+            }
+            if (action === 'edit') {
+                editOwnMessage(current);
+            }
+        });
+        menu.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+        document.body.appendChild(menu);
+        return menu;
+    }
+
+    function openChatContextMenu(x, y, msg) {
+        var menu = ensureChatContextMenu();
+        if (!menu || !msg || !msg.id) return;
+        chatContextMenuState.open = true;
+        chatContextMenuState.message = msg;
+        menu.hidden = false;
+        var left = Math.max(8, Math.min(x, window.innerWidth - 170));
+        var top = Math.max(8, Math.min(y, window.innerHeight - 96));
+        menu.style.left = left + 'px';
+        menu.style.top = top + 'px';
+    }
+
+    function removeMessageFromUi(messageId) {
+        if (!messageId) return;
+        delete knownMessageIds[messageId];
+        delete knownMessagesById[messageId];
+        var list = document.getElementById('orgChatMessages');
+        if (!list) return;
+        var row = list.querySelector('.org-chat-message[data-message-id="' + String(messageId).replace(/"/g, '\\"') + '"]');
+        if (row) row.remove();
+        if (!list.querySelector('.org-chat-message')) {
+            list.innerHTML =
+                '<div class="org-chat-empty">' +
+                    '<span class="org-chat-empty-icon" aria-hidden="true">💬</span>' +
+                    '<p class="org-chat-empty-title">Пока тихо</p>' +
+                    '<p class="org-chat-empty-hint">Напишите первым или упомяните коллегу через @</p>' +
+                '</div>';
+        }
+    }
+
+    function deleteOwnMessage(messageId) {
+        if (!messageId) return;
+        if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+            var ok = window.confirm('Удалить сообщение у всех участников чата?');
+            if (!ok) return;
+        }
+        var token = typeof getAuthToken === 'function' ? getAuthToken() : '';
+        if (!token || typeof getApiBase !== 'function') return;
+        fetch(getApiBase() + '/api/chat/' + encodeURIComponent(messageId), {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + token }
+        })
+            .then(function(r) { return r.json(); })
+            .then(function(body) {
+                if (body && body.ok && body.messageId) {
+                    removeMessageFromUi(body.messageId);
+                } else if (body && body.error && typeof window.showWarning === 'function') {
+                    window.showWarning(body.error, 'Чат');
+                }
+            })
+            .catch(function() {
+                if (typeof window.showWarning === 'function') {
+                    window.showWarning('Не удалось удалить сообщение', 'Чат');
+                }
+            });
+    }
+
+    function editOwnMessage(msg) {
+        if (!msg || !msg.id) return;
+        var currentText = msg.text != null ? String(msg.text) : '';
+        if (!currentText && typeof window.showWarning === 'function') {
+            window.showWarning('Редактирование доступно только для текстовых сообщений', 'Чат');
+            return;
+        }
+        var row = document.querySelector('.org-chat-message[data-message-id="' + String(msg.id).replace(/"/g, '\\"') + '"]');
+        if (!row) return;
+        var bubble = row.querySelector('.org-chat-message-bubble');
+        var textEl = row.querySelector('.org-chat-message-text');
+        if (!bubble || !textEl) return;
+        if (activeInlineEditMessageId && activeInlineEditMessageId !== msg.id) {
+            if (typeof window.showWarning === 'function') {
+                window.showWarning('Сначала завершите текущее редактирование', 'Чат');
+            }
+            return;
+        }
+        activeInlineEditMessageId = msg.id;
+        var originalHtml = textEl.innerHTML;
+        var editorWrap = document.createElement('div');
+        editorWrap.className = 'org-chat-inline-edit';
+        editorWrap.innerHTML =
+            '<textarea class="org-chat-inline-edit-input" rows="3" maxlength="2000"></textarea>' +
+            '<div class="org-chat-inline-edit-actions">' +
+                '<button type="button" class="org-chat-inline-edit-btn" data-action="save">Сохранить</button>' +
+                '<button type="button" class="org-chat-inline-edit-btn org-chat-inline-edit-btn--ghost" data-action="cancel">Отмена</button>' +
+            '</div>';
+        textEl.replaceWith(editorWrap);
+        var input = editorWrap.querySelector('.org-chat-inline-edit-input');
+        if (!input) return;
+        input.value = currentText;
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+
+        function restoreText() {
+            var restored = document.createElement('div');
+            restored.className = 'org-chat-message-text';
+            restored.innerHTML = originalHtml;
+            if (editorWrap.parentNode) editorWrap.replaceWith(restored);
+            activeInlineEditMessageId = null;
+        }
+
+        function saveInlineEdit() {
+            var nextText = String(input.value || '').trim();
+            if (!nextText || nextText === currentText) {
+                restoreText();
+                return;
+            }
+            var token = typeof getAuthToken === 'function' ? getAuthToken() : '';
+            if (!token || typeof getApiBase !== 'function') {
+                restoreText();
+                return;
+            }
+            fetch(getApiBase() + '/api/chat/' + encodeURIComponent(msg.id), {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
+                body: JSON.stringify({ text: nextText })
+            })
+                .then(function(r) { return r.json(); })
+                .then(function(body) {
+                    if (body && body.ok && body.message) {
+                        msg.text = body.message.text || '';
+                        updateMessageInUi(body.message);
+                    } else if (body && body.error && typeof window.showWarning === 'function') {
+                        window.showWarning(body.error, 'Чат');
+                        restoreText();
+                    } else {
+                        restoreText();
+                    }
+                })
+                .catch(function() {
+                    if (typeof window.showWarning === 'function') {
+                        window.showWarning('Не удалось изменить сообщение', 'Чат');
+                    }
+                    restoreText();
+                });
+        }
+
+        editorWrap.addEventListener('click', function(e) {
+            var action = e.target && e.target.getAttribute ? e.target.getAttribute('data-action') : '';
+            if (action === 'save') saveInlineEdit();
+            if (action === 'cancel') restoreText();
+        });
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                saveInlineEdit();
+                return;
+            }
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                restoreText();
+            }
+        });
+    }
+
     function renderMessage(msg, options) {
         options = options || {};
         if (!msg || !msg.id) return;
         if (knownMessageIds[msg.id] && !options.force) return;
         knownMessageIds[msg.id] = true;
+        knownMessagesById[msg.id] = msg;
 
         var list = document.getElementById('orgChatMessages');
         if (!list) return;
@@ -498,8 +721,7 @@
         if (msg.mediaId) el.classList.add('org-chat-message--media');
         if (isMentionedInMessage(msg)) el.classList.add('org-chat-message--mention-me');
         el.dataset.messageId = msg.id;
-        var timeStr = escapeHtml(formatChatTime(msg.createdAt));
-        var timeIso = escapeHtml(msg.createdAt || '');
+        el.dataset.own = isOwn ? '1' : '0';
         var metaHtml = isOwn
             ? ''
             : '<div class="org-chat-message-meta"><span class="org-chat-message-author">' +
@@ -510,7 +732,7 @@
                 metaHtml +
                 '<div class="org-chat-message-bubble">' +
                     buildMessageBodyHtml(msg) +
-                    '<time class="org-chat-message-time" datetime="' + timeIso + '">' + timeStr + '</time>' +
+                    buildMessageTimeHtml(msg) +
                 '</div>' +
             '</div>';
         list.appendChild(el);
@@ -522,6 +744,7 @@
         if (!Array.isArray(messages)) return;
         if (replace) {
             knownMessageIds = {};
+            knownMessagesById = {};
             var list = document.getElementById('orgChatMessages');
             if (list) list.innerHTML = '';
         }
@@ -1187,6 +1410,7 @@
         var stickerUpload = document.getElementById('orgChatStickerUpload');
         var gifUpload = document.getElementById('orgChatGifUpload');
         var fileAttach = document.getElementById('orgChatFileAttach');
+        var messagesList = document.getElementById('orgChatMessages');
 
         buildEmojiGrid();
         syncChatMobileUi();
@@ -1311,9 +1535,29 @@
                 fileAttach.value = '';
             });
         }
+        if (messagesList) {
+            messagesList.addEventListener('contextmenu', function(e) {
+                var bubble = e.target && e.target.closest ? e.target.closest('.org-chat-message-bubble') : null;
+                if (!bubble) return;
+                var row = bubble.closest('.org-chat-message');
+                if (!row) return;
+                if (!row.dataset || row.dataset.own !== '1') return;
+                var messageId = row.dataset.messageId;
+                var msg = messageId ? knownMessagesById[messageId] : null;
+                if (!msg) return;
+                e.preventDefault();
+                e.stopPropagation();
+                openChatContextMenu(e.clientX, e.clientY, msg);
+            });
+        }
 
         document.addEventListener('keydown', function(e) {
             if (e.key !== 'Escape') return;
+            if (chatContextMenuState.open) {
+                e.preventDefault();
+                closeChatContextMenu();
+                return;
+            }
             if (attachPickerOpen) {
                 e.preventDefault();
                 closeAttachPicker();
@@ -1323,6 +1567,10 @@
         });
 
         document.addEventListener('click', function(e) {
+            if (chatContextMenuState.open) {
+                var menu = document.getElementById('orgChatMessageMenu');
+                if (!menu || !menu.contains(e.target)) closeChatContextMenu();
+            }
             if (!attachPickerOpen) return;
             var picker = document.getElementById('orgChatEmojiPicker');
             if (picker && picker.contains(e.target)) return;
@@ -1334,6 +1582,8 @@
     window.orgChatRequestNotificationPermission = requestChatNotificationPermission;
     window.orgChatStartBackgroundWatch = startBackgroundChatWatch;
     window.orgChatOnMessage = onIncomingMessage;
+    window.orgChatOnDeleted = removeMessageFromUi;
+    window.orgChatOnUpdated = updateMessageInUi;
     window.orgChatOnHistory = function(messages) {
         if (panelOpen) {
             renderMessages(messages, true);

@@ -328,6 +328,14 @@
                     try { window.orgChatOnHistory(msg.messages); } catch (e) {}
                     return;
                 }
+                if (msg.type === 'chat_deleted' && msg.messageId && typeof window.orgChatOnDeleted === 'function') {
+                    try { window.orgChatOnDeleted(msg.messageId); } catch (e) {}
+                    return;
+                }
+                if (msg.type === 'chat_updated' && msg.message && typeof window.orgChatOnUpdated === 'function') {
+                    try { window.orgChatOnUpdated(msg.message); } catch (e) {}
+                    return;
+                }
                 if (msg.type === 'state' && Array.isArray(msg.data) && typeof applyRemoteState === 'function') {
                     var data = msg.data;
                     if (sendTimer) { clearTimeout(sendTimer); sendTimer = null; }

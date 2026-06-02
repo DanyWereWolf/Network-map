@@ -351,6 +351,44 @@ function addOrgChatMessage(orgId, message) {
     return message;
 }
 
+function removeOrgChatMessage(orgId, messageId) {
+    if (!orgId || !messageId) return null;
+    const s = loadStore();
+    if (!s.chatByOrg || typeof s.chatByOrg !== 'object') return null;
+    const key = String(orgId);
+    if (!Array.isArray(s.chatByOrg[key])) return null;
+    var removed = null;
+    s.chatByOrg[key] = s.chatByOrg[key].filter(function(item) {
+        if (!item || String(item.id) !== String(messageId)) return true;
+        removed = item;
+        return false;
+    });
+    if (!removed) return null;
+    saveStore();
+    return removed;
+}
+
+function updateOrgChatMessageText(orgId, messageId, text) {
+    if (!orgId || !messageId) return null;
+    const s = loadStore();
+    if (!s.chatByOrg || typeof s.chatByOrg !== 'object') return null;
+    const key = String(orgId);
+    if (!Array.isArray(s.chatByOrg[key])) return null;
+    var updated = null;
+    s.chatByOrg[key] = s.chatByOrg[key].map(function(item) {
+        if (!item || String(item.id) !== String(messageId)) return item;
+        var next = Object.assign({}, item, {
+            text: text || null,
+            editedAt: new Date().toISOString()
+        });
+        updated = next;
+        return next;
+    });
+    if (!updated) return null;
+    saveStore();
+    return updated;
+}
+
 const MAX_CHAT_MEDIA_PER_ORG = 150;
 
 function getChatMedia(orgId, kind) {
@@ -1453,6 +1491,8 @@ module.exports = {
     setHistory,
     getOrgChat,
     addOrgChatMessage,
+    removeOrgChatMessage,
+    updateOrgChatMessageText,
     getChatMedia,
     getChatMediaItem,
     addChatMedia,

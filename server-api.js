@@ -1571,6 +1571,24 @@ function broadcastOrgChat(orgId, message) {
     });
 }
 
+function broadcastOrgChatDeleted(orgId, messageId) {
+    if (!orgId || !wss || !messageId) return;
+    wss.clients.forEach(function(client) {
+        if (client.readyState === WebSocket.OPEN && client.orgId === orgId) {
+            try { client.send(JSON.stringify({ type: 'chat_deleted', messageId: String(messageId) })); } catch (e) {}
+        }
+    });
+}
+
+function broadcastOrgChatUpdated(orgId, message) {
+    if (!orgId || !wss || !message || !message.id) return;
+    wss.clients.forEach(function(client) {
+        if (client.readyState === WebSocket.OPEN && client.orgId === orgId) {
+            try { client.send(JSON.stringify({ type: 'chat_updated', message: message })); } catch (e) {}
+        }
+    });
+}
+
 function sendOrgChatHistory(ws, orgId, limit) {
     var messages = db.getOrgChat(orgId, limit || CHAT_HISTORY_DEFAULT_LIMIT);
     try { ws.send(JSON.stringify({ type: 'chat_history', messages: messages })); } catch (e) {}
@@ -1614,6 +1632,45 @@ function createOrgChatMessage(user, payload) {
     return { ok: true, message: message };
 }
 
+function deleteOrgChatMessage(user, messageId) {
+    var orgId = user && user.organizationId ? user.organizationId : null;
+    if (!orgId) return { error: 'Чат доступен только участникам организации', status: 403 };
+    var id = messageId != null ? String(messageId).trim() : '';
+    if (!id) return { error: 'messageId обязателен', status: 400 };
+    var messages = db.getOrgChat(orgId);
+    var message = Array.isArray(messages)
+        ? messages.find(function(item) { return item && String(item.id) === id; })
+        : null;
+    if (!message) return { error: 'Сообщение не найдено', status: 404 };
+    var canDelete = String(message.userId) === String(user.userId) || user.role === 'admin';
+    if (!canDelete) return { error: 'Можно удалять только свои сообщения', status: 403 };
+    var removed = db.removeOrgChatMessage(orgId, id);
+    if (!removed) return { error: 'Сообщение уже удалено', status: 404 };
+    broadcastOrgChatDeleted(orgId, id);
+    return { ok: true, messageId: id };
+}
+
+function editOrgChatMessage(user, messageId, payload) {
+    var orgId = user && user.organizationId ? user.organizationId : null;
+    if (!orgId) return { error: 'Чат доступен только участникам организации', status: 403 };
+    var id = messageId != null ? String(messageId).trim() : '';
+    if (!id) return { error: 'messageId обязателен', status: 400 };
+    var newText = payload && payload.text != null ? String(payload.text).trim() : '';
+    if (!newText) return { error: 'Текст сообщения не может быть пустым', status: 400 };
+    if (newText.length > MAX_CHAT_TEXT_LENGTH) newText = newText.slice(0, MAX_CHAT_TEXT_LENGTH);
+    var messages = db.getOrgChat(orgId);
+    var message = Array.isArray(messages)
+        ? messages.find(function(item) { return item && String(item.id) === id; })
+        : null;
+    if (!message) return { error: 'Сообщение не найдено', status: 404 };
+    var canEdit = String(message.userId) === String(user.userId) || user.role === 'admin';
+    if (!canEdit) return { error: 'Можно изменять только свои сообщения', status: 403 };
+    var updated = db.updateOrgChatMessageText(orgId, id, newText);
+    if (!updated) return { error: 'Сообщение не найдено', status: 404 };
+    broadcastOrgChatUpdated(orgId, updated);
+    return { ok: true, message: updated };
+}
+
 app.get('/api/chat/members', (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
@@ -1654,6 +1711,30 @@ app.post('/api/chat', (req, res) => {
     try {
         var body = req.body || {};
         var result = createOrgChatMessage(user, { text: body.text, mediaId: body.mediaId });
+        if (result.error) return res.status(result.status || 400).json({ error: result.error });
+        res.json({ ok: true, message: result.message });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.delete('/api/chat/:messageId', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    try {
+        var result = deleteOrgChatMessage(user, req.params && req.params.messageId);
+        if (result.error) return res.status(result.status || 400).json({ error: result.error });
+        res.json({ ok: true, messageId: result.messageId });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.patch('/api/chat/:messageId', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    try {
+        var result = editOrgChatMessage(user, req.params && req.params.messageId, req.body || {});
         if (result.error) return res.status(result.status || 400).json({ error: result.error });
         res.json({ ok: true, message: result.message });
     } catch (e) {
