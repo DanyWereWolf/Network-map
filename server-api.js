@@ -2668,6 +2668,17 @@ function getLocalIPs() {
     return ips;
 }
 
+server.on('error', function(err) {
+    if (err && err.code === 'EADDRINUSE') {
+        console.error('[ОШИБКА] Порт ' + PORT + ' уже занят. Остановите старый процесс:');
+        console.error('  systemctl stop <имя-сервиса>  или  fuser -k ' + PORT + '/tcp');
+        console.error('Либо укажите другой порт в server-config.json или переменной PORT.');
+    } else {
+        console.error('[ОШИБКА] Не удалось запустить HTTP-сервер:', err && err.message ? err.message : err);
+    }
+    process.exit(1);
+});
+
 server.listen(PORT, HOST, () => {
     console.log('Приложение и API:');
     console.log('  Локально:    http://localhost:' + PORT);
