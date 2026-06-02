@@ -621,6 +621,21 @@ function getOnboardingSteps() {
     ];
 }
 
+function isOnboardingAllowedForCurrentDevice() {
+    try {
+        var isNarrow = typeof isNetworkMapMobileViewOnly === 'function' && isNetworkMapMobileViewOnly();
+        var isTouchLike = false;
+        if (typeof window.matchMedia === 'function') {
+            isTouchLike = window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(hover: none)').matches;
+        }
+        // Отключаем обучение только для сценария «похоже на телефон»:
+        // узкий экран + touch-управление.
+        return !(isNarrow && isTouchLike);
+    } catch (e) {
+        return true;
+    }
+}
+
 function clearOnboardingHighlight() {
     if (onboardingState && onboardingState.activeTarget) {
         onboardingState.activeTarget.classList.remove('onboarding-highlight');
@@ -793,6 +808,7 @@ function evaluateOnboardingStepCompletion() {
 
 function startOnboardingTour(options) {
     options = options || {};
+    if (!isOnboardingAllowedForCurrentDevice()) return;
     if (hasOnboardingCompleted()) return;
     if (onboardingState) return;
 
@@ -920,6 +936,7 @@ window.restartOnboardingTour = function() {
 };
 
 function resumeOnboardingTourIfNeeded() {
+    if (!isOnboardingAllowedForCurrentDevice()) return;
     if (hasOnboardingCompleted()) return;
     var idx = getSavedOnboardingProgressIndex(getOnboardingSteps().length);
     if (idx == null) return;
@@ -968,6 +985,11 @@ function initWelcomeModal() {
     if (okBtn) okBtn.addEventListener('click', onClose);
     var startTourBtn = document.getElementById('welcomeModalStartTour');
     if (startTourBtn) {
+        if (!isOnboardingAllowedForCurrentDevice()) {
+            startTourBtn.style.display = 'none';
+            return;
+        }
+        startTourBtn.style.display = '';
         startTourBtn.addEventListener('click', function() {
             closeWelcomeModal();
             setTimeout(function() { startOnboardingTour(); }, 120);

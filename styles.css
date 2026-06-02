@@ -5912,13 +5912,13 @@ button {
     -webkit-backdrop-filter: var(--panel-glass-blur-sm);
     box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.22);
     display: grid;
-    grid-template-columns: 108px 1fr;
+    grid-template-columns: 144px 1fr;
     gap: 12px;
     align-items: center;
 }
 
 .help-assistant-hero-image {
-    width: 108px;
+    width: 144px;
     max-width: 100%;
     height: auto;
     display: block;
@@ -5934,6 +5934,10 @@ button {
     margin: 0;
     font-size: 0.86rem;
     line-height: 1.42;
+}
+
+.help-assistant-hero-text p + p {
+    margin-top: 10px;
 }
 
 .help-modal-scroll .help-section {
@@ -6011,7 +6015,7 @@ button {
     }
 
     .help-assistant-hero-image {
-        width: 122px;
+        width: 136px;
         margin: 0 auto;
     }
 }

@@ -29,14 +29,18 @@ function helpSection(title, innerHtml) {
 
 function getHelpContentHtml() {
     var html = '';
+    var allowOnboardingBtn = true;
+    if (typeof window !== 'undefined' && typeof window.isOnboardingAllowedForCurrentDevice === 'function') {
+        allowOnboardingBtn = !!window.isOnboardingAllowedForCurrentDevice();
+    }
 
     html +=
         '<section class="help-assistant-hero" aria-label="Помощник Volsmap">' +
             '<img class="help-assistant-hero-image" src="icons/assistant/volsmap-girl.png" alt="Виртуальный помощник Volsmap">' +
             '<div class="help-assistant-hero-text">' +
                 '<h3>Привет! Я помощник Volsmap</h3>' +
-                '<p>Здесь собраны ключевые подсказки по режимам карты, объектам, кабелям, журналу и совместной работе. Если нужно, запустите обучение ещё раз.</p>' +
-                '<p><button type="button" id="helpStartOnboardingBtn" class="btn-primary">Пройти обучение ещё раз</button></p>' +
+                '<p>Здесь собраны ключевые подсказки по режимам карты, объектам, кабелям, журналу и совместной работе.</p>' +
+                (allowOnboardingBtn ? '<p><button type="button" id="helpStartOnboardingBtn" class="btn-primary">Пройти обучение ещё раз</button></p>' : '') +
             '</div>' +
         '</section>';
 
