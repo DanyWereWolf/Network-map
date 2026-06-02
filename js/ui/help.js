@@ -30,6 +30,15 @@ function helpSection(title, innerHtml) {
 function getHelpContentHtml() {
     var html = '';
 
+    html +=
+        '<section class="help-assistant-hero" aria-label="Помощник Volsmap">' +
+            '<img class="help-assistant-hero-image" src="icons/assistant/volsmap-girl.png" alt="Виртуальный помощник Volsmap">' +
+            '<div class="help-assistant-hero-text">' +
+                '<h3>Привет! Я помощник Volsmap</h3>' +
+                '<p>Если что-то не получается, начните с разделов ниже: там быстрые подсказки по объектам, кабелям, жилкам, журналу и совместной работе.</p>' +
+            '</div>' +
+        '</section>';
+
     html += helpSection('О программе',
         '<p><strong>Карта оптической сети</strong> — веб‑сервис для учёта и проектирования ВОЛС на Яндекс.Картах (<a href="https://volsmap.ru" target="_blank" rel="noopener">volsmap.ru</a>). У каждой организации отдельная карта на сервере: узлы с коммутаторами, кроссы, муфты, опоры и крепления, GPON (OLT, сплиттер, ONU), камеры и медиаконвертеры.</p>' +
         '<p>Возможности: прокладка ВОЛС и меди, схема и таблица жил в кроссе и муфте, трассировка маршрутов, поиск и фильтры, совместная работа по WebSocket, журнал изменений, отмена действий, резервные копии, справочник оборудования.</p>'
