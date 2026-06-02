@@ -1021,6 +1021,13 @@
                 <span class="close" id="welcomeModalCloseBtn" title="Закрыть" role="button" tabindex="0">&times;</span>
             </div>
             <div class="modal-body welcome-modal-body">
+                <section class="welcome-assistant-greeting" aria-label="Приветствие помощника Volsmap">
+                    <img class="welcome-assistant-avatar" src="icons/assistant/volsmap-girl.png" alt="Помощник Volsmap">
+                    <div class="welcome-assistant-bubble">
+                        <p class="welcome-assistant-name">Помощник Volsmap</p>
+                        <p class="welcome-assistant-text">Привет! Пройдите короткое обучение, чтобы быстро освоиться.</p>
+                    </div>
+                </section>
                 <p class="home-intro-lead">Карта вашей организации: опоры, муфты, кроссы, узлы, ВОЛС и GPON, камеры и медиаконвертеры. Подключитесь к синхронизации в боковой панели — так вы увидите актуальные данные и сможете работать вместе с коллегами.</p>
                 <ul class="home-intro-features" role="list">
                     <li>
@@ -1052,6 +1059,7 @@
                     </ul>
                 </details>
                 <div class="welcome-modal-actions">
+                    <button type="button" id="welcomeModalStartTour" class="btn-secondary">Пройти обучение</button>
                     <button type="button" id="welcomeModalOk" class="btn-primary">Понятно</button>
                 </div>
             </div>
@@ -1847,9 +1855,9 @@
         </header>
         <div id="orgChatMessages" class="org-chat-messages" role="log" aria-live="polite" aria-relevant="additions">
             <div class="org-chat-empty">
-                <span class="org-chat-empty-icon" aria-hidden="true">💬</span>
-                <p class="org-chat-empty-title">Пока тихо</p>
-                <p class="org-chat-empty-hint">Напишите первым или упомяните коллегу через @</p>
+                <img class="org-chat-empty-image" src="icons/assistant/volsmap-girl.png" alt="" loading="lazy">
+                <p class="org-chat-empty-title">Пока нет сообщений</p>
+                <p class="org-chat-empty-hint">Начните переписку — команда увидит ваше сообщение сразу.</p>
             </div>
         </div>
         <footer class="org-chat-footer">

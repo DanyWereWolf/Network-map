@@ -16,6 +16,7 @@
     var fabWrap = null;
     var backdropEl = null;
     var mode = 'bot';
+    var ownerModeEnabled = true;
     var pollTimer = null;
     var adminOnline = false;
     var hasUnreadAdmin = false;
@@ -379,6 +380,7 @@
 
     function setMode(next, options) {
         options = options || {};
+        if (!ownerModeEnabled && next === 'owner') next = 'bot';
         mode = next;
         document.querySelectorAll('.support-chat-mode-tabs button').forEach(function(btn) {
             btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
@@ -398,7 +400,7 @@
         if (hint) {
             hint.textContent = mode === 'owner'
                 ? 'E-mail — если нужен ответ на почту.'
-                : 'Бот — частые вопросы. Личное сообщение — «Владельцу».';
+                : (ownerModeEnabled ? 'Бот — частые вопросы. Личное сообщение — «Владельцу».' : 'Бот — частые вопросы по сервису.');
         }
         if (mode === 'owner') {
             prefillContactFields();
@@ -441,6 +443,8 @@
     }
 
     function buildUi() {
+        ownerModeEnabled = !(document.body && document.body.classList.contains('auth-page'));
+        if (!ownerModeEnabled) return;
         var fab = document.createElement('button');
         fab.type = 'button';
         fab.id = 'supportChatFab';
@@ -496,14 +500,16 @@
             '<div class="support-chat-compose">' +
                 '<div class="support-chat-mode-tabs">' +
                     '<button type="button" data-mode="bot" class="active">Бот</button>' +
-                    '<button type="button" data-mode="owner">Владельцу</button>' +
+                    (ownerModeEnabled ? '<button type="button" data-mode="owner">Владельцу</button>' : '') +
                 '</div>' +
-                '<div class="support-chat-owner-fields" id="supportChatOwnerFields">' +
-                    '<div class="support-chat-owner-fields-row">' +
-                        '<input type="text" id="supportChatName" placeholder="Имя" maxlength="120" autocomplete="name">' +
-                        '<input type="email" id="supportChatEmail" placeholder="E-mail" maxlength="200" autocomplete="email">' +
-                    '</div>' +
-                '</div>' +
+                (ownerModeEnabled
+                    ? '<div class="support-chat-owner-fields" id="supportChatOwnerFields">' +
+                        '<div class="support-chat-owner-fields-row">' +
+                            '<input type="text" id="supportChatName" placeholder="Имя" maxlength="120" autocomplete="name">' +
+                            '<input type="email" id="supportChatEmail" placeholder="E-mail" maxlength="200" autocomplete="email">' +
+                        '</div>' +
+                    '</div>'
+                    : '') +
                 '<textarea id="supportChatInput" rows="2" placeholder="Спросите бота о сервисе…" maxlength="4000"></textarea>' +
                 '<button type="button" class="support-chat-send" id="supportChatSend">Спросить бота</button>' +
                 '<p class="support-chat-hint" id="supportChatHint"></p>' +
@@ -549,7 +555,12 @@
         if (emailEl) emailEl.addEventListener('change', function() { saveContact(nameEl ? nameEl.value : '', emailEl.value); });
 
         if (!botWelcomeShown) {
-            appendMessage('bot', 'Здравствуйте! Я отвечу на частые вопросы о «Карте оптической сети». Для личного сообщения разработчику — вкладка «Владельцу».', new Date().toISOString());
+            appendMessage('bot',
+                ownerModeEnabled
+                    ? 'Здравствуйте! Я отвечу на частые вопросы о «Карте оптической сети». Для личного сообщения разработчику — вкладка «Владельцу».'
+                    : 'Здравствуйте! Я отвечу на частые вопросы о «Карте оптической сети».',
+                new Date().toISOString()
+            );
             botWelcomeShown = true;
         }
         renderQuickReplies(['Что такое ранний доступ?', 'Как зарегистрироваться?', 'Лимит объектов']);

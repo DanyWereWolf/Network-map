@@ -426,6 +426,9 @@ window.onSyncOpConflict = function(payload) {
 };
 
 var WELCOME_DISMISSED_KEY = 'networkMap_welcomeDismissed';
+var ONBOARDING_COMPLETED_KEY = 'networkMap_onboardingCompleted';
+var ONBOARDING_PROGRESS_KEY = 'networkMap_onboardingProgress';
+var onboardingState = null;
 
 function getWelcomeDismissedKeyForCurrentUser() {
     var suffix = 'guest';
@@ -437,6 +440,494 @@ function getWelcomeDismissedKeyForCurrentUser() {
         }
     }
     return WELCOME_DISMISSED_KEY + '_' + suffix;
+}
+
+function getOnboardingCompletedKeyForCurrentUser() {
+    var suffix = 'guest';
+    if (currentUser) {
+        if (currentUser.userId != null && String(currentUser.userId).trim() !== '') {
+            suffix = String(currentUser.userId).trim();
+        } else if (currentUser.username) {
+            suffix = String(currentUser.username).trim().toLowerCase();
+        }
+    }
+    return ONBOARDING_COMPLETED_KEY + '_' + suffix;
+}
+
+function getOnboardingProgressKeyForCurrentUser() {
+    var suffix = 'guest';
+    if (currentUser) {
+        if (currentUser.userId != null && String(currentUser.userId).trim() !== '') {
+            suffix = String(currentUser.userId).trim();
+        } else if (currentUser.username) {
+            suffix = String(currentUser.username).trim().toLowerCase();
+        }
+    }
+    return ONBOARDING_PROGRESS_KEY + '_' + suffix;
+}
+
+function markOnboardingCompleted() {
+    try { localStorage.setItem(getOnboardingCompletedKeyForCurrentUser(), '1'); } catch (e) {}
+    clearOnboardingProgress();
+}
+
+function clearOnboardingCompletedFlag() {
+    try { localStorage.removeItem(getOnboardingCompletedKeyForCurrentUser()); } catch (e) {}
+}
+
+function hasOnboardingCompleted() {
+    try { return !!localStorage.getItem(getOnboardingCompletedKeyForCurrentUser()); } catch (e) { return false; }
+}
+
+function saveOnboardingProgress(index) {
+    try {
+        localStorage.setItem(getOnboardingProgressKeyForCurrentUser(), JSON.stringify({
+            index: Math.max(0, Number(index) || 0),
+            ts: Date.now()
+        }));
+    } catch (e) {}
+}
+
+function getSavedOnboardingProgressIndex(totalSteps) {
+    try {
+        var raw = localStorage.getItem(getOnboardingProgressKeyForCurrentUser());
+        if (!raw) return null;
+        var data = JSON.parse(raw);
+        if (!data || typeof data !== 'object') return null;
+        var idx = Number(data.index);
+        if (!Number.isFinite(idx)) return null;
+        idx = Math.floor(idx);
+        if (idx < 0) idx = 0;
+        if (typeof totalSteps === 'number' && totalSteps > 0 && idx > totalSteps - 1) idx = totalSteps - 1;
+        return idx;
+    } catch (e) {
+        return null;
+    }
+}
+
+function clearOnboardingProgress() {
+    try { localStorage.removeItem(getOnboardingProgressKeyForCurrentUser()); } catch (e) {}
+}
+
+function getOnboardingSteps() {
+    return [
+        {
+            selector: '#editMode',
+            title: 'Режим просмотра и редактирования',
+            text: 'Практика: переключитесь в режим "Редактирование".',
+            requireAction: true,
+            isComplete: function() {
+                if (this._completed) return true;
+                if (typeof isEditMode !== 'undefined' && isEditMode) return true;
+                var editBtn = document.getElementById('editMode');
+                return !!(editBtn && editBtn.classList.contains('active'));
+            }
+        },
+        {
+            selector: '#mapSearch',
+            title: 'Поиск объектов',
+            text: 'Начните с поиска по названию: список сразу подскажет совпадения и перенесёт карту к объекту.'
+        },
+        {
+            selector: '.object-type-picker',
+            title: 'Выбор типа объекта',
+            text: 'Практика: выберите любой тип объекта в списке панели.',
+            requireAction: true,
+            isComplete: function(step) {
+                var select = document.getElementById('objectType');
+                if (!select) return false;
+                var currentValue = String(select.value || '');
+                return !!currentValue && !!step._interacted;
+            },
+            setup: function(step) {
+                var select = document.getElementById('objectType');
+                var picker = document.querySelector('.object-type-picker');
+                step._interacted = false;
+                if (!select || !picker) return null;
+                var onChange = function() { step._interacted = true; };
+                var onClick = function(e) {
+                    var chip = e.target && e.target.closest ? e.target.closest('.object-type-chip') : null;
+                    if (chip) step._interacted = true;
+                };
+                select.addEventListener('change', onChange);
+                picker.addEventListener('click', onClick);
+                return function() {
+                    select.removeEventListener('change', onChange);
+                    picker.removeEventListener('click', onClick);
+                };
+            }
+        },
+        {
+            selector: '#addObject',
+            title: 'Запуск размещения',
+            text: 'Практика: нажмите "Добавить на карту", чтобы включить режим размещения.',
+            preferredPlacement: 'right',
+            requireAction: true,
+            isComplete: function() {
+                var addBtn = document.getElementById('addObject');
+                return !!(addBtn && addBtn.classList.contains('btn-add-object--placement'));
+            }
+        },
+        {
+            selector: '#map',
+            title: 'Поставьте объект на карту',
+            text: 'Практика: кликните по карте, чтобы разместить объект.',
+            requireAction: true,
+            setup: function(step) {
+                step._objectsCountBefore = Array.isArray(objects) ? objects.length : 0;
+                step._mapLimitCountBefore = (typeof mapLimitsCache === 'object' && mapLimitsCache && mapLimitsCache.count != null)
+                    ? Number(mapLimitsCache.count) : 0;
+            },
+            isComplete: function(step) {
+                var currentCount = Array.isArray(objects) ? objects.length : 0;
+                var mapLimitCountNow = (typeof mapLimitsCache === 'object' && mapLimitsCache && mapLimitsCache.count != null)
+                    ? Number(mapLimitsCache.count) : 0;
+                return currentCount > (step._objectsCountBefore || 0)
+                    || mapLimitCountNow > (step._mapLimitCountBefore || 0);
+            }
+        },
+        {
+            selector: '#mapFilterBadge',
+            title: 'Видимость объектов',
+            text: 'Через блок "Видимость на карте" можно быстро показать или скрыть группы объектов для удобной работы.'
+        },
+        {
+            selector: '#themeToggle',
+            title: 'Смена темы',
+            text: 'Переключайте светлую и тёмную тему, чтобы комфортнее работать в разное время суток.',
+            disableAutoScroll: true
+        },
+        {
+            selector: '#historyBtn',
+            title: 'Откройте журнал',
+            text: 'Практика: нажмите кнопку журнала, чтобы открыть историю изменений.',
+            requireAction: true,
+            isComplete: function() {
+                var modal = document.getElementById('historyModal');
+                if (!modal) return false;
+                return modal.style.display === 'block' || modal.style.display === 'flex';
+            }
+        },
+        {
+            selector: '#userAvatar',
+            title: 'Личный кабинет',
+            text: 'Через аватар открывается профиль с лимитами организации и дополнительными настройками аккаунта.'
+        },
+        {
+            selector: '#infoHelpBtn',
+            title: 'Полная справка',
+            text: 'Если нужна подробная инструкция по кроссам, муфтам и кабелям, откройте справку в шапке.'
+        }
+    ];
+}
+
+function clearOnboardingHighlight() {
+    if (onboardingState && onboardingState.activeTarget) {
+        onboardingState.activeTarget.classList.remove('onboarding-highlight');
+    }
+}
+
+function stopOnboardingTour(markCompleted) {
+    if (!onboardingState) return;
+    if (typeof onboardingState.stepCleanup === 'function') {
+        try { onboardingState.stepCleanup(); } catch (e) {}
+    }
+    if (typeof onboardingState.detachProgressSignals === 'function') {
+        onboardingState.detachProgressSignals();
+    }
+    clearOnboardingHighlight();
+    window.removeEventListener('resize', onboardingState.reposition, true);
+    window.removeEventListener('scroll', onboardingState.reposition, true);
+    if (onboardingState.overlay && onboardingState.overlay.parentNode) {
+        onboardingState.overlay.parentNode.removeChild(onboardingState.overlay);
+    }
+    onboardingState = null;
+    if (markCompleted) markOnboardingCompleted();
+}
+
+function positionOnboardingCard(card, target, step) {
+    if (!card) return;
+    var margin = 12;
+    var isTargetVisible = false;
+    if (target) {
+        try {
+            var s = window.getComputedStyle(target);
+            var r = target.getBoundingClientRect();
+            isTargetVisible = s.display !== 'none' && s.visibility !== 'hidden' && r.width > 0 && r.height > 0;
+        } catch (e) {
+            isTargetVisible = false;
+        }
+    }
+    if (!target || !isTargetVisible) {
+        card.style.left = '50%';
+        card.style.top = '50%';
+        card.style.transform = 'translate(-50%, -50%)';
+        return;
+    }
+    var rect = target.getBoundingClientRect();
+    var cardRect = card.getBoundingClientRect();
+    var preferredPlacement = step && step.preferredPlacement ? step.preferredPlacement : 'bottom';
+    var placements = [preferredPlacement, 'bottom', 'top', 'right', 'left'];
+    var seen = {};
+    var normalized = [];
+    for (var i = 0; i < placements.length; i++) {
+        var p = placements[i];
+        if (seen[p]) continue;
+        seen[p] = true;
+        normalized.push(p);
+    }
+
+    function clampPosition(pos) {
+        var clamped = { left: pos.left, top: pos.top };
+        if (clamped.top < margin) clamped.top = margin;
+        if (clamped.left < margin) clamped.left = margin;
+        if (clamped.left + cardRect.width > window.innerWidth - margin) {
+            clamped.left = window.innerWidth - cardRect.width - margin;
+        }
+        if (clamped.top + cardRect.height > window.innerHeight - margin) {
+            clamped.top = window.innerHeight - cardRect.height - margin;
+        }
+        return clamped;
+    }
+
+    function getPosByPlacement(place) {
+        if (place === 'right') return { left: rect.right + margin, top: rect.top };
+        if (place === 'left') return { left: rect.left - cardRect.width - margin, top: rect.top };
+        if (place === 'top') return { left: rect.left, top: rect.top - cardRect.height - margin };
+        return { left: rect.left, top: rect.bottom + margin };
+    }
+
+    function intersectsTarget(pos) {
+        var cardLeft = pos.left;
+        var cardTop = pos.top;
+        var cardRight = cardLeft + cardRect.width;
+        var cardBottom = cardTop + cardRect.height;
+        return !(cardRight <= rect.left || cardLeft >= rect.right || cardBottom <= rect.top || cardTop >= rect.bottom);
+    }
+
+    var selected = null;
+    for (var j = 0; j < normalized.length; j++) {
+        var candidate = clampPosition(getPosByPlacement(normalized[j]));
+        if (!intersectsTarget(candidate)) {
+            selected = candidate;
+            break;
+        }
+    }
+    if (!selected) {
+        // Фолбэк: ставим в верхний угол окна, чтобы не блокировать кнопку в панели.
+        selected = { left: window.innerWidth - cardRect.width - margin, top: margin };
+        selected = clampPosition(selected);
+    }
+
+    card.style.left = String(Math.round(selected.left)) + 'px';
+    card.style.top = String(Math.round(selected.top)) + 'px';
+    card.style.transform = 'none';
+}
+
+function renderOnboardingStep() {
+    if (!onboardingState) return;
+    var step = onboardingState.steps[onboardingState.index];
+    if (!step) return;
+
+    if (typeof onboardingState.stepCleanup === 'function') {
+        try { onboardingState.stepCleanup(); } catch (e) {}
+        onboardingState.stepCleanup = null;
+    }
+    clearOnboardingHighlight();
+    var target = step.selector ? document.querySelector(step.selector) : null;
+    onboardingState.activeTarget = target || null;
+
+    if (target && typeof target.scrollIntoView === 'function' && !step.disableAutoScroll) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        target.classList.add('onboarding-highlight');
+    } else if (target) {
+        target.classList.add('onboarding-highlight');
+    }
+
+    onboardingState.stepEl.textContent = 'Шаг ' + String(onboardingState.index + 1) + ' из ' + String(onboardingState.steps.length);
+    onboardingState.titleEl.textContent = step.title;
+    onboardingState.textEl.textContent = step.text;
+
+    onboardingState.prevBtn.disabled = onboardingState.index === 0;
+    onboardingState.nextBtn.textContent = onboardingState.index === onboardingState.steps.length - 1 ? 'Завершить' : 'Далее';
+    onboardingState.statusEl.textContent = step.requireAction ? 'Ожидание действия...' : 'Информационный шаг';
+
+    if (typeof step.setup === 'function') {
+        try {
+            var cleanup = step.setup(step);
+            if (typeof cleanup === 'function') onboardingState.stepCleanup = cleanup;
+        } catch (e) {}
+    }
+
+    if (step.requireAction) {
+        onboardingState.nextBtn.disabled = true;
+    } else {
+        onboardingState.nextBtn.disabled = false;
+    }
+
+    saveOnboardingProgress(onboardingState.index);
+    evaluateOnboardingStepCompletion();
+
+    positionOnboardingCard(onboardingState.card, target, step);
+}
+
+function evaluateOnboardingStepCompletion() {
+    if (!onboardingState) return;
+    var step = onboardingState.steps[onboardingState.index];
+    if (!step || !step.requireAction) return;
+    var done = false;
+    try {
+        done = typeof step.isComplete === 'function' ? !!step.isComplete(step) : false;
+    } catch (e) {
+        done = false;
+    }
+    if (done && !step._completed) {
+        step._completed = true;
+        if (typeof step.onCompleted === 'function') {
+            try { step.onCompleted(step); } catch (e) {}
+        }
+    }
+    onboardingState.nextBtn.disabled = !done;
+    onboardingState.statusEl.textContent = done ? 'Шаг выполнен' : 'Ожидание действия...';
+}
+
+function startOnboardingTour(options) {
+    options = options || {};
+    if (hasOnboardingCompleted()) return;
+    if (onboardingState) return;
+
+    var steps = getOnboardingSteps();
+    if (!steps || !steps.length) return;
+    var resumeIndex = options.resumeFromSaved ? getSavedOnboardingProgressIndex(steps.length) : null;
+
+    var overlay = document.createElement('div');
+    overlay.className = 'onboarding-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-label', 'Интерактивное обучение');
+
+    var card = document.createElement('div');
+    card.className = 'onboarding-card';
+
+    var stepEl = document.createElement('p');
+    stepEl.className = 'onboarding-step';
+    var titleEl = document.createElement('h3');
+    titleEl.className = 'onboarding-title';
+    var textEl = document.createElement('p');
+    textEl.className = 'onboarding-text';
+    var statusEl = document.createElement('p');
+    statusEl.className = 'onboarding-status';
+
+    var actions = document.createElement('div');
+    actions.className = 'onboarding-actions';
+
+    var skipBtn = document.createElement('button');
+    skipBtn.type = 'button';
+    skipBtn.className = 'btn-secondary';
+    skipBtn.textContent = 'Пропустить';
+
+    var prevBtn = document.createElement('button');
+    prevBtn.type = 'button';
+    prevBtn.className = 'btn-secondary';
+    prevBtn.textContent = 'Назад';
+
+    var nextBtn = document.createElement('button');
+    nextBtn.type = 'button';
+    nextBtn.className = 'btn-primary';
+    nextBtn.textContent = 'Далее';
+
+    actions.appendChild(skipBtn);
+    actions.appendChild(prevBtn);
+    actions.appendChild(nextBtn);
+
+    card.appendChild(stepEl);
+    card.appendChild(titleEl);
+    card.appendChild(textEl);
+    card.appendChild(statusEl);
+    card.appendChild(actions);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    onboardingState = {
+        index: (resumeIndex != null ? resumeIndex : 0),
+        steps: steps,
+        overlay: overlay,
+        card: card,
+        stepEl: stepEl,
+        titleEl: titleEl,
+        textEl: textEl,
+        statusEl: statusEl,
+        prevBtn: prevBtn,
+        nextBtn: nextBtn,
+        activeTarget: null,
+        stepCleanup: null,
+        reposition: function() {
+            if (!onboardingState) return;
+            var currentStep = onboardingState.steps[onboardingState.index];
+            positionOnboardingCard(onboardingState.card, onboardingState.activeTarget, currentStep);
+        }
+    };
+
+    skipBtn.addEventListener('click', function() {
+        stopOnboardingTour(true);
+    });
+    prevBtn.addEventListener('click', function() {
+        if (!onboardingState || onboardingState.index === 0) return;
+        onboardingState.index -= 1;
+        renderOnboardingStep();
+    });
+    nextBtn.addEventListener('click', function() {
+        if (!onboardingState) return;
+        evaluateOnboardingStepCompletion();
+        var currentStep = onboardingState.steps[onboardingState.index];
+        if (currentStep && currentStep.requireAction && onboardingState.nextBtn.disabled) return;
+        if (onboardingState.index >= onboardingState.steps.length - 1) {
+            stopOnboardingTour(true);
+            return;
+        }
+        onboardingState.index += 1;
+        renderOnboardingStep();
+    });
+
+    var onAnyProgressSignal = function() {
+        // Дожидаемся завершения штатных обработчиков UI (переключение режимов и т.п.)
+        // и только потом проверяем выполнение шага.
+        setTimeout(function() {
+            evaluateOnboardingStepCompletion();
+        }, 0);
+    };
+    document.addEventListener('click', onAnyProgressSignal);
+    document.addEventListener('change', onAnyProgressSignal);
+    document.addEventListener('keyup', onAnyProgressSignal);
+
+    onboardingState.detachProgressSignals = function() {
+        document.removeEventListener('click', onAnyProgressSignal);
+        document.removeEventListener('change', onAnyProgressSignal);
+        document.removeEventListener('keyup', onAnyProgressSignal);
+    };
+
+    window.addEventListener('resize', onboardingState.reposition, true);
+    window.addEventListener('scroll', onboardingState.reposition, true);
+    renderOnboardingStep();
+}
+
+window.startOnboardingTour = startOnboardingTour;
+window.restartOnboardingTour = function() {
+    clearOnboardingCompletedFlag();
+    clearOnboardingProgress();
+    stopOnboardingTour(false);
+    startOnboardingTour({ resumeFromSaved: false });
+};
+
+function resumeOnboardingTourIfNeeded() {
+    if (hasOnboardingCompleted()) return;
+    var idx = getSavedOnboardingProgressIndex(getOnboardingSteps().length);
+    if (idx == null) return;
+    var wm = document.getElementById('welcomeModal');
+    if (wm && wm.style.display !== 'none') closeWelcomeModal();
+    setTimeout(function() {
+        startOnboardingTour({ resumeFromSaved: true });
+    }, 140);
 }
 
 function closeWelcomeModal() {
@@ -475,6 +966,13 @@ function initWelcomeModal() {
     }
     var okBtn = document.getElementById('welcomeModalOk');
     if (okBtn) okBtn.addEventListener('click', onClose);
+    var startTourBtn = document.getElementById('welcomeModalStartTour');
+    if (startTourBtn) {
+        startTourBtn.addEventListener('click', function() {
+            closeWelcomeModal();
+            setTimeout(function() { startOnboardingTour(); }, 120);
+        });
+    }
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -485,6 +983,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     initUserUI();
     initWelcomeModal();
+    resumeOnboardingTourIfNeeded();
     document.addEventListener('keydown', function(e) {
         if (e.key !== 'Escape') return;
         var wm = document.getElementById('welcomeModal');

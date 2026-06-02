@@ -35,7 +35,8 @@ function getHelpContentHtml() {
             '<img class="help-assistant-hero-image" src="icons/assistant/volsmap-girl.png" alt="Виртуальный помощник Volsmap">' +
             '<div class="help-assistant-hero-text">' +
                 '<h3>Привет! Я помощник Volsmap</h3>' +
-                '<p>Если что-то не получается, начните с разделов ниже: там быстрые подсказки по объектам, кабелям, жилкам, журналу и совместной работе.</p>' +
+                '<p>Здесь собраны ключевые подсказки по режимам карты, объектам, кабелям, журналу и совместной работе. Если нужно, запустите обучение ещё раз.</p>' +
+                '<p><button type="button" id="helpStartOnboardingBtn" class="btn-primary">Пройти обучение ещё раз</button></p>' +
             '</div>' +
         '</section>';
 
@@ -160,5 +161,18 @@ function setupHelpModalHandlers() {
     var closeBtn = document.querySelector('.close-help');
     if (closeBtn) closeBtn.addEventListener('click', closeHelpModal);
     var modal = document.getElementById('helpModal');
-    if (modal) modal.addEventListener('click', function(e) { if (e.target === modal) closeHelpModal(); });
+    if (modal) modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            closeHelpModal();
+            return;
+        }
+        if (e.target && e.target.id === 'helpStartOnboardingBtn') {
+            closeHelpModal();
+            if (typeof window.restartOnboardingTour === 'function') {
+                setTimeout(function() { window.restartOnboardingTour(); }, 120);
+            } else if (typeof window.startOnboardingTour === 'function') {
+                setTimeout(function() { window.startOnboardingTour({ resumeFromSaved: false }); }, 120);
+            }
+        }
+    });
 }

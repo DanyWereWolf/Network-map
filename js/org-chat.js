@@ -492,6 +492,14 @@
         return '<time class="org-chat-message-time" datetime="' + timeIso + '">' + timeStr + editedLabel + '</time>';
     }
 
+    function buildChatEmptyHtml() {
+        return '<div class="org-chat-empty">' +
+            '<img class="org-chat-empty-image" src="icons/assistant/volsmap-girl.png" alt="" loading="lazy">' +
+            '<p class="org-chat-empty-title">Пока нет сообщений</p>' +
+            '<p class="org-chat-empty-hint">Начните переписку — команда увидит ваше сообщение сразу.</p>' +
+        '</div>';
+    }
+
     function updateMessageInUi(message) {
         if (!message || !message.id) return;
         knownMessagesById[message.id] = message;
@@ -566,12 +574,7 @@
         var row = list.querySelector('.org-chat-message[data-message-id="' + String(messageId).replace(/"/g, '\\"') + '"]');
         if (row) row.remove();
         if (!list.querySelector('.org-chat-message')) {
-            list.innerHTML =
-                '<div class="org-chat-empty">' +
-                    '<span class="org-chat-empty-icon" aria-hidden="true">💬</span>' +
-                    '<p class="org-chat-empty-title">Пока тихо</p>' +
-                    '<p class="org-chat-empty-hint">Напишите первым или упомяните коллегу через @</p>' +
-                '</div>';
+            list.innerHTML = buildChatEmptyHtml();
         }
     }
 
@@ -752,12 +755,7 @@
         if (replace) {
             var listEl = document.getElementById('orgChatMessages');
             if (listEl && !listEl.querySelector('.org-chat-message')) {
-                listEl.innerHTML =
-                    '<div class="org-chat-empty">' +
-                        '<span class="org-chat-empty-icon" aria-hidden="true">💬</span>' +
-                        '<p class="org-chat-empty-title">Пока тихо</p>' +
-                        '<p class="org-chat-empty-hint">Напишите первым или упомяните коллегу через @</p>' +
-                    '</div>';
+                listEl.innerHTML = buildChatEmptyHtml();
             }
         }
         scrollMessagesToBottom();
