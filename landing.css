@@ -102,7 +102,7 @@ body,
 }
 .landing-brand-title {
     font-weight: 600;
-    font-size: clamp(0.95rem, 1vw, 1.05rem);
+    font-size: clamp(0.9rem, 1vw, 1.05rem);
     color: #111827;
     line-height: 1.2;
     overflow: hidden;
@@ -384,6 +384,24 @@ body,
 }
 .landing-for-whom {
     margin-bottom: 36px;
+}
+.landing-quick-info {
+    margin-bottom: 36px;
+}
+.landing-quick-info-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+}
+.landing-quick-info .feature-list {
+    margin-top: 2px;
+}
+.landing-quick-info .feature-list li {
+    margin-bottom: 6px;
+}
+.landing-quick-info .feature-list li span {
+    color: #64748b;
 }
 .landing-for-whom-grid {
     display: grid;
@@ -1111,7 +1129,8 @@ a.contact-card:hover {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .landing-steps-list,
-    .landing-for-whom-grid {
+    .landing-for-whom-grid,
+    .landing-quick-info-grid {
         grid-template-columns: 1fr;
     }
     .landing-glance {
@@ -1259,6 +1278,9 @@ a.contact-card:hover {
 }
 [data-theme="dark"] .landing-step p,
 [data-theme="dark"] .landing-for-whom-card p {
+    color: #94a3b8;
+}
+[data-theme="dark"] .landing-quick-info .feature-list li span {
     color: #94a3b8;
 }
 [data-theme="dark"] .capability-footnote {

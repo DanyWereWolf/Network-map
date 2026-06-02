@@ -14,12 +14,34 @@
     var quickWrap = null;
     var fabBadge = null;
     var fabWrap = null;
+    var backdropEl = null;
     var mode = 'bot';
     var pollTimer = null;
     var adminOnline = false;
     var hasUnreadAdmin = false;
     var ownerHintShown = false;
     var botWelcomeShown = false;
+    var mobileMq = typeof window !== 'undefined' && window.matchMedia
+        ? window.matchMedia('(max-width: 768px)')
+        : null;
+
+    function isMobileUi() {
+        return mobileMq ? mobileMq.matches : false;
+    }
+
+    function syncMobileState(opened) {
+        var isOpen = !!opened;
+        var mobile = isMobileUi();
+        if (document && document.body) {
+            document.body.classList.toggle('support-chat-mobile-open', mobile && isOpen);
+        }
+        if (backdropEl) {
+            var showBackdrop = mobile && isOpen;
+            backdropEl.hidden = !showBackdrop;
+            backdropEl.classList.toggle('is-open', showBackdrop);
+            backdropEl.setAttribute('aria-hidden', showBackdrop ? 'false' : 'true');
+        }
+    }
 
     function getApiBase() {
         if (typeof window.getApiBase === 'function') {
@@ -399,8 +421,10 @@
         var fab = document.getElementById('supportChatFab');
         var isOpen = open !== undefined ? open : !panel.classList.contains('is-open');
         panel.classList.toggle('is-open', isOpen);
+        panel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
         if (fab) fab.classList.toggle('is-open', isOpen);
         if (fabWrap) fabWrap.classList.toggle('is-open', isOpen);
+        syncMobileState(isOpen);
         if (isOpen) {
             fetchPresence().then(function() {
                 return syncThread(mode === 'owner');
@@ -441,11 +465,18 @@
         fabWrap.appendChild(pulse2);
         fabWrap.appendChild(fab);
 
+        backdropEl = document.createElement('div');
+        backdropEl.id = 'supportChatBackdrop';
+        backdropEl.className = 'support-chat-backdrop';
+        backdropEl.hidden = true;
+        backdropEl.setAttribute('aria-hidden', 'true');
+
         panel = document.createElement('div');
         panel.id = 'supportChatPanel';
         panel.className = 'support-chat-panel';
         panel.setAttribute('role', 'dialog');
         panel.setAttribute('aria-label', 'Чат поддержки');
+        panel.setAttribute('aria-hidden', 'true');
 
         panel.innerHTML =
             '<div class="support-chat-header">' +
@@ -478,6 +509,7 @@
                 '<p class="support-chat-hint" id="supportChatHint"></p>' +
             '</div>';
 
+        document.body.appendChild(backdropEl);
         document.body.appendChild(panel);
         document.body.appendChild(fabWrap);
 
@@ -494,12 +526,22 @@
 
         document.getElementById('supportChatSend').addEventListener('click', onSend);
         document.getElementById('supportChatClose').addEventListener('click', function() { togglePanel(false); });
+        backdropEl.addEventListener('click', function() { togglePanel(false); });
         document.getElementById('supportChatInput').addEventListener('keydown', function(e) {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 onSend();
             }
         });
+        if (mobileMq && typeof mobileMq.addEventListener === 'function') {
+            mobileMq.addEventListener('change', function() {
+                syncMobileState(panel && panel.classList.contains('is-open'));
+            });
+        } else if (mobileMq && typeof mobileMq.addListener === 'function') {
+            mobileMq.addListener(function() {
+                syncMobileState(panel && panel.classList.contains('is-open'));
+            });
+        }
 
         var nameEl = document.getElementById('supportChatName');
         var emailEl = document.getElementById('supportChatEmail');
@@ -516,6 +558,7 @@
         syncThread(false).then(function() {
             if (hasUnreadAdmin) setFabBadge(true);
         });
+        syncMobileState(false);
     }
 
     if (document.readyState === 'loading') {

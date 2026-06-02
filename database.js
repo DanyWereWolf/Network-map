@@ -1407,7 +1407,7 @@ function sortProductUpdates(posts) {
 
 function getProductUpdatesAdmin() {
     var parsed = parseProductUpdatesRaw(getSetting('productUpdates'));
-    if (!parsed || !parsed.length) {
+    if (parsed == null) {
         return DEFAULT_PRODUCT_UPDATES.map(function(p, i) { return normalizeProductUpdate(p, i); });
     }
     return sortProductUpdates(parsed.map(function(p, i) { return normalizeProductUpdate(p, i); }));

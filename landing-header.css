@@ -162,7 +162,13 @@ body.landing-page .landing-nav:not(.landing-nav--menu-collapsed) .landing-nav-ac
 
 @container landing-shell (max-width: 999px) {
     body.landing-page .landing-brand-sub {
-        display: none;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        font-size: 0.62rem;
+        line-height: 1.25;
+        max-width: 12.5em;
     }
 
     body.landing-page .landing-nav:not(.landing-nav--menu-collapsed) .landing-nav-left {
@@ -193,6 +199,16 @@ body.landing-page .landing-nav-actions .theme-toggle-btn {
 }
 
 @container landing-shell (max-width: 720px) {
+    body.landing-page .landing-nav-left {
+        max-width: 180px;
+    }
+
+    body.landing-page .landing-brand-title {
+        white-space: normal;
+        text-overflow: clip;
+        line-height: 1.25;
+    }
+
     body.landing-page .landing-nav-actions .theme-toggle-btn {
         width: 2.75rem;
         height: 2.75rem;
@@ -221,7 +237,13 @@ body.landing-page .landing-nav-actions .theme-toggle-btn {
 @supports not (container-type: inline-size) {
     @media (max-width: 999px) {
         body.landing-page .landing-brand-sub {
-            display: none;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            font-size: 0.62rem;
+            line-height: 1.25;
+            max-width: 12.5em;
         }
     }
 

@@ -2943,9 +2943,14 @@
                 return;
             }
             if (!confirm('Удалить выбранный пост?')) return;
+            var prevCache = productUpdatesCache.slice();
             productUpdatesCache = productUpdatesCache.filter(function(p) { return p.id !== productUpdatesSelectedId; });
             clearProductUpdateEditor();
-            setProductUpdatesHint('Пост удалён из списка. Сохраните изменения на сервере.');
+            setProductUpdatesHint('Пост удалён из списка. Сохраняем на сервере…');
+            saveProductUpdatesToServer().catch(function() {
+                productUpdatesCache = prevCache;
+                renderProductUpdatesList();
+            });
         }
 
         var productUpdatesNewBtn = document.getElementById('productUpdatesNewBtn');
