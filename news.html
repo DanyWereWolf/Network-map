@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="description" content="Новости проекта «Карта оптической сети» — что нового в программе для работы с ВОЛС.">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#1d4ed8">
+    <title>Новости — Карта оптической сети</title>
+    <link rel="canonical" href="https://volsmap.ru/news.html">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="auth.css">
+    <link rel="stylesheet" href="cookie-consent.css">
+    <link rel="stylesheet" href="maintenance-notice.css">
+    <link rel="stylesheet" href="early-access-notice.css">
+    <link rel="stylesheet" href="support-chat.css">
+    <script>
+        (function() {
+            try {
+                var saved = localStorage.getItem('networkMap_landingTheme');
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var theme = (saved === 'dark' || saved === 'light') ? saved : (prefersDark ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch (e) {}
+        })();
+    </script>
+    <link rel="stylesheet" href="landing.css">
+    <link rel="stylesheet" href="landing-header.css">
+    <link rel="stylesheet" href="news.css">
+    <link rel="stylesheet" href="pages-mobile.css">
+</head>
+<body class="landing-page">
+    <div class="auth-bg" aria-hidden="true">
+        <div class="auth-bg-gradient"></div>
+        <canvas id="authPlexusCanvas" class="auth-bg-plexus"></canvas>
+    </div>
+    <div class="auth-container landing-root">
+        <div class="auth-card landing-shell">
+            <header class="landing-nav" id="landingNav">
+                <div class="landing-nav-overlay" id="landingNavOverlay" aria-hidden="true"></div>
+                <div class="landing-nav-left">
+                    <a href="/" class="landing-nav-logo-link" title="На главную">
+                        <div class="auth-logo landing-nav-logo" role="img" aria-label="Карта оптической сети">
+                            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                <circle cx="12" cy="10" r="3"></circle>
+                            </svg>
+                        </div>
+                    </a>
+                    <div>
+                        <div class="landing-brand-title">Карта оптической сети</div>
+                        <div class="landing-brand-sub">Программа для работы с оптической сетью</div>
+                    </div>
+                </div>
+                <nav class="landing-nav-menu" id="landingNavMenu" aria-label="Разделы страницы">
+                    <a href="/#home">Главная</a>
+                    <a href="/#capabilities">Возможности</a>
+                    <a href="/#about">О продукте</a>
+                    <a href="/#pricing">Условия</a>
+                    <a href="news.html" class="is-active" aria-current="page">Новости</a>
+                    <a href="/#faq">Вопросы</a>
+                    <a href="/#contacts">Контакты</a>
+                </nav>
+                <div class="landing-nav-actions">
+                    <button type="button" class="btn-outline landing-nav-burger" id="landingNavBurger" aria-expanded="false" aria-controls="landingNavMenu" title="Разделы страницы">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <line x1="3" y1="12" x2="21" y2="12"></line>
+                            <line x1="3" y1="18" x2="21" y2="18"></line>
+                        </svg>
+                        <span>Разделы</span>
+                    </button>
+                    <button id="landingThemeToggle" type="button" class="btn-outline theme-toggle-btn" title="Тёмная тема" aria-label="Включить тёмную тему">
+                        <span aria-hidden="true">🌙</span>
+                    </button>
+                    <button class="btn-outline" onclick="window.location.href='auth.html'">Войти</button>
+                    <button class="btn-primary-hero" onclick="window.location.href='/#pricing'">Попробовать сейчас</button>
+                </div>
+            </header>
+
+            <section class="updates-hero" aria-labelledby="newsPageTitle">
+                <h1 id="newsPageTitle" class="updates-hero-title">Новости</h1>
+                <p class="updates-hero-sub">Здесь публикуем новости о доработках карты ВОЛС, синхронизации и интерфейса.</p>
+            </section>
+
+            <div id="updatesFeed" class="updates-feed" aria-live="polite">
+                <p class="updates-loading" role="status">Загрузка новостей…</p>
+            </div>
+
+            <footer class="landing-footer">
+                <div>© 2024–2026 «Карта оптической сети». Все права защищены.</div>
+                <nav class="landing-footer-nav" aria-label="Нижняя навигация">
+                    <a href="/#home">Главная</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="/#capabilities">Возможности</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="/#about">О продукте</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="/#pricing">Условия</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="news.html" aria-current="page">Новости</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="/#faq">Вопросы</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="/#contacts">Контакты</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="auth.html">Войти</a>
+                </nav>
+            </footer>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        var toggleBtn = document.getElementById('landingThemeToggle');
+        function setTheme(theme) {
+            var t = (theme === 'dark') ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', t);
+            try {
+                localStorage.setItem('networkMap_landingTheme', t);
+            } catch (e) {}
+            if (!toggleBtn) return;
+            if (t === 'dark') {
+                toggleBtn.innerHTML = '<span aria-hidden="true">☀️</span>';
+                toggleBtn.setAttribute('aria-label', 'Включить светлую тему');
+                toggleBtn.setAttribute('title', 'Светлая тема');
+            } else {
+                toggleBtn.innerHTML = '<span aria-hidden="true">🌙</span>';
+                toggleBtn.setAttribute('aria-label', 'Включить тёмную тему');
+                toggleBtn.setAttribute('title', 'Тёмная тема');
+            }
+        }
+        setTheme(document.documentElement.getAttribute('data-theme') || 'light');
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', function() {
+                var current = document.documentElement.getAttribute('data-theme') || 'light';
+                setTheme(current === 'dark' ? 'light' : 'dark');
+            });
+        }
+    })();
+    </script>
+    <script src="js/landing-nav.js"></script>
+    <script src="js/core/page-bg-plexus.js"></script>
+    <script src="js/core/cookie-consent.js"></script>
+    <script src="js/core/maintenance-notice.js"></script>
+    <script src="js/core/early-access-notice.js"></script>
+    <script src="js/support-chat.js"></script>
+    <script src="js/news-page.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,233 @@
+/**
+ * Шапка лендинга: ссылки в строке, при нехватке места — список по кнопке «Разделы» (см. landing-nav.js).
+ */
+
+body.landing-page .landing-nav-burger {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 44px;
+    padding: 6px 12px;
+}
+
+body.landing-page .landing-nav-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 25;
+    background: rgba(15, 23, 42, 0.45);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+body.landing-page .landing-nav-actions > .btn-primary-hero {
+    display: none;
+}
+
+/* Режим «не влезло» — выпадающий список */
+body.landing-page .landing-nav.landing-nav--menu-collapsed .landing-nav-burger {
+    display: inline-flex;
+}
+
+body.landing-page .landing-nav.landing-nav--menu-collapsed {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto;
+}
+
+body.landing-page .landing-nav.landing-nav--menu-collapsed .landing-nav-left {
+    grid-column: 1;
+    grid-row: 1;
+    max-width: none;
+}
+
+body.landing-page .landing-nav.landing-nav--menu-collapsed .landing-nav-actions {
+    grid-column: 2;
+    grid-row: 1;
+}
+
+body.landing-page .landing-nav.landing-nav--menu-collapsed .landing-nav-menu {
+    display: none;
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 56px);
+    left: max(12px, env(safe-area-inset-left, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
+    z-index: 30;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 12px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.98);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+    backdrop-filter: blur(16px);
+    max-height: min(70vh, 520px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    mask-image: none;
+    width: auto;
+    font-size: 0.92rem;
+}
+
+body.landing-page .landing-nav.landing-nav--menu-collapsed.is-menu-open .landing-nav-menu {
+    display: flex;
+}
+
+body.landing-page .landing-nav.landing-nav--menu-collapsed.is-menu-open .landing-nav-overlay {
+    display: block;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+body.landing-page .landing-nav.landing-nav--menu-collapsed .landing-nav-menu a {
+    padding: 12px 14px;
+    border-radius: 10px;
+    white-space: normal;
+}
+
+body.landing-page .landing-nav.landing-nav--menu-collapsed .landing-nav-menu a:hover {
+    background: rgba(59, 130, 246, 0.08);
+}
+
+[data-theme="dark"] body.landing-page .landing-nav.landing-nav--menu-collapsed .landing-nav-menu {
+    background: rgba(15, 23, 42, 0.97);
+    border-color: rgba(148, 163, 184, 0.25);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] body.landing-page .landing-nav.landing-nav--menu-collapsed .landing-nav-menu a:hover {
+    background: rgba(59, 130, 246, 0.15);
+}
+
+/* Обычный режим: одна строка */
+body.landing-page .landing-nav:not(.landing-nav--menu-collapsed) {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto;
+}
+
+body.landing-page .landing-nav:not(.landing-nav--menu-collapsed) .landing-nav-left {
+    grid-column: 1;
+    grid-row: 1;
+}
+
+body.landing-page .landing-nav:not(.landing-nav--menu-collapsed) .landing-nav-menu {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    position: static;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    padding: 2px 4px;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    mask-image: none;
+}
+
+body.landing-page .landing-nav:not(.landing-nav--menu-collapsed) .landing-nav-actions {
+    grid-column: 3;
+    grid-row: 1;
+}
+
+@container landing-shell (min-width: 721px) {
+    body.landing-page section[id],
+    body.landing-page .landing-block {
+        scroll-margin-top: calc(88px + env(safe-area-inset-top, 0px));
+    }
+}
+
+@container landing-shell (min-width: 1000px) {
+    body.landing-page .landing-nav:not(.landing-nav--menu-collapsed) {
+        grid-template-columns: minmax(0, 240px) minmax(0, 1fr) auto;
+    }
+
+    body.landing-page .landing-nav:not(.landing-nav--menu-collapsed) .landing-nav-left {
+        max-width: 240px;
+    }
+
+    body.landing-page .landing-nav-actions > .btn-primary-hero {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+}
+
+@container landing-shell (max-width: 999px) {
+    body.landing-page .landing-brand-sub {
+        display: none;
+    }
+
+    body.landing-page .landing-nav:not(.landing-nav--menu-collapsed) .landing-nav-left {
+        max-width: 200px;
+    }
+
+    body.landing-page .landing-nav:not(.landing-nav--menu-collapsed) .landing-nav-menu {
+        justify-content: flex-start;
+        font-size: 0.78rem;
+        gap: 6px;
+    }
+}
+
+@container landing-shell (max-width: 720px) {
+    body.landing-page section[id],
+    body.landing-page .landing-block {
+        scroll-margin-top: calc(80px + env(safe-area-inset-top, 0px));
+    }
+}
+
+body.landing-page .landing-nav-actions .theme-toggle-btn {
+    min-width: 0;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    font-size: 1.05rem;
+    line-height: 1;
+}
+
+@container landing-shell (max-width: 720px) {
+    body.landing-page .landing-nav-actions .theme-toggle-btn {
+        width: 2.75rem;
+        height: 2.75rem;
+        font-size: 1.1rem;
+    }
+
+    body.landing-page .landing-nav-actions .btn-outline:not(.theme-toggle-btn):not(.landing-nav-burger) {
+        min-height: 2.75rem;
+        padding: 0 12px;
+        display: inline-flex;
+        align-items: center;
+    }
+
+    body.landing-page .landing-nav-burger span {
+        display: none;
+    }
+}
+
+@container landing-shell (min-width: 721px) {
+    body.landing-page .landing-nav-burger span {
+        display: inline;
+    }
+}
+
+/* Fallback без container queries */
+@supports not (container-type: inline-size) {
+    @media (max-width: 999px) {
+        body.landing-page .landing-brand-sub {
+            display: none;
+        }
+    }
+
+    @media (min-width: 1000px) {
+        body.landing-page .landing-nav-actions > .btn-primary-hero {
+            display: inline-flex;
+        }
+    }
+}

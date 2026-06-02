@@ -54,7 +54,18 @@
     <script>
         (function() {
             try {
-                var saved = localStorage.getItem('networkMap_theme') || localStorage.getItem('networkMap_landingTheme');
+                var key = 'networkMap_theme';
+                var sess = localStorage.getItem('networkMap_session') || sessionStorage.getItem('networkMap_session');
+                if (sess) {
+                    var u = JSON.parse(sess);
+                    var uid = (u && u.userId != null) ? u.userId : (u && u.id != null ? u.id : null);
+                    if (uid != null && String(uid).trim() !== '') key = 'networkMap_theme_' + String(uid).trim();
+                }
+                var saved = localStorage.getItem(key);
+                if (saved !== 'dark' && saved !== 'light' && key !== 'networkMap_theme') {
+                    saved = localStorage.getItem('networkMap_theme');
+                }
+                if (saved !== 'dark' && saved !== 'light') saved = localStorage.getItem('networkMap_landingTheme');
                 var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
                 var theme = (saved === 'dark' || saved === 'light') ? saved : (prefersDark ? 'dark' : 'light');
                 document.documentElement.setAttribute('data-theme', theme);
@@ -65,6 +76,7 @@
     <link rel="stylesheet" href="app-mobile.css">
     <link rel="stylesheet" href="cookie-consent.css">
     <link rel="stylesheet" href="maintenance-notice.css">
+    <link rel="stylesheet" href="early-access-notice.css">
     <!-- Защита от копирования -->
     <script>
         // Отключение контекстного меню
@@ -1952,6 +1964,7 @@
     <script src="js/org-chat.js"></script>
     <script src="js/core/cookie-consent.js"></script>
     <script src="js/core/maintenance-notice.js"></script>
+    <script src="js/core/early-access-notice.js"></script>
     <script src="js/core/page-bg-plexus.js"></script>
     <script src="js/ui/modal-glass.js"></script>
 </body></html>

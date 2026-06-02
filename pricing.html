@@ -53,6 +53,8 @@
     <link rel="stylesheet" href="auth.css">
     <link rel="stylesheet" href="cookie-consent.css">
     <link rel="stylesheet" href="maintenance-notice.css">
+    <link rel="stylesheet" href="early-access-notice.css">
+    <link rel="stylesheet" href="support-chat.css">
     <script>
         (function() {
             try {
@@ -64,6 +66,7 @@
         })();
     </script>
     <link rel="stylesheet" href="landing.css">
+    <link rel="stylesheet" href="landing-header.css">
     <link rel="stylesheet" href="pages-mobile.css">
 </head>
 <body class="landing-page">
@@ -91,23 +94,24 @@
                 <nav class="landing-nav-menu" id="landingNavMenu" aria-label="Разделы страницы">
                     <a href="#home">Главная</a>
                     <a href="#capabilities">Возможности</a>
+                    <a href="#how">Как начать</a>
                     <a href="#about">О продукте</a>
                     <a href="#pricing">Условия</a>
+                    <a href="news.html">Новости</a>
                     <a href="#faq">Вопросы</a>
                     <a href="#contacts">Контакты</a>
                 </nav>
                 <div class="landing-nav-actions">
-                    <button type="button" class="btn-outline landing-nav-burger" id="landingNavBurger" aria-expanded="false" aria-controls="landingNavMenu" title="Меню разделов">
+                    <button type="button" class="btn-outline landing-nav-burger" id="landingNavBurger" aria-expanded="false" aria-controls="landingNavMenu" title="Разделы страницы">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                             <line x1="3" y1="6" x2="21" y2="6"></line>
                             <line x1="3" y1="12" x2="21" y2="12"></line>
                             <line x1="3" y1="18" x2="21" y2="18"></line>
                         </svg>
-                        <span>Меню</span>
+                        <span>Разделы</span>
                     </button>
-                    <button id="landingThemeToggle" type="button" class="btn-outline theme-toggle-btn" title="Сменить тему">
+                    <button id="landingThemeToggle" type="button" class="btn-outline theme-toggle-btn" title="Тёмная тема" aria-label="Включить тёмную тему">
                         <span aria-hidden="true">🌙</span>
-                        <span>Тёмная</span>
                     </button>
                     <button class="btn-outline" onclick="window.location.href='auth.html'">Войти</button>
                     <button class="btn-primary-hero" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">
@@ -124,11 +128,18 @@
                         <span class="hero-line hero-highlight">Бесплатно, с лимитом под ваш масштаб.</span>
                     </h1>
                     <p class="landing-hero-subtitle">
-                        Оптическая сеть на карте: узлы и коммутаторы, кроссы и муфты со схемой жил, GPON, камеры и медиаконвертеры.
-                        Поиск и трассировка, совместная работа в реальном времени, журнал изменений и ежедневные бэкапы
-                        для каждой организации. Бесплатно до <strong id="heroFreeLimit">2000</strong> объектов и до <strong id="heroMaxConcurrent">4</strong> одновременных пользователей; при росте — через владельца программы.
+                        Веб‑сервис для учёта ВОЛС на Яндекс.Картах: топология, схема жил, GPON и трассировка до абонента.
+                        Командная работа в браузере — без установки. Бесплатно до <strong id="heroFreeLimit">2000</strong> объектов
+                        и <strong id="heroMaxConcurrent">4</strong> одновременных пользователей.
                     </p>
+                    <ul class="landing-glance" aria-label="Кратко о сервисе">
+                        <li><strong>Браузер</strong> — без установки на ПК</li>
+                        <li><strong>Организация</strong> — своя карта и бэкапы</li>
+                        <li><strong>Бэкапы</strong> — снимки 30 дней</li>
+                        <li><strong>Ранний доступ</strong> — развиваем по вашей обратной связи</li>
+                    </ul>
                     <div class="landing-hero-badges">
+                        <span class="badge-pill badge-pill--early">Ранний доступ · нужна обратная связь</span>
                         <span class="badge-pill">Схема жил в кроссе и муфте</span>
                         <span class="badge-pill">Своя карта на организацию</span>
                         <span class="badge-pill">Синхронизация и бэкапы</span>
@@ -227,7 +238,7 @@
                     </div>
                     <div>
                         <h3>Данные под защитой</h3>
-                        <p>Данные на наших серверах. Доступ к картам — только у пользователей вашей организации и команды сервиса (поддержка).</p>
+                        <p>Изоляция карт по организациям, вход по паролю и сессиям, защита от ботов при регистрации. Доступ к вашей карте — только у приглашённых пользователей.</p>
                     </div>
                 </div>
                 <div class="trust-item" role="listitem">
@@ -259,10 +270,56 @@
                 </div>
             </div>
 
+            <section id="how" class="landing-steps landing-block" aria-labelledby="how-heading">
+                <h2 id="how-heading" class="capability-section-title">Как начать</h2>
+                <p class="capability-section-lead">Три шага от регистрации до совместной работы на карте.</p>
+                <ol class="landing-steps-list">
+                    <li class="landing-step">
+                        <span class="landing-step-num" aria-hidden="true">1</span>
+                        <div>
+                            <h3>Регистрация организации</h3>
+                            <p>Создайте учётную запись — появится отдельная карта вашей компании. Подтверждение доступа — у администратора организации.</p>
+                        </div>
+                    </li>
+                    <li class="landing-step">
+                        <span class="landing-step-num" aria-hidden="true">2</span>
+                        <div>
+                            <h3>Схема сети на карте</h3>
+                            <p>Узлы, кабели, кроссы и муфты, GPON, поиск и трассировка. Схема жил — в карточке объекта.</p>
+                        </div>
+                    </li>
+                    <li class="landing-step">
+                        <span class="landing-step-num" aria-hidden="true">3</span>
+                        <div>
+                            <h3>Работа команды</h3>
+                            <p>Правки видны коллегам в реальном времени, есть журнал изменений, бэкапы и чат организации.</p>
+                        </div>
+                    </li>
+                </ol>
+            </section>
+
+            <section class="landing-for-whom landing-block" aria-labelledby="for-whom-heading">
+                <h2 id="for-whom-heading" class="capability-section-title">Для кого</h2>
+                <div class="landing-for-whom-grid">
+                    <article class="landing-for-whom-card">
+                        <h3>Провайдеры и операторы</h3>
+                        <p>Учёт пассивной оптики и абонентского доступа, масштабирование при росте сети.</p>
+                    </article>
+                    <article class="landing-for-whom-card">
+                        <h3>Интеграторы и монтаж</h3>
+                        <p>Актуальная схема после выездов, передача объекта заказчику на общей платформе.</p>
+                    </article>
+                    <article class="landing-for-whom-card">
+                        <h3>Эксплуатация и проект</h3>
+                        <p>Быстрый поиск объекта, трассировка, история правок и восстановление из бэкапа.</p>
+                    </article>
+                </div>
+            </section>
+
             <section id="capabilities" class="landing-block" aria-labelledby="capabilities-heading">
                 <h2 id="capabilities-heading" class="capability-section-title">Что вы получаете в одной платформе</h2>
                 <p class="capability-section-lead">
-                    От географической схемы до схемы жил в кроссе и трассировки до абонента — в одном веб‑интерфейсе.
+                    От географической схемы до жил в кроссе и трассировки до ONU — в одном веб‑интерфейсе.
                 </p>
                 <div class="capability-grid">
                     <article class="capability-card">
@@ -307,75 +364,97 @@
                         <h3>Мобильный просмотр</h3>
                         <p>С телефона — навигация, поиск и карточки объектов; редактирование — с широкого экрана.</p>
                     </article>
+                    <article class="capability-card">
+                        <div class="capability-card-icon" aria-hidden="true">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
+                        </div>
+                        <h3>Бэкапы и контроль</h3>
+                        <p>Ежедневные снимки (30 дней), журнал правок, чат организации, справочник оборудования.</p>
+                    </article>
                 </div>
+                <p class="capability-footnote">Также: фильтры слоёв карты, медиаконвертеры и камеры, печать схем, опциональная 2FA для организации.</p>
             </section>
 
-            <!-- О продукте и управление организациями/подписками -->
-            <section id="about" class="landing-sections landing-block">
-                <div class="landing-section">
-                    <div class="about-card">
-                        <h2 class="section-title">
-                            <span class="icon">i</span>
-                            О продукте
-                        </h2>
-                        <div class="section-body">
-                            «Карта оптической сети» — программа для работы с оптической сетью: объекты на Яндекс.Картах,
-                            учёт жил в кроссах и муфтах, GPON, камеры и медные линии. Каждая организация работает со своей картой;
-                            данные, история и ежедневные бэкапы хранятся у нас на защищённых серверах.
-                            <ul class="feature-list">
-                                <li>
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="20 6 9 17 4 12"></polyline>
-                                    </svg>
-                                    <span>Единая модель: узлы, ВОЛС, кроссы, муфты, OLT, сплиттеры, ONU, камеры, медиаконвертеры.</span>
-                                </li>
-                                <li>
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="20 6 9 17 4 12"></polyline>
-                                    </svg>
-                                    <span>Бэкапы по организации (30 дней) и восстановление из приложения.</span>
-                                </li>
-                                <li>
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="20 6 9 17 4 12"></polyline>
-                                    </svg>
-                                    <span>Справочник оборудования.</span>
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
+            <!-- О продукте -->
+            <section id="about" class="landing-block landing-about">
+                <div class="landing-block-head">
+                    <h2 class="capability-section-title">О продукте</h2>
+                    <p class="capability-section-lead section-body">
+                        «Карта оптической сети» — веб‑платформа на volsmap.ru: каждая организация ведёт свою сеть, данные изолированы, полный функционал в пределах лимита объектов.
+                    </p>
                 </div>
-
-                <div class="landing-section">
+                <div class="about-grid">
                     <div class="about-card">
-                        <h2 class="section-title">
-                            <span class="icon">⚙</span>
-                            Что даёт карта инженеру
-                        </h2>
-                        <div class="section-body">
-                            Повседневные задачи без переключения между картой, Excel и чертежами:
+                        <h3 class="about-card-title">Что входит</h3>
+                        <ul class="feature-list">
+                            <li>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                <span>Узлы, ВОЛС, кроссы, муфты, OLT, сплиттеры, ONU, камеры, медиаконвертеры.</span>
+                            </li>
+                            <li>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                <span>Яндекс.Карты — ключ настраивается на стороне сервиса.</span>
+                            </li>
+                            <li>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                <span>Бэкапы 30 дней и восстановление из приложения.</span>
+                            </li>
+                            <li>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                <span>Роли: администратор организации и пользователи с разными правами.</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="about-card">
+                        <h3 class="about-card-title">Задачи инженера</h3>
+                        <ul class="feature-list">
+                            <li>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                <span>Поиск узлов, муфт, сплиттеров и абонентского оборудования.</span>
+                            </li>
+                            <li>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                <span>Трассировка жил от OLT до ONU; схема в кроссе и муфте.</span>
+                            </li>
+                            <li>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                <span>Журнал правок, Ctrl+Z / Ctrl+Y, массовое выделение на карте.</span>
+                            </li>
+                            <li>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                <span>Синхронизация правок и курсоры коллег в реальном времени.</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <details class="about-card about-card--wide about-security-details">
+                        <summary class="about-security-summary">
+                            <span class="about-security-summary-icon" aria-hidden="true">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                            </span>
+                            Защита и безопасность — подробнее
+                        </summary>
+                        <div class="section-body about-security-body">
+                            <p>Изоляция данных по организациям, защищённый вход, опциональная 2FA, контроль сессий.</p>
                             <ul class="feature-list">
                                 <li>
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="20 6 9 17 4 12"></polyline>
-                                    </svg>
-                                    <span>Поиск по названию: узлы, муфты, сплиттеры, абонентское оборудование.</span>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <span>Карты разных компаний недоступны друг другу; доступ только у приглашённых пользователей.</span>
                                 </li>
                                 <li>
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="20 6 9 17 4 12"></polyline>
-                                    </svg>
-                                    <span>Трассировка жил от OLT, через сплиттеры, до ONU и узла; схема в кроссе и муфте.</span>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <span>Вход: капча (Turnstile), лимит попыток, пароли не в открытом виде; одна учётная запись — одна сессия.</span>
                                 </li>
                                 <li>
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="20 6 9 17 4 12"></polyline>
-                                    </svg>
-                                    <span>Журнал правок, Ctrl+Z / Ctrl+Y и выделение области для массового удаления.</span>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <span>2FA организации — общий код из приложения-аутентификатора при входе (по желанию).</span>
+                                </li>
+                                <li>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <span>Администраторы платформы — только для поддержки; данные третьим лицам не передаются.</span>
                                 </li>
                             </ul>
                         </div>
-                    </div>
+                    </details>
                 </div>
             </section>
 
@@ -433,6 +512,15 @@
                 <details class="faq-item">
                     <summary>Можно ли редактировать карту с телефона?</summary>
                     <p>На узком экране (до 768&nbsp;px) доступен просмотр: поиск, карточки объектов, трассировка. Добавление объектов, кабелей и правка жил — с компьютера или планшета в альбомной ориентации с большей шириной окна.</p>
+                </details>
+                <details class="faq-item">
+                    <summary>Как защищены данные и вход в систему?</summary>
+                    <p>Карты разных организаций изолированы. Вход — по паролю и сессии; защита от ботов и лимит попыток.
+                    Организация может включить 2FA. Подробнее — раскройте «Защита и безопасность» в разделе «О продукте».</p>
+                </details>
+                <details class="faq-item">
+                    <summary>Нужна ли установка программы?</summary>
+                    <p>Нет. Сервис работает в браузере на volsmap.ru — достаточно регистрации и входа. С телефона удобен просмотр; правки карты — с компьютера или широкого экрана.</p>
                 </details>
                 <details class="faq-item">
                     <summary>Как снять лимит объектов?</summary>
@@ -501,9 +589,13 @@
                     <span aria-hidden="true">·</span>
                     <a href="#capabilities">Возможности</a>
                     <span aria-hidden="true">·</span>
+                    <a href="#how">Как начать</a>
+                    <span aria-hidden="true">·</span>
                     <a href="#about">О продукте</a>
                     <span aria-hidden="true">·</span>
                     <a href="#pricing">Условия</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="news.html">Новости</a>
                     <span aria-hidden="true">·</span>
                     <a href="#faq">Вопросы</a>
                     <span aria-hidden="true">·</span>
@@ -527,11 +619,13 @@
             } catch (e) {}
             if (!toggleBtn) return;
             if (t === 'dark') {
-                toggleBtn.innerHTML = '<span aria-hidden="true">☀️</span><span>Светлая</span>';
+                toggleBtn.innerHTML = '<span aria-hidden="true">☀️</span>';
                 toggleBtn.setAttribute('aria-label', 'Включить светлую тему');
+                toggleBtn.setAttribute('title', 'Светлая тема');
             } else {
-                toggleBtn.innerHTML = '<span aria-hidden="true">🌙</span><span>Тёмная</span>';
+                toggleBtn.innerHTML = '<span aria-hidden="true">🌙</span>';
                 toggleBtn.setAttribute('aria-label', 'Включить тёмную тему');
+                toggleBtn.setAttribute('title', 'Тёмная тема');
             }
         }
         var initialTheme = document.documentElement.getAttribute('data-theme') || 'light';
@@ -546,30 +640,6 @@
     </script>
     <script>
     (function() {
-        var nav = document.getElementById('landingNav');
-        var burger = document.getElementById('landingNavBurger');
-        var overlay = document.getElementById('landingNavOverlay');
-        function setMenuOpen(open) {
-            if (!nav || !burger) return;
-            nav.classList.toggle('is-menu-open', open);
-            burger.setAttribute('aria-expanded', open ? 'true' : 'false');
-            document.body.style.overflow = open ? 'hidden' : '';
-        }
-        if (burger) {
-            burger.addEventListener('click', function() {
-                setMenuOpen(!nav.classList.contains('is-menu-open'));
-            });
-        }
-        if (overlay) {
-            overlay.addEventListener('click', function() { setMenuOpen(false); });
-        }
-        document.querySelectorAll('.landing-nav-menu a').forEach(function(a) {
-            a.addEventListener('click', function() { setMenuOpen(false); });
-        });
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') setMenuOpen(false);
-        });
-
         var navLinks = document.querySelectorAll('.landing-nav-menu a[href^="#"]');
         var sections = [];
         navLinks.forEach(function(link) {
@@ -897,9 +967,12 @@
             .catch(function() {});
     })();
     </script>
+    <script src="js/landing-nav.js"></script>
     <script src="js/core/page-bg-plexus.js"></script>
     <script src="js/core/cookie-consent.js"></script>
     <script src="js/core/maintenance-notice.js"></script>
+    <script src="js/core/early-access-notice.js"></script>
+    <script src="js/support-chat.js"></script>
 </body>
 </html>
 

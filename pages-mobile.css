@@ -89,11 +89,15 @@
     }
 
     .landing-brand-title {
-        display: none;
+        font-size: 0.82rem;
+        line-height: 1.15;
     }
 
-    .landing-nav-left > div:not(.landing-nav-logo) {
-        display: none;
+    .landing-brand-sub {
+        display: block;
+        font-size: 0.65rem;
+        max-width: 10.5em;
+        line-height: 1.2;
     }
 
     .landing-nav-actions {
@@ -107,33 +111,12 @@
         display: none;
     }
 
-    .theme-toggle-btn {
-        min-width: 44px;
-        padding-left: 10px;
-        padding-right: 10px;
-    }
-
-    .theme-toggle-btn span:last-child {
-        display: none;
-    }
-
-    .landing-nav-burger span {
-        display: none;
-    }
-
-    .landing-nav-burger {
-        min-width: 44px;
-        padding-left: 10px;
-        padding-right: 10px;
-    }
-
     .btn-primary-hero,
     .btn-outline,
     .pricing-cta-btn,
-    .theme-toggle-btn,
-    .landing-nav-burger,
+    body.landing-page .theme-toggle-btn,
     .faq-item summary,
-    .landing-nav-menu a {
+    body.landing-page .landing-nav-menu a {
         min-height: 44px;
         touch-action: manipulation;
         -webkit-tap-highlight-color: transparent;
@@ -222,31 +205,10 @@
         margin-top: 32px;
     }
 
-    /* Выпадающее меню: отступ от шапки с учётом safe-area */
-    .landing-nav-menu {
-        top: calc(env(safe-area-inset-top, 0px) + 52px);
-        left: max(10px, env(safe-area-inset-left, 0px));
-        right: max(10px, env(safe-area-inset-right, 0px));
-    }
 }
 
 /* --- Лендинг: узкий смартфон (iPhone SE, малые Android) --- */
 @media (max-width: 480px) {
-    .landing-nav {
-        flex-wrap: wrap;
-        row-gap: 10px;
-    }
-
-    .landing-nav-left {
-        flex: 1 1 auto;
-        min-width: 0;
-        max-width: calc(100% - 120px);
-    }
-
-    .landing-nav-actions {
-        flex: 0 0 auto;
-    }
-
     .landing-hero-cta-row .btn-primary-hero,
     .landing-hero-cta-row .btn-outline,
     .landing-cta-band-actions .btn-primary-hero,
@@ -358,11 +320,6 @@
         min-height: 100px;
     }
 
-    .landing-nav-menu {
-        max-height: calc(100vh - 56px);
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-    }
 }
 
 /* --- checkout / site-admin (как было) --- */

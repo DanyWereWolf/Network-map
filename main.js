@@ -370,6 +370,9 @@ function pushSaveDataToSync(opts) {
         else syncPushObjectUpdate(currentModalObject, !!opts.syncImmediate);
         return;
     }
+    if (typeof window.syncSendState === 'function') {
+        window.syncSendState(getSerializedData());
+    }
 }
 
 function acquireDragObjectLock(obj) {
@@ -8927,7 +8930,9 @@ function loadData() {
         }).catch(function() {});
         fetch(getApiBase() + '/api/settings', { headers: { 'Authorization': 'Bearer ' + token } }).then(function(r) { return r.json(); }).then(function(s) {
             if (!s) return;
-            if (s.theme) try { document.documentElement.setAttribute('data-theme', s.theme); setTheme(s.theme); } catch (e) {}
+            if (s.theme === 'dark' || s.theme === 'light') {
+                try { setTheme(s.theme, { syncServer: false }); } catch (e) {}
+            }
             if (s.groupNames && typeof crossGroupNames !== 'undefined' && typeof nodeGroupNames !== 'undefined') {
                 try {
                     if (s.groupNames.cross && typeof s.groupNames.cross === 'object') Object.keys(s.groupNames.cross).forEach(function(k) { crossGroupNames.set(k, s.groupNames.cross[k]); });
@@ -17308,11 +17313,7 @@ function updateCrossDisplay() {
                             updateConnectedCables(crossObj);
                             updateAllConnectionLines();
                             ensurePlacemarkUniqueIdForSync(crossObj);
-                            var moveUid = crossObj.properties.get('uniqueId');
-                            if (typeof window.syncSendOp === 'function' && moveUid) {
-                                window.syncSendOp({ type: 'update_object', uniqueId: moveUid, data: { geometry: offsetCoords, name: crossObj.properties.get('name') } });
-                            }
-                            saveData();
+                            saveData({ object: crossObj, syncImmediate: true });
                             myMap.balloon.close();
                             updateCrossDisplay();
                         });
@@ -17364,10 +17365,7 @@ function updateCrossDisplay() {
                 if (lbl && lbl.geometry) lbl.geometry.setCoordinates(newCoords);
                 updateConnectedCables(c);
                 ensurePlacemarkUniqueIdForSync(c);
-                var cuid = c.properties.get('uniqueId');
-                if (typeof window.syncSendOp === 'function' && cuid) {
-                    window.syncSendOp({ type: 'update_object', uniqueId: cuid, data: { geometry: newCoords, name: c.properties.get('name') } });
-                }
+                syncPushObjectUpdate(c, true);
             });
             updateAllConnectionLines();
             if (savedName) {
@@ -17375,7 +17373,7 @@ function updateCrossDisplay() {
                 crossGroupNames.set(groupKey(newCoords), savedName);
                 saveGroupNames();
             }
-            saveData();
+            saveData({ skipSync: true });
             updateCrossDisplay();
         });
         attachHoverEventsToObject(groupPlacemark);
@@ -17535,11 +17533,7 @@ function updateNodeDisplay() {
                             updateConnectedCables(nodes[i]);
                             updateAllConnectionLines();
                             ensurePlacemarkUniqueIdForSync(nodes[i]);
-                            var nodeMoveUid = nodes[i].properties.get('uniqueId');
-                            if (typeof window.syncSendOp === 'function' && nodeMoveUid) {
-                                window.syncSendOp({ type: 'update_object', uniqueId: nodeMoveUid, data: { geometry: offsetCoords, name: nodes[i].properties.get('name') } });
-                            }
-                            saveData();
+                            saveData({ object: nodes[i], syncImmediate: true });
                             myMap.balloon.close();
                             updateNodeDisplay();
                         });
@@ -17573,10 +17567,7 @@ function updateNodeDisplay() {
                 if (lbl && lbl.geometry) lbl.geometry.setCoordinates(newCoords);
                 updateConnectedCables(n);
                 ensurePlacemarkUniqueIdForSync(n);
-                var nuid = n.properties.get('uniqueId');
-                if (typeof window.syncSendOp === 'function' && nuid) {
-                    window.syncSendOp({ type: 'update_object', uniqueId: nuid, data: { geometry: newCoords, name: n.properties.get('name') } });
-                }
+                syncPushObjectUpdate(n, true);
             });
             updateAllConnectionLines();
             if (savedName) {
@@ -17584,7 +17575,7 @@ function updateNodeDisplay() {
                 nodeGroupNames.set(groupKey(newCoords), savedName);
                 saveGroupNames();
             }
-            saveData();
+            saveData({ skipSync: true });
             updateNodeDisplay();
         });
         attachHoverEventsToObject(groupPlacemark);

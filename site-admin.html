@@ -21,6 +21,8 @@
     <link rel="stylesheet" href="site-admin.css">
     <link rel="stylesheet" href="cookie-consent.css">
     <link rel="stylesheet" href="maintenance-notice.css">
+    <link rel="stylesheet" href="news.css">
+    <link href="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.snow.css" rel="stylesheet">
     <style>
         body {
             color: #0f172a;
@@ -319,6 +321,98 @@
             color: #94a3b8;
             border-color: #334155;
         }
+        .support-admin-layout {
+            display: grid;
+            grid-template-columns: minmax(220px, 320px) 1fr;
+            gap: 16px;
+            min-height: 420px;
+            align-items: stretch;
+        }
+        @media (max-width: 900px) {
+            .support-admin-layout { grid-template-columns: 1fr; }
+        }
+        .support-thread-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            max-height: min(560px, 60vh);
+            overflow-y: auto;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            background: #fff;
+        }
+        .support-thread-item {
+            padding: 10px 12px;
+            border-bottom: 1px solid #f1f5f9;
+            cursor: pointer;
+        }
+        .support-thread-item:hover { background: #f8fafc; }
+        .support-thread-item.is-active { background: #eff6ff; }
+        .support-thread-item.is-unread { border-left: 3px solid #2563eb; }
+        .support-thread-item-title { font-weight: 600; font-size: 0.86rem; color: #0f172a; }
+        .support-thread-item-preview { font-size: 0.76rem; color: #64748b; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .support-thread-detail {
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            min-height: 420px;
+            max-height: min(640px, 70vh);
+            overflow: hidden;
+        }
+        .support-thread-messages {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .support-admin-msg {
+            max-width: 88%;
+            padding: 8px 10px;
+            border-radius: 10px;
+            font-size: 0.84rem;
+            line-height: 1.4;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            white-space: pre-wrap;
+        }
+        .support-admin-msg.visitor { align-self: flex-start; background: #f1f5f9; }
+        .support-admin-msg.admin { align-self: flex-end; background: #2563eb; color: #fff; }
+        .support-admin-msg.bot { align-self: flex-start; background: #fef3c7; color: #78350f; }
+        .support-thread-reply {
+            flex: 0 0 auto;
+            padding: 12px;
+            border-top: 1px solid #e2e8f0;
+        }
+        .support-thread-reply textarea {
+            width: 100%;
+            box-sizing: border-box;
+            min-height: 64px;
+            max-height: 140px;
+            resize: vertical;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 8px;
+            font-family: inherit;
+            font-size: 0.86rem;
+            margin-bottom: 8px;
+        }
+        .support-presence-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.78rem;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: #f1f5f9;
+            color: #64748b;
+        }
+        .support-presence-badge.online { background: #dcfce7; color: #166534; }
         .panel-head {
             margin-bottom: 16px;
         }
@@ -919,6 +1013,15 @@
                                 <span class="admin-nav-label">Уведомления</span>
                                 <span class="admin-nav-badge" id="maintTabBadge" aria-hidden="true"></span>
                             </button>
+                            <button type="button" class="admin-nav-item" role="tab" data-tab="support" id="nav-support">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                                <span class="admin-nav-label">Обратная связь</span>
+                                <span class="admin-nav-badge" id="supportTabBadge" aria-hidden="true"></span>
+                            </button>
+                            <button type="button" class="admin-nav-item" role="tab" data-tab="updates" id="nav-updates">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path><line x1="12" y1="6" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                                <span class="admin-nav-label">Новости</span>
+                            </button>
                             <button type="button" class="admin-nav-item" role="tab" data-tab="account" id="nav-account">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                                 <span class="admin-nav-label">Аккаунт</span>
@@ -1391,6 +1494,91 @@
                     </div>
                 </section>
 
+                <!-- Обратная связь от пользователей -->
+                <section id="tab-support" class="tab-content">
+                    <div class="panel-head">
+                        <details class="panel-help">
+                            <summary>Справка по разделу</summary>
+                            <ul class="fact-list">
+                                <li>Сообщения из виджета «Поддержка» на главной странице и других публичных страницах.</li>
+                                <li>Пока эта панель открыта, пользователи видят статус «Владелец в сети» в чате.</li>
+                                <li>Ответы появляются у пользователя в том же чате при следующем открытии или автоматически.</li>
+                            </ul>
+                        </details>
+                        <span class="support-presence-badge online" id="supportPresenceBadge">Вы в сети для пользователей</span>
+                    </div>
+                    <div class="support-admin-layout">
+                        <div>
+                            <div class="updates-admin-toolbar" style="margin-bottom:8px;">
+                                <button type="button" class="btn-sm btn-refresh" id="supportRefreshBtn">Обновить</button>
+                                <span class="hint" id="supportThreadsHint">—</span>
+                            </div>
+                            <ul class="support-thread-list" id="supportThreadList" aria-label="Диалоги"></ul>
+                        </div>
+                        <div class="support-thread-detail" id="supportThreadDetail">
+                            <div class="support-thread-messages" id="supportThreadMessages">
+                                <p class="hint" style="padding:12px;">Выберите диалог слева</p>
+                            </div>
+                            <div class="support-thread-reply" id="supportThreadReply" hidden>
+                                <textarea id="supportReplyText" placeholder="Ответ пользователю…" maxlength="4000"></textarea>
+                                <button type="button" class="btn-sm-primary" id="supportReplyBtn">Отправить ответ</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Публикации об обновлениях -->
+                <section id="tab-updates" class="tab-content">
+                    <div class="panel-head">
+                        <details class="panel-help">
+                            <summary>Справка по разделу</summary>
+                            <ul class="fact-list">
+                                <li>Посты отображаются на публичной странице <a href="news.html" target="_blank" rel="noopener">news.html</a>.</li>
+                                <li>Снимите «Опубликовать», чтобы сохранить черновик — он не попадёт на сайт.</li>
+                                <li>Редактор: размер шрифта, цвет, заголовки, списки, ссылки, изображения, видео по ссылке или файлом (MP4/WebM), вложения документов.</li>
+                            </ul>
+                        </details>
+                    </div>
+                    <div class="updates-admin-layout">
+                        <div class="updates-admin-list-wrap">
+                            <div class="updates-admin-toolbar">
+                                <button type="button" class="btn-sm-primary" id="productUpdatesNewBtn">Новый пост</button>
+                                <a href="news.html" class="btn-sm" target="_blank" rel="noopener">Открыть на сайте</a>
+                            </div>
+                            <ul class="updates-admin-list" id="productUpdatesList" aria-label="Список постов"></ul>
+                        </div>
+                        <div class="updates-admin-editor">
+                            <input type="hidden" id="productUpdateEditId" value="">
+                            <label for="productUpdateTitle">Заголовок</label>
+                            <input id="productUpdateTitle" type="text" maxlength="200" placeholder="Заголовок поста">
+                            <label for="productUpdateDate">Дата</label>
+                            <input id="productUpdateDate" type="date">
+                            <label for="productUpdateSummary">Краткое описание</label>
+                            <input id="productUpdateSummary" type="text" maxlength="500" placeholder="Одна строка для списка и анонса">
+                            <label for="productUpdateTags">Теги (через запятую)</label>
+                            <input id="productUpdateTags" type="text" placeholder="карта, синхронизация">
+                            <label for="productUpdateBodyEditor">Текст новости</label>
+                            <div class="news-editor-media-bar">
+                                <button type="button" class="btn-sm" id="newsEditorUploadVideoBtn" title="Загрузить MP4/WebM">Видео (файл)</button>
+                                <button type="button" class="btn-sm" id="newsEditorUploadFileBtn" title="PDF, Office, архив">Вложить файл</button>
+                            </div>
+                            <div id="productUpdateBodyEditor" class="news-quill-editor" aria-label="Редактор текста новости"></div>
+                            <div class="updates-admin-publish-row">
+                                <label for="productUpdatePublished">
+                                    <input type="checkbox" id="productUpdatePublished" checked>
+                                    Опубликовать на сайте
+                                </label>
+                            </div>
+                            <div class="updates-admin-form-actions">
+                                <button type="button" class="btn-sm-primary" id="productUpdatesApplyBtn">Применить к списку</button>
+                                <button type="button" class="btn-sm" id="productUpdatesDeleteBtn">Удалить</button>
+                                <button type="button" class="btn-sm-primary" id="productUpdatesSaveBtn">Сохранить на сервере</button>
+                            </div>
+                            <p class="updates-admin-hint" id="productUpdatesStatusHint">Выберите пост или создайте новый, затем сохраните.</p>
+                        </div>
+                    </div>
+                </section>
+
                 <!-- Аккаунт -->
                 <section id="tab-account" class="tab-content">
                     <div class="panel-head">
@@ -1464,6 +1652,8 @@
             organizations: 'Организации',
             showcase: 'Витрина',
             maintenance: 'Уведомления',
+            support: 'Обратная связь',
+            updates: 'Новости',
             account: 'Аккаунт'
         };
 
@@ -1504,6 +1694,9 @@
             closeAdminSidebar();
             var main = document.querySelector('.admin-main');
             if (main) main.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (name === 'support' && typeof window.adminLoadSupportThreads === 'function') {
+                window.adminLoadSupportThreads();
+            }
         };
 
         document.addEventListener('click', function(e) {
@@ -1583,6 +1776,8 @@
     (function() {
         var orgs = [];
         var adminUserId = null;
+        var supportThreadsCache = [];
+        var supportActiveThreadId = null;
         var cachedUsers = [];
         var orgListFilter = 'all';
         var adminDataLoading = false;
@@ -2391,6 +2586,139 @@
                 .catch(function() {});
         }
 
+        function updateSupportTabBadge(count) {
+            var badge = document.getElementById('supportTabBadge');
+            if (!badge) return;
+            if (count > 0) {
+                badge.textContent = String(count);
+                badge.style.display = '';
+            } else {
+                badge.textContent = '';
+                badge.style.display = 'none';
+            }
+        }
+
+        function formatSupportDate(iso) {
+            try {
+                var d = new Date(iso);
+                if (isNaN(d.getTime())) return '';
+                return d.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+            } catch (e) { return ''; }
+        }
+
+        function escapeSupportHtml(s) {
+            return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function renderSupportThreadList(threads) {
+            var list = document.getElementById('supportThreadList');
+            var hint = document.getElementById('supportThreadsHint');
+            if (!list) return;
+            list.innerHTML = '';
+            if (!threads || !threads.length) {
+                list.innerHTML = '<li class="hint" style="padding:12px;">Пока нет сообщений</li>';
+                if (hint) hint.textContent = 'Нет диалогов';
+                return;
+            }
+            if (hint) hint.textContent = 'Диалогов: ' + threads.length;
+            threads.forEach(function(t) {
+                var li = document.createElement('li');
+                li.className = 'support-thread-item' +
+                    (t.id === supportActiveThreadId ? ' is-active' : '') +
+                    (t.unreadByAdmin ? ' is-unread' : '');
+                li.setAttribute('data-thread-id', t.id);
+                var title = t.name || t.email || ('Посетитель ' + (t.visitorId || '').slice(-6));
+                var preview = t.lastMessage ? t.lastMessage.text : '—';
+                li.innerHTML =
+                    '<div class="support-thread-item-title">' + escapeSupportHtml(title) + '</div>' +
+                    '<div class="support-thread-item-preview">' + escapeSupportHtml(preview) + '</div>' +
+                    '<div class="hint" style="margin-top:4px;font-size:0.72rem;">' + escapeSupportHtml(formatSupportDate(t.updatedAt)) + '</div>';
+                li.addEventListener('click', function() { openSupportThread(t.id); });
+                list.appendChild(li);
+            });
+        }
+
+        function renderSupportMessages(thread) {
+            var box = document.getElementById('supportThreadMessages');
+            var reply = document.getElementById('supportThreadReply');
+            if (!box) return;
+            box.innerHTML = '';
+            if (!thread) {
+                box.innerHTML = '<p class="hint" style="padding:12px;">Выберите диалог слева</p>';
+                if (reply) reply.hidden = true;
+                return;
+            }
+            if (reply) reply.hidden = false;
+            var meta = document.createElement('p');
+            meta.className = 'hint';
+            meta.style.padding = '0 0 8px';
+            meta.textContent = (thread.email ? thread.email + ' · ' : '') + (thread.page ? thread.page : '');
+            box.appendChild(meta);
+            (thread.messages || []).forEach(function(m) {
+                var div = document.createElement('div');
+                div.className = 'support-admin-msg ' + (m.from === 'admin' ? 'admin' : m.from === 'bot' ? 'bot' : 'visitor');
+                div.textContent = m.text;
+                box.appendChild(div);
+            });
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function openSupportThread(threadId) {
+            supportActiveThreadId = threadId;
+            var token = getAuthToken();
+            var headers = {};
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            fetch('api/admin/support/threads/' + encodeURIComponent(threadId), { credentials: 'include', headers: headers })
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(body) {
+                    if (!body || !body.thread) return;
+                    renderSupportMessages(body.thread);
+                    renderSupportThreadList(supportThreadsCache);
+                    return fetch('api/admin/support/threads/' + encodeURIComponent(threadId) + '/read', {
+                        method: 'PATCH',
+                        credentials: 'include',
+                        headers: headers
+                    });
+                })
+                .then(function(r) { return r && r.ok ? r.json() : null; })
+                .then(function(body) {
+                    if (body && body.unreadCount != null) {
+                        updateSupportTabBadge(body.unreadCount);
+                        supportThreadsCache.forEach(function(x) {
+                            if (x.id === threadId) x.unreadByAdmin = false;
+                        });
+                        renderSupportThreadList(supportThreadsCache);
+                    }
+                })
+                .catch(function() {});
+        }
+
+        window.adminLoadSupportThreads = function() {
+            var token = getAuthToken();
+            var headers = {};
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            return fetch('api/admin/support/threads', { credentials: 'include', headers: headers })
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(body) {
+                    if (!body) return;
+                    supportThreadsCache = body.threads || [];
+                    updateSupportTabBadge(body.unreadCount || 0);
+                    renderSupportThreadList(supportThreadsCache);
+                    if (supportActiveThreadId) openSupportThread(supportActiveThreadId);
+                })
+                .catch(function() {});
+        };
+
+        function sendAdminPresencePing() {
+            var token = getAuthToken();
+            if (!token) return;
+            fetch('api/admin/presence', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Authorization': 'Bearer ' + token }
+            }).catch(function() {});
+        }
+
         function saveMaintenanceNotice() {
             var token = getAuthToken();
             var headers = { 'Content-Type': 'application/json' };
@@ -2445,6 +2773,7 @@
                 renderPricingSelector();
                 loadShowcase();
                 loadMaintenanceNotice();
+                loadProductUpdates();
                 setAdminSyncTime(true);
                 return fetchVisitStats().then(renderVisitOverview);
             }).then(function() {
@@ -2455,6 +2784,178 @@
                 setAdminLoading(false);
             });
         }
+
+        var productUpdatesCache = [];
+        var productUpdatesSelectedId = null;
+
+        function setProductUpdatesHint(text) {
+            var el = document.getElementById('productUpdatesStatusHint');
+            if (el) el.textContent = text || '';
+        }
+
+        function clearProductUpdateEditor() {
+            productUpdatesSelectedId = null;
+            var idEl = document.getElementById('productUpdateEditId');
+            if (idEl) idEl.value = '';
+            var titleEl = document.getElementById('productUpdateTitle');
+            var dateEl = document.getElementById('productUpdateDate');
+            var sumEl = document.getElementById('productUpdateSummary');
+            var tagsEl = document.getElementById('productUpdateTags');
+            var pubEl = document.getElementById('productUpdatePublished');
+            if (titleEl) titleEl.value = '';
+            if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);
+            if (sumEl) sumEl.value = '';
+            if (tagsEl) tagsEl.value = '';
+            if (window.NewsEditor) window.NewsEditor.clear();
+            if (pubEl) pubEl.checked = true;
+            renderProductUpdatesList();
+        }
+
+        function fillProductUpdateEditor(post) {
+            productUpdatesSelectedId = post.id;
+            var idEl = document.getElementById('productUpdateEditId');
+            if (idEl) idEl.value = post.id || '';
+            var titleEl = document.getElementById('productUpdateTitle');
+            var dateEl = document.getElementById('productUpdateDate');
+            var sumEl = document.getElementById('productUpdateSummary');
+            var tagsEl = document.getElementById('productUpdateTags');
+            var pubEl = document.getElementById('productUpdatePublished');
+            if (titleEl) titleEl.value = post.title || '';
+            if (dateEl) dateEl.value = post.date || '';
+            if (sumEl) sumEl.value = post.summary || '';
+            if (tagsEl) tagsEl.value = Array.isArray(post.tags) ? post.tags.join(', ') : '';
+            if (window.NewsEditor) window.NewsEditor.setHtml(post.body || '');
+            if (pubEl) pubEl.checked = post.published !== false;
+            renderProductUpdatesList();
+        }
+
+        function readProductUpdateFromEditor() {
+            var idEl = document.getElementById('productUpdateEditId');
+            var titleEl = document.getElementById('productUpdateTitle');
+            var dateEl = document.getElementById('productUpdateDate');
+            var sumEl = document.getElementById('productUpdateSummary');
+            var tagsEl = document.getElementById('productUpdateTags');
+            var pubEl = document.getElementById('productUpdatePublished');
+            var existing = null;
+            if (idEl && idEl.value) {
+                existing = productUpdatesCache.find(function(p) { return p.id === idEl.value; });
+            }
+            var tags = tagsEl ? tagsEl.value.split(',').map(function(t) { return t.trim(); }).filter(Boolean) : [];
+            var bodyHtml = window.NewsEditor ? window.NewsEditor.getHtml() : '';
+            return {
+                id: idEl && idEl.value ? idEl.value : ('upd_' + Date.now()),
+                title: titleEl ? titleEl.value.trim() : '',
+                date: dateEl && dateEl.value ? dateEl.value : new Date().toISOString().slice(0, 10),
+                summary: sumEl ? sumEl.value.trim() : '',
+                body: bodyHtml,
+                tags: tags,
+                published: pubEl ? !!pubEl.checked : true,
+                createdAt: existing && existing.createdAt ? existing.createdAt : new Date().toISOString()
+            };
+        }
+
+        function renderProductUpdatesList() {
+            var list = document.getElementById('productUpdatesList');
+            if (!list) return;
+            if (!productUpdatesCache.length) {
+                list.innerHTML = '<li class="text-muted" style="padding:12px;">Нет постов. Нажмите «Новый пост».</li>';
+                return;
+            }
+            list.innerHTML = '';
+            productUpdatesCache.forEach(function(post) {
+                var li = document.createElement('li');
+                li.className = 'updates-admin-list-item' + (post.id === productUpdatesSelectedId ? ' is-selected' : '');
+                li.setAttribute('data-id', post.id);
+                var draft = post.published === false ? '<span class="updates-admin-draft-badge">Черновик</span>' : '';
+                li.innerHTML =
+                    '<div><p class="updates-admin-list-item-title">' + escapeHtml(post.title || 'Без названия') + '</p>' +
+                    '<p class="updates-admin-list-item-meta">' + escapeHtml(post.date || '') + '</p></div>' + draft;
+                li.addEventListener('click', function() { fillProductUpdateEditor(post); });
+                list.appendChild(li);
+            });
+        }
+
+        function loadProductUpdates() {
+            var token = getAuthToken && getAuthToken();
+            var headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            return fetch('api/admin/product-updates', { credentials: 'include', headers: headers })
+                .then(function(r) {
+                    if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+                    return r.json();
+                })
+                .then(function(body) {
+                    productUpdatesCache = (body && Array.isArray(body.posts)) ? body.posts : [];
+                    renderProductUpdatesList();
+                    setProductUpdatesHint('Загружено постов: ' + productUpdatesCache.length);
+                })
+                .catch(function(err) {
+                    setProductUpdatesHint('Ошибка загрузки: ' + (err.message || err));
+                });
+        }
+
+        function saveProductUpdatesToServer() {
+            var token = getAuthToken && getAuthToken();
+            var headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            setProductUpdatesHint('Сохранение…');
+            return fetch('api/admin/product-updates', {
+                method: 'PUT',
+                credentials: 'include',
+                headers: headers,
+                body: JSON.stringify({ posts: productUpdatesCache })
+            }).then(function(r) {
+                if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+                return r.json();
+            }).then(function(body) {
+                productUpdatesCache = (body && Array.isArray(body.posts)) ? body.posts : productUpdatesCache;
+                renderProductUpdatesList();
+                setProductUpdatesHint('Сохранено. Постов: ' + productUpdatesCache.length);
+            }).catch(function(err) {
+                setProductUpdatesHint('Ошибка: ' + (err.message || err));
+                alert('Ошибка: ' + (err.message || err));
+            });
+        }
+
+        function applyProductUpdateFromEditor() {
+            var post = readProductUpdateFromEditor();
+            if (!post.title) {
+                alert('Укажите заголовок.');
+                return;
+            }
+            var idx = productUpdatesCache.findIndex(function(p) { return p.id === post.id; });
+            if (idx >= 0) {
+                post.createdAt = productUpdatesCache[idx].createdAt || post.createdAt;
+                productUpdatesCache[idx] = post;
+            } else {
+                productUpdatesCache.unshift(post);
+            }
+            productUpdatesSelectedId = post.id;
+            var idEl = document.getElementById('productUpdateEditId');
+            if (idEl) idEl.value = post.id;
+            renderProductUpdatesList();
+            setProductUpdatesHint('Пост добавлен в список. Нажмите «Сохранить на сервере» для публикации.');
+        }
+
+        function deleteSelectedProductUpdate() {
+            if (!productUpdatesSelectedId) {
+                alert('Выберите пост для удаления.');
+                return;
+            }
+            if (!confirm('Удалить выбранный пост?')) return;
+            productUpdatesCache = productUpdatesCache.filter(function(p) { return p.id !== productUpdatesSelectedId; });
+            clearProductUpdateEditor();
+            setProductUpdatesHint('Пост удалён из списка. Сохраните изменения на сервере.');
+        }
+
+        var productUpdatesNewBtn = document.getElementById('productUpdatesNewBtn');
+        if (productUpdatesNewBtn) productUpdatesNewBtn.addEventListener('click', clearProductUpdateEditor);
+        var productUpdatesApplyBtn = document.getElementById('productUpdatesApplyBtn');
+        if (productUpdatesApplyBtn) productUpdatesApplyBtn.addEventListener('click', applyProductUpdateFromEditor);
+        var productUpdatesDeleteBtn = document.getElementById('productUpdatesDeleteBtn');
+        if (productUpdatesDeleteBtn) productUpdatesDeleteBtn.addEventListener('click', deleteSelectedProductUpdate);
+        var productUpdatesSaveBtn = document.getElementById('productUpdatesSaveBtn');
+        if (productUpdatesSaveBtn) productUpdatesSaveBtn.addEventListener('click', saveProductUpdatesToServer);
 
         var maintSaveBtnEl = document.getElementById('maintSaveBtn');
         if (maintSaveBtnEl) {
@@ -2623,6 +3124,42 @@
             document.getElementById('adminContent').style.display = 'block';
             adminUserId = user.userId || null;
             loadAll();
+            adminLoadSupportThreads();
+            sendAdminPresencePing();
+            setInterval(sendAdminPresencePing, 30000);
+
+            var supportRefreshBtn = document.getElementById('supportRefreshBtn');
+            if (supportRefreshBtn) supportRefreshBtn.addEventListener('click', function() { adminLoadSupportThreads(); });
+            var supportReplyBtn = document.getElementById('supportReplyBtn');
+            if (supportReplyBtn) {
+                supportReplyBtn.addEventListener('click', function() {
+                    if (!supportActiveThreadId) return;
+                    var ta = document.getElementById('supportReplyText');
+                    var text = ta ? String(ta.value || '').trim() : '';
+                    if (!text) return;
+                    var token = getAuthToken();
+                    var headers = { 'Content-Type': 'application/json' };
+                    if (token) headers['Authorization'] = 'Bearer ' + token;
+                    supportReplyBtn.disabled = true;
+                    fetch('api/admin/support/threads/' + encodeURIComponent(supportActiveThreadId) + '/reply', {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: headers,
+                        body: JSON.stringify({ text: text })
+                    }).then(function(r) {
+                        if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+                        return r.json();
+                    }).then(function() {
+                        if (ta) ta.value = '';
+                        openSupportThread(supportActiveThreadId);
+                        adminLoadSupportThreads();
+                    }).catch(function(err) {
+                        alert('Ошибка: ' + (err.message || err));
+                    }).finally(function() {
+                        supportReplyBtn.disabled = false;
+                    });
+                });
+            }
 
             var btn = document.getElementById('adminChangePasswordBtn');
             if (btn) btn.addEventListener('click', function() {
@@ -2778,6 +3315,8 @@
         });
     })();
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js"></script>
+    <script src="js/admin/news-editor.js"></script>
     <script src="js/core/page-bg-plexus.js"></script>
     <script src="js/core/cookie-consent.js"></script>
     <script src="js/core/maintenance-notice.js"></script>

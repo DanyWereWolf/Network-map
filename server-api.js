@@ -7,7 +7,9 @@ const WebSocket = require('ws');
 const db = require('./database');
 const avatars = require('./avatars');
 const chatMedia = require('./chat-media');
+const newsMedia = require('./news-media');
 const security = require('./lib/security');
+const supportBot = require('./lib/support-bot');
 
 function loadServerConfig() {
     let config = {};
@@ -718,6 +720,254 @@ app.get('/api/maintenance-notice', (req, res) => {
         res.json(db.getPublicMaintenanceNotice());
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
+    }
+});
+
+/** Присутствие главного администратора (heartbeat из site-admin). */
+var adminPresenceAt = 0;
+var ADMIN_PRESENCE_TTL_MS = 2 * 60 * 1000;
+
+function isAdminOnline() {
+    return adminPresenceAt > 0 && (Date.now() - adminPresenceAt) < ADMIN_PRESENCE_TTL_MS;
+}
+
+app.get('/api/support/presence', (req, res) => {
+    try {
+        res.setHeader('Cache-Control', 'no-store');
+        res.json({ online: isAdminOnline() });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/admin/presence', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    adminPresenceAt = Date.now();
+    res.json({ ok: true, online: true });
+});
+
+app.get('/api/support/thread', (req, res) => {
+    try {
+        var visitorId = String(req.query.visitorId || '').trim();
+        if (!visitorId || visitorId.length > 80) {
+            return res.status(400).json({ error: 'Недопустимый идентификатор' });
+        }
+        res.setHeader('Cache-Control', 'no-store');
+        res.json(db.getSupportThreadPublic(visitorId));
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/support/read', (req, res) => {
+    try {
+        var visitorId = String((req.body && req.body.visitorId) || '').trim();
+        if (!visitorId || visitorId.length > 80) {
+            return res.status(400).json({ error: 'Недопустимый идентификатор' });
+        }
+        db.markSupportThreadReadByVisitor(visitorId);
+        res.json({ ok: true, hasUnreadAdmin: false });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/support/bot', (req, res) => {
+    try {
+        var ip = req.ip || req.connection.remoteAddress || 'unknown';
+        var rl = security.checkRateLimit('support-bot:' + ip, { windowMs: 15 * 60 * 1000, maxAttempts: 60 });
+        if (!rl.ok) {
+            return res.status(429).json({ error: 'Слишком много запросов. Попробуйте позже.', retryAfterSec: rl.retryAfterSec });
+        }
+        var query = String((req.body && req.body.query) || '').trim();
+        if (!query || query.length > 500) {
+            return res.status(400).json({ error: 'Введите вопрос (до 500 символов)' });
+        }
+        var result = supportBot.matchFaq(query);
+        res.json({
+            reply: result.answer,
+            matched: result.matched,
+            quickReplies: supportBot.getQuickReplies()
+        });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/support/message', (req, res) => {
+    try {
+        var ip = req.ip || req.connection.remoteAddress || 'unknown';
+        var rl = security.checkRateLimit('support-msg:' + ip, { windowMs: 15 * 60 * 1000, maxAttempts: 30 });
+        if (!rl.ok) {
+            return res.status(429).json({ error: 'Слишком много сообщений. Попробуйте позже.', retryAfterSec: rl.retryAfterSec });
+        }
+        var body = req.body || {};
+        var visitorId = String(body.visitorId || '').trim();
+        var text = String(body.text || '').trim();
+        if (!visitorId || visitorId.length > 80) {
+            return res.status(400).json({ error: 'Недопустимый идентификатор' });
+        }
+        if (!text || text.length > 4000) {
+            return res.status(400).json({ error: 'Введите сообщение (до 4000 символов)' });
+        }
+        var email = body.email != null ? String(body.email).trim() : '';
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return res.status(400).json({ error: 'Некорректный e-mail' });
+        }
+        var result = db.addSupportMessage({
+            visitorId: visitorId,
+            text: text,
+            from: 'visitor',
+            name: body.name,
+            email: body.email,
+            page: body.page || (req.headers.referer || '')
+        });
+        res.json({
+            ok: true,
+            threadId: result.thread.id,
+            message: { id: result.message.id, from: result.message.from, text: result.message.text, at: result.message.at }
+        });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.get('/api/admin/support/threads', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    try {
+        res.json({
+            threads: db.getSupportThreadsAdminSummary(),
+            unreadCount: db.countUnreadSupportThreads(),
+            adminOnline: isAdminOnline()
+        });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.get('/api/admin/support/threads/:id', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    try {
+        var thread = db.findSupportThreadById(req.params.id);
+        if (!thread) return res.status(404).json({ error: 'Диалог не найден' });
+        res.json({ thread: thread });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.patch('/api/admin/support/threads/:id/read', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    try {
+        var thread = db.markSupportThreadRead(req.params.id);
+        if (!thread) return res.status(404).json({ error: 'Диалог не найден' });
+        res.json({ ok: true, unreadCount: db.countUnreadSupportThreads() });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/admin/support/threads/:id/reply', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    try {
+        var thread = db.findSupportThreadById(req.params.id);
+        if (!thread) return res.status(404).json({ error: 'Диалог не найден' });
+        var text = String((req.body && req.body.text) || '').trim();
+        if (!text || text.length > 4000) {
+            return res.status(400).json({ error: 'Введите ответ (до 4000 символов)' });
+        }
+        var result = db.addSupportMessage({
+            visitorId: thread.visitorId,
+            text: text,
+            from: 'admin'
+        });
+        db.markSupportThreadRead(thread.id);
+        res.json({
+            ok: true,
+            message: { id: result.message.id, from: result.message.from, text: result.message.text, at: result.message.at }
+        });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.get('/api/updates', (req, res) => {
+    try {
+        res.setHeader('Cache-Control', 'public, max-age=60');
+        res.json({ posts: db.getProductUpdatesPublic() });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.get('/api/admin/product-updates', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    try {
+        res.json({ posts: db.getProductUpdatesAdmin() });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.put('/api/admin/product-updates', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    const body = req.body || {};
+    try {
+        const posts = db.setProductUpdates(body.posts);
+        res.json({ ok: true, posts: posts });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/admin/news-media', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    try {
+        const parsed = newsMedia.parsePayload(req.body || {});
+        if (!parsed) {
+            return res.status(400).json({
+                error: 'Недопустимый файл. Изображение до 10 МБ, видео до 80 МБ, документ до 20 МБ.'
+            });
+        }
+        const mediaId = newsMedia.generateMediaId();
+        newsMedia.saveMedia(mediaId, parsed.buffer, parsed.ext);
+        res.json({
+            ok: true,
+            id: mediaId,
+            url: newsMedia.getMediaApiPath(mediaId, parsed.ext),
+            kind: parsed.kind,
+            name: parsed.name,
+            mime: parsed.mime
+        });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.get('/api/news-media/file/:mediaId', (req, res) => {
+    try {
+        const mediaId = newsMedia.mediaIdFromRouteParam(req.params.mediaId);
+        const file = newsMedia.findMediaFile(mediaId);
+        if (!file) return res.status(404).end();
+        const ext = path.extname(file);
+        const mime = newsMedia.mimeForExt(ext);
+        const downloadName = newsMedia.safeDownloadName(req.query.name, ext);
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.type(mime);
+        if (!newsMedia.isVideoExt(ext) && !newsMedia.shouldInline(mime, ext, 'image')) {
+            res.setHeader('Content-Disposition', 'attachment; filename="' + downloadName.replace(/"/g, '') + '"');
+        }
+        res.sendFile(path.resolve(file));
+    } catch (e) {
+        res.status(500).end();
     }
 });
 
@@ -1544,6 +1794,9 @@ app.get('/api/settings', (req, res) => {
             const mapStart = db.getMapStartForUserOrOrg(user.userId, orgId);
             if (mapStart) settings.mapStart = mapStart;
         }
+        if (user && db.getThemeForUser) {
+            settings.theme = db.getThemeForUser(user.userId) || '';
+        }
         res.json(settings);
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
@@ -1564,14 +1817,18 @@ app.post('/api/settings', (req, res) => {
                 db.setMapStartForUser(user.userId, null);
             }
         }
+        if (body.theme !== undefined && db.setThemeForUser) {
+            const t = body.theme === 'dark' || body.theme === 'light' ? body.theme : null;
+            db.setThemeForUser(user.userId, t);
+        }
         var toSave = {};
         if (user.role === 'admin') {
             if (body.groupNames !== undefined && typeof body.groupNames === 'object') {
                 syncGroupNames = body.groupNames;
             }
-            toSave = body;
-        } else {
-            if (body.theme !== undefined) toSave.theme = body.theme;
+            toSave = Object.assign({}, body);
+            delete toSave.theme;
+            delete toSave.mapStart;
         }
         if (Object.keys(toSave).length > 0) db.setSettings(toSave, orgId || undefined);
         res.json({ ok: true });
@@ -1701,6 +1958,10 @@ app.get('/', (req, res) => {
 
 app.get('/pricing.html', (req, res) => {
     res.redirect(301, '/');
+});
+
+app.get('/updates.html', (req, res) => {
+    res.redirect(301, '/news.html');
 });
 
 // Браузеры по умолчанию запрашивают /favicon.ico; в репозитории только favicon.svg

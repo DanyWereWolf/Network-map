@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const { sanitizeNewsBody } = require('./news-sanitize');
 
 const STORE_PATH = process.env.DB_PATH ? process.env.DB_PATH.replace(/\.db$/i, '-store.json') : path.join(__dirname, 'data', 'store.json');
 const BACKUPS_DIR = path.join(path.dirname(STORE_PATH), 'backups');
@@ -77,6 +78,7 @@ function loadStore() {
     if (typeof store.chatMediaByOrg !== 'object') store.chatMediaByOrg = {};
     if (!Array.isArray(store.pricingPlans)) store.pricingPlans = [];
     if (!Array.isArray(store.visitLogs)) store.visitLogs = [];
+    if (!Array.isArray(store.supportThreads)) store.supportThreads = [];
     migrateToOrganizations();
     stripNetboxFromStore(store);
     return store;
@@ -257,6 +259,7 @@ function initSchema() {
     if (typeof s.settingsByOrg !== 'object') s.settingsByOrg = {};
     if (!Array.isArray(s.pricingPlans)) s.pricingPlans = [];
     if (!Array.isArray(s.visitLogs)) s.visitLogs = [];
+    if (!Array.isArray(s.supportThreads)) s.supportThreads = [];
     saveStore();
 }
 
@@ -795,6 +798,35 @@ function getMapStartForUserOrOrg(userId, orgId) {
     return orgStart;
 }
 
+function getUserThemesMap() {
+    const raw = getSetting('userThemes');
+    if (!raw) return {};
+    try {
+        return typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch (e) {
+        return {};
+    }
+}
+
+function getThemeForUser(userId) {
+    if (userId == null) return '';
+    const map = getUserThemesMap();
+    const t = map[String(userId)];
+    return (t === 'dark' || t === 'light') ? t : '';
+}
+
+function setThemeForUser(userId, theme) {
+    if (userId == null) return;
+    const s = loadStore();
+    if (!s.settings) s.settings = {};
+    let map = getUserThemesMap();
+    const id = String(userId);
+    if (theme === 'dark' || theme === 'light') map[id] = theme;
+    else delete map[id];
+    s.settings.userThemes = JSON.stringify(map);
+    saveStore();
+}
+
 function createDailyBackup() {
     try {
         if (!fs.existsSync(STORE_PATH)) return;
@@ -955,6 +987,164 @@ function addVisitLog(entry) {
 function getVisitLogs() {
     const s = loadStore();
     return Array.isArray(s.visitLogs) ? s.visitLogs : [];
+}
+
+var MAX_SUPPORT_THREADS = 500;
+var MAX_SUPPORT_MESSAGES_PER_THREAD = 200;
+
+function normalizeSupportMessage(msg) {
+    return {
+        id: msg.id ? String(msg.id) : 'sm_' + Date.now(),
+        from: msg.from === 'admin' || msg.from === 'bot' ? msg.from : 'visitor',
+        text: String(msg.text || '').trim().slice(0, 4000),
+        at: msg.at ? String(msg.at) : new Date().toISOString()
+    };
+}
+
+function normalizeSupportThread(thread) {
+    var msgs = Array.isArray(thread.messages) ? thread.messages.map(normalizeSupportMessage) : [];
+    return {
+        id: thread.id ? String(thread.id) : 'st_' + Date.now(),
+        visitorId: String(thread.visitorId || ''),
+        name: thread.name ? String(thread.name).trim().slice(0, 120) : '',
+        email: thread.email ? String(thread.email).trim().slice(0, 200) : '',
+        page: thread.page ? String(thread.page).trim().slice(0, 200) : '',
+        createdAt: thread.createdAt ? String(thread.createdAt) : new Date().toISOString(),
+        updatedAt: thread.updatedAt ? String(thread.updatedAt) : new Date().toISOString(),
+        unreadByAdmin: !!thread.unreadByAdmin,
+        unreadByVisitor: !!thread.unreadByVisitor,
+        messages: msgs
+    };
+}
+
+function getSupportThreads() {
+    const s = loadStore();
+    return Array.isArray(s.supportThreads) ? s.supportThreads.map(normalizeSupportThread) : [];
+}
+
+function findSupportThreadByVisitorId(visitorId) {
+    if (!visitorId) return null;
+    var threads = getSupportThreads();
+    return threads.find(function(t) { return t.visitorId === String(visitorId); }) || null;
+}
+
+function findSupportThreadById(threadId) {
+    if (!threadId) return null;
+    var threads = getSupportThreads();
+    return threads.find(function(t) { return t.id === String(threadId); }) || null;
+}
+
+function getSupportThreadPublic(visitorId) {
+    var thread = findSupportThreadByVisitorId(visitorId);
+    if (!thread) return { threadId: null, messages: [], hasUnreadAdmin: false };
+    return {
+        threadId: thread.id,
+        hasUnreadAdmin: !!thread.unreadByVisitor,
+        name: thread.name,
+        email: thread.email,
+        messages: thread.messages.map(function(m) {
+            return { id: m.id, from: m.from, text: m.text, at: m.at };
+        })
+    };
+}
+
+function addSupportMessage(payload) {
+    var visitorId = String(payload.visitorId || '').trim();
+    var text = String(payload.text || '').trim().slice(0, 4000);
+    if (!visitorId || !text) throw new Error('visitorId and text required');
+    const s = loadStore();
+    if (!Array.isArray(s.supportThreads)) s.supportThreads = [];
+    var now = new Date().toISOString();
+    var msg = normalizeSupportMessage({
+        id: 'sm_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+        from: payload.from === 'admin' || payload.from === 'bot' ? payload.from : 'visitor',
+        text: text,
+        at: now
+    });
+    var idx = s.supportThreads.findIndex(function(t) { return t.visitorId === visitorId; });
+    var thread;
+    if (idx >= 0) {
+        thread = normalizeSupportThread(s.supportThreads[idx]);
+        thread.messages.push(msg);
+        if (thread.messages.length > MAX_SUPPORT_MESSAGES_PER_THREAD) {
+            thread.messages = thread.messages.slice(thread.messages.length - MAX_SUPPORT_MESSAGES_PER_THREAD);
+        }
+        thread.updatedAt = now;
+        if (msg.from === 'visitor') thread.unreadByAdmin = true;
+        if (msg.from === 'admin') thread.unreadByVisitor = true;
+        if (payload.name) thread.name = String(payload.name).trim().slice(0, 120);
+        if (payload.email) thread.email = String(payload.email).trim().slice(0, 200);
+        if (payload.page) thread.page = String(payload.page).trim().slice(0, 200);
+        s.supportThreads[idx] = thread;
+    } else {
+        thread = normalizeSupportThread({
+            id: 'st_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+            visitorId: visitorId,
+            name: payload.name || '',
+            email: payload.email || '',
+            page: payload.page || '',
+            createdAt: now,
+            updatedAt: now,
+            unreadByAdmin: msg.from === 'visitor',
+            unreadByVisitor: false,
+            messages: [msg]
+        });
+        s.supportThreads.push(thread);
+    }
+    if (s.supportThreads.length > MAX_SUPPORT_THREADS) {
+        s.supportThreads = s.supportThreads.slice(s.supportThreads.length - MAX_SUPPORT_THREADS);
+    }
+    saveStore();
+    return { thread: thread, message: msg };
+}
+
+function markSupportThreadRead(threadId) {
+    const s = loadStore();
+    if (!Array.isArray(s.supportThreads)) return null;
+    var idx = s.supportThreads.findIndex(function(t) { return t.id === String(threadId); });
+    if (idx < 0) return null;
+    var thread = normalizeSupportThread(s.supportThreads[idx]);
+    thread.unreadByAdmin = false;
+    s.supportThreads[idx] = thread;
+    saveStore();
+    return thread;
+}
+
+function markSupportThreadReadByVisitor(visitorId) {
+    const s = loadStore();
+    if (!Array.isArray(s.supportThreads) || !visitorId) return null;
+    var idx = s.supportThreads.findIndex(function(t) { return t.visitorId === String(visitorId); });
+    if (idx < 0) return null;
+    var thread = normalizeSupportThread(s.supportThreads[idx]);
+    thread.unreadByVisitor = false;
+    s.supportThreads[idx] = thread;
+    saveStore();
+    return thread;
+}
+
+function getSupportThreadsAdminSummary() {
+    return getSupportThreads()
+        .slice()
+        .sort(function(a, b) { return String(b.updatedAt).localeCompare(String(a.updatedAt)); })
+        .map(function(t) {
+            var last = t.messages.length ? t.messages[t.messages.length - 1] : null;
+            return {
+                id: t.id,
+                visitorId: t.visitorId,
+                name: t.name,
+                email: t.email,
+                page: t.page,
+                createdAt: t.createdAt,
+                updatedAt: t.updatedAt,
+                unreadByAdmin: t.unreadByAdmin,
+                messageCount: t.messages.length,
+                lastMessage: last ? { from: last.from, text: last.text, at: last.at } : null
+            };
+        });
+}
+
+function countUnreadSupportThreads() {
+    return getSupportThreads().filter(function(t) { return t.unreadByAdmin; }).length;
 }
 
 const MAINTENANCE_NOTICE_DEFAULTS = {
@@ -1149,6 +1339,95 @@ function setShowcaseConfig(patch) {
     return getShowcaseConfig();
 }
 
+var DEFAULT_PRODUCT_UPDATES = [
+    {
+        id: 'upd_20260529_collab',
+        title: 'Совместная работа над картой',
+        date: '2026-05-29',
+        summary: 'Блокировка объектов при редактировании, инкрементальная синхронизация и персональные темы.',
+        body: 'При открытии карточки объект блокируется для остальных участников до закрытия или по таймауту.\n\nСохранение на карте передаётся по операциям, а не целым снимком — меньше трафика и меньше конфликтов при одновременной работе.\n\nТема оформления (светлая/тёмная) сохраняется отдельно для каждого пользователя; при первом входе подставляется системная.',
+        tags: ['карта', 'синхронизация', 'интерфейс'],
+        published: true
+    },
+    {
+        id: 'upd_20260501_release',
+        title: 'Версия 1.2',
+        date: '2026-05-01',
+        summary: 'Карта ВОЛС: GPON, схемы жил, организации и резервные копии.',
+        body: 'Учёт кроссов и муфт со схемой оптических жил, GPON, резервное копирование данных организации.\n\nНа главной странице — актуальные условия и тарифы.',
+        tags: ['релиз'],
+        published: true
+    }
+];
+
+function parseProductUpdatesRaw(raw) {
+    if (!raw) return null;
+    try {
+        var parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        return Array.isArray(parsed) ? parsed : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function normalizeProductUpdate(post, idx) {
+    var src = post && typeof post === 'object' ? post : {};
+    var now = new Date().toISOString();
+    var dateStr = String(src.date || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        dateStr = now.slice(0, 10);
+    }
+    var tags = [];
+    if (Array.isArray(src.tags)) {
+        tags = src.tags.map(function(t) { return String(t || '').trim(); }).filter(Boolean).slice(0, 12);
+    } else if (typeof src.tags === 'string') {
+        tags = src.tags.split(',').map(function(t) { return t.trim(); }).filter(Boolean).slice(0, 12);
+    }
+    return {
+        id: String(src.id || ('upd_' + Date.now() + '_' + (idx || 0))).trim(),
+        title: String(src.title || 'Без названия').trim().slice(0, 200),
+        date: dateStr,
+        summary: String(src.summary || '').trim().slice(0, 500),
+        body: sanitizeNewsBody(String(src.body || '')).slice(0, 150000),
+        tags: tags,
+        published: src.published !== false,
+        createdAt: src.createdAt ? String(src.createdAt) : now,
+        updatedAt: now
+    };
+}
+
+function sortProductUpdates(posts) {
+    return posts.slice().sort(function(a, b) {
+        var da = String(a.date || '');
+        var db = String(b.date || '');
+        if (da !== db) return db.localeCompare(da);
+        return String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''));
+    });
+}
+
+function getProductUpdatesAdmin() {
+    var parsed = parseProductUpdatesRaw(getSetting('productUpdates'));
+    if (!parsed || !parsed.length) {
+        return DEFAULT_PRODUCT_UPDATES.map(function(p, i) { return normalizeProductUpdate(p, i); });
+    }
+    return sortProductUpdates(parsed.map(function(p, i) { return normalizeProductUpdate(p, i); }));
+}
+
+function getProductUpdatesPublic() {
+    return getProductUpdatesAdmin().filter(function(p) { return p.published; });
+}
+
+function setProductUpdates(posts) {
+    var list = Array.isArray(posts) ? posts : [];
+    var normalized = list.map(function(p, i) {
+        var n = normalizeProductUpdate(p, i);
+        if (p && p.createdAt) n.createdAt = String(p.createdAt);
+        return n;
+    });
+    setSetting('productUpdates', JSON.stringify(sortProductUpdates(normalized)));
+    return getProductUpdatesAdmin();
+}
+
 function getPublicMaintenanceNotice() {
     const notice = getMaintenanceNotice();
     const active = isMaintenanceNoticeActive(notice);
@@ -1187,6 +1466,8 @@ module.exports = {
     getMapStartForOrg,
     setMapStartForOrg,
     getMapStartForUserOrOrg,
+    getThemeForUser,
+    setThemeForUser,
     createDailyBackup,
     listBackups,
     restoreFromBackup,
@@ -1210,6 +1491,14 @@ module.exports = {
     countMapObjectsForOrganization,
     addVisitLog,
     getVisitLogs,
+    getSupportThreads,
+    findSupportThreadById,
+    getSupportThreadPublic,
+    addSupportMessage,
+    markSupportThreadRead,
+    markSupportThreadReadByVisitor,
+    getSupportThreadsAdminSummary,
+    countUnreadSupportThreads,
     getMaintenanceNotice,
     setMaintenanceNotice,
     getPublicMaintenanceNotice,
@@ -1219,5 +1508,8 @@ module.exports = {
     getFreeCardConfig,
     setFreeCardConfig,
     getShowcaseConfig,
-    setShowcaseConfig
+    setShowcaseConfig,
+    getProductUpdatesPublic,
+    getProductUpdatesAdmin,
+    setProductUpdates
 };
