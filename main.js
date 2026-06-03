@@ -1271,7 +1271,6 @@ function initUserUI() {
     const deviceCatalogBtn = document.getElementById('deviceCatalogBtn');
     if (deviceCatalogBtn) {
         deviceCatalogBtn.style.display = currentUser.role === 'admin' ? 'flex' : 'none';
-        deviceCatalogBtn.addEventListener('click', openDeviceCatalogModal);
     }
 
     const editModeBtn = document.getElementById('editMode');
@@ -1297,32 +1296,41 @@ function initUserUI() {
         usersManageBtn.addEventListener('click', openUsersModal);
     }
 
-    const historyBtn = document.getElementById('historyBtn');
-    if (historyBtn && typeof openHistoryModal === 'function') {
-        historyBtn.addEventListener('click', openHistoryModal);
-    }
-
-    const infoHelpBtn = document.getElementById('infoHelpBtn');
-    if (infoHelpBtn) infoHelpBtn.addEventListener('click', openHelpModal);
     setupUsersModalHandlers();
 
-    if (window._mapScriptsReadyPromise) {
-        window._mapScriptsReadyPromise.then(function() {
-            if (typeof setupHistoryModalHandlers === 'function') setupHistoryModalHandlers();
-            if (typeof setupDeviceCatalogModalHandlers === 'function') setupDeviceCatalogModalHandlers();
-            if (typeof updateHistoryBadge === 'function') updateHistoryBadge();
-        });
-    } else {
+    function bindDeferredMapUiHandlers() {
+        if (deviceCatalogBtn && typeof openDeviceCatalogModal === 'function' && !deviceCatalogBtn._deferredClickBound) {
+            deviceCatalogBtn._deferredClickBound = true;
+            deviceCatalogBtn.addEventListener('click', openDeviceCatalogModal);
+        }
+        var historyBtn = document.getElementById('historyBtn');
+        if (historyBtn && typeof openHistoryModal === 'function' && !historyBtn._deferredClickBound) {
+            historyBtn._deferredClickBound = true;
+            historyBtn.addEventListener('click', openHistoryModal);
+        }
         if (typeof setupHistoryModalHandlers === 'function') setupHistoryModalHandlers();
         if (typeof setupDeviceCatalogModalHandlers === 'function') setupDeviceCatalogModalHandlers();
         if (typeof updateHistoryBadge === 'function') updateHistoryBadge();
     }
+
+    function bindDeferredHelpHandlers() {
+        var infoHelpBtn = document.getElementById('infoHelpBtn');
+        if (infoHelpBtn && typeof openHelpModal === 'function' && !infoHelpBtn._deferredClickBound) {
+            infoHelpBtn._deferredClickBound = true;
+            infoHelpBtn.addEventListener('click', openHelpModal);
+        }
+        if (typeof setupHelpModalHandlers === 'function') setupHelpModalHandlers();
+    }
+
+    if (window._mapScriptsReadyPromise) {
+        window._mapScriptsReadyPromise.then(bindDeferredMapUiHandlers);
+    } else {
+        bindDeferredMapUiHandlers();
+    }
     if (window._uiExtrasPromise) {
-        window._uiExtrasPromise.then(function() {
-            if (typeof setupHelpModalHandlers === 'function') setupHelpModalHandlers();
-        });
-    } else if (typeof setupHelpModalHandlers === 'function') {
-        setupHelpModalHandlers();
+        window._uiExtrasPromise.then(bindDeferredHelpHandlers);
+    } else {
+        bindDeferredHelpHandlers();
     }
 
     setupUndergroundEditBar();
