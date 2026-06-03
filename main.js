@@ -1004,6 +1004,15 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (!checkAuth()) return;
 
+    if (typeof loadAppScripts === 'function') {
+        var coreScripts = window.MAP_CORE_DEFERRED_SCRIPTS || ['js/catalog/device-catalog.js', 'js/history.js'];
+        var uiScripts = window.MAP_UI_DEFERRED_SCRIPTS || ['js/ui/help.js', 'js/ui/camera-player.js'];
+        window._mapScriptsReadyPromise = loadAppScripts(coreScripts).catch(function() {});
+        window._uiExtrasPromise = window._mapScriptsReadyPromise
+            .then(function() { return loadAppScripts(uiScripts); })
+            .catch(function() {});
+    }
+
     startMapLoadSafetyTimeout();
 
     initUserUI();
@@ -1027,14 +1036,21 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function whenYmapsReady(cb) {
-        if (window.ymaps) { window.ymaps.ready(cb); return; }
+        function runCb() {
+            if (window._mapScriptsReadyPromise) {
+                window._mapScriptsReadyPromise.then(cb).catch(function() { cb(); });
+            } else {
+                cb();
+            }
+        }
+        if (window.ymaps) { window.ymaps.ready(runCb); return; }
         var attempts = 0;
         var maxAttempts = 600;
         var t = setInterval(function() {
             attempts++;
             if (window.ymaps) {
                 clearInterval(t);
-                window.ymaps.ready(cb);
+                window.ymaps.ready(runCb);
             } else if (attempts >= maxAttempts) {
                 clearInterval(t);
                 if (typeof markMapDataReady === 'function') markMapDataReady();
@@ -1290,19 +1306,32 @@ function initUserUI() {
     if (infoHelpBtn) infoHelpBtn.addEventListener('click', openHelpModal);
     setupUsersModalHandlers();
 
-    if (typeof setupHistoryModalHandlers === 'function') setupHistoryModalHandlers();
+    if (window._mapScriptsReadyPromise) {
+        window._mapScriptsReadyPromise.then(function() {
+            if (typeof setupHistoryModalHandlers === 'function') setupHistoryModalHandlers();
+            if (typeof setupDeviceCatalogModalHandlers === 'function') setupDeviceCatalogModalHandlers();
+            if (typeof updateHistoryBadge === 'function') updateHistoryBadge();
+        });
+    } else {
+        if (typeof setupHistoryModalHandlers === 'function') setupHistoryModalHandlers();
+        if (typeof setupDeviceCatalogModalHandlers === 'function') setupDeviceCatalogModalHandlers();
+        if (typeof updateHistoryBadge === 'function') updateHistoryBadge();
+    }
+    if (window._uiExtrasPromise) {
+        window._uiExtrasPromise.then(function() {
+            if (typeof setupHelpModalHandlers === 'function') setupHelpModalHandlers();
+        });
+    } else if (typeof setupHelpModalHandlers === 'function') {
+        setupHelpModalHandlers();
+    }
 
-    setupHelpModalHandlers();
     setupUndergroundEditBar();
     setupUpdatesModalHandlers();
     setupBackupsSection();
-    setupDeviceCatalogModalHandlers();
 
     setupSidebarToggle();
     setupStatsToggle();
     setupProfileAvatarHandlers();
-
-    if (typeof updateHistoryBadge === 'function') updateHistoryBadge();
 }
 
 var mapLimitsCache = { count: 0, limit: 2000, unlocked: false, remaining: 2000, defaultFreeLimit: 2000 };
@@ -2360,6 +2389,21 @@ function markMapDataReady() {
 }
 window.markMapDataReady = markMapDataReady;
 
+function scheduleBackgroundAppScripts() {
+    if (window._backgroundScriptsScheduled) return;
+    window._backgroundScriptsScheduled = true;
+    var urls = window.MAP_BACKGROUND_SCRIPTS;
+    if (!urls || !urls.length || typeof loadAppScripts !== 'function') return;
+    var load = function() {
+        loadAppScripts(urls).catch(function() {});
+    };
+    if (typeof requestIdleCallback === 'function') {
+        requestIdleCallback(load, { timeout: 3000 });
+    } else {
+        setTimeout(load, 50);
+    }
+}
+
 function tryCompleteMapInitialLoad() {
     if (!_mapInitialLoadPending) return;
     if (!_mapTilesReady || !_mapDataReady) return;
@@ -2368,6 +2412,7 @@ function tryCompleteMapInitialLoad() {
         clearTimeout(_mapLoadSafetyTimer);
         _mapLoadSafetyTimer = null;
     }
+    scheduleBackgroundAppScripts();
     requestAnimationFrame(function() {
         requestAnimationFrame(function() {
             hideMapLoadingOverlay();
@@ -10306,7 +10351,10 @@ function loadData() {
         if (typeof AuthSystem !== 'undefined' && AuthSystem.refreshUsersFromApi) AuthSystem.refreshUsersFromApi();
         var token = getAuthToken();
         fetch(getApiBase() + '/api/history', { headers: { 'Authorization': 'Bearer ' + token } }).then(function(r) { return r.json(); }).then(function(b) {
-            if (b && Array.isArray(b.history) && typeof window.setHistoryFromApi === 'function') window.setHistoryFromApi(b.history);
+            if (b && Array.isArray(b.history)) {
+                if (typeof window.setHistoryFromApi === 'function') window.setHistoryFromApi(b.history);
+                else window._pendingHistoryFromApi = b.history;
+            }
         }).catch(function() {});
         fetch(getApiBase() + '/api/settings', { headers: { 'Authorization': 'Bearer ' + token } }).then(function(r) { return r.json(); }).then(function(s) {
             if (!s) return;

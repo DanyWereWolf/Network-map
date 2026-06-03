@@ -585,4 +585,10 @@ function setupHistoryModalHandlers() {
     }
 }
 
-if (typeof window !== 'undefined') window.setHistoryFromApi = setHistoryFromApi;
+if (typeof window !== 'undefined') {
+    window.setHistoryFromApi = setHistoryFromApi;
+    if (window._pendingHistoryFromApi) {
+        setHistoryFromApi(window._pendingHistoryFromApi);
+        window._pendingHistoryFromApi = null;
+    }
+}
