@@ -2255,6 +2255,29 @@ function copyOpticalFiberFieldsToCableData(cableData, c) {
     }
 }
 
+function normalizeUndergroundSpansArray(spans) {
+    if (!Array.isArray(spans) || !spans.length) return null;
+    var out = [];
+    for (var i = 0; i < spans.length; i++) {
+        var s = spans[i];
+        if (!s || typeof s !== 'object') continue;
+        var entry = s.entryManholeId || s.manholeId || null;
+        var exit = s.exitManholeId || s.supportId || null;
+        if (!entry || !exit) continue;
+        var path = Array.isArray(s.pathCoords) ? s.pathCoords.filter(function(c) {
+            return Array.isArray(c) && c.length >= 2 && typeof c[0] === 'number' && typeof c[1] === 'number';
+        }).map(function(c) { return [c[0], c[1]]; }) : [];
+        out.push({ entryManholeId: entry, exitManholeId: exit, pathCoords: path });
+    }
+    return out.length ? out : null;
+}
+
+function copyUndergroundFieldsToCableData(cableData, c) {
+    if (!cableData || !c || c.cableType === 'copper') return;
+    var spans = normalizeUndergroundSpansArray(c.undergroundSpans);
+    if (spans) cableData.undergroundSpans = spans;
+}
+
 function mergeMapState(current, incoming) {
     if (!Array.isArray(incoming)) return current;
     if (incoming.length === 0) return incoming;
@@ -2297,6 +2320,7 @@ function mergeMapState(current, incoming) {
                 if (c.copperPortTo != null && c.copperPortTo !== '') cableData.copperPortTo = c.copperPortTo;
             }
             copyOpticalFiberFieldsToCableData(cableData, c);
+            copyUndergroundFieldsToCableData(cableData, c);
             mergedCables.push(cableData);
         }
     }
@@ -2321,6 +2345,7 @@ function mergeMapState(current, incoming) {
             if (c.copperPortTo != null && c.copperPortTo !== '') cableData.copperPortTo = c.copperPortTo;
         }
         copyOpticalFiberFieldsToCableData(cableData, c);
+        copyUndergroundFieldsToCableData(cableData, c);
         existing = mergedCables.findIndex(function(x) { return x.uniqueId === c.uniqueId; });
         if (existing >= 0) mergedCables[existing] = cableData; else mergedCables.push(cableData);
     }
@@ -2422,6 +2447,7 @@ function applyOperationToState(state, op) {
                 if (op.data.copperPortTo != null && op.data.copperPortTo !== '') c.copperPortTo = op.data.copperPortTo;
             }
             copyOpticalFiberFieldsToCableData(c, op.data);
+            copyUndergroundFieldsToCableData(c, op.data);
             if (op.data.uniqueId != null && op.data.uniqueId !== '') {
                 var dupIdx = state.findIndex(function(i) { return i.type === 'cable' && i.uniqueId === op.data.uniqueId; });
                 if (dupIdx >= 0) {

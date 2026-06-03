@@ -344,6 +344,11 @@
                                             <span class="map-filter-chip-dot" aria-hidden="true"></span>
                                             <span class="map-filter-chip-text">Крепления</span>
                                         </label>
+                                        <label class="map-filter-chip map-filter-chip--teal" title="Вход в подземную прокладку кабеля">
+                                            <input type="checkbox" id="mapFilterManhole" checked>
+                                            <span class="map-filter-chip-dot" aria-hidden="true"></span>
+                                            <span class="map-filter-chip-text">Колодцы</span>
+                                        </label>
                                     </div>
                                 </div>
 
@@ -431,6 +436,7 @@
                                         <button type="button" class="object-type-chip object-type-chip--rose" data-type="sleeve">Муфты</button>
                                         <button type="button" class="object-type-chip object-type-chip--violet" data-type="cross">Кроссы</button>
                                         <button type="button" class="object-type-chip object-type-chip--slate" data-type="attachment">Крепления</button>
+                                        <button type="button" class="object-type-chip object-type-chip--teal" data-type="manhole">Колодцы</button>
                                     </div>
                                 </div>
                                 <div class="object-type-group">
@@ -461,6 +467,7 @@
                                 <option value="mediaConverter">Медиаконвертер</option>
                                 <option value="node">Узлы сети</option>
                                 <option value="attachment">Крепление узлов</option>
+                                <option value="manhole">Колодец</option>
                             </select>
                         </div>
 
@@ -689,6 +696,34 @@
                                 </svg>
                                 <span class="btn-lay-cable-text">Проложить кабель</span>
                             </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Аккордеон для регионов -->
+                <div class="accordion-section accordion-section--regions">
+                    <div class="accordion-header" data-accordion="regions">
+                        <span class="accordion-header-icon accordion-header-icon--regions" aria-hidden="true">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"></path>
+                            </svg>
+                        </span>
+                        <span class="accordion-header-title">Регионы</span>
+                        <span class="regions-count-badge" id="regionsCountBadge" title="Число регионов"></span>
+                        <svg class="accordion-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </div>
+                    <div class="accordion-content" id="regions-content">
+                        <div class="regions-panel">
+                            <p class="regions-panel-hint">Список регионов — слева. Редактирование названия, цвета и контура — кнопка карандаша (в режиме редактирования).</p>
+                            <button type="button" id="drawRegionBtn" class="btn-primary btn-draw-region">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon>
+                                </svg>
+                                <span class="btn-draw-region-text">Нарисовать регион</span>
+                            </button>
+                            <div id="regionsList" class="regions-list" aria-live="polite"></div>
                         </div>
                     </div>
                 </div>
@@ -1010,6 +1045,70 @@
                 </div>
             </div>
             <div id="map" class="map"></div>
+            <div id="undergroundEditBar" class="underground-draw-card" hidden aria-live="polite" role="region" aria-labelledby="undergroundEditBarTitle">
+                <div class="underground-draw-card__accent" aria-hidden="true"></div>
+                <div class="underground-draw-card__inner">
+                    <div class="underground-draw-card__head">
+                        <div class="underground-draw-card__icon" aria-hidden="true">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2">
+                                <circle cx="5" cy="12" r="2.5" fill="currentColor" stroke="none"></circle>
+                                <circle cx="19" cy="12" r="2.5" fill="currentColor" stroke="none"></circle>
+                                <path d="M7.5 12h9"></path>
+                            </svg>
+                        </div>
+                        <div class="underground-draw-card__titles">
+                            <span id="undergroundEditBarTitle" class="underground-draw-card__title">Подземный участок</span>
+                            <span id="undergroundEditBarMode" class="underground-draw-card__mode">Перепрокладка</span>
+                        </div>
+                        <div class="underground-draw-card__stat" title="Точек на трассе">
+                            <span id="undergroundEditBarPoints" class="underground-draw-card__stat-num">0</span>
+                            <span class="underground-draw-card__stat-label">тчк.</span>
+                        </div>
+                    </div>
+                    <p id="undergroundEditBarText" class="underground-draw-card__hint">Кликайте по карте, чтобы проложить трассу между колодцами.</p>
+                    <div class="underground-draw-card__actions">
+                        <button type="button" id="undergroundEditDone" class="btn-primary underground-draw-card__btn">Готово</button>
+                        <button type="button" id="undergroundEditRelayout" class="btn-secondary underground-draw-card__btn">Заново</button>
+                        <button type="button" id="undergroundEditCancelBar" class="btn-secondary underground-draw-card__btn">Отмена</button>
+                    </div>
+                </div>
+            </div>
+            <div id="regionDrawBar" class="underground-draw-card region-draw-card" hidden aria-live="polite" role="region" aria-labelledby="regionDrawBarTitle">
+                <div class="underground-draw-card__accent" aria-hidden="true"></div>
+                <div class="underground-draw-card__inner">
+                    <div class="underground-draw-card__head">
+                        <div class="underground-draw-card__icon" aria-hidden="true">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon>
+                            </svg>
+                        </div>
+                        <div class="underground-draw-card__titles">
+                            <span id="regionDrawBarTitle" class="underground-draw-card__title">Новый регион</span>
+                            <span class="underground-draw-card__mode">Рисование</span>
+                        </div>
+                        <div class="underground-draw-card__stat" title="Вершин контура">
+                            <span id="regionDrawBarPoints" class="underground-draw-card__stat-num">0</span>
+                            <span class="underground-draw-card__stat-label">тчк.</span>
+                        </div>
+                    </div>
+                    <p id="regionDrawBarText" class="underground-draw-card__hint">Кликайте по карте — вершины контура. Минимум 3 точки. Двойной клик или «Готово» — завершить.</p>
+                    <div class="region-draw-fields">
+                        <label class="region-draw-field">
+                            <span>Название</span>
+                            <input type="text" id="regionDrawName" class="form-input" placeholder="Регион">
+                        </label>
+                        <label class="region-draw-field region-draw-field--color">
+                            <span>Заливка</span>
+                            <input type="color" id="regionDrawFillColor" value="#3b82f6">
+                        </label>
+                    </div>
+                    <div class="underground-draw-card__actions region-draw-card__actions">
+                        <button type="button" id="regionDrawDone" class="btn-primary underground-draw-card__btn btn-compact" disabled>Готово</button>
+                        <button type="button" id="regionDrawUndo" class="btn-secondary underground-draw-card__btn btn-compact">− точка</button>
+                        <button type="button" id="regionDrawCancel" class="btn-secondary underground-draw-card__btn btn-compact">Отмена</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1957,6 +2056,8 @@
     <script src="js/catalog/device-catalog.js"></script>
     <script src="js/map/theme.js"></script>
     <script src="js/map/map-icons.js"></script>
+    <script src="js/map/cable-underground.js"></script>
+    <script src="js/map/regions.js"></script>
     <script src="js/ui/camera-player.js"></script>
     <script src="js/map/search.js"></script>
     <script src="js/ui/help.js"></script>

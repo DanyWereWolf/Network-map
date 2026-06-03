@@ -220,7 +220,10 @@ function applyObjectLocksToMapDraggable() {
     objects.forEach(function(o) {
         if (!o || !o.properties || !o.options) return;
         var t = o.properties.get('type');
-        if (t === 'cable' || t === 'cableLabel' || t === 'crossGroup' || t === 'nodeGroup') return;
+        if (t === 'cable' || t === 'cableLabel' || t === 'crossGroup' || t === 'nodeGroup' || t === 'region') {
+            if (t === 'region') try { o.options.set('draggable', false); } catch (eR) {}
+            return;
+        }
         var uid = getObjectUniqueId(o);
         var locked = uid && isObjectLockedByOther(uid);
         try { o.options.set('draggable', !locked); } catch (e) {}
@@ -1290,6 +1293,7 @@ function initUserUI() {
     if (typeof setupHistoryModalHandlers === 'function') setupHistoryModalHandlers();
 
     setupHelpModalHandlers();
+    setupUndergroundEditBar();
     setupUpdatesModalHandlers();
     setupBackupsSection();
     setupDeviceCatalogModalHandlers();
@@ -2597,6 +2601,7 @@ function setupEventListeners() {
     });
 
     setupMapFilterControls();
+    setupRegionControls();
 
     var saveMapStartBtn = document.getElementById('saveMapStartBtn');
     if (saveMapStartBtn) {
@@ -2660,6 +2665,19 @@ function setupEventListeners() {
             if (fiberRoutingMode) { cancelFiberRouting(); showInfo('Прокладка жилы отменена.', 'Отмена'); e.preventDefault(); return; }
             if (cableSplitMode) { cancelCableSplitMode(); showInfo('Установка муфты отменена.', 'Отмена'); e.preventDefault(); return; }
             if (objectPlacementMode) { cancelObjectPlacement(); e.preventDefault(); return; }
+            if (cableUndergroundEditMode) {
+                cancelUndergroundSpanEdit();
+                if (typeof showInfo === 'function') showInfo('Перепрокладка подземного участка отменена.', 'Отмена');
+                e.preventDefault();
+                return;
+            }
+            if (currentCableTool && cableUndergroundActive) {
+                resetCableUndergroundLayingState(true);
+                hideUndergroundEditBar();
+                if (typeof showInfo === 'function') showInfo('Подземная прокладка отменена. Колодец убран из маршрута.', 'Отмена');
+                e.preventDefault();
+                return;
+            }
             if (currentCableTool) {
                 var cableBtn = document.getElementById('addCable');
                 if (cableBtn) cableBtn.click();
@@ -2685,7 +2703,7 @@ function setupEventListeners() {
             const splitterSettingsGroup = document.getElementById('splitterSettingsGroup');
             const type = this.value;
 
-            const showName = ['node', 'cross', 'sleeve', 'support', 'attachment', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter'].indexOf(type) !== -1;
+            const showName = ['node', 'cross', 'sleeve', 'support', 'attachment', 'manhole', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter'].indexOf(type) !== -1;
             if (nameInputGroup) nameInputGroup.style.display = showName ? 'block' : 'none';
             if (sleeveSettingsGroup) sleeveSettingsGroup.style.display = type === 'sleeve' ? 'block' : 'none';
             if (crossSettingsGroup) crossSettingsGroup.style.display = type === 'cross' ? 'block' : 'none';
@@ -2702,7 +2720,7 @@ function setupEventListeners() {
             if (nameInputGroup) {
                 const nameLabel = nameInputGroup.querySelector('label');
                 if (nameLabel) {
-                    const labels = { cross: 'Имя кросса', sleeve: 'Название муфты', support: 'Подпись опоры', attachment: 'Название', node: 'Имя узла', olt: 'Имя OLT', splitter: 'Имя сплиттера', onu: 'Имя ONU', camera: 'Имя камеры', mediaConverter: 'Название медиаконвертера' };
+                    const labels = { cross: 'Имя кросса', sleeve: 'Название муфты', support: 'Подпись опоры', attachment: 'Название', manhole: 'Название колодца', node: 'Имя узла', olt: 'Имя OLT', splitter: 'Имя сплиттера', onu: 'Имя ONU', camera: 'Имя камеры', mediaConverter: 'Название медиаконвертера' };
                     nameLabel.textContent = labels[type] || 'Имя';
                 }
             }
@@ -2834,6 +2852,9 @@ function setupEventListeners() {
             expertZoomTimer = setTimeout(function() {
                 expertZoomTimer = null;
                 if (typeof applyMapFilter === 'function') applyMapFilter();
+                if (window.MapRegions && MapRegions.syncAllRegionLabels && myMap) {
+                    MapRegions.syncAllRegionLabels(myMap, objects);
+                }
             }, 80);
         } catch (e) {}
     });
@@ -2901,6 +2922,9 @@ function handleAddObject() {
         cableSource = null;
         cableSourceCopperSwitchId = null;
         cableWaypoints = [];
+        cancelUndergroundSpanEdit();
+        resetCableUndergroundLayingState(false);
+        resetCableUndergroundPendingSpans();
         pendingCopperPortPreset = null;
         pendingCopperRouteFinish = null;
         copperCableLayingActive = false;
@@ -2997,6 +3021,7 @@ var OBJECT_TYPE_LABELS = {
     sleeve: 'Муфты',
     cross: 'Кроссы',
     attachment: 'Крепления',
+    manhole: 'Колодцы',
     olt: 'OLT',
     splitter: 'Сплиттер',
     onu: 'ONU',
@@ -3204,90 +3229,17 @@ function handleMapClick(e) {
 
     const target = e.get('target');
     if (cableSplitMode && cableSplitData) {
-        var splitTargetCable = (target && target.properties && target.properties.get('type') === 'cable') ? target : null;
-        handleCableSplitMapClick(coords, splitTargetCable);
+        handleCableSplitMapClick(coords, resolveCableFromMapTarget(target));
         return;
     }
-    if (target && target.properties) {
-        const type = target.properties.get('type');
-        if (type === 'cable') {
-            showCableInfo(target);
-            return;
-        }
-    }
-
-    let clickedCable = null;
-    let minDistance = Infinity;
-
     const zoom = myMap.getZoom();
+    const clickedCable = findCableAtCoords(coords, zoom);
 
-    let baseTolerance;
-    if (zoom < 10) {
-        
-        baseTolerance = 0.000003;
-    } else if (zoom < 13) {
-        
-        baseTolerance = 0.000005;
-    } else if (zoom < 15) {
-        
-        baseTolerance = 0.000003;
-    } else {
-        
-        baseTolerance = 0.000002;
+    var cableFromTarget = resolveCableFromMapTarget(target);
+    if (cableFromTarget) {
+        showCableInfo(cableFromTarget);
+        return;
     }
-    
-    objects.forEach(obj => {
-        if (obj && obj.geometry && obj.properties) {
-            const type = obj.properties.get('type');
-            if (type === 'cable') {
-                try {
-                    
-                    const cableCoords = obj.geometry.getCoordinates();
-                    if (cableCoords && cableCoords.length >= 2) {
-                        const fromCoords = cableCoords[0];
-                        const toCoords = cableCoords[cableCoords.length - 1];
-
-                        const result = pointToLineDistance(coords, fromCoords, toCoords);
-                        const distanceToLine = result.distance;
-                        const param = result.param;
-
-                        const segmentTolerance = zoom < 10 ? 0.005 : 0.01;
-                        const isWithinSegment = param >= -segmentTolerance && param <= 1 + segmentTolerance;
-
-                        const cableType = obj.properties.get('cableType');
-                        const cableWidthPixels = getCableWidth(cableType);
-
-                        let pixelToDegree;
-                        if (zoom < 10) {
-                            
-                            pixelToDegree = 0.000002;
-                        } else if (zoom < 13) {
-                            
-                            pixelToDegree = 0.000005;
-                        } else if (zoom < 15) {
-                            
-                            pixelToDegree = 0.000004;
-                        } else {
-                            
-                            pixelToDegree = 0.000003;
-                        }
-                        
-                        const cableWidthInDegrees = (cableWidthPixels / 2) * pixelToDegree;
-
-                        const widthMultiplier = zoom < 10 ? 1.1 : 1.2;
-                        const cableTolerance = Math.max(baseTolerance, cableWidthInDegrees * widthMultiplier);
-
-                        if (isWithinSegment && distanceToLine < cableTolerance && distanceToLine < minDistance) {
-                            minDistance = distanceToLine;
-                            clickedCable = obj;
-                        }
-                    }
-                } catch (error) {
-                    
-                }
-            }
-        }
-    });
 
     if (clickedCable && !(cableSplitMode && cableSplitData)) {
         showCableInfo(clickedCable);
@@ -3305,6 +3257,47 @@ function handleMapClick(e) {
     }
 
     if (!isEditMode) {
+        return;
+    }
+
+    if (regionDrawMode) {
+        regionDrawCoords.push(coords);
+        updateRegionDrawBar();
+        updateRegionDrawPreview();
+        return;
+    }
+
+    if (cableUndergroundEditMode && cableUndergroundEditCable) {
+        var editCoords = e.get('coords');
+        var zoomEdit = myMap ? myMap.getZoom() : 15;
+        var clickedObjEdit = findObjectAtCoords(editCoords, getCableSnapTolerance(zoomEdit));
+        if (clickedObjEdit && clickedObjEdit.geometry && clickedObjEdit.properties) {
+            var ugEditType = clickedObjEdit.properties.get('type');
+            if (ugEditType === 'manhole') {
+                var epUg = getUndergroundEditSpanEndpoints(cableUndergroundEditCable, cableUndergroundEditSpanIndex);
+                var clickUid = getObjectUniqueId(clickedObjEdit);
+                if (epUg && clickUid === epUg.norm.exitManholeId) {
+                    saveUndergroundSpanEdit();
+                    return;
+                }
+                showWarning('Кликайте по карте. Завершение — <strong>второй колодец</strong> (выход) или «Готово».', 'Подземная прокладка');
+                return;
+            }
+            if (ugEditType === 'support' || ugEditType === 'attachment') {
+                showError('Сначала завершите подземный участок (второй колодец или «Готово»).', 'Подземная прокладка');
+                return;
+            }
+        }
+        if (editCoords && editCoords.length >= 2) {
+            var lastEd = cableUndergroundCoords.length ? cableUndergroundCoords[cableUndergroundCoords.length - 1] : null;
+            var minStepEd = 0.000008;
+            if (!lastEd || Math.abs(lastEd[0] - editCoords[0]) > minStepEd || Math.abs(lastEd[1] - editCoords[1]) > minStepEd) {
+                cableUndergroundCoords.push(editCoords);
+                persistUndergroundRelayoutDraft();
+            }
+            updateUndergroundEditPreview(editCoords);
+            updateUndergroundEditBarText();
+        }
         return;
     }
 
@@ -3372,6 +3365,9 @@ function handleMapClick(e) {
         } else if (type === 'attachment') {
             const name = document.getElementById('objectName').value.trim();
             createObject(type, name || '', coords);
+        } else if (type === 'manhole') {
+            const name = document.getElementById('objectName').value.trim();
+            createObject(type, name || '', coords);
         } else if (type === 'olt') {
             const name = getPlacementObjectName();
             const oltPortsEl = document.getElementById('oltPonPorts');
@@ -3421,34 +3417,9 @@ function handleMapClick(e) {
             return;
         }
         const coords = e.get('coords');
-
-        let clickedCable = null;
-        let minDistance = Infinity;
         const zoom = myMap.getZoom();
-        const cableTolerance = zoom < 12 ? 0.000008 : (zoom < 15 ? 0.000005 : 0.000003);
-        
-        objects.forEach(obj => {
-            if (obj && obj.geometry && obj.properties) {
-                const type = obj.properties.get('type');
-                if (type === 'cable') {
-                    try {
-                        const cableCoords = obj.geometry.getCoordinates();
-                        if (cableCoords && cableCoords.length >= 2) {
-                            const fromCoords = cableCoords[0];
-                            const toCoords = cableCoords[cableCoords.length - 1];
-                            const result = pointToLineDistance(coords, fromCoords, toCoords);
-                            if (result.distance < cableTolerance && result.param >= -0.01 && result.param <= 1.01 && result.distance < minDistance) {
-                                minDistance = result.distance;
-                                clickedCable = obj;
-                            }
-                        }
-                    } catch (error) {
-                        
-                    }
-                }
-            }
-        });
-        
+        const clickedCable = findCableAtCoords(coords, zoom);
+
         if (clickedCable && !(cableSplitMode && cableSplitData)) {
             showCableInfo(clickedCable);
             return;
@@ -3509,8 +3480,22 @@ function handleMapClick(e) {
             }
             return;
         }
-        var cableEndpoints = ['cross', 'sleeve', 'support', 'attachment', 'olt'];
-        
+        var cableEndpoints = ['cross', 'sleeve', 'support', 'attachment', 'manhole', 'olt'];
+
+        if (cableUndergroundActive && clickedObject && clickedObject.geometry) {
+            var ugType = clickedObject.properties.get('type');
+            if (ugType === 'manhole') {
+                handleManholeCableLayClick(clickedObject);
+                return;
+            }
+            if (ugType === 'support' || ugType === 'attachment') {
+                showError('В подземном участке выберите <strong>второй колодец</strong> (выход). Опора — только после выхода из колодца.', 'Подземная прокладка');
+                return;
+            }
+            showWarning('В подземном участке кликайте по карте для трассы или выберите <strong>второй колодец</strong> для выхода.', 'Колодец');
+            return;
+        }
+
         if (clickedObject && clickedObject.geometry) {
             var objType = clickedObject.properties ? clickedObject.properties.get('type') : null;
 
@@ -3518,23 +3503,29 @@ function handleMapClick(e) {
                 showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU, камеры или медиаконвертера. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
                 return;
             }
-            
+
             if (cableEndpoints.indexOf(objType) !== -1) {
                 if (!cableSource) {
-                    if (objType === 'support' || objType === 'attachment') {
-                        showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
+                    if (isCableIntermediateWaypoint(objType)) {
+                        showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры, крепления и колодцы — только промежуточные точки.', 'Недопустимое действие');
                         return;
                     }
                     cableSource = clickedObject;
                     cableWaypoints = [];
+                    resetCableUndergroundPendingSpans();
                     clearSelection();
                     selectObject(cableSource);
                     return;
                 }
                 if (clickedObject === cableSource) {
                     cableWaypoints = [];
+                    resetCableUndergroundLayingState(false);
                     clearSelection();
                     selectObject(cableSource);
+                    return;
+                }
+                if (objType === 'manhole') {
+                    handleManholeCableLayClick(clickedObject);
                     return;
                 }
                 if (objType === 'support' || objType === 'attachment') {
@@ -3543,9 +3534,13 @@ function handleMapClick(e) {
                     selectObject(cableSource);
                     return;
                 }
-                var points = [cableSource].concat(cableWaypoints).concat([clickedObject]);
-                var success = createCableFromPoints(points, cableType);
-                if (success) {
+                if (cableUndergroundActive) {
+                    showError('Завершите подземный участок: кликайте по карте и выберите второй колодец, или Escape для отмены.', 'Колодец');
+                    return;
+                }
+                var pointsEnd = [cableSource].concat(cableWaypoints).concat([clickedObject]);
+                var successEnd = createCableFromPoints(pointsEnd, cableType);
+                if (successEnd) {
                     cableSource = clickedObject;
                     cableWaypoints = [];
                     clearSelection();
@@ -3558,24 +3553,30 @@ function handleMapClick(e) {
                 showError('Нельзя прокладывать кабель к узлу сети. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
                 return;
             }
-            
+
             if (!cableSource) {
                 var startEndpoints = ['sleeve', 'cross', 'olt'];
                 if (startEndpoints.indexOf(objType) === -1) {
-                    showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
+                    showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры, крепления и колодцы — только промежуточные точки.', 'Недопустимое действие');
                     return;
                 }
                 cableSource = clickedObject;
                 cableWaypoints = [];
+                resetCableUndergroundPendingSpans();
                 clearSelection();
                 selectObject(cableSource);
                 return;
             }
-            
+
             if (clickedObject === cableSource) {
                 cableWaypoints = [];
+                resetCableUndergroundLayingState(false);
                 clearSelection();
                 selectObject(cableSource);
+                return;
+            }
+            if (objType === 'manhole') {
+                handleManholeCableLayClick(clickedObject);
                 return;
             }
             if (objType === 'support' || objType === 'attachment') {
@@ -3586,9 +3587,13 @@ function handleMapClick(e) {
             }
             var finishEndpoints = ['sleeve', 'cross', 'olt'];
             if (finishEndpoints.indexOf(objType) !== -1) {
-                const points = [cableSource].concat(cableWaypoints).concat([clickedObject]);
-                const success = createCableFromPoints(points, cableType);
-                if (success) {
+                if (cableUndergroundActive) {
+                    showError('Завершите подземный участок: кликайте по карте и выберите второй колодец, или Escape для отмены.', 'Колодец');
+                    return;
+                }
+                const pointsFin = [cableSource].concat(cableWaypoints).concat([clickedObject]);
+                const successFin = createCableFromPoints(pointsFin, cableType);
+                if (successFin) {
                     cableSource = clickedObject;
                     cableWaypoints = [];
                     clearSelection();
@@ -3597,15 +3602,29 @@ function handleMapClick(e) {
                 }
                 return;
             }
-            showError('Кабель прокладывается между муфтой, кроссом или OLT. Промежуточными точками могут быть опоры и крепления.', 'Недопустимое действие');
+            showError('Кабель прокладывается между муфтой, кроссом или OLT. Промежуточные точки: опора, крепление; под землёй — между двумя колодцами.', 'Недопустимое действие');
         } else {
-            
+
+            if (cableUndergroundActive && cableSource) {
+                var lastUg = cableUndergroundCoords.length ? cableUndergroundCoords[cableUndergroundCoords.length - 1] : null;
+                var minStep = 0.000008;
+                if (!lastUg || Math.abs(lastUg[0] - coords[0]) > minStep || Math.abs(lastUg[1] - coords[1]) > minStep) {
+                    cableUndergroundCoords.push(coords);
+                }
+                clearSelection();
+                selectObject(cableSource);
+                removeCablePreview();
+                updateCablePreview(cableSource, cableWaypoints, coords);
+                updateUndergroundEditBarText();
+                return;
+            }
+
             if (cableSource) {
                 const currentCableType = getEffectiveCableLayingType();
                 const autoSelectTolerance = getCableAutoSelectTolerance(zoom);
                 let nearestObject = null;
                 let minDist = Infinity;
-                var validCableEndpoints = ['cross', 'sleeve', 'support', 'attachment', 'olt'];
+                var validCableEndpoints = ['cross', 'sleeve', 'support', 'attachment', 'manhole', 'olt'];
                 objects.forEach(obj => {
                     if (obj && obj.geometry && obj.properties) {
                         const t = obj.properties.get('type');
@@ -3625,15 +3644,17 @@ function handleMapClick(e) {
                 });
                 if (nearestObject) {
                     const t = nearestObject.properties.get('type');
-                    if (t === 'support' || t === 'attachment') {
+                    if (t === 'manhole') {
+                        handleManholeCableLayClick(nearestObject);
+                    } else if (t === 'support' || t === 'attachment') {
                         cableWaypoints.push(nearestObject);
                         clearSelection();
                         selectObject(cableSource);
                     } else {
-                        const points = [cableSource].concat(cableWaypoints).concat([nearestObject]);
+                        const pointsNear = [cableSource].concat(cableWaypoints).concat([nearestObject]);
                         const cableTypeVal = getEffectiveCableLayingType();
-                        const success = createCableFromPoints(points, cableTypeVal);
-                        if (success) {
+                        const successNear = createCableFromPoints(pointsNear, cableTypeVal);
+                        if (successNear) {
                             cableSource = nearestObject;
                             cableWaypoints = [];
                             clearSelection();
@@ -3679,6 +3700,15 @@ function handleMapMouseMove(e) {
         updatePhantomPlacemark(type, mapCoords);
         if (type) updateCursorIndicator(e, type);
         return;
+    }
+
+    if (cableUndergroundEditMode && cableUndergroundEditCable && mapCoords) {
+        if (mapMouseMoveRafId != null) cancelAnimationFrame(mapMouseMoveRafId);
+        var coordsEd = mapCoords;
+        mapMouseMoveRafId = requestAnimationFrame(function() {
+            mapMouseMoveRafId = null;
+            updateUndergroundEditPreview(coordsEd);
+        });
     }
 
     if (currentCableTool && cableSource && mapCoords) {
@@ -3787,6 +3817,9 @@ function updateCursorIndicator(e, objectType, objectCoord) {
             case 'attachment':
                 text = 'Крепление узлов';
                 break;
+            case 'manhole':
+                text = 'Колодец';
+                break;
             case 'olt':
                 text = 'OLT (GPON)';
                 break;
@@ -3878,10 +3911,89 @@ function removePhantomPlacemark() {
     }
 }
 
+function resolveCableFromMapTarget(target) {
+    if (!target || !target.properties) return null;
+    var type = target.properties.get('type');
+    if (type === 'cable') return target;
+    if (type === 'cableAerialOverlay') {
+        var uid = target.properties.get('parentCableId');
+        if (!uid || !Array.isArray(objects)) return null;
+        for (var i = 0; i < objects.length; i++) {
+            var o = objects[i];
+            if (o && o.properties && o.properties.get('uniqueId') === uid && o.properties.get('type') === 'cable') {
+                return o;
+            }
+        }
+    }
+    return null;
+}
+
+function handleCableMapClickEvent(cable, e) {
+    try {
+        if (e.originalEvent && typeof e.originalEvent.stopPropagation === 'function') {
+            e.originalEvent.stopPropagation();
+        }
+        if (e.stopPropagation && typeof e.stopPropagation === 'function') {
+            e.stopPropagation();
+        }
+    } catch (error) {}
+    if (cableSplitMode && cableSplitData) {
+        var splitCoords = e.get && e.get('coords');
+        if (splitCoords) {
+            window.lastMapClickCoords = splitCoords;
+            handleCableSplitMapClick(splitCoords, cable);
+            return false;
+        }
+    }
+    if (cableSplitSuppressInfoUntil && Date.now() < cableSplitSuppressInfoUntil) {
+        return false;
+    }
+    showCableInfo(cable);
+    return false;
+}
+
+function bindCableAerialOverlayEvents(overlay, cable) {
+    if (!overlay || !cable || !overlay.events) return;
+    overlay.events.add('click', function(e) {
+        return handleCableMapClickEvent(cable, e);
+    });
+    function onEnter(e) {
+        var domEvent = e.get && e.get('domEvent');
+        if (domEvent) {
+            window.lastMouseX = domEvent.clientX || 0;
+            window.lastMouseY = domEvent.clientY || 0;
+        }
+        if (objectPlacementMode && phantomPlacemark) {
+            myMap.geoObjects.remove(phantomPlacemark);
+            phantomPlacemark = null;
+        }
+        if (hoveredObject && hoveredObject !== cable) clearHoverHighlight();
+        highlightObjectOnHover(cable, e);
+    }
+    function onLeave() {
+        if (hoveredObject === cable) clearHoverHighlight();
+    }
+    overlay.events.add('mouseenter', onEnter);
+    overlay.events.add('mouseleave', onLeave);
+    overlay.events.add('mouseover', onEnter);
+    overlay.events.add('mouseout', onLeave);
+}
+
+function bindAllCableAerialOverlays(cable) {
+    if (!cable || !cable.properties) return;
+    var overlays = cable.properties.get('aerialOverlays');
+    if (!Array.isArray(overlays)) return;
+    overlays.forEach(function(ol) {
+        bindCableAerialOverlayEvents(ol, cable);
+    });
+}
+
+window.bindAllCableAerialOverlays = bindAllCableAerialOverlays;
+
 function attachHoverEventsToObject(obj) {
     if (!obj || !obj.events) return;
     const objType = obj.properties ? obj.properties.get('type') : null;
-    if (!objType || objType === 'cableLabel') return;
+    if (!objType || objType === 'cableLabel' || objType === 'cableAerialOverlay') return;
     
     function onMouseEnter(e) {
         const domEvent = e.get && e.get('domEvent');
@@ -3934,7 +4046,7 @@ function highlightObjectOnHover(obj, e) {
         return;
     }
 
-    var hoverIconTypes = ['support', 'sleeve', 'cross', 'crossGroup', 'nodeGroup', 'olt', 'splitter', 'onu', 'switch', 'camera', 'mediaConverter', 'attachment'];
+    var hoverIconTypes = ['support', 'sleeve', 'cross', 'crossGroup', 'nodeGroup', 'olt', 'splitter', 'onu', 'switch', 'camera', 'mediaConverter', 'attachment', 'manhole'];
     if (hoverIconTypes.indexOf(type) < 0) return;
 
     var hoverIcon = buildMapPlacemarkIcon(type, 'hover', obj);
@@ -3969,19 +4081,21 @@ function showHoverCircle(obj, e) {
         if (!e) return;
         
         const coords = e.get('coords');
-        const cableCoords = obj.geometry.getCoordinates();
-        
-        if (cableCoords && cableCoords.length >= 2) {
-            const fromCoords = cableCoords[0];
-            const toCoords = cableCoords[cableCoords.length - 1];
-
-            const result = pointToLineDistance(coords, fromCoords, toCoords);
-            const param = Math.max(0, Math.min(1, result.param));
-
-            const nearestPoint = [
-                fromCoords[0] + param * (toCoords[0] - fromCoords[0]),
-                fromCoords[1] + param * (toCoords[1] - fromCoords[1])
-            ];
+        var geoms = (window.CableUnderground && CableUnderground.getCableDisplayGeometries)
+            ? CableUnderground.getCableDisplayGeometries(obj)
+            : [obj.geometry.getCoordinates()];
+        var nearestPoint = null;
+        var bestDist = Infinity;
+        for (var gi = 0; gi < geoms.length; gi++) {
+            var geom = geoms[gi];
+            if (!geom || geom.length < 2) continue;
+            var projected = projectPointOntoPolyline(coords, geom);
+            if (projected && projected.distance < bestDist) {
+                bestDist = projected.distance;
+                nearestPoint = projected.point;
+            }
+        }
+        if (!nearestPoint) return;
 
             const zoom = myMap.getZoom();
             const radius = zoom < 12 ? 0.00025 : (zoom < 15 ? 0.00015 : 0.0001);
@@ -3995,7 +4109,6 @@ function showHoverCircle(obj, e) {
             });
             
             myMap.geoObjects.add(hoverCircle);
-        }
     } else {
         
         const coords = obj.geometry.getCoordinates();
@@ -4063,6 +4176,9 @@ function highlightCableOnHover(cable) {
         strokeOpacity: 0.95,
         zIndex: 998
     });
+    if (window.CableUnderground && CableUnderground.syncAerialOverlayStroke) {
+        CableUnderground.syncAerialOverlayStroke(cable);
+    }
 }
 
 function clearCableHoverHighlight(cable) {
@@ -4074,9 +4190,12 @@ function clearCableHoverHighlight(cable) {
             strokeWidth: originalOptions.strokeWidth,
             strokeColor: originalOptions.strokeColor,
             strokeOpacity: originalOptions.strokeOpacity,
-            zIndex: 0
+            zIndex: CABLE_MAP_Z_INDEX
         });
         cable.properties.unset('originalCableOptions');
+        if (window.CableUnderground && CableUnderground.syncAerialOverlayStroke) {
+            CableUnderground.syncAerialOverlayStroke(cable);
+        }
     }
 }
 
@@ -4166,6 +4285,9 @@ function switchToViewMode(silent) {
     cableSource = null;
     cableSourceCopperSwitchId = null;
     cableWaypoints = [];
+    cancelUndergroundSpanEdit();
+    resetCableUndergroundLayingState(false);
+    resetCableUndergroundPendingSpans();
     pendingCopperPortPreset = null;
     pendingCopperRouteFinish = null;
 
@@ -4184,6 +4306,8 @@ function switchToViewMode(silent) {
     if (cableSplitMode) {
         cancelCableSplitMode();
     }
+
+    if (regionDrawMode && typeof cancelRegionDraw === 'function') cancelRegionDraw();
     
     if (wasEditMode && !silent) {
         showInfo('Переключено в режим просмотра', 'Режим');
@@ -4206,6 +4330,7 @@ function switchToViewMode(silent) {
     updateEditControls();
     makeObjectsNonDraggable();
     syncMapPanLockForEditTools();
+    if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
 }
 
 function switchToEditMode() {
@@ -4226,6 +4351,7 @@ function switchToEditMode() {
     makeObjectsDraggable();
     showInfo('Переключено в режим редактирования', 'Режим');
     syncMapPanLockForEditTools();
+    if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
 }
 
 function updateUIForMode() {
@@ -4237,7 +4363,7 @@ function updateUIForMode() {
 }
 
 function updateEditControls() {
-    const editControls = document.querySelectorAll('#addObject, #addCable');
+    const editControls = document.querySelectorAll('#addObject, #addCable, #drawRegionBtn');
     editControls.forEach(control => {
         control.style.opacity = isEditMode ? '1' : '0.5';
         control.style.pointerEvents = isEditMode ? 'all' : 'none';
@@ -4246,9 +4372,10 @@ function updateEditControls() {
 
 function makeObjectsDraggable() {
     objects.forEach(obj => {
-        if (obj.options && obj.properties.get('type') !== 'cable') {
-            obj.options.set('draggable', true);
-        }
+        if (!obj.options || !obj.properties) return;
+        var t = obj.properties.get('type');
+        if (t === 'cable' || t === 'region') return;
+        obj.options.set('draggable', true);
     });
     crossGroupPlacemarks.forEach(pm => { if (pm.options) pm.options.set('draggable', true); });
     nodeGroupPlacemarks.forEach(pm => { if (pm.options) pm.options.set('draggable', true); });
@@ -4256,9 +4383,10 @@ function makeObjectsDraggable() {
 
 function makeObjectsNonDraggable() {
     objects.forEach(obj => {
-        if (obj.options && obj.properties.get('type') !== 'cable') {
-            obj.options.set('draggable', false);
-        }
+        if (!obj.options || !obj.properties) return;
+        var t = obj.properties.get('type');
+        if (t === 'cable' || t === 'region') return;
+        obj.options.set('draggable', false);
     });
     crossGroupPlacemarks.forEach(pm => { if (pm.options) pm.options.set('draggable', false); });
     nodeGroupPlacemarks.forEach(pm => { if (pm.options) pm.options.set('draggable', false); });
@@ -4329,7 +4457,7 @@ function applyMapPlacemarkIcon(target, type, variant, source) {
 function refreshMapPlacemarkIcons() {
     if (!window.MapIcons || typeof objects === 'undefined') return;
 
-    var hoverIconTypes = ['support', 'sleeve', 'cross', 'crossGroup', 'nodeGroup', 'olt', 'splitter', 'onu', 'switch', 'camera', 'mediaConverter', 'attachment'];
+    var hoverIconTypes = ['support', 'sleeve', 'cross', 'crossGroup', 'nodeGroup', 'olt', 'splitter', 'onu', 'switch', 'camera', 'mediaConverter', 'attachment', 'manhole'];
 
     objects.forEach(function(obj) {
         if (!obj || !obj.properties || !obj.options) return;
@@ -4430,6 +4558,7 @@ function createObject(type, name, coords, options = {}) {
         case 'cross': balloonContent = 'Оптический кросс: ' + name; break;
         case 'node': balloonContent = 'Узел сети: ' + name; break;
         case 'attachment': balloonContent = name ? 'Крепление узлов: ' + name : 'Крепление узлов'; break;
+        case 'manhole': balloonContent = name ? 'Колодец: ' + name : 'Колодец'; break;
         case 'olt': balloonContent = name ? 'OLT: ' + name : 'OLT (GPON)'; break;
         case 'splitter': balloonContent = name ? 'Сплиттер: ' + name : 'Сплиттер'; break;
         case 'onu': balloonContent = name ? 'ONU: ' + name : 'ONU'; break;
@@ -4602,15 +4731,29 @@ function createObject(type, name, coords, options = {}) {
                 showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU, камеры или медиаконвертера. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
                 return;
             }
-            var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment', 'olt'];
+            if (cableUndergroundActive) {
+                if (type === 'manhole') {
+                    handleManholeCableLayClick(placemark);
+                    syncMapPanLockForEditTools();
+                    return;
+                }
+                if (type === 'support' || type === 'attachment') {
+                    showError('В подземном участке выберите второй колодец (выход).', 'Подземная прокладка');
+                } else {
+                    showWarning('В подземном участке выберите второй колодец для выхода.', 'Колодец');
+                }
+                return;
+            }
+            var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment', 'manhole', 'olt'];
             if (cableEndpointsPlacemark.indexOf(type) !== -1) {
                 if (!cableSource) {
-                    if (type === 'support' || type === 'attachment') {
-                        showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
+                    if (isCableIntermediateWaypoint(type)) {
+                        showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры, крепления и колодцы — только промежуточные точки.', 'Недопустимое действие');
                         return;
                     }
                     cableSource = placemark;
                     cableWaypoints = [];
+                    resetCableUndergroundPendingSpans();
                     clearSelection();
                     selectObject(cableSource);
                     syncMapPanLockForEditTools();
@@ -4618,8 +4761,13 @@ function createObject(type, name, coords, options = {}) {
                 }
                 if (placemark === cableSource) {
                     cableWaypoints = [];
+                    resetCableUndergroundLayingState(false);
                     clearSelection();
                     selectObject(cableSource);
+                    return;
+                }
+                if (type === 'manhole') {
+                    handleManholeCableLayClick(placemark);
                     return;
                 }
                 if (type === 'support' || type === 'attachment') {
@@ -4652,7 +4800,7 @@ function createObject(type, name, coords, options = {}) {
             return;
         }
 
-        if (type === 'support' || type === 'attachment') {
+        if (type === 'support' || type === 'attachment' || type === 'manhole') {
             if (isEditMode) {
                 clearSelection();
                 selectObject(placemark);
@@ -4689,6 +4837,8 @@ function createObject(type, name, coords, options = {}) {
         if (type === 'cross') updateCrossDisplay(); 
         if (type === 'node') updateNodeDisplay();
         saveData({ object: placemark, syncImmediate: true });
+        if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
+        if (typeof applyMapFilter === 'function') applyMapFilter();
         releaseDragObjectLock(uid);
     });
     
@@ -4718,6 +4868,7 @@ function createObject(type, name, coords, options = {}) {
     } else {
         myMap.geoObjects.add(placemark);
         if (typeof applyMapFilter === 'function') applyMapFilter();
+        if (window.MapRegions && MapRegions.sendAllRegionsToMapBack) MapRegions.sendAllRegionsToMapBack(myMap, objects);
     }
     if (typeof window.syncSendOp === 'function') {
         var data = serializeOneObject(placemark);
@@ -5020,6 +5171,11 @@ function syncCableGeometryFromRoutePoints(cable) {
     if (!cable || !cable.properties) return;
     var points = cable.properties.get('points');
     if (!Array.isArray(points) || points.length < 2) return;
+    if (window.CableUnderground) {
+        CableUnderground.applyCableRouteGeometry(cable, points);
+        CableUnderground.refreshCableUndergroundOverlays(cable);
+        return;
+    }
     var coords = [];
     for (var i = 0; i < points.length; i++) {
         if (points[i] && points[i].geometry) {
@@ -5028,6 +5184,383 @@ function syncCableGeometryFromRoutePoints(cable) {
         }
     }
     if (coords.length >= 2) applyCableGeometryFromCoords(cable, coords);
+}
+
+function isCableIntermediateWaypoint(type) {
+    return type === 'support' || type === 'attachment' || type === 'manhole';
+}
+
+function resetCableUndergroundLayingState(popManholeFromRoute) {
+    if (popManholeFromRoute && cableUndergroundManhole && Array.isArray(cableWaypoints) && cableWaypoints.length) {
+        var lastWp = cableWaypoints[cableWaypoints.length - 1];
+        if (lastWp === cableUndergroundManhole) cableWaypoints.pop();
+    }
+    cableUndergroundActive = false;
+    cableUndergroundManhole = null;
+    cableUndergroundCoords = [];
+}
+
+function resetCableUndergroundPendingSpans() {
+    cableUndergroundPendingSpans = [];
+}
+
+function startUndergroundRoutingFromManhole(manholeObj) {
+    if (!manholeObj || !manholeObj.geometry) return;
+    cableUndergroundActive = true;
+    cableUndergroundManhole = manholeObj;
+    cableUndergroundCoords = [];
+    showUndergroundDrawBar('lay');
+}
+
+function commitUndergroundSpanToManhole(exitManholeObj) {
+    if (!cableUndergroundActive || !cableUndergroundManhole || !exitManholeObj) return false;
+    var entryId = getObjectUniqueId(cableUndergroundManhole);
+    var exitId = getObjectUniqueId(exitManholeObj);
+    if (!entryId || !exitId) return false;
+    if (entryId === exitId) {
+        if (typeof showError === 'function') showError('Выберите другой колодец для выхода из подземного участка.', 'Колодец');
+        return false;
+    }
+    if (!Array.isArray(cableUndergroundPendingSpans)) cableUndergroundPendingSpans = [];
+    cableUndergroundPendingSpans.push({
+        entryManholeId: entryId,
+        exitManholeId: exitId,
+        pathCoords: window.CableUnderground
+            ? CableUnderground.normalizePathCoords(cableUndergroundCoords)
+            : (cableUndergroundCoords || []).slice()
+    });
+    var lastWp = cableWaypoints.length ? cableWaypoints[cableWaypoints.length - 1] : null;
+    if (lastWp !== exitManholeObj) cableWaypoints.push(exitManholeObj);
+    resetCableUndergroundLayingState(false);
+    hideUndergroundEditBar();
+    return true;
+}
+
+function findObjectByUniqueId(uid) {
+    if (!uid || !objects) return null;
+    for (var i = 0; i < objects.length; i++) {
+        var o = objects[i];
+        if (o && o.properties && o.properties.get('uniqueId') === uid) return o;
+    }
+    return null;
+}
+
+function getManholeDisplayLabel(uid) {
+    var o = findObjectByUniqueId(uid);
+    if (!o) return 'колодец';
+    var name = o.properties.get('name');
+    return name ? name : getObjectTypeName('manhole');
+}
+
+function removeUndergroundEditPreview() {
+    if (cableUndergroundEditPreviewLine && myMap) {
+        try { myMap.geoObjects.remove(cableUndergroundEditPreviewLine); } catch (e) {}
+        cableUndergroundEditPreviewLine = null;
+    }
+}
+
+function getUndergroundEditSpanEndpoints(cable, spanIndex) {
+    if (!cable || !cable.properties) return null;
+    var spans = cable.properties.get('undergroundSpans') || [];
+    var sp = spans[spanIndex];
+    if (!sp || !window.CableUnderground) return null;
+    var n = CableUnderground.normalizeSpanRecord(sp);
+    if (!n || !n.entryManholeId || !n.exitManholeId) return null;
+    return {
+        norm: n,
+        entry: findObjectByUniqueId(n.entryManholeId),
+        exit: findObjectByUniqueId(n.exitManholeId)
+    };
+}
+
+function updateUndergroundEditPreview(cursorCoords) {
+    if (!cableUndergroundEditMode || !cableUndergroundEditCable) return;
+    var ep = getUndergroundEditSpanEndpoints(cableUndergroundEditCable, cableUndergroundEditSpanIndex);
+    if (!ep || !ep.entry || !ep.exit || !ep.entry.geometry || !ep.exit.geometry) return;
+    var c0 = ep.entry.geometry.getCoordinates();
+    var c1 = ep.exit.geometry.getCoordinates();
+    if (!c0 || !c1) return;
+    var coords = [c0];
+    for (var i = 0; i < cableUndergroundCoords.length; i++) coords.push(cableUndergroundCoords[i]);
+    if (cursorCoords && cursorCoords.length >= 2) coords.push(cursorCoords);
+    coords.push(c1);
+    var color = window.CableUnderground ? CableUnderground.UNDERGROUND_COLOR : '#dc2626';
+    if (cableUndergroundEditPreviewLine) {
+        cableUndergroundEditPreviewLine.geometry.setCoordinates(coords);
+    } else if (myMap) {
+        cableUndergroundEditPreviewLine = new ymaps.Polyline(coords, {}, {
+            strokeColor: color,
+            strokeWidth: 3,
+            strokeStyle: '10 6',
+            strokeOpacity: 0.92,
+            zIndex: 1001,
+            interactive: false
+        });
+        myMap.geoObjects.add(cableUndergroundEditPreviewLine);
+    }
+}
+
+function cancelUndergroundSpanEdit() {
+    var cable = cableUndergroundEditCable;
+    var idx = cableUndergroundEditSpanIndex;
+    if (cable && idx >= 0 && cableUndergroundRelayoutBackup) {
+        applyUndergroundSpanDraft(cable, idx, cableUndergroundRelayoutBackup, false);
+    }
+    cableUndergroundRelayoutBackup = null;
+    cableUndergroundEditMode = false;
+    cableUndergroundEditCable = null;
+    cableUndergroundEditSpanIndex = -1;
+    cableUndergroundCoords = [];
+    removeUndergroundEditPreview();
+    hideUndergroundEditBar();
+}
+
+function findUndergroundRelayoutForManhole(manholeObj) {
+    if (!manholeObj || !objects) return null;
+    var uid = getObjectUniqueId(manholeObj);
+    if (!uid) return null;
+    var cables = getCablesThroughObject(manholeObj);
+    for (var ci = 0; ci < cables.length; ci++) {
+        var cable = cables[ci];
+        if (!cable.properties || cable.properties.get('type') !== 'cable') continue;
+        if (isCopperCableType(cable.properties.get('cableType'))) continue;
+        var spans = cable.properties.get('undergroundSpans') || [];
+        for (var si = 0; si < spans.length; si++) {
+            var n = window.CableUnderground ? CableUnderground.normalizeSpanRecord(spans[si]) : spans[si];
+            if (!n) continue;
+            if (n.entryManholeId === uid || n.exitManholeId === uid) {
+                return { cable: cable, spanIndex: si };
+            }
+        }
+    }
+    return null;
+}
+
+function updateUndergroundEditBarText() {
+    var titleEl = document.getElementById('undergroundEditBarTitle');
+    var modeEl = document.getElementById('undergroundEditBarMode');
+    var hintEl = document.getElementById('undergroundEditBarText');
+    var pointsEl = document.getElementById('undergroundEditBarPoints');
+    var n = cableUndergroundCoords.length;
+    if (pointsEl) pointsEl.textContent = String(n);
+
+    if (cableUndergroundActive && cableUndergroundManhole) {
+        var entryLabelLay = getManholeDisplayLabel(getObjectUniqueId(cableUndergroundManhole));
+        if (titleEl) titleEl.textContent = '«' + entryLabelLay + '» → …';
+        if (modeEl) modeEl.textContent = 'Прокладка кабеля';
+        if (hintEl) {
+            hintEl.textContent = n
+                ? 'Добавляйте точки кликами по карте. Завершите выбором второго колодца (выход).'
+                : 'Кликайте по карте — трасса под землёй. Завершение: второй колодец.';
+        }
+        return;
+    }
+    if (!cableUndergroundEditCable) return;
+    var ep = getUndergroundEditSpanEndpoints(cableUndergroundEditCable, cableUndergroundEditSpanIndex);
+    var routeLabel = ep
+        ? (getManholeDisplayLabel(ep.norm.entryManholeId) + ' → ' + getManholeDisplayLabel(ep.norm.exitManholeId))
+        : 'Подземный участок';
+    if (titleEl) titleEl.textContent = routeLabel;
+    if (modeEl) modeEl.textContent = 'Перепрокладка';
+    if (hintEl) {
+        hintEl.textContent = n
+            ? 'Трасса сохраняется автоматически. «Заново» — сбросить клики. Завершение: второй колодец или «Готово».'
+            : 'Кликайте по карте — новая трасса между теми же колодцами. «Заново» сбрасывает точки.';
+    }
+}
+
+function showUndergroundDrawBar(mode) {
+    var bar = document.getElementById('undergroundEditBar');
+    var done = document.getElementById('undergroundEditDone');
+    if (done) done.hidden = mode !== 'relayout';
+    if (bar) {
+        bar.hidden = false;
+        bar.classList.toggle('underground-draw-card--lay', mode === 'lay');
+        bar.classList.toggle('underground-draw-card--relayout', mode === 'relayout');
+        document.body.classList.add('underground-draw-active');
+        updateUndergroundEditBarText();
+    }
+}
+
+function hideUndergroundEditBar() {
+    var bar = document.getElementById('undergroundEditBar');
+    if (bar) {
+        bar.hidden = true;
+        bar.classList.remove('underground-draw-card--lay', 'underground-draw-card--relayout');
+    }
+    document.body.classList.remove('underground-draw-active');
+}
+
+function clearUndergroundDrawCoords() {
+    cableUndergroundCoords = [];
+    if (cableUndergroundEditMode && cableUndergroundEditCable) {
+        applyUndergroundSpanDraft(cableUndergroundEditCable, cableUndergroundEditSpanIndex, [], false);
+        updateUndergroundEditPreview(null);
+        updateUndergroundEditBarText();
+    } else if (cableUndergroundActive && cableSource) {
+        var previewTarget = (cableUndergroundManhole && cableUndergroundManhole.geometry)
+            ? cableUndergroundManhole.geometry.getCoordinates()
+            : null;
+        if (previewTarget) updateCablePreview(cableSource, cableWaypoints, previewTarget);
+        updateUndergroundEditBarText();
+    }
+}
+
+function setupUndergroundEditBar() {
+    var done = document.getElementById('undergroundEditDone');
+    var relayout = document.getElementById('undergroundEditRelayout');
+    var cancel = document.getElementById('undergroundEditCancelBar');
+    if (done) {
+        done.addEventListener('click', function() {
+            if (!cableUndergroundEditMode) return;
+            saveUndergroundSpanEdit();
+        });
+    }
+    if (relayout) {
+        relayout.addEventListener('click', function() {
+            if (!cableUndergroundEditMode && !cableUndergroundActive) return;
+            clearUndergroundDrawCoords();
+        });
+    }
+    if (cancel) {
+        cancel.addEventListener('click', function() {
+            if (cableUndergroundEditMode) {
+                cancelUndergroundSpanEdit();
+                return;
+            }
+            if (cableUndergroundActive) {
+                resetCableUndergroundLayingState(true);
+                if (cableSource) {
+                    clearSelection();
+                    selectObject(cableSource);
+                }
+                removeCablePreview();
+                hideUndergroundEditBar();
+            }
+        });
+    }
+    window.onUndergroundSpanClick = function(cable, spanIndex) {
+        if (!isEditMode) {
+            if (typeof showWarning === 'function') showWarning('Включите режим редактирования.', 'Карта');
+            return;
+        }
+        if (typeof closeInfoModal === 'function') closeInfoModal();
+        startUndergroundSpanRelayout(cable, spanIndex);
+    };
+}
+
+window.setupUndergroundEditBar = setupUndergroundEditBar;
+
+/** Записать черновик pathCoords подземного участка на кабель и сохранить на диск. */
+function applyUndergroundSpanDraft(cable, spanIndex, pathCoords, skipSave) {
+    if (!cable || !cable.properties || spanIndex < 0) return false;
+    var spans = (cable.properties.get('undergroundSpans') || []).slice();
+    if (!spans[spanIndex]) return false;
+    var n = window.CableUnderground ? CableUnderground.normalizeSpanRecord(spans[spanIndex]) : spans[spanIndex];
+    if (!n) return false;
+    var normPath = window.CableUnderground
+        ? CableUnderground.normalizePathCoords(pathCoords)
+        : (pathCoords || []).slice();
+    spans[spanIndex] = {
+        entryManholeId: n.entryManholeId,
+        exitManholeId: n.exitManholeId,
+        pathCoords: normPath
+    };
+    cable.properties.set('undergroundSpans', spans);
+    applyCableRouteAndOverlays(cable);
+    if (!skipSave) {
+        saveData({ cable: cable, syncImmediate: true });
+    }
+    return true;
+}
+
+function persistUndergroundRelayoutDraft() {
+    if (!cableUndergroundEditMode || !cableUndergroundEditCable) return;
+    applyUndergroundSpanDraft(
+        cableUndergroundEditCable,
+        cableUndergroundEditSpanIndex,
+        cableUndergroundCoords,
+        false
+    );
+}
+
+function saveUndergroundSpanEdit() {
+    if (!cableUndergroundEditCable || cableUndergroundEditSpanIndex < 0) return false;
+    persistUndergroundRelayoutDraft();
+    cableUndergroundRelayoutBackup = null;
+    cancelUndergroundSpanEdit();
+    return true;
+}
+
+/** Перепрокладка подземного участка заново (колодцы те же, трасса с нуля). */
+function startUndergroundSpanRelayout(cable, spanIndex) {
+    if (!cable || !cable.properties || !canEdit()) return;
+    if (isCopperCableType(cable.properties.get('cableType'))) return;
+    var spans = cable.properties.get('undergroundSpans');
+    if (!Array.isArray(spans) || !spans[spanIndex]) return;
+    if (currentCableTool) {
+        var cableBtn = document.getElementById('addCable');
+        if (cableBtn) cableBtn.click();
+    }
+    removeUndergroundEditPreview();
+    var normStart = window.CableUnderground ? CableUnderground.normalizeSpanRecord(spans[spanIndex]) : spans[spanIndex];
+    cableUndergroundRelayoutBackup = normStart && normStart.pathCoords ? normStart.pathCoords.slice() : [];
+    cableUndergroundEditMode = true;
+    cableUndergroundEditCable = cable;
+    cableUndergroundEditSpanIndex = spanIndex;
+    cableUndergroundCoords = [];
+    applyUndergroundSpanDraft(cable, spanIndex, [], true);
+    updateUndergroundEditPreview(null);
+    showUndergroundDrawBar('relayout');
+}
+
+function handleManholeCableLayClick(manholeObj) {
+    if (!manholeObj || !cableSource) return false;
+    if (cableUndergroundActive) {
+        if (!commitUndergroundSpanToManhole(manholeObj)) return false;
+        clearSelection();
+        selectObject(cableSource);
+        removeCablePreview();
+        return true;
+    }
+    var lastWp = cableWaypoints.length ? cableWaypoints[cableWaypoints.length - 1] : null;
+    if (lastWp !== manholeObj) cableWaypoints.push(manholeObj);
+    startUndergroundRoutingFromManhole(manholeObj);
+    clearSelection();
+    selectObject(cableSource);
+    return true;
+}
+
+function mergeUndergroundSpansForCreate(extraSpans) {
+    var base = Array.isArray(cableUndergroundPendingSpans) ? cableUndergroundPendingSpans.slice() : [];
+    if (Array.isArray(extraSpans) && extraSpans.length) {
+        return base.concat(extraSpans);
+    }
+    return base;
+}
+
+function applyCableRouteAndOverlays(cable, points, undergroundSpans) {
+    if (!cable || !cable.properties) return;
+    if (undergroundSpans != null) cable.properties.set('undergroundSpans', undergroundSpans);
+    if (window.CableUnderground) {
+        CableUnderground.applyCableRouteGeometry(cable, points, undergroundSpans);
+        CableUnderground.refreshCableUndergroundOverlays(cable);
+    } else {
+        syncCableGeometryFromRoutePoints(cable);
+    }
+}
+
+function refreshAllCableUndergroundOverlays() {
+    if (!window.CableUnderground || !objects) return;
+    objects.forEach(function (o) {
+        if (o.properties && o.properties.get('type') === 'cable') {
+            var spans = o.properties.get('undergroundSpans') || [];
+            if (spans.length) {
+                CableUnderground.applyCableRouteGeometry(o);
+            }
+            CableUnderground.refreshCableUndergroundOverlays(o);
+        }
+    });
 }
 
 function getCableSplitLabel(cable) {
@@ -5245,8 +5778,12 @@ function splitCableAt(cable, splitOptions) {
         window.syncSendOp({ type: 'delete_cable', uniqueId: oldId });
     }
 
-    var okA = createCableFromPoints(routes.pointsA, cableType, idA, null, true, true);
-    var okB = createCableFromPoints(routes.pointsB, cableType, idB, null, true, true);
+    var oldSpans = cable.properties.get('undergroundSpans') || [];
+    var splitSpans = window.CableUnderground
+        ? CableUnderground.splitSpansForRoute(oldSpans, routes.pointsA, routes.pointsB)
+        : { spansA: [], spansB: [] };
+    var okA = createCableFromPoints(routes.pointsA, cableType, idA, null, true, true, null, splitSpans.spansA);
+    var okB = createCableFromPoints(routes.pointsB, cableType, idB, null, true, true, null, splitSpans.spansB);
     if (!okA || !okB) {
         showError('Ошибка при создании сегментов кабеля после разреза.', 'Разрез кабеля');
         return false;
@@ -5582,8 +6119,12 @@ function deleteObject(obj, opts) {
     });
     
     myMap.geoObjects.remove(obj);
-    const hadLabel = obj.properties && obj.properties.get('label');
-    if (hadLabel) try { myMap.geoObjects.remove(hadLabel); } catch (e) {}
+    if (objType === 'region' && window.MapRegions && MapRegions.removeRegionLabel) {
+        MapRegions.removeRegionLabel(obj, myMap);
+    } else {
+        const hadLabel = obj.properties && obj.properties.get('label');
+        if (hadLabel) try { myMap.geoObjects.remove(hadLabel); } catch (e) {}
+    }
     objects = objects.filter(o => o !== obj);
     
     updateCableVisualization();
@@ -5602,6 +6143,7 @@ function deleteObject(obj, opts) {
         });
     }
     updateStats();
+    if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
     
     var infoModal = document.getElementById('infoModal');
     if (isInfoModalVisible(infoModal)) {
@@ -5741,8 +6283,13 @@ function applyNewCableFiberProps(cable) {
     cable.properties.set('fiberCount', count);
     cable.properties.set('cableType', 'fiber');
     var pal = window.FiberCableConfig.getLayFiberPalette();
-    if (pal && pal.length) cable.properties.set('fiberPalette', pal);
-    else cable.properties.unset('fiberPalette');
+    if (pal && pal.length) {
+        cable.properties.set('fiberPalette', window.FiberCableConfig.trimPaletteToCount
+            ? window.FiberCableConfig.trimPaletteToCount(pal, count)
+            : pal);
+    } else {
+        cable.properties.unset('fiberPalette');
+    }
     window.FiberCableConfig.applyOpticalMapStyle(cable);
 }
 
@@ -5755,7 +6302,13 @@ function applyImportedCableFiberProps(cable, item) {
         cable.properties.set('fiberCount', window.FiberCableConfig.LEGACY_TYPE_COUNTS[item.cableType]);
     }
     if (Array.isArray(item.fiberPalette) && item.fiberPalette.length) {
-        cable.properties.set('fiberPalette', item.fiberPalette);
+        var impCount = cable.properties.get('fiberCount');
+        if (impCount == null || impCount === '') {
+            impCount = window.FiberCableConfig.LEGACY_TYPE_COUNTS[item.cableType] || window.FiberCableConfig.getLayFiberCount();
+        }
+        cable.properties.set('fiberPalette', window.FiberCableConfig.trimPaletteToCount
+            ? window.FiberCableConfig.trimPaletteToCount(item.fiberPalette, impCount)
+            : item.fiberPalette);
     }
     if (window.FiberCableConfig.isOpticalCableType(cable.properties.get('cableType'))) {
         window.FiberCableConfig.applyOpticalMapStyle(cable);
@@ -6127,7 +6680,7 @@ function ensurePlacemarkUniqueIdForSync(pm) {
     pm.properties.set('uniqueId', generateUniqueId(t));
 }
 
-function createCableFromPoints(points, cableType, existingCableId = null, fiberNumber = null, skipHistoryLog = false, skipSync = false, copperMeta = null) {
+function createCableFromPoints(points, cableType, existingCableId = null, fiberNumber = null, skipHistoryLog = false, skipSync = false, copperMeta = null, undergroundSpans = null) {
     if (!points || points.length < 2) return false;
     
     var firstType = points[0] && points[0].properties ? points[0].properties.get('type') : null;
@@ -6185,12 +6738,48 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     }
     
     const fiberCount = getFiberCount(cableType);
-    
-    const coords = points.map(obj => obj.geometry.getCoordinates());
 
-    let totalDistance = 0;
-    for (let i = 0; i < coords.length - 1; i++) {
-        totalDistance += calculateDistance(coords[i], coords[i + 1]);
+    var spansForCable = undergroundSpans != null ? undergroundSpans : mergeUndergroundSpansForCreate(null);
+    if (!isCopperCableType(cableType) && spansForCable.length) {
+        for (var spChk = 0; spChk < spansForCable.length; spChk++) {
+            var spRaw = spansForCable[spChk];
+            var sp = window.CableUnderground ? CableUnderground.normalizeSpanRecord(spRaw) : spRaw;
+            var pairOk = false;
+            var eId = sp && (sp.entryManholeId || sp.manholeId);
+            var xId = sp && (sp.exitManholeId || sp.supportId);
+            for (var pi = 0; pi < points.length - 1; pi++) {
+                var ptA = points[pi];
+                var ptB = points[pi + 1];
+                if (!ptA || !ptB || !ptA.properties || !ptB.properties) continue;
+                if (ptA.properties.get('type') !== 'manhole' || ptB.properties.get('type') !== 'manhole') continue;
+                var u0 = getObjectUniqueId(ptA);
+                var u1 = getObjectUniqueId(ptB);
+                if ((u0 === eId && u1 === xId) || (u0 === xId && u1 === eId)) {
+                    pairOk = true;
+                    break;
+                }
+            }
+            if (!pairOk) {
+                if (!skipSync) showError('Подземный участок — два колодца подряд на маршруте (вход и выход).', 'Маршрут кабеля');
+                return false;
+            }
+        }
+    }
+    var coords;
+    let totalDistance;
+    if (!isCopperCableType(cableType) && window.CableUnderground && spansForCable.length) {
+        coords = CableUnderground.buildAerialCableCoordsFromRoute(points);
+        totalDistance = CableUnderground.computeRouteDistance(points, spansForCable);
+    } else {
+        coords = points.map(function (obj) { return obj.geometry.getCoordinates(); });
+    }
+    if (!coords || coords.length < 2) return false;
+
+    if (totalDistance === undefined || totalDistance === null) {
+        totalDistance = 0;
+        for (let i = 0; i < coords.length - 1; i++) {
+            totalDistance += calculateDistance(coords[i], coords[i + 1]);
+        }
     }
     
     const cableColor = getCableColor(cableType);
@@ -6203,6 +6792,7 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
         strokeColor: cableColor,
         strokeWidth: cableWidth,
         strokeOpacity: 0.8,
+        zIndex: CABLE_MAP_Z_INDEX,
         hasBalloon: false,
         hasHint: false
     });
@@ -6214,8 +6804,13 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
         to: points[points.length - 1],
         uniqueId: cableUniqueId,
         distance: totalDistance,
-        points: points 
+        points: points
     });
+    if (!isCopperCableType(cableType) && spansForCable.length) {
+        polyline.properties.set('undergroundSpans', window.CableUnderground ? CableUnderground.cloneSpans(spansForCable) : spansForCable);
+        polyline.properties.set('undergroundOverlays', []);
+        polyline.properties.set('aerialOverlays', []);
+    }
     if (isCopperCableType(cableType)) {
         polyline.properties.set('copperPortFrom', null);
         polyline.properties.set('copperPortTo', null);
@@ -6247,35 +6842,17 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     }
 
     polyline.events.add('click', function(e) {
-        try {
-            if (e.originalEvent && typeof e.originalEvent.stopPropagation === 'function') {
-                e.originalEvent.stopPropagation();
-            }
-            if (e.stopPropagation && typeof e.stopPropagation === 'function') {
-                e.stopPropagation();
-            }
-        } catch (error) {
-            
-        }
-        if (cableSplitMode && cableSplitData) {
-            var splitCoords = e.get && e.get('coords');
-            if (splitCoords) {
-                window.lastMapClickCoords = splitCoords;
-                handleCableSplitMapClick(splitCoords, polyline);
-                return false;
-            }
-        }
-        if (cableSplitSuppressInfoUntil && Date.now() < cableSplitSuppressInfoUntil) {
-            return false;
-        }
-        showCableInfo(polyline);
-        return false;
+        return handleCableMapClickEvent(polyline, e);
     });
     
     disableCableMapBalloon(polyline);
     attachHoverEventsToObject(polyline);
     objects.push(polyline);
     myMap.geoObjects.add(polyline);
+    if (!isCopperCableType(cableType) && spansForCable.length && window.CableUnderground) {
+        CableUnderground.applyCableRouteGeometry(polyline, points, spansForCable);
+        CableUnderground.refreshCableUndergroundOverlays(polyline);
+    }
     if (typeof applyMapFilter === 'function') applyMapFilter();
 
     if (fiberNumber !== null && points.length >= 2) {
@@ -6301,6 +6878,9 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
             });
         }
     }
+    if (!existingCableId && !isCopperCableType(cableType)) {
+        resetCableUndergroundPendingSpans();
+    }
     updateStats();
     return true;
 }
@@ -6312,7 +6892,10 @@ function buildAddCableSyncOp(polyline, points) {
     }
     var cableType = polyline.properties.get('cableType');
     var cableUniqueId = polyline.properties.get('uniqueId');
-    var coords = polyline.geometry ? polyline.geometry.getCoordinates() : null;
+    var coords = (window.CableUnderground && CableUnderground.getCableGeometryForSave)
+        ? CableUnderground.getCableGeometryForSave(polyline)
+        : null;
+    if (!coords) coords = polyline.geometry ? polyline.geometry.getCoordinates() : null;
     if (!coords) coords = points.map(function(obj) { return obj.geometry.getCoordinates(); });
     coords = normalizeCableGeometry(coords) || coords;
     var totalDistance = polyline.properties.get('distance');
@@ -6343,7 +6926,7 @@ function buildAddCableSyncOp(polyline, points) {
         var fpOp = polyline.properties.get('fiberPalette');
         if (Array.isArray(fpOp) && fpOp.length) addCableOp.data.fiberPalette = fpOp;
     }
-    if (points.length > 2) {
+    if (points.length >= 2) {
         var ridAdd = [];
         for (var piAdd = 0; piAdd < points.length; piAdd++) {
             var uAdd = points[piAdd] && points[piAdd].properties && points[piAdd].properties.get('uniqueId');
@@ -6354,6 +6937,10 @@ function buildAddCableSyncOp(polyline, points) {
             ridAdd.push(uAdd);
         }
         if (ridAdd && ridAdd.length === points.length) addCableOp.data.routeUniqueIds = ridAdd;
+    }
+    if (!isCopperCableType(cableType)) {
+        var uSpans = polyline.properties.get('undergroundSpans');
+        if (Array.isArray(uSpans) && uSpans.length) addCableOp.data.undergroundSpans = uSpans;
     }
     if (isCopperCableType(cableType)) {
         var cfs = polyline.properties.get('copperSwitchFromId');
@@ -6519,6 +7106,58 @@ function isFiberUsed(cableId, fiberNumber, exclude) {
     return getFiberUsage(cableId, fiberNumber, exclude).used;
 }
 
+function applySerializedUndergroundToCable(cable, item, pointsArr) {
+    if (!cable || !item || !cable.properties) return;
+    if (isCopperCableType(cable.properties.get('cableType'))) return;
+    if (!Array.isArray(item.undergroundSpans) || !item.undergroundSpans.length) return;
+    cable.properties.set('undergroundSpans', window.CableUnderground
+        ? CableUnderground.cloneSpans(item.undergroundSpans)
+        : item.undergroundSpans);
+    var pts = pointsArr || cable.properties.get('points');
+    if (window.CableUnderground && Array.isArray(pts) && pts.length >= 2) {
+        pts = CableUnderground.ensureRouteIncludesUndergroundManholes(pts, item.undergroundSpans);
+        cable.properties.set('points', pts);
+        cable.properties.set('from', pts[0]);
+        cable.properties.set('to', pts[pts.length - 1]);
+    }
+    applyCableRouteAndOverlays(cable, pts);
+}
+
+function repairCablesAfterImport() {
+    if (!objects || !objects.length || !myMap) return;
+    objects.forEach(function (cable) {
+        if (!cable || !cable.properties || cable.properties.get('type') !== 'cable') return;
+        try {
+            if (myMap.geoObjects.indexOf(cable) === -1) myMap.geoObjects.add(cable);
+        } catch (eAdd) {}
+        var points = cable.properties.get('points');
+        var spans = cable.properties.get('undergroundSpans') || [];
+        if (window.CableUnderground && spans.length && Array.isArray(points) && points.length >= 2) {
+            points = CableUnderground.ensureRouteIncludesUndergroundManholes(points, spans);
+            cable.properties.set('points', points);
+            cable.properties.set('from', points[0]);
+            cable.properties.set('to', points[points.length - 1]);
+            applyCableRouteAndOverlays(cable, points);
+        } else if (cable.geometry && Array.isArray(points) && points.length >= 2) {
+            try {
+                var lin = points.map(function (p) {
+                    return p && p.geometry ? p.geometry.getCoordinates() : null;
+                }).filter(function (c) { return c && c.length >= 2; });
+                if (lin.length >= 2) cable.geometry.setCoordinates(lin);
+            } catch (eLin) {}
+        }
+        if (cable.options) {
+            try {
+                var op = cable.options.get('strokeOpacity');
+                if (op === 0 || op == null) cable.options.set('strokeOpacity', 0.8);
+            } catch (eOp) {}
+        }
+        if (window.CableUnderground) {
+            try { CableUnderground.syncAerialOverlayStroke(cable); } catch (eSyn) {}
+        }
+    });
+}
+
 function validateAndFixCableGeometryOnLoad() {
     if (!objects || !objects.length) return;
     var cables = objects.filter(function(o) {
@@ -6528,6 +7167,18 @@ function validateAndFixCableGeometryOnLoad() {
         var fromObj = cable.properties.get('from');
         var toObj = cable.properties.get('to');
         var points = cable.properties.get('points');
+        var ugSpans = cable.properties.get('undergroundSpans') || [];
+        if (window.CableUnderground && ugSpans.length && Array.isArray(points) && points.length >= 2) {
+            try {
+                points = CableUnderground.ensureRouteIncludesUndergroundManholes(points, ugSpans);
+                cable.properties.set('points', points);
+                cable.properties.set('from', points[0]);
+                cable.properties.set('to', points[points.length - 1]);
+                CableUnderground.applyCableRouteGeometry(cable, points);
+                CableUnderground.refreshCableUndergroundOverlays(cable);
+            } catch (eUg) {}
+            return;
+        }
         var coords = [];
         if (Array.isArray(points) && points.length >= 2) {
             coords = points
@@ -6564,10 +7215,15 @@ function updateConnectedCables(obj) {
         var points = cable.properties.get('points');
         if (Array.isArray(points) && points.length > 2) {
             try {
-                var coords = points
-                    .map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; })
-                    .filter(function(c) { return c && Array.isArray(c) && c.length >= 2; });
-                if (coords.length >= 2) cable.geometry.setCoordinates(coords);
+                if (window.CableUnderground) {
+                    CableUnderground.applyCableRouteGeometry(cable, points);
+                    CableUnderground.refreshCableUndergroundOverlays(cable);
+                } else {
+                    var coords = points
+                        .map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; })
+                        .filter(function(c) { return c && Array.isArray(c) && c.length >= 2; });
+                    if (coords.length >= 2) cable.geometry.setCoordinates(coords);
+                }
             } catch (e) {}
         } else {
             var fromObj = cable.properties.get('from');
@@ -8204,6 +8860,97 @@ function calculateDistance(coords1, coords2) {
     return Math.round(distance);
 }
 
+var CABLE_MAP_Z_INDEX = 500;
+
+function getCableClickTolerance(zoom) {
+    if (zoom == null && myMap) zoom = myMap.getZoom();
+    if (typeof zoom !== 'number') zoom = 15;
+
+    var baseTolerance;
+    if (zoom < 10) {
+        baseTolerance = 0.000003;
+    } else if (zoom < 13) {
+        baseTolerance = 0.000005;
+    } else if (zoom < 15) {
+        baseTolerance = 0.000003;
+    } else {
+        baseTolerance = 0.000002;
+    }
+
+    var pixelToDegree;
+    if (zoom < 10) {
+        pixelToDegree = 0.000002;
+    } else if (zoom < 13) {
+        pixelToDegree = 0.000005;
+    } else if (zoom < 15) {
+        pixelToDegree = 0.000004;
+    } else {
+        pixelToDegree = 0.000003;
+    }
+
+    return {
+        baseTolerance: baseTolerance,
+        pixelToDegree: pixelToDegree,
+        segmentTolerance: zoom < 10 ? 0.005 : 0.01,
+        widthMultiplier: zoom < 10 ? 1.1 : 1.2
+    };
+}
+
+function findCableAtCoords(coords, zoom) {
+    if (!coords || !Array.isArray(objects)) return null;
+
+    var tol = getCableClickTolerance(zoom);
+    var clickedCable = null;
+    var minDistance = Infinity;
+
+    objects.forEach(function(obj) {
+        if (!obj || !obj.geometry || !obj.properties) return;
+        if (obj.properties.get('type') !== 'cable') return;
+        try {
+            if (obj.options && obj.options.get('visible') === false) return;
+        } catch (visErr) {}
+
+        try {
+            var cableCoordsList = (window.CableUnderground && CableUnderground.getCableDisplayGeometries)
+                ? CableUnderground.getCableDisplayGeometries(obj)
+                : [obj.geometry.getCoordinates()];
+            if (!cableCoordsList || !cableCoordsList.length) return;
+
+            var cableType = obj.properties.get('cableType');
+            var cableWidthPixels = getCableWidth(cableType);
+            var cableWidthInDegrees = (cableWidthPixels / 2) * tol.pixelToDegree;
+
+            for (var ci = 0; ci < cableCoordsList.length; ci++) {
+                var cableCoords = cableCoordsList[ci];
+                if (!cableCoords || cableCoords.length < 2) continue;
+
+                for (var seg = 0; seg < cableCoords.length - 1; seg++) {
+                    var fromCoords = cableCoords[seg];
+                    var toCoords = cableCoords[seg + 1];
+                    var result = pointToLineDistance(coords, fromCoords, toCoords);
+                    var isWithinSegment = result.param >= -tol.segmentTolerance && result.param <= 1 + tol.segmentTolerance;
+                    var cableTolerance = Math.max(tol.baseTolerance, cableWidthInDegrees * tol.widthMultiplier);
+
+                    if (isWithinSegment && result.distance < cableTolerance && result.distance < minDistance) {
+                        minDistance = result.distance;
+                        clickedCable = obj;
+                    }
+                }
+            }
+        } catch (error) {}
+    });
+
+    return clickedCable;
+}
+
+function ensureCableMapZIndex(cable) {
+    if (!cable || !cable.options || !cable.properties || cable.properties.get('type') !== 'cable') return;
+    try {
+        var z = cable.options.get('zIndex');
+        if (z == null || z < CABLE_MAP_Z_INDEX) cable.options.set('zIndex', CABLE_MAP_Z_INDEX);
+    } catch (e) {}
+}
+
 function pointToLineDistance(point, lineStart, lineEnd) {
     const A = point[0] - lineStart[0];
     const B = point[1] - lineStart[1];
@@ -8398,6 +9145,61 @@ function closeInfoModal() {
     if (typeof clearFiberConnectionLabelSelection === 'function') clearFiberConnectionLabelSelection();
 }
 
+function relayoutUndergroundSpanFromCableCard(cableUniqueId, spanIndex) {
+    var cable = objects.find(function (obj) {
+        return obj && obj.properties && obj.properties.get('type') === 'cable' &&
+            obj.properties.get('uniqueId') === cableUniqueId;
+    });
+    if (!cable || !isEditMode || !canEdit()) return;
+    if (typeof closeInfoModal === 'function') closeInfoModal();
+    startUndergroundSpanRelayout(cable, spanIndex);
+}
+window.relayoutUndergroundSpanFromCableCard = relayoutUndergroundSpanFromCableCard;
+
+function buildCableInfoUndergroundHtml(cable, uniqueId) {
+    if (!window.CableUnderground || !CableUnderground.getUndergroundSpansInfo) return '';
+    var spansInfo = CableUnderground.getUndergroundSpansInfo(cable);
+    if (!spansInfo.length) return '';
+
+    var ugTotal = CableUnderground.getUndergroundDistanceMeters(cable);
+    var html = '';
+    html += '<div class="cable-info-underground-block" style="margin-bottom: 16px; padding: 12px; background: rgba(220, 38, 38, 0.06); border-radius: 8px; border: 1px solid rgba(220, 38, 38, 0.25);">';
+    html += '<h4 style="margin: 0 0 10px 0; color: #dc2626; font-size: 0.875rem; font-weight: 600;">🕳 Подземные участки (' + spansInfo.length + ')</h4>';
+    html += '<p style="margin: 0 0 12px 0; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.45;">';
+    html += 'Между колодцами кабель идёт под землёй (красный пунктир на карте). Воздушный зелёный участок на этом отрезке не отображается.';
+    html += '</p>';
+
+    spansInfo.forEach(function (sp) {
+        html += '<div class="cable-info-underground-span" style="padding: 10px 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: 8px; border-left: 3px solid #dc2626;">';
+        html += '<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; flex-wrap: wrap;">';
+        html += '<div style="font-size: 0.8rem; font-weight: 600; color: var(--text-primary);">Участок ' + (sp.index + 1) + '</div>';
+        html += '<div style="font-size: 0.8rem; font-weight: 600; color: #dc2626; white-space: nowrap;">' + sp.distanceM + ' м</div>';
+        html += '</div>';
+        html += '<div style="margin-top: 8px; font-size: 0.8rem; color: var(--text-secondary);">';
+        html += '<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;"><span>⬤</span><span><strong>Вход:</strong> ' + escapeHtml(sp.entryName) + '</span></div>';
+        html += '<div style="display: flex; align-items: center; gap: 6px;"><span>⬤</span><span><strong>Выход:</strong> ' + escapeHtml(sp.exitName) + '</span></div>';
+        html += '</div>';
+        if (sp.pathPoints > 0) {
+            html += '<div style="margin-top: 6px; font-size: 0.72rem; color: var(--text-muted);">Точек трассы на карте: ' + sp.pathPoints + '</div>';
+        }
+        if (modalIsEditMode() && !cableUndergroundEditMode) {
+            html += '<button type="button" class="btn-secondary btn-compact" style="margin-top: 10px; width: 100%;" onclick="relayoutUndergroundSpanFromCableCard(\'' + uniqueId + '\', ' + sp.index + ')">Переложить участок на карте</button>';
+        }
+        html += '</div>';
+    });
+
+    html += '<div style="font-size: 0.8125rem; color: var(--text-secondary); padding-top: 4px; border-top: 1px dashed rgba(220, 38, 38, 0.2);">';
+    html += '<strong>Суммарно под землёй:</strong> ' + Math.round(ugTotal) + ' м';
+    html += '</div>';
+
+    if (modalIsEditMode() && !cableUndergroundEditMode) {
+        html += '<p class="object-card-hint" style="margin: 12px 0 0 0; font-size: 0.75rem;">Либо кликните по <strong>красному пунктиру</strong> на карте — откроется перепрокладка с теми же колодцами.</p>';
+    }
+
+    html += '</div>';
+    return html;
+}
+
 function showCableInfo(cable) {
     resetInfoModalFiberLayout();
     if (cableSplitSuppressInfoUntil && Date.now() < cableSplitSuppressInfoUntil) {
@@ -8476,6 +9278,7 @@ function showCableInfoBody(cable) {
         else if (type === 'cross') { typeName = 'Оптический кросс'; icon = '📦'; }
         else if (type === 'node') { typeName = 'Узел сети'; icon = '🖥️'; }
         else if (type === 'attachment') { typeName = 'Крепление узлов'; icon = '🔗'; }
+        else if (type === 'manhole') { typeName = 'Колодец'; icon = '⬤'; }
         else if (type === 'switch') { typeName = 'Коммутатор'; icon = '🔀'; }
         else if (type === 'olt') { typeName = 'OLT (GPON)'; icon = '📶'; }
         else if (type === 'onu') { typeName = 'ONU'; icon = '📟'; }
@@ -8484,9 +9287,6 @@ function showCableInfoBody(cable) {
         else if (type === 'mediaConverter') { typeName = 'Медиаконвертер'; icon = '⇄'; }
         return { type: typeName, name, icon };
     };
-    
-    const fromInfo = getObjInfo(fromObj);
-    const toInfo = getObjInfo(toObj);
     
     const modal = document.getElementById('infoModal');
     const modalTitle = document.getElementById('modalTitle');
@@ -8559,7 +9359,9 @@ function showCableInfoBody(cable) {
         return;
     }
 
-    modalTitle.textContent = '🔌 Информация о кабеле';
+    modalTitle.textContent = (cable.properties.get('undergroundSpans') || []).length
+        ? '🔌 Кабель ВОЛС · с подземным участком'
+        : '🔌 Информация о кабеле';
 
     var cableColor = getCableColor(cableType);
     
@@ -8591,45 +9393,49 @@ function showCableInfoBody(cable) {
         html += '</div></div>';
     }
 
-    html += '<div style="margin-bottom: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 8px; border: 1px solid var(--border-color);">';
-    html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.875rem; font-weight: 600;">📍 Маршрут</h4>';
-    
-    html += `<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">`;
-    html += `<span style="font-size: 1.1rem;">${fromInfo.icon}</span>`;
-    html += `<div><strong style="color: var(--text-primary);">${fromInfo.type}</strong>`;
-    if (fromInfo.name) html += `<br><span style="font-size: 0.8rem; color: var(--text-secondary);">${escapeHtml(fromInfo.name)}</span>`;
-    html += `</div></div>`;
-    
-    html += `<div style="margin-left: 14px; padding-left: 14px; border-left: 2px dashed ${cableColor}; margin-bottom: 8px;">`;
-    html += `<span style="font-size: 0.75rem; color: var(--text-muted);">↓ кабель</span></div>`;
-    
-    html += `<div style="display: flex; align-items: center; gap: 8px;">`;
-    html += `<span style="font-size: 1.1rem;">${toInfo.icon}</span>`;
-    html += `<div><strong style="color: var(--text-primary);">${toInfo.type}</strong>`;
-    if (toInfo.name) html += `<br><span style="font-size: 0.8rem; color: var(--text-secondary);">${escapeHtml(toInfo.name)}</span>`;
-    html += `</div></div>`;
-    html += '</div>';
-
-    let displayDistance = 'неизвестно';
-    if (fromObj && toObj && fromObj.geometry && toObj.geometry) {
-        const fromCoords = fromObj.geometry.getCoordinates();
-        const toCoords = toObj.geometry.getCoordinates();
-        displayDistance = calculateDistance(fromCoords, toCoords);
-        cable.properties.set('distance', displayDistance);
-        saveData();
+    let displayDistance = cable.properties.get('distance');
+    if (displayDistance == null && cable.geometry) {
+        try {
+            var gcDist = cable.geometry.getCoordinates();
+            if (gcDist && gcDist.length >= 2) {
+                displayDistance = 0;
+                for (var di2 = 0; di2 < gcDist.length - 1; di2++) {
+                    displayDistance += calculateDistance(gcDist[di2], gcDist[di2 + 1]);
+                }
+                cable.properties.set('distance', displayDistance);
+            }
+        } catch (eDist) {}
     }
+    if (displayDistance == null) displayDistance = 'неизвестно';
 
-    const totalCablesOnSegment = parallelCables.length + 1; 
-    
-    html += '<div style="display: flex; gap: 10px; margin-bottom: 16px;">';
-    html += `<div style="flex: 1; padding: 10px; background: var(--bg-tertiary); border-radius: 8px; text-align: center; border: 1px solid var(--border-color);">`;
-    html += `<div style="font-size: 0.7rem; color: var(--accent-primary); margin-bottom: 2px;">Расстояние</div>`;
+    var ugDist = window.CableUnderground ? CableUnderground.getUndergroundDistanceMeters(cable) : 0;
+    var ugSpansCount = (cable.properties.get('undergroundSpans') || []).length;
+    var aerialDist = (typeof displayDistance === 'number' && ugSpansCount > 0)
+        ? Math.max(0, Math.round(displayDistance - ugDist))
+        : null;
+
+    const totalCablesOnSegment = parallelCables.length + 1;
+
+    html += '<div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px;">';
+    html += `<div style="flex: 1 1 100px; padding: 10px; background: var(--bg-tertiary); border-radius: 8px; text-align: center; border: 1px solid var(--border-color);">`;
+    html += `<div style="font-size: 0.7rem; color: var(--accent-primary); margin-bottom: 2px;">Всего по маршруту</div>`;
     if (typeof displayDistance === 'number') {
-        html += `<div style="font-size: 1rem; font-weight: 600; color: var(--text-primary);">${displayDistance} м</div>`;
+        html += `<div style="font-size: 1rem; font-weight: 600; color: var(--text-primary);">${Math.round(displayDistance)} м</div>`;
     } else {
         html += `<div style="font-size: 0.9rem; color: var(--text-muted);">${displayDistance}</div>`;
     }
     html += `</div>`;
+    if (ugSpansCount > 0 && typeof displayDistance === 'number') {
+        html += `<div style="flex: 1 1 90px; padding: 10px; background: var(--bg-tertiary); border-radius: 8px; text-align: center; border: 1px solid var(--border-color);">`;
+        html += `<div style="font-size: 0.7rem; color: ${cableColor}; margin-bottom: 2px;">Воздух</div>`;
+        html += `<div style="font-size: 1rem; font-weight: 600; color: var(--text-primary);">${aerialDist} м</div>`;
+        html += `</div>`;
+        html += `<div style="flex: 1 1 90px; padding: 10px; background: rgba(220, 38, 38, 0.08); border-radius: 8px; text-align: center; border: 1px solid rgba(220, 38, 38, 0.2);">`;
+        html += `<div style="font-size: 0.7rem; color: #dc2626; margin-bottom: 2px;">Под землёй</div>`;
+        html += `<div style="font-size: 1rem; font-weight: 600; color: var(--text-primary);">${Math.round(ugDist)} м</div>`;
+        html += `<div style="font-size: 0.65rem; color: var(--text-muted);">${ugSpansCount} уч.</div>`;
+        html += `</div>`;
+    }
     html += `<div style="flex: 1; padding: 10px; background: var(--bg-tertiary); border-radius: 8px; text-align: center; border: 1px solid var(--border-color);">`;
     html += `<div style="font-size: 0.7rem; color: var(--accent-success); margin-bottom: 2px;">Жил</div>`;
     html += `<div style="font-size: 1rem; font-weight: 600; color: var(--text-primary);">${fiberCount}</div>`;
@@ -8638,6 +9444,8 @@ function showCableInfoBody(cable) {
     html += `<div style="font-size: 0.7rem; color: ${totalCablesOnSegment > 1 ? 'var(--accent-warning)' : 'var(--text-muted)'}; margin-bottom: 2px;">На участке</div>`;
     html += `<div style="font-size: 1rem; font-weight: 600; color: var(--text-primary);">${totalCablesOnSegment} каб.</div>`;
     html += `</div></div>`;
+
+    html += buildCableInfoUndergroundHtml(cable, uniqueId);
 
     if (parallelCables.length > 0) {
         html += '<div style="margin-bottom: 16px; padding: 12px; background: var(--bg-accent); border-radius: 8px; border: 1px solid var(--accent-warning);">';
@@ -8759,14 +9567,30 @@ function updateCableName(cableUniqueId, newName) {
     }
 }
 
+function buildCablePreviewCoordsList(sourceObj, waypoints, targetCoords) {
+    waypoints = waypoints || [];
+    var sourceCoords = sourceObj.geometry.getCoordinates();
+    var allCoords = [sourceCoords];
+    for (var wi = 0; wi < waypoints.length; wi++) {
+        var w = waypoints[wi];
+        if (w && w.geometry) allCoords.push(w.geometry.getCoordinates());
+        if (cableUndergroundActive && cableUndergroundManhole && w === cableUndergroundManhole) {
+            for (var ui = 0; ui < cableUndergroundCoords.length; ui++) {
+                allCoords.push(cableUndergroundCoords[ui]);
+            }
+        }
+    }
+    allCoords.push(targetCoords);
+    return allCoords;
+}
+
 function updateCablePreview(sourceObj, waypoints, targetCoords) {
     if (!sourceObj || !sourceObj.geometry) {
         return;
     }
     waypoints = waypoints || [];
+    const allCoords = buildCablePreviewCoordsList(sourceObj, waypoints, targetCoords);
     const sourceCoords = sourceObj.geometry.getCoordinates();
-    const waypointCoords = waypoints.map(function(w) { return w && w.geometry ? w.geometry.getCoordinates() : null; }).filter(Boolean);
-    const allCoords = [sourceCoords].concat(waypointCoords).concat([targetCoords]);
     var last = allCoords[allCoords.length - 1];
     if (sourceCoords[0] === last[0] && sourceCoords[1] === last[1] && waypointCoords.length === 0) {
         const zoom = myMap.getZoom();
@@ -8775,19 +9599,22 @@ function updateCablePreview(sourceObj, waypoints, targetCoords) {
     }
     const cableType = getEffectiveCableLayingType();
     const cableWidth = getCableWidth(cableType);
+    var previewColor = cableUndergroundActive ? (window.CableUnderground ? CableUnderground.UNDERGROUND_COLOR : '#dc2626') : '#3b82f6';
+    var previewDash = cableUndergroundActive ? '10 6' : '12 6';
     if (cablePreviewLine) {
         cablePreviewLine.geometry.setCoordinates(allCoords);
         cablePreviewLine.options.set({
-            strokeColor: '#3b82f6',
+            strokeColor: previewColor,
             strokeWidth: Math.max(cableWidth, 5),
-            strokeOpacity: 0.9
+            strokeOpacity: 0.9,
+            strokeStyle: previewDash
         });
     } else {
         cablePreviewLine = new ymaps.Polyline(allCoords, {}, {
-            strokeColor: '#3b82f6',
+            strokeColor: previewColor,
             strokeWidth: Math.max(cableWidth, 5),
             strokeOpacity: 0.9,
-            strokeStyle: '12 6',
+            strokeStyle: previewDash,
             zIndex: 1000,
             interactive: false
         });
@@ -8876,7 +9703,7 @@ function setupRectSelection() {
     container.addEventListener('mousedown', function(e) {
         if (e.button !== 2) return;
         e.preventDefault();
-        if (objectPlacementMode || currentCableTool || splitterFiberRoutingMode || fiberRoutingMode) return;
+        if (objectPlacementMode || currentCableTool || splitterFiberRoutingMode || fiberRoutingMode || regionDrawMode) return;
         var geo = clientToGeo(e.clientX, e.clientY);
         if (!geo) return;
         rectSelectStart = { x: e.clientX, y: e.clientY, geo: geo };
@@ -9113,20 +9940,34 @@ function buildCableRoutePointsFromData(refs, item, fromObj, toObj, coords) {
                     break;
                 }
             }
-            if (!found) return null;
+            if (!found) {
+                route = null;
+                break;
+            }
             route.push(found);
         }
-        if (fromObj) route[0] = fromObj;
-        if (toObj) route[route.length - 1] = toObj;
-        return route;
+        if (route && route.length >= 2) {
+            if (fromObj) route[0] = fromObj;
+            if (toObj) route[route.length - 1] = toObj;
+            if (window.CableUnderground && Array.isArray(item.undergroundSpans) && item.undergroundSpans.length) {
+                route = CableUnderground.ensureRouteIncludesUndergroundManholes(route, item.undergroundSpans);
+            }
+            return route;
+        }
     }
     if (coords && coords.length > 2 && item.geometry != null) {
         var fg = findObjectsAtGeometry(refs, item.geometry);
         if (fg && fg.length >= 2) {
             if (fromObj) fg[0] = fromObj;
             if (toObj) fg[fg.length - 1] = toObj;
+            if (window.CableUnderground && Array.isArray(item.undergroundSpans) && item.undergroundSpans.length) {
+                fg = CableUnderground.ensureRouteIncludesUndergroundManholes(fg, item.undergroundSpans);
+            }
             return fg;
         }
+    }
+    if (fromObj && toObj && window.CableUnderground && Array.isArray(item.undergroundSpans) && item.undergroundSpans.length) {
+        return CableUnderground.ensureRouteIncludesUndergroundManholes([fromObj, toObj], item.undergroundSpans);
     }
     return null;
 }
@@ -9211,7 +10052,9 @@ function serializeMapItemFromObject(obj) {
     var geometry = obj.geometry.getCoordinates();
     var revision = getMapRevision(obj);
     if (props.type === 'cable') {
-            var cableGeom = normalizeCableGeometry(geometry) || geometry;
+            var cableGeom = (window.CableUnderground && CableUnderground.getCableGeometryForSave)
+                ? (CableUnderground.getCableGeometryForSave(obj) || normalizeCableGeometry(geometry) || geometry)
+                : (normalizeCableGeometry(geometry) || geometry);
             const fromObj = props.from, toObj = props.to;
             const result = {
                 type: 'cable',
@@ -9236,7 +10079,7 @@ function serializeMapItemFromObject(obj) {
                 if (Array.isArray(fpSer) && fpSer.length) result.fiberPalette = fpSer;
             }
             var ptsRoute = props.points;
-            if (Array.isArray(ptsRoute) && ptsRoute.length > 2) {
+            if (Array.isArray(ptsRoute) && ptsRoute.length >= 2) {
                 var routeIds = [];
                 for (var pri = 0; pri < ptsRoute.length; pri++) {
                     var ptm = ptsRoute[pri];
@@ -9249,6 +10092,8 @@ function serializeMapItemFromObject(obj) {
                 }
                 if (routeIds && routeIds.length === ptsRoute.length) result.routeUniqueIds = routeIds;
             }
+            var uSpansSer = props.undergroundSpans;
+            if (Array.isArray(uSpansSer) && uSpansSer.length) result.undergroundSpans = uSpansSer;
             if (props.cableType === 'copper') {
                 if (props.copperPortFrom != null && props.copperPortFrom !== '') result.copperPortFrom = props.copperPortFrom;
                 if (props.copperPortTo != null && props.copperPortTo !== '') result.copperPortTo = props.copperPortTo;
@@ -9257,6 +10102,20 @@ function serializeMapItemFromObject(obj) {
             }
             result.revision = revision;
             return result;
+        }
+        if (props.type === 'region') {
+            var ringOut = MapRegions.getRegionRing(obj);
+            return {
+                type: 'region',
+                name: props.name,
+                geometry: ringOut,
+                fillColor: props.fillColor || MapRegions.DEFAULT_FILL,
+                strokeColor: props.strokeColor || MapRegions.DEFAULT_STROKE,
+                fillOpacity: props.fillOpacity != null ? props.fillOpacity : MapRegions.DEFAULT_FILL_OPACITY,
+                regionVisible: props.regionVisible !== false,
+                uniqueId: props.uniqueId,
+                revision: revision
+            };
         }
         const result = {
             type: props.type,
@@ -9691,6 +10550,13 @@ function applyRemoteStateMerged(data) {
                 toObj = toObj || findRefClosestToCoord(refs, coords[coords.length - 1], undefined, preferFiberEndpoint, item.toUniqueId);
             }
         }
+        if ((!fromObj || !toObj) && coords && coords.length >= 2) {
+            var geomEpMerge = findObjectsAtGeometry(refs, coords);
+            if (geomEpMerge && geomEpMerge.length >= 2) {
+                fromObj = fromObj || geomEpMerge[0];
+                toObj = toObj || geomEpMerge[geomEpMerge.length - 1];
+            }
+        }
         if (!fromObj || !toObj) return;
         var itemCuMetaMerge = copperSerializedMetaFromItem(item);
         var existingCable = objects.find(function(o) {
@@ -9700,7 +10566,7 @@ function applyRemoteStateMerged(data) {
             var routeMerged = buildCableRoutePointsFromData(refs, item, fromObj, toObj, coords);
             var pointsArr = routeMerged;
             if (!pointsArr || pointsArr.length < 2) {
-                pointsArr = (coords && coords.length > 2) ? findObjectsAtGeometry(refs, item.geometry) : null;
+                pointsArr = (coords && coords.length >= 2) ? findObjectsAtGeometry(refs, item.geometry) : null;
             }
             if (!pointsArr || pointsArr.length < 2) pointsArr = [fromObj, toObj];
             else {
@@ -9719,12 +10585,13 @@ function applyRemoteStateMerged(data) {
             }
             if (item.distance !== undefined) existingCable.properties.set('distance', item.distance);
             if (item.cableName != null) existingCable.properties.set('cableName', item.cableName);
+            applySerializedUndergroundToCable(existingCable, item, pointsArr);
             applySerializedCopperMetadataToCable(existingCable, item);
             applyImportedCableFiberProps(existingCable, item);
         } else {
             var points = buildCableRoutePointsFromData(refs, item, fromObj, toObj, coords);
             if (!points || points.length < 2) {
-                points = (coords && coords.length > 2) ? findObjectsAtGeometry(refs, item.geometry) : null;
+                points = (coords && coords.length >= 2) ? findObjectsAtGeometry(refs, item.geometry) : null;
             }
             if (points && points.length >= 2) {
                 if (fromObj) points[0] = fromObj;
@@ -9746,11 +10613,14 @@ function applyRemoteStateMerged(data) {
                 } else if (cable.geometry && coords && coords.length >= 2) cable.geometry.setCoordinates(coords);
                 if (item.distance !== undefined) cable.properties.set('distance', item.distance);
                 if (item.cableName != null) cable.properties.set('cableName', item.cableName);
+                applySerializedUndergroundToCable(cable, item, cable.properties.get('points'));
                 applyImportedCableFiberProps(cable, item);
             }
         }
     });
 
+    repairCablesAfterImport();
+    refreshAllCableUndergroundOverlays();
     updateCableVisualization();
     updateCrossDisplay();
     updateNodeDisplay();
@@ -9765,6 +10635,13 @@ function applyRemoteStateMerged(data) {
             });
             if (!cable || !cable.geometry) return;
             var pts = cable.properties.get('points');
+            var ugItem = item.undergroundSpans;
+            if (window.CableUnderground && Array.isArray(ugItem) && ugItem.length && Array.isArray(pts) && pts.length >= 2) {
+                try {
+                    applySerializedUndergroundToCable(cable, item, pts);
+                    return;
+                } catch (eUgM) {}
+            }
             if (Array.isArray(pts) && pts.length >= 2) {
                 try {
                     var fromPts = pts.map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; }).filter(function(c) { return c && c.length >= 2; });
@@ -9778,6 +10655,7 @@ function applyRemoteStateMerged(data) {
             }
         });
         validateAndFixCableGeometryOnLoad();
+        refreshAllCableUndergroundOverlays();
         updateCableVisualization();
         
         lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
@@ -9812,6 +10690,14 @@ function applyOperationToMap(op) {
                 return;
             }
         }
+        if (op.data.type === 'region') {
+            var newRegion = createRegionFromData(op.data);
+            if (newRegion) {
+                updateStats();
+                if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
+            }
+            return;
+        }
         var newObj = createObjectFromData(op.data, { skipAddToObjects: true });
         if (!newObj) return;
         objects.splice(objCount, 0, newObj);
@@ -9830,7 +10716,7 @@ function applyOperationToMap(op) {
         });
         if (objUp) {
             populatePlacemarkFromSerializedData(objUp, op.data);
-            updateConnectedCables(objUp);
+            if (op.data.type !== 'region') updateConnectedCables(objUp);
             updateCrossDisplay();
             updateNodeDisplay();
             updateAllConnectionLines();
@@ -9884,6 +10770,7 @@ function applyOperationToMap(op) {
                 existingByOp.properties.set('copperPortTo', opCuMeta.copperPortTo != null ? opCuMeta.copperPortTo : null);
                 applyCopperCableOccupancyFromCable(existingByOp);
             }
+            applySerializedUndergroundToCable(existingByOp, op.data, existingByOp.properties.get('points'));
             applyImportedCableFiberProps(existingByOp, op.data);
             updateCableVisualization();
             updateAllConnectionLines();
@@ -9920,6 +10807,7 @@ function applyOperationToMap(op) {
                 } else if (cable.geometry && opCoordsNorm && opCoordsNorm.length >= 2) cable.geometry.setCoordinates(opCoordsNorm);
                 if (op.data.distance !== undefined) cable.properties.set('distance', op.data.distance);
                 if (op.data.cableName != null) cable.properties.set('cableName', op.data.cableName);
+                applySerializedUndergroundToCable(cable, op.data, cable.properties.get('points'));
                 applyImportedCableFiberProps(cable, op.data);
             }
             updateCableVisualization();
@@ -9975,6 +10863,10 @@ function importData(data, opts) {
             objectRefs.push(null);
             return;
         }
+        if (item.type === 'region') {
+            objectRefs.push(createRegionFromData(item));
+            return;
+        }
         const obj = createObjectFromData(item);
         objectRefs.push(obj);
     });
@@ -9997,9 +10889,18 @@ function importData(data, opts) {
                 }
             }
             if (!fromObj || !toObj) {
-                if (item.from === undefined || item.to === undefined || item.from >= objectRefs.length || item.to >= objectRefs.length) return;
-                fromObj = objectRefs[item.from];
-                toObj = objectRefs[item.to];
+                if (item.from !== undefined && item.to !== undefined &&
+                    item.from < objectRefs.length && item.to < objectRefs.length) {
+                    fromObj = fromObj || objectRefs[item.from];
+                    toObj = toObj || objectRefs[item.to];
+                }
+            }
+            if ((!fromObj || !toObj) && coords && coords.length >= 2) {
+                var geomEp = findObjectsAtGeometry(refsOnly, coords);
+                if (geomEp && geomEp.length >= 2) {
+                    fromObj = fromObj || geomEp[0];
+                    toObj = toObj || geomEp[geomEp.length - 1];
+                }
             }
             if (!fromObj || !toObj) return;
             var itemCuMeta = copperSerializedMetaFromItem(item);
@@ -10008,7 +10909,8 @@ function importData(data, opts) {
                 var routeExisting = buildCableRoutePointsFromData(refsOnly, item, fromObj, toObj, coords);
                 var ptsArr = routeExisting;
                 if (!ptsArr || ptsArr.length < 2) {
-                    ptsArr = (coords && coords.length > 2) ? findObjectsAtGeometry(refsOnly, item.geometry) : [fromObj, toObj];
+                    ptsArr = (coords && coords.length >= 2) ? findObjectsAtGeometry(refsOnly, item.geometry) : null;
+                    if (!ptsArr || ptsArr.length < 2) ptsArr = [fromObj, toObj];
                 }
                 if (ptsArr && ptsArr.length >= 2) {
                     if (fromObj) ptsArr[0] = fromObj;
@@ -10024,6 +10926,7 @@ function importData(data, opts) {
                 }
                 if (item && 'cableName' in item) existingCableImport.properties.set('cableName', item.cableName);
                 if (item.distance !== undefined) existingCableImport.properties.set('distance', item.distance);
+                applySerializedUndergroundToCable(existingCableImport, item, ptsArr);
                 applySerializedCopperMetadataToCable(existingCableImport, item);
                 applyImportedCableFiberProps(existingCableImport, item);
                 return;
@@ -10032,7 +10935,7 @@ function importData(data, opts) {
             if (routePts && routePts.length >= 2) {
                 addCable(routePts[0], routePts, item.cableType, item.uniqueId, undefined, true, true, itemCuMeta);
             } else {
-                var points = (coords && coords.length > 2) ? findObjectsAtGeometry(refsOnly, item.geometry) : null;
+                var points = (coords && coords.length >= 2) ? findObjectsAtGeometry(refsOnly, item.geometry) : null;
                 if (points && points.length >= 2) {
                     if (fromObj) points[0] = fromObj;
                     if (toObj) points[points.length - 1] = toObj;
@@ -10063,11 +10966,14 @@ function importData(data, opts) {
                     cable.properties.set('distance', distance);
                 }
                 if (item && 'cableName' in item) cable.properties.set('cableName', item.cableName);
+                applySerializedUndergroundToCable(cable, item, cable.properties.get('points'));
                 applyImportedCableFiberProps(cable, item);
             }
     });
 
+    repairCablesAfterImport();
     validateAndFixCableGeometryOnLoad();
+    refreshAllCableUndergroundOverlays();
     applyAllOpticalCableMapStyles();
     ensureNodeLabelsVisible();
     updateCableVisualization();
@@ -10078,11 +10984,45 @@ function importData(data, opts) {
     if (migrateNodeLevelSwitchMetaToAttached()) saveData();
     rebuildAllCopperPortUsageFromCables();
     if (window.CameraPlayer && CameraPlayer.startStreamMonitor) CameraPlayer.startStreamMonitor();
+    if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
+    if (window.MapRegions && MapRegions.sendAllRegionsToMapBack && myMap) {
+        MapRegions.sendAllRegionsToMapBack(myMap, objects);
+    }
+    if (window.MapRegions && MapRegions.syncAllRegionLabels && myMap) {
+        MapRegions.syncAllRegionLabels(myMap, objects);
+    }
+    objects.forEach(function(obj) {
+        if (obj && obj.properties && obj.properties.get('type') === 'cable') ensureCableMapZIndex(obj);
+    });
+}
+
+function populateRegionFromSerializedData(regionObj, data) {
+    if (!regionObj || !data || data.type !== 'region' || !window.MapRegions) return;
+    var ring = MapRegions.normalizeRing(data.geometry);
+    if (ring.length >= 3 && regionObj.geometry) {
+        try { regionObj.geometry.setCoordinates([ring]); } catch (e) {}
+    }
+    if (data.name != null) {
+        regionObj.properties.set('name', data.name);
+        regionObj.properties.set('balloonContent', data.name ? ('Регион: ' + data.name) : 'Регион');
+    }
+    if (data.fillColor) regionObj.properties.set('fillColor', data.fillColor);
+    if (data.strokeColor) regionObj.properties.set('strokeColor', data.strokeColor);
+    if (data.fillOpacity != null) regionObj.properties.set('fillOpacity', data.fillOpacity);
+    if (data.regionVisible != null) regionObj.properties.set('regionVisible', data.regionVisible !== false);
+    if (data.revision != null) setMapRevision(regionObj, data.revision);
+    MapRegions.applyRegionStyle(regionObj);
+    if (typeof applyMapFilter === 'function') applyMapFilter();
+    if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
 }
 
 function populatePlacemarkFromSerializedData(placemark, data) {
     if (!placemark || !data || !data.type) return;
     var type = data.type;
+    if (type === 'region') {
+        populateRegionFromSerializedData(placemark, data);
+        return;
+    }
     if (data.geometry && placemark.geometry) placemark.geometry.setCoordinates(data.geometry);
     if (data.name != null) {
         placemark.properties.set('name', data.name);
@@ -10226,8 +11166,15 @@ function applySerializedCableToMap(cable, data) {
         cable.properties.set('copperPortTo', opCuMeta.copperPortTo != null ? opCuMeta.copperPortTo : null);
         applyCopperCableOccupancyFromCable(cable);
     }
+    applySerializedUndergroundToCable(cable, data, cable.properties.get('points'));
     applyImportedCableFiberProps(cable, data);
     if (data.revision != null) setMapRevision(cable, data.revision);
+    if (window.CableUnderground) {
+        try {
+            CableUnderground.refreshCableUndergroundOverlays(cable);
+            CableUnderground.syncAerialOverlayStroke(cable);
+        } catch (eUgUp) {}
+    }
     updateCableVisualization();
     updateAllConnectionLines();
 }
@@ -10242,6 +11189,7 @@ function createObjectFromData(data, opts) {
         case 'cross': balloonContent = 'Оптический кросс: ' + name; break;
         case 'node': balloonContent = 'Узел сети: ' + name; break;
         case 'attachment': balloonContent = name ? 'Крепление узлов: ' + name : 'Крепление узлов'; break;
+        case 'manhole': balloonContent = name ? 'Колодец: ' + name : 'Колодец'; break;
         case 'olt': balloonContent = name ? 'OLT: ' + name : 'OLT (GPON)'; break;
         case 'splitter': balloonContent = name ? 'Сплиттер: ' + name : 'Сплиттер'; break;
         case 'onu': balloonContent = name ? 'ONU: ' + name : 'ONU'; break;
@@ -10358,15 +11306,29 @@ function createObjectFromData(data, opts) {
                 showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU, камеры или медиаконвертера. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
                 return;
             }
-            var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment', 'olt'];
+            if (cableUndergroundActive) {
+                if (type === 'manhole') {
+                    handleManholeCableLayClick(placemark);
+                    syncMapPanLockForEditTools();
+                    return;
+                }
+                if (type === 'support' || type === 'attachment') {
+                    showError('В подземном участке выберите второй колодец (выход).', 'Подземная прокладка');
+                } else {
+                    showWarning('В подземном участке выберите второй колодец для выхода.', 'Колодец');
+                }
+                return;
+            }
+            var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment', 'manhole', 'olt'];
             if (cableEndpointsPlacemark.indexOf(type) !== -1) {
                 if (!cableSource) {
-                    if (type === 'support' || type === 'attachment') {
-                        showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
+                    if (isCableIntermediateWaypoint(type)) {
+                        showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры, крепления и колодцы — только промежуточные точки.', 'Недопустимое действие');
                         return;
                     }
                     cableSource = placemark;
                     cableWaypoints = [];
+                    resetCableUndergroundPendingSpans();
                     clearSelection();
                     selectObject(cableSource);
                     syncMapPanLockForEditTools();
@@ -10374,8 +11336,13 @@ function createObjectFromData(data, opts) {
                 }
                 if (placemark === cableSource) {
                     cableWaypoints = [];
+                    resetCableUndergroundLayingState(false);
                     clearSelection();
                     selectObject(cableSource);
+                    return;
+                }
+                if (type === 'manhole') {
+                    handleManholeCableLayClick(placemark);
                     return;
                 }
                 if (type === 'support' || type === 'attachment') {
@@ -10408,7 +11375,7 @@ function createObjectFromData(data, opts) {
             return;
         }
 
-        if (type === 'support' || type === 'attachment') {
+        if (type === 'support' || type === 'attachment' || type === 'manhole') {
             if (isEditMode) {
                 clearSelection();
                 selectObject(placemark);
@@ -11140,7 +12107,17 @@ function showObjectInfoBody(obj) {
     }
 }
 
-function getSupportWaypointCopy(isAttachment) {
+function getSupportWaypointCopy(isAttachment, waypointType) {
+    if (waypointType === 'manhole') {
+        return {
+            typeLabel: 'Колодец',
+            heroHint: 'При прокладке: колодец → карта → второй колодец → опора. Пунктир: клик — проложить подземный участок заново.',
+            nameLabel: 'Название',
+            editPlaceholder: 'Например: КК-12',
+            noCablesMsg: 'Через этот колодец не проходит ни один кабель',
+            splitWaypoint: 'Колодец'
+        };
+    }
     return {
         typeLabel: isAttachment ? 'Крепление узлов' : 'Опора связи',
         heroHint: isAttachment
@@ -11158,8 +12135,9 @@ function buildSupportCardContent(supportObj, isEditMode) {
     var supportName = supportObj.properties.get('name') || '';
     var waypointType = supportObj.properties.get('type');
     var isAttachment = waypointType === 'attachment';
-    var copy = getSupportWaypointCopy(isAttachment);
-    var mapType = isAttachment ? 'attachment' : 'support';
+    var isManhole = waypointType === 'manhole';
+    var copy = getSupportWaypointCopy(isAttachment, waypointType);
+    var mapType = isManhole ? 'manhole' : (isAttachment ? 'attachment' : 'support');
     var coords = supportObj.geometry.getCoordinates();
     var html = '<div class="support-card support-card--' + mapType + '">';
 
@@ -11187,6 +12165,18 @@ function buildSupportCardContent(supportObj, isEditMode) {
         html += '</div>';
         html += '<button type="button" id="saveSupportEdit" class="btn-primary support-card-save-btn">Сохранить</button>';
         html += '</section>';
+    }
+
+    if (isManhole && isEditMode) {
+        var ugRel = findUndergroundRelayoutForManhole(supportObj);
+        if (ugRel && ugRel.cable) {
+            var relCableId = ugRel.cable.properties.get('uniqueId');
+            html += '<section class="object-card-section">';
+            html += '<h4 class="object-card-section-title">Подземный участок</h4>';
+            html += '<p class="object-card-hint">Проложить трассу между колодцами заново (без правки старых точек).</p>';
+            html += '<button type="button" id="manholeRelayoutUnderground" class="btn-secondary" data-cable-id="' + escapeHtml(relCableId) + '" data-span-index="' + ugRel.spanIndex + '">Проложить заново</button>';
+            html += '</section>';
+        }
     }
 
     var splittableAtSupport = isEditMode ? getSplittableFiberCablesAtWaypoint(supportObj) : [];
@@ -11284,7 +12274,7 @@ function showSupportInfoBody(supportObj) {
     var supportName = supportObj.properties.get('name') || '';
     var waypointType = supportObj.properties.get('type');
     var isAttachment = waypointType === 'attachment';
-    var copy = getSupportWaypointCopy(isAttachment);
+    var copy = getSupportWaypointCopy(isAttachment, waypointType);
 
     document.getElementById('modalTitle').textContent = supportName ? (copy.typeLabel + ': ' + supportName) : copy.typeLabel;
     updateInfoModalChrome(waypointType, supportName);
@@ -11311,7 +12301,8 @@ function showSupportInfoBody(supportObj) {
 function refreshObjectModal(obj) {
     if (!obj || !obj.properties) return;
     var t = obj.properties.get('type');
-    if (t === 'support' || t === 'attachment') showSupportInfo(obj);
+    if (t === 'support' || t === 'attachment' || t === 'manhole') showSupportInfo(obj);
+    else if (t === 'region') showRegionEditModal(obj);
     else showObjectInfo(obj);
 }
 
@@ -11561,9 +12552,22 @@ function setupEditAndDeleteListeners() {
         saveSupportBtn.addEventListener('click', function() {
             if (!currentModalObject) return;
             var wt = currentModalObject.properties.get('type');
-            if (wt !== 'support' && wt !== 'attachment') return;
+            if (wt !== 'support' && wt !== 'attachment' && wt !== 'manhole') return;
             flushNameFieldIfChanged('editSupportName', applySupportNameChange);
             showSupportInfo(currentModalObject);
+        });
+    }
+
+    var manholeRelayoutBtn = document.getElementById('manholeRelayoutUnderground');
+    if (manholeRelayoutBtn) {
+        manholeRelayoutBtn.addEventListener('click', function() {
+            var cableId = manholeRelayoutBtn.getAttribute('data-cable-id');
+            var spanIdx = parseInt(manholeRelayoutBtn.getAttribute('data-span-index'), 10);
+            if (!cableId || isNaN(spanIdx)) return;
+            var cable = findObjectByUniqueId(cableId);
+            if (!cable) return;
+            if (typeof closeInfoModal === 'function') closeInfoModal();
+            startUndergroundSpanRelayout(cable, spanIdx);
         });
     }
 
@@ -17457,6 +18461,7 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
         }
     });
 
+    if (window.CableUnderground) CableUnderground.removeAllCableRouteOverlays(cable);
     myMap.geoObjects.remove(cable);
     objects = objects.filter(o => o !== cable);
     
@@ -18112,12 +19117,535 @@ function updateNodeDisplay() {
 }
 
 var MAP_FILTER_STORAGE_KEY = 'networkMap_mapFilter';
+
+function getNextRegionDefaultName() {
+    var n = 1;
+    if (window.MapRegions) {
+        n = MapRegions.getAllRegions(objects).length + 1;
+    }
+    return 'Регион ' + n;
+}
+
+function removeRegionDrawPreview() {
+    if (regionDrawPreview && myMap) {
+        try { myMap.geoObjects.remove(regionDrawPreview); } catch (e) {}
+    }
+    regionDrawPreview = null;
+}
+
+function updateRegionDrawPreview() {
+    if (!myMap || !regionDrawMode) return;
+    removeRegionDrawPreview();
+    if (!regionDrawCoords.length) return;
+    var fillEl = document.getElementById('regionDrawFillColor');
+    var fillColor = MapRegions.DEFAULT_FILL;
+    if (regionEditTarget && regionEditTarget.properties) {
+        fillColor = regionEditTarget.properties.get('fillColor') || fillColor;
+    } else if (fillEl && fillEl.value) {
+        fillColor = fillEl.value;
+    }
+    var coords = regionDrawCoords.slice();
+    if (coords.length >= 3) {
+        regionDrawPreview = new ymaps.Polygon([coords], {}, MapRegions.getPolygonOptions(fillColor, MapRegions.DEFAULT_STROKE, 0.18));
+    } else if (coords.length >= 2) {
+        regionDrawPreview = new ymaps.Polyline(coords, {}, {
+            strokeColor: fillColor,
+            strokeWidth: 2,
+            strokeOpacity: 0.85,
+            strokeStyle: 'dash',
+            zIndex: 1000,
+            interactive: false
+        });
+    } else {
+        regionDrawPreview = new ymaps.Placemark(coords[0], {}, {
+            preset: 'islands#blueCircleDotIcon',
+            zIndex: 1000,
+            interactive: false
+        });
+    }
+    myMap.geoObjects.add(regionDrawPreview);
+}
+
+function updateRegionDrawBar() {
+    var pointsEl = document.getElementById('regionDrawBarPoints');
+    var doneBtn = document.getElementById('regionDrawDone');
+    var n = regionDrawCoords.length;
+    if (pointsEl) pointsEl.textContent = String(n);
+    if (doneBtn) doneBtn.disabled = n < 3;
+}
+
+function showRegionDrawBar(mode) {
+    mode = mode || 'create';
+    var bar = document.getElementById('regionDrawBar');
+    if (bar) {
+        bar.hidden = false;
+        bar.classList.toggle('region-draw-card--edit', mode === 'edit');
+    }
+    document.body.classList.add('underground-draw-active');
+    var fields = bar ? bar.querySelector('.region-draw-fields') : null;
+    var titleEl = document.getElementById('regionDrawBarTitle');
+    var modeEl = bar ? bar.querySelector('.underground-draw-card__mode') : null;
+    var hintEl = document.getElementById('regionDrawBarText');
+    if (mode === 'edit') {
+        if (fields) fields.hidden = true;
+        var rname = regionEditTarget && regionEditTarget.properties ? (regionEditTarget.properties.get('name') || '') : '';
+        if (titleEl) titleEl.textContent = rname ? ('«' + rname + '»') : 'Контур региона';
+        if (modeEl) modeEl.textContent = 'Новый контур';
+        if (hintEl) hintEl.textContent = 'Кликайте по карте — новые вершины. «Готово» сохранит контур, «Отмена» вернёт прежний.';
+    } else {
+        if (fields) fields.hidden = false;
+        if (titleEl) titleEl.textContent = 'Новый регион';
+        if (modeEl) modeEl.textContent = 'Рисование';
+        if (hintEl) hintEl.textContent = 'Кликайте по карте — вершины контура. Минимум 3 точки. Двойной клик или «Готово» — завершить.';
+        var nameEl = document.getElementById('regionDrawName');
+        if (nameEl && !nameEl.value.trim()) nameEl.value = getNextRegionDefaultName();
+    }
+    updateRegionDrawBar();
+    updateRegionDrawPreview();
+}
+
+function hideRegionDrawBar() {
+    var bar = document.getElementById('regionDrawBar');
+    if (bar) {
+        bar.hidden = true;
+        bar.classList.remove('region-draw-card--edit');
+    }
+    document.body.classList.remove('underground-draw-active');
+}
+
+function resetRegionDrawUi() {
+    regionDrawMode = false;
+    regionDrawCoords = [];
+    removeRegionDrawPreview();
+    hideRegionDrawBar();
+    var btn = document.getElementById('drawRegionBtn');
+    if (btn) {
+        btn.classList.remove('btn-add-object--placement');
+        btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon></svg><span class="btn-draw-region-text">Нарисовать регион</span>';
+    }
+    if (myMap && myMap.container) {
+        var mapEl = myMap.container.getElement();
+        mapEl.style.cursor = '';
+        mapEl.classList.remove('map-crosshair-active');
+    }
+    syncMapPanLockForEditTools();
+}
+
+function detachRegionFromMapForEdit(regionObj) {
+    if (!regionObj || !myMap || !regionObj.properties) return;
+    if (regionObj.properties.get('_detachedForGeometryEdit')) return;
+    try { myMap.geoObjects.remove(regionObj); } catch (e) {}
+    regionObj.properties.set('_detachedForGeometryEdit', true);
+}
+
+function attachRegionToMapAfterEdit(regionObj) {
+    if (!regionObj || !myMap || !regionObj.properties) return;
+    if (!regionObj.properties.get('_detachedForGeometryEdit')) return;
+    try {
+        myMap.geoObjects.add(regionObj, 0);
+        if (window.MapRegions && MapRegions.sendRegionToMapBack) MapRegions.sendRegionToMapBack(regionObj, myMap);
+    } catch (e) {}
+    regionObj.properties.set('_detachedForGeometryEdit', false);
+}
+
+function cancelRegionDraw() {
+    if (regionEditTarget) {
+        if (regionEditGeometryBackup && regionEditTarget.geometry) {
+            try { regionEditTarget.geometry.setCoordinates([regionEditGeometryBackup]); } catch (e) {}
+        }
+        attachRegionToMapAfterEdit(regionEditTarget);
+        var restored = regionEditTarget;
+        regionEditTarget = null;
+        regionEditGeometryBackup = null;
+        resetRegionDrawUi();
+        if (typeof applyMapFilter === 'function') applyMapFilter();
+        if (restored && isEditMode && canEdit()) showRegionEditModal(restored);
+        return;
+    }
+    resetRegionDrawUi();
+}
+
+function startRegionGeometryEdit(regionObj) {
+    if (!regionObj || !isEditMode || !canEdit()) return;
+    if (typeof closeInfoModal === 'function') closeInfoModal();
+    if (regionDrawMode) cancelRegionDraw();
+    if (objectPlacementMode && typeof cancelObjectPlacement === 'function') cancelObjectPlacement();
+    if (currentCableTool) {
+        currentCableTool = false;
+        removeCablePreview();
+        cableSource = null;
+        cableWaypoints = [];
+    }
+    if (cableUndergroundEditMode && typeof cancelUndergroundSpanEdit === 'function') cancelUndergroundSpanEdit();
+    if (fiberRoutingMode) cancelFiberRouting();
+    if (splitterFiberRoutingMode) cancelSplitterFiberRouting();
+    if (cableSplitMode) cancelCableSplitMode();
+
+    regionEditTarget = regionObj;
+    regionEditGeometryBackup = MapRegions.getRegionRing(regionObj).slice();
+    regionDrawMode = true;
+    regionDrawCoords = [];
+    removeRegionDrawPreview();
+    detachRegionFromMapForEdit(regionObj);
+    showRegionDrawBar('edit');
+    focusRegionOnMap(regionObj);
+    if (myMap && myMap.container) {
+        var mapEl = myMap.container.getElement();
+        mapEl.style.cursor = 'crosshair';
+        mapEl.classList.add('map-crosshair-active');
+    }
+    syncMapPanLockForEditTools();
+}
+
+function startRegionDraw() {
+    if (!isEditMode || !canEdit()) return;
+    if (objectPlacementMode && typeof cancelObjectPlacement === 'function') cancelObjectPlacement();
+    if (currentCableTool) {
+        currentCableTool = false;
+        var cableBtn = document.getElementById('addCable');
+        if (cableBtn) {
+            cableBtn.classList.remove('btn-add-object--placement');
+            cableBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><line x1="12" y1="2" x2="12" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line></svg><span class="btn-lay-cable-text">Проложить кабель</span>';
+        }
+        removeCablePreview();
+        cableSource = null;
+        cableWaypoints = [];
+    }
+    if (cableUndergroundEditMode && typeof cancelUndergroundSpanEdit === 'function') cancelUndergroundSpanEdit();
+    if (fiberRoutingMode) cancelFiberRouting();
+    if (splitterFiberRoutingMode) cancelSplitterFiberRouting();
+    if (cableSplitMode) cancelCableSplitMode();
+
+    regionDrawMode = true;
+    regionEditTarget = null;
+    regionEditGeometryBackup = null;
+    regionDrawCoords = [];
+    removeRegionDrawPreview();
+    showRegionDrawBar('create');
+    var btn = document.getElementById('drawRegionBtn');
+    if (btn) {
+        btn.classList.add('btn-add-object--placement');
+        btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span class="btn-draw-region-text">Завершить рисование</span>';
+    }
+    if (myMap && myMap.container) {
+        var mapEl = myMap.container.getElement();
+        mapEl.style.cursor = 'crosshair';
+        mapEl.classList.add('map-crosshair-active');
+    }
+    syncMapPanLockForEditTools();
+}
+
+function finishRegionDraw() {
+    if (!regionDrawMode) return;
+    var ring = MapRegions.normalizeRing(regionDrawCoords);
+    if (ring.length < 3) {
+        if (typeof showWarning === 'function') showWarning('Нужно минимум 3 точки контура.', 'Регион');
+        return;
+    }
+    if (regionEditTarget) {
+        try { regionEditTarget.geometry.setCoordinates([ring]); } catch (e) {}
+        MapRegions.applyRegionStyle(regionEditTarget);
+        attachRegionToMapAfterEdit(regionEditTarget);
+        if (window.MapRegions && MapRegions.updateRegionLabel) {
+            MapRegions.updateRegionLabel(regionEditTarget, myMap);
+        }
+        var edited = regionEditTarget;
+        regionEditTarget = null;
+        regionEditGeometryBackup = null;
+        resetRegionDrawUi();
+        saveData();
+        if (typeof applyMapFilter === 'function') applyMapFilter();
+        renderRegionsSidebarList();
+        if (typeof showSuccess === 'function') showSuccess('Контур региона обновлён', 'Регион');
+        if (edited) showRegionEditModal(edited);
+        return;
+    }
+    var nameEl = document.getElementById('regionDrawName');
+    var fillEl = document.getElementById('regionDrawFillColor');
+    var name = nameEl ? nameEl.value.trim() : '';
+    var fillColor = (fillEl && fillEl.value) ? fillEl.value : MapRegions.DEFAULT_FILL;
+    resetRegionDrawUi();
+    var region = createRegion(name || getNextRegionDefaultName(), ring, { fillColor: fillColor, strokeColor: MapRegions.DEFAULT_STROKE });
+    if (region) {
+        if (typeof showSuccess === 'function') showSuccess('Регион создан', 'Регион');
+        focusRegionOnMap(region);
+    }
+}
+
+function createRegion(name, ringCoords, options) {
+    options = options || {};
+    if (wouldExceedMapObjectLimit(1)) {
+        notifyMapObjectLimitBlocked();
+        return null;
+    }
+    var ring = MapRegions.normalizeRing(ringCoords);
+    if (ring.length < 3) return null;
+    var fillColor = options.fillColor || MapRegions.DEFAULT_FILL;
+    var strokeColor = options.strokeColor || MapRegions.DEFAULT_STROKE;
+    var fillOpacity = options.fillOpacity != null ? options.fillOpacity : MapRegions.DEFAULT_FILL_OPACITY;
+    var props = {
+        type: 'region',
+        name: name || '',
+        regionVisible: options.regionVisible !== false,
+        fillColor: fillColor,
+        strokeColor: strokeColor,
+        fillOpacity: fillOpacity,
+        balloonContent: name ? ('Регион: ' + name) : 'Регион'
+    };
+    props.uniqueId = options.uniqueId || generateUniqueId('region');
+    var polygon = new ymaps.Polygon([ring], props, MapRegions.getPolygonOptions(fillColor, strokeColor, fillOpacity));
+    try { polygon.options.set('draggable', false); } catch (eDr) {}
+    try { polygon.options.set('interactive', false); } catch (eInt) {}
+    objects.push(polygon);
+    myMap.geoObjects.add(polygon, 0);
+    if (window.MapRegions && MapRegions.sendRegionToMapBack) MapRegions.sendRegionToMapBack(polygon, myMap);
+    if (window.MapRegions && MapRegions.updateRegionLabel) MapRegions.updateRegionLabel(polygon, myMap);
+    if (!(options && options.skipLimitCount)) {
+        mapLimitsCache.count = (mapLimitsCache.count || 0) + 1;
+        if (mapLimitsCache.limit != null) {
+            mapLimitsCache.remaining = Math.max(0, mapLimitsCache.limit - mapLimitsCache.count);
+        }
+        updateMapLimitBanner();
+    }
+    if (options && options.data && options.data.revision != null) setMapRevision(polygon, options.data.revision);
+    if (typeof applyMapFilter === 'function') applyMapFilter();
+    if (!(options && options.skipSync) && typeof window.syncSendOp === 'function') {
+        var dataSer = serializeOneObject(polygon);
+        if (dataSer) window.syncSendOp({ type: 'add_object', data: dataSer });
+    }
+    if (!(options && options.skipSave)) saveData();
+    renderRegionsSidebarList();
+    if (!(options && options.skipLog)) {
+        logAction(ActionTypes.CREATE_OBJECT, { objectType: 'region', name: name || '' });
+    }
+    return polygon;
+}
+
+function createRegionFromData(data) {
+    if (!data || !data.geometry) return null;
+    var ring = MapRegions.normalizeRing(data.geometry);
+    if (ring.length < 3) return null;
+    return createRegion(data.name || '', ring, {
+        uniqueId: data.uniqueId,
+        fillColor: data.fillColor,
+        strokeColor: data.strokeColor,
+        fillOpacity: data.fillOpacity,
+        regionVisible: data.regionVisible !== false,
+        skipSync: true,
+        skipSave: true,
+        skipLog: true,
+        data: data
+    });
+}
+
+function focusRegionOnMap(regionObj) {
+    if (!regionObj || !myMap || !window.MapRegions) return;
+    var ring = MapRegions.getRegionRing(regionObj);
+    if (ring.length < 3) return;
+    var lats = ring.map(function(c) { return c[0]; });
+    var lons = ring.map(function(c) { return c[1]; });
+    myMap.setBounds(
+        [[Math.min.apply(null, lats), Math.min.apply(null, lons)], [Math.max.apply(null, lats), Math.max.apply(null, lons)]],
+        { checkZoomRange: true, duration: 300 }
+    );
+}
+
+
+function setRegionVisible(regionObj, visible, opts) {
+    if (!regionObj || !regionObj.properties) return;
+    regionObj.properties.set('regionVisible', !!visible);
+    if (!(opts && opts.skipSave)) saveData();
+    if (typeof applyMapFilter === 'function') applyMapFilter();
+    renderRegionsSidebarList();
+}
+
+function renderRegionsSidebarList() {
+    var root = document.getElementById('regionsList');
+    var badge = document.getElementById('regionsCountBadge');
+    if (!root || !window.MapRegions) return;
+    var regions = MapRegions.getAllRegions(objects);
+    var editable = isEditMode && canEdit();
+    if (badge) badge.textContent = regions.length ? String(regions.length) : '';
+    if (!regions.length) {
+        root.innerHTML = '<p class="regions-list-empty">Регионов пока нет. Нарисуйте первый контур на карте.</p>';
+        return;
+    }
+    var html = '';
+    regions.forEach(function(region) {
+        var uid = region.properties.get('uniqueId') || '';
+        var name = region.properties.get('name') || 'Без названия';
+        var fill = region.properties.get('fillColor') || MapRegions.DEFAULT_FILL;
+        var stats = MapRegions.collectObjectsInRegion(region, objects);
+        var summary = stats.total + ' объект.' + (stats.total === 1 ? '' : (stats.total >= 2 && stats.total <= 4 ? 'а' : 'ов'));
+        var hidden = !MapRegions.isRegionVisible(region);
+        html += '<div class="region-list-item' + (hidden ? ' region-list-item--hidden' : '') + '" style="border-left-color:' + escapeHtml(fill) + '" data-region-id="' + escapeHtml(uid) + '">';
+        html += '<span class="region-list-item__swatch" style="background:' + escapeHtml(fill) + '"></span>';
+        html += '<div class="region-list-item__body">';
+        html += '<button type="button" class="region-list-item__name" data-action="focus">' + escapeHtml(name) + '</button>';
+        html += '<div class="region-list-item__meta">' + escapeHtml(summary) + '</div>';
+        html += '</div>';
+        html += '<div class="region-list-item__actions">';
+        html += '<button type="button" class="region-list-item__icon-btn" data-action="toggle" title="' + (hidden ? 'Показать' : 'Скрыть') + '" aria-label="' + (hidden ? 'Показать регион' : 'Скрыть регион') + '">';
+        html += hidden
+            ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>'
+            : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>';
+        html += '</button>';
+        if (editable) {
+            html += '<button type="button" class="region-list-item__icon-btn region-list-item__icon-btn--edit" data-action="edit" title="Редактировать" aria-label="Редактировать регион">';
+            html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';
+            html += '</button>';
+        }
+        html += '</div></div>';
+    });
+    root.innerHTML = html;
+    root.querySelectorAll('.region-list-item').forEach(function(item) {
+        var uid = item.getAttribute('data-region-id');
+        var region = objects.find(function(o) { return o.properties && o.properties.get('uniqueId') === uid; });
+        if (!region) return;
+        var focusBtn = item.querySelector('[data-action="focus"]');
+        if (focusBtn) focusBtn.addEventListener('click', function() { focusRegionOnMap(region); });
+        var toggleBtn = item.querySelector('[data-action="toggle"]');
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                setRegionVisible(region, !MapRegions.isRegionVisible(region));
+            });
+        }
+        var editBtn = item.querySelector('[data-action="edit"]');
+        if (editBtn) {
+            editBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                showRegionEditModal(region);
+            });
+        }
+    });
+}
+
+function buildRegionEditCardContent(regionObj) {
+    var name = regionObj.properties.get('name') || '';
+    var fill = regionObj.properties.get('fillColor') || MapRegions.DEFAULT_FILL;
+    var stroke = regionObj.properties.get('strokeColor') || MapRegions.DEFAULT_STROKE;
+    var visible = MapRegions.isRegionVisible(regionObj);
+    var stats = MapRegions.collectObjectsInRegion(regionObj, objects);
+    var html = '<div class="region-edit-card">';
+    html += '<p class="region-edit-card__stats">' + escapeHtml(MapRegions.countSummaryText(stats.counts, stats.total)) + '</p>';
+    html += '<label class="region-edit-card__field"><span>Название</span><input type="text" id="editRegionName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Название"></label>';
+    html += '<div class="region-edit-card__colors">';
+    html += '<label class="region-edit-card__color"><span>Заливка</span><input type="color" id="editRegionFillColor" value="' + escapeHtml(fill) + '"></label>';
+    html += '<label class="region-edit-card__color"><span>Обводка</span><input type="color" id="editRegionStrokeColor" value="' + escapeHtml(stroke) + '"></label>';
+    html += '</div>';
+    html += '<div class="region-edit-card__actions">';
+    html += '<button type="button" id="regionRedrawBtn" class="btn-secondary btn-compact">Перерисовать контур</button>';
+    html += '<button type="button" id="toggleRegionVisibleBtn" class="btn-secondary btn-compact">' + (visible ? 'Скрыть' : 'Показать') + '</button>';
+    html += '<button type="button" id="deleteCurrentObject" class="btn-danger btn-compact">Удалить</button>';
+    html += '</div></div>';
+    return html;
+}
+
+function applyRegionCardEdits(regionObj) {
+    if (!regionObj || !regionObj.properties) return;
+    var nameEl = document.getElementById('editRegionName');
+    var fillEl = document.getElementById('editRegionFillColor');
+    var strokeEl = document.getElementById('editRegionStrokeColor');
+    if (nameEl) {
+        var nm = nameEl.value.trim();
+        regionObj.properties.set('name', nm);
+        regionObj.properties.set('balloonContent', nm ? ('Регион: ' + nm) : 'Регион');
+    }
+    if (fillEl) regionObj.properties.set('fillColor', fillEl.value);
+    if (strokeEl) regionObj.properties.set('strokeColor', strokeEl.value);
+    MapRegions.applyRegionStyle(regionObj);
+    saveData();
+    renderRegionsSidebarList();
+}
+
+function showRegionEditModal(regionObj) {
+    if (!regionObj || !isEditMode || !canEdit()) return;
+    applyModalEditModeForObject(regionObj, function() {
+        showRegionEditModalBody(regionObj);
+    });
+}
+
+function showRegionEditModalBody(regionObj) {
+    currentModalObject = regionObj;
+    var name = regionObj.properties.get('name') || '';
+    document.getElementById('modalTitle').textContent = name ? ('Регион: ' + name) : 'Регион';
+    updateInfoModalChrome(null, name);
+    var modalInfoEl = document.getElementById('modalInfo');
+    modalInfoEl.innerHTML = buildRegionEditCardContent(regionObj);
+    resetInfoModalFiberLayout();
+    var modal = document.getElementById('infoModal');
+    setupEditAndDeleteListeners();
+    var toggleBtn = document.getElementById('toggleRegionVisibleBtn');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', function() {
+            setRegionVisible(regionObj, !MapRegions.isRegionVisible(regionObj));
+            showRegionEditModalBody(regionObj);
+        });
+    }
+    var redrawBtn = document.getElementById('regionRedrawBtn');
+    if (redrawBtn) {
+        redrawBtn.addEventListener('click', function() {
+            startRegionGeometryEdit(regionObj);
+        });
+    }
+    var nameEl = document.getElementById('editRegionName');
+    if (nameEl) {
+        var saveName = function() { applyRegionCardEdits(regionObj); };
+        nameEl.addEventListener('change', saveName);
+        nameEl.addEventListener('blur', saveName);
+    }
+    ['editRegionFillColor', 'editRegionStrokeColor'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('input', function() { applyRegionCardEdits(regionObj); });
+    });
+    if (modal) {
+        modal.style.display = 'flex';
+        modal.classList.add('modal--centered');
+        updateModalLockBanner(getObjectUniqueId(regionObj));
+    }
+}
+
+function setupRegionControls() {
+    var drawBtn = document.getElementById('drawRegionBtn');
+    if (drawBtn) {
+        drawBtn.addEventListener('click', function() {
+            if (regionDrawMode) finishRegionDraw();
+            else startRegionDraw();
+        });
+    }
+    var doneBtn = document.getElementById('regionDrawDone');
+    if (doneBtn) doneBtn.addEventListener('click', finishRegionDraw);
+    var undoBtn = document.getElementById('regionDrawUndo');
+    if (undoBtn) {
+        undoBtn.addEventListener('click', function() {
+            if (!regionDrawCoords.length) return;
+            regionDrawCoords.pop();
+            updateRegionDrawBar();
+            updateRegionDrawPreview();
+        });
+    }
+    var cancelBtn = document.getElementById('regionDrawCancel');
+    if (cancelBtn) cancelBtn.addEventListener('click', cancelRegionDraw);
+    var fillColorInput = document.getElementById('regionDrawFillColor');
+    if (fillColorInput) fillColorInput.addEventListener('input', updateRegionDrawPreview);
+    if (myMap && !myMap._regionDblClickBound) {
+        myMap._regionDblClickBound = true;
+        myMap.events.add('dblclick', function(e) {
+            if (!regionDrawMode) return;
+            try { e.stopPropagation(); } catch (err) {}
+            finishRegionDraw();
+        });
+    }
+    renderRegionsSidebarList();
+}
+
 var MAP_FILTER_INPUT_IDS = [
     'mapFilterNode', 'mapFilterNodeAggregationOnly', 'mapFilterCross', 'mapFilterSleeve',
-    'mapFilterSupport', 'mapFilterAttachment', 'mapFilterOlt', 'mapFilterSplitter',
+    'mapFilterSupport', 'mapFilterAttachment', 'mapFilterManhole', 'mapFilterOlt', 'mapFilterSplitter',
     'mapFilterOnu', 'mapFilterCamera', 'mapFilterMediaConverter'
 ];
-var MAP_FILTER_MAIN_KEYS = ['node', 'cross', 'sleeve', 'support', 'attachment', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter'];
+var MAP_FILTER_MAIN_KEYS = ['node', 'cross', 'sleeve', 'support', 'attachment', 'manhole', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter'];
 
 function syncMapFilterChipVisual(el) {
     if (!el) return;
@@ -18165,6 +19693,7 @@ var MAP_FILTER_KEY_TO_ID = {
     sleeve: 'mapFilterSleeve',
     support: 'mapFilterSupport',
     attachment: 'mapFilterAttachment',
+    manhole: 'mapFilterManhole',
     olt: 'mapFilterOlt',
     splitter: 'mapFilterSplitter',
     onu: 'mapFilterOnu',
@@ -18246,6 +19775,7 @@ function getMapFilterState() {
     var sleeveEl = document.getElementById('mapFilterSleeve');
     var supportEl = document.getElementById('mapFilterSupport');
     var attachmentEl = document.getElementById('mapFilterAttachment');
+    var manholeEl = document.getElementById('mapFilterManhole');
     var oltEl = document.getElementById('mapFilterOlt');
     var splitterEl = document.getElementById('mapFilterSplitter');
     var onuEl = document.getElementById('mapFilterOnu');
@@ -18258,6 +19788,7 @@ function getMapFilterState() {
         sleeve: sleeveEl ? sleeveEl.checked : true,
         support: supportEl ? supportEl.checked : true,
         attachment: attachmentEl ? attachmentEl.checked : true,
+        manhole: manholeEl ? manholeEl.checked : true,
         olt: oltEl ? oltEl.checked : true,
         splitter: splitterEl ? splitterEl.checked : true,
         onu: onuEl ? onuEl.checked : true,
@@ -18270,6 +19801,26 @@ function getMapFilterState() {
 // Настройка порогов: при уменьшении зума значение растет к "ближе" и скрытие уходит обратно.
 const EXPERT_ZOOM_HIDE_LABELS_BELOW = 17;
 const EXPERT_ZOOM_HIDE_OBJECTS_BELOW = 16;
+/** Регионы скрываются только при сильном отдалении (отдельно от сетевых объектов). */
+const EXPERT_ZOOM_HIDE_REGIONS_BELOW = 10;
+
+function applyRegionZoomVisibility(zoom) {
+    if (!Array.isArray(objects)) return;
+    var hideRegions = typeof zoom === 'number' && zoom < EXPERT_ZOOM_HIDE_REGIONS_BELOW;
+    objects.forEach(function(obj) {
+        if (!obj || !obj.properties || obj.properties.get('type') !== 'region') return;
+        var visible = true;
+        if (regionEditTarget && obj === regionEditTarget) visible = false;
+        else if (obj.properties.get('_detachedForGeometryEdit')) visible = false;
+        else if (hideRegions) visible = false;
+        else if (window.MapRegions) visible = MapRegions.isRegionVisible(obj);
+        try { if (obj.options) obj.options.set('visible', visible); } catch (e) {}
+        var regionLabel = obj.properties.get('regionLabel');
+        if (regionLabel && regionLabel.options) {
+            try { regionLabel.options.set('visible', visible); } catch (eLbl) {}
+        }
+    });
+}
 
 function forEachConnectionLine(callback) {
     [nodeConnectionLines, onuConnectionLines, oltConnectionLines, splitterConnectionLines, splitterOutputConnectionLines].forEach(function(arr) {
@@ -18322,7 +19873,11 @@ function applyExpertZoomVisibility() {
     if (hideObjects) {
         objects.forEach(function(obj) {
             if (!obj || !obj.options) return;
+            if (obj.properties && obj.properties.get('type') === 'region') return;
             try { obj.options.set('visible', false); } catch (e) {}
+            if (obj.properties && obj.properties.get('type') === 'cable' && window.CableUnderground) {
+                try { CableUnderground.setOverlaysVisible(obj, false); } catch (eUg) {}
+            }
         });
         setAllConnectionLinesVisible(false);
     }
@@ -18357,6 +19912,8 @@ function applyExpertZoomVisibility() {
             try { if (pm && pm.options) pm.options.set('visible', false); } catch (e) {}
         });
     }
+
+    applyRegionZoomVisibility(zoom);
 }
 
 function applyMapFilter() {
@@ -18367,14 +19924,17 @@ function applyMapFilter() {
     function isObjVisible(obj) {
         if (!obj || !obj.properties) return false;
         var type = obj.properties.get('type');
-        if (type === 'cable' || type === 'cableLabel') return false;
+        if (type === 'cable' || type === 'cableLabel' || type === 'region') return false;
         if (type === 'node') {
             if (!filter.node) return false;
             if (filter.nodeAggregationOnly) return obj.properties.get('nodeKind') === 'aggregation';
-            return true;
+        } else if (type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter') {
+            if (filter[type] === false) return false;
+        } else if (filter[type] !== true) {
+            return false;
         }
-        if (type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter') return filter[type] !== false;
-        return filter[type] === true;
+        if (window.MapRegions && MapRegions.isObjectInAnyHiddenRegion(obj, objects)) return false;
+        return true;
     }
     var visibleCables = new Set();
     objects.forEach(function(obj) {
@@ -18386,6 +19946,7 @@ function applyMapFilter() {
             var points = obj.properties.get('points');
             var visible = from && to && isObjVisible(from) && isObjVisible(to) &&
                 (!Array.isArray(points) || points.length === 0 || points.every(function(p) { return isObjVisible(p); }));
+            if (visible && window.MapRegions && MapRegions.isCableInAnyHiddenRegion(obj, objects)) visible = false;
             if (visible) visibleCables.add(obj);
         }
     });
@@ -18395,16 +19956,27 @@ function applyMapFilter() {
         var visible = false;
         if (type === 'cable') {
             visible = visibleCables.has(obj);
+            if (window.CableUnderground) CableUnderground.setOverlaysVisible(obj, visible);
         } else if (type === 'cableLabel') {
             var cables = obj.properties.get('cables');
             visible = Array.isArray(cables) && cables.some(function(c) { return visibleCables.has(c); });
+        } else if (type === 'region') {
+            if (regionEditTarget && obj === regionEditTarget) {
+                visible = false;
+            } else if (obj.properties && obj.properties.get('_detachedForGeometryEdit')) {
+                visible = false;
+            } else {
+                visible = window.MapRegions ? MapRegions.isRegionVisible(obj) : true;
+            }
         } else {
-            visible = filter[type] === true || (['olt', 'splitter', 'onu', 'camera', 'mediaConverter'].indexOf(type) !== -1 && filter[type] !== false);
+            visible = isObjVisible(obj);
         }
         try {
             if (obj.options) obj.options.set('visible', visible);
             var label = obj.properties.get('label');
             if (label && label.options) label.options.set('visible', visible);
+            var regionLabel = obj.properties.get('regionLabel');
+            if (regionLabel && regionLabel.options) regionLabel.options.set('visible', visible);
         } catch (e) {}
     });
     crossGroupPlacemarks.forEach(function(pm) {
@@ -18426,6 +19998,15 @@ function applyMapFilter() {
 
     // Линии связи (ONU, медиаконвертер, OLT, сплиттер, кросс–узел) — отдельные polyline, не в objects.
     try { setAllConnectionLinesVisible(true); } catch (e) {}
+    if (window.MapRegions && MapRegions.syncConnectionLinesVisibility) {
+        MapRegions.syncConnectionLinesVisibility(objects, {
+            onuConnectionLines: typeof onuConnectionLines !== 'undefined' ? onuConnectionLines : [],
+            oltConnectionLines: typeof oltConnectionLines !== 'undefined' ? oltConnectionLines : [],
+            splitterConnectionLines: typeof splitterConnectionLines !== 'undefined' ? splitterConnectionLines : [],
+            splitterOutputConnectionLines: typeof splitterOutputConnectionLines !== 'undefined' ? splitterOutputConnectionLines : [],
+            nodeConnectionLines: typeof nodeConnectionLines !== 'undefined' ? nodeConnectionLines : []
+        });
+    }
 
     // Доп. скрытие по зуму (поверх фильтра).
     try { applyExpertZoomVisibility(); } catch (e) {}
@@ -19360,6 +20941,9 @@ function applyAllOpticalCableMapStyles() {
         if (!obj.properties || obj.properties.get('type') !== 'cable') return;
         disableCableMapBalloon(obj);
         if (window.FiberCableConfig) window.FiberCableConfig.applyOpticalMapStyle(obj);
+        if (window.CableUnderground && CableUnderground.syncAerialOverlayStroke) {
+            CableUnderground.syncAerialOverlayStroke(obj);
+        }
     });
 }
 

@@ -133,6 +133,7 @@ function renderSearchResults(results, query) {
             case 'attachment': return '🔗';
             case 'camera': return '📷';
             case 'cable': return '🔌';
+            case 'region': return '⬡';
             default: return '📍';
         }
     };
@@ -166,6 +167,19 @@ function goToSearchResult(result) {
     var searchInput = document.getElementById('mapSearch');
     searchResults.style.display = 'none';
     var coords;
+    if (result.type === 'region' && window.MapRegions) {
+        var ring = MapRegions.getRegionRing(obj);
+        if (ring.length >= 3) {
+            var lats = ring.map(function(c) { return c[0]; });
+            var lons = ring.map(function(c) { return c[1]; });
+            myMap.setBounds([[Math.min.apply(null, lats), Math.min.apply(null, lons)], [Math.max.apply(null, lats), Math.max.apply(null, lons)]], { checkZoomRange: true, duration: 500 });
+            setTimeout(function() { focusRegionOnMap(obj); }, 600);
+            searchInput.value = '';
+            var clearElR = document.getElementById('clearSearch');
+            if (clearElR) clearElR.style.display = 'none';
+            return;
+        }
+    }
     if (result.type === 'cable') {
         var geometry = obj.geometry.getCoordinates();
         if (geometry && geometry.length >= 2) {
@@ -180,6 +194,7 @@ function goToSearchResult(result) {
     setTimeout(function() {
         if (result.type === 'cable') showCableInfo(obj);
         else if (result.type === 'support' || result.type === 'attachment') showSupportInfo(obj);
+        else if (result.type === 'region') focusRegionOnMap(obj);
         else if (result.type === 'node' || result.type === 'cross' || result.type === 'sleeve' || result.type === 'olt' || result.type === 'splitter' || result.type === 'onu' || result.type === 'camera') showObjectInfo(obj);
     }, 600);
     searchInput.value = '';

@@ -23,6 +23,19 @@ var pendingCopperRouteFinish = null;
 /** Прокладка меди только с портов коммутатора/кросса (не из списка типа кабеля) */
 var copperCableLayingActive = false;
 var cableWaypoints = [];
+/** Подземный участок: вход в колодец — клики по карте — выход во второй колодец */
+var cableUndergroundActive = false;
+var cableUndergroundManhole = null;
+var cableUndergroundCoords = [];
+/** Завершённые подземные участки текущей цепочки прокладки */
+var cableUndergroundPendingSpans = [];
+/** Редактирование pathCoords уже проложенного подземного участка */
+var cableUndergroundEditMode = false;
+var cableUndergroundEditCable = null;
+var cableUndergroundEditSpanIndex = -1;
+var cableUndergroundEditPreviewLine = null;
+/** pathCoords до перепрокладки (для отмены) */
+var cableUndergroundRelayoutBackup = null;
 var cablePreviewLine = null;
 var selectedFiberForConnection = null;
 /** Индекс выбранного сращивания для редактирования подписи (карточка кросса/муфты) */
@@ -41,13 +54,20 @@ var cableSplitData = null;
 var cableSplitPreviewLine = null;
 /** Блокирует showCableInfo сразу после клика в режиме установки муфты (двойное срабатывание карта + линия). */
 var cableSplitSuppressInfoUntil = 0;
+/** Рисование региона: вершины полигона и preview */
+var regionDrawMode = false;
+var regionDrawCoords = [];
+var regionDrawPreview = null;
+/** Регион, у которого перерисовывают контур (null — создание нового) */
+var regionEditTarget = null;
+var regionEditGeometryBackup = null;
 var currentUser = null;
 var crossGroupPlacemarks = [];
 var nodeGroupPlacemarks = [];
 var crossGroupNames = new Map();
 var nodeGroupNames = new Map();
 var collaboratorCursorsPlacemarks = [];
-var mapFilter = { node: true, nodeAggregationOnly: false, cross: true, sleeve: true, support: true, attachment: true, olt: true, splitter: true, onu: true, camera: true };
+var mapFilter = { node: true, nodeAggregationOnly: false, cross: true, sleeve: true, support: true, attachment: true, manhole: true, olt: true, splitter: true, onu: true, camera: true };
 var lastDraggedPlacemark = null;
 var UNDO_MAX = 20;
 var undoStack = [];

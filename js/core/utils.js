@@ -18,6 +18,8 @@ function getObjectTypeName(type) {
         case 'node': return 'Узел сети';
         case 'switch': return 'Коммутатор';
         case 'attachment': return 'Крепление узлов';
+        case 'manhole': return 'Колодец';
+        case 'region': return 'Регион';
         default: return 'Объект';
     }
 }

@@ -9,6 +9,7 @@
         node: '#22c55e',
         nodeAggregation: '#ef4444',
         attachment: '#64748b',
+        manhole: '#92400e',
         olt: '#0ea5e9',
         splitter: '#a855f7',
         onu: '#06b6d4',
@@ -121,6 +122,13 @@
             '<circle cx="16" cy="24" r="1.5" fill="' + sw + '" opacity="' + wo + '"/>';
     }
 
+    function drawManhole(fill, sw, w, fo, wo) {
+        return '<ellipse cx="16" cy="17" rx="10" ry="7" fill="' + fill + '" stroke="' + sw + '" stroke-width="' + w + '" opacity="' + fo + '"/>' +
+            '<rect x="10" y="8" width="12" height="3" rx="1" fill="' + sw + '" opacity="' + wo + '"/>' +
+            '<path d="M11 17 H21" stroke="' + sw + '" stroke-width="1.2" opacity="' + (wo * 0.75) + '"/>' +
+            '<path d="M16 11 V23" stroke="' + sw + '" stroke-width="1.2" opacity="' + (wo * 0.75) + '"/>';
+    }
+
     function drawOlt(fill, sw, w, fo, wo) {
         return '<rect x="5" y="7" width="22" height="18" rx="2.5" fill="' + fill + '" stroke="' + sw + '" stroke-width="' + w + '" opacity="' + fo + '"/>' +
             '<rect x="8" y="11" width="3" height="2.2" rx="0.6" fill="#4ade80" opacity="' + wo + '"/>' +
@@ -210,6 +218,7 @@
             case 'cross': body = drawCross(fill, sw, w, fo, wo); break;
             case 'node': body = drawNode(fill, sw, w, fo, wo, nodeKind); break;
             case 'attachment': body = drawAttachment(fill, sw, w, fo, wo); break;
+            case 'manhole': body = drawManhole(fill, sw, w, fo, wo); break;
             case 'olt': body = drawOlt(fill, sw, w, fo, wo); break;
             case 'splitter': body = drawSplitter(fill, sw, w, fo, wo); break;
             case 'onu': body = drawOnu(fill, sw, w, fo, wo); break;

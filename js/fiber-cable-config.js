@@ -66,7 +66,10 @@
             n = parseInt(n, 10);
             if (!isNaN(n) && n > 0) return Math.min(MAX_FIBERS, n);
         }
-        return countFromLegacyType(cable.properties.get('cableType')) || 0;
+        var legacy = countFromLegacyType(cable.properties.get('cableType'));
+        if (legacy > 0) return legacy;
+        if (cable.properties.get('cableType') === 'fiber') return 4;
+        return 0;
     }
 
     function getFiberCountFromType(type) {
@@ -81,11 +84,20 @@
         return getFiberCountFromType(arg);
     }
 
+    function trimPaletteToCount(palette, count) {
+        if (!Array.isArray(palette) || !palette.length) return [];
+        var pal = normalizePalette(palette);
+        var n = Math.max(1, Math.min(MAX_FIBERS, parseInt(count, 10) || 1));
+        return pal.length > n ? pal.slice(0, n) : pal;
+    }
+
     function getFiberPaletteForCable(cable) {
         if (!cable || !cable.properties) return [];
-        var custom = cable.properties.get('fiberPalette');
-        if (Array.isArray(custom) && custom.length) return normalizePalette(custom);
         var c = getFiberCountFromCable(cable);
+        var custom = cable.properties.get('fiberPalette');
+        if (Array.isArray(custom) && custom.length) {
+            return c > 0 ? trimPaletteToCount(custom, c) : normalizePalette(custom);
+        }
         return c > 0 ? buildStandardPalette(c) : [];
     }
 
@@ -159,7 +171,10 @@
     function setLayFiberPalette(palette) {
         try {
             if (!palette || !palette.length) localStorage.removeItem(LAY_FIBER_PALETTE_KEY);
-            else localStorage.setItem(LAY_FIBER_PALETTE_KEY, JSON.stringify(normalizePalette(palette)));
+            else {
+                var trimmed = trimPaletteToCount(palette, getLayFiberCount());
+                localStorage.setItem(LAY_FIBER_PALETTE_KEY, JSON.stringify(trimmed));
+            }
         } catch (e) {}
     }
 
@@ -177,9 +192,9 @@
             cable.properties.set('cableType', 'fiber');
         }
         if (fiberPalette === null) {
-            cable.properties.set('fiberPalette', null);
+            cable.properties.unset('fiberPalette');
         } else if (Array.isArray(fiberPalette) && fiberPalette.length) {
-            cable.properties.set('fiberPalette', normalizePalette(fiberPalette));
+            cable.properties.set('fiberPalette', trimPaletteToCount(fiberPalette, count));
         } else {
             cable.properties.unset('fiberPalette');
         }
@@ -427,6 +442,7 @@
         getFiberCountFromType: getFiberCountFromType,
         getFiberColors: getFiberColors,
         getFiberPaletteForCable: getFiberPaletteForCable,
+        trimPaletteToCount: trimPaletteToCount,
         getCableMapColor: function(t) {
             return isOpticalCableType(t) ? MAP_FIBER_COLOR : (t === 'copper' ? '#b45309' : '#64748b');
         },
