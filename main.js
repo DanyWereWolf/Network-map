@@ -374,6 +374,7 @@ function pushSaveDataToSync(opts) {
         return;
     }
     if (typeof window.syncSendState === 'function') {
+        if (typeof window.syncShouldSendFullState === 'function' && !window.syncShouldSendFullState()) return;
         window.syncSendState(getSerializedData());
     }
 }
@@ -4921,7 +4922,7 @@ function createObject(type, name, coords, options = {}) {
         var data = serializeOneObject(placemark);
         if (data) window.syncSendOp({ type: 'add_object', data: data });
     }
-    saveData();
+    saveData({ skipSync: true });
     updateStats();
     logAction(ActionTypes.CREATE_OBJECT, {
         objectType: type,
@@ -10485,6 +10486,22 @@ function applyRemoteState(data) {
         return;
     }
     _mapStateReceived = true;
+    if (_mapDataReady && !_mapInitialLoadPending && objects && objects.length > 0) {
+        try {
+            if (data.length === 0) {
+                clearMap({ skipSave: true, skipHistory: true });
+                lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
+                updateStats();
+                markMapDataReady();
+                return;
+            }
+            applyRemoteStateMerged(data);
+            lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
+            updateStats();
+            markMapDataReady();
+            return;
+        } catch (eMerge) {}
+    }
     if (_mapInitialLoadPending && data.length > 0 && typeof setMapLoadingOverlayText === 'function') {
         setMapLoadingOverlayText('Загрузка объектов…');
     }
@@ -10533,6 +10550,21 @@ function applyRemoteStateMerged(data) {
     for (i = 0; i < data.length; i++) {
         item = data[i];
         if (item.type === 'cable') continue;
+        if (item.type === 'region') {
+            existing = objects.find(function(o) {
+                return o.properties && o.properties.get('type') === 'region' &&
+                    o.properties.get('uniqueId') === item.uniqueId;
+            });
+            if (existing) {
+                populateRegionFromSerializedData(existing, item);
+                refs.push(existing);
+            } else {
+                created = createRegionFromData(item);
+                if (created) refs.push(created);
+            }
+            refIndexByDataIndex[i] = refs.length - 1;
+            continue;
+        }
         existing = objects.find(function(o) {
             var t = o.properties && o.properties.get('type');
             return t && t !== 'cable' && t !== 'cableLabel' && o.properties.get('uniqueId') === item.uniqueId;
@@ -10686,6 +10718,10 @@ function applyRemoteStateMerged(data) {
     ensureNodeLabelsVisible();
     updateAllConnectionLines();
     updateStats();
+    if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
+    if (window.MapRegions && MapRegions.sendAllRegionsToMapBack && myMap) {
+        MapRegions.sendAllRegionsToMapBack(myMap, objects);
+    }
 
     setTimeout(function() {
         incomingCables.forEach(function(item) {
@@ -19550,7 +19586,7 @@ function createRegion(name, ringCoords, options) {
         var dataSer = serializeOneObject(polygon);
         if (dataSer) window.syncSendOp({ type: 'add_object', data: dataSer });
     }
-    if (!(options && options.skipSave)) saveData();
+    if (!(options && options.skipSave)) saveData({ skipSync: true });
     renderRegionsSidebarList();
     if (!(options && options.skipLog)) {
         logAction(ActionTypes.CREATE_OBJECT, { objectType: 'region', name: name || '' });
