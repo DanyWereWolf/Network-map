@@ -84,6 +84,13 @@
 
     function doApplyPendingState() {
         if (!pendingApplyState || !Array.isArray(pendingApplyState)) return;
+        if (typeof myMap === 'undefined' || !myMap) {
+            applyStateTimer = setTimeout(function() {
+                applyStateTimer = null;
+                doApplyPendingState();
+            }, 50);
+            return;
+        }
         if (shouldDeferRemoteFullState()) {
             applyStateTimer = setTimeout(function() {
                 applyStateTimer = null;
@@ -155,6 +162,7 @@
 
     function connect() {
         var url = getSyncUrl();
+        if (ws && ws.readyState === WebSocket.CONNECTING) return;
         if (ws && ws.readyState === WebSocket.OPEN) {
             disconnect();
             return;
@@ -422,14 +430,22 @@
         } catch (e) {}
     }
 
+    function autoConnectOnMapPage() {
+        if (typeof getApiBase === 'function' && !getApiBase()) return;
+        try {
+            if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+        } catch (eWs) {}
+        connect();
+    }
+
     if (typeof document !== 'undefined' && document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function() {
             loadSavedSyncUrl();
-            setTimeout(autoConnectIfSaved, 1200);
+            autoConnectOnMapPage();
         });
     } else {
         loadSavedSyncUrl();
-        setTimeout(autoConnectIfSaved, 1200);
+        autoConnectOnMapPage();
     }
 
     function sendCursorPosition(position) {
@@ -548,6 +564,7 @@
     window.syncConnect = connect;
     window.syncDisconnect = disconnect;
     window.syncAutoConnectIfSaved = autoConnectIfSaved;
+    window.syncAutoConnect = autoConnectOnMapPage;
     window.syncForceSendState = forceSendState;
     window.syncApplyPendingState = applyPendingStateAfterDrag;
 })();

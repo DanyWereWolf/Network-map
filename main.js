@@ -1061,22 +1061,6 @@ document.addEventListener('DOMContentLoaded', function() {
     whenYmapsReady(init);
     refreshMapLimitsFromServer();
 
-    // Авто‑подключение к синхронизации для организации при входе на карту,
-    // только если ещё нет сохранённого адреса sync-сервера
-    try {
-        var hasSavedSyncUrl = false;
-        try {
-            hasSavedSyncUrl = !!sessionStorage.getItem('networkMap_syncUrl');
-        } catch (e) {}
-        if (!hasSavedSyncUrl && typeof window.syncConnect === 'function') {
-            setTimeout(function() {
-                try {
-                    window.syncConnect();
-                } catch (e) {}
-            }, 2000);
-        }
-    } catch (e) {}
-    
     (async function() {
         await new Promise(function(r) { setTimeout(r, 1500); });
         const result = await checkForUpdates(true);
@@ -2366,6 +2350,13 @@ var _mapTilesReady = false;
 var _mapDataReady = false;
 var _mapStateReceived = false;
 var _mapLoadSafetyTimer = null;
+var _mapBulkImportActive = false;
+var MAP_BULK_IMPORT_MIN_ITEMS = 350;
+var MAP_BULK_IMPORT_BATCH_SIZE = 60;
+
+function isMapBulkImportActive() {
+    return !!_mapBulkImportActive;
+}
 
 function hideMapLoadingOverlay() {
     var el = document.getElementById('mapLoadingOverlay');
@@ -2451,8 +2442,11 @@ function setupMapTilesReady() {
         done = true;
         markMapTilesReady();
     }
+    if (myMap.events && typeof myMap.events.add === 'function') {
+        try { myMap.events.add('tilesload', mark); } catch (eTiles) {}
+    }
     myMap.events.add('actionend', mark);
-    setTimeout(mark, 800);
+    setTimeout(mark, 350);
 }
 
 function hidePanoramaLayerMenuItem() {
@@ -6904,16 +6898,16 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     myMap.geoObjects.add(polyline);
     if (!isCopperCableType(cableType) && spansForCable.length && window.CableUnderground) {
         CableUnderground.applyCableRouteGeometry(polyline, points, spansForCable);
-        CableUnderground.refreshCableUndergroundOverlays(polyline);
+        if (!isMapBulkImportActive()) CableUnderground.refreshCableUndergroundOverlays(polyline);
     }
-    if (typeof applyMapFilter === 'function') applyMapFilter();
+    if (!isMapBulkImportActive() && typeof applyMapFilter === 'function') applyMapFilter();
 
     if (fiberNumber !== null && points.length >= 2) {
         markFiberAsUsed(points[0], cableUniqueId, fiberNumber);
         markFiberAsUsed(points[points.length - 1], cableUniqueId, fiberNumber);
     }
 
-    updateCableVisualization();
+    if (!isMapBulkImportActive()) updateCableVisualization();
     
     if (!skipSync) {
         saveData();
@@ -6934,7 +6928,7 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     if (!existingCableId && !isCopperCableType(cableType)) {
         resetCableUndergroundPendingSpans();
     }
-    updateStats();
+    if (!isMapBulkImportActive()) updateStats();
     return true;
 }
 
@@ -10500,6 +10494,16 @@ function applyRemoteState(data) {
         });
         collaboratorCursorsPlacemarks = [];
         var opts = { skipSave: true, skipHistory: true };
+        var bulkLoad = _mapInitialLoadPending && data.length >= MAP_BULK_IMPORT_MIN_ITEMS;
+        if (bulkLoad) opts.bulkImport = true;
+        var applyFinished = false;
+        function finishRemoteApply() {
+            if (applyFinished) return;
+            applyFinished = true;
+            lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
+            updateStats();
+            markMapDataReady();
+        }
         if (data.length === 0) {
             clearMap(opts);
             updateStats();
@@ -10507,14 +10511,13 @@ function applyRemoteState(data) {
             if (window._savedMapStart && typeof applyMapStartFromSettings === 'function') {
                 applyMapStartFromSettings(window._savedMapStart, true);
             }
+            markMapDataReady();
             return;
         }
-        importData(data, opts);
-        lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
-        updateStats();
+        importData(data, opts, bulkLoad ? finishRemoteApply : null);
+        if (!bulkLoad) finishRemoteApply();
     } catch (e) {
         updateStats();
-    } finally {
         markMapDataReady();
     }
 }
@@ -10903,130 +10906,143 @@ function ensureNodeLabelsVisible() {
     });
 }
 
-function importData(data, opts) {
-    clearMap(opts || {});
-    if (Array.isArray(data)) {
-        data.forEach(function(item) {
-            if (item && item.type && item.type !== 'cable' && (item.uniqueId == null || item.uniqueId === '')) {
-                item.uniqueId = generateUniqueId(item.type);
-            }
-        });
-    }
-    
-    const objectRefs = [];
-    data.forEach(item => {
-        if (item.type === 'cable') {
-            objectRefs.push(null);
-            return;
+function importDataAssignUniqueIds(data) {
+    if (!Array.isArray(data)) return;
+    data.forEach(function(item) {
+        if (item && item.type && item.type !== 'cable' && (item.uniqueId == null || item.uniqueId === '')) {
+            item.uniqueId = generateUniqueId(item.type);
         }
-        if (item.type === 'region') {
-            objectRefs.push(createRegionFromData(item));
-            return;
-        }
-        const obj = createObjectFromData(item);
-        objectRefs.push(obj);
     });
-    
-    data.forEach((item, index) => {
-            if (item.type !== 'cable') return;
-            var refsOnly = objectRefs.filter(function(r) { return r != null; });
-            var coords = normalizeCableGeometry(item.geometry);
-            var fromObj = null, toObj = null;
-            
-            if (item.fromUniqueId && item.toUniqueId) {
-                fromObj = refsOnly.find(function(r) { return r.properties && r.properties.get('uniqueId') === item.fromUniqueId; });
-                toObj = refsOnly.find(function(r) { return r.properties && r.properties.get('uniqueId') === item.toUniqueId; });
-            }
-            if (!fromObj || !toObj) {
-                if (coords && coords.length >= 2) {
-                    var preferFiberEpImp = item.cableType !== 'copper';
-                    fromObj = fromObj || findRefClosestToCoord(refsOnly, coords[0], undefined, preferFiberEpImp, item.fromUniqueId);
-                    toObj = toObj || findRefClosestToCoord(refsOnly, coords[coords.length - 1], undefined, preferFiberEpImp, item.toUniqueId);
-                }
-            }
-            if (!fromObj || !toObj) {
-                if (item.from !== undefined && item.to !== undefined &&
-                    item.from < objectRefs.length && item.to < objectRefs.length) {
-                    fromObj = fromObj || objectRefs[item.from];
-                    toObj = toObj || objectRefs[item.to];
-                }
-            }
-            if ((!fromObj || !toObj) && coords && coords.length >= 2) {
-                var geomEp = findObjectsAtGeometry(refsOnly, coords);
-                if (geomEp && geomEp.length >= 2) {
-                    fromObj = fromObj || geomEp[0];
-                    toObj = toObj || geomEp[geomEp.length - 1];
-                }
-            }
-            if (!fromObj || !toObj) return;
-            var itemCuMeta = copperSerializedMetaFromItem(item);
-            var existingCableImport = objects.find(function(o) { return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId; });
-            if (existingCableImport) {
-                var routeExisting = buildCableRoutePointsFromData(refsOnly, item, fromObj, toObj, coords);
-                var ptsArr = routeExisting;
-                if (!ptsArr || ptsArr.length < 2) {
-                    ptsArr = (coords && coords.length >= 2) ? findObjectsAtGeometry(refsOnly, item.geometry) : null;
-                    if (!ptsArr || ptsArr.length < 2) ptsArr = [fromObj, toObj];
-                }
-                if (ptsArr && ptsArr.length >= 2) {
-                    if (fromObj) ptsArr[0] = fromObj;
-                    if (toObj) ptsArr[ptsArr.length - 1] = toObj;
-                    existingCableImport.properties.set('from', ptsArr[0]);
-                    existingCableImport.properties.set('to', ptsArr[ptsArr.length - 1]);
-                    existingCableImport.properties.set('points', ptsArr);
-                    try {
-                        var lineExisting = ptsArr.map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; }).filter(function(c) { return c && c.length >= 2; });
-                        if (existingCableImport.geometry && lineExisting.length >= 2) existingCableImport.geometry.setCoordinates(lineExisting);
-                        else if (existingCableImport.geometry && coords && coords.length >= 2) existingCableImport.geometry.setCoordinates(coords);
-                    } catch (eEx) {}
-                }
-                if (item && 'cableName' in item) existingCableImport.properties.set('cableName', item.cableName);
-                if (item.distance !== undefined) existingCableImport.properties.set('distance', item.distance);
-                applySerializedUndergroundToCable(existingCableImport, item, ptsArr);
-                applySerializedCopperMetadataToCable(existingCableImport, item);
-                applyImportedCableFiberProps(existingCableImport, item);
-                return;
-            }
-            var routePts = buildCableRoutePointsFromData(refsOnly, item, fromObj, toObj, coords);
-            if (routePts && routePts.length >= 2) {
-                addCable(routePts[0], routePts, item.cableType, item.uniqueId, undefined, true, true, itemCuMeta);
-            } else {
-                var points = (coords && coords.length >= 2) ? findObjectsAtGeometry(refsOnly, item.geometry) : null;
-                if (points && points.length >= 2) {
-                    if (fromObj) points[0] = fromObj;
-                    if (toObj) points[points.length - 1] = toObj;
-                    addCable(points[0], points, item.cableType, item.uniqueId, undefined, true, true, itemCuMeta);
-                } else {
-                    addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true, true, itemCuMeta);
-                }
-            }
-            const cable = objects.find(obj =>
-                obj.properties &&
-                obj.properties.get('type') === 'cable' &&
-                obj.properties.get('uniqueId') === item.uniqueId
-            );
-            if (cable) {
-                var ptList = cable.properties.get('points');
-                if (Array.isArray(ptList) && ptList.length >= 2) {
-                    try {
-                        var lineFromPts = ptList.map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; }).filter(function(c) { return c && c.length >= 2; });
-                        if (cable.geometry && lineFromPts.length >= 2) cable.geometry.setCoordinates(lineFromPts);
-                    } catch (eImp) {}
-                } else if (cable.geometry && coords && coords.length >= 2) {
-                    cable.geometry.setCoordinates(coords);
-                }
-                if (!cable.properties.get('distance')) {
-                    const fromCoords = fromObj.geometry.getCoordinates();
-                    const toCoords = toObj.geometry.getCoordinates();
-                    const distance = calculateDistance(fromCoords, toCoords);
-                    cable.properties.set('distance', distance);
-                }
-                if (item && 'cableName' in item) cable.properties.set('cableName', item.cableName);
-                applySerializedUndergroundToCable(cable, item, cable.properties.get('points'));
-                applyImportedCableFiberProps(cable, item);
-            }
-    });
+}
 
+function importDataCreatePlacemarkRef(item) {
+    if (!item || item.type === 'cable') return null;
+    if (item.type === 'region') return createRegionFromData(item);
+    return createObjectFromData(item, null, { bulkImport: true });
+}
+
+function importDataRunCables(data, objectRefs) {
+    var refsOnly = [];
+    var refByUid = Object.create(null);
+    var ri, r, uid;
+    for (ri = 0; ri < objectRefs.length; ri++) {
+        r = objectRefs[ri];
+        if (!r) continue;
+        refsOnly.push(r);
+        try {
+            uid = r.properties && r.properties.get('uniqueId');
+            if (uid != null && uid !== '') refByUid[uid] = r;
+        } catch (eRef) {}
+    }
+    var cableByUid = Object.create(null);
+
+    data.forEach(function(item) {
+        if (!item || item.type !== 'cable') return;
+        var coords = normalizeCableGeometry(item.geometry);
+        var fromObj = null;
+        var toObj = null;
+
+        if (item.fromUniqueId) fromObj = refByUid[item.fromUniqueId] || null;
+        if (item.toUniqueId) toObj = refByUid[item.toUniqueId] || null;
+        if (!fromObj || !toObj) {
+            if (coords && coords.length >= 2) {
+                var preferFiberEpImp = item.cableType !== 'copper';
+                fromObj = fromObj || findRefClosestToCoord(refsOnly, coords[0], undefined, preferFiberEpImp, item.fromUniqueId);
+                toObj = toObj || findRefClosestToCoord(refsOnly, coords[coords.length - 1], undefined, preferFiberEpImp, item.toUniqueId);
+            }
+        }
+        if (!fromObj || !toObj) {
+            if (item.from !== undefined && item.to !== undefined &&
+                item.from < objectRefs.length && item.to < objectRefs.length) {
+                fromObj = fromObj || objectRefs[item.from];
+                toObj = toObj || objectRefs[item.to];
+            }
+        }
+        if ((!fromObj || !toObj) && coords && coords.length >= 2) {
+            var geomEp = findObjectsAtGeometry(refsOnly, coords);
+            if (geomEp && geomEp.length >= 2) {
+                fromObj = fromObj || geomEp[0];
+                toObj = toObj || geomEp[geomEp.length - 1];
+            }
+        }
+        if (!fromObj || !toObj) return;
+
+        var itemCuMeta = copperSerializedMetaFromItem(item);
+        var existingCableImport = (item.uniqueId != null && cableByUid[item.uniqueId]) || null;
+        if (!existingCableImport && item.uniqueId != null) {
+            existingCableImport = objects.find(function(o) {
+                return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId;
+            }) || null;
+            if (existingCableImport) cableByUid[item.uniqueId] = existingCableImport;
+        }
+        if (existingCableImport) {
+            var routeExisting = buildCableRoutePointsFromData(refsOnly, item, fromObj, toObj, coords);
+            var ptsArr = routeExisting;
+            if (!ptsArr || ptsArr.length < 2) {
+                ptsArr = (coords && coords.length >= 2) ? findObjectsAtGeometry(refsOnly, item.geometry) : null;
+                if (!ptsArr || ptsArr.length < 2) ptsArr = [fromObj, toObj];
+            }
+            if (ptsArr && ptsArr.length >= 2) {
+                if (fromObj) ptsArr[0] = fromObj;
+                if (toObj) ptsArr[ptsArr.length - 1] = toObj;
+                existingCableImport.properties.set('from', ptsArr[0]);
+                existingCableImport.properties.set('to', ptsArr[ptsArr.length - 1]);
+                existingCableImport.properties.set('points', ptsArr);
+                try {
+                    var lineExisting = ptsArr.map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; }).filter(function(c) { return c && c.length >= 2; });
+                    if (existingCableImport.geometry && lineExisting.length >= 2) existingCableImport.geometry.setCoordinates(lineExisting);
+                    else if (existingCableImport.geometry && coords && coords.length >= 2) existingCableImport.geometry.setCoordinates(coords);
+                } catch (eEx) {}
+            }
+            if (item && 'cableName' in item) existingCableImport.properties.set('cableName', item.cableName);
+            if (item.distance !== undefined) existingCableImport.properties.set('distance', item.distance);
+            applySerializedUndergroundToCable(existingCableImport, item, ptsArr);
+            applySerializedCopperMetadataToCable(existingCableImport, item);
+            applyImportedCableFiberProps(existingCableImport, item);
+            return;
+        }
+        var routePts = buildCableRoutePointsFromData(refsOnly, item, fromObj, toObj, coords);
+        if (routePts && routePts.length >= 2) {
+            addCable(routePts[0], routePts, item.cableType, item.uniqueId, undefined, true, true, itemCuMeta);
+        } else {
+            var points = (coords && coords.length >= 2) ? findObjectsAtGeometry(refsOnly, item.geometry) : null;
+            if (points && points.length >= 2) {
+                if (fromObj) points[0] = fromObj;
+                if (toObj) points[points.length - 1] = toObj;
+                addCable(points[0], points, item.cableType, item.uniqueId, undefined, true, true, itemCuMeta);
+            } else {
+                addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true, true, itemCuMeta);
+            }
+        }
+        var cable = (item.uniqueId != null && cableByUid[item.uniqueId]) || objects.find(function(obj) {
+            return obj.properties &&
+                obj.properties.get('type') === 'cable' &&
+                obj.properties.get('uniqueId') === item.uniqueId;
+        });
+        if (cable) {
+            if (item.uniqueId != null) cableByUid[item.uniqueId] = cable;
+            var ptList = cable.properties.get('points');
+            if (Array.isArray(ptList) && ptList.length >= 2) {
+                try {
+                    var lineFromPts = ptList.map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; }).filter(function(c) { return c && c.length >= 2; });
+                    if (cable.geometry && lineFromPts.length >= 2) cable.geometry.setCoordinates(lineFromPts);
+                } catch (eImp) {}
+            } else if (cable.geometry && coords && coords.length >= 2) {
+                cable.geometry.setCoordinates(coords);
+            }
+            if (!cable.properties.get('distance')) {
+                var fromCoords = fromObj.geometry.getCoordinates();
+                var toCoords = toObj.geometry.getCoordinates();
+                cable.properties.set('distance', calculateDistance(fromCoords, toCoords));
+            }
+            if (item && 'cableName' in item) cable.properties.set('cableName', item.cableName);
+            applySerializedUndergroundToCable(cable, item, cable.properties.get('points'));
+            applyImportedCableFiberProps(cable, item);
+        }
+    });
+}
+
+function importDataPostProcess(opts) {
     repairCablesAfterImport();
     validateAndFixCableGeometryOnLoad();
     refreshAllCableUndergroundOverlays();
@@ -11037,7 +11053,7 @@ function importData(data, opts) {
     updateNodeDisplay();
     updateAllConnectionLines();
     migrateStandaloneSwitchesIntoNodes();
-    if (migrateNodeLevelSwitchMetaToAttached()) saveData();
+    if (migrateNodeLevelSwitchMetaToAttached() && !(opts && opts.skipSave)) saveData();
     rebuildAllCopperPortUsageFromCables();
     if (window.CameraPlayer && CameraPlayer.startStreamMonitor) CameraPlayer.startStreamMonitor();
     if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
@@ -11050,6 +11066,70 @@ function importData(data, opts) {
     objects.forEach(function(obj) {
         if (obj && obj.properties && obj.properties.get('type') === 'cable') ensureCableMapZIndex(obj);
     });
+    if (typeof applyMapFilter === 'function') applyMapFilter();
+}
+
+function importData(data, opts, done) {
+    opts = opts || {};
+    var useBulk = !!opts.bulkImport;
+    _mapBulkImportActive = useBulk;
+    clearMap(opts || {});
+    importDataAssignUniqueIds(data);
+
+    function completeImport() {
+        importDataPostProcess(opts);
+        _mapBulkImportActive = false;
+        if (typeof done === 'function') done();
+    }
+
+    if (useBulk && Array.isArray(data) && data.length >= MAP_BULK_IMPORT_MIN_ITEMS) {
+        var objectRefs = new Array(data.length);
+        var idx = 0;
+        var placemarkLoaded = 0;
+        var placemarkTotal = 0;
+        data.forEach(function(it) { if (it && it.type !== 'cable') placemarkTotal++; });
+
+        function importPlacemarkBatch() {
+            var end = Math.min(idx + MAP_BULK_IMPORT_BATCH_SIZE, data.length);
+            for (; idx < end; idx++) {
+                var item = data[idx];
+                if (!item) continue;
+                if (item.type === 'cable') {
+                    objectRefs[idx] = null;
+                    continue;
+                }
+                objectRefs[idx] = importDataCreatePlacemarkRef(item);
+                if (objectRefs[idx]) placemarkLoaded++;
+            }
+            if (typeof setMapLoadingOverlayText === 'function' && placemarkTotal > 0) {
+                setMapLoadingOverlayText('Загрузка объектов… ' + placemarkLoaded + ' / ' + placemarkTotal);
+            }
+            if (idx < data.length) {
+                requestAnimationFrame(importPlacemarkBatch);
+                return;
+            }
+            if (typeof setMapLoadingOverlayText === 'function') {
+                setMapLoadingOverlayText('Прокладка кабелей…');
+            }
+            requestAnimationFrame(function() {
+                importDataRunCables(data, objectRefs);
+                completeImport();
+            });
+        }
+        requestAnimationFrame(importPlacemarkBatch);
+        return;
+    }
+
+    var objectRefs = [];
+    data.forEach(function(item) {
+        if (item.type === 'cable') {
+            objectRefs.push(null);
+            return;
+        }
+        objectRefs.push(importDataCreatePlacemarkRef(item));
+    });
+    importDataRunCables(data, objectRefs);
+    completeImport();
 }
 
 function populateRegionFromSerializedData(regionObj, data) {
@@ -11235,7 +11315,8 @@ function applySerializedCableToMap(cable, data) {
     updateAllConnectionLines();
 }
 
-function createObjectFromData(data, opts) {
+function createObjectFromData(data, opts, createOpts) {
+    createOpts = createOpts || opts || {};
     const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, fiberPorts, sleeveType, maxFibers, crossPorts, crossCopperPorts, copperPortUsage, nodeConnections, oltConnections, onuConnections, mediaConverterConnections, uniqueId, nodeKind, manufacturer, model, comment, ponPorts, splitRatio, splitterConnections, incomingFiber, portAssignments, inputFiber, outputConnections, parentNodeId, switchPortTypes, attachedSwitches, streamType, streamUrl, streamUser, streamPass, streamAutoplay, streamMuted, snapshotPhoto } = data;
     
     var balloonContent;
@@ -11482,7 +11563,7 @@ function createObjectFromData(data, opts) {
     if (type === 'camera') refreshCameraMapPresentation(placemark);
 
     attachHoverEventsToObject(placemark);
-    if (!(opts && opts.skipAddToObjects)) {
+    if (!(createOpts && createOpts.skipAddToObjects)) {
         objects.push(placemark);
         if (type !== 'cross' && type !== 'node') {
             myMap.geoObjects.add(placemark);
@@ -11491,7 +11572,7 @@ function createObjectFromData(data, opts) {
         if (objLabel) {
             try { myMap.geoObjects.add(objLabel); } catch(e) {}
         }
-        updateStats();
+        if (!isMapBulkImportActive() && !(createOpts && createOpts.bulkImport)) updateStats();
     }
     return placemark;
 }

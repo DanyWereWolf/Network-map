@@ -43,6 +43,10 @@
         (function(){
             var base = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : '';
             if (!base || base === 'null') base = '';
+            var link = document.createElement('link');
+            link.rel = 'preconnect';
+            link.href = 'https://api-maps.yandex.ru';
+            document.head.appendChild(link);
             fetch(base + '/api/public-config').then(function(r){ return r.json(); }).catch(function(){ return {}; }).then(function(c){
                 var key = (c && c.yandexMapsApiKey) ? String(c.yandexMapsApiKey).trim() : '';
                 var s = document.createElement('script');
