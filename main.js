@@ -2883,22 +2883,24 @@ function setupEventListeners() {
 
     myMap.events.add('mousemove', handleMapMouseMove);
 
-    // Обновляем видимость "как в vols expert" при изменении зума.
-    // Событие `boundschange` срабатывает на панорамирование тоже, поэтому ограничиваемся изменением zoom.
+    // Обновляем видимость по зуму и (при большой карте) по viewport при панорамировании.
     let expertLastZoom = (typeof myMap.getZoom === 'function') ? myMap.getZoom() : null;
-    let expertZoomTimer = null;
+    let mapBoundsChangeTimer = null;
     myMap.events.add('boundschange', function() {
         try {
             if (!myMap || typeof myMap.getZoom !== 'function') return;
             const z = myMap.getZoom();
             if (typeof z !== 'number') return;
 
-            if (expertLastZoom != null && Math.abs(z - expertLastZoom) < 0.01) return;
+            var viewportCull = typeof MapPerf !== 'undefined' && MapPerf.shouldUseViewportCull();
+            if (!viewportCull) {
+                if (expertLastZoom != null && Math.abs(z - expertLastZoom) < 0.01) return;
+            }
             expertLastZoom = z;
 
-            if (expertZoomTimer) return;
-            expertZoomTimer = setTimeout(function() {
-                expertZoomTimer = null;
+            if (mapBoundsChangeTimer) return;
+            mapBoundsChangeTimer = setTimeout(function() {
+                mapBoundsChangeTimer = null;
                 if (typeof applyMapFilter === 'function') applyMapFilter();
                 if (window.MapRegions && MapRegions.syncAllRegionLabels && myMap) {
                     MapRegions.syncAllRegionLabels(myMap, objects);
@@ -4880,7 +4882,7 @@ function createObject(type, name, coords, options = {}) {
         updateConnectedCables(placemark);
         const label = placemark.properties.get('label');
         if (label) label.geometry.setCoordinates(placemark.geometry.getCoordinates());
-        updateAllConnectionLines();
+        scheduleConnectionLinesUpdate();
         updateSelectionPulsePosition(placemark);
         if (type === 'cross') updateCrossDisplay(); 
         if (type === 'node') updateNodeDisplay();
@@ -4902,6 +4904,7 @@ function createObject(type, name, coords, options = {}) {
 
     attachHoverEventsToObject(placemark);
     objects.push(placemark);
+    mapPerfRegister(placemark);
     if (!options.skipAddToObjects) {
         mapLimitsCache.count = (mapLimitsCache.count || 0) + 1;
         if (mapLimitsCache.limit != null) {
@@ -5184,7 +5187,7 @@ function migrateCableIdReferences(cable, oldId, idA, idB, splitAfterIndex) {
         }
     });
 
-    updateAllConnectionLines();
+    scheduleConnectionLinesUpdate();
 }
 
 function buildRoutePointsForSplit(points, splitAfterIndex, newSleeve, coordsA, coordsB) {
@@ -5861,7 +5864,7 @@ function splitCableAt(cable, splitOptions) {
     saveData({ syncFull: true });
 
     updateCableVisualization();
-    updateAllConnectionLines();
+    scheduleConnectionLinesUpdate();
     updateStats();
 
     var fromName = routes.pointsA[0].properties.get('name') || getObjectTypeName(routes.pointsA[0].properties.get('type'));
@@ -6161,6 +6164,7 @@ function deleteObject(obj, opts) {
         if (cableUniqueId) {
             deleteCableByUniqueId(cableUniqueId, { skipSync: true });
         } else {
+            mapPerfUnregister(cable);
             myMap.geoObjects.remove(cable);
             objects = objects.filter(o => o !== cable);
         }
@@ -6173,12 +6177,13 @@ function deleteObject(obj, opts) {
         const hadLabel = obj.properties && obj.properties.get('label');
         if (hadLabel) try { myMap.geoObjects.remove(hadLabel); } catch (e) {}
     }
+    mapPerfUnregister(obj);
     objects = objects.filter(o => o !== obj);
     
     updateCableVisualization();
     if (objType === 'cross') updateCrossDisplay();
     if (objType === 'node') updateNodeDisplay();
-    updateAllConnectionLines();
+    scheduleConnectionLinesUpdate(objUniqueId || 'full');
 
     if (!(opts && opts.skipSync)) {
         if (typeof window.syncSendOp === 'function' && objUniqueId) {
@@ -6663,7 +6668,7 @@ function pruneConnectionsForRemovedCableFibers(cableUniqueId, maxFiber) {
             slot.properties.set('usedFibers', usedFibersData);
         }
     });
-    updateAllConnectionLines();
+    scheduleConnectionLinesUpdate();
     updateOltConnectionLines();
     updateSplitterConnectionLines();
 }
@@ -6896,6 +6901,7 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     disableCableMapBalloon(polyline);
     attachHoverEventsToObject(polyline);
     objects.push(polyline);
+    mapPerfRegister(polyline);
     myMap.geoObjects.add(polyline);
     if (!isCopperCableType(cableType) && spansForCable.length && window.CableUnderground) {
         CableUnderground.applyCableRouteGeometry(polyline, points, spansForCable);
@@ -10716,7 +10722,7 @@ function applyRemoteStateMerged(data) {
     updateCrossDisplay();
     updateNodeDisplay();
     ensureNodeLabelsVisible();
-    updateAllConnectionLines();
+    scheduleConnectionLinesUpdate();
     updateStats();
     if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
     if (window.MapRegions && MapRegions.sendAllRegionsToMapBack && myMap) {
@@ -10781,7 +10787,7 @@ function applyOperationToMap(op) {
                 updateConnectedCables(existingAdd);
                 updateCrossDisplay();
                 updateNodeDisplay();
-                updateAllConnectionLines();
+                scheduleConnectionLinesUpdate();
                 return;
             }
         }
@@ -10796,25 +10802,30 @@ function applyOperationToMap(op) {
         var newObj = createObjectFromData(op.data, { skipAddToObjects: true });
         if (!newObj) return;
         objects.splice(objCount, 0, newObj);
+        mapPerfRegister(newObj);
         if (newObj.properties.get('type') !== 'cross' && newObj.properties.get('type') !== 'node') myMap.geoObjects.add(newObj);
-        updateCrossDisplay();
-        updateNodeDisplay();
+        var newType = newObj.properties.get('type');
+        if (newType === 'cross') updateCrossDisplay(groupKey(newObj.geometry.getCoordinates()));
+        else if (newType === 'node') updateNodeDisplay(groupKey(newObj.geometry.getCoordinates()));
+        else { updateCrossDisplay(); updateNodeDisplay(); }
         ensureNodeLabelsVisible();
-        updateAllConnectionLines();
+        scheduleConnectionLinesUpdate(getObjectUniqueId(newObj));
         updateStats();
         return;
     }
     if (op.type === 'update_object' && op.uniqueId != null && op.data) {
-        var objUp = objects.find(function(o) {
-            var t = o.properties && o.properties.get('type');
-            return t && t !== 'cable' && t !== 'cableLabel' && o.properties.get('uniqueId') === op.uniqueId;
-        });
+        var objUp = getMapObjectByUid(op.uniqueId);
         if (objUp) {
+            var objUpType = objUp.properties && objUp.properties.get('type');
             populatePlacemarkFromSerializedData(objUp, op.data);
             if (op.data.type !== 'region') updateConnectedCables(objUp);
-            updateCrossDisplay();
-            updateNodeDisplay();
-            updateAllConnectionLines();
+            if (objUpType === 'cross') updateCrossDisplay(groupKey(objUp.geometry.getCoordinates()));
+            else if (objUpType === 'node') updateNodeDisplay(groupKey(objUp.geometry.getCoordinates()));
+            else {
+                updateCrossDisplay();
+                updateNodeDisplay();
+            }
+            scheduleConnectionLinesUpdate(op.uniqueId);
             updateStats();
             if (currentModalObject === objUp && typeof refreshObjectModal === 'function') refreshObjectModal(objUp);
         }
@@ -10868,7 +10879,7 @@ function applyOperationToMap(op) {
             applySerializedUndergroundToCable(existingByOp, op.data, existingByOp.properties.get('points'));
             applyImportedCableFiberProps(existingByOp, op.data);
             updateCableVisualization();
-            updateAllConnectionLines();
+            scheduleConnectionLinesUpdate();
             updateStats();
             return;
         }
@@ -10906,7 +10917,7 @@ function applyOperationToMap(op) {
                 applyImportedCableFiberProps(cable, op.data);
             }
             updateCableVisualization();
-            updateAllConnectionLines();
+            scheduleConnectionLinesUpdate();
             updateStats();
         }
         return;
@@ -11087,7 +11098,7 @@ function importDataPostProcess(opts) {
     updateCableVisualization();
     updateCrossDisplay();
     updateNodeDisplay();
-    updateAllConnectionLines();
+    scheduleConnectionLinesUpdate();
     migrateStandaloneSwitchesIntoNodes();
     if (migrateNodeLevelSwitchMetaToAttached() && !(opts && opts.skipSave)) saveData();
     rebuildAllCopperPortUsageFromCables();
@@ -11115,6 +11126,7 @@ function importData(data, opts, done) {
     function completeImport() {
         importDataPostProcess(opts);
         _mapBulkImportActive = false;
+        if (typeof MapPerf !== 'undefined') MapPerf.reindexAllObjects(objects);
         if (typeof done === 'function') done();
     }
 
@@ -11165,6 +11177,7 @@ function importData(data, opts, done) {
         objectRefs.push(importDataCreatePlacemarkRef(item));
     });
     importDataRunCables(data, objectRefs);
+    if (typeof MapPerf !== 'undefined') MapPerf.reindexAllObjects(objects);
     completeImport();
 }
 
@@ -11348,7 +11361,7 @@ function applySerializedCableToMap(cable, data) {
         } catch (eUgUp) {}
     }
     updateCableVisualization();
-    updateAllConnectionLines();
+    scheduleConnectionLinesUpdate();
 }
 
 function createObjectFromData(data, opts, createOpts) {
@@ -11579,7 +11592,7 @@ function createObjectFromData(data, opts, createOpts) {
                 label.geometry.setCoordinates(placemark.geometry.getCoordinates());
                 try { myMap.geoObjects.add(label); } catch (e) {} 
             }
-            updateAllConnectionLines();
+            scheduleConnectionLinesUpdate();
             updateSelectionPulsePosition(placemark);
             saveData({ object: placemark, syncImmediate: true });
             releaseDragObjectLock(uid);
@@ -11601,6 +11614,7 @@ function createObjectFromData(data, opts, createOpts) {
     attachHoverEventsToObject(placemark);
     if (!(createOpts && createOpts.skipAddToObjects)) {
         objects.push(placemark);
+        mapPerfRegister(placemark);
         if (type !== 'cross' && type !== 'node') {
             myMap.geoObjects.add(placemark);
         }
@@ -11785,6 +11799,9 @@ function clearMap(opts) {
     selectedObjects = [];
     crossGroupPlacemarks = [];
     nodeGroupPlacemarks = [];
+    crossGroupPlacemarkByKey.clear();
+    nodeGroupPlacemarkByKey.clear();
+    if (typeof MapPerf !== 'undefined') MapPerf.clearObjectsIndex();
     if (!opts.skipSave) {
         saveData({ syncFull: true });
     }
@@ -13457,7 +13474,7 @@ function setupModalEventListeners() {
                 }
                 currentModalObject.properties.set('portAssignments', portAssignments);
                 saveData();
-                updateAllConnectionLines();
+                scheduleConnectionLinesUpdate();
                 const traceBtn = modalInfo.querySelector('.btn-trace-olt-port[data-port="' + portNum + '"]');
                 if (traceBtn) traceBtn.disabled = !val;
             });
@@ -14889,7 +14906,27 @@ function getObjectUniqueId(obj) {
         id = `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         obj.properties.set('uniqueId', id);
     }
+    if (typeof MapPerf !== 'undefined') MapPerf.registerMapObject(obj);
     return id;
+}
+
+function getMapObjectByUid(uid, typeFilter) {
+    if (uid == null || uid === '') return null;
+    if (typeof MapPerf !== 'undefined') {
+        return MapPerf.getByUid(uid, typeFilter);
+    }
+    return objects.find(function(o) {
+        if (!o || !o.properties || o.properties.get('uniqueId') !== uid) return false;
+        return !typeFilter || o.properties.get('type') === typeFilter;
+    }) || null;
+}
+
+function mapPerfRegister(obj) {
+    if (typeof MapPerf !== 'undefined' && obj) MapPerf.registerMapObject(obj);
+}
+
+function mapPerfUnregister(obj) {
+    if (typeof MapPerf !== 'undefined' && obj) MapPerf.unregisterMapObject(obj);
 }
 
 function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
@@ -17666,7 +17703,7 @@ function createOnuConnectionLine(sleeveObj, onuObj, cableId, fiberNumber, routeI
     var points = [sleeveCoords];
     if (routeIds && routeIds.length > 0) {
         routeIds.forEach(function(wpId) {
-            var wpObj = objects.find(function(o) { return o.properties && getObjectUniqueId(o) === wpId; });
+            var wpObj = getMapObjectByUid(wpId);
             if (wpObj && wpObj.geometry) {
                 points.push(wpObj.geometry.getCoordinates());
             }
@@ -17701,7 +17738,7 @@ function createMediaConverterConnectionLine(sleeveObj, mcObj, cableId, fiberNumb
     var points = [sleeveCoords];
     if (routeIds && routeIds.length > 0) {
         routeIds.forEach(function(wpId) {
-            var wpObj = objects.find(function(o) { return o.properties && getObjectUniqueId(o) === wpId; });
+            var wpObj = getMapObjectByUid(wpId);
             if (wpObj && wpObj.geometry) {
                 points.push(wpObj.geometry.getCoordinates());
             }
@@ -17797,12 +17834,274 @@ function removeNodeConnectionLineByKey(key) {
     }
 }
 
+function scheduleConnectionLinesUpdate(uidOrList) {
+    if (typeof MapPerf !== 'undefined') {
+        MapPerf.scheduleConnectionLinesUpdate(uidOrList);
+        return;
+    }
+    updateAllConnectionLines();
+}
+
+function applyConnectionLinesVisibility() {
+    if (!myMap || typeof myMap.getZoom !== 'function') return;
+    var zoom = myMap.getZoom();
+    var zoomOk = typeof MapPerf !== 'undefined'
+        ? MapPerf.connectionLinesVisibleAtZoom(zoom)
+        : (typeof zoom !== 'number' || zoom >= 17);
+    if (!zoomOk) {
+        setAllConnectionLinesVisible(false);
+        return;
+    }
+    try { setAllConnectionLinesVisible(true); } catch (e) {}
+    if (window.MapRegions && MapRegions.syncConnectionLinesVisibility) {
+        MapRegions.syncConnectionLinesVisibility(objects, {
+            onuConnectionLines: typeof onuConnectionLines !== 'undefined' ? onuConnectionLines : [],
+            oltConnectionLines: typeof oltConnectionLines !== 'undefined' ? oltConnectionLines : [],
+            splitterConnectionLines: typeof splitterConnectionLines !== 'undefined' ? splitterConnectionLines : [],
+            splitterOutputConnectionLines: typeof splitterOutputConnectionLines !== 'undefined' ? splitterOutputConnectionLines : [],
+            nodeConnectionLines: typeof nodeConnectionLines !== 'undefined' ? nodeConnectionLines : []
+        });
+    }
+}
+
+function removeHostConnectionLines(hostUid) {
+    var i;
+    for (i = onuConnectionLines.length - 1; i >= 0; i--) {
+        if (onuConnectionLines[i].properties.get('sleeveId') === hostUid) {
+            myMap.geoObjects.remove(onuConnectionLines[i]);
+            onuConnectionLines.splice(i, 1);
+        }
+    }
+    for (i = oltConnectionLines.length - 1; i >= 0; i--) {
+        if (oltConnectionLines[i].properties.get('sleeveId') === hostUid) {
+            myMap.geoObjects.remove(oltConnectionLines[i]);
+            oltConnectionLines.splice(i, 1);
+        }
+    }
+    for (i = splitterConnectionLines.length - 1; i >= 0; i--) {
+        if (splitterConnectionLines[i].properties.get('sleeveId') === hostUid) {
+            myMap.geoObjects.remove(splitterConnectionLines[i]);
+            splitterConnectionLines.splice(i, 1);
+        }
+    }
+}
+
+function removeNodeLinesForCross(crossUid) {
+    for (var i = nodeConnectionLines.length - 1; i >= 0; i--) {
+        if (nodeConnectionLines[i].properties.get('crossId') === crossUid) {
+            myMap.geoObjects.remove(nodeConnectionLines[i]);
+            nodeConnectionLines.splice(i, 1);
+        }
+    }
+}
+
+function removeSplitterOutputLinesForSplitter(splitterUid) {
+    for (var i = splitterOutputConnectionLines.length - 1; i >= 0; i--) {
+        if (splitterOutputConnectionLines[i].properties.get('splitterId') === splitterUid) {
+            myMap.geoObjects.remove(splitterOutputConnectionLines[i]);
+            splitterOutputConnectionLines.splice(i, 1);
+        }
+    }
+}
+
+function rebuildHostFiberConnections(obj) {
+    if (!obj || !obj.properties) return;
+    var type = obj.properties.get('type');
+    if (type !== 'cross' && type !== 'sleeve') return;
+    var hostUid = getObjectUniqueId(obj);
+    var onuConnections = obj.properties.get('onuConnections');
+    if (onuConnections) {
+        Object.keys(onuConnections).forEach(function(key) {
+            var conn = onuConnections[key];
+            var parts = key.split('-');
+            var fiberNumberParsed = parseInt(parts.pop(), 10);
+            var cableIdParsed = parts.join('-');
+            if (!crossHasFiberForConnection(obj, cableIdParsed, fiberNumberParsed)) return;
+            var onuObj = getMapObjectByUid(conn.onuId, 'onu');
+            if (onuObj) createOnuConnectionLine(obj, onuObj, cableIdParsed, fiberNumberParsed, conn.routeIds || []);
+        });
+    }
+    var mcConnections = obj.properties.get('mediaConverterConnections');
+    if (mcConnections) {
+        Object.keys(mcConnections).forEach(function(key) {
+            var conn = mcConnections[key];
+            var parts = key.split('-');
+            var fiberNumberParsed = parseInt(parts.pop(), 10);
+            var cableIdParsed = parts.join('-');
+            if (!crossHasFiberForConnection(obj, cableIdParsed, fiberNumberParsed)) return;
+            var mcObj = getMapObjectByUid(conn.mediaConverterId, 'mediaConverter');
+            if (mcObj) createMediaConverterConnectionLine(obj, mcObj, cableIdParsed, fiberNumberParsed, conn.routeIds || []);
+        });
+    }
+    var oltConnections = obj.properties.get('oltConnections');
+    if (oltConnections) {
+        Object.keys(oltConnections).forEach(function(key) {
+            var conn = oltConnections[key];
+            if (!conn || !conn.oltId) return;
+            var parts = key.split('-');
+            var fiberNumberParsed = parseInt(parts.pop(), 10);
+            var cableIdParsed = parts.join('-');
+            if (!crossHasFiberForConnection(obj, cableIdParsed, fiberNumberParsed)) return;
+            var oltObj = getMapObjectByUid(conn.oltId, 'olt');
+            if (oltObj) createOltConnectionLine(obj, oltObj, cableIdParsed, fiberNumberParsed);
+        });
+    }
+    var splitterConnections = obj.properties.get('splitterConnections');
+    if (splitterConnections) {
+        Object.keys(splitterConnections).forEach(function(key) {
+            var conn = splitterConnections[key];
+            if (!conn || !conn.splitterId) return;
+            var parts = key.split('-');
+            var fiberNumberParsed = parseInt(parts.pop(), 10);
+            var cableIdParsed = parts.join('-');
+            if (!crossHasFiberForConnection(obj, cableIdParsed, fiberNumberParsed)) return;
+            var splitterObj = getMapObjectByUid(conn.splitterId, 'splitter');
+            if (splitterObj) createSplitterConnectionLine(obj, splitterObj, cableIdParsed, fiberNumberParsed, conn.routeIds || []);
+        });
+    }
+}
+
+function rebuildNodeLinesForCross(crossObj) {
+    if (!crossObj || !crossObj.properties) return;
+    var crossUid = getObjectUniqueId(crossObj);
+    removeNodeLinesForCross(crossUid);
+    var nodeConnections = crossObj.properties.get('nodeConnections');
+    if (!nodeConnections) return;
+    Object.keys(nodeConnections).forEach(function(key) {
+        var conn = nodeConnections[key];
+        var parts = key.split('-');
+        var fiberNumberParsed = parseInt(parts.pop(), 10);
+        var cableIdParsed = parts.join('-');
+        if (!crossHasFiberForConnection(crossObj, cableIdParsed, fiberNumberParsed)) return;
+        var nodeObj = getMapObjectByUid(conn.nodeId, 'node');
+        if (nodeObj) createNodeConnectionLine(crossObj, nodeObj, cableIdParsed, fiberNumberParsed);
+    });
+}
+
+function rebuildSplitterOutputLines(splitterObj) {
+    if (!splitterObj || !splitterObj.properties) return;
+    var splitterUid = getObjectUniqueId(splitterObj);
+    removeSplitterOutputLinesForSplitter(splitterUid);
+    var outputs = splitterObj.properties.get('outputConnections') || [];
+    for (var oi = 0; oi < outputs.length; oi++) {
+        var out = outputs[oi];
+        if (!out) continue;
+        var target = null;
+        if (out.onuId) target = getMapObjectByUid(out.onuId, 'onu');
+        else if (out.splitterId) target = getMapObjectByUid(out.splitterId, 'splitter');
+        if (target) createSplitterOutputConnectionLine(splitterObj, target, oi, out.routeIds || out.route || []);
+    }
+}
+
+function rebuildLinesTargetingEndpoint(endpointUid, endpointType) {
+    objects.forEach(function(obj) {
+        if (!obj.properties) return;
+        var t = obj.properties.get('type');
+        if (t !== 'cross' && t !== 'sleeve') return;
+        var changed = false;
+        if (endpointType === 'onu') {
+            var onuC = obj.properties.get('onuConnections');
+            if (onuC && Object.keys(onuC).some(function(k) { return onuC[k] && onuC[k].onuId === endpointUid; })) changed = true;
+        } else if (endpointType === 'olt') {
+            var oltC = obj.properties.get('oltConnections');
+            if (oltC && Object.keys(oltC).some(function(k) { return oltC[k] && oltC[k].oltId === endpointUid; })) changed = true;
+        } else if (endpointType === 'mediaConverter') {
+            var mcC = obj.properties.get('mediaConverterConnections');
+            if (mcC && Object.keys(mcC).some(function(k) { return mcC[k] && mcC[k].mediaConverterId === endpointUid; })) changed = true;
+        } else if (endpointType === 'splitter') {
+            var spC = obj.properties.get('splitterConnections');
+            if (spC && Object.keys(spC).some(function(k) { return spC[k] && spC[k].splitterId === endpointUid; })) changed = true;
+        }
+        if (changed) {
+            removeHostConnectionLines(getObjectUniqueId(obj));
+            rebuildHostFiberConnections(obj);
+        }
+    });
+    if (endpointType === 'splitter') {
+        objects.forEach(function(obj) {
+            if (!obj.properties || obj.properties.get('type') !== 'splitter') return;
+            var outputs = obj.properties.get('outputConnections') || [];
+            for (var i = 0; i < outputs.length; i++) {
+                if (outputs[i] && (outputs[i].onuId === endpointUid || outputs[i].splitterId === endpointUid)) {
+                    rebuildSplitterOutputLines(obj);
+                    break;
+                }
+            }
+        });
+    }
+}
+
+function syncConnectionLinesForObject(obj) {
+    if (!obj || !obj.properties) return;
+    var type = obj.properties.get('type');
+    var uid = getObjectUniqueId(obj);
+    if (type === 'cross') {
+        removeHostConnectionLines(uid);
+        rebuildHostFiberConnections(obj);
+        rebuildNodeLinesForCross(obj);
+    } else if (type === 'sleeve') {
+        removeHostConnectionLines(uid);
+        rebuildHostFiberConnections(obj);
+    } else if (type === 'splitter') {
+        rebuildSplitterOutputLines(obj);
+        rebuildLinesTargetingEndpoint(uid, 'splitter');
+    } else if (type === 'onu') {
+        rebuildLinesTargetingEndpoint(uid, 'onu');
+    } else if (type === 'olt') {
+        rebuildLinesTargetingEndpoint(uid, 'olt');
+    } else if (type === 'mediaConverter') {
+        rebuildLinesTargetingEndpoint(uid, 'mediaConverter');
+    } else if (type === 'node') {
+        objects.forEach(function(host) {
+            if (!host.properties || host.properties.get('type') !== 'cross') return;
+            var nc = host.properties.get('nodeConnections');
+            if (!nc) return;
+            if (Object.keys(nc).some(function(k) { return nc[k] && nc[k].nodeId === uid; })) {
+                rebuildNodeLinesForCross(host);
+            }
+        });
+    }
+}
+
+function purgeConnectionLinesForMissingUid(uid) {
+    if (!uid) return;
+    var prefixes = [uid + '-'];
+    function lineMatches(line) {
+        var key = line.properties.get('connectionKey');
+        if (key && String(key).indexOf(uid) === 0) return true;
+        var sid = line.properties.get('sleeveId') || line.properties.get('crossId') || line.properties.get('splitterId');
+        return sid === uid;
+    }
+    [nodeConnectionLines, onuConnectionLines, oltConnectionLines, splitterConnectionLines, splitterOutputConnectionLines].forEach(function(arr) {
+        for (var i = arr.length - 1; i >= 0; i--) {
+            if (lineMatches(arr[i])) {
+                myMap.geoObjects.remove(arr[i]);
+                arr.splice(i, 1);
+            }
+        }
+    });
+}
+
+window.flushMapConnectionLines = function(pendingUids) {
+    if (!pendingUids || !(pendingUids instanceof Set) || pendingUids.size === 0) {
+        updateAllConnectionLines();
+        return;
+    }
+    pendingUids.forEach(function(uid) {
+        var obj = getMapObjectByUid(uid);
+        if (obj) syncConnectionLinesForObject(obj);
+        else purgeConnectionLinesForMissingUid(uid);
+    });
+    applyConnectionLinesVisibility();
+};
+
 function updateAllConnectionLines() {
     updateAllNodeConnectionLines();
     updateOnuConnectionLines();
     updateOltConnectionLines();
     updateSplitterConnectionLines();
     updateSplitterOutputConnectionLines();
+    applyConnectionLinesVisibility();
 }
 
 function createSplitterOutputConnectionLine(splitterObj, targetObj, outIdx, routeIds) {
@@ -17821,9 +18120,7 @@ function createSplitterOutputConnectionLine(splitterObj, targetObj, outIdx, rout
     var lineCoords = [splitterCoords];
     if (routeIds && Array.isArray(routeIds) && routeIds.length > 0) {
         routeIds.forEach(function(wpId) {
-            var wpObj = objects.find(function(o) { 
-                return o.properties && getObjectUniqueId(o) === wpId; 
-            });
+            var wpObj = getMapObjectByUid(wpId);
             if (wpObj && wpObj.geometry) {
                 lineCoords.push(wpObj.geometry.getCoordinates());
             }
@@ -17857,9 +18154,9 @@ function updateSplitterOutputConnectionLines() {
             if (!out) continue;
             var target = null;
             if (out.onuId) {
-                target = objects.find(function(o) { return o.properties && o.properties.get('type') === 'onu' && getObjectUniqueId(o) === out.onuId; });
+                target = getMapObjectByUid(out.onuId, 'onu');
             } else if (out.splitterId) {
-                target = objects.find(function(o) { return o.properties && o.properties.get('type') === 'splitter' && getObjectUniqueId(o) === out.splitterId; });
+                target = getMapObjectByUid(out.splitterId, 'splitter');
             }
             if (target) createSplitterOutputConnectionLine(obj, target, oi, out.routeIds || out.route || []);
         }
@@ -17881,9 +18178,7 @@ function updateOnuConnectionLines() {
                 const fiberNumberParsed = parseInt(parts.pop(), 10);
                 const cableIdParsed = parts.join('-');
                 if (!crossHasFiberForConnection(obj, cableIdParsed, fiberNumberParsed)) return;
-                const onuObj = objects.find(function(n) {
-                    return n.properties && n.properties.get('type') === 'onu' && n.properties.get('uniqueId') === conn.onuId;
-                });
+                const onuObj = getMapObjectByUid(conn.onuId, 'onu');
                 if (onuObj) createOnuConnectionLine(obj, onuObj, cableIdParsed, fiberNumberParsed, conn.routeIds || []);
             });
         }
@@ -17895,9 +18190,7 @@ function updateOnuConnectionLines() {
                 const fiberNumberParsed = parseInt(parts.pop(), 10);
                 const cableIdParsed = parts.join('-');
                 if (!crossHasFiberForConnection(obj, cableIdParsed, fiberNumberParsed)) return;
-                const mcObj = objects.find(function(n) {
-                    return n.properties && n.properties.get('type') === 'mediaConverter' && n.properties.get('uniqueId') === conn.mediaConverterId;
-                });
+                const mcObj = getMapObjectByUid(conn.mediaConverterId, 'mediaConverter');
                 if (mcObj) createMediaConverterConnectionLine(obj, mcObj, cableIdParsed, fiberNumberParsed, conn.routeIds || []);
             });
         }
@@ -17956,9 +18249,7 @@ function updateOltConnectionLines() {
             const fiberNumberParsed = parseInt(parts.pop(), 10);
             const cableIdParsed = parts.join('-');
             if (!crossHasFiberForConnection(obj, cableIdParsed, fiberNumberParsed)) return;
-            const oltObj = objects.find(function(o) {
-                return o.properties && o.properties.get('type') === 'olt' && o.properties.get('uniqueId') === conn.oltId;
-            });
+            const oltObj = getMapObjectByUid(conn.oltId, 'olt');
             if (oltObj) createOltConnectionLine(obj, oltObj, cableIdParsed, fiberNumberParsed);
         });
     });
@@ -17975,7 +18266,7 @@ function createSplitterConnectionLine(sleeveObj, splitterObj, cableId, fiberNumb
     var points = [sleeveCoords];
     if (routeIds && routeIds.length > 0) {
         routeIds.forEach(function(wpId) {
-            var wpObj = objects.find(function(o) { return o.properties && getObjectUniqueId(o) === wpId; });
+            var wpObj = getMapObjectByUid(wpId);
             if (wpObj && wpObj.geometry) {
                 points.push(wpObj.geometry.getCoordinates());
             }
@@ -18029,9 +18320,7 @@ function updateSplitterConnectionLines() {
             const fiberNumberParsed = parseInt(parts.pop(), 10);
             const cableIdParsed = parts.join('-');
             if (!crossHasFiberForConnection(obj, cableIdParsed, fiberNumberParsed)) return;
-            const splitterObj = objects.find(function(o) {
-                return o.properties && o.properties.get('type') === 'splitter' && o.properties.get('uniqueId') === conn.splitterId;
-            });
+            const splitterObj = getMapObjectByUid(conn.splitterId, 'splitter');
             if (splitterObj) createSplitterConnectionLine(obj, splitterObj, cableIdParsed, fiberNumberParsed, conn.routeIds || []);
         });
     });
@@ -18054,11 +18343,7 @@ function updateAllNodeConnectionLines() {
             const fiberNumberParsed = parseInt(parts.pop(), 10);
             const cableIdParsed = parts.join('-');
             if (!crossHasFiberForConnection(obj, cableIdParsed, fiberNumberParsed)) return;
-            const nodeObj = objects.find(n =>
-                n.properties &&
-                n.properties.get('type') === 'node' &&
-                n.properties.get('uniqueId') === conn.nodeId
-            );
+            const nodeObj = getMapObjectByUid(conn.nodeId, 'node');
             if (nodeObj) createNodeConnectionLine(obj, nodeObj, cableIdParsed, fiberNumberParsed);
         });
     });
@@ -18651,7 +18936,7 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
     }
 
     updateCableVisualization();
-    updateAllConnectionLines();
+    scheduleConnectionLinesUpdate();
 
     const modal = document.getElementById('infoModal');
     if (isInfoModalVisible(modal)) {
@@ -18854,30 +19139,91 @@ function getCrossGroups() {
     const groups = new Map();
     crosses.forEach(cross => {
         const coords = cross.geometry.getCoordinates();
-        const key = `${coords[0].toFixed(5)},${coords[1].toFixed(5)}`;
+        const key = groupKey(coords);
         if (!groups.has(key)) groups.set(key, { coords: coords, crosses: [] });
         groups.get(key).crosses.push(cross);
     });
     return Array.from(groups.values());
 }
 
-function updateCrossDisplay() {
-    crossGroupPlacemarks.forEach(pm => {
-        const lbl = pm.properties && pm.properties.get('crossGroupLabel');
+function parseGroupDisplayScope(scope) {
+    if (scope == null || scope === true) return { full: true, keys: null };
+    if (typeof scope === 'string') return { full: false, keys: [scope] };
+    if (Array.isArray(scope)) return { full: false, keys: scope };
+    if (typeof scope === 'object' && scope.keys) return { full: !!scope.full, keys: scope.keys };
+    return { full: true, keys: null };
+}
+
+function detachCrossesAtGroupKey(key) {
+    var pm = crossGroupPlacemarkByKey.get(key);
+    if (pm) {
+        var lbl = pm.properties && pm.properties.get('crossGroupLabel');
         if (lbl) try { myMap.geoObjects.remove(lbl); } catch (e) {}
         try { myMap.geoObjects.remove(pm); } catch (e) {}
+        crossGroupPlacemarks = crossGroupPlacemarks.filter(function(p) { return p !== pm; });
+        crossGroupPlacemarkByKey.delete(key);
+    }
+    objects.forEach(function(obj) {
+        if (!obj.properties || obj.properties.get('type') !== 'cross' || !obj.geometry) return;
+        try {
+            if (groupKey(obj.geometry.getCoordinates()) !== key) return;
+            try { myMap.geoObjects.remove(obj); } catch (e2) {}
+            var label = obj.properties.get('label');
+            if (label) try { myMap.geoObjects.remove(label); } catch (e3) {}
+        } catch (e4) {}
     });
-    crossGroupPlacemarks = [];
+}
+
+function detachNodesAtGroupKey(key) {
+    var pm = nodeGroupPlacemarkByKey.get(key);
+    if (pm) {
+        var lbl = pm.properties && pm.properties.get('nodeGroupLabel');
+        if (lbl) try { myMap.geoObjects.remove(lbl); } catch (e) {}
+        try { myMap.geoObjects.remove(pm); } catch (e) {}
+        nodeGroupPlacemarks = nodeGroupPlacemarks.filter(function(p) { return p !== pm; });
+        nodeGroupPlacemarkByKey.delete(key);
+    }
+    objects.forEach(function(obj) {
+        if (!obj.properties || obj.properties.get('type') !== 'node' || !obj.geometry) return;
+        try {
+            if (groupKey(obj.geometry.getCoordinates()) !== key) return;
+            try { myMap.geoObjects.remove(obj); } catch (e2) {}
+            var label = obj.properties.get('label');
+            if (label) try { myMap.geoObjects.remove(label); } catch (e3) {}
+        } catch (e4) {}
+    });
+}
+
+function updateCrossDisplay(scope) {
+    var parsed = parseGroupDisplayScope(scope);
+    var keysOnly = !parsed.full && parsed.keys && parsed.keys.length && !isMapBulkImportActive();
+    if (keysOnly) {
+        parsed.keys.forEach(function(k) { detachCrossesAtGroupKey(k); });
+    } else {
+        crossGroupPlacemarks.forEach(pm => {
+            const lbl = pm.properties && pm.properties.get('crossGroupLabel');
+            if (lbl) try { myMap.geoObjects.remove(lbl); } catch (e) {}
+            try { myMap.geoObjects.remove(pm); } catch (e) {}
+        });
+        crossGroupPlacemarks = [];
+        crossGroupPlacemarkByKey.clear();
+        const allCrosses = objects.filter(obj => obj.properties && obj.properties.get('type') === 'cross');
+        allCrosses.forEach(cross => {
+            try { myMap.geoObjects.remove(cross); } catch (e) {}
+            const label = cross.properties.get('label');
+            if (label) try { myMap.geoObjects.remove(label); } catch (e) {}
+        });
+    }
     const allCrosses = objects.filter(obj => obj.properties && obj.properties.get('type') === 'cross');
-    allCrosses.forEach(cross => {
-        try { myMap.geoObjects.remove(cross); } catch (e) {}
-        const label = cross.properties.get('label');
-        if (label) try { myMap.geoObjects.remove(label); } catch (e) {}
-    });
     const groups = getCrossGroups();
-    groups.forEach(group => {
+    const groupsToRender = keysOnly
+        ? groups.filter(function(g) { return parsed.keys.indexOf(groupKey(g.coords)) >= 0; })
+        : groups;
+    groupsToRender.forEach(group => {
+        const gKey = groupKey(group.coords);
         if (group.crosses.length === 1) {
             const cross = group.crosses[0];
+            crossGroupPlacemarkByKey.delete(gKey);
             myMap.geoObjects.add(cross);
             const label = cross.properties.get('label');
             if (label) myMap.geoObjects.add(label);
@@ -19010,11 +19356,11 @@ function updateCrossDisplay() {
                             const lbl = crossObj.properties.get('label');
                             if (lbl && lbl.geometry) lbl.geometry.setCoordinates(offsetCoords);
                             updateConnectedCables(crossObj);
-                            updateAllConnectionLines();
+                            scheduleConnectionLinesUpdate();
                             ensurePlacemarkUniqueIdForSync(crossObj);
                             saveData({ object: crossObj, syncImmediate: true });
                             myMap.balloon.close();
-                            updateCrossDisplay();
+                            updateCrossDisplay([groupKey(coords), groupKey(offsetCoords)]);
                         });
                     }
                     el.addEventListener('click', (e) => {
@@ -19066,22 +19412,26 @@ function updateCrossDisplay() {
                 ensurePlacemarkUniqueIdForSync(c);
                 syncPushObjectUpdate(c, true);
             });
-            updateAllConnectionLines();
+            scheduleConnectionLinesUpdate();
             if (savedName) {
                 crossGroupNames.delete(oldKey);
                 crossGroupNames.set(groupKey(newCoords), savedName);
                 saveGroupNames();
             }
             saveData({ skipSync: true });
-            updateCrossDisplay();
+            updateCrossDisplay([oldKey, groupKey(newCoords)]);
         });
         attachHoverEventsToObject(groupPlacemark);
         myMap.geoObjects.add(crossLabel);
         myMap.geoObjects.add(groupPlacemark);
         crossGroupPlacemarks.push(groupPlacemark);
+        crossGroupPlacemarkByKey.set(gKey, groupPlacemark);
     });
     
-    allCrosses.forEach(function(cross) {
+    var crossesForCables = keysOnly ? groupsToRender.reduce(function(acc, g) {
+        return acc.concat(g.crosses);
+    }, []) : allCrosses;
+    crossesForCables.forEach(function(cross) {
         updateConnectedCables(cross);
     });
     if (typeof applyMapFilter === 'function') applyMapFilter();
@@ -19093,36 +19443,49 @@ function getNodeGroups() {
     const groups = new Map();
     nodes.forEach(node => {
         const coords = node.geometry.getCoordinates();
-        const key = `${coords[0].toFixed(5)},${coords[1].toFixed(5)}`;
+        const key = groupKey(coords);
         if (!groups.has(key)) groups.set(key, { coords: coords, nodes: [] });
         groups.get(key).nodes.push(node);
     });
     return Array.from(groups.values());
 }
 
-function updateNodeDisplay() {
-    nodeGroupPlacemarks.forEach(pm => {
-        const lbl = pm.properties && pm.properties.get('nodeGroupLabel');
-        if (lbl) try { myMap.geoObjects.remove(lbl); } catch (e) {}
-        try { myMap.geoObjects.remove(pm); } catch (e) {}
-    });
-    nodeGroupPlacemarks = [];
+function updateNodeDisplay(scope) {
+    var parsed = parseGroupDisplayScope(scope);
+    var keysOnly = !parsed.full && parsed.keys && parsed.keys.length && !isMapBulkImportActive();
+    if (keysOnly) {
+        parsed.keys.forEach(function(k) { detachNodesAtGroupKey(k); });
+    } else {
+        nodeGroupPlacemarks.forEach(pm => {
+            const lbl = pm.properties && pm.properties.get('nodeGroupLabel');
+            if (lbl) try { myMap.geoObjects.remove(lbl); } catch (e) {}
+            try { myMap.geoObjects.remove(pm); } catch (e) {}
+        });
+        nodeGroupPlacemarks = [];
+        nodeGroupPlacemarkByKey.clear();
+        const allNodes = objects.filter(obj => obj.properties && obj.properties.get('type') === 'node');
+        allNodes.forEach(node => {
+            try { myMap.geoObjects.remove(node); } catch (e) {}
+            const label = node.properties.get('label');
+            if (label) try { myMap.geoObjects.remove(label); } catch (e) {}
+        });
+    }
     const allNodes = objects.filter(obj => obj.properties && obj.properties.get('type') === 'node');
-    allNodes.forEach(node => {
-        try { myMap.geoObjects.remove(node); } catch (e) {}
-        const label = node.properties.get('label');
-        if (label) try { myMap.geoObjects.remove(label); } catch (e) {}
-    });
     const mapFilterState = typeof getMapFilterState === 'function' ? getMapFilterState() : {};
     const aggregationOnly = !!mapFilterState.nodeAggregationOnly;
     const groups = getNodeGroups();
-    groups.forEach(group => {
+    const groupsToRender = keysOnly
+        ? groups.filter(function(g) { return parsed.keys.indexOf(groupKey(g.coords)) >= 0; })
+        : groups;
+    groupsToRender.forEach(group => {
         const displayNodes = aggregationOnly
             ? group.nodes.filter(function(nd) { return (nd.properties && nd.properties.get('nodeKind')) === 'aggregation'; })
             : group.nodes;
         if (displayNodes.length === 0) return;
+        const nKey = groupKey(group.coords);
         if (displayNodes.length === 1) {
             const node = displayNodes[0];
+            nodeGroupPlacemarkByKey.delete(nKey);
             myMap.geoObjects.add(node);
             const label = node.properties.get('label');
             if (label) myMap.geoObjects.add(label);
@@ -19230,7 +19593,7 @@ function updateNodeDisplay() {
                             const lbl = nodes[i].properties.get('label');
                             if (lbl && lbl.geometry) lbl.geometry.setCoordinates(offsetCoords);
                             updateConnectedCables(nodes[i]);
-                            updateAllConnectionLines();
+                            scheduleConnectionLinesUpdate();
                             ensurePlacemarkUniqueIdForSync(nodes[i]);
                             saveData({ object: nodes[i], syncImmediate: true });
                             myMap.balloon.close();
@@ -19268,22 +19631,26 @@ function updateNodeDisplay() {
                 ensurePlacemarkUniqueIdForSync(n);
                 syncPushObjectUpdate(n, true);
             });
-            updateAllConnectionLines();
+            scheduleConnectionLinesUpdate();
             if (savedName) {
                 nodeGroupNames.delete(oldKey);
                 nodeGroupNames.set(groupKey(newCoords), savedName);
                 saveGroupNames();
             }
             saveData({ skipSync: true });
-            updateNodeDisplay();
+            updateNodeDisplay([oldKey, groupKey(newCoords)]);
         });
         attachHoverEventsToObject(groupPlacemark);
         myMap.geoObjects.add(nodeLabel);
         myMap.geoObjects.add(groupPlacemark);
         nodeGroupPlacemarks.push(groupPlacemark);
+        nodeGroupPlacemarkByKey.set(nKey, groupPlacemark);
     });
     
-    allNodes.forEach(function(node) {
+    var nodesForCables = keysOnly ? groupsToRender.reduce(function(acc, g) {
+        return acc.concat(g.nodes);
+    }, []) : allNodes;
+    nodesForCables.forEach(function(node) {
         updateConnectedCables(node);
     });
     if (typeof applyMapFilter === 'function') applyMapFilter();
@@ -19570,6 +19937,7 @@ function createRegion(name, ringCoords, options) {
     try { polygon.options.set('draggable', false); } catch (eDr) {}
     try { polygon.options.set('interactive', false); } catch (eInt) {}
     objects.push(polygon);
+    mapPerfRegister(polygon);
     myMap.geoObjects.add(polygon, 0);
     if (window.MapRegions && MapRegions.sendRegionToMapBack) MapRegions.sendRegionToMapBack(polygon, myMap);
     if (window.MapRegions && MapRegions.updateRegionLabel) MapRegions.updateRegionLabel(polygon, myMap);
@@ -20169,20 +20537,55 @@ function applyMapFilter() {
         try { if (lbl && lbl.options) lbl.options.set('visible', visible); } catch (e) {}
     });
 
-    // Линии связи (ONU, медиаконвертер, OLT, сплиттер, кросс–узел) — отдельные polyline, не в objects.
-    try { setAllConnectionLinesVisible(true); } catch (e) {}
-    if (window.MapRegions && MapRegions.syncConnectionLinesVisibility) {
-        MapRegions.syncConnectionLinesVisibility(objects, {
-            onuConnectionLines: typeof onuConnectionLines !== 'undefined' ? onuConnectionLines : [],
-            oltConnectionLines: typeof oltConnectionLines !== 'undefined' ? oltConnectionLines : [],
-            splitterConnectionLines: typeof splitterConnectionLines !== 'undefined' ? splitterConnectionLines : [],
-            splitterOutputConnectionLines: typeof splitterOutputConnectionLines !== 'undefined' ? splitterOutputConnectionLines : [],
-            nodeConnectionLines: typeof nodeConnectionLines !== 'undefined' ? nodeConnectionLines : []
-        });
-    }
+    applyViewportCullToMap();
+    applyConnectionLinesVisibility();
 
     // Доп. скрытие по зуму (поверх фильтра).
     try { applyExpertZoomVisibility(); } catch (e) {}
+}
+
+function applyViewportCullToMap() {
+    if (!myMap || typeof MapPerf === 'undefined' || !MapPerf.shouldUseViewportCull()) return;
+    var bounds = MapPerf.getExpandedBounds(myMap);
+    if (!bounds) return;
+    objects.forEach(function(obj) {
+        if (!obj || !obj.options) return;
+        try {
+            if (obj.options.get('visible') === false) return;
+            var type = obj.properties && obj.properties.get('type');
+            if (type === 'region') return;
+            if (!MapPerf.isObjectInViewport(obj, bounds)) {
+                obj.options.set('visible', false);
+                var label = obj.properties.get('label');
+                if (label && label.options) label.options.set('visible', false);
+                if (type === 'cable' && window.CableUnderground) {
+                    try { CableUnderground.setOverlaysVisible(obj, false); } catch (eUg) {}
+                }
+            }
+        } catch (e) {}
+    });
+    crossGroupPlacemarks.forEach(function(pm) {
+        if (!pm || !pm.options || pm.options.get('visible') === false) return;
+        try {
+            var c = pm.geometry && pm.geometry.getCoordinates();
+            if (c && !MapPerf.coordInBounds(c, bounds)) {
+                pm.options.set('visible', false);
+                var lbl = pm.properties && pm.properties.get('crossGroupLabel');
+                if (lbl && lbl.options) lbl.options.set('visible', false);
+            }
+        } catch (e2) {}
+    });
+    nodeGroupPlacemarks.forEach(function(pm) {
+        if (!pm || !pm.options || pm.options.get('visible') === false) return;
+        try {
+            var c = pm.geometry && pm.geometry.getCoordinates();
+            if (c && !MapPerf.coordInBounds(c, bounds)) {
+                pm.options.set('visible', false);
+                var lbl = pm.properties && pm.properties.get('nodeGroupLabel');
+                if (lbl && lbl.options) lbl.options.set('visible', false);
+            }
+        } catch (e3) {}
+    });
 }
 
 function updateCableVisualization() {
@@ -20222,6 +20625,7 @@ function updateCableVisualization() {
             label.properties.set('cables', group.cables);
             
             objects.push(label);
+            mapPerfRegister(label);
             myMap.geoObjects.add(label);
         }
     });
@@ -21264,5 +21668,5 @@ setTimeout(() => {
     updateEditControls();
     updateStats();
     updateCableVisualization();
-    updateAllConnectionLines();
+    scheduleConnectionLinesUpdate();
 }, 100);
