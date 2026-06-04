@@ -829,6 +829,101 @@ function setMapStartForOrg(orgId, data) {
     saveStore();
 }
 
+function resolveSettingsOrgKey(orgId) {
+    if (!orgId) return null;
+    const s = loadStore();
+    const byOrg = s.settingsByOrg || {};
+    if (byOrg[orgId]) return orgId;
+    var k = Object.keys(byOrg).find(function(key) { return organizationIdsMatch(key, orgId); });
+    return k || orgId;
+}
+
+function normalizeZabbixUrl(url) {
+    var u = String(url || '').trim();
+    if (!u) return '';
+    if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+    u = u.replace(/\/api_jsonrpc\.php\/?$/i, '').replace(/\/$/, '');
+    return u.slice(0, 512);
+}
+
+function getZabbixConfigRaw(orgId) {
+    if (!orgId) return null;
+    const s = loadStore();
+    const key = resolveSettingsOrgKey(orgId);
+    const byOrg = (s.settingsByOrg || {})[key];
+    if (!byOrg || !byOrg.zabbix || typeof byOrg.zabbix !== 'object') return null;
+    return byOrg.zabbix;
+}
+
+function getZabbixConfigForMonitor(orgId) {
+    var z = getZabbixConfigRaw(orgId);
+    if (!z || !z.enabled) return null;
+    var url = normalizeZabbixUrl(z.url);
+    var token = z.apiToken ? String(z.apiToken).trim() : '';
+    if (!url || !token) return null;
+    return {
+        enabled: true,
+        url: url,
+        apiToken: token,
+        hostGroup: z.hostGroup ? String(z.hostGroup).trim() : ''
+    };
+}
+
+function getZabbixConfigPublic(orgId) {
+    var z = getZabbixConfigRaw(orgId);
+    if (!z) {
+        return {
+            enabled: false,
+            configured: false,
+            tokenSet: false,
+            url: '',
+            hostGroup: ''
+        };
+    }
+    var url = normalizeZabbixUrl(z.url);
+    var tokenSet = !!(z.apiToken && String(z.apiToken).trim());
+    return {
+        enabled: !!z.enabled,
+        configured: !!(url && tokenSet),
+        tokenSet: tokenSet,
+        url: url,
+        hostGroup: z.hostGroup ? String(z.hostGroup).trim() : '',
+        lastError: z.lastError ? String(z.lastError).slice(0, 500) : '',
+        lastOkAt: z.lastOkAt || null
+    };
+}
+
+function setZabbixConfig(orgId, patch) {
+    if (!orgId || !patch || typeof patch !== 'object') return;
+    const s = loadStore();
+    if (!s.settingsByOrg) s.settingsByOrg = {};
+    const key = resolveSettingsOrgKey(orgId);
+    if (!s.settingsByOrg[key]) s.settingsByOrg[key] = {};
+    var cur = s.settingsByOrg[key].zabbix && typeof s.settingsByOrg[key].zabbix === 'object'
+        ? s.settingsByOrg[key].zabbix
+        : {};
+    var next = Object.assign({}, cur);
+    if (patch.enabled !== undefined) next.enabled = !!patch.enabled;
+    if (patch.url !== undefined) next.url = normalizeZabbixUrl(patch.url);
+    if (patch.hostGroup !== undefined) next.hostGroup = String(patch.hostGroup || '').trim().slice(0, 128);
+    if (patch.apiToken !== undefined) {
+        var tok = String(patch.apiToken || '').trim();
+        if (tok) next.apiToken = tok;
+        else if (patch.clearToken) delete next.apiToken;
+    }
+    if (patch.lastError !== undefined) {
+        if (patch.lastError) next.lastError = String(patch.lastError).slice(0, 500);
+        else delete next.lastError;
+    }
+    if (patch.lastOkAt !== undefined) next.lastOkAt = patch.lastOkAt || null;
+    if (!next.enabled && !next.url && !next.apiToken && !next.hostGroup) {
+        delete s.settingsByOrg[key].zabbix;
+    } else {
+        s.settingsByOrg[key].zabbix = next;
+    }
+    saveStore();
+}
+
 function getMapStartForUserOrOrg(userId, orgId) {
     const userStart = getMapStartForUser(userId);
     if (userStart) return userStart;
@@ -1507,6 +1602,10 @@ module.exports = {
     getMapStartForOrg,
     setMapStartForOrg,
     getMapStartForUserOrOrg,
+    getZabbixConfigRaw,
+    getZabbixConfigForMonitor,
+    getZabbixConfigPublic,
+    setZabbixConfig,
     getThemeForUser,
     setThemeForUser,
     createDailyBackup,
