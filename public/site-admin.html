@@ -1,0 +1,3330 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="description" content="Панель администратора программы «Карта оптической сети» для работы с оптической сетью.">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Панель администратора — Карта оптической сети</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <script>
+        (function() {
+            try {
+                var saved = localStorage.getItem('networkMap_theme') || localStorage.getItem('networkMap_landingTheme');
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var theme = (saved === 'dark' || saved === 'light') ? saved : (prefersDark ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch (e) {}
+        })();
+    </script>
+    <link rel="stylesheet" href="css/auth.css">
+    <link rel="stylesheet" href="css/site-admin.css">
+    <link rel="stylesheet" href="css/cookie-consent.css">
+    <link rel="stylesheet" href="css/maintenance-notice.css">
+    <link rel="stylesheet" href="css/news.css">
+    <link href="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.snow.css" rel="stylesheet">
+    <style>
+        body {
+            color: #0f172a;
+            padding: 0;
+            align-items: center;
+            justify-content: center;
+        }
+        .admin-root {
+            max-width: 1440px;
+            width: 100%;
+            min-height: 100vh;
+        }
+        .auth-card.admin-shell {
+            border-radius: 0;
+            border: none;
+            border-top: none !important;
+            border-bottom: none !important;
+            background: rgba(255, 255, 255, 0.78);
+            backdrop-filter: blur(22px) saturate(1.15);
+            box-shadow: none;
+            animation: none;
+        }
+        .admin-shell {
+            width: 100%;
+            min-height: 100vh;
+            padding: 0 clamp(16px, 3vw, 42px) 36px;
+            margin: 0;
+        }
+        .admin-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-top: 10px;
+            margin-bottom: 8px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid rgba(15,23,42,0.08);
+        }
+        .admin-header-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .admin-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        .admin-subtitle {
+            font-size: 0.8rem;
+            color: #6b7280;
+        }
+        .admin-header-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .btn-sm {
+            border-radius: 999px;
+            padding: 5px 12px;
+            border: 1px solid rgba(15,23,42,0.14);
+            background: rgba(255,255,255,0.96);
+            font-size: 0.78rem;
+            cursor: pointer;
+            color: #111827;
+        }
+        .btn-sm:hover {
+            background: #f3f4f6;
+        }
+        .btn-sm-primary {
+            border-radius: 999px;
+            padding: 6px 14px;
+            border: none;
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            color: #fff;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            box-shadow: 0 10px 26px rgba(37,99,235,0.35);
+        }
+        .btn-sm-primary:hover {
+            filter: brightness(1.03);
+        }
+        .theme-toggle-btn {
+            min-width: 104px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .tab-content {
+            display: none;
+            font-size: 0.85rem;
+            animation: panelIn 0.2s ease-out;
+        }
+        @keyframes panelIn {
+            from { opacity: 0.85; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .maintenance-admin-layout {
+            max-width: 960px;
+        }
+        .maintenance-admin-head-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .maint-live-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 12px;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            white-space: nowrap;
+            border: 1px solid transparent;
+        }
+        .maint-live-badge::before {
+            content: '';
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+        .maint-live-badge--on {
+            background: #fff7ed;
+            color: #c2410c;
+            border-color: #fdba74;
+        }
+        .maint-live-badge--scheduled {
+            background: #eff6ff;
+            color: #1d4ed8;
+            border-color: #93c5fd;
+        }
+        .maint-live-badge--off {
+            background: #f1f5f9;
+            color: #64748b;
+            border-color: #e2e8f0;
+        }
+        .maintenance-admin-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+            gap: 20px;
+            align-items: start;
+        }
+        @media (max-width: 900px) {
+            .maintenance-admin-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        .maintenance-preview-card,
+        .maintenance-form-card {
+            border-radius: 16px;
+            border: 1px solid #e2e8f0;
+            background: #fff;
+            padding: 18px 20px;
+            box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
+        }
+        .maintenance-form-card {
+            border-color: #fed7aa;
+            background: linear-gradient(180deg, #fffbeb 0%, #ffffff 42%);
+        }
+        .maintenance-card-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #94a3b8;
+            margin: 0 0 12px;
+        }
+        .maintenance-preview {
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid #fdba74;
+            background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+            color: #9a3412;
+            font-size: 0.8125rem;
+            line-height: 1.45;
+        }
+        .maintenance-preview.is-empty {
+            padding: 28px 16px;
+            text-align: center;
+            color: #c2410c;
+            opacity: 0.75;
+            border-style: dashed;
+            background: #fffbeb;
+        }
+        .maintenance-preview-inner {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 12px 14px;
+        }
+        .maintenance-preview-icon {
+            flex-shrink: 0;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: #f97316;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            font-weight: 700;
+        }
+        .maintenance-preview-text strong {
+            display: block;
+            font-size: 0.88rem;
+            color: #7c2d12;
+            margin-bottom: 2px;
+        }
+        .maintenance-preview-text p {
+            margin: 0;
+            white-space: pre-wrap;
+        }
+        .maintenance-preview-meta {
+            margin-top: 4px;
+            font-size: 0.72rem;
+            color: #c2410c;
+        }
+        .maintenance-toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 14px;
+            margin-bottom: 14px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid #fed7aa;
+        }
+        .maintenance-toggle-row label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            font-weight: 500;
+            color: #7c2d12;
+            margin: 0;
+        }
+        .maintenance-form-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+            padding-top: 14px;
+            border-top: 1px solid rgba(253, 186, 116, 0.45);
+        }
+        [data-theme="dark"] .maintenance-preview-card {
+            background: #1e293b;
+            border-color: #334155;
+        }
+        [data-theme="dark"] .maintenance-form-card {
+            background: linear-gradient(180deg, #431407 0%, #1e293b 38%);
+            border-color: #9a3412;
+        }
+        [data-theme="dark"] .maintenance-card-label {
+            color: #94a3b8;
+        }
+        [data-theme="dark"] .maintenance-preview {
+            border-color: #ea580c;
+            background: linear-gradient(135deg, #431407 0%, #7c2d12 100%);
+            color: #ffedd5;
+        }
+        [data-theme="dark"] .maintenance-preview.is-empty {
+            background: #292524;
+            color: #fdba74;
+        }
+        [data-theme="dark"] .maintenance-preview-text strong {
+            color: #fff7ed;
+        }
+        [data-theme="dark"] .maintenance-preview-meta {
+            color: #fed7aa;
+        }
+        [data-theme="dark"] .maintenance-toggle-row {
+            background: rgba(15, 23, 42, 0.45);
+            border-color: #9a3412;
+        }
+        [data-theme="dark"] .maintenance-toggle-row label {
+            color: #ffedd5;
+        }
+        [data-theme="dark"] .maint-live-badge--on {
+            background: #431407;
+            color: #fdba74;
+            border-color: #9a3412;
+        }
+        [data-theme="dark"] .maint-live-badge--off {
+            background: #0f172a;
+            color: #94a3b8;
+            border-color: #334155;
+        }
+        .support-admin-layout {
+            display: grid;
+            grid-template-columns: minmax(220px, 320px) 1fr;
+            gap: 16px;
+            min-height: 420px;
+            align-items: stretch;
+        }
+        @media (max-width: 900px) {
+            .support-admin-layout { grid-template-columns: 1fr; }
+        }
+        .support-thread-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            max-height: min(560px, 60vh);
+            overflow-y: auto;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            background: #fff;
+        }
+        .support-thread-item {
+            padding: 10px 12px;
+            border-bottom: 1px solid #f1f5f9;
+            cursor: pointer;
+        }
+        .support-thread-item:hover { background: #f8fafc; }
+        .support-thread-item.is-active { background: #eff6ff; }
+        .support-thread-item.is-unread { border-left: 3px solid #2563eb; }
+        .support-thread-item-title { font-weight: 600; font-size: 0.86rem; color: #0f172a; }
+        .support-thread-item-preview { font-size: 0.76rem; color: #64748b; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .support-thread-detail {
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            min-height: 420px;
+            max-height: min(640px, 70vh);
+            overflow: hidden;
+        }
+        .support-thread-messages {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .support-admin-msg {
+            max-width: 88%;
+            padding: 8px 10px;
+            border-radius: 10px;
+            font-size: 0.84rem;
+            line-height: 1.4;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            white-space: pre-wrap;
+        }
+        .support-admin-msg.visitor { align-self: flex-start; background: #f1f5f9; }
+        .support-admin-msg.admin { align-self: flex-end; background: #2563eb; color: #fff; }
+        .support-admin-msg.bot { align-self: flex-start; background: #fef3c7; color: #78350f; }
+        .support-thread-reply {
+            flex: 0 0 auto;
+            padding: 12px;
+            border-top: 1px solid #e2e8f0;
+        }
+        .support-thread-reply textarea {
+            width: 100%;
+            box-sizing: border-box;
+            min-height: 64px;
+            max-height: 140px;
+            resize: vertical;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 8px;
+            font-family: inherit;
+            font-size: 0.86rem;
+            margin-bottom: 8px;
+        }
+        .support-presence-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.78rem;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: #f1f5f9;
+            color: #64748b;
+        }
+        .support-presence-badge.online { background: #dcfce7; color: #166534; }
+        .panel-head {
+            margin-bottom: 16px;
+        }
+        .panel-title {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: #0f172a;
+            margin: 0 0 10px;
+            letter-spacing: -0.02em;
+        }
+        .fact-list {
+            margin: 0;
+            padding-left: 1.15em;
+            color: #64748b;
+            font-size: 0.8rem;
+            line-height: 1.5;
+        }
+        .fact-list li {
+            margin-bottom: 4px;
+        }
+        .fact-list li:last-child {
+            margin-bottom: 0;
+        }
+        .org-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .search-field {
+            flex: 1 1 240px;
+            min-width: 0;
+        }
+        .search-field input[type="search"],
+        .search-field input[type="text"] {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 9px 12px 9px 38px;
+            border-radius: 10px;
+            border: 1px solid #e2e8f0;
+            font-size: 0.84rem;
+            background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='M11 11l3.5 3.5'/%3E%3C/svg%3E") no-repeat 12px center;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .search-field input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+        }
+        .org-toolbar-meta {
+            font-size: 0.78rem;
+            color: #64748b;
+            white-space: nowrap;
+        }
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0,0,0,0);
+            border: 0;
+        }
+        .cards-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+            align-items: stretch;
+        }
+        .stat-card {
+            border-radius: 12px;
+            border: 1px solid rgba(148,163,184,0.28);
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            padding: 12px 14px;
+            min-width: 0;
+            overflow: hidden;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+        }
+        .stat-label {
+            font-size: 0.74rem;
+            color: #6b7280;
+            margin-bottom: 4px;
+            line-height: 1.3;
+            word-break: break-word;
+        }
+        .stat-value {
+            font-size: clamp(0.98rem, 1.8vw, 1.12rem);
+            font-weight: 600;
+            color: #111827;
+            line-height: 1.2;
+            word-break: break-word;
+            font-variant-numeric: tabular-nums;
+        }
+        .stat-extra {
+            font-size: 0.72rem;
+            color: #9ca3af;
+            margin-top: 2px;
+            line-height: 1.3;
+            word-break: break-word;
+        }
+        .overview-analytics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+        .analytics-card {
+            border-radius: 12px;
+            border: 1px solid rgba(148,163,184,0.28);
+            background: #fff;
+            padding: 12px;
+            min-width: 0;
+            overflow: hidden;
+            box-sizing: border-box;
+            box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+        }
+        .analytics-title {
+            font-size: 0.78rem;
+            color: #475569;
+            margin-bottom: 10px;
+            font-weight: 600;
+            line-height: 1.3;
+            padding-bottom: 7px;
+            border-bottom: 1px dashed #e2e8f0;
+        }
+        .bar-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 9px;
+            min-width: 0;
+        }
+        .bar-row {
+            display: grid;
+            grid-template-columns: minmax(0, 112px) minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.74rem;
+            color: #64748b;
+            min-width: 0;
+        }
+        .bar-row > span:first-child {
+            min-width: 0;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            line-height: 1.2;
+            word-break: break-word;
+        }
+        .bar-row > strong {
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+            color: #334155;
+        }
+        .bar-track {
+            position: relative;
+            height: 8px;
+            border-radius: 999px;
+            background: #e2e8f0;
+            overflow: hidden;
+        }
+        .bar-fill {
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 0;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #2563eb, #1d4ed8);
+        }
+        .bar-row.warn .bar-fill {
+            background: linear-gradient(90deg, #f59e0b, #d97706);
+        }
+        .bar-row.danger .bar-fill {
+            background: linear-gradient(90deg, #ef4444, #dc2626);
+        }
+        .donut-wrap {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            min-width: 0;
+        }
+        .donut-chart {
+            --donut-a: 0deg;
+            --donut-b: 0deg;
+            width: 88px;
+            height: 88px;
+            border-radius: 50%;
+            background:
+                radial-gradient(circle at center, #ffffff 0 52%, transparent 53% 100%),
+                conic-gradient(
+                    #16a34a 0 var(--donut-a),
+                    #f59e0b var(--donut-a) var(--donut-b),
+                    #ef4444 var(--donut-b) 360deg
+                );
+            border: 1px solid #e2e8f0;
+            flex: 0 0 auto;
+        }
+        .legend-list {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 0.75rem;
+            color: #64748b;
+            min-width: 0;
+        }
+        .legend-item {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            align-items: start;
+            gap: 8px;
+            min-width: 0;
+            line-height: 1.25;
+        }
+        .legend-item strong {
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+        .legend-item-label {
+            min-width: 0;
+            word-break: break-word;
+        }
+        .legend-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            flex: 0 0 auto;
+        }
+        .legend-dot.active { background: #16a34a; }
+        .legend-dot.suspended { background: #f59e0b; }
+        .legend-dot.expired { background: #ef4444; }
+        .legend-dot.warn { background: #f97316; }
+        .legend-dot.info { background: #2563eb; }
+        .table-wrap {
+            border-radius: 12px;
+            border: 1px solid #e5e7eb;
+            overflow: hidden;
+            background: #fff;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+        thead {
+            background: #f9fafb;
+        }
+        th, td {
+            padding: 7px 9px;
+            border-bottom: 1px solid #e5e7eb;
+            text-align: left;
+        }
+        th {
+            font-weight: 500;
+            color: #4b5563;
+            font-size: 0.76rem;
+        }
+        tr:last-child td {
+            border-bottom: none;
+        }
+        .admin-user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #fff;
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            overflow: hidden;
+            vertical-align: middle;
+        }
+        .admin-user-avatar .avatar-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+            display: block;
+        }
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 0.7rem;
+        }
+        .pill-active {
+            background: #ecfdf5;
+            color: #047857;
+        }
+        .pill-suspended {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        .pill-expired {
+            background: #fef2f2;
+            color: #b91c1c;
+        }
+        .text-muted {
+            color: #9ca3af;
+        }
+        .actions-cell button {
+            border-radius: 999px;
+            border: 1px solid #e5e7eb;
+            background: #fff;
+            padding: 3px 8px;
+            font-size: 0.72rem;
+            cursor: pointer;
+            margin-right: 4px;
+        }
+        .actions-cell button:hover {
+            background: #f3f4f6;
+        }
+        .field-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .field-col {
+            flex: 1 1 180px;
+        }
+        .field-col label {
+            display: block;
+            font-size: 0.75rem;
+            color: #6b7280;
+            margin-bottom: 3px;
+        }
+        .field-col input, .field-col select, .field-col textarea {
+            width: 100%;
+            padding: 6px 8px;
+            border-radius: 8px;
+            border: 1px solid #d1d5db;
+            font-size: 0.8rem;
+        }
+        .hint {
+            font-size: 0.72rem;
+            color: #9ca3af;
+        }
+        .danger-text {
+            color: #b91c1c;
+        }
+        .info-box {
+            font-size: 0.78rem;
+            color: #4b5563;
+            background: #eff6ff;
+            border-radius: 10px;
+            padding: 8px 10px;
+            border: 1px solid rgba(59,130,246,0.25);
+            margin-bottom: 10px;
+        }
+        .no-access {
+            text-align: center;
+            padding: 40px 10px;
+            color: #6b7280;
+            font-size: 0.9rem;
+        }
+        @media (max-width: 900px) {
+            .admin-root {
+                max-width: 100%;
+            }
+        }
+        @media (max-width: 720px) {
+            .admin-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .admin-header-actions {
+                width: 100%;
+                justify-content: flex-start;
+                flex-wrap: wrap;
+            }
+        }
+        @media (max-width: 540px) {
+            .auth-card.admin-shell {
+                padding: 26px 18px;
+            }
+            .admin-title {
+                font-size: 1rem;
+            }
+            .admin-subtitle {
+                font-size: 0.78rem;
+            }
+            .cards-row {
+                grid-template-columns: minmax(0, 1fr);
+            }
+            .overview-analytics-grid {
+                grid-template-columns: minmax(0, 1fr);
+            }
+            .bar-row {
+                grid-template-columns: minmax(0, 86px) minmax(0, 1fr) auto;
+                gap: 6px;
+            }
+            .bar-row > span:first-child {
+                -webkit-line-clamp: 1;
+            }
+            .donut-wrap {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .legend-item {
+                grid-template-columns: auto minmax(0, 1fr);
+            }
+            .legend-item strong {
+                grid-column: 2;
+            }
+            .donut-chart {
+                width: 82px;
+                height: 82px;
+            }
+            .table-wrap {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+        }
+
+        /* Тёмная тема админ-панели */
+        [data-theme="dark"] .auth-card.admin-shell {
+            background: rgba(8, 14, 28, 0.9);
+            border: none;
+            box-shadow: none;
+        }
+        [data-theme="dark"] .admin-header {
+            border-bottom-color: rgba(148, 163, 184, 0.24);
+        }
+        [data-theme="dark"] .admin-title,
+        [data-theme="dark"] .panel-title,
+        [data-theme="dark"] .stat-value,
+        [data-theme="dark"] .analytics-title,
+        [data-theme="dark"] .bar-row > strong,
+        [data-theme="dark"] .faq-item summary {
+            color: #f8fafc;
+        }
+        [data-theme="dark"] .admin-subtitle,
+        [data-theme="dark"] .fact-list,
+        [data-theme="dark"] .org-toolbar-meta,
+        [data-theme="dark"] .stat-label,
+        [data-theme="dark"] .stat-extra,
+        [data-theme="dark"] .legend-list,
+        [data-theme="dark"] .text-muted,
+        [data-theme="dark"] .hint,
+        [data-theme="dark"] th {
+            color: #94a3b8;
+        }
+        [data-theme="dark"] .btn-sm {
+            background: rgba(15, 23, 42, 0.8);
+            border-color: rgba(148, 163, 184, 0.24);
+            color: #e2e8f0;
+        }
+        [data-theme="dark"] .btn-sm:hover,
+        [data-theme="dark"] .actions-cell button:hover {
+            background: rgba(30, 41, 59, 0.9);
+        }
+        [data-theme="dark"] .tabs {
+            border-bottom-color: #334155;
+        }
+        [data-theme="dark"] .tabs::-webkit-scrollbar-thumb {
+            background: #334155;
+        }
+        [data-theme="dark"] .tab {
+            color: #94a3b8;
+        }
+        [data-theme="dark"] .tab.active {
+            background: #1e293b;
+            color: #f8fafc;
+            border-color: #334155;
+            box-shadow: 0 4px 14px rgba(2, 6, 23, 0.5);
+        }
+        [data-theme="dark"] .tab:not(.active):hover {
+            background: #1e293b;
+            color: #e2e8f0;
+            border-color: #334155;
+        }
+        [data-theme="dark"] .stat-card,
+        [data-theme="dark"] .analytics-card,
+        [data-theme="dark"] .table-wrap {
+            background: #0f172a;
+            border-color: rgba(148, 163, 184, 0.24);
+            box-shadow: 0 6px 18px rgba(2, 6, 23, 0.35);
+        }
+        [data-theme="dark"] .analytics-title {
+            border-bottom-color: #334155;
+        }
+        [data-theme="dark"] .bar-track {
+            background: #334155;
+        }
+        [data-theme="dark"] .donut-chart {
+            background:
+                radial-gradient(circle at center, #0f172a 0 52%, transparent 53% 100%),
+                conic-gradient(
+                    #16a34a 0 var(--donut-a),
+                    #f59e0b var(--donut-a) var(--donut-b),
+                    #ef4444 var(--donut-b) 360deg
+                );
+            border-color: #334155;
+        }
+        [data-theme="dark"] .search-field input[type="search"],
+        [data-theme="dark"] .search-field input[type="text"],
+        [data-theme="dark"] .field-col input,
+        [data-theme="dark"] .field-col select,
+        [data-theme="dark"] .field-col textarea {
+            background-color: #0f172a;
+            border-color: #334155;
+            color: #e2e8f0;
+        }
+        [data-theme="dark"] .search-field input[type="search"],
+        [data-theme="dark"] .search-field input[type="text"] {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='M11 11l3.5 3.5'/%3E%3C/svg%3E");
+        }
+        [data-theme="dark"] .search-field input::placeholder,
+        [data-theme="dark"] .field-col input::placeholder {
+            color: #64748b;
+        }
+        [data-theme="dark"] .search-field input:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+        [data-theme="dark"] thead {
+            background: #1e293b;
+        }
+        [data-theme="dark"] th,
+        [data-theme="dark"] td {
+            border-bottom-color: #334155;
+        }
+        [data-theme="dark"] .actions-cell button {
+            background: #0f172a;
+            border-color: #334155;
+            color: #cbd5e1;
+        }
+        [data-theme="dark"] .info-box {
+            color: #93c5fd;
+            background: rgba(30, 64, 175, 0.15);
+            border-color: rgba(96, 165, 250, 0.35);
+        }
+    </style>
+    <link rel="stylesheet" href="css/pages-mobile.css">
+</head>
+<body class="page-with-bg">
+    <script src="js/core/config.js"></script>
+    <script src="js/app/auth.js"></script>
+    <div class="auth-bg" aria-hidden="true">
+        <div class="auth-bg-gradient"></div>
+        <canvas id="authPlexusCanvas" class="auth-bg-plexus"></canvas>
+    </div>
+    <div class="auth-container admin-root">
+        <div class="auth-card admin-shell">
+            <div id="adminContent" style="display:none;">
+                <header class="admin-header">
+                    <div class="admin-header-left">
+                        <div class="auth-logo" style="width:52px;height:52px;margin:0;">
+                            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                <circle cx="12" cy="10" r="3"></circle>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="admin-title">Панель главного администратора</div>
+                            <div class="admin-subtitle">Организации · витрина · лимиты</div>
+                        </div>
+                    </div>
+                    <div class="admin-header-actions">
+                        <button class="btn-sm theme-toggle-btn" id="adminThemeToggle">🌙 Тёмная</button>
+                        <button class="btn-sm" id="backToLandingBtn">На главную</button>
+                        <button class="btn-sm-primary" id="logoutBtn">Выйти</button>
+                    </div>
+                </header>
+
+                <button type="button" class="admin-nav-toggle" id="adminNavToggle" aria-expanded="false" aria-controls="adminSidebar">☰ Разделы</button>
+                <div class="admin-sidebar-overlay" id="adminSidebarOverlay" aria-hidden="true"></div>
+                <div class="admin-layout">
+                    <aside class="admin-sidebar" id="adminSidebar" aria-label="Разделы панели">
+                        <nav class="admin-nav" role="tablist">
+                            <button type="button" class="admin-nav-item active" role="tab" data-tab="overview" aria-selected="true" id="nav-overview">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg>
+                                <span class="admin-nav-label">Обзор</span>
+                            </button>
+                            <button type="button" class="admin-nav-item" role="tab" data-tab="organizations" id="nav-organizations">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+                                <span class="admin-nav-label">Организации</span>
+                            </button>
+                            <button type="button" class="admin-nav-item" role="tab" data-tab="showcase" id="nav-showcase">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+                                <span class="admin-nav-label">Витрина</span>
+                            </button>
+                            <button type="button" class="admin-nav-item" role="tab" data-tab="maintenance" id="nav-maintenance">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                                <span class="admin-nav-label">Уведомления</span>
+                                <span class="admin-nav-badge" id="maintTabBadge" aria-hidden="true"></span>
+                            </button>
+                            <button type="button" class="admin-nav-item" role="tab" data-tab="support" id="nav-support">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                                <span class="admin-nav-label">Обратная связь</span>
+                                <span class="admin-nav-badge" id="supportTabBadge" aria-hidden="true"></span>
+                            </button>
+                            <button type="button" class="admin-nav-item" role="tab" data-tab="updates" id="nav-updates">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path><line x1="12" y1="6" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                                <span class="admin-nav-label">Новости</span>
+                            </button>
+                            <button type="button" class="admin-nav-item" role="tab" data-tab="account" id="nav-account">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                <span class="admin-nav-label">Аккаунт</span>
+                            </button>
+                        </nav>
+                    </aside>
+                    <div class="admin-main">
+                        <div class="admin-toolbar">
+                            <h2 class="admin-section-title" id="adminSectionTitle">Обзор</h2>
+                            <div class="admin-toolbar-actions">
+                                <span class="admin-sync-meta" id="adminLastSync">Данные не загружены</span>
+                                <button type="button" class="btn-sm btn-refresh" id="adminRefreshBtn" title="Обновить данные с сервера">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                                    Обновить
+                                </button>
+                            </div>
+                        </div>
+                        <div class="admin-loading" id="adminLoading" hidden>
+                            <span class="admin-loading-spinner" aria-hidden="true"></span>
+                            <span>Загрузка данных…</span>
+                        </div>
+                        <div class="admin-panels">
+
+                <!-- Обзор -->
+                <section id="tab-overview" class="tab-content active">
+                    <div class="panel-head">
+                        <details class="panel-help">
+                            <summary>Справка по разделу</summary>
+                            <ul class="fact-list">
+                            <li>Сводка по данным API <code style="font-size:0.76em;">/api/organizations</code> на момент загрузки.</li>
+                            <li>Счётчик объектов на картах — узлы, кроссы, муфты и т.д. (кабели не учитываются), как в приложении карты.</li>
+                            <li>Бесплатный режим и карточки на сайте — во вкладке «Витрина» (лимиты объектов и пользователей, текст карточек).</li>
+                            <li>Остальные карточки — просмотр; по клику откроется связанный раздел.</li>
+                        </ul>
+                        </details>
+                    </div>
+                    <div class="cards-row">
+                        <div class="stat-card stat-card--action" data-admin-goto="organizations" tabindex="0" role="button" title="Открыть список организаций">
+                            <div class="stat-label">Всего организаций</div>
+                            <div class="stat-value" id="statOrgsTotal">—</div>
+                            <div class="stat-extra">Активные / приостановленные: <span id="statOrgsSplit" class="text-muted">—</span></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Активных сессий</div>
+                            <div class="stat-value" id="statSessionsActive">—</div>
+                            <div class="stat-extra">По данным /api/organizations</div>
+                        </div>
+                        <div class="stat-card stat-card--action" data-admin-goto="showcase" tabindex="0" role="button" title="Настроить витрину">
+                            <div class="stat-label">Безлимит объектов</div>
+                            <div class="stat-value" id="statUnlimitedOrgs">—</div>
+                            <div class="stat-extra">организаций с разблокировкой</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Покрытие лимитов</div>
+                            <div class="stat-value" id="statCapacityCoverage">—</div>
+                            <div class="stat-extra">Суммарно: сессии / лимиты <span id="statCapacitySplit" class="text-muted">—</span></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Средняя нагрузка</div>
+                            <div class="stat-value" id="statAvgSessions">—</div>
+                            <div class="stat-extra">Среднее активных сессий на организацию</div>
+                        </div>
+                        <div class="stat-card stat-card--action" data-admin-goto="showcase" tabindex="0" role="button" title="Настроить бесплатный режим">
+                            <div class="stat-label">Бесплатный режим (по умолчанию)</div>
+                            <div class="stat-value" id="statFreeDefaultObjects">—</div>
+                            <div class="stat-extra">объектов · одновременно <span id="statFreeDefaultConcurrent" class="text-muted">—</span> польз.</div>
+                        </div>
+                        <div class="stat-card stat-card--action" data-admin-goto="organizations" data-org-filter="highload" tabindex="0" role="button" title="Открыть организации с высокой загрузкой">
+                            <div class="stat-label">Организации с риском по лимиту</div>
+                            <div class="stat-value danger-text" id="statHighLoadOrgs">—</div>
+                            <div class="stat-extra">С загрузкой лимита 80% и выше</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Организации без лимита</div>
+                            <div class="stat-value" id="statWithoutLimit">—</div>
+                            <div class="stat-extra">Лимит не задан/невалидный</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Медиана активных сессий</div>
+                            <div class="stat-value" id="statMedianSessions">—</div>
+                            <div class="stat-extra">По всем организациям</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Всего входов в систему</div>
+                            <div class="stat-value" id="statVisitsTotal">—</div>
+                            <div class="stat-extra">Все успешные авторизации</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Входы за 24 часа</div>
+                            <div class="stat-value" id="statVisits24h">—</div>
+                            <div class="stat-extra">С учётом всех учётных записей</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Входы за 7 дней</div>
+                            <div class="stat-value" id="statVisits7d">—</div>
+                            <div class="stat-extra">Суммарно по всем источникам</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Объектов на картах</div>
+                            <div class="stat-value" id="statMapObjectsTotal">—</div>
+                            <div class="stat-extra">Суммарно по всем организациям</div>
+                        </div>
+                    </div>
+                    <div class="overview-analytics-grid">
+                        <div class="analytics-card">
+                            <div class="analytics-title">Статусы организаций</div>
+                            <div class="donut-wrap">
+                                <div class="donut-chart" id="statusDonutChart"></div>
+                                <ul class="legend-list">
+                                    <li class="legend-item"><span class="legend-dot active"></span><span class="legend-item-label">Активные</span><strong id="statusLegendActive">0</strong></li>
+                                    <li class="legend-item"><span class="legend-dot suspended"></span><span class="legend-item-label">Приостановленные</span><strong id="statusLegendSuspended">0</strong></li>
+                                    <li class="legend-item"><span class="legend-dot info"></span><span class="legend-item-label">Безлимит объектов</span><strong id="statusLegendUnlimited">0</strong></li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-title">Лимиты объектов на карте</div>
+                            <div class="bar-chart" id="mapLimitBarChart"></div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-title">Топ организаций по загрузке лимита</div>
+                            <div class="bar-chart" id="capacityBarChart"></div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-title">Топ организаций по объектам на карте</div>
+                            <div class="bar-chart" id="mapObjectsBarChart"></div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-title">Качество данных и риски</div>
+                            <ul class="legend-list">
+                                <li class="legend-item"><span class="legend-dot warn"></span><span class="legend-item-label">Высокая загрузка сессий (≥80%)</span><strong id="riskLegendHighLoad">0</strong></li>
+                                <li class="legend-item"><span class="legend-dot info"></span><span class="legend-item-label">Безлимит объектов</span><strong id="riskLegendUnlimited">0</strong></li>
+                                <li class="legend-item"><span class="legend-dot suspended"></span><span class="legend-item-label">Приостановленные</span><strong id="riskLegendSuspended">0</strong></li>
+                            </ul>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-title">Топ источников входа</div>
+                            <div class="bar-chart" id="visitSourcesChart"></div>
+                        </div>
+                        <div class="analytics-card">
+                            <div class="analytics-title">Последние входы</div>
+                            <div class="bar-chart" id="recentVisitsList"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Организации -->
+                <section id="tab-organizations" class="tab-content">
+                    <div class="panel-head">
+                        <details class="panel-help">
+                            <summary>Справка по разделу</summary>
+                            <ul class="fact-list">
+                            <li>Список организаций: лимиты объектов и сессий, контактная почта, число объектов на карте (узлы, кроссы, муфты — без кабелей).</li>
+                            <li>«Настроить» открывает блок лимитов для выбранной организации ниже.</li>
+                            <li>«Удалить» безвозвратно удаляет организацию, карту, историю и пользователей этой организации.</li>
+                            <li>Роли и редактирование пользователей — в приложении карты (модальное окно «Пользователи»). Ниже — сводный список с аватарами (только просмотр).</li>
+                        </ul>
+                        </details>
+                    </div>
+                    <div class="org-filters" id="orgsFilters" role="group" aria-label="Фильтр организаций">
+                        <button type="button" class="org-filter active" data-filter="all">Все</button>
+                        <button type="button" class="org-filter" data-filter="active">Активные</button>
+                        <button type="button" class="org-filter" data-filter="suspended">Приостановленные</button>
+                        <button type="button" class="org-filter" data-filter="unlimited">Безлимит</button>
+                        <button type="button" class="org-filter" data-filter="highload">Высокая загрузка</button>
+                    </div>
+                    <div class="org-toolbar">
+                        <div class="search-field">
+                            <label for="orgsSearchInput" class="sr-only">Поиск организаций</label>
+                            <input type="search" id="orgsSearchInput" placeholder="Поиск: название, e-mail, ID…" autocomplete="off">
+                        </div>
+                        <span class="org-toolbar-meta" id="orgsSearchMeta">—</span>
+                    </div>
+                    <div class="table-wrap" style="margin-bottom:10px;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Организация</th>
+                                    <th>Почта</th>
+                                    <th>Лимит объектов</th>
+                                    <th>Безлимит</th>
+                                    <th>Сессии / лимит</th>
+                                    <th>Статус</th>
+                                    <th>Объектов на карте</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="orgsTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="margin-top:22px;padding-top:18px;border-top:1px solid rgba(15,23,42,0.08);">
+                        <h3 class="panel-title" style="font-size:0.95rem;margin-bottom:12px;">Лимиты организации</h3>
+                        <div class="field-row">
+                            <div class="field-col">
+                                <label for="pricingOrgSelect">Организация</label>
+                                <select id="pricingOrgSelect">
+                                    <option value="">Выберите организацию…</option>
+                                </select>
+                            </div>
+                            <div class="field-col">
+                                <label><input type="checkbox" id="pricingMapLimitUnlocked"> Безлимит объектов на карте</label>
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <div class="field-col">
+                                <label for="pricingCustomMapLimit">Свой лимит объектов (пусто = по умолчанию с витрины)</label>
+                                <input id="pricingCustomMapLimit" type="number" min="1" placeholder="по умолчанию">
+                            </div>
+                            <div class="field-col">
+                                <label for="pricingMaxConcurrentUsers">Макс. одновременных пользователей</label>
+                                <input id="pricingMaxConcurrentUsers" type="number" min="-1" placeholder="4">
+                                <div class="hint">Пусто — как на витрине; −1 — без ограничения.</div>
+                            </div>
+                            <div class="field-col">
+                                <label for="pricingStatus">Статус</label>
+                                <select id="pricingStatus">
+                                    <option value="active">Активна</option>
+                                    <option value="suspended">Приостановлена</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <div class="field-col">
+                                <label for="pricingContactEmail">E-mail для связи</label>
+                                <input id="pricingContactEmail" type="email" placeholder="name@company.ru">
+                            </div>
+                        </div>
+                        <button class="btn-sm-primary" id="pricingSaveBtn">Сохранить лимиты организации</button>
+                    </div>
+                    <div style="margin-top:22px;padding-top:18px;border-top:1px solid rgba(15,23,42,0.08);">
+                        <h3 class="panel-title" style="font-size:0.95rem;margin-bottom:12px;">Пользователи платформы</h3>
+                        <p class="hint" style="margin:0 0 10px;">Аватары загружаются в личном кабинете приложения карты. Здесь — просмотр всех учётных записей.</p>
+                        <div class="table-wrap" style="max-height:320px;overflow:auto;margin-bottom:12px;">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="width:48px;"></th>
+                                        <th>Имя / логин</th>
+                                        <th>Роль</th>
+                                        <th>Организация</th>
+                                        <th>Статус</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="adminUsersTableBody">
+                                    <tr><td colspan="5" class="text-muted">Загрузка…</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div style="margin-top:22px;padding-top:18px;border-top:1px solid rgba(15,23,42,0.08);">
+                        <h3 class="panel-title" style="font-size:0.95rem;margin-bottom:12px;">Сброс пароля пользователя</h3>
+                        <div class="field-row">
+                            <div class="field-col" style="flex:1;min-width:220px;">
+                                <label for="orgPasswordResetSelect">Организация</label>
+                                <select id="orgPasswordResetSelect">
+                                    <option value="">Выберите организацию…</option>
+                                </select>
+                            </div>
+                            <div class="field-col" style="flex:1;min-width:200px;">
+                                <label for="orgPasswordResetUserSelect">Пользователь</label>
+                                <select id="orgPasswordResetUserSelect">
+                                    <option value="">— Сначала выберите организацию —</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <div class="field-col">
+                                <label for="orgPasswordResetNew">Новый пароль</label>
+                                <input id="orgPasswordResetNew" type="password" minlength="6" autocomplete="new-password" placeholder="Не менее 6 символов">
+                            </div>
+                            <div class="field-col" style="align-self:flex-end;">
+                                <button class="btn-sm-primary" type="button" id="orgPasswordResetBtn">Установить пароль</button>
+                            </div>
+                        </div>
+                        <div class="hint" id="orgPasswordResetMsg" style="margin-top:6px;"></div>
+                    </div>
+                </section>
+
+                <!-- Витрина: бесплатный режим и карточки -->
+                <section id="tab-showcase" class="tab-content">
+                    <div class="panel-head">
+                        <details class="panel-help">
+                            <summary>Справка по разделу</summary>
+                            <ul class="fact-list">
+                            <li>Карточка «Бесплатно» на <strong>pricing.html</strong>: лимиты объектов и пользователей применяются ко всем новым организациям (если не задано иное в разделе «Организации»).</li>
+                            <li>Строка под ценой: если поле «Подпись под ценой» пустое — подставляется текст с числами лимитов автоматически.</li>
+                            <li>Дополнительные карточки — обычно «Снять лимит» с кнопкой в контакты.</li>
+                        </ul>
+                        </details>
+                    </div>
+
+                    <h3 class="panel-title" style="font-size:0.95rem;margin:0 0 12px;">Бесплатное использование</h3>
+                    <p class="hint" style="margin:0 0 14px;">Лимиты для организаций без индивидуальных настроек. Отображаются на карточке «Бесплатно» и при регистрации.</p>
+                    <div class="field-row">
+                        <div class="field-col">
+                            <label for="platformDefaultMapObjectLimit">Объектов на карте (макс.)</label>
+                            <input id="platformDefaultMapObjectLimit" type="number" min="1" max="999999" placeholder="2000">
+                            <div class="hint">Узлы, кроссы, муфты — без кабелей. На сервере: <strong id="adminDefaultFreeLimit">—</strong></div>
+                        </div>
+                        <div class="field-col">
+                            <label for="platformDefaultMaxConcurrent">Пользователей одновременно</label>
+                            <input id="platformDefaultMaxConcurrent" type="number" min="1" max="999" placeholder="4">
+                            <div class="hint">На сервере: <strong id="adminDefaultMaxConcurrent">—</strong></div>
+                        </div>
+                    </div>
+                    <div class="field-row">
+                        <div class="field-col">
+                            <label for="freeCardTitle">Заголовок карточки</label>
+                            <input id="freeCardTitle" type="text" placeholder="Бесплатно">
+                        </div>
+                        <div class="field-col">
+                            <label for="freeCardShort">Краткое описание</label>
+                            <input id="freeCardShort" type="text" placeholder="Полный функционал карты в пределах лимита…">
+                        </div>
+                    </div>
+                    <div class="field-row">
+                        <div class="field-col">
+                            <label for="freeCardPrice">Цена (текст)</label>
+                            <input id="freeCardPrice" type="text" placeholder="0 ₽">
+                        </div>
+                        <div class="field-col">
+                            <label for="freeCardPeriod">Период (текст)</label>
+                            <input id="freeCardPeriod" type="text" placeholder="навсегда">
+                        </div>
+                        <div class="field-col">
+                            <label for="freeCardCta">Текст кнопки</label>
+                            <input id="freeCardCta" type="text" placeholder="Создать организацию">
+                        </div>
+                    </div>
+                    <div class="field-row">
+                        <div class="field-col" style="flex:1 1 100%;">
+                            <label for="freeCardMeta">Подпись под ценой (необязательно)</label>
+                            <input id="freeCardMeta" type="text" placeholder="Пусто — «До N объектов… · до M пользователей…»">
+                        </div>
+                    </div>
+                    <button type="button" class="btn-sm-primary" id="freeShowcaseSaveBtn">Сохранить бесплатный режим</button>
+
+                    <div style="margin-top:28px;padding-top:20px;border-top:1px solid rgba(15,23,42,0.08);">
+                        <h3 class="panel-title" style="font-size:0.95rem;margin:0 0 12px;">Дополнительные карточки на сайте</h3>
+                        <p class="hint" style="margin:0 0 14px;">Например «Безлимит объектов» — кнопка ведёт в раздел контактов. Карточка «Бесплатно» задаётся выше.</p>
+                        <div class="table-wrap" style="max-height:220px;overflow:auto;margin-bottom:12px;">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Название</th>
+                                        <th>Цена</th>
+                                        <th>Порядок</th>
+                                        <th>Выделена</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="landingPricingTableBody"></tbody>
+                            </table>
+                        </div>
+                        <button type="button" class="btn-sm" id="landingPricingAddBtn">Добавить карточку</button>
+                        <div class="field-row" style="margin-top:16px;">
+                            <div class="field-col">
+                                <label for="landingPricingId">ID (латиница)</label>
+                                <input id="landingPricingId" type="text" placeholder="unlock">
+                            </div>
+                            <div class="field-col">
+                                <label for="landingPricingTitle">Название</label>
+                                <input id="landingPricingTitle" type="text" placeholder="Безлимит объектов">
+                            </div>
+                            <div class="field-col">
+                                <label for="landingPricingShort">Описание</label>
+                                <input id="landingPricingShort" type="text" placeholder="Снимите лимит для организации…">
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <div class="field-col">
+                                <label for="landingPricingPrice">Цена (текст)</label>
+                                <input id="landingPricingPrice" type="text" placeholder="по договорённости">
+                            </div>
+                            <div class="field-col">
+                                <label for="landingPricingPeriod">Период (текст)</label>
+                                <input id="landingPricingPeriod" type="text" placeholder="">
+                            </div>
+                            <div class="field-col">
+                                <label for="landingPricingOrder">Порядок</label>
+                                <input id="landingPricingOrder" type="number" placeholder="0">
+                            </div>
+                        </div>
+                        <div class="field-row">
+                            <div class="field-col">
+                                <label for="landingPricingMaxUsersText">Подпись под ценой</label>
+                                <input id="landingPricingMaxUsersText" type="text" placeholder="Неограниченное число узлов…">
+                            </div>
+                            <div class="field-col">
+                                <label for="landingPricingCtaText">Текст кнопки</label>
+                                <input id="landingPricingCtaText" type="text" placeholder="Связаться с владельцем">
+                            </div>
+                            <div class="field-col">
+                                <label for="landingPricingHighlighted">Выделить карточку</label>
+                                <select id="landingPricingHighlighted">
+                                    <option value="false">Нет</option>
+                                    <option value="true">Да</option>
+                                </select>
+                            </div>
+                        </div>
+                        <input type="hidden" id="landingPricingKind" value="contact">
+                        <button type="button" class="btn-sm-primary" id="landingPricingSaveBtn">Сохранить карточку в список</button>
+                        <button type="button" class="btn-sm-primary" id="showcasePlansPublishBtn" style="margin-left:8px;">Опубликовать все карточки на сайте</button>
+                    </div>
+                </section>
+
+                <!-- Уведомления пользователям -->
+                <section id="tab-maintenance" class="tab-content">
+                    <div class="maintenance-admin-layout">
+                        <div class="panel-head">
+                            <div class="maintenance-admin-head-row">
+                                <div>
+                                    <details class="panel-help" style="margin:0;">
+                                        <summary>Справка по разделу</summary>
+                                        <ul class="fact-list">
+                                        <li>Оранжевый баннер вверху страницы: вход, витрина и приложение карты.</li>
+                                        <li>После изменения текста баннер снова появится у тех, кто нажимал «Понятно».</li>
+                                    </ul>
+                                    </details>
+                                </div>
+                                <span id="maintLiveBadge" class="maint-live-badge maint-live-badge--off">Выключено</span>
+                            </div>
+                        </div>
+
+                        <div class="maintenance-admin-grid">
+                            <div class="maintenance-preview-card">
+                                <p class="maintenance-card-label">Предпросмотр</p>
+                                <div id="maintPreview" class="maintenance-preview is-empty">Включите уведомление и введите текст</div>
+                            </div>
+
+                            <div class="maintenance-form-card">
+                                <p class="maintenance-card-label">Настройки</p>
+                                <div class="maintenance-toggle-row">
+                                    <label for="maintEnabled">
+                                        <input type="checkbox" id="maintEnabled">
+                                        <span>Показывать баннер пользователям</span>
+                                    </label>
+                                </div>
+                                <div class="field-row">
+                                    <div class="field-col">
+                                        <label for="maintTitle">Заголовок</label>
+                                        <input id="maintTitle" type="text" placeholder="Технические работы">
+                                    </div>
+                                </div>
+                                <div class="field-row">
+                                    <div class="field-col" style="flex:1 1 100%;">
+                                        <label for="maintMessage">Текст уведомления</label>
+                                        <textarea id="maintMessage" rows="4" placeholder="Например: 20 мая с 02:00 до 06:00 возможны перебои в работе сервиса."></textarea>
+                                    </div>
+                                </div>
+                                <div class="field-row">
+                                    <div class="field-col">
+                                        <label for="maintStartsAt">Показывать с</label>
+                                        <input id="maintStartsAt" type="datetime-local">
+                                        <div class="hint">Необязательно. Локальное время браузера.</div>
+                                    </div>
+                                    <div class="field-col">
+                                        <label for="maintEndsAt">Показывать до</label>
+                                        <input id="maintEndsAt" type="datetime-local">
+                                        <div class="hint">Необязательно.</div>
+                                    </div>
+                                </div>
+                                <div class="maintenance-form-actions">
+                                    <button type="button" class="btn-sm-primary" id="maintSaveBtn">Сохранить</button>
+                                    <span class="hint" id="maintStatusHint"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Обратная связь от пользователей -->
+                <section id="tab-support" class="tab-content">
+                    <div class="panel-head">
+                        <details class="panel-help">
+                            <summary>Справка по разделу</summary>
+                            <ul class="fact-list">
+                                <li>Сообщения из виджета «Поддержка» на главной странице и других публичных страницах.</li>
+                                <li>Пока эта панель открыта, пользователи видят статус «Владелец в сети» в чате.</li>
+                                <li>Ответы появляются у пользователя в том же чате при следующем открытии или автоматически.</li>
+                            </ul>
+                        </details>
+                        <span class="support-presence-badge online" id="supportPresenceBadge">Вы в сети для пользователей</span>
+                    </div>
+                    <div class="support-admin-layout">
+                        <div>
+                            <div class="updates-admin-toolbar" style="margin-bottom:8px;">
+                                <button type="button" class="btn-sm btn-refresh" id="supportRefreshBtn">Обновить</button>
+                                <span class="hint" id="supportThreadsHint">—</span>
+                            </div>
+                            <ul class="support-thread-list" id="supportThreadList" aria-label="Диалоги"></ul>
+                        </div>
+                        <div class="support-thread-detail" id="supportThreadDetail">
+                            <div class="support-thread-messages" id="supportThreadMessages">
+                                <p class="hint" style="padding:12px;">Выберите диалог слева</p>
+                            </div>
+                            <div class="support-thread-reply" id="supportThreadReply" hidden>
+                                <textarea id="supportReplyText" placeholder="Ответ пользователю…" maxlength="4000"></textarea>
+                                <button type="button" class="btn-sm-primary" id="supportReplyBtn">Отправить ответ</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Публикации об обновлениях -->
+                <section id="tab-updates" class="tab-content">
+                    <div class="panel-head">
+                        <details class="panel-help">
+                            <summary>Справка по разделу</summary>
+                            <ul class="fact-list">
+                                <li>Посты отображаются на публичной странице <a href="news.html" target="_blank" rel="noopener">news.html</a>.</li>
+                                <li>Снимите «Опубликовать», чтобы сохранить черновик — он не попадёт на сайт.</li>
+                                <li>Редактор: размер шрифта, цвет, заголовки, списки, ссылки, изображения, видео по ссылке или файлом (MP4/WebM), вложения документов.</li>
+                            </ul>
+                        </details>
+                    </div>
+                    <div class="updates-admin-layout">
+                        <div class="updates-admin-list-wrap">
+                            <div class="updates-admin-toolbar">
+                                <button type="button" class="btn-sm-primary" id="productUpdatesNewBtn">Новый пост</button>
+                                <a href="news.html" class="btn-sm" target="_blank" rel="noopener">Открыть на сайте</a>
+                            </div>
+                            <ul class="updates-admin-list" id="productUpdatesList" aria-label="Список постов"></ul>
+                        </div>
+                        <div class="updates-admin-editor">
+                            <input type="hidden" id="productUpdateEditId" value="">
+                            <label for="productUpdateTitle">Заголовок</label>
+                            <input id="productUpdateTitle" type="text" maxlength="200" placeholder="Заголовок поста">
+                            <label for="productUpdateDate">Дата</label>
+                            <input id="productUpdateDate" type="date">
+                            <label for="productUpdateSummary">Краткое описание</label>
+                            <input id="productUpdateSummary" type="text" maxlength="500" placeholder="Одна строка для списка и анонса">
+                            <label for="productUpdateTags">Теги (через запятую)</label>
+                            <input id="productUpdateTags" type="text" placeholder="карта, синхронизация">
+                            <label for="productUpdateBodyEditor">Текст новости</label>
+                            <div class="news-editor-media-bar">
+                                <button type="button" class="btn-sm" id="newsEditorUploadVideoBtn" title="Загрузить MP4/WebM">Видео (файл)</button>
+                                <button type="button" class="btn-sm" id="newsEditorUploadFileBtn" title="PDF, Office, архив">Вложить файл</button>
+                            </div>
+                            <div id="productUpdateBodyEditor" class="news-quill-editor" aria-label="Редактор текста новости"></div>
+                            <div class="updates-admin-publish-row">
+                                <label for="productUpdatePublished">
+                                    <input type="checkbox" id="productUpdatePublished" checked>
+                                    Опубликовать на сайте
+                                </label>
+                            </div>
+                            <div class="updates-admin-form-actions">
+                                <button type="button" class="btn-sm-primary" id="productUpdatesApplyBtn">Применить к списку</button>
+                                <button type="button" class="btn-sm" id="productUpdatesDeleteBtn">Удалить</button>
+                                <button type="button" class="btn-sm-primary" id="productUpdatesSaveBtn">Сохранить на сервере</button>
+                            </div>
+                            <p class="updates-admin-hint" id="productUpdatesStatusHint">Выберите пост или создайте новый, затем сохраните.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Аккаунт -->
+                <section id="tab-account" class="tab-content">
+                    <div class="panel-head">
+                        <details class="panel-help">
+                            <summary>Справка по разделу</summary>
+                            <ul class="fact-list">
+                            <li>Смена пароля только для учётной записи <strong>admin</strong> (глобальный доступ к этой панели).</li>
+                            <li>Минимум 6 символов; после смены используйте новый пароль при следующем входе.</li>
+                        </ul>
+                        </details>
+                    </div>
+                    <div class="field-row">
+                        <div class="field-col">
+                            <label for="adminNewPassword">Новый пароль</label>
+                            <input id="adminNewPassword" type="password" class="form-input" placeholder="Введите новый пароль (мин. 6 символов)" minlength="6">
+                        </div>
+                        <div class="field-col">
+                            <label for="adminNewPasswordConfirm">Повторите пароль</label>
+                            <input id="adminNewPasswordConfirm" type="password" class="form-input" placeholder="Повторите пароль" minlength="6">
+                        </div>
+                    </div>
+                    <div class="field-row">
+                        <div class="field-col">
+                            <button class="btn-sm-primary" id="adminChangePasswordBtn">Сменить пароль</button>
+                            <div class="hint" id="adminPasswordMsg" style="margin-top: 8px;"></div>
+                        </div>
+                    </div>
+                </section>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="noAccess" class="no-access" style="display:none;">
+                Доступ к этой странице есть только у главного администратора (учётная запись <strong>admin</strong>).<br>
+                <br>
+                <button class="btn-sm" onclick="window.location.href='auth.html'">Перейти к странице входа</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        var themeBtn = document.getElementById('adminThemeToggle');
+        function setTheme(theme) {
+            var t = (theme === 'dark') ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', t);
+            try {
+                localStorage.setItem('networkMap_theme', t);
+                localStorage.setItem('networkMap_landingTheme', t);
+            } catch (e) {}
+            if (!themeBtn) return;
+            if (t === 'dark') {
+                themeBtn.textContent = '☀️ Светлая';
+                themeBtn.setAttribute('aria-label', 'Включить светлую тему');
+            } else {
+                themeBtn.textContent = '🌙 Тёмная';
+                themeBtn.setAttribute('aria-label', 'Включить тёмную тему');
+            }
+        }
+        setTheme(document.documentElement.getAttribute('data-theme') || 'light');
+        if (themeBtn) {
+            themeBtn.addEventListener('click', function() {
+                var current = document.documentElement.getAttribute('data-theme') || 'light';
+                setTheme(current === 'dark' ? 'light' : 'dark');
+            });
+        }
+
+        var ADMIN_SECTION_TITLES = {
+            overview: 'Обзор',
+            organizations: 'Организации',
+            showcase: 'Витрина',
+            maintenance: 'Уведомления',
+            support: 'Обратная связь',
+            updates: 'Новости',
+            account: 'Аккаунт'
+        };
+
+        function closeAdminSidebar() {
+            var sidebar = document.getElementById('adminSidebar');
+            var overlay = document.getElementById('adminSidebarOverlay');
+            var toggle = document.getElementById('adminNavToggle');
+            if (sidebar) sidebar.classList.remove('is-open');
+            if (overlay) overlay.classList.remove('is-open');
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        }
+
+        function openAdminSidebar() {
+            var sidebar = document.getElementById('adminSidebar');
+            var overlay = document.getElementById('adminSidebarOverlay');
+            var toggle = document.getElementById('adminNavToggle');
+            if (sidebar) sidebar.classList.add('is-open');
+            if (overlay) overlay.classList.add('is-open');
+            if (toggle) toggle.setAttribute('aria-expanded', 'true');
+        }
+
+        window.adminSwitchTab = function(name, options) {
+            options = options || {};
+            if (!name || !ADMIN_SECTION_TITLES[name]) return;
+            document.querySelectorAll('.admin-nav-item').forEach(function(t) {
+                var on = t.getAttribute('data-tab') === name;
+                t.classList.toggle('active', on);
+                t.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+            document.querySelectorAll('.tab-content').forEach(function(sec) {
+                sec.classList.toggle('active', sec.id === 'tab-' + name);
+            });
+            var titleEl = document.getElementById('adminSectionTitle');
+            if (titleEl) titleEl.textContent = ADMIN_SECTION_TITLES[name];
+            if (!options.skipHash) {
+                try { history.replaceState(null, '', '#' + name); } catch (e) {}
+            }
+            closeAdminSidebar();
+            var main = document.querySelector('.admin-main');
+            if (main) main.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (name === 'support' && typeof window.adminLoadSupportThreads === 'function') {
+                window.adminLoadSupportThreads();
+            }
+        };
+
+        document.addEventListener('click', function(e) {
+            var nav = e.target.closest('.admin-nav-item');
+            if (nav) {
+                adminSwitchTab(nav.getAttribute('data-tab'));
+                return;
+            }
+            var gotoCard = e.target.closest('[data-admin-goto]');
+            if (gotoCard) {
+                var tabName = gotoCard.getAttribute('data-admin-goto');
+                var orgFilter = gotoCard.getAttribute('data-org-filter');
+                if (orgFilter && window.adminSetOrgFilter) window.adminSetOrgFilter(orgFilter);
+                adminSwitchTab(tabName);
+            }
+        });
+
+        document.addEventListener('keydown', function(e) {
+            var card = e.target.closest('[data-admin-goto]');
+            if (card && (e.key === 'Enter' || e.key === ' ')) {
+                e.preventDefault();
+                card.click();
+            }
+        });
+
+        var navToggle = document.getElementById('adminNavToggle');
+        var navOverlay = document.getElementById('adminSidebarOverlay');
+        if (navToggle) {
+            navToggle.addEventListener('click', function() {
+                var sidebar = document.getElementById('adminSidebar');
+                if (sidebar && sidebar.classList.contains('is-open')) closeAdminSidebar();
+                else openAdminSidebar();
+            });
+        }
+        if (navOverlay) navOverlay.addEventListener('click', closeAdminSidebar);
+
+        var hashTab = (location.hash || '').replace(/^#/, '');
+        if (hashTab === 'pricing' || hashTab === 'landing-pricing' || hashTab === 'subscriptions') hashTab = 'showcase';
+        if (hashTab && ADMIN_SECTION_TITLES[hashTab]) {
+            adminSwitchTab(hashTab, { skipHash: true });
+        }
+
+        document.getElementById('backToLandingBtn').addEventListener('click', function() {
+            window.location.href = 'pricing.html';
+        });
+        document.getElementById('logoutBtn').addEventListener('click', function() {
+            function getToken() {
+                try {
+                    var exp = localStorage.getItem('networkMap_tokenExpiry');
+                    if (exp && Date.now() <= parseInt(exp, 10)) {
+                        var t = localStorage.getItem('networkMap_token');
+                        if (t) return t;
+                    }
+                    return sessionStorage.getItem('networkMap_token') || '';
+                } catch (e) { return ''; }
+            }
+            var token = getToken();
+            var headers = {};
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            fetch('api/auth/logout', {
+                method: 'POST',
+                credentials: 'include',
+                headers: headers,
+                keepalive: true
+            }).catch(function() {}).finally(function() {
+                localStorage.removeItem('networkMap_token');
+                localStorage.removeItem('networkMap_session');
+                localStorage.removeItem('networkMap_tokenExpiry');
+                sessionStorage.removeItem('networkMap_token');
+                sessionStorage.removeItem('networkMap_session');
+                window.location.href = 'auth.html';
+            });
+        });
+    })();
+    </script>
+    <script>
+    (function() {
+        var orgs = [];
+        var adminUserId = null;
+        var supportThreadsCache = [];
+        var supportActiveThreadId = null;
+        var cachedUsers = [];
+        var orgListFilter = 'all';
+        var adminDataLoading = false;
+        window.adminSetOrgFilter = function(filter) {
+            orgListFilter = filter || 'all';
+            document.querySelectorAll('.org-filter').forEach(function(btn) {
+                btn.classList.toggle('active', btn.getAttribute('data-filter') === orgListFilter);
+            });
+            renderOrganizationsTable();
+            if (filter && filter !== 'all') adminSwitchTab('organizations');
+        };
+
+        function orgMatchesListFilter(o) {
+            if (!o || orgListFilter === 'all') return true;
+            if (orgListFilter === 'unlimited') return !!o.mapObjectLimitUnlocked;
+            if (orgListFilter === 'suspended') return o.status === 'suspended';
+            if (orgListFilter === 'active') return o.status === 'active';
+            if (orgListFilter === 'highload') {
+                var limit = o.effectiveMaxConcurrentUsers != null ? o.effectiveMaxConcurrentUsers :
+                    (o.maxConcurrentUsers != null && o.maxConcurrentUsers > 0 ? o.maxConcurrentUsers : null);
+                var sessions = o.activeSessions != null ? o.activeSessions : 0;
+                if (limit == null || limit <= 0) return false;
+                return (sessions / limit) >= 0.8;
+            }
+            return true;
+        }
+
+        function setAdminLoading(on) {
+            adminDataLoading = !!on;
+            var el = document.getElementById('adminLoading');
+            var btn = document.getElementById('adminRefreshBtn');
+            if (el) el.hidden = !on;
+            if (btn) btn.classList.toggle('is-loading', on);
+        }
+
+        function setAdminSyncTime(ok) {
+            var meta = document.getElementById('adminLastSync');
+            if (!meta) return;
+            if (!ok) {
+                meta.textContent = 'Ошибка загрузки';
+                meta.classList.add('is-stale');
+                return;
+            }
+            meta.classList.remove('is-stale');
+            var d = new Date();
+            meta.textContent = 'Обновлено ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function getAuthToken() {
+            try {
+                var exp = localStorage.getItem('networkMap_tokenExpiry');
+                if (exp && Date.now() <= parseInt(exp, 10)) {
+                    var t = localStorage.getItem('networkMap_token');
+                    if (t) return t;
+                }
+                return sessionStorage.getItem('networkMap_token') || '';
+            } catch (e) { return ''; }
+        }
+
+        function fetchSession() {
+            var token = getAuthToken();
+            var opts = { credentials: 'include', headers: {} };
+            if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+            return fetch('api/auth/session', opts)
+                .then(function(r) {
+                    // Сервер хранит сессии с меньшим сроком, чем "remember me" на клиенте,
+                    // поэтому токен может быть уже невалидным. Очищаем хранилище при 401.
+                    if (r.status === 401) {
+                        try {
+                            sessionStorage.removeItem('networkMap_session');
+                            sessionStorage.removeItem('networkMap_token');
+                            localStorage.removeItem('networkMap_token');
+                            localStorage.removeItem('networkMap_session');
+                            localStorage.removeItem('networkMap_tokenExpiry');
+                        } catch (e) {}
+                    }
+                    return r.ok ? r.json() : null;
+                })
+                .catch(function() { return null; });
+        }
+
+        function fetchOrganizations() {
+            var token = getAuthToken && getAuthToken();
+            var opts = { credentials: 'include', headers: {} };
+            if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+            return fetch('api/organizations', opts)
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .catch(function() { return null; });
+        }
+
+        function fetchVisitStats() {
+            var token = getAuthToken && getAuthToken();
+            var opts = { credentials: 'include', headers: {} };
+            if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+            return fetch('api/admin/visits', opts)
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .catch(function() { return null; });
+        }
+
+        function escapeHtml(text) {
+            return String(text == null ? '' : text)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function compactLabel(text, max) {
+            var value = String(text == null ? '' : text).trim();
+            if (!value) return '—';
+            if (value.length <= max) return value;
+            return value.slice(0, Math.max(1, max - 1)) + '…';
+        }
+
+        function renderOverview() {
+            var total = orgs.length;
+            var active = orgs.filter(function(o) { return o.status === 'active'; }).length;
+            var suspended = orgs.filter(function(o) { return o.status === 'suspended'; }).length;
+            var unlimitedOrgs = orgs.filter(function(o) { return o.mapObjectLimitUnlocked; }).length;
+            var sessions = 0;
+            var totalLimit = 0;
+            var orgsWithoutLimit = 0;
+            var highLoadOrgs = 0;
+            var sessionsArray = [];
+            var orgCapacityList = [];
+            var orgMapObjectsList = [];
+            var mapObjectsTotal = 0;
+            var limitBuckets = { unlimited: 0, withLimit: 0 };
+            orgs.forEach(function(o) {
+                var activeSessions = parseInt(o.activeSessions, 10);
+                if (isNaN(activeSessions) || activeSessions < 0) activeSessions = 0;
+                sessions += activeSessions;
+                sessionsArray.push(activeSessions);
+                if (o.mapObjectLimitUnlocked) limitBuckets.unlimited++;
+                else limitBuckets.withLimit++;
+                var rawLimit = parseInt(o.effectiveMaxConcurrentUsers != null ? o.effectiveMaxConcurrentUsers : o.maxConcurrentUsers, 10);
+                if (!isNaN(rawLimit) && rawLimit > 0) {
+                    totalLimit += rawLimit;
+                    var loadPct = (activeSessions / rawLimit) * 100;
+                    if (loadPct >= 80) highLoadOrgs++;
+                    orgCapacityList.push({
+                        name: o.name || o.id || 'Организация',
+                        loadPct: loadPct,
+                        sessions: activeSessions,
+                        limit: rawLimit
+                    });
+                } else {
+                    orgsWithoutLimit++;
+                }
+                var mapObj = parseInt(o.mapObjectCount, 10);
+                if (isNaN(mapObj) || mapObj < 0) mapObj = 0;
+                mapObjectsTotal += mapObj;
+                orgMapObjectsList.push({
+                    name: o.name || o.id || 'Организация',
+                    count: mapObj
+                });
+            });
+            document.getElementById('statOrgsTotal').textContent = total || '0';
+            document.getElementById('statOrgsSplit').textContent = active + ' / ' + suspended;
+            document.getElementById('statSessionsActive').textContent = sessions || '0';
+            var statUnl = document.getElementById('statUnlimitedOrgs');
+            if (statUnl) statUnl.textContent = String(unlimitedOrgs);
+            var coverage = (totalLimit > 0) ? ((sessions / totalLimit) * 100) : 0;
+            document.getElementById('statCapacityCoverage').textContent = (coverage || 0).toFixed(1) + '%';
+            document.getElementById('statCapacitySplit').textContent = sessions + ' / ' + totalLimit;
+            document.getElementById('statAvgSessions').textContent = total ? (sessions / total).toFixed(1) : '0.0';
+            document.getElementById('statHighLoadOrgs').textContent = String(highLoadOrgs);
+            document.getElementById('statWithoutLimit').textContent = String(orgsWithoutLimit);
+
+            var median = 0;
+            if (sessionsArray.length) {
+                sessionsArray.sort(function(a, b) { return a - b; });
+                var mid = Math.floor(sessionsArray.length / 2);
+                median = (sessionsArray.length % 2 === 0)
+                    ? ((sessionsArray[mid - 1] + sessionsArray[mid]) / 2)
+                    : sessionsArray[mid];
+            }
+            document.getElementById('statMedianSessions').textContent = median.toFixed(1);
+
+            var mapTotalEl = document.getElementById('statMapObjectsTotal');
+            if (mapTotalEl) mapTotalEl.textContent = String(mapObjectsTotal);
+
+            var mapObjectsContainer = document.getElementById('mapObjectsBarChart');
+            if (mapObjectsContainer) {
+                mapObjectsContainer.innerHTML = '';
+                var topMapObjects = orgMapObjectsList
+                    .filter(function(item) { return item.count > 0; })
+                    .sort(function(a, b) { return b.count - a.count; })
+                    .slice(0, 5);
+                if (!topMapObjects.length) {
+                    mapObjectsContainer.innerHTML = '<div class="hint">Нет объектов на картах</div>';
+                } else {
+                    var maxMapObj = topMapObjects[0].count || 1;
+                    topMapObjects.forEach(function(item) {
+                        var pct = Math.round((item.count / maxMapObj) * 100);
+                        var safeFullName = escapeHtml(item.name);
+                        var safeShortName = escapeHtml(compactLabel(item.name, 20));
+                        var row = document.createElement('div');
+                        row.className = 'bar-row';
+                        row.innerHTML =
+                            '<span title="' + safeFullName + '">' + safeShortName + '</span>' +
+                            '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>' +
+                            '<strong>' + item.count + '</strong>';
+                        mapObjectsContainer.appendChild(row);
+                    });
+                }
+            }
+
+            var donutEl = document.getElementById('statusDonutChart');
+            var statusTotal = Math.max(total, 1);
+            var activeDeg = Math.round((active / statusTotal) * 360);
+            var suspendedDeg = Math.round((suspended / statusTotal) * 360);
+            donutEl.style.setProperty('--donut-a', activeDeg + 'deg');
+            donutEl.style.setProperty('--donut-b', (activeDeg + suspendedDeg) + 'deg');
+            document.getElementById('statusLegendActive').textContent = String(active);
+            document.getElementById('statusLegendSuspended').textContent = String(suspended);
+            var legUnl = document.getElementById('statusLegendUnlimited');
+            if (legUnl) legUnl.textContent = String(unlimitedOrgs);
+
+            var limitChart = document.getElementById('mapLimitBarChart');
+            if (limitChart) {
+                limitChart.innerHTML = '';
+                var entries = [
+                    { label: 'С лимитом', value: limitBuckets.withLimit },
+                    { label: 'Безлимит', value: limitBuckets.unlimited }
+                ];
+                var maxB = Math.max(entries[0].value, entries[1].value, 1);
+                entries.forEach(function(item) {
+                    var pct = Math.round((item.value / maxB) * 100);
+                    var row = document.createElement('div');
+                    row.className = 'bar-row';
+                    row.innerHTML =
+                        '<span>' + escapeHtml(item.label) + '</span>' +
+                        '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>' +
+                        '<strong>' + item.value + '</strong>';
+                    limitChart.appendChild(row);
+                });
+            }
+
+            var capacityContainer = document.getElementById('capacityBarChart');
+            capacityContainer.innerHTML = '';
+            var topCapacity = orgCapacityList
+                .sort(function(a, b) { return b.loadPct - a.loadPct; })
+                .slice(0, 5);
+            if (!topCapacity.length) {
+                capacityContainer.innerHTML = '<div class="hint">Нет организаций с валидным лимитом</div>';
+            } else {
+                topCapacity.forEach(function(item) {
+                    var pctSafe = Math.max(0, Math.min(100, Math.round(item.loadPct)));
+                    var safeFullName = escapeHtml(item.name);
+                    var safeShortName = escapeHtml(compactLabel(item.name, 20));
+                    var row = document.createElement('div');
+                    var rowClass = 'bar-row';
+                    if (pctSafe >= 95) rowClass += ' danger';
+                    else if (pctSafe >= 80) rowClass += ' warn';
+                    row.className = rowClass;
+                    row.innerHTML =
+                        '<span title="' + safeFullName + '">' + safeShortName + '</span>' +
+                        '<span class="bar-track"><span class="bar-fill" style="width:' + pctSafe + '%"></span></span>' +
+                        '<strong>' + pctSafe + '%</strong>';
+                    capacityContainer.appendChild(row);
+                });
+            }
+
+            var riskHl = document.getElementById('riskLegendHighLoad');
+            if (riskHl) riskHl.textContent = String(highLoadOrgs);
+            var riskUnl = document.getElementById('riskLegendUnlimited');
+            if (riskUnl) riskUnl.textContent = String(unlimitedOrgs);
+            var riskSusp = document.getElementById('riskLegendSuspended');
+            if (riskSusp) riskSusp.textContent = String(suspended);
+        }
+
+        function renderVisitOverview(data) {
+            var totalEl = document.getElementById('statVisitsTotal');
+            var dayEl = document.getElementById('statVisits24h');
+            var weekEl = document.getElementById('statVisits7d');
+            if (totalEl) totalEl.textContent = String((data && data.totalVisits) || 0);
+            if (dayEl) dayEl.textContent = String((data && data.visitsLast24h) || 0);
+            if (weekEl) weekEl.textContent = String((data && data.visitsLast7d) || 0);
+
+            var sourceChart = document.getElementById('visitSourcesChart');
+            if (sourceChart) {
+                sourceChart.innerHTML = '';
+                var sources = (data && Array.isArray(data.topSources)) ? data.topSources : [];
+                if (!sources.length) {
+                    sourceChart.innerHTML = '<div class="hint">Пока нет данных по источникам</div>';
+                } else {
+                    var max = sources[0].count || 1;
+                    sources.forEach(function(item) {
+                        var count = item.count || 0;
+                        var pct = Math.round((count / max) * 100);
+                        var label = compactLabel(item.source || 'unknown', 24);
+                        var row = document.createElement('div');
+                        row.className = 'bar-row';
+                        row.innerHTML =
+                            '<span title="' + escapeHtml(item.source || 'unknown') + '">' + escapeHtml(label) + '</span>' +
+                            '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>' +
+                            '<strong>' + count + '</strong>';
+                        sourceChart.appendChild(row);
+                    });
+                }
+            }
+
+            var recentEl = document.getElementById('recentVisitsList');
+            if (recentEl) {
+                recentEl.innerHTML = '';
+                var recent = (data && Array.isArray(data.recentVisits)) ? data.recentVisits : [];
+                if (!recent.length) {
+                    recentEl.innerHTML = '<div class="hint">Пока нет входов</div>';
+                } else {
+                    recent.forEach(function(item) {
+                        var at = item.at ? new Date(item.at) : null;
+                        var when = at && !isNaN(at.getTime()) ? at.toLocaleString('ru-RU') : '—';
+                        var who = item.username || '—';
+                        var src = compactLabel(item.source || 'unknown', 30);
+                        var row = document.createElement('div');
+                        row.className = 'bar-row';
+                        row.innerHTML =
+                            '<span title="' + escapeHtml(item.source || 'unknown') + '">' + escapeHtml(who + ' · ' + src) + '</span>' +
+                            '<span class="bar-track"><span class="bar-fill" style="width:100%"></span></span>' +
+                            '<strong>' + escapeHtml(when) + '</strong>';
+                        recentEl.appendChild(row);
+                    });
+                }
+            }
+        }
+
+        function getFilteredOrgs() {
+            var inp = document.getElementById('orgsSearchInput');
+            var q = (inp && inp.value) ? String(inp.value).trim().toLowerCase() : '';
+            return orgs.filter(function(o) {
+                if (!orgMatchesListFilter(o)) return false;
+                if (!q) return true;
+                var name = (o.name || '').toLowerCase();
+                var mail = (o.contactEmail || '').toLowerCase();
+                var id = (o.id || '').toLowerCase();
+                var mapCnt = String(o.mapObjectCount != null ? o.mapObjectCount : '');
+                return name.indexOf(q) >= 0 || mail.indexOf(q) >= 0 || id.indexOf(q) >= 0 || mapCnt.indexOf(q) >= 0;
+            });
+        }
+
+        function renderOrganizationsTable() {
+            var tbody = document.getElementById('orgsTableBody');
+            var list = getFilteredOrgs();
+            var meta = document.getElementById('orgsSearchMeta');
+            if (meta) {
+                if (!orgs.length) meta.textContent = 'Нет организаций';
+                else if (!list.length) meta.textContent = 'Ничего не найдено · всего ' + orgs.length;
+                else meta.textContent = 'Показано ' + list.length + ' из ' + orgs.length;
+            }
+            tbody.innerHTML = '';
+            if (!orgs.length) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-muted">Организаций пока нет</td></tr>';
+                return;
+            }
+            if (!list.length) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-muted">По запросу ничего не найдено — уточните поиск.</td></tr>';
+                return;
+            }
+            var now = new Date();
+            list.forEach(function(o) {
+                var tr = document.createElement('tr');
+                var limitStr = o.mapObjectLimitUnlocked ? '∞' :
+                    ((o.mapObjectCount != null ? o.mapObjectCount : 0) + ' / ' + (o.mapObjectLimit != null ? o.mapObjectLimit : '—'));
+                var maxU = o.effectiveMaxConcurrentUsers;
+                if (maxU === -1) maxU = '∞';
+                else if (maxU == null || maxU <= 0) maxU = '4';
+                var pillClass = 'pill-active';
+                var pillText = 'Активна';
+                if (o.status === 'suspended') {
+                    pillClass = 'pill-suspended';
+                    pillText = 'Приостановлена';
+                }
+                var mail = (o.contactEmail && String(o.contactEmail).trim()) ? String(o.contactEmail).trim() : '—';
+                tr.innerHTML =
+                    '<td>' + (o.name || '—') + '</td>' +
+                    '<td class="text-muted" style="max-width:160px;word-break:break-all;">' + mail + '</td>' +
+                    '<td>' + limitStr + '</td>' +
+                    '<td>' + (o.mapObjectLimitUnlocked ? 'да' : 'нет') + '</td>' +
+                    '<td>' + (o.activeSessions != null ? o.activeSessions : '0') + ' / ' + maxU + '</td>' +
+                    '<td><span class="pill ' + pillClass + '">' + pillText + '</span></td>' +
+                    '<td>' + (o.mapObjectCount != null ? o.mapObjectCount : '0') + '</td>' +
+                    '<td class="actions-cell">' +
+                        '<button data-id="' + o.id + '" data-action="selectOrgLimits">Настроить</button>' +
+                        '<button data-id="' + o.id + '" data-action="deleteOrg" style="margin-left:4px;color:#b91c1c;border-color:#fecaca;">Удалить</button>' +
+                    '</td>';
+                tbody.appendChild(tr);
+            });
+        }
+
+        function renderPricingSelector() {
+            var select = document.getElementById('pricingOrgSelect');
+            select.innerHTML = '<option value="">Выберите организацию…</option>';
+            var orgPwd = document.getElementById('orgPasswordResetSelect');
+            if (orgPwd) {
+                orgPwd.innerHTML = '<option value="">Выберите организацию…</option>';
+            }
+            orgs.forEach(function(o) {
+                var opt = document.createElement('option');
+                opt.value = o.id;
+                opt.textContent = o.name || o.id;
+                select.appendChild(opt);
+                if (orgPwd) {
+                    var opt2 = document.createElement('option');
+                    opt2.value = o.id;
+                    opt2.textContent = o.name || o.id;
+                    orgPwd.appendChild(opt2);
+                }
+            });
+        }
+
+        function renderOrgPasswordUserSelect(orgId) {
+            var sel = document.getElementById('orgPasswordResetUserSelect');
+            if (!sel) return;
+            sel.innerHTML = '';
+            if (!orgId) {
+                sel.innerHTML = '<option value="">— Сначала выберите организацию —</option>';
+                return;
+            }
+            var list = (cachedUsers || []).filter(function(u) {
+                return u.organizationId === orgId && u.status !== 'rejected';
+            });
+            if (!list.length) {
+                sel.innerHTML = '<option value="">Нет пользователей</option>';
+                return;
+            }
+            list.forEach(function(u) {
+                var opt = document.createElement('option');
+                opt.value = u.id;
+                opt.textContent = (u.username || u.id) + (u.role === 'admin' ? ' (админ)' : '');
+                sel.appendChild(opt);
+            });
+        }
+
+        function fillPricingFormForOrg(orgId) {
+            var o = orgs.find(function(x) { return x.id === orgId; });
+            if (!o) return;
+            var unlockedEl = document.getElementById('pricingMapLimitUnlocked');
+            if (unlockedEl) unlockedEl.checked = !!o.mapObjectLimitUnlocked;
+            var customEl = document.getElementById('pricingCustomMapLimit');
+            if (customEl) customEl.value = o.customMapObjectLimit != null ? o.customMapObjectLimit : '';
+            var mcuEl = document.getElementById('pricingMaxConcurrentUsers');
+            if (mcuEl) {
+                if (o.effectiveMaxConcurrentUsers === -1 || o.maxConcurrentUsers === -1) mcuEl.value = '-1';
+                else if (o.maxConcurrentUsers != null && o.maxConcurrentUsers > 0) mcuEl.value = String(o.maxConcurrentUsers);
+                else mcuEl.value = '';
+            }
+            document.getElementById('pricingStatus').value = o.status || 'active';
+            var pe = document.getElementById('pricingContactEmail');
+            if (pe) pe.value = (o.contactEmail != null) ? String(o.contactEmail) : '';
+        }
+
+        function patchOrganization(orgId, data) {
+            var token = getAuthToken && getAuthToken();
+            var headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            return fetch('api/organizations/' + encodeURIComponent(orgId), {
+                method: 'PATCH',
+                headers: headers,
+                credentials: 'include',
+                body: JSON.stringify(data)
+            }).then(function(r) {
+                if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+            });
+        }
+
+        var showcasePlansCache = [];
+
+        function loadLandingPricing() {
+            var opts = { credentials: 'include', headers: {} };
+            var token = getAuthToken && getAuthToken();
+            if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+            fetch('api/pricing', opts)
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(body) {
+                    showcasePlansCache = body && Array.isArray(body.plans) ? body.plans : [];
+                    var tbody = document.getElementById('landingPricingTableBody');
+                    if (!tbody) return;
+                    tbody.innerHTML = '';
+                    if (!showcasePlansCache.length) {
+                        tbody.innerHTML = '<tr><td colspan="5" class="text-muted">Дополнительных карточек нет</td></tr>';
+                        return;
+                    }
+                    showcasePlansCache.forEach(function(p, idx) {
+                        var tr = document.createElement('tr');
+                        tr.innerHTML =
+                            '<td>' + (p.title || p.id || '—') + '</td>' +
+                            '<td>' + (p.price || '—') + (p.period ? ' ' + p.period : '') + '</td>' +
+                            '<td>' + (typeof p.order === 'number' ? p.order : idx) + '</td>' +
+                            '<td>' + (p.highlighted ? 'да' : 'нет') + '</td>' +
+                            '<td class="actions-cell">' +
+                                '<button data-idx="' + idx + '" data-action="editLandingPlan">Редактировать</button>' +
+                                '<button data-idx="' + idx + '" data-action="deleteLandingPlan" style="margin-left:6px;color:#b91c1c;border-color:#fecaca;">Удалить</button>' +
+                            '</td>';
+                        tbody.appendChild(tr);
+                    });
+                });
+        }
+
+        function loadShowcase() {
+            var token = getAuthToken && getAuthToken();
+            var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+            return fetch('api/admin/showcase', { headers: headers, credentials: 'include' })
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(cfg) {
+                    if (!cfg) return;
+                    applyPlatformLimitsUi(cfg);
+                    applyFreeCardUi(cfg.freeCard);
+                    showcasePlansCache = Array.isArray(cfg.plans) ? cfg.plans : [];
+                    var tbody = document.getElementById('landingPricingTableBody');
+                    if (tbody) {
+                        tbody.innerHTML = '';
+                        if (!showcasePlansCache.length) {
+                            tbody.innerHTML = '<tr><td colspan="5" class="text-muted">Дополнительных карточек нет</td></tr>';
+                        } else {
+                            showcasePlansCache.forEach(function(p, idx) {
+                                var tr = document.createElement('tr');
+                                tr.innerHTML =
+                                    '<td>' + (p.title || p.id || '—') + '</td>' +
+                                    '<td>' + (p.price || '—') + (p.period ? ' ' + p.period : '') + '</td>' +
+                                    '<td>' + (typeof p.order === 'number' ? p.order : idx) + '</td>' +
+                                    '<td>' + (p.highlighted ? 'да' : 'нет') + '</td>' +
+                                    '<td class="actions-cell">' +
+                                        '<button data-idx="' + idx + '" data-action="editLandingPlan">Редактировать</button>' +
+                                        '<button data-idx="' + idx + '" data-action="deleteLandingPlan" style="margin-left:6px;color:#b91c1c;border-color:#fecaca;">Удалить</button>' +
+                                    '</td>';
+                                tbody.appendChild(tr);
+                            });
+                        }
+                    }
+                })
+                .catch(function() {});
+        }
+
+        function applyFreeCardUi(card) {
+            if (!card) return;
+            var set = function(id, val) {
+                var el = document.getElementById(id);
+                if (el && document.activeElement !== el) el.value = val != null ? String(val) : '';
+            };
+            set('freeCardTitle', card.title);
+            set('freeCardShort', card.short);
+            set('freeCardPrice', card.price);
+            set('freeCardPeriod', card.period);
+            set('freeCardCta', card.ctaText);
+            set('freeCardMeta', card.metaLine);
+        }
+
+        function saveShowcaseFree() {
+            var lim = parseInt(document.getElementById('platformDefaultMapObjectLimit').value.trim(), 10);
+            var mc = parseInt(document.getElementById('platformDefaultMaxConcurrent').value.trim(), 10);
+            if (isNaN(lim) || lim < 1) {
+                alert('Укажите лимит объектов (≥ 1)');
+                return Promise.resolve();
+            }
+            if (isNaN(mc) || mc < 1) {
+                alert('Укажите лимит пользователей (≥ 1)');
+                return Promise.resolve();
+            }
+            var token = getAuthToken && getAuthToken();
+            var headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            return fetch('api/admin/showcase', {
+                method: 'PUT',
+                headers: headers,
+                credentials: 'include',
+                body: JSON.stringify({
+                    defaultFreeMapObjectLimit: lim,
+                    defaultMaxConcurrentUsers: mc,
+                    freeCard: {
+                        title: (document.getElementById('freeCardTitle') || {}).value,
+                        short: (document.getElementById('freeCardShort') || {}).value,
+                        price: (document.getElementById('freeCardPrice') || {}).value,
+                        period: (document.getElementById('freeCardPeriod') || {}).value,
+                        ctaText: (document.getElementById('freeCardCta') || {}).value,
+                        metaLine: (document.getElementById('freeCardMeta') || {}).value
+                    }
+                })
+            }).then(function(r) {
+                if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+                return r.json();
+            }).then(function(body) {
+                var cfg = body.showcase || body;
+                applyPlatformLimitsUi(cfg);
+                applyFreeCardUi(cfg.freeCard);
+                alert('Бесплатный режим сохранён');
+                loadAll();
+            }).catch(function(e) {
+                alert('Ошибка: ' + (e.message || e));
+            });
+        }
+
+        function publishShowcasePlans(plans) {
+            var token = getAuthToken && getAuthToken();
+            var headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            return fetch('api/admin/showcase', {
+                method: 'PUT',
+                headers: headers,
+                credentials: 'include',
+                body: JSON.stringify({ plans: plans })
+            }).then(function(r) {
+                if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+                return r.json();
+            }).then(function() {
+                alert('Карточки опубликованы на сайте');
+                loadShowcase();
+            });
+        }
+
+        function adminAvatarSrc(avatarUrl) {
+            if (!avatarUrl) return '';
+            var path = avatarUrl.charAt(0) === '/' ? avatarUrl : '/' + avatarUrl;
+            var url = path;
+            var token = getAuthToken && getAuthToken();
+            if (token) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(token);
+            return url;
+        }
+
+        function adminUserAvatarCell(u) {
+            var initial = String((u.fullName || u.username || '?')).charAt(0).toUpperCase();
+            if (u.avatarUrl && getAuthToken && getAuthToken()) {
+                return '<span class="admin-user-avatar has-avatar-image"><img class="avatar-img" src="' + escapeHtml(adminAvatarSrc(u.avatarUrl)) + '" alt=""></span>';
+            }
+            return '<span class="admin-user-avatar">' + escapeHtml(initial) + '</span>';
+        }
+
+        function renderAdminUsersTable() {
+            var tbody = document.getElementById('adminUsersTableBody');
+            if (!tbody) return;
+            var list = (cachedUsers || []).slice().sort(function(a, b) {
+                return String(a.username || '').localeCompare(String(b.username || ''), 'ru');
+            });
+            if (!list.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-muted">Нет пользователей</td></tr>';
+                return;
+            }
+            tbody.innerHTML = '';
+            list.forEach(function(u) {
+                var orgName = '—';
+                if (u.organizationId && orgs && orgs.length) {
+                    var o = orgs.find(function(x) { return x.id === u.organizationId; });
+                    orgName = o ? (o.name || u.organizationId) : u.organizationId;
+                } else if (u.organizationName) {
+                    orgName = u.organizationName;
+                }
+                var roleLabel = u.role === 'admin' ? 'Администратор' : 'Пользователь';
+                var status = u.status || 'approved';
+                var statusLabel = status === 'pending' ? 'Ожидает' : (status === 'rejected' ? 'Отклонён' : 'Активен');
+                var tr = document.createElement('tr');
+                tr.innerHTML =
+                    '<td>' + adminUserAvatarCell(u) + '</td>' +
+                    '<td><strong>' + escapeHtml(u.fullName || u.username || '—') + '</strong><br><span class="text-muted">@' + escapeHtml(u.username || '') + '</span></td>' +
+                    '<td>' + escapeHtml(roleLabel) + '</td>' +
+                    '<td>' + escapeHtml(orgName) + '</td>' +
+                    '<td>' + escapeHtml(statusLabel) + '</td>';
+                tbody.appendChild(tr);
+            });
+        }
+
+        function fetchUsersCached() {
+            var token = getAuthToken && getAuthToken();
+            var headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            return fetch('api/users', { credentials: 'include', headers: headers })
+                .then(function(r) { return r.ok ? r.json() : { users: [] }; })
+                .then(function(body) {
+                    cachedUsers = (body && Array.isArray(body.users)) ? body.users : [];
+                    renderAdminUsersTable();
+                });
+        }
+
+        function isoToDatetimeLocal(iso) {
+            if (!iso) return '';
+            var d = new Date(iso);
+            if (isNaN(d.getTime())) return '';
+            var pad = function(n) { return String(n).padStart(2, '0'); };
+            return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+        }
+
+        function datetimeLocalToIso(val) {
+            if (!val) return null;
+            var d = new Date(val);
+            return isNaN(d.getTime()) ? null : d.toISOString();
+        }
+
+        function formatMaintDateRange(startsAt, endsAt) {
+            var parts = [];
+            var opts = { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' };
+            try {
+                if (startsAt) {
+                    var s = new Date(startsAt);
+                    if (!isNaN(s.getTime())) parts.push('с ' + s.toLocaleString('ru-RU', opts));
+                }
+                if (endsAt) {
+                    var e = new Date(endsAt);
+                    if (!isNaN(e.getTime())) parts.push('до ' + e.toLocaleString('ru-RU', opts));
+                }
+            } catch (err) {}
+            return parts.join(' ');
+        }
+
+        function getMaintenanceFormState() {
+            var enabledEl = document.getElementById('maintEnabled');
+            var titleEl = document.getElementById('maintTitle');
+            var msgEl = document.getElementById('maintMessage');
+            var startsEl = document.getElementById('maintStartsAt');
+            var endsEl = document.getElementById('maintEndsAt');
+            return {
+                enabled: enabledEl ? !!enabledEl.checked : false,
+                title: titleEl ? titleEl.value : '',
+                message: msgEl ? msgEl.value : '',
+                startsAt: startsEl && startsEl.value ? datetimeLocalToIso(startsEl.value) : null,
+                endsAt: endsEl && endsEl.value ? datetimeLocalToIso(endsEl.value) : null
+            };
+        }
+
+        function wouldMaintenanceBeActive(state) {
+            if (!state.enabled || !String(state.message || '').trim()) return false;
+            var now = Date.now();
+            if (state.startsAt) {
+                var s = new Date(state.startsAt).getTime();
+                if (!isNaN(s) && now < s) return false;
+            }
+            if (state.endsAt) {
+                var e = new Date(state.endsAt).getTime();
+                if (!isNaN(e) && now > e) return false;
+            }
+            return true;
+        }
+
+        function refreshMaintenancePreview(serverActive) {
+            var preview = document.getElementById('maintPreview');
+            var badge = document.getElementById('maintLiveBadge');
+            var tabBadge = document.getElementById('maintTabBadge');
+            if (!preview) return;
+
+            var state = getMaintenanceFormState();
+            var activeNow = serverActive === true || (serverActive === undefined && wouldMaintenanceBeActive(state));
+            var scheduled = state.enabled && String(state.message || '').trim() && !activeNow
+                && (state.startsAt || state.endsAt);
+
+            if (badge) {
+                badge.className = 'maint-live-badge ' + (
+                    activeNow ? 'maint-live-badge--on' :
+                    (state.enabled && String(state.message || '').trim() ? 'maint-live-badge--scheduled' : 'maint-live-badge--off')
+                );
+                badge.textContent = activeNow ? 'Сейчас на сайте' : (scheduled ? 'Запланировано' : 'Выключено');
+            }
+            if (tabBadge) tabBadge.classList.toggle('visible', !!activeNow);
+
+            if (!state.enabled || !String(state.message || '').trim()) {
+                preview.className = 'maintenance-preview is-empty';
+                preview.textContent = state.enabled ? 'Введите текст уведомления' : 'Баннер скрыт — включите показ и сохраните';
+                return;
+            }
+
+            var title = String(state.title || '').trim() || 'Технические работы';
+            var meta = formatMaintDateRange(state.startsAt, state.endsAt);
+            preview.className = 'maintenance-preview';
+            preview.innerHTML =
+                '<div class="maintenance-preview-inner">' +
+                    '<div class="maintenance-preview-icon" aria-hidden="true">!</div>' +
+                    '<div class="maintenance-preview-text">' +
+                        '<strong></strong><p></p>' +
+                        (meta ? '<div class="maintenance-preview-meta"></div>' : '') +
+                    '</div>' +
+                '</div>';
+            preview.querySelector('strong').textContent = title;
+            preview.querySelector('p').textContent = state.message;
+            var metaEl = preview.querySelector('.maintenance-preview-meta');
+            if (metaEl) metaEl.textContent = meta;
+        }
+
+        function applyMaintenanceAdminState(body) {
+            var notice = body && body.notice ? body.notice : {};
+            var enabledEl = document.getElementById('maintEnabled');
+            var titleEl = document.getElementById('maintTitle');
+            var msgEl = document.getElementById('maintMessage');
+            var startsEl = document.getElementById('maintStartsAt');
+            var endsEl = document.getElementById('maintEndsAt');
+            var hintEl = document.getElementById('maintStatusHint');
+            if (enabledEl) enabledEl.checked = !!notice.enabled;
+            if (titleEl) titleEl.value = notice.title || '';
+            if (msgEl) msgEl.value = notice.message || '';
+            if (startsEl) startsEl.value = isoToDatetimeLocal(notice.startsAt);
+            if (endsEl) endsEl.value = isoToDatetimeLocal(notice.endsAt);
+            if (hintEl) {
+                hintEl.textContent = body && body.active
+                    ? 'Баннер сейчас виден пользователям на всех страницах.'
+                    : (notice.enabled ? 'Сохранено. Показ вне интервала дат или ждёт наступления времени «с».' : 'Уведомление отключено.');
+            }
+            refreshMaintenancePreview(body && body.active);
+        }
+
+        function loadMaintenanceNotice() {
+            var token = getAuthToken();
+            var headers = {};
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            return fetch('api/admin/maintenance-notice', { credentials: 'include', headers: headers })
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(body) {
+                    if (body) applyMaintenanceAdminState(body);
+                })
+                .catch(function() {});
+        }
+
+        function updateSupportTabBadge(count) {
+            var badge = document.getElementById('supportTabBadge');
+            if (!badge) return;
+            if (count > 0) {
+                badge.textContent = String(count);
+                badge.style.display = '';
+            } else {
+                badge.textContent = '';
+                badge.style.display = 'none';
+            }
+        }
+
+        function formatSupportDate(iso) {
+            try {
+                var d = new Date(iso);
+                if (isNaN(d.getTime())) return '';
+                return d.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+            } catch (e) { return ''; }
+        }
+
+        function escapeSupportHtml(s) {
+            return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function renderSupportThreadList(threads) {
+            var list = document.getElementById('supportThreadList');
+            var hint = document.getElementById('supportThreadsHint');
+            if (!list) return;
+            list.innerHTML = '';
+            if (!threads || !threads.length) {
+                list.innerHTML = '<li class="hint" style="padding:12px;">Пока нет сообщений</li>';
+                if (hint) hint.textContent = 'Нет диалогов';
+                return;
+            }
+            if (hint) hint.textContent = 'Диалогов: ' + threads.length;
+            threads.forEach(function(t) {
+                var li = document.createElement('li');
+                li.className = 'support-thread-item' +
+                    (t.id === supportActiveThreadId ? ' is-active' : '') +
+                    (t.unreadByAdmin ? ' is-unread' : '');
+                li.setAttribute('data-thread-id', t.id);
+                var title = t.name || t.email || ('Посетитель ' + (t.visitorId || '').slice(-6));
+                var preview = t.lastMessage ? t.lastMessage.text : '—';
+                li.innerHTML =
+                    '<div class="support-thread-item-title">' + escapeSupportHtml(title) + '</div>' +
+                    '<div class="support-thread-item-preview">' + escapeSupportHtml(preview) + '</div>' +
+                    '<div class="hint" style="margin-top:4px;font-size:0.72rem;">' + escapeSupportHtml(formatSupportDate(t.updatedAt)) + '</div>';
+                li.addEventListener('click', function() { openSupportThread(t.id); });
+                list.appendChild(li);
+            });
+        }
+
+        function renderSupportMessages(thread) {
+            var box = document.getElementById('supportThreadMessages');
+            var reply = document.getElementById('supportThreadReply');
+            if (!box) return;
+            box.innerHTML = '';
+            if (!thread) {
+                box.innerHTML = '<p class="hint" style="padding:12px;">Выберите диалог слева</p>';
+                if (reply) reply.hidden = true;
+                return;
+            }
+            if (reply) reply.hidden = false;
+            var meta = document.createElement('p');
+            meta.className = 'hint';
+            meta.style.padding = '0 0 8px';
+            meta.textContent = (thread.email ? thread.email + ' · ' : '') + (thread.page ? thread.page : '');
+            box.appendChild(meta);
+            (thread.messages || []).forEach(function(m) {
+                var div = document.createElement('div');
+                div.className = 'support-admin-msg ' + (m.from === 'admin' ? 'admin' : m.from === 'bot' ? 'bot' : 'visitor');
+                div.textContent = m.text;
+                box.appendChild(div);
+            });
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function openSupportThread(threadId) {
+            supportActiveThreadId = threadId;
+            var token = getAuthToken();
+            var headers = {};
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            fetch('api/admin/support/threads/' + encodeURIComponent(threadId), { credentials: 'include', headers: headers })
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(body) {
+                    if (!body || !body.thread) return;
+                    renderSupportMessages(body.thread);
+                    renderSupportThreadList(supportThreadsCache);
+                    return fetch('api/admin/support/threads/' + encodeURIComponent(threadId) + '/read', {
+                        method: 'PATCH',
+                        credentials: 'include',
+                        headers: headers
+                    });
+                })
+                .then(function(r) { return r && r.ok ? r.json() : null; })
+                .then(function(body) {
+                    if (body && body.unreadCount != null) {
+                        updateSupportTabBadge(body.unreadCount);
+                        supportThreadsCache.forEach(function(x) {
+                            if (x.id === threadId) x.unreadByAdmin = false;
+                        });
+                        renderSupportThreadList(supportThreadsCache);
+                    }
+                })
+                .catch(function() {});
+        }
+
+        window.adminLoadSupportThreads = function() {
+            var token = getAuthToken();
+            var headers = {};
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            return fetch('api/admin/support/threads', { credentials: 'include', headers: headers })
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(body) {
+                    if (!body) return;
+                    supportThreadsCache = body.threads || [];
+                    updateSupportTabBadge(body.unreadCount || 0);
+                    renderSupportThreadList(supportThreadsCache);
+                    if (supportActiveThreadId) openSupportThread(supportActiveThreadId);
+                })
+                .catch(function() {});
+        };
+
+        function sendAdminPresencePing() {
+            var token = getAuthToken();
+            if (!token) return;
+            fetch('api/admin/presence', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Authorization': 'Bearer ' + token }
+            }).catch(function() {});
+        }
+
+        function saveMaintenanceNotice() {
+            var token = getAuthToken();
+            var headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            var enabledEl = document.getElementById('maintEnabled');
+            var titleEl = document.getElementById('maintTitle');
+            var msgEl = document.getElementById('maintMessage');
+            var startsEl = document.getElementById('maintStartsAt');
+            var endsEl = document.getElementById('maintEndsAt');
+            var hintEl = document.getElementById('maintStatusHint');
+            var payload = {
+                enabled: enabledEl ? !!enabledEl.checked : false,
+                title: titleEl ? titleEl.value : '',
+                message: msgEl ? msgEl.value : '',
+                startsAt: startsEl && startsEl.value ? datetimeLocalToIso(startsEl.value) : null,
+                endsAt: endsEl && endsEl.value ? datetimeLocalToIso(endsEl.value) : null
+            };
+            if (payload.enabled && !String(payload.message || '').trim()) {
+                alert('Укажите текст уведомления или отключите показ.');
+                return Promise.resolve();
+            }
+            return fetch('api/admin/maintenance-notice', {
+                method: 'PUT',
+                credentials: 'include',
+                headers: headers,
+                body: JSON.stringify(payload)
+            }).then(function(r) {
+                if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+                return r.json();
+            }).then(function(body) {
+                applyMaintenanceAdminState(body || {});
+            }).catch(function(err) {
+                alert('Ошибка: ' + (err.message || err));
+            });
+        }
+
+        function loadAll() {
+            if (adminDataLoading) return Promise.resolve();
+            setAdminLoading(true);
+            return fetchOrganizations().then(function(body) {
+                if (!body || !body.organizations) {
+                    setAdminSyncTime(false);
+                    return;
+                }
+                orgs = body.organizations;
+                applyPlatformLimitsUi({
+                    defaultFreeMapObjectLimit: body.defaultFreeMapObjectLimit,
+                    defaultMaxConcurrentUsers: body.defaultMaxConcurrentUsers
+                });
+                renderOverview();
+                renderOrganizationsTable();
+                renderPricingSelector();
+                loadShowcase();
+                loadMaintenanceNotice();
+                loadProductUpdates();
+                setAdminSyncTime(true);
+                return fetchVisitStats().then(renderVisitOverview);
+            }).then(function() {
+                return fetchUsersCached();
+            }).catch(function() {
+                setAdminSyncTime(false);
+            }).finally(function() {
+                setAdminLoading(false);
+            });
+        }
+
+        var productUpdatesCache = [];
+        var productUpdatesSelectedId = null;
+
+        function setProductUpdatesHint(text) {
+            var el = document.getElementById('productUpdatesStatusHint');
+            if (el) el.textContent = text || '';
+        }
+
+        function clearProductUpdateEditor() {
+            productUpdatesSelectedId = null;
+            var idEl = document.getElementById('productUpdateEditId');
+            if (idEl) idEl.value = '';
+            var titleEl = document.getElementById('productUpdateTitle');
+            var dateEl = document.getElementById('productUpdateDate');
+            var sumEl = document.getElementById('productUpdateSummary');
+            var tagsEl = document.getElementById('productUpdateTags');
+            var pubEl = document.getElementById('productUpdatePublished');
+            if (titleEl) titleEl.value = '';
+            if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);
+            if (sumEl) sumEl.value = '';
+            if (tagsEl) tagsEl.value = '';
+            if (window.NewsEditor) window.NewsEditor.clear();
+            if (pubEl) pubEl.checked = true;
+            renderProductUpdatesList();
+        }
+
+        function fillProductUpdateEditor(post) {
+            productUpdatesSelectedId = post.id;
+            var idEl = document.getElementById('productUpdateEditId');
+            if (idEl) idEl.value = post.id || '';
+            var titleEl = document.getElementById('productUpdateTitle');
+            var dateEl = document.getElementById('productUpdateDate');
+            var sumEl = document.getElementById('productUpdateSummary');
+            var tagsEl = document.getElementById('productUpdateTags');
+            var pubEl = document.getElementById('productUpdatePublished');
+            if (titleEl) titleEl.value = post.title || '';
+            if (dateEl) dateEl.value = post.date || '';
+            if (sumEl) sumEl.value = post.summary || '';
+            if (tagsEl) tagsEl.value = Array.isArray(post.tags) ? post.tags.join(', ') : '';
+            if (window.NewsEditor) window.NewsEditor.setHtml(post.body || '');
+            if (pubEl) pubEl.checked = post.published !== false;
+            renderProductUpdatesList();
+        }
+
+        function readProductUpdateFromEditor() {
+            var idEl = document.getElementById('productUpdateEditId');
+            var titleEl = document.getElementById('productUpdateTitle');
+            var dateEl = document.getElementById('productUpdateDate');
+            var sumEl = document.getElementById('productUpdateSummary');
+            var tagsEl = document.getElementById('productUpdateTags');
+            var pubEl = document.getElementById('productUpdatePublished');
+            var existing = null;
+            if (idEl && idEl.value) {
+                existing = productUpdatesCache.find(function(p) { return p.id === idEl.value; });
+            }
+            var tags = tagsEl ? tagsEl.value.split(',').map(function(t) { return t.trim(); }).filter(Boolean) : [];
+            var bodyHtml = window.NewsEditor ? window.NewsEditor.getHtml() : '';
+            return {
+                id: idEl && idEl.value ? idEl.value : ('upd_' + Date.now()),
+                title: titleEl ? titleEl.value.trim() : '',
+                date: dateEl && dateEl.value ? dateEl.value : new Date().toISOString().slice(0, 10),
+                summary: sumEl ? sumEl.value.trim() : '',
+                body: bodyHtml,
+                tags: tags,
+                published: pubEl ? !!pubEl.checked : true,
+                createdAt: existing && existing.createdAt ? existing.createdAt : new Date().toISOString()
+            };
+        }
+
+        function renderProductUpdatesList() {
+            var list = document.getElementById('productUpdatesList');
+            if (!list) return;
+            if (!productUpdatesCache.length) {
+                list.innerHTML = '<li class="text-muted" style="padding:12px;">Нет постов. Нажмите «Новый пост».</li>';
+                return;
+            }
+            list.innerHTML = '';
+            productUpdatesCache.forEach(function(post) {
+                var li = document.createElement('li');
+                li.className = 'updates-admin-list-item' + (post.id === productUpdatesSelectedId ? ' is-selected' : '');
+                li.setAttribute('data-id', post.id);
+                var draft = post.published === false ? '<span class="updates-admin-draft-badge">Черновик</span>' : '';
+                li.innerHTML =
+                    '<div><p class="updates-admin-list-item-title">' + escapeHtml(post.title || 'Без названия') + '</p>' +
+                    '<p class="updates-admin-list-item-meta">' + escapeHtml(post.date || '') + '</p></div>' + draft;
+                li.addEventListener('click', function() { fillProductUpdateEditor(post); });
+                list.appendChild(li);
+            });
+        }
+
+        function loadProductUpdates() {
+            var token = getAuthToken && getAuthToken();
+            var headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            return fetch('api/admin/product-updates', { credentials: 'include', headers: headers })
+                .then(function(r) {
+                    if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+                    return r.json();
+                })
+                .then(function(body) {
+                    productUpdatesCache = (body && Array.isArray(body.posts)) ? body.posts : [];
+                    renderProductUpdatesList();
+                    setProductUpdatesHint('Загружено постов: ' + productUpdatesCache.length);
+                })
+                .catch(function(err) {
+                    setProductUpdatesHint('Ошибка загрузки: ' + (err.message || err));
+                });
+        }
+
+        function saveProductUpdatesToServer() {
+            var token = getAuthToken && getAuthToken();
+            var headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            setProductUpdatesHint('Сохранение…');
+            return fetch('api/admin/product-updates', {
+                method: 'PUT',
+                credentials: 'include',
+                headers: headers,
+                body: JSON.stringify({ posts: productUpdatesCache })
+            }).then(function(r) {
+                if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+                return r.json();
+            }).then(function(body) {
+                productUpdatesCache = (body && Array.isArray(body.posts)) ? body.posts : productUpdatesCache;
+                renderProductUpdatesList();
+                setProductUpdatesHint('Сохранено. Постов: ' + productUpdatesCache.length);
+            }).catch(function(err) {
+                setProductUpdatesHint('Ошибка: ' + (err.message || err));
+                alert('Ошибка: ' + (err.message || err));
+            });
+        }
+
+        function applyProductUpdateFromEditor() {
+            var post = readProductUpdateFromEditor();
+            if (!post.title) {
+                alert('Укажите заголовок.');
+                return;
+            }
+            var idx = productUpdatesCache.findIndex(function(p) { return p.id === post.id; });
+            if (idx >= 0) {
+                post.createdAt = productUpdatesCache[idx].createdAt || post.createdAt;
+                productUpdatesCache[idx] = post;
+            } else {
+                productUpdatesCache.unshift(post);
+            }
+            productUpdatesSelectedId = post.id;
+            var idEl = document.getElementById('productUpdateEditId');
+            if (idEl) idEl.value = post.id;
+            renderProductUpdatesList();
+            setProductUpdatesHint('Пост добавлен в список. Нажмите «Сохранить на сервере» для публикации.');
+        }
+
+        function deleteSelectedProductUpdate() {
+            if (!productUpdatesSelectedId) {
+                alert('Выберите пост для удаления.');
+                return;
+            }
+            if (!confirm('Удалить выбранный пост?')) return;
+            var prevCache = productUpdatesCache.slice();
+            productUpdatesCache = productUpdatesCache.filter(function(p) { return p.id !== productUpdatesSelectedId; });
+            clearProductUpdateEditor();
+            setProductUpdatesHint('Пост удалён из списка. Сохраняем на сервере…');
+            saveProductUpdatesToServer().catch(function() {
+                productUpdatesCache = prevCache;
+                renderProductUpdatesList();
+            });
+        }
+
+        var productUpdatesNewBtn = document.getElementById('productUpdatesNewBtn');
+        if (productUpdatesNewBtn) productUpdatesNewBtn.addEventListener('click', clearProductUpdateEditor);
+        var productUpdatesApplyBtn = document.getElementById('productUpdatesApplyBtn');
+        if (productUpdatesApplyBtn) productUpdatesApplyBtn.addEventListener('click', applyProductUpdateFromEditor);
+        var productUpdatesDeleteBtn = document.getElementById('productUpdatesDeleteBtn');
+        if (productUpdatesDeleteBtn) productUpdatesDeleteBtn.addEventListener('click', deleteSelectedProductUpdate);
+        var productUpdatesSaveBtn = document.getElementById('productUpdatesSaveBtn');
+        if (productUpdatesSaveBtn) productUpdatesSaveBtn.addEventListener('click', saveProductUpdatesToServer);
+
+        var maintSaveBtnEl = document.getElementById('maintSaveBtn');
+        if (maintSaveBtnEl) {
+            maintSaveBtnEl.addEventListener('click', function() {
+                saveMaintenanceNotice();
+            });
+        }
+        ['maintEnabled', 'maintTitle', 'maintMessage', 'maintStartsAt', 'maintEndsAt'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener('input', function() { refreshMaintenancePreview(); });
+            el.addEventListener('change', function() { refreshMaintenancePreview(); });
+        });
+
+        var orgsSearchInputEl = document.getElementById('orgsSearchInput');
+        if (orgsSearchInputEl) {
+            orgsSearchInputEl.addEventListener('input', function() {
+                renderOrganizationsTable();
+            });
+        }
+
+        document.querySelectorAll('.org-filter').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                adminSetOrgFilter(btn.getAttribute('data-filter'));
+            });
+        });
+
+        var adminRefreshBtn = document.getElementById('adminRefreshBtn');
+        if (adminRefreshBtn) {
+            adminRefreshBtn.addEventListener('click', function() {
+                loadAll();
+            });
+        }
+
+        document.getElementById('pricingOrgSelect').addEventListener('change', function() {
+            var id = this.value;
+            if (!id) {
+                document.getElementById('pricingStatus').value = 'active';
+                var pce = document.getElementById('pricingContactEmail');
+                if (pce) pce.value = '';
+                return;
+            }
+            fillPricingFormForOrg(id);
+        });
+
+        var lastPlatformLimits = { defaultFreeMapObjectLimit: 2000, defaultMaxConcurrentUsers: 4 };
+
+        function applyPlatformLimitsUi(cfg) {
+            if (!cfg) return;
+            var lim = cfg.defaultFreeMapObjectLimit != null ? cfg.defaultFreeMapObjectLimit : 2000;
+            var mc = cfg.defaultMaxConcurrentUsers != null ? cfg.defaultMaxConcurrentUsers : 4;
+            lastPlatformLimits = { defaultFreeMapObjectLimit: lim, defaultMaxConcurrentUsers: mc };
+            var defLimEl = document.getElementById('adminDefaultFreeLimit');
+            var defMcEl = document.getElementById('adminDefaultMaxConcurrent');
+            var inpLim = document.getElementById('platformDefaultMapObjectLimit');
+            var inpMc = document.getElementById('platformDefaultMaxConcurrent');
+            var statObj = document.getElementById('statFreeDefaultObjects');
+            var statMc = document.getElementById('statFreeDefaultConcurrent');
+            if (defLimEl) defLimEl.textContent = String(lim);
+            if (defMcEl) defMcEl.textContent = String(mc);
+            if (statObj) statObj.textContent = String(lim);
+            if (statMc) statMc.textContent = String(mc);
+            if (inpLim && document.activeElement !== inpLim) inpLim.value = String(lim);
+            if (inpMc && document.activeElement !== inpMc) inpMc.value = String(mc);
+        }
+
+        function loadPlatformLimits() {
+            var token = getAuthToken && getAuthToken();
+            var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+            return fetch('api/admin/platform-limits', { headers: headers, credentials: 'include' })
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(cfg) {
+                    if (cfg) applyPlatformLimitsUi(cfg);
+                })
+                .catch(function() {});
+        }
+
+        var freeShowcaseSaveBtn = document.getElementById('freeShowcaseSaveBtn');
+        if (freeShowcaseSaveBtn) {
+            freeShowcaseSaveBtn.addEventListener('click', function() {
+                saveShowcaseFree();
+            });
+        }
+
+        var showcasePlansPublishBtn = document.getElementById('showcasePlansPublishBtn');
+        if (showcasePlansPublishBtn) {
+            showcasePlansPublishBtn.addEventListener('click', function() {
+                publishShowcasePlans(showcasePlansCache);
+            });
+        }
+
+        document.getElementById('pricingSaveBtn').addEventListener('click', function() {
+            var id = document.getElementById('pricingOrgSelect').value;
+            if (!id) {
+                alert('Выберите организацию');
+                return;
+            }
+            var unlocked = document.getElementById('pricingMapLimitUnlocked').checked;
+            var customRaw = document.getElementById('pricingCustomMapLimit').value.trim();
+            var customLimit = customRaw === '' ? null : parseInt(customRaw, 10);
+            if (customLimit != null && isNaN(customLimit)) customLimit = null;
+            var maxCuRaw = (document.getElementById('pricingMaxConcurrentUsers') || {}).value.trim();
+            var maxConcurrentUsers = null;
+            if (maxCuRaw !== '') {
+                var parsedCu = parseInt(maxCuRaw, 10);
+                if (!isNaN(parsedCu)) maxConcurrentUsers = parsedCu;
+            }
+            var status = document.getElementById('pricingStatus').value;
+            var contactEmail = (document.getElementById('pricingContactEmail') || {}).value;
+            var payload = {
+                mapObjectLimitUnlocked: unlocked,
+                customMapObjectLimit: customLimit,
+                maxConcurrentUsers: maxConcurrentUsers,
+                status: status,
+                contactEmail: contactEmail != null ? String(contactEmail).trim() : ''
+            };
+            patchOrganization(id, payload).then(function() {
+                alert('Изменения сохранены');
+                loadAll();
+            }).catch(function(e) {
+                alert('Ошибка: ' + (e.message || e));
+            });
+        });
+
+        document.getElementById('orgsTableBody').addEventListener('click', function(e) {
+            var btn = e.target.closest('button');
+            if (!btn) return;
+            var action = btn.getAttribute('data-action');
+            if (action === 'selectOrgLimits') {
+                var id = btn.getAttribute('data-id');
+                var select = document.getElementById('pricingOrgSelect');
+                select.value = id;
+                fillPricingFormForOrg(id);
+                adminSwitchTab('organizations');
+                var block = select.closest('div');
+                if (block) block.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } else if (action === 'deleteOrg') {
+                var orgId = btn.getAttribute('data-id');
+                var org = orgs.find(function(o) { return o.id === orgId; });
+                if (!orgId || !org) return;
+                if (!confirm('Удалить организацию «' + (org.name || orgId) + '»? Все данные карты, история и сессии будут удалены.')) return;
+                var token = getAuthToken && getAuthToken();
+                var headers = { 'Content-Type': 'application/json' };
+                if (token) headers['Authorization'] = 'Bearer ' + token;
+                fetch('api/organizations/' + encodeURIComponent(orgId), {
+                    method: 'DELETE',
+                    headers: headers,
+                    credentials: 'include'
+                }).then(function(r) {
+                    if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+                    alert('Организация удалена');
+                    loadAll();
+                }).catch(function(err) {
+                    alert('Ошибка: ' + (err.message || err));
+                });
+            }
+        });
+
+        // Инициализация: проверяем сессию и загружаем данные
+        fetchSession().then(function(body) {
+            var user = body && body.user;
+            if (!user || user.role !== 'admin' || String(user.username || '').toLowerCase() !== 'admin') {
+                document.getElementById('noAccess').style.display = 'block';
+                return;
+            }
+            document.getElementById('adminContent').style.display = 'block';
+            adminUserId = user.userId || null;
+            loadAll();
+            adminLoadSupportThreads();
+            sendAdminPresencePing();
+            setInterval(sendAdminPresencePing, 30000);
+
+            var supportRefreshBtn = document.getElementById('supportRefreshBtn');
+            if (supportRefreshBtn) supportRefreshBtn.addEventListener('click', function() { adminLoadSupportThreads(); });
+            var supportReplyBtn = document.getElementById('supportReplyBtn');
+            if (supportReplyBtn) {
+                supportReplyBtn.addEventListener('click', function() {
+                    if (!supportActiveThreadId) return;
+                    var ta = document.getElementById('supportReplyText');
+                    var text = ta ? String(ta.value || '').trim() : '';
+                    if (!text) return;
+                    var token = getAuthToken();
+                    var headers = { 'Content-Type': 'application/json' };
+                    if (token) headers['Authorization'] = 'Bearer ' + token;
+                    supportReplyBtn.disabled = true;
+                    fetch('api/admin/support/threads/' + encodeURIComponent(supportActiveThreadId) + '/reply', {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: headers,
+                        body: JSON.stringify({ text: text })
+                    }).then(function(r) {
+                        if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+                        return r.json();
+                    }).then(function() {
+                        if (ta) ta.value = '';
+                        openSupportThread(supportActiveThreadId);
+                        adminLoadSupportThreads();
+                    }).catch(function(err) {
+                        alert('Ошибка: ' + (err.message || err));
+                    }).finally(function() {
+                        supportReplyBtn.disabled = false;
+                    });
+                });
+            }
+
+            var btn = document.getElementById('adminChangePasswordBtn');
+            if (btn) btn.addEventListener('click', function() {
+                var msgEl = document.getElementById('adminPasswordMsg');
+                if (msgEl) msgEl.textContent = '';
+                if (!adminUserId) {
+                    if (msgEl) msgEl.textContent = 'Не удалось определить id админа.';
+                    return;
+                }
+                var p1 = (document.getElementById('adminNewPassword') || {}).value || '';
+                var p2 = (document.getElementById('adminNewPasswordConfirm') || {}).value || '';
+                if (!p1 || p1.length < 6) {
+                    if (msgEl) msgEl.textContent = 'Пароль должен быть не менее 6 символов.';
+                    return;
+                }
+                if (p1 !== p2) {
+                    if (msgEl) msgEl.textContent = 'Пароли не совпадают.';
+                    return;
+                }
+
+                var token = getAuthToken && getAuthToken();
+                var headers = { 'Content-Type': 'application/json' };
+                if (token) headers['Authorization'] = 'Bearer ' + token;
+
+                fetch('api/users/' + encodeURIComponent(adminUserId), {
+                    method: 'PUT',
+                    headers: headers,
+                    credentials: 'include',
+                    body: JSON.stringify({ password: p1 })
+                }).then(function(r) {
+                    if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+                    if (msgEl) {
+                        msgEl.textContent = 'Пароль изменён.';
+                    }
+                    if (document.getElementById('adminNewPassword')) document.getElementById('adminNewPassword').value = '';
+                    if (document.getElementById('adminNewPasswordConfirm')) document.getElementById('adminNewPasswordConfirm').value = '';
+                }).catch(function(e) {
+                    if (msgEl) msgEl.textContent = 'Ошибка: ' + (e.message || e);
+                });
+            });
+        });
+
+        document.getElementById('landingPricingAddBtn').addEventListener('click', function() {
+            document.getElementById('landingPricingId').value = '';
+            document.getElementById('landingPricingTitle').value = '';
+            document.getElementById('landingPricingShort').value = '';
+            document.getElementById('landingPricingPrice').value = '';
+            document.getElementById('landingPricingPeriod').value = '';
+            document.getElementById('landingPricingOrder').value = '';
+            document.getElementById('landingPricingMaxUsersText').value = '';
+            document.getElementById('landingPricingHighlighted').value = 'false';
+            document.getElementById('landingPricingCtaText').value = '';
+        });
+
+        var orgPwdSelect = document.getElementById('orgPasswordResetSelect');
+        if (orgPwdSelect) {
+            orgPwdSelect.addEventListener('change', function() {
+                renderOrgPasswordUserSelect(this.value);
+            });
+        }
+        document.getElementById('orgPasswordResetBtn').addEventListener('click', function() {
+            var msgEl = document.getElementById('orgPasswordResetMsg');
+            if (msgEl) msgEl.textContent = '';
+            var orgId = (document.getElementById('orgPasswordResetSelect') || {}).value;
+            var userId = (document.getElementById('orgPasswordResetUserSelect') || {}).value;
+            var pwd = (document.getElementById('orgPasswordResetNew') || {}).value || '';
+            if (!orgId) {
+                if (msgEl) msgEl.textContent = 'Выберите организацию.';
+                return;
+            }
+            if (!userId) {
+                if (msgEl) msgEl.textContent = 'Выберите пользователя.';
+                return;
+            }
+            if (!pwd || pwd.length < 6) {
+                if (msgEl) msgEl.textContent = 'Пароль не менее 6 символов.';
+                return;
+            }
+            var token = getAuthToken && getAuthToken();
+            var headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            fetch('api/organizations/' + encodeURIComponent(orgId) + '/reset-password', {
+                method: 'POST',
+                headers: headers,
+                credentials: 'include',
+                body: JSON.stringify({ password: pwd, userId: userId })
+            }).then(function(r) {
+                return r.json().then(function(b) {
+                    if (!r.ok) throw new Error(b.error || 'Ошибка');
+                    return b;
+                });
+            }).then(function(b) {
+                if (msgEl) msgEl.textContent = 'Пароль для «' + (b.username || '') + '» обновлён.';
+                document.getElementById('orgPasswordResetNew').value = '';
+            }).catch(function(e) {
+                if (msgEl) msgEl.textContent = 'Ошибка: ' + (e.message || e);
+            });
+        });
+
+        document.getElementById('landingPricingTableBody').addEventListener('click', function(e) {
+            var btn = e.target.closest('button');
+            if (!btn) return;
+            var action = btn.getAttribute('data-action');
+            var idx = parseInt(btn.getAttribute('data-idx') || '0', 10);
+            var plans = showcasePlansCache.slice();
+            var p = plans[idx];
+            if (!p) return;
+
+            if (action === 'editLandingPlan') {
+                document.getElementById('landingPricingId').value = p.id || '';
+                document.getElementById('landingPricingTitle').value = p.title || '';
+                document.getElementById('landingPricingShort').value = p.short || '';
+                document.getElementById('landingPricingPrice').value = p.price || '';
+                document.getElementById('landingPricingPeriod').value = p.period || '';
+                document.getElementById('landingPricingOrder').value = typeof p.order === 'number' ? p.order : idx;
+                document.getElementById('landingPricingMaxUsersText').value = p.maxUsersText || '';
+                document.getElementById('landingPricingHighlighted').value = p.highlighted ? 'true' : 'false';
+                document.getElementById('landingPricingCtaText').value = p.ctaText || '';
+                return;
+            }
+
+            if (action === 'deleteLandingPlan') {
+                if (!confirm('Удалить карточку «' + (p.title || p.id || '—') + '»?')) return;
+                plans.splice(idx, 1);
+                publishShowcasePlans(plans).catch(function(err) {
+                    alert('Ошибка: ' + (err.message || err));
+                });
+            }
+        });
+
+        document.getElementById('landingPricingSaveBtn').addEventListener('click', function() {
+            var plans = showcasePlansCache.slice();
+            var currentId = document.getElementById('landingPricingId').value.trim() || 'plan_' + Date.now();
+            var existingIdx = plans.findIndex(function(p) { return p.id === currentId; });
+            var plan = {
+                id: currentId,
+                title: document.getElementById('landingPricingTitle').value.trim() || currentId,
+                short: document.getElementById('landingPricingShort').value.trim(),
+                price: document.getElementById('landingPricingPrice').value.trim(),
+                period: document.getElementById('landingPricingPeriod').value.trim(),
+                maxUsersText: document.getElementById('landingPricingMaxUsersText').value.trim(),
+                order: parseInt(document.getElementById('landingPricingOrder').value || '0', 10) || 0,
+                highlighted: document.getElementById('landingPricingHighlighted').value === 'true',
+                kind: 'contact',
+                ctaText: document.getElementById('landingPricingCtaText').value.trim()
+            };
+            if (existingIdx >= 0) plans[existingIdx] = plan;
+            else plans.push(plan);
+            showcasePlansCache = plans;
+            publishShowcasePlans(plans).catch(function(e) {
+                alert('Ошибка: ' + (e.message || e));
+            });
+        });
+    })();
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js"></script>
+    <script src="js/admin/news-editor.js"></script>
+    <script src="js/core/page-bg-plexus.js"></script>
+    <script src="js/core/cookie-consent.js"></script>
+    <script src="js/core/maintenance-notice.js"></script>
+</body>
+</html>
+

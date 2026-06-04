@@ -1,0 +1,2100 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="author" content="Карта оптической сети">
+    <meta name="copyright" content="Copyright (c) 2024–2026 Карта оптической сети. Все права защищены.">
+    <meta name="description" content="Карта оптической сети — программа для работы с оптической сетью в облаке volsmap.ru: интерактивная карта, кроссы и муфты со схемой жил, GPON, синхронизация команды, история и бэкапы.">
+    <meta name="keywords" content="программа для оптической сети, ВОЛС, карта оптической сети, учёт ВОЛС, GPON, кроссы, муфты, volsmap">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#1d4ed8">
+    <title>Карта оптической сети — программа для работы с оптической сетью</title>
+    <link rel="canonical" href="https://volsmap.ru/">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="ru_RU">
+    <meta property="og:site_name" content="Карта оптической сети">
+    <meta property="og:title" content="Карта оптической сети — программа для работы с оптической сетью">
+    <meta property="og:description" content="Карта оптической сети — программа для работы с оптической сетью в облаке volsmap.ru: интерактивная карта, кроссы и муфты со схемой жил, GPON, синхронизация команды.">
+    <meta property="og:image" content="https://volsmap.ru/favicon.svg">
+    <meta property="og:url" content="https://volsmap.ru/">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Карта оптической сети — программа для работы с оптической сетью">
+    <meta name="twitter:description" content="Карта оптической сети — программа для работы с оптической сетью в облаке volsmap.ru: интерактивная карта, кроссы и муфты, GPON, синхронизация команды.">
+    <meta name="twitter:image" content="https://volsmap.ru/favicon.svg">
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Карта оптической сети",
+        "applicationCategory": "BusinessApplication",
+        "applicationSubCategory": "Программа для работы с оптической сетью",
+        "operatingSystem": "Web",
+        "description": "Программа для работы с оптической сетью: интерактивная карта, кроссы и муфты со схемой жил, GPON, синхронизация команды, история и бэкапы на volsmap.ru.",
+        "url": "https://volsmap.ru/",
+        "inLanguage": "ru"
+    }
+    </script>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+    <script>
+        (function(){
+            var base = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : '';
+            if (!base || base === 'null') base = '';
+            var link = document.createElement('link');
+            link.rel = 'preconnect';
+            link.href = 'https://api-maps.yandex.ru';
+            document.head.appendChild(link);
+            fetch(base + '/api/public-config').then(function(r){ return r.json(); }).catch(function(){ return {}; }).then(function(c){
+                var key = (c && c.yandexMapsApiKey) ? String(c.yandexMapsApiKey).trim() : '';
+                var s = document.createElement('script');
+                s.src = 'https://api-maps.yandex.ru/2.1/?apikey=' + encodeURIComponent(key) + '&lang=ru_RU';
+                document.head.appendChild(s);
+            });
+        })();
+    </script>
+    <script>
+        (function() {
+            try {
+                var key = 'networkMap_theme';
+                var sess = localStorage.getItem('networkMap_session') || sessionStorage.getItem('networkMap_session');
+                if (sess) {
+                    var u = JSON.parse(sess);
+                    var uid = (u && u.userId != null) ? u.userId : (u && u.id != null ? u.id : null);
+                    if (uid != null && String(uid).trim() !== '') key = 'networkMap_theme_' + String(uid).trim();
+                }
+                var saved = localStorage.getItem(key);
+                if (saved !== 'dark' && saved !== 'light' && key !== 'networkMap_theme') {
+                    saved = localStorage.getItem('networkMap_theme');
+                }
+                if (saved !== 'dark' && saved !== 'light') saved = localStorage.getItem('networkMap_landingTheme');
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var theme = (saved === 'dark' || saved === 'light') ? saved : (prefersDark ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch (e) {}
+        })();
+    </script>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/app-mobile.css">
+    <link rel="stylesheet" href="css/cookie-consent.css">
+    <link rel="stylesheet" href="css/maintenance-notice.css">
+    <!-- Защита от копирования -->
+    <script>
+        // Контекстное меню не блокируем
+        // Отключение горячих клавиш разработчика
+        document.addEventListener('keydown', function(e) {
+            // F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
+            if (e.key === 'F12' || 
+                (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j')) ||
+                (e.ctrlKey && (e.key === 'U' || e.key === 'u'))) {
+                e.preventDefault();
+                return false;
+            }
+        });
+        // Отключение перетаскивания
+        document.addEventListener('dragstart', function(e) {
+            e.preventDefault();
+            return false;
+        });
+    </script>
+    <style>
+        /* Запрет выделения текста */
+        body {
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+        /* Разрешить выделение в полях ввода */
+        input, textarea, [contenteditable="true"] {
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
+            user-select: text;
+        }
+    </style>
+</head>
+<body>
+    <!-- Верхняя панель на всю ширину -->
+    <header class="top-header">
+        <div class="top-header-content">
+            <div class="header-brand">
+                <span class="header-title-icon" aria-hidden="true" title="Карта оптической сети">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                </span>
+                <div class="header-brand-text">
+                    <h1 class="header-title">Карта оптической сети</h1>
+                    <p class="header-tagline">Узлы, кабели и GPON на одной карте</p>
+                </div>
+            </div>
+            <!-- Поиск по карте -->
+            <div class="header-search">
+                <div class="search-wrapper">
+                    <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="m21 21-4.35-4.35"></path>
+                    </svg>
+                    <input type="text" id="mapSearch" class="search-input" placeholder="Поиск объектов..." autocomplete="off">
+                    <button id="clearSearch" class="search-clear" style="display: none;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+                <div id="searchResults" class="search-results" style="display: none;"></div>
+            </div>
+            <!-- Панель пользователя -->
+            <div class="user-panel">
+                <div class="user-info" id="userInfo">
+                    <div class="user-avatar" id="userAvatar" role="button" tabindex="0" title="Открыть личный кабинет">А</div>
+                    <div class="user-details">
+                        <span class="user-name" id="userName">Пользователь</span>
+                        <span class="user-role" id="userRole">Роль</span>
+                    </div>
+                </div>
+                <div class="user-menu">
+                    <button id="infoHelpBtn" class="user-menu-btn" title="Справка по программе">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                            <circle cx="12" cy="16" r="1.5" fill="currentColor" stroke="none"></circle>
+                        </svg>
+                    </button>
+                    <button id="undoBtn" class="user-menu-btn" title="Отменить (Ctrl+Z)" disabled>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 10h10a5 5 0 0 1 5 5v2"></path>
+                            <polyline points="3 10 8 5 3 10 8 15 3 10"></polyline>
+                        </svg>
+                    </button>
+                    <button id="redoBtn" class="user-menu-btn" title="Повторить (Ctrl+Y)" disabled>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 10H11a5 5 0 0 0-5 5v2"></path>
+                            <polyline points="21 10 16 5 21 10 16 15 21 10"></polyline>
+                        </svg>
+                    </button>
+                    <button id="themeToggle" class="user-menu-btn theme-toggle" title="Сменить тему">
+                        <svg class="theme-icon-light" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="5"></circle>
+                            <line x1="12" y1="1" x2="12" y2="3"></line>
+                            <line x1="12" y1="21" x2="12" y2="23"></line>
+                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                            <line x1="1" y1="12" x2="3" y2="12"></line>
+                            <line x1="21" y1="12" x2="23" y2="12"></line>
+                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                        </svg>
+                        <svg class="theme-icon-dark" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                        </svg>
+                    </button>
+                    <button id="historyBtn" class="user-menu-btn" title="Журнал изменений">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        <span id="historyBadge" class="history-badge" style="display: none;">0</span>
+                    </button>
+                    <button id="orgChatBtn" class="user-menu-btn" title="Чат организации" aria-expanded="false" aria-controls="orgChatPanel">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                        <span id="orgChatBadge" class="history-badge org-chat-badge" style="display: none;">0</span>
+                    </button>
+                    <button id="usersManageBtn" class="user-menu-btn admin-only" title="Управление пользователями" style="display: none;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                    </button>
+                    <button id="deviceCatalogBtn" class="user-menu-btn admin-only" title="Справочник устройств" style="display: none;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                            <path d="M2 17l10 5 10-5"></path>
+                        </svg>
+                    </button>
+                    <button id="logoutBtn" class="user-menu-btn" title="Выйти">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16 17 21 12 16 7"></polyline>
+                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+    <div id="mapLimitBanner" class="map-limit-banner" style="display:none;" role="status" aria-live="polite">
+        <p class="map-limit-banner__message"></p>
+        <button type="button" class="map-limit-banner__close" aria-label="Закрыть напоминание" title="Закрыть">&times;</button>
+    </div>
+
+    <div class="container">
+        <div class="sidebar panel-glass" id="sidebar">
+            <div class="panel-glass-bg" aria-hidden="true">
+                <div class="panel-glass-gradient"></div>
+                <canvas class="panel-plexus-canvas"></canvas>
+            </div>
+            <div class="sidebar-body">
+            <div class="sidebar-content">
+                <p class="sidebar-readonly-hint" role="status">На этом экране карта только для просмотра. Изменения — с компьютера (ширина окна больше 768&nbsp;px).</p>
+
+                <section class="sidebar-controls-card" aria-label="Управление картой">
+                    <header class="sidebar-controls-head">
+                        <div class="sidebar-controls-head-icon" aria-hidden="true">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="1 6 1 22 8 18 16 22 23 18 23 6 16 10 8 6 1 6"></polygon>
+                                <line x1="8" y1="3" x2="8" y2="6"></line>
+                                <line x1="16" y1="3" x2="16" y2="6"></line>
+                            </svg>
+                        </div>
+                        <div class="sidebar-controls-head-text">
+                            <h3 class="sidebar-controls-title">Управление картой</h3>
+                            <p class="sidebar-controls-desc">Режим работы и видимость объектов</p>
+                        </div>
+                    </header>
+
+                    <div class="sidebar-controls-mode">
+                        <div class="mode-switcher" role="group" aria-label="Режим карты">
+                            <button type="button" id="viewMode" class="mode-btn">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                                <span>Просмотр</span>
+                            </button>
+                            <button type="button" id="editMode" class="mode-btn">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                                <span>Редактирование</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="accordion-section accordion-section--mapfilter accordion-section--embedded" data-accordion-initial="closed">
+                        <div class="accordion-header" data-accordion="mapfilter">
+                            <span class="accordion-header-icon accordion-header-icon--filter" aria-hidden="true">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                                </svg>
+                            </span>
+                            <span class="accordion-header-title">Видимость на карте</span>
+                            <span class="map-filter-badge" id="mapFilterBadge" title="Включено типов объектов"></span>
+                            <svg class="accordion-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </div>
+                        <div class="accordion-content" id="mapfilter-content">
+                            <div class="map-filter-panel">
+                                <div class="map-filter-toolbar" role="group" aria-label="Быстрые действия фильтра">
+                                    <button type="button" id="mapFilterShowAll" class="map-filter-toolbar-btn" title="Включить все типы">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                        Все
+                                    </button>
+                                    <button type="button" id="mapFilterHideAll" class="map-filter-toolbar-btn map-filter-toolbar-btn--muted" title="Скрыть все типы">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                                        Ничего
+                                    </button>
+                                </div>
+
+                                <div class="map-filter-scroll">
+                                <div class="map-filter-group map-filter-group--nodes">
+                                    <p class="map-filter-group-label">Узлы</p>
+                                    <div class="map-filter-chips">
+                                        <label class="map-filter-chip map-filter-chip--green">
+                                            <input type="checkbox" id="mapFilterNode" checked>
+                                            <span class="map-filter-chip-dot" aria-hidden="true"></span>
+                                            <span class="map-filter-chip-text">Узлы сети</span>
+                                        </label>
+                                        <label class="map-filter-chip map-filter-chip--red map-filter-chip--sub" title="Показывает только узлы агрегации; кроссы, муфты, опоры и крепления остаются видимыми">
+                                            <input type="checkbox" id="mapFilterNodeAggregationOnly">
+                                            <span class="map-filter-chip-dot" aria-hidden="true"></span>
+                                            <span class="map-filter-chip-text">Только агрегация</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="map-filter-group map-filter-group--infra">
+                                    <p class="map-filter-group-label">Инфраструктура</p>
+                                    <div class="map-filter-chips">
+                                        <label class="map-filter-chip map-filter-chip--violet">
+                                            <input type="checkbox" id="mapFilterCross" checked>
+                                            <span class="map-filter-chip-dot" aria-hidden="true"></span>
+                                            <span class="map-filter-chip-text">Кроссы</span>
+                                        </label>
+                                        <label class="map-filter-chip map-filter-chip--rose">
+                                            <input type="checkbox" id="mapFilterSleeve" checked>
+                                            <span class="map-filter-chip-dot" aria-hidden="true"></span>
+                                            <span class="map-filter-chip-text">Муфты</span>
+                                        </label>
+                                        <label class="map-filter-chip map-filter-chip--blue">
+                                            <input type="checkbox" id="mapFilterSupport" checked>
+                                            <span class="map-filter-chip-dot" aria-hidden="true"></span>
+                                            <span class="map-filter-chip-text">Опоры</span>
+                                        </label>
+                                        <label class="map-filter-chip map-filter-chip--slate">
+                                            <input type="checkbox" id="mapFilterAttachment" checked>
+                                            <span class="map-filter-chip-dot" aria-hidden="true"></span>
+                                            <span class="map-filter-chip-text">Крепления</span>
+                                        </label>
+                                        <label class="map-filter-chip map-filter-chip--teal" title="Вход в подземную прокладку кабеля">
+                                            <input type="checkbox" id="mapFilterManhole" checked>
+                                            <span class="map-filter-chip-dot" aria-hidden="true"></span>
+                                            <span class="map-filter-chip-text">Колодцы</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="map-filter-group map-filter-group--gpon">
+                                    <p class="map-filter-group-label">GPON</p>
+                                    <div class="map-filter-chips">
+                                        <label class="map-filter-chip map-filter-chip--sky">
+                                            <input type="checkbox" id="mapFilterOlt" checked>
+                                            <span class="map-filter-chip-dot" aria-hidden="true"></span>
+                                            <span class="map-filter-chip-text">OLT</span>
+                                        </label>
+                                        <label class="map-filter-chip map-filter-chip--purple">
+                                            <input type="checkbox" id="mapFilterSplitter" checked>
+                                            <span class="map-filter-chip-dot" aria-hidden="true"></span>
+                                            <span class="map-filter-chip-text">Сплиттеры</span>
+                                        </label>
+                                        <label class="map-filter-chip map-filter-chip--cyan">
+                                            <input type="checkbox" id="mapFilterOnu" checked>
+                                            <span class="map-filter-chip-dot" aria-hidden="true"></span>
+                                            <span class="map-filter-chip-text">ONU</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="map-filter-group map-filter-group--other">
+                                    <p class="map-filter-group-label">Прочее</p>
+                                    <div class="map-filter-chips">
+                                        <label class="map-filter-chip map-filter-chip--slate">
+                                            <input type="checkbox" id="mapFilterCamera" checked>
+                                            <span class="map-filter-chip-dot" aria-hidden="true"></span>
+                                            <span class="map-filter-chip-text">Камеры</span>
+                                        </label>
+                                        <label class="map-filter-chip map-filter-chip--teal">
+                                            <input type="checkbox" id="mapFilterMediaConverter" checked>
+                                            <span class="map-filter-chip-dot" aria-hidden="true"></span>
+                                            <span class="map-filter-chip-text">Медиаконв.</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                </div>
+
+                                <p class="map-filter-note">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                                    <span>Кабели — только между видимыми объектами. «Только агрегация» скрывает обычные узлы.</span>
+                                </p>
+                                <div class="map-filter-save-start">
+                                    <button type="button" id="saveMapStartBtn" class="btn-secondary map-filter-save-btn" title="При следующем открытии карта откроется в этом месте и с этим масштабом">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+                                        Начальный вид карты
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <div class="sidebar-panels">
+                <!-- Аккордеон для объектов -->
+                <div class="accordion-section accordion-section--objects">
+                    <div class="accordion-header" data-accordion="objects">
+                        <span class="accordion-header-icon accordion-header-icon--objects" aria-hidden="true">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="8" x2="12" y2="16"></line>
+                                <line x1="8" y1="12" x2="16" y2="12"></line>
+                            </svg>
+                        </span>
+                        <span class="accordion-header-title">Объекты</span>
+                        <span class="object-type-badge" id="objectTypeBadge" title="Выбранный тип"></span>
+                        <svg class="accordion-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </div>
+                    <div class="accordion-content" id="objects-content">
+                        <div class="objects-panel">
+                        <p class="objects-panel-hint">Выберите тип, при необходимости заполните параметры и нажмите «Добавить на карту» — затем укажите место на карте.</p>
+
+                        <div class="object-type-section">
+                            <p class="object-type-section-label">Тип объекта</p>
+                            <div class="object-type-picker" role="group" aria-label="Тип добавляемого объекта">
+                                <div class="object-type-group">
+                                    <span class="object-type-group-label">Инфраструктура</span>
+                                    <div class="object-type-chips">
+                                        <button type="button" class="object-type-chip object-type-chip--blue" data-type="support">Опоры</button>
+                                        <button type="button" class="object-type-chip object-type-chip--rose" data-type="sleeve">Муфты</button>
+                                        <button type="button" class="object-type-chip object-type-chip--violet" data-type="cross">Кроссы</button>
+                                        <button type="button" class="object-type-chip object-type-chip--slate" data-type="attachment">Крепления</button>
+                                        <button type="button" class="object-type-chip object-type-chip--teal" data-type="manhole">Колодцы</button>
+                                    </div>
+                                </div>
+                                <div class="object-type-group">
+                                    <span class="object-type-group-label">GPON</span>
+                                    <div class="object-type-chips">
+                                        <button type="button" class="object-type-chip object-type-chip--sky" data-type="olt">OLT</button>
+                                        <button type="button" class="object-type-chip object-type-chip--purple" data-type="splitter">Сплиттер</button>
+                                        <button type="button" class="object-type-chip object-type-chip--cyan" data-type="onu">ONU</button>
+                                    </div>
+                                </div>
+                                <div class="object-type-group">
+                                    <span class="object-type-group-label">Узлы и устройства</span>
+                                    <div class="object-type-chips">
+                                        <button type="button" class="object-type-chip object-type-chip--green" data-type="node">Узел</button>
+                                        <button type="button" class="object-type-chip object-type-chip--slate" data-type="camera">Камера</button>
+                                        <button type="button" class="object-type-chip object-type-chip--teal" data-type="mediaConverter">Медиаконв.</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <select id="objectType" class="object-type-select-native" aria-hidden="true" tabindex="-1">
+                                <option value="support">Опоры связи</option>
+                                <option value="sleeve">Кабельные муфты</option>
+                                <option value="cross">Оптический кросс</option>
+                                <option value="olt">OLT (GPON)</option>
+                                <option value="splitter">Сплиттер</option>
+                                <option value="onu">ONU</option>
+                                <option value="camera">Камера</option>
+                                <option value="mediaConverter">Медиаконвертер</option>
+                                <option value="node">Узлы сети</option>
+                                <option value="attachment">Крепление узлов</option>
+                                <option value="manhole">Колодец</option>
+                            </select>
+                        </div>
+
+                        <div class="object-settings-area" id="objectSettingsArea">
+                        <div class="form-group object-settings-card" id="objectNameGroup" style="display: none;">
+                            <label for="objectName">Имя</label>
+                            <input type="text" id="objectName" class="form-input" placeholder="Введите имя">
+                        </div>
+                        <div class="form-group object-settings-card" id="oltSettingsGroup" style="display: none;">
+                            <label for="oltPonPorts">Количество PON-портов</label>
+                            <select id="oltPonPorts" class="form-select">
+                                <option value="4">4 порта</option>
+                                <option value="8" selected>8 портов</option>
+                                <option value="16">16 портов</option>
+                                <option value="32">32 порта</option>
+                                <option value="64">64 порта</option>
+                            </select>
+                            <label for="oltManufacturer" class="form-group-sub">Производитель</label>
+                            <div class="device-combobox" data-catalog="olt" data-type="manufacturer" data-value-id="oltManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="oltManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button>
+                                <input type="hidden" id="oltManufacturer" name="oltManufacturer" value="">
+                                <div class="device-combobox-panel" role="listbox" id="oltManufacturerPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
+                            </div>
+                            <label for="oltModel" class="form-group-sub">Модель</label>
+                            <div class="device-combobox" data-catalog="olt" data-type="model" data-value-id="oltModel" data-manufacturer-id="oltManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="oltModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
+                                <input type="hidden" id="oltModel" name="oltModel" value="">
+                                <div class="device-combobox-panel" role="listbox" id="oltModelPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
+                            </div>
+                            <p class="form-hint">Приход от кросса — одна жила (не входит в порты). Порты задаются жилами кабелей, подключённых к OLT.</p>
+                        </div>
+                        <div class="form-group object-settings-card" id="onuSettingsGroup" style="display: none;">
+                            <label for="onuManufacturer">Производитель</label>
+                            <div class="device-combobox" data-catalog="onu" data-type="manufacturer" data-value-id="onuManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="onuManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button>
+                                <input type="hidden" id="onuManufacturer" name="onuManufacturer" value="">
+                                <div class="device-combobox-panel" role="listbox" id="onuManufacturerPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
+                            </div>
+                            <label for="onuModel" class="form-group-sub">Модель</label>
+                            <div class="device-combobox" data-catalog="onu" data-type="model" data-value-id="onuModel" data-manufacturer-id="onuManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="onuModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
+                                <input type="hidden" id="onuModel" name="onuModel" value="">
+                                <div class="device-combobox-panel" role="listbox" id="onuModelPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group object-settings-card" id="cameraSettingsGroup" style="display: none;">
+                            <p class="form-hint object-settings-card-lead">Подключение к сети — только медным кабелем от порта коммутатора в узле (или отдельной точки коммутатора).</p>
+                            <label for="cameraManufacturer">Производитель</label>
+                            <div class="device-combobox" data-catalog="camera" data-type="manufacturer" data-value-id="cameraManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="cameraManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button>
+                                <input type="hidden" id="cameraManufacturer" name="cameraManufacturer" value="">
+                                <div class="device-combobox-panel" role="listbox" id="cameraManufacturerPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
+                            </div>
+                            <label for="cameraModel" class="form-group-sub">Модель</label>
+                            <div class="device-combobox" data-catalog="camera" data-type="model" data-value-id="cameraModel" data-manufacturer-id="cameraManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="cameraModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
+                                <input type="hidden" id="cameraModel" name="cameraModel" value="">
+                                <div class="device-combobox-panel" role="listbox" id="cameraModelPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
+                            </div>
+                            <p class="form-hint form-group-sub" style="margin-top: 12px;">Видеопоток (можно изменить в карточке камеры)</p>
+                            <label for="cameraStreamType">Тип потока</label>
+                            <select id="cameraStreamType" class="form-select">
+                                <option value="none">Без видео</option>
+                                <option value="hls">HLS (.m3u8)</option>
+                                <option value="http">HTTP (MP4 / WebM)</option>
+                                <option value="mjpeg">MJPEG</option>
+                                <option value="iframe">iframe</option>
+                                <option value="rtsp">RTSP</option>
+                            </select>
+                            <label for="cameraStreamUrl" class="form-group-sub">URL потока</label>
+                            <input type="url" id="cameraStreamUrl" class="form-input" placeholder="https://…/stream.m3u8" autocomplete="off">
+                            <div class="camera-stream-auth-grid camera-stream-auth-grid--placement">
+                                <div>
+                                    <label for="cameraStreamUser" class="form-group-sub">Логин</label>
+                                    <input type="text" id="cameraStreamUser" class="form-input" autocomplete="off">
+                                </div>
+                                <div>
+                                    <label for="cameraStreamPass" class="form-group-sub">Пароль</label>
+                                    <input type="password" id="cameraStreamPass" class="form-input" autocomplete="new-password">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group object-settings-card" id="mediaConverterSettingsGroup" style="display: none;">
+                            <p class="form-hint object-settings-card-lead">Точка на карте: оптический медиаконвертер (марка и модель из справочника узла).</p>
+                            <label for="mediaConverterManufacturer">Производитель</label>
+                            <div class="device-combobox" data-catalog="node" data-type="manufacturer" data-value-id="mediaConverterManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="mediaConverterManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button>
+                                <input type="hidden" id="mediaConverterManufacturer" name="mediaConverterManufacturer" value="">
+                                <div class="device-combobox-panel" role="listbox" id="mediaConverterManufacturerPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
+                            </div>
+                            <label for="mediaConverterModel" class="form-group-sub">Модель</label>
+                            <div class="device-combobox" data-catalog="node" data-type="model" data-value-id="mediaConverterModel" data-manufacturer-id="mediaConverterManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="mediaConverterModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
+                                <input type="hidden" id="mediaConverterModel" name="mediaConverterModel" value="">
+                                <div class="device-combobox-panel" role="listbox" id="mediaConverterModelPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group object-settings-card" id="splitterSettingsGroup" style="display: none;">
+                            <label for="splitterRatio">Коэффициент деления</label>
+                            <select id="splitterRatio" class="form-select">
+                                <option value="2">1:2</option>
+                                <option value="4">1:4</option>
+                                <option value="8" selected>1:8</option>
+                                <option value="16">1:16</option>
+                                <option value="32">1:32</option>
+                                <option value="64">1:64</option>
+                            </select>
+                        </div>
+                        <div class="form-group object-settings-card" id="nodeSettingsGroup" style="display: none;">
+                            <label for="nodeKind">Тип узла</label>
+                            <select id="nodeKind" class="form-select">
+                                <option value="network">Узел сети (зелёный)</option>
+                                <option value="aggregation">Узел агрегации (красный)</option>
+                            </select>
+                        </div>
+                        <div class="form-group object-settings-card" id="crossSettingsGroup" style="display: none;">
+                            <label for="crossPorts">Количество портов</label>
+                            <select id="crossPorts" class="form-select">
+                                <option value="4">4 порта</option>
+                                <option value="8">8 портов</option>
+                                <option value="12">12 портов</option>
+                                <option value="16">16 портов</option>
+                                <option value="24" selected>24 порта</option>
+                                <option value="48">48 портов</option>
+                                <option value="96">96 портов</option>
+                            </select>
+                        </div>
+                        <div class="form-group object-settings-card" id="sleeveSettingsGroup" style="display: none;">
+                            <label for="sleeveType">Тип муфты</label>
+                            <select id="sleeveType" class="form-select">
+                                <option value="SNR-FOSC-L" selected>SNR-FOSC-L (до 96 волокон)</option>
+                            </select>
+                            <label for="sleeveMaxFibers" style="margin-top: 8px;">Макс. количество волокон</label>
+                            <input type="number" id="sleeveMaxFibers" class="form-input" placeholder="0" min="0" max="288" value="96">
+                            <small class="text-muted-inline" style="display: block; margin-top: 5px; font-size: 11px;">0 = неограничено</small>
+                        </div>
+                        </div>
+
+                        <div class="objects-add-footer">
+                        <button type="button" id="addObject" class="btn-primary btn-add-object">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                            <span class="btn-add-object-text">Добавить на карту</span>
+                        </button>
+                        </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Аккордеон для кабелей -->
+                <div class="accordion-section accordion-section--cables">
+                    <div class="accordion-header" data-accordion="cables">
+                        <span class="accordion-header-icon accordion-header-icon--cables" aria-hidden="true">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                                <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                            </svg>
+                        </span>
+                        <span class="accordion-header-title">Кабели</span>
+                        <span class="cable-type-badge" id="cableTypeBadge" title="Тип прокладываемого кабеля"></span>
+                        <svg class="accordion-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </div>
+                    <div class="accordion-content" id="cables-content">
+                        <div class="cables-panel">
+                            <p class="cables-panel-hint">Укажите число жил и при необходимости цвета, нажмите «Проложить кабель» и отметьте точки на карте. Двойной клик или «Завершить» — закончить трассу.</p>
+                            <div class="cable-type-section cable-fiber-config-card">
+                                <p class="cable-type-section-label">ВОЛС</p>
+                                <div class="cable-type-picker" id="cableTypePicker" role="group" aria-label="Вид кабеля на карте">
+                                    <!-- Превью линии — js/fiber-cable-config.js -->
+                                </div>
+                                <div class="cable-fiber-lay-row">
+                                    <label class="cable-fiber-lay-label" for="layFiberCount">Жил</label>
+                                    <input type="number" id="layFiberCount" class="form-input cable-fiber-count-input" min="1" max="96" value="4" aria-label="Число жил">
+                                    <div class="cable-fiber-presets" role="group" aria-label="Быстрый выбор числа жил">
+                                        <button type="button" class="cable-fiber-preset cable-fiber-preset--active" data-count="4">4</button>
+                                        <button type="button" class="cable-fiber-preset" data-count="8">8</button>
+                                        <button type="button" class="cable-fiber-preset" data-count="16">16</button>
+                                        <button type="button" class="cable-fiber-preset" data-count="24">24</button>
+                                    </div>
+                                </div>
+                                <button type="button" id="layFiberPaletteBtn" class="btn-secondary cable-fiber-palette-btn">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 0 20 10 10 0 0 1 0-20z" fill="currentColor" opacity="0.15"></path><circle cx="8" cy="10" r="2" fill="#3b82f6"></circle><circle cx="14" cy="8" r="2" fill="#f59e0b"></circle><circle cx="15" cy="14" r="2" fill="#22c55e"></circle></svg>
+                                    Цвета жил
+                                </button>
+                                <select id="cableType" class="cable-type-select-native" aria-hidden="true" tabindex="-1">
+                                    <option value="fiber" selected>ВОЛС</option>
+                                </select>
+                            </div>
+                            <p class="cables-copper-note">
+                                <strong>Медный кабель</strong> — из карточки узла (порт коммутатора), отдельного коммутатора на карте или медиаконвертера с подключённой жилой. См. легенду ниже.
+                            </p>
+                            <button type="button" id="addCable" class="btn-primary btn-lay-cable">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                    <line x1="12" y1="2" x2="12" y2="22"></line>
+                                    <line x1="2" y1="12" x2="22" y2="12"></line>
+                                </svg>
+                                <span class="btn-lay-cable-text">Проложить кабель</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Аккордеон для регионов -->
+                <div class="accordion-section accordion-section--regions">
+                    <div class="accordion-header" data-accordion="regions">
+                        <span class="accordion-header-icon accordion-header-icon--regions" aria-hidden="true">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"></path>
+                            </svg>
+                        </span>
+                        <span class="accordion-header-title">Регионы</span>
+                        <span class="regions-count-badge" id="regionsCountBadge" title="Число регионов"></span>
+                        <svg class="accordion-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </div>
+                    <div class="accordion-content" id="regions-content">
+                        <div class="regions-panel">
+                            <p class="regions-panel-hint">Список регионов — слева. Редактирование названия, цвета и контура — кнопка карандаша (в режиме редактирования).</p>
+                            <button type="button" id="drawRegionBtn" class="btn-primary btn-draw-region">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon>
+                                </svg>
+                                <span class="btn-draw-region-text">Нарисовать регион</span>
+                            </button>
+                            <div id="regionsList" class="regions-list" aria-live="polite"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Аккордеон для файлов -->
+                <div class="accordion-section accordion-section--files">
+                    <div class="accordion-header" data-accordion="files">
+                        <span class="accordion-header-icon accordion-header-icon--files" aria-hidden="true">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                                <polyline points="13 2 13 9 20 9"></polyline>
+                            </svg>
+                        </span>
+                        <span class="accordion-header-title">Файлы</span>
+                        <svg class="accordion-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </div>
+                    <div class="accordion-content" id="files-content">
+                        <input type="file" id="importFile" accept=".json" style="display: none;">
+                        <button id="importBtn" class="btn-secondary">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            Импорт карты
+                        </button>
+                        <button id="exportData" class="btn-secondary">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            Экспорт карты
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Резервные копии (только админ) -->
+                <div class="accordion-section accordion-section--backups backups-accordion admin-only" id="backupsAccordionSection" style="display: none;">
+                    <div class="accordion-header" data-accordion="backups">
+                        <span class="accordion-header-icon accordion-header-icon--backups" aria-hidden="true">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                        </span>
+                        <span class="accordion-header-title">Резервные копии</span>
+                        <svg class="accordion-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </div>
+                    <div class="accordion-content" id="backups-content">
+                        <p class="backups-hint">Восстановление из ежедневных бэкапов (хранятся 30 дней). Группы по месяцам — откройте нужный месяц и нажмите «Восстановить». После восстановления страница обновится.</p>
+                        <button type="button" id="backupsRefreshBtn" class="btn-secondary backups-refresh-btn">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg>
+                            Обновить список
+                        </button>
+                        <div id="backupsList" class="backups-list"></div>
+                    </div>
+                </div>
+
+                <!-- Легенда -->
+                <div class="accordion-section accordion-section--legend">
+                    <div class="accordion-header" data-accordion="legend">
+                        <span class="accordion-header-icon accordion-header-icon--legend" aria-hidden="true">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="16" x2="12" y2="12"></line>
+                                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                            </svg>
+                        </span>
+                        <span class="accordion-header-title">Легенда</span>
+                        <svg class="accordion-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </div>
+                    <div class="accordion-content legend-panel" id="legend-content">
+                        <!-- Группы легенды — js/map-legend.js -->
+                    </div>
+                </div>
+                </div>
+
+                <!-- Статистика -->
+                <div class="stats-section" id="statsSection" aria-label="Статистика объектов на карте">
+                    <div class="stats-header">
+                        <h3 class="stats-title">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <line x1="18" y1="20" x2="18" y2="10"></line>
+                                <line x1="12" y1="20" x2="12" y2="4"></line>
+                                <line x1="6" y1="20" x2="6" y2="14"></line>
+                            </svg>
+                            Статистика
+                        </h3>
+                        <div class="stats-header-actions">
+                            <div class="stats-total" title="Сумма по всем показателям ниже">
+                                <span class="stats-total-value" id="statsTotal" aria-live="polite">0</span>
+                                <span class="stats-total-label">всего</span>
+                            </div>
+                            <button type="button" id="statsToggleBtn" class="stats-toggle-btn" aria-expanded="true" aria-controls="statsBody" title="Скрыть статистику">
+                                <svg class="stats-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="stats-body" id="statsBody">
+                    <div class="stats-group">
+                        <p class="stats-group-label">Узлы</p>
+                        <div class="stats-grid">
+                        <div class="stat-item stat-item--tone-green">
+                            <div class="stat-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <polyline points="12 6 12 12 16 14"></polyline>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="networkNodeCount">0</div>
+                                <div class="stat-label">Узлы сети</div>
+                            </div>
+                        </div>
+                        <div class="stat-item stat-item--tone-red">
+                            <div class="stat-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <circle cx="12" cy="12" r="4" fill="currentColor" opacity="0.35"></circle>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="aggregationNodeCount">0</div>
+                                <div class="stat-label">Агрегация</div>
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+
+                    <div class="stats-group">
+                        <p class="stats-group-label">Инфраструктура</p>
+                        <div class="stats-grid">
+                        <div class="stat-item stat-item--tone-blue">
+                            <div class="stat-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="supportCount">0</div>
+                                <div class="stat-label">Опоры</div>
+                            </div>
+                        </div>
+                        <div class="stat-item stat-item--tone-rose">
+                            <div class="stat-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="sleeveCount">0</div>
+                                <div class="stat-label">Муфты</div>
+                            </div>
+                        </div>
+                        <div class="stat-item stat-item--tone-violet">
+                            <div class="stat-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                    <line x1="9" y1="3" x2="9" y2="21"></line>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="crossCount">0</div>
+                                <div class="stat-label">Кроссы</div>
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+
+                    <div class="stats-group">
+                        <p class="stats-group-label">GPON</p>
+                        <div class="stats-grid">
+                        <div class="stat-item stat-item--tone-sky">
+                            <div class="stat-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M5 12h14"></path><path d="M12 5v14"></path><circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="oltCount">0</div>
+                                <div class="stat-label">OLT</div>
+                            </div>
+                        </div>
+                        <div class="stat-item stat-item--tone-purple">
+                            <div class="stat-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="6" r="2"></circle><path d="M12 8v4"></path><circle cx="8" cy="14" r="2"></circle><circle cx="16" cy="14" r="2"></circle><path d="M10 14l2-2 2 2"></path>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="splitterCount">0</div>
+                                <div class="stat-label">Сплиттеры</div>
+                            </div>
+                        </div>
+                        <div class="stat-item stat-item--tone-cyan">
+                            <div class="stat-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6.01" y2="10"></line><line x1="10" y1="10" x2="10.01" y2="10"></line>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="onuCount">0</div>
+                                <div class="stat-label">ONU</div>
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+
+                    <div class="stats-group">
+                        <p class="stats-group-label">Прочее</p>
+                        <div class="stats-grid">
+                        <div class="stat-item stat-item--tone-slate">
+                            <div class="stat-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                    <circle cx="12" cy="13" r="4"></circle>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="cameraCount">0</div>
+                                <div class="stat-label">Камеры</div>
+                            </div>
+                        </div>
+                        <div class="stat-item stat-item--tone-teal">
+                            <div class="stat-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="4" y="7" width="16" height="10" rx="2"></rect>
+                                    <path d="M8 12h8M12 8v8" stroke-linecap="round"></path>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="mediaConverterCount">0</div>
+                                <div class="stat-label">Медиаконв.</div>
+                            </div>
+                        </div>
+                        <div class="stat-item stat-item--tone-orange">
+                            <div class="stat-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="4" y="6" width="16" height="12" rx="2"></rect>
+                                    <line x1="8" y1="10" x2="8.01" y2="10"></line><line x1="12" y1="10" x2="12.01" y2="10"></line><line x1="16" y1="10" x2="16.01" y2="10"></line>
+                                    <line x1="8" y1="14" x2="16" y2="14"></line>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="switchCount">0</div>
+                                <div class="stat-label">Коммутаторы</div>
+                            </div>
+                        </div>
+                        <div class="stat-item stat-item--tone-amber">
+                            <div class="stat-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                </svg>
+                            </div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="cableCount">0</div>
+                                <div class="stat-label">Кабели</div>
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+                    </div>
+                </div>
+
+                <!-- Опасные действия — блок скрыт, кнопки «Очистить карту» и «Очистить историю» убраны -->
+                <div class="accordion-section accordion-section-danger" style="display: none;">
+                    <div class="accordion-header" data-accordion="danger">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                        <span>Опасные действия</span>
+                        <svg class="accordion-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </div>
+                    <div class="accordion-content" id="danger-content" style="display: none;">
+                        <!-- Кнопка «Очистить карту» убрана по требованию -->
+                    </div>
+                </div>
+                <div class="sidebar-license" title="Подробнее — в разделе «Справка»">
+                    © 2024–2026 Карта оптической сети. Проприетарное ПО.
+                </div>
+            </div>
+            </div>
+        </div>
+
+        <button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Скрыть панель" title="Скрыть панель" aria-expanded="true" aria-controls="sidebar">
+            <svg class="sidebar-toggle-tab" viewBox="0 0 38 52" aria-hidden="true" focusable="false">
+                <path class="sidebar-toggle-tab-path" d="M0 0h25L38 26 25 52H0V0z"></path>
+            </svg>
+            <span class="sidebar-toggle-icons">
+                <svg class="arrow-icon arrow-left" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <polyline points="15 6 9 12 15 18"></polyline>
+                </svg>
+                <svg class="arrow-icon arrow-right" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <polyline points="9 6 15 12 9 18"></polyline>
+                </svg>
+            </span>
+        </button>
+
+        <div class="map-area-wrapper" id="mapAreaWrapper">
+            <div id="mapLoadingOverlay" class="map-loading-overlay" aria-live="polite" aria-busy="true">
+                <div class="map-loading-content">
+                    <span class="map-loading-spinner" aria-hidden="true"></span>
+                    <p class="map-loading-text">Загрузка карты…</p>
+                </div>
+            </div>
+            <div id="map" class="map"></div>
+            <div id="undergroundEditBar" class="underground-draw-card" hidden aria-live="polite" role="region" aria-labelledby="undergroundEditBarTitle">
+                <div class="underground-draw-card__accent" aria-hidden="true"></div>
+                <div class="underground-draw-card__inner">
+                    <div class="underground-draw-card__head">
+                        <div class="underground-draw-card__icon" aria-hidden="true">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2">
+                                <circle cx="5" cy="12" r="2.5" fill="currentColor" stroke="none"></circle>
+                                <circle cx="19" cy="12" r="2.5" fill="currentColor" stroke="none"></circle>
+                                <path d="M7.5 12h9"></path>
+                            </svg>
+                        </div>
+                        <div class="underground-draw-card__titles">
+                            <span id="undergroundEditBarTitle" class="underground-draw-card__title">Подземный участок</span>
+                            <span id="undergroundEditBarMode" class="underground-draw-card__mode">Перепрокладка</span>
+                        </div>
+                        <div class="underground-draw-card__stat" title="Точек на трассе">
+                            <span id="undergroundEditBarPoints" class="underground-draw-card__stat-num">0</span>
+                            <span class="underground-draw-card__stat-label">тчк.</span>
+                        </div>
+                    </div>
+                    <p id="undergroundEditBarText" class="underground-draw-card__hint">Кликайте по карте, чтобы проложить трассу между колодцами.</p>
+                    <div class="underground-draw-card__actions">
+                        <button type="button" id="undergroundEditDone" class="btn-primary underground-draw-card__btn">Готово</button>
+                        <button type="button" id="undergroundEditRelayout" class="btn-secondary underground-draw-card__btn">Заново</button>
+                        <button type="button" id="undergroundEditCancelBar" class="btn-secondary underground-draw-card__btn">Отмена</button>
+                    </div>
+                </div>
+            </div>
+            <div id="regionDrawBar" class="underground-draw-card region-draw-card" hidden aria-live="polite" role="region" aria-labelledby="regionDrawBarTitle">
+                <div class="underground-draw-card__accent" aria-hidden="true"></div>
+                <div class="underground-draw-card__inner">
+                    <div class="underground-draw-card__head">
+                        <div class="underground-draw-card__icon" aria-hidden="true">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon>
+                            </svg>
+                        </div>
+                        <div class="underground-draw-card__titles">
+                            <span id="regionDrawBarTitle" class="underground-draw-card__title">Новый регион</span>
+                            <span class="underground-draw-card__mode">Рисование</span>
+                        </div>
+                        <div class="underground-draw-card__stat" title="Вершин контура">
+                            <span id="regionDrawBarPoints" class="underground-draw-card__stat-num">0</span>
+                            <span class="underground-draw-card__stat-label">тчк.</span>
+                        </div>
+                    </div>
+                    <p id="regionDrawBarText" class="underground-draw-card__hint">Кликайте по карте — вершины контура. Минимум 3 точки. Двойной клик или «Готово» — завершить.</p>
+                    <div class="region-draw-fields">
+                        <label class="region-draw-field">
+                            <span>Название</span>
+                            <input type="text" id="regionDrawName" class="form-input" placeholder="Регион">
+                        </label>
+                        <label class="region-draw-field region-draw-field--color">
+                            <span>Заливка</span>
+                            <input type="color" id="regionDrawFillColor" value="#3b82f6">
+                        </label>
+                    </div>
+                    <div class="underground-draw-card__actions region-draw-card__actions">
+                        <button type="button" id="regionDrawDone" class="btn-primary underground-draw-card__btn btn-compact" disabled>Готово</button>
+                        <button type="button" id="regionDrawUndo" class="btn-secondary underground-draw-card__btn btn-compact">− точка</button>
+                        <button type="button" id="regionDrawCancel" class="btn-secondary underground-draw-card__btn btn-compact">Отмена</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Приветствие при первом входе (центр экрана, после закрытия не показывается) -->
+    <div id="welcomeModal" class="modal welcome-modal" style="display: none;" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="welcomeModalTitle">
+        <div class="modal-content welcome-modal-content">
+            <div class="modal-header">
+                <h2 id="welcomeModalTitle">Добро пожаловать</h2>
+                <span class="close" id="welcomeModalCloseBtn" title="Закрыть" role="button" tabindex="0">&times;</span>
+            </div>
+            <div class="modal-body welcome-modal-body">
+                <section class="welcome-assistant-greeting" aria-label="Приветствие помощника Volsmap">
+                    <img class="welcome-assistant-avatar" src="icons/assistant/volsmap-girl.png" alt="Вола, ассистент Volsmap">
+                    <div class="welcome-assistant-bubble">
+                        <p class="welcome-assistant-name">Вола · Volsmap</p>
+                        <p class="welcome-assistant-text">Привет! Пройдите короткое обучение — покажу, где что находится на карте.</p>
+                    </div>
+                </section>
+                <p class="home-intro-lead">Карта вашей организации: опоры, муфты, кроссы, узлы, ВОЛС и GPON, камеры и медиаконвертеры. Данные подгружаются автоматически — изменения видны всей команде в реальном времени.</p>
+                <ul class="home-intro-features" role="list">
+                    <li>
+                        <span class="home-intro-feature-icon" aria-hidden="true">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
+                        </span>
+                        <span><strong>Поиск</strong> — переход к объекту по названию</span>
+                    </li>
+                    <li>
+                        <span class="home-intro-feature-icon" aria-hidden="true">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M9 3v18M15 7v10"></path></svg>
+                        </span>
+                        <span><strong>Кросс и муфта</strong> — схема и таблица жил, соединения и выводы</span>
+                    </li>
+                    <li>
+                        <span class="home-intro-feature-icon" aria-hidden="true">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                        </span>
+                        <span><strong>Чат</strong> — общение с коллегами, @упоминания</span>
+                    </li>
+                </ul>
+                <details class="home-intro-details">
+                    <summary>Подсказки по работе</summary>
+                    <ul class="home-intro-tips">
+                        <li>Колёсико — масштаб; перетаскивание — сдвиг карты.</li>
+                        <li>Редактирование — на экране шире 768&nbsp;px; на телефоне доступен просмотр.</li>
+                        <li>Клик по кроссу или муфте открывает рабочее место жил; по остальным объектам — карточку с трассировкой.</li>
+                        <li>Аватар в шапке — личный кабинет (лимит объектов); кнопка «Справка» — полное руководство.</li>
+                    </ul>
+                </details>
+                <div class="welcome-modal-actions">
+                    <button type="button" id="welcomeModalStartTour" class="btn-secondary">Пройти обучение</button>
+                    <button type="button" id="welcomeModalOk" class="btn-primary">Понятно</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для информации об объекте / рабочее место кросса и муфты -->
+    <div id="infoModal" class="modal" role="dialog" aria-labelledby="modalTitle" aria-modal="true">
+        <div class="modal-content panel-glass">
+            <div class="panel-glass-bg" aria-hidden="true">
+                <div class="panel-glass-gradient"></div>
+                <canvas class="panel-plexus-canvas"></canvas>
+            </div>
+            <header class="modal-header fiber-modal-header" id="fiberModalHeader">
+                <div class="fiber-modal-header-main">
+                    <div class="fiber-modal-header-text">
+                        <h2 id="modalTitle">Информация об объекте</h2>
+                        <p class="fiber-modal-header-sub" id="modalTitleSub" hidden></p>
+                        <p class="object-lock-banner" id="modalLockBanner" hidden></p>
+                    </div>
+                </div>
+                <span class="close" title="Закрыть" role="button" tabindex="0">&times;</span>
+            </header>
+            <div class="modal-body">
+                <div id="modalInfo"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для выбора узла (оформление как у балуна групп — одна карточка) -->
+    <div id="nodeSelectionModal" class="modal">
+        <div class="modal-content node-selection-modal-content">
+            <div class="network-map-balloon node-selection-balloon">
+                <div class="group-balloon-header">
+                    <span class="group-balloon-title">Подключение жилы к узлу</span>
+                    <button type="button" class="group-balloon-close close-node-selection" title="Закрыть">&times;</button>
+                </div>
+                <div class="modal-body node-selection-body">
+                    <div class="node-selection-info">
+                        <p id="nodeSelectionFiberInfo"></p>
+                    </div>
+                    <div class="form-group">
+                        <label for="nodeSearchInput">Поиск узла</label>
+                        <div class="node-search-wrapper">
+                            <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
+                            <input type="text" id="nodeSearchInput" class="form-input node-search-input" placeholder="Введите имя узла...">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Выберите узел</label>
+                        <div id="nodeListContainer" class="node-list-container">
+                            <!-- Список узлов будет генерироваться динамически -->
+                        </div>
+                    </div>
+                    <div class="node-selection-actions">
+                        <button id="cancelNodeSelection" class="btn-secondary">Отмена</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для выбора ONU (подключение жилы к ONU) -->
+    <div id="onuSelectionModal" class="modal">
+        <div class="modal-content node-selection-modal-content">
+            <div class="network-map-balloon node-selection-balloon">
+                <div class="group-balloon-header">
+                    <span class="group-balloon-title">Подключение жилы к ONU</span>
+                    <button type="button" class="group-balloon-close close-onu-selection" title="Закрыть">&times;</button>
+                </div>
+                <div class="modal-body node-selection-body">
+                    <div class="node-selection-info">
+                        <p id="onuSelectionFiberInfo"></p>
+                    </div>
+                    <div class="form-group">
+                        <label for="onuSearchInput">Поиск ONU</label>
+                        <div class="node-search-wrapper">
+                            <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
+                            <input type="text" id="onuSearchInput" class="form-input node-search-input" placeholder="Введите имя ONU...">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Выберите ONU</label>
+                        <div id="onuListContainer" class="node-list-container">
+                            <!-- Список ONU генерируется динамически -->
+                        </div>
+                    </div>
+                    <div class="node-selection-actions">
+                        <button id="cancelOnuSelection" class="btn-secondary">Отмена</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для выбора сплиттера (подключение жилы к входу сплиттера) -->
+    <div id="splitterSelectionModal" class="modal">
+        <div class="modal-content node-selection-modal-content">
+            <div class="network-map-balloon node-selection-balloon">
+                <div class="group-balloon-header">
+                    <span class="group-balloon-title">Подключение жилы к сплиттеру</span>
+                    <button type="button" class="group-balloon-close close-splitter-selection" title="Закрыть">&times;</button>
+                </div>
+                <div class="modal-body node-selection-body">
+                    <div class="node-selection-info">
+                        <p id="splitterSelectionFiberInfo"></p>
+                    </div>
+                    <div class="form-group">
+                        <label for="splitterSelect">Сплиттер</label>
+                        <select id="splitterSelect" class="form-input" style="width: 100%; padding: 8px;">
+                            <option value="">— выберите сплиттер</option>
+                        </select>
+                    </div>
+                    <p class="node-selection-info" style="font-size: 0.8125rem; color: var(--text-secondary); margin-top: 8px;">
+                        Жила будет назначена как вход сплиттера (1&nbsp;→&nbsp;N). Выходы на ONU или следующий сплиттер настраиваются в карточке сплиттера.
+                    </p>
+                    <div class="node-selection-actions">
+                        <button id="confirmSplitterSelection" class="btn-primary" disabled>Подключить</button>
+                        <button id="cancelSplitterSelection" class="btn-secondary">Отмена</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Выбор ONU для выхода сплиттера -->
+    <div id="splitterOutputOnuModal" class="modal">
+        <div class="modal-content node-selection-modal-content">
+            <div class="network-map-balloon node-selection-balloon">
+                <div class="group-balloon-header">
+                    <span class="group-balloon-title">Выбор ONU для выхода</span>
+                    <button type="button" class="group-balloon-close close-splitter-output-onu" title="Закрыть">&times;</button>
+                </div>
+                <div class="modal-body node-selection-body">
+                    <p class="node-selection-info" style="font-size: 0.8125rem; color: var(--text-secondary);">Выберите свободную ONU</p>
+                    <div id="splitterOutputOnuList" class="node-list-container"></div>
+                    <div class="node-selection-actions" style="margin-top: 12px;">
+                        <button id="cancelSplitterOutputOnu" class="btn-secondary">Отмена</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Выбор сплиттера для выхода сплиттера -->
+    <div id="splitterOutputSplitterModal" class="modal">
+        <div class="modal-content node-selection-modal-content">
+            <div class="network-map-balloon node-selection-balloon">
+                <div class="group-balloon-header">
+                    <span class="group-balloon-title">Выбор сплиттера для выхода</span>
+                    <button type="button" class="group-balloon-close close-splitter-output-splitter" title="Закрыть">&times;</button>
+                </div>
+                <div class="modal-body node-selection-body">
+                    <p class="node-selection-info" style="font-size: 0.8125rem; color: var(--text-secondary);">Выберите свободный сплиттер (без входа)</p>
+                    <div id="splitterOutputSplitterList" class="node-list-container"></div>
+                    <div class="node-selection-actions" style="margin-top: 12px;">
+                        <button id="cancelSplitterOutputSplitter" class="btn-secondary">Отмена</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для выбора OLT и порта (подключение жилы к порту OLT) -->
+    <div id="oltSelectionModal" class="modal">
+        <div class="modal-content node-selection-modal-content">
+            <div class="network-map-balloon node-selection-balloon">
+                <div class="group-balloon-header">
+                    <span class="group-balloon-title">Подключение жилы к порту OLT</span>
+                    <button type="button" class="group-balloon-close close-olt-selection" title="Закрыть">&times;</button>
+                </div>
+                <div class="modal-body node-selection-body">
+                    <div class="node-selection-info">
+                        <p id="oltSelectionFiberInfo"></p>
+                    </div>
+                    <div class="form-group">
+                        <label for="oltSelectSelect">OLT (приходящая жила)</label>
+                        <select id="oltSelectSelect" class="form-input" style="width: 100%; padding: 8px;">
+                            <option value="">— выберите OLT</option>
+                        </select>
+                    </div>
+                    <p class="node-selection-info" style="font-size: 0.8125rem; color: var(--text-secondary); margin-top: 8px;">Жила будет назначена как приход от кросса для выбранного OLT.</p>
+                    <div class="node-selection-actions">
+                        <button id="confirmOltSelection" class="btn-primary" disabled>Подключить</button>
+                        <button id="cancelOltSelection" class="btn-secondary">Отмена</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно управления пользователями -->
+    <div id="usersModal" class="modal">
+        <div class="modal-content users-modal-content">
+            <div class="modal-header">
+                <h2>Управление пользователями</h2>
+                <span class="close-users">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="orgSecuritySection" class="org-security-section" style="display: none;">
+                    <h3 class="section-title">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                        </svg>
+                        Безопасность организации
+                    </h3>
+                    <p class="hint org-security-hint">Двухфакторная аутентификация (2FA) — общий код для всех пользователей организации при входе. Настройте в Google Authenticator, Яндекс.Ключ или аналоге.</p>
+                    <div id="orgSecurityStatus" class="org-security-status">Загрузка…</div>
+                    <div id="orgSecuritySetup" class="org-security-setup" style="display: none;">
+                        <p class="hint">Отсканируйте QR-код или введите секрет вручную, затем введите 6-значный код для подтверждения.</p>
+                        <img id="org2faQr" class="org-2fa-qr" alt="QR-код 2FA" width="220" height="220">
+                        <div class="org-2fa-secret-wrap">
+                            <code id="org2faSecret" class="org-2fa-secret"></code>
+                            <button type="button" id="org2faCopySecretBtn" class="btn-secondary btn-sm">Копировать</button>
+                        </div>
+                        <div class="form-group">
+                            <label for="org2faEnableCode">Код из приложения</label>
+                            <input type="text" id="org2faEnableCode" class="form-input" inputmode="numeric" maxlength="8" placeholder="000000" autocomplete="one-time-code">
+                        </div>
+                        <button type="button" id="org2faEnableBtn" class="btn-primary btn-sm">Включить 2FA</button>
+                        <button type="button" id="org2faCancelSetupBtn" class="btn-secondary btn-sm">Отмена</button>
+                    </div>
+                    <div id="orgSecurityActions" class="org-security-actions">
+                        <button type="button" id="org2faSetupBtn" class="btn-primary btn-sm">Настроить 2FA</button>
+                        <button type="button" id="org2faDisableBtn" class="btn-secondary btn-sm" style="display: none;">Отключить 2FA</button>
+                    </div>
+                    <div id="org2faDisablePanel" class="org-security-setup" style="display: none;">
+                        <div class="form-group">
+                            <label for="org2faDisableCode">Код для отключения</label>
+                            <input type="text" id="org2faDisableCode" class="form-input" inputmode="numeric" maxlength="8" placeholder="000000">
+                        </div>
+                        <button type="button" id="org2faConfirmDisableBtn" class="btn-secondary btn-sm">Подтвердить отключение</button>
+                    </div>
+                </div>
+
+                <div id="orgZabbixSection" class="org-zabbix-section" style="display: none;">
+                    <h3 class="section-title">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                        </svg>
+                        Мониторинг Zabbix
+                    </h3>
+                    <p class="hint org-zabbix-hint">Свой сервер Zabbix для организации. Статусы узлов на карте берутся из Zabbix (доступность интерфейса), если интеграция включена. Иначе используется ping с сервера приложения.</p>
+                    <div id="orgZabbixStatus" class="org-zabbix-status">Загрузка…</div>
+                    <div class="org-zabbix-form">
+                        <div class="form-group">
+                            <label class="object-card-label"><input type="checkbox" id="orgZabbixEnabled"> Включить Zabbix для организации</label>
+                        </div>
+                        <div class="form-group">
+                            <label for="orgZabbixUrl" class="object-card-label">URL Zabbix</label>
+                            <input type="url" id="orgZabbixUrl" class="form-input" placeholder="https://zabbix.example.com" autocomplete="off" spellcheck="false">
+                        </div>
+                        <div class="form-group">
+                            <label for="orgZabbixToken" class="object-card-label">API-токен</label>
+                            <input type="password" id="orgZabbixToken" class="form-input" placeholder="Токен из Zabbix → Users → API tokens" autocomplete="new-password">
+                            <p class="hint org-zabbix-token-hint" id="orgZabbixTokenHint">Оставьте пустым, чтобы не менять сохранённый токен.</p>
+                        </div>
+                        <div class="org-zabbix-actions">
+                            <button type="button" id="orgZabbixTestBtn" class="btn-secondary btn-sm">Проверить подключение</button>
+                            <button type="button" id="orgZabbixSaveBtn" class="btn-primary btn-sm">Сохранить</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Заявки на регистрацию -->
+                <div id="pendingUsersSection" class="pending-users-section" style="display: none;">
+                    <h3 class="section-title">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        Заявки на регистрацию
+                        <span id="pendingCount" class="pending-badge">0</span>
+                    </h3>
+                    <div id="pendingUsersList" class="users-list">
+                        <!-- Заявки будут генерироваться динамически -->
+                    </div>
+                </div>
+                
+                <!-- Активные пользователи -->
+                <h3 class="section-title" style="margin-top: 16px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                    Пользователи
+                </h3>
+                <div class="users-actions">
+                    <button id="addUserBtn" class="btn-primary">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="8.5" cy="7" r="4"></circle>
+                            <line x1="20" y1="8" x2="20" y2="14"></line>
+                            <line x1="23" y1="11" x2="17" y2="11"></line>
+                        </svg>
+                        Добавить пользователя
+                    </button>
+                </div>
+                <div id="usersList" class="users-list">
+                    <!-- Список пользователей будет генерироваться динамически -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно управления организациями -->
+    <div id="organizationsModal" class="modal">
+        <div class="modal-content organizations-modal-content">
+            <div class="modal-header">
+                <h2>Организации</h2>
+                <span class="close-organizations">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="users-actions" style="margin-bottom: 12px;">
+                    <button id="addOrganizationBtn" class="btn-primary">Добавить организацию</button>
+                </div>
+                <div id="organizationsList" class="users-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно редактирования организации -->
+    <div id="organizationEditModal" class="modal">
+        <div class="modal-content organization-edit-modal-content">
+            <div class="modal-header">
+                <h2 id="organizationEditTitle">Редактировать организацию</h2>
+                <span class="close-organization-edit">&times;</span>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editOrgId">
+                <div class="form-group">
+                    <label for="editOrgName">Название</label>
+                    <input type="text" id="editOrgName" class="form-input" placeholder="Название организации">
+                </div>
+                <div class="form-group">
+                    <label><input type="checkbox" id="editOrgMapLimitUnlocked"> Безлимит объектов на карте</label>
+                </div>
+                <div class="form-group">
+                    <label for="editOrgCustomMapLimit">Свой лимит объектов (пусто = лимит по умолчанию с сервера)</label>
+                    <input type="number" id="editOrgCustomMapLimit" class="form-input" min="1" placeholder="2000">
+                </div>
+                <div class="form-group">
+                    <label for="editOrgStatus">Статус</label>
+                    <select id="editOrgStatus" class="form-select">
+                        <option value="active">Активна</option>
+                        <option value="suspended">Приостановлена</option>
+                    </select>
+                </div>
+                <div class="form-group" style="display: flex; gap: 10px;">
+                    <button id="saveOrganizationBtn" class="btn-primary" style="flex: 1;">Сохранить</button>
+                    <button id="cancelOrganizationEditBtn" class="btn-secondary" style="flex: 1;">Отмена</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно добавления/редактирования пользователя -->
+    <div id="userEditModal" class="modal">
+        <div class="modal-content user-edit-modal-content">
+            <div class="modal-header">
+                <h2 id="userEditTitle">Добавить пользователя</h2>
+                <span class="close-user-edit">&times;</span>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editUserId">
+                <div class="form-group">
+                    <label for="editUsername">Имя пользователя</label>
+                    <input type="text" id="editUsername" class="form-input" placeholder="Введите имя пользователя" required>
+                </div>
+                <div class="form-group">
+                    <label for="editFullName">Полное имя</label>
+                    <input type="text" id="editFullName" class="form-input" placeholder="Введите полное имя">
+                </div>
+                <div class="form-group">
+                    <label for="editPassword">Пароль</label>
+                    <input type="password" id="editPassword" class="form-input" placeholder="Введите пароль">
+                    <small class="text-muted-inline" style="font-size: 11px;">Оставьте пустым, чтобы не менять пароль</small>
+                </div>
+                <div class="form-group">
+                    <label for="editRole">Роль</label>
+                    <select id="editRole" class="form-select">
+                        <option value="user">Пользователь</option>
+                        <option value="admin">Администратор</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editOrganizationId">Организация</label>
+                    <select id="editOrganizationId" class="form-select">
+                        <option value="">— Без организации —</option>
+                    </select>
+                </div>
+                <div class="form-group" style="display: flex; gap: 10px;">
+                    <button id="saveUserBtn" class="btn-primary" style="flex: 1;">Сохранить</button>
+                    <button id="cancelUserEditBtn" class="btn-secondary" style="flex: 1;">Отмена</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Окно обновлений -->
+    <div id="updatesModal" class="modal">
+        <div class="modal-content updates-modal-content">
+            <div class="modal-header">
+                <h2>Обновления</h2>
+                <span class="close-updates">&times;</span>
+            </div>
+            <div class="modal-body updates-modal-body">
+                <div class="updates-current">
+                    <span class="updates-label">Текущая версия:</span>
+                    <span id="updatesVersionDisplay" class="version-current">—</span>
+                </div>
+                <div id="updatesStatus" class="updates-status"></div>
+                <div class="updates-actions">
+                    <button type="button" id="updatesCheckBtn" class="btn-primary">Проверить обновления</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Личный кабинет -->
+    <div id="profileModal" class="modal" role="dialog" aria-labelledby="profileModalTitle" aria-modal="true">
+        <div class="modal-content profile-modal-content">
+            <div class="modal-header">
+                <h2 id="profileModalTitle">Личный кабинет</h2>
+                <span class="close close-profile" title="Закрыть">&times;</span>
+            </div>
+            <div class="modal-body profile-modal-body">
+                <div class="profile-hero">
+                    <div class="profile-hero-icon" aria-hidden="true">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 21h18"></path>
+                            <path d="M5 21V7l8-4v18"></path>
+                            <path d="M19 21V11l-6-4"></path>
+                        </svg>
+                    </div>
+                    <div class="profile-hero-text">
+                        <p class="profile-hero-label">Организация</p>
+                        <p class="profile-org-name" id="profileOrgName">—</p>
+                        <span class="profile-status-badge" id="profileStatus">—</span>
+                    </div>
+                </div>
+
+                <div class="profile-user-card">
+                    <div class="profile-avatar-upload">
+                        <div class="profile-user-avatar" id="profileUserAvatar" aria-hidden="true">?</div>
+                        <div class="profile-avatar-controls">
+                            <label class="profile-avatar-upload-btn">
+                                <input type="file" id="profileAvatarInput" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
+                                Загрузить фото
+                            </label>
+                            <button type="button" id="profileAvatarRemoveBtn" class="profile-avatar-remove-btn" style="display: none;">Удалить</button>
+                            <p class="profile-avatar-hint">JPG, PNG или WebP, до 2 МБ</p>
+                        </div>
+                    </div>
+                    <div class="profile-user-meta">
+                        <p class="profile-user-name" id="profileUserName">—</p>
+                        <p class="profile-user-role" id="profileUserRole">—</p>
+                    </div>
+                </div>
+
+                <div class="profile-metrics">
+                    <div class="profile-metric profile-metric--objects">
+                        <div class="profile-metric-top">
+                            <span class="profile-metric-label">Объекты на карте</span>
+                            <span class="profile-metric-numbers">
+                                <span class="profile-metric-value" id="profileMapObjects">—</span>
+                                <span class="profile-metric-limit" id="profileMapLimit">—</span>
+                            </span>
+                        </div>
+                        <div class="profile-metric-bar" id="profileMapLimitBar" aria-hidden="true">
+                            <div class="profile-metric-bar-fill" id="profileMapLimitFill"></div>
+                        </div>
+                    </div>
+                    <div class="profile-metric profile-metric--sessions">
+                        <div class="profile-metric-top">
+                            <span class="profile-metric-label">Одновременно на карте</span>
+                            <span class="profile-metric-numbers">
+                                <span class="profile-metric-value" id="profileConcurrentUsers">—</span>
+                                <span class="profile-metric-limit" id="profileConcurrentLimit"></span>
+                            </span>
+                        </div>
+                        <div class="profile-metric-bar" id="profileConcurrentBar" aria-hidden="true">
+                            <div class="profile-metric-bar-fill" id="profileConcurrentFill"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно: цвета жил кабеля -->
+    <div id="fiberPaletteModal" class="modal modal--centered" style="display: none;" role="dialog" aria-labelledby="fiberPaletteModalTitle" aria-modal="true" aria-hidden="true">
+        <div class="modal-content fiber-palette-modal-content panel-glass">
+            <div class="panel-glass-bg" aria-hidden="true">
+                <div class="panel-glass-gradient"></div>
+                <canvas class="panel-plexus-canvas"></canvas>
+            </div>
+            <div class="modal-header">
+                <h2 id="fiberPaletteModalTitle">Цвета жил кабеля</h2>
+                <span class="close close-fiber-palette" title="Закрыть" role="button" tabindex="0">&times;</span>
+            </div>
+            <div class="modal-body fiber-palette-modal-body">
+                <p class="form-hint fiber-palette-modal__hint">Стандарт Инкаб: 1–12 основные цвета, 13–24 с чёрным кольцом. Можно задать свои названия и оттенки.</p>
+                <div class="fiber-palette-modal__count-row">
+                    <div class="form-group">
+                        <label for="fiberPaletteCountInput">Число жил</label>
+                        <input type="number" id="fiberPaletteCountInput" class="form-input" min="1" max="96" value="4">
+                    </div>
+                    <button type="button" class="btn-secondary fiber-palette-modal__std-btn" id="fiberPaletteStdBtn">Сбросить к стандарту</button>
+                </div>
+                <div class="fiber-palette-modal__list" id="fiberPaletteList"></div>
+                <div class="form-group fiber-palette-modal__actions">
+                    <button type="button" class="btn-secondary" id="fiberPaletteAddBtn">+ Добавить жилу</button>
+                    <button type="button" class="btn-secondary" id="fiberPaletteCancelBtn">Отмена</button>
+                    <button type="button" class="btn-primary" id="fiberPaletteSaveBtn">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно справки / информация о программе -->
+    <div id="helpModal" class="modal help-modal" role="dialog" aria-labelledby="helpModalTitle" aria-modal="true">
+        <div class="modal-content help-modal-content panel-glass">
+            <div class="panel-glass-bg" aria-hidden="true">
+                <div class="panel-glass-gradient"></div>
+                <canvas class="panel-plexus-canvas"></canvas>
+            </div>
+            <header class="help-modal-header">
+                <div class="help-modal-header-main">
+                    <div class="help-modal-header-icon" aria-hidden="true">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                            <circle cx="12" cy="16" r="1.5" fill="currentColor" stroke="none"></circle>
+                        </svg>
+                    </div>
+                    <div class="help-modal-header-text">
+                        <h2 id="helpModalTitle">Справка по программе</h2>
+                        <p class="help-modal-header-sub">Руководство по карте, объектам и настройкам · <span id="helpModalVersion">—</span></p>
+                    </div>
+                </div>
+                <span class="close close-help" title="Закрыть" role="button" tabindex="0">&times;</span>
+            </header>
+            <div class="help-modal-body">
+                <div id="helpModalContent" class="help-modal-scroll"><!-- Контент подставляется из JS --></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно истории изменений -->
+    <div id="historyModal" class="modal" role="dialog" aria-labelledby="historyModalTitle" aria-modal="true">
+        <div class="modal-content history-modal-content">
+            <div class="modal-header">
+                <h2 id="historyModalTitle">Журнал изменений</h2>
+                <span class="close close-history" title="Закрыть">&times;</span>
+            </div>
+            <div class="modal-body history-modal-body">
+                <div class="history-hero">
+                    <div class="history-hero-icon" aria-hidden="true">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                    </div>
+                    <div class="history-hero-text">
+                        <p class="history-hero-label">Записей в журнале</p>
+                        <p class="history-hero-count" id="historyTotalCount">—</p>
+                        <p class="history-hero-sub" id="historyFilteredMeta">Откройте фильтры, чтобы сузить список</p>
+                    </div>
+                </div>
+
+                <div class="history-toolbar">
+                    <label class="history-search-field">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        <input type="search" id="historyFilterSearch" class="history-search-input" placeholder="Поиск по действию, объекту, пользователю…" autocomplete="off">
+                    </label>
+                    <button type="button" id="clearHistoryBtn" class="history-clear-btn" title="Очистить журнал" style="display: none;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        Очистить
+                    </button>
+                </div>
+
+                <details class="history-filters-panel" id="historyFiltersPanel" open>
+                    <summary class="history-filters-summary">
+                        <span>Фильтры</span>
+                        <span class="history-filter-badge" id="historyFilterBadge" hidden>0</span>
+                    </summary>
+                    <div class="history-filters-body">
+                        <div class="history-filter-group">
+                            <p class="history-filter-group-label">Категория</p>
+                            <div class="history-category-chips" role="group" aria-label="Категория действий">
+                                <button type="button" class="history-category-chip active" data-category="">Все</button>
+                                <button type="button" class="history-category-chip" data-category="map">Карта</button>
+                                <button type="button" class="history-category-chip" data-category="cable">Кабели</button>
+                                <button type="button" class="history-category-chip" data-category="fiber">Жилы</button>
+                                <button type="button" class="history-category-chip" data-category="users">Пользователи</button>
+                            </div>
+                        </div>
+                        <div class="history-filter-fields">
+                            <div class="history-filter-field">
+                                <label for="historyFilterUser">Кто</label>
+                                <select id="historyFilterUser" class="history-filter-select" title="Кто выполнил действие">
+                                    <option value="">Все</option>
+                                </select>
+                            </div>
+                            <div class="history-filter-field">
+                                <label for="historyFilterAction">Действие</label>
+                                <select id="historyFilterAction" class="history-filter-select" title="Тип действия">
+                                    <option value="">Все</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="history-filter-group">
+                            <p class="history-filter-group-label">Период</p>
+                            <div class="history-period-chips" role="group" aria-label="Период">
+                                <button type="button" class="history-filter-btn active" data-filter="all">Все</button>
+                                <button type="button" class="history-filter-btn" data-filter="today">Сегодня</button>
+                                <button type="button" class="history-filter-btn" data-filter="week">Неделя</button>
+                            </div>
+                            <div class="history-filter-dates">
+                                <input type="date" id="historyFilterDateFrom" class="history-filter-date" title="С даты" aria-label="С даты">
+                                <span class="history-filter-date-sep">—</span>
+                                <input type="date" id="historyFilterDateTo" class="history-filter-date" title="По дату" aria-label="По дату">
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <div id="historyList" class="history-list" role="log" aria-live="polite">
+                    <!-- Записи журнала -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно справочника устройств (только админ), полноэкранное -->
+    <div id="deviceCatalogModal" class="modal device-catalog-modal" role="dialog" aria-labelledby="deviceCatalogModalTitle" aria-modal="true">
+        <div class="modal-content device-catalog-modal-content">
+            <header class="modal-header device-catalog-modal-header">
+                <div class="device-catalog-hero">
+                    <div class="device-catalog-hero-icon" aria-hidden="true">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                            <line x1="8" y1="6" x2="16" y2="6"></line>
+                            <line x1="8" y1="10" x2="16" y2="10"></line>
+                        </svg>
+                    </div>
+                    <div class="device-catalog-hero-text">
+                        <h2 id="deviceCatalogModalTitle">Справочник устройств</h2>
+                        <p id="deviceCatalogHeaderHint" class="device-catalog-header-hint">Производители и модели для выпадающих списков при добавлении объектов на карте</p>
+                        <div id="deviceCatalogGlobalStats" class="device-catalog-hero-stats" aria-live="polite"></div>
+                    </div>
+                </div>
+                <span class="close close-device-catalog" title="Закрыть">&times;</span>
+            </header>
+            <div class="modal-body device-catalog-modal-body">
+                <aside class="device-catalog-sidebar panel-glass" aria-label="Разделы справочника">
+                    <div class="panel-glass-bg" aria-hidden="true">
+                        <div class="panel-glass-gradient"></div>
+                        <canvas class="panel-plexus-canvas"></canvas>
+                    </div>
+                    <p class="device-catalog-sidebar-label">Разделы</p>
+                    <nav class="device-catalog-tabs" role="tablist">
+                        <button type="button" class="device-catalog-tab device-catalog-tab--violet device-catalog-tab-active" data-tab="switch" role="tab" aria-selected="true">
+                            <span class="device-catalog-tab-label">Коммутаторы</span>
+                            <span class="device-catalog-tab-badge" data-stat-tab="switch"></span>
+                        </button>
+                        <button type="button" class="device-catalog-tab device-catalog-tab--sky" data-tab="olt" role="tab" aria-selected="false">
+                            <span class="device-catalog-tab-label">OLT</span>
+                            <span class="device-catalog-tab-badge" data-stat-tab="olt"></span>
+                        </button>
+                        <button type="button" class="device-catalog-tab device-catalog-tab--cyan" data-tab="onu" role="tab" aria-selected="false">
+                            <span class="device-catalog-tab-label">ONU</span>
+                            <span class="device-catalog-tab-badge" data-stat-tab="onu"></span>
+                        </button>
+                        <button type="button" class="device-catalog-tab device-catalog-tab--slate" data-tab="camera" role="tab" aria-selected="false">
+                            <span class="device-catalog-tab-label">Камеры</span>
+                            <span class="device-catalog-tab-badge" data-stat-tab="camera"></span>
+                        </button>
+                        <button type="button" class="device-catalog-tab device-catalog-tab--teal" data-tab="node" role="tab" aria-selected="false">
+                            <span class="device-catalog-tab-label">Медиаконвертер</span>
+                            <span class="device-catalog-tab-badge" data-stat-tab="node"></span>
+                        </button>
+                        <button type="button" class="device-catalog-tab device-catalog-tab--green" data-tab="sleeve" role="tab" aria-selected="false">
+                            <span class="device-catalog-tab-label">Муфты</span>
+                            <span class="device-catalog-tab-badge" data-stat-tab="sleeve"></span>
+                        </button>
+                    </nav>
+                    <div class="device-catalog-sidebar-actions">
+                        <button type="button" id="deviceCatalogOpenAddBtn" class="btn-primary device-catalog-sidebar-add">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                            Добавить
+                        </button>
+                        <button type="button" id="deviceCatalogReset" class="btn-secondary device-catalog-reset-btn">Сбросить раздел</button>
+                    </div>
+                </aside>
+                <div class="device-catalog-main panel-glass" id="deviceCatalogMain">
+                    <div class="panel-glass-bg" aria-hidden="true">
+                        <div class="panel-glass-gradient"></div>
+                        <canvas class="panel-plexus-canvas"></canvas>
+                    </div>
+                    <div class="device-catalog-main-head">
+                        <div class="device-catalog-main-head-text">
+                            <p class="device-catalog-main-label">Текущий раздел</p>
+                            <h3 id="deviceCatalogSectionTitle" class="device-catalog-section-title">Коммутаторы</h3>
+                            <p id="deviceCatalogTabDesc" class="device-catalog-main-desc"></p>
+                        </div>
+                        <span id="deviceCatalogTabStats" class="device-catalog-section-stats" aria-live="polite"></span>
+                    </div>
+                    <div class="device-catalog-toolbar">
+                        <label class="device-catalog-search-field">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                            <input type="search" id="deviceCatalogSearch" class="device-catalog-search-input" placeholder="Поиск производителя или модели…" autocomplete="off">
+                        </label>
+                    </div>
+                    <div id="deviceCatalogList" class="device-catalog-list" role="region" aria-label="Список производителей и моделей"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Добавление производителя / модели в справочник -->
+    <div id="deviceCatalogEntryModal" class="modal device-catalog-entry-modal" role="dialog" aria-modal="true">
+        <div class="modal-content device-catalog-entry-modal-content panel-glass">
+            <div class="panel-glass-bg" aria-hidden="true">
+                <div class="panel-glass-gradient"></div>
+                <canvas class="panel-plexus-canvas"></canvas>
+            </div>
+            <div class="modal-header">
+                <h2 id="deviceCatalogEntryModalTitle">Добавить в справочник</h2>
+                <span class="close close-device-catalog-entry" title="Закрыть">&times;</span>
+            </div>
+            <div class="modal-body device-catalog-entry-body">
+                <p id="deviceCatalogEntrySectionHint" class="device-catalog-entry-hint"></p>
+                <div class="device-catalog-entry-type-tabs" role="tablist" aria-label="Тип записи">
+                    <button type="button" class="device-catalog-entry-type device-catalog-entry-type-active" data-entry-type="manufacturer" role="tab" aria-selected="true">Новый производитель</button>
+                    <button type="button" class="device-catalog-entry-type" data-entry-type="model" role="tab" aria-selected="false">Модель к производителю</button>
+                </div>
+                <div id="deviceCatalogEntryMfrPanel" class="device-catalog-entry-panel">
+                    <div class="form-group">
+                        <label for="deviceCatalogEntryMfrName">Название производителя</label>
+                        <input type="text" id="deviceCatalogEntryMfrName" class="form-input" placeholder="Например: MikroTik" autocomplete="off">
+                    </div>
+                </div>
+                <div id="deviceCatalogEntryModelPanel" class="device-catalog-entry-panel" hidden>
+                    <div class="form-group">
+                        <label for="deviceCatalogEntryMfrSelect">Производитель</label>
+                        <select id="deviceCatalogEntryMfrSelect" class="form-select">
+                            <option value="">— Выберите —</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="deviceCatalogEntryModelName">Модель устройства</label>
+                        <input type="text" id="deviceCatalogEntryModelName" class="form-input" placeholder="Например: CRS326-24G-2S+" autocomplete="off">
+                    </div>
+                    <div id="deviceCatalogEntryPortsGroup" class="form-group" hidden>
+                        <label for="deviceCatalogEntryDefaultPorts">Портов по умолчанию</label>
+                        <input type="number" id="deviceCatalogEntryDefaultPorts" class="form-input" min="1" max="96" placeholder="24" style="max-width: 120px;">
+                        <p class="form-hint device-catalog-entry-ports-hint">Подставится при добавлении коммутатора в узел на карте</p>
+                    </div>
+                </div>
+                <div id="deviceCatalogEntrySleevePanel" class="device-catalog-entry-panel" hidden>
+                    <div class="form-group">
+                        <label for="deviceCatalogEntrySleeveId">Код типа</label>
+                        <input type="text" id="deviceCatalogEntrySleeveId" class="form-input" placeholder="Например: SNR-FOSC-MY24" autocomplete="off">
+                        <p class="form-hint">Значение в списке «Тип муфты» при добавлении объекта</p>
+                    </div>
+                    <div class="form-group">
+                        <label for="deviceCatalogEntrySleeveLabel">Подпись в списке</label>
+                        <input type="text" id="deviceCatalogEntrySleeveLabel" class="form-input" placeholder="Необязательно — по умолчанию как код" autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label for="deviceCatalogEntrySleeveMaxFibers">Макс. волокон</label>
+                        <input type="number" id="deviceCatalogEntrySleeveMaxFibers" class="form-input" min="0" max="288" value="96" style="max-width: 120px;">
+                        <p class="form-hint">0 — без лимита; подставится при выборе типа на карте</p>
+                    </div>
+                </div>
+            </div>
+            <div class="device-catalog-entry-footer">
+                <button type="button" id="deviceCatalogEntryCancel" class="btn-secondary">Отмена</button>
+                <button type="button" id="deviceCatalogEntrySave" class="btn-primary">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Чат организации -->
+    <div id="orgChatBackdrop" class="org-chat-backdrop" hidden aria-hidden="true"></div>
+    <aside id="orgChatPanel" class="org-chat-panel panel-glass" aria-hidden="true" aria-label="Чат организации">
+        <div class="panel-glass-bg" aria-hidden="true">
+            <div class="panel-glass-gradient"></div>
+        </div>
+        <header class="org-chat-header">
+            <span class="org-chat-mobile-handle" aria-hidden="true"></span>
+            <div class="org-chat-header-main">
+            <div class="org-chat-header-brand">
+                <span class="org-chat-header-icon" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                </span>
+                <div class="org-chat-header-text">
+                    <h2 class="org-chat-title">Чат команды</h2>
+                    <p class="org-chat-subtitle">Сообщения, файлы и упоминания @</p>
+                </div>
+            </div>
+            <button type="button" id="orgChatClose" class="org-chat-close" aria-label="Закрыть чат" title="Закрыть">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+            </div>
+        </header>
+        <div id="orgChatMessages" class="org-chat-messages" role="log" aria-live="polite" aria-relevant="additions">
+            <div class="org-chat-empty">
+                <img class="org-chat-empty-image" src="icons/assistant/volsmap-girl.png" alt="" loading="lazy">
+                <p class="org-chat-empty-title">Пока нет сообщений</p>
+                <p class="org-chat-empty-hint">Начните переписку — команда увидит ваше сообщение сразу.</p>
+            </div>
+        </div>
+        <footer class="org-chat-footer">
+            <div class="org-chat-compose">
+                <div id="orgChatEmojiPicker" class="org-chat-attach-picker" hidden>
+                    <div class="org-chat-attach-tabs" role="tablist" aria-label="Вложения чата">
+                        <button type="button" class="org-chat-attach-tab org-chat-attach-tab--active" data-tab="emoji" role="tab" aria-selected="true" aria-controls="orgChatAttachEmoji">Эмодзи</button>
+                        <button type="button" class="org-chat-attach-tab" data-tab="sticker" role="tab" aria-selected="false" aria-controls="orgChatAttachSticker">Стикеры</button>
+                        <button type="button" class="org-chat-attach-tab" data-tab="gif" role="tab" aria-selected="false" aria-controls="orgChatAttachGif">GIF</button>
+                    </div>
+                    <div id="orgChatAttachEmoji" class="org-chat-attach-panel" role="tabpanel">
+                        <div id="orgChatEmojiGrid" class="org-chat-emoji-grid" role="listbox" aria-label="Выбор эмодзи"></div>
+                    </div>
+                    <div id="orgChatAttachSticker" class="org-chat-attach-panel" role="tabpanel" hidden>
+                        <div class="org-chat-media-toolbar">
+                            <label class="org-chat-upload-btn">
+                                Загрузить стикер
+                                <input type="file" id="orgChatStickerUpload" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+                            </label>
+                        </div>
+                        <div id="orgChatStickerGrid" class="org-chat-media-grid" role="listbox" aria-label="Стикеры организации"></div>
+                        <p class="org-chat-media-hint">PNG, JPG, WebP или GIF до 2 МБ</p>
+                    </div>
+                    <div id="orgChatAttachGif" class="org-chat-attach-panel" role="tabpanel" hidden>
+                        <div class="org-chat-media-toolbar">
+                            <label class="org-chat-upload-btn">
+                                Загрузить GIF
+                                <input type="file" id="orgChatGifUpload" accept="image/gif" hidden>
+                            </label>
+                        </div>
+                        <div id="orgChatGifGrid" class="org-chat-media-grid" role="listbox" aria-label="GIF организации"></div>
+                        <p class="org-chat-media-hint">Только GIF до 8 МБ</p>
+                    </div>
+                </div>
+                <div class="org-chat-input-area">
+                    <div id="orgChatMentionList" class="org-chat-mention-list" hidden role="listbox" aria-label="Кого упомянуть"></div>
+                    <div class="org-chat-input-row">
+                        <label class="org-chat-tool-btn org-chat-tool-btn--file" title="Прикрепить файл" aria-label="Прикрепить файл">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+                            </svg>
+                            <input type="file" id="orgChatFileAttach" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.zip,.rar,.7z,.json,.xml,image/png,image/jpeg,image/webp,image/gif" hidden>
+                        </label>
+                        <div class="org-chat-input-wrap">
+                            <textarea id="orgChatInput" class="org-chat-input" rows="1" maxlength="2000" placeholder="Сообщение… Enter — отправить" aria-label="Текст сообщения" aria-controls="orgChatMentionList" aria-autocomplete="list" aria-expanded="false"></textarea>
+                        </div>
+                        <button type="button" id="orgChatEmojiBtn" class="org-chat-tool-btn org-chat-tool-btn--emoji" title="Эмодзи, стикеры и GIF" aria-label="Эмодзи и стикеры" aria-expanded="false" aria-controls="orgChatEmojiPicker">
+                            <span class="org-chat-tool-emoji" aria-hidden="true">😊</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </aside>
+
+    <!-- Контейнер для уведомлений -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Модальное окно подтверждения (удаление и т.п.) -->
+    <div id="confirmModal" class="modal">
+        <div class="modal-content confirm-modal-content">
+            <div class="modal-header">
+                <h2 id="confirmModalTitle">Подтверждение</h2>
+                <span class="close-confirm-modal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p id="confirmModalMessage" style="margin: 0 0 16px;"></p>
+                <div class="confirm-modal-actions" style="display: flex; gap: 8px; justify-content: flex-end;">
+                    <button type="button" id="confirmModalCancel" class="btn-secondary">Отмена</button>
+                    <button type="button" id="confirmModalConfirm" class="btn-primary" style="background: var(--accent-danger, #dc2626); border-color: var(--accent-danger, #dc2626);">Удалить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/core/config.js"></script>
+    <script src="js/app/auth.js"></script>
+    <script>
+    (function() {
+        try {
+            if (window.AuthSystem && typeof AuthSystem.getCurrentSession === 'function') {
+                var s = AuthSystem.getCurrentSession();
+                if (s && s.role === 'admin' && (s.organizationId == null)) {
+                    window.location.href = 'site-admin.html';
+                }
+            }
+        } catch (e) {}
+    })();
+    </script>
+    <script src="js/core/state.js"></script>
+    <script src="js/core/utils.js"></script>
+    <script src="js/core/script-loader.js"></script>
+    <script src="js/core/notifications.js"></script>
+    <script src="js/core/confirm-dialog.js"></script>
+    <script src="js/core/network-status.js"></script>
+    <script src="js/core/updates.js"></script>
+    <script src="js/groups.js"></script>
+    <script src="js/map/theme.js"></script>
+    <script src="js/map/map-icons.js"></script>
+    <script src="js/map/cable-underground.js"></script>
+    <script src="js/map/regions.js"></script>
+    <script src="js/map/map-perf.js"></script>
+    <script src="js/map/search.js"></script>
+    <script src="js/fiber-cable-config.js"></script>
+    <script src="js/map-legend.js"></script>
+    <script src="js/ui/node-monitor.js"></script>
+    <script src="js/app/main.js"></script>
+    <script src="js/sync.js"></script>
+</body></html>

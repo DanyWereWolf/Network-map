@@ -25,5 +25,5 @@ Thumbs.db
 # База данных (локальная)
 data/
 
-# Конфиг сервера (копируйте из server-config.example.json)
+# Конфиг сервера (копируйте из server/config/server-config.example.json)
 server-config.json

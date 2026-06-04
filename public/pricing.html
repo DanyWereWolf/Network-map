@@ -1,0 +1,852 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="description" content="Карта оптической сети — программа для работы с оптической сетью на volsmap.ru: кроссы и муфты со схемой жил, GPON, синхронизация команды.">
+    <meta name="keywords" content="программа для оптической сети, ВОЛС, карта оптической сети, учёт ВОЛС, GPON, кроссы, муфты, volsmap">
+    <meta name="author" content="Карта оптической сети">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#1d4ed8">
+    <title>Карта оптической сети — программа для работы с оптической сетью</title>
+    <link rel="canonical" href="https://volsmap.ru/">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="ru_RU">
+    <meta property="og:site_name" content="Карта оптической сети">
+    <meta property="og:title" content="Карта оптической сети — программа для работы с оптической сетью">
+    <meta property="og:description" content="Карта оптической сети — программа для работы с оптической сетью на volsmap.ru: кроссы и муфты со схемой жил, GPON, синхронизация команды.">
+    <meta property="og:image" content="https://volsmap.ru/favicon.svg">
+    <meta property="og:url" content="https://volsmap.ru/">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Карта оптической сети — программа для работы с оптической сетью">
+    <meta name="twitter:description" content="Карта оптической сети — программа для работы с оптической сетью на volsmap.ru: кроссы и муфты со схемой жил, GPON, синхронизация команды.">
+    <meta name="twitter:image" content="https://volsmap.ru/favicon.svg">
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Карта оптической сети",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web",
+        "applicationSubCategory": "Программа для работы с оптической сетью",
+        "description": "Программа для работы с оптической сетью на volsmap.ru: кроссы и муфты со схемой жил, GPON, синхронизация команды.",
+        "url": "https://volsmap.ru/",
+        "inLanguage": "ru",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "RUB",
+            "description": ""
+        },
+        "contactPoint": {
+            "@type": "ContactPoint",
+            "contactType": "customer support",
+            "email": "danil.sechin3@gmail.com",
+            "availableLanguage": ["ru"]
+        }
+    }
+    </script>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/auth.css">
+    <link rel="stylesheet" href="css/cookie-consent.css">
+    <link rel="stylesheet" href="css/maintenance-notice.css">
+    <link rel="stylesheet" href="css/support-chat.css">
+    <script>
+        (function() {
+            try {
+                var saved = localStorage.getItem('networkMap_landingTheme');
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var theme = (saved === 'dark' || saved === 'light') ? saved : (prefersDark ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch (e) {}
+        })();
+    </script>
+    <link rel="stylesheet" href="css/landing.css">
+    <link rel="stylesheet" href="css/landing-header.css">
+    <link rel="stylesheet" href="css/pages-mobile.css">
+</head>
+<body class="landing-page">
+    <div class="auth-bg" aria-hidden="true">
+        <div class="auth-bg-gradient"></div>
+        <canvas id="authPlexusCanvas" class="auth-bg-plexus"></canvas>
+    </div>
+    <div class="auth-container landing-root">
+        <div class="auth-card landing-shell">
+            <!-- Навигация -->
+            <header class="landing-nav" id="landingNav">
+                <div class="landing-nav-overlay" id="landingNavOverlay" aria-hidden="true"></div>
+                <div class="landing-nav-left">
+                    <div class="auth-logo landing-nav-logo" role="img" aria-label="Карта оптической сети" title="Карта оптической сети">
+                        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                            <circle cx="12" cy="10" r="3"></circle>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="landing-brand-title">Карта оптической сети</div>
+                        <div class="landing-brand-sub">Программа для работы с оптической сетью</div>
+                    </div>
+                </div>
+                <nav class="landing-nav-menu" id="landingNavMenu" aria-label="Разделы страницы">
+                    <a href="#home">Главная</a>
+                    <a href="#capabilities">Возможности</a>
+                    <a href="#how">Как начать</a>
+                    <a href="#about">О продукте</a>
+                    <a href="#pricing">Условия</a>
+                    <a href="news.html">Новости</a>
+                    <a href="#faq">Вопросы</a>
+                    <a href="#contacts">Контакты</a>
+                </nav>
+                <div class="landing-nav-actions">
+                    <button type="button" class="btn-outline landing-nav-burger" id="landingNavBurger" aria-expanded="false" aria-controls="landingNavMenu" title="Разделы страницы">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <line x1="3" y1="12" x2="21" y2="12"></line>
+                            <line x1="3" y1="18" x2="21" y2="18"></line>
+                        </svg>
+                        <span>Разделы</span>
+                    </button>
+                    <button id="landingThemeToggle" type="button" class="btn-outline theme-toggle-btn" title="Тёмная тема" aria-label="Включить тёмную тему">
+                        <span aria-hidden="true">🌙</span>
+                    </button>
+                    <button class="btn-outline" onclick="window.location.href='auth.html'">Войти</button>
+                    <button class="btn-primary-hero" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">
+                        Попробовать сейчас
+                    </button>
+                </div>
+            </header>
+
+            <!-- Главная / hero -->
+            <section id="home" class="landing-hero">
+                <div>
+                    <h1 class="landing-hero-title">
+                        <span class="hero-line">Вся ваша сеть на одной карте.</span>
+                        <span class="hero-line hero-highlight">Бесплатно, с лимитом под ваш масштаб.</span>
+                    </h1>
+                    <p class="landing-hero-subtitle">
+                        Веб‑сервис для учёта ВОЛС: карта, схема жил, GPON и трассировка. Без установки — в браузере.
+                        Бесплатно до <strong id="heroFreeLimit">2000</strong> объектов и <strong id="heroMaxConcurrent">4</strong> пользователей одновременно.
+                    </p>
+                    <div class="landing-hero-badges">
+                        <span class="badge-pill badge-pill--early">Ранний доступ</span>
+                    </div>
+                    <div class="landing-hero-cta-row">
+                        <button class="btn-primary-hero" id="heroRegisterCtaBtn" onclick="window.location.href='auth.html?register=1'">
+                            Начать бесплатно
+                        </button>
+                        <button type="button" class="btn-outline" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">
+                            Условия и лимиты
+                        </button>
+                    </div>
+                    <p class="landing-hero-meta">Провайдеры, интеграторы, эксплуатация · с телефона — просмотр, правки — с ПК</p>
+                </div>
+                <aside class="landing-hero-visual" aria-label="Статистика сервиса и схема сети">
+                    <div class="hero-showcase">
+                        <div class="hero-showcase-chrome">
+                            <span class="hero-showcase-title">Карта оптической сети</span>
+                            <span class="hero-showcase-live" aria-hidden="true">
+                                <span class="hero-live-dot"></span>Синхронизация
+                            </span>
+                        </div>
+                        <div class="hero-showcase-map" aria-hidden="true">
+                            <svg class="hero-map-svg" viewBox="0 0 360 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="">
+                                <defs>
+                                    <pattern id="heroMapGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+                                        <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#94a3b8" stroke-width="0.4" opacity="0.35"/>
+                                    </pattern>
+                                    <linearGradient id="heroFiberGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                        <stop offset="0%" stop-color="#22c55e"/>
+                                        <stop offset="100%" stop-color="#2563eb"/>
+                                    </linearGradient>
+                                </defs>
+                                <rect width="360" height="200" fill="url(#heroMapGrid)"/>
+                                <path class="hero-map-fiber hero-map-fiber--a" d="M48 165 C90 120, 120 90, 168 72" fill="none" stroke="url(#heroFiberGrad)" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
+                                <path class="hero-map-fiber" d="M168 72 L220 58 L300 48" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" opacity="0.7"/>
+                                <path class="hero-map-fiber" d="M100 140 L168 110 L260 95" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" opacity="0.45"/>
+                                <g class="hero-map-node hero-map-node--olt">
+                                    <circle cx="48" cy="165" r="8" fill="#1d4ed8"/>
+                                    <circle cx="48" cy="165" r="4" fill="#93c5fd"/>
+                                </g>
+                                <g class="hero-map-node hero-map-node--hub">
+                                    <circle cx="168" cy="72" r="7" fill="#059669"/>
+                                    <circle cx="168" cy="72" r="3.5" fill="#6ee7b7"/>
+                                </g>
+                                <g class="hero-map-node">
+                                    <circle cx="300" cy="48" r="5" fill="#2563eb"/>
+                                </g>
+                                <g class="hero-map-node">
+                                    <circle cx="100" cy="140" r="5" fill="#64748b" opacity="0.8"/>
+                                </g>
+                                <g class="hero-map-node">
+                                    <circle cx="260" cy="95" r="5" fill="#64748b" opacity="0.8"/>
+                                </g>
+                            </svg>
+                        </div>
+                        <div class="hero-showcase-stats">
+                            <div class="hero-stat-card">
+                                <span class="hero-stat-icon" aria-hidden="true">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+                                </span>
+                                <div class="hero-stat-text">
+                                    <span class="hero-stat-label">Организаций</span>
+                                    <span class="hero-stat-value" id="heroStatOrgs">—</span>
+                                </div>
+                            </div>
+                            <div class="hero-stat-card">
+                                <span class="hero-stat-icon" aria-hidden="true">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
+                                </span>
+                                <div class="hero-stat-text">
+                                    <span class="hero-stat-label">Пользователей</span>
+                                    <span class="hero-stat-value" id="heroStatUsers">—</span>
+                                </div>
+                            </div>
+                            <div class="hero-stat-card">
+                                <span class="hero-stat-icon" aria-hidden="true">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                                </span>
+                                <div class="hero-stat-text">
+                                    <span class="hero-stat-label" title="Узлы, кроссы, муфты, OLT и др.; без кабелей">Объектов</span>
+                                    <span class="hero-stat-value" id="heroStatNodes">—</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+            </section>
+
+            <div class="trust-strip" role="list">
+                <div class="trust-item" role="listitem">
+                    <div class="trust-item-icon" aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                    </div>
+                    <div>
+                        <h3>Изоляция данных</h3>
+                        <p>Отдельная карта на организацию, доступ только у приглашённых.</p>
+                    </div>
+                </div>
+                <div class="trust-item" role="listitem">
+                    <div class="trust-item-icon" aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    </div>
+                    <div>
+                        <h3>Роли</h3>
+                        <p>Администратор и пользователи с разными правами.</p>
+                    </div>
+                </div>
+                <div class="trust-item" role="listitem">
+                    <div class="trust-item-icon" aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                    </div>
+                    <div>
+                        <h3>Синхронизация</h3>
+                        <p>Правки на карте в реальном времени.</p>
+                    </div>
+                </div>
+                <div class="trust-item" role="listitem">
+                    <div class="trust-item-icon" aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
+                    </div>
+                    <div>
+                        <h3>Бэкапы</h3>
+                        <p>Снимки 30 дней и журнал изменений.</p>
+                    </div>
+                </div>
+            </div>
+
+            <section id="how" class="landing-steps landing-block" aria-labelledby="how-heading">
+                <h2 id="how-heading" class="capability-section-title">Как начать</h2>
+                <p class="capability-section-lead">Три шага от регистрации до совместной работы на карте.</p>
+                <ol class="landing-steps-list">
+                    <li class="landing-step">
+                        <span class="landing-step-num" aria-hidden="true">1</span>
+                        <div>
+                            <h3>Регистрация</h3>
+                            <p>Учётная запись и отдельная карта организации.</p>
+                        </div>
+                    </li>
+                    <li class="landing-step">
+                        <span class="landing-step-num" aria-hidden="true">2</span>
+                        <div>
+                            <h3>Схема на карте</h3>
+                            <p>Узлы, кабели, кроссы, GPON, трассировка и жилы в карточке объекта.</p>
+                        </div>
+                    </li>
+                    <li class="landing-step">
+                        <span class="landing-step-num" aria-hidden="true">3</span>
+                        <div>
+                            <h3>Команда</h3>
+                            <p>Синхронизация правок, журнал, бэкапы, чат организации.</p>
+                        </div>
+                    </li>
+                </ol>
+            </section>
+
+            <section id="capabilities" class="landing-block" aria-labelledby="capabilities-heading">
+                <h2 id="capabilities-heading" class="capability-section-title">Возможности</h2>
+                <p class="capability-section-lead">Карта, жилы, GPON и командная работа — в одном интерфейсе.</p>
+                <div class="capability-grid">
+                    <article class="capability-card">
+                        <div class="capability-card-icon" aria-hidden="true">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                        </div>
+                        <h3>Карта и топология</h3>
+                        <p>Яндекс.Карты, ВОЛС и медные линии, фильтры по типам объектов, поиск и сохранение вида карты.</p>
+                    </article>
+                    <article class="capability-card">
+                        <div class="capability-card-icon" aria-hidden="true">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M9 3v18M15 7v10"></path></svg>
+                        </div>
+                        <h3>Кроссы, муфты и GPON</h3>
+                        <p>Схема жил, OLT, сплиттеры, ONU, трассировка от порта PON.</p>
+                    </article>
+                    <article class="capability-card">
+                        <div class="capability-card-icon" aria-hidden="true">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                        </div>
+                        <h3>Команда</h3>
+                        <p>Роли, синхронизация правок, чат организации. С телефона — просмотр.</p>
+                    </article>
+                    <article class="capability-card">
+                        <div class="capability-card-icon" aria-hidden="true">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
+                        </div>
+                        <h3>Бэкапы</h3>
+                        <p>Снимки 30 дней, журнал правок, справочник оборудования.</p>
+                    </article>
+                </div>
+                <p class="capability-footnote">Также: камеры, медиаконвертеры, печать схем, 2FA.</p>
+            </section>
+
+            <section id="about" class="landing-block landing-about">
+                <details class="about-card about-card--wide about-security-details">
+                        <summary class="about-security-summary">
+                            <span class="about-security-summary-icon" aria-hidden="true">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                            </span>
+                            Защита и безопасность
+                        </summary>
+                        <div class="section-body about-security-body">
+                            <p>Изоляция по организациям, защищённый вход, опциональная 2FA. Данные на серверах volsmap.ru; доступ — у вашей команды и поддержки сервиса.</p>
+                        </div>
+                    </details>
+            </section>
+
+            <!-- Условия использования -->
+            <section id="pricing" class="landing-pricing landing-block">
+                <div class="landing-block-head">
+                    <h2 class="capability-section-title">Условия</h2>
+                    <p class="capability-section-lead section-body">Бесплатно в пределах лимита объектов. Снятие лимита — по запросу.</p>
+                </div>
+                <div class="pricing-section-intro" aria-label="Кратко об условиях">
+                    <span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        <span id="pricingIntroFreeLimit">До 2000 объектов</span> — бесплатно · до <span id="pricingIntroMaxConcurrent">4</span> пользователей одновременно
+                    </span>
+                    <span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        Без онлайн-оплаты на сайте
+                    </span>
+                    <span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        Снятие лимита — по запросу владельцу сервиса
+                    </span>
+                </div>
+                <div id="pricingCards" class="pricing-grid">
+                    <!-- Карточки витрины подставляются с сервера -->
+                </div>
+            </section>
+
+            <section id="faq" class="landing-faq landing-block" aria-labelledby="faq-heading">
+                <div class="landing-block-head">
+                    <h2 id="faq-heading" class="capability-section-title">Частые вопросы</h2>
+                    <p class="capability-section-lead section-body">Коротко о сервисе, данных и лимитах.</p>
+                </div>
+                <details class="faq-item">
+                    <summary>Где хранятся данные и кто к ним имеет доступ?</summary>
+                    <p>Приложение и все данные организаций размещены на наших серверах (сервис volsmap.ru). Доступ имеют пользователи,
+                    которых вы добавили в свою организацию, и администраторы сервиса — только для технической поддержки и обеспечения работы платформы.
+                    Третьим лицам данные не передаются.</p>
+                </details>
+                <details class="faq-item">
+                    <summary>Сколько человек могут работать на карте одновременно?</summary>
+                    <p>По умолчанию не больше 4 активных сессий в одной организации (4 разных учётные записи или 4 открытых входа). Одна учётная запись — одно окно/браузер. Увеличить лимит можно через владельца программы.</p>
+                </details>
+                <details class="faq-item">
+                    <summary>Что считается «объектом» в лимите?</summary>
+                    <p>Узлы, кроссы, муфты, опоры, OLT, сплиттеры, ONU и другие точки на карте, включая коммутаторы внутри узла. Кабели в лимит не входят.</p>
+                </details>
+                <details class="faq-item">
+                    <summary>Нужен ли отдельный API‑ключ карт?</summary>
+                    <p>Да, для отображения карты используется API Яндекс.Карт. Ключ настраивается на стороне сервиса; вам отдельно его получать не нужно — достаточно войти в приложение.</p>
+                </details>
+                <details class="faq-item">
+                    <summary>Можно ли редактировать карту с телефона?</summary>
+                    <p>На узком экране (до 768&nbsp;px) доступен просмотр: поиск, карточки объектов, трассировка. Добавление объектов, кабелей и правка жил — с компьютера или планшета в альбомной ориентации с большей шириной окна.</p>
+                </details>
+                <details class="faq-item">
+                    <summary>Как защищены данные и вход в систему?</summary>
+                    <p>Карты разных организаций изолированы. Вход — по паролю и сессии; защита от ботов и лимит попыток.
+                    Организация может включить 2FA. Подробнее — раскройте «Защита и безопасность» в разделе «О продукте».</p>
+                </details>
+                <details class="faq-item">
+                    <summary>Нужна ли установка программы?</summary>
+                    <p>Нет. Сервис работает в браузере на volsmap.ru — достаточно регистрации и входа. С телефона удобен просмотр; правки карты — с компьютера или широкого экрана.</p>
+                </details>
+                <details class="faq-item">
+                    <summary>Как снять лимит объектов?</summary>
+                    <p>Напишите владельцу программы (e-mail, Telegram или ВКонтакте ниже), укажите название организации и e-mail учётной записи. После согласования лимит снимается для вашей организации.</p>
+                </details>
+            </section>
+
+            <!-- Контакты -->
+            <section id="contacts" class="landing-block">
+                <div class="landing-block-head">
+                    <h2 class="capability-section-title">Связаться с нами</h2>
+                    <p class="capability-section-lead section-body">
+                        Снятие лимита объектов, подключение организации и технические вопросы — напишите владельцу программы.
+                    </p>
+                </div>
+                <div class="contact-cards">
+                    <a class="contact-card" href="mailto:danil.sechin3@gmail.com">
+                        <span class="contact-card-icon" aria-hidden="true">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                        </span>
+                        <span class="contact-card-label">Электронная почта</span>
+                        <span class="contact-card-value">danil.sechin3@gmail.com</span>
+                        <span class="contact-card-hint">Написать письмо</span>
+                    </a>
+                    <a class="contact-card" href="https://vk.com/id591228298" target="_blank" rel="noopener noreferrer">
+                        <span class="contact-card-icon contact-card-icon--vk" aria-hidden="true">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M15.684 0H8.316C1.592 0 0 1.592 0 8.316v7.367C0 22.408 1.592 24 8.316 24h7.368C22.408 24 24 22.408 24 15.684V8.316C24 1.592 22.408 0 15.684 0zm3.692 17.123h-1.744c-.66 0-.864-.525-2.05-1.727-1.033-1.01-1.49-1.135-1.744-1.135-.356 0-.458.102-.458.593v1.578c0 .424-.135.678-1.253.678-1.846 0-3.897-1.118-5.336-3.203C4.233 10.857 3.017 8.39 3.017 8.004c0-.254.102-.491.593-.491h1.744c.44 0 .61.203.78.678.847 2.49 2.303 4.675 2.896 4.675.22 0 .322-.102.322-.66V9.721c-.069-1.186-.695-1.287-.695-1.71 0-.203.17-.407.44-.407h2.744c.373 0 .508.203.508.643v3.473c0 .372.17.508.271.508.22 0 .407-.136.813-.542 1.254-1.422 2.18-3.625 2.18-3.625.119-.254.322-.491.763-.491h1.744c.525 0 .644.271.525.643-.22 1.017-2.354 4.031-2.354 4.031-.186.305-.254.44 0 .78.186.254.796.779 1.203 1.254.745.847 1.32 1.558 1.473 2.05.17.491-.085.745-.576.745z"/>
+                            </svg>
+                        </span>
+                        <span class="contact-card-label">ВКонтакте</span>
+                        <span class="contact-card-value">vk.com/id591228298</span>
+                        <span class="contact-card-hint">Открыть профиль</span>
+                    </a>
+                    <a class="contact-card" href="https://t.me/Dan11lSech1n" target="_blank" rel="noopener noreferrer">
+                        <span class="contact-card-icon" aria-hidden="true">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                        </span>
+                        <span class="contact-card-label">Telegram</span>
+                        <span class="contact-card-value">@Dan11lSech1n</span>
+                        <span class="contact-card-hint">Написать в Telegram</span>
+                    </a>
+                </div>
+            </section>
+
+            <div class="landing-cta-band" role="region" aria-label="Попробовать сервис">
+                <div>
+                    <h2>Готовы перенести сеть на карту?</h2>
+                    <p>Бесплатная карта с лимитом объектов. Без установки, данные на наших серверах.</p>
+                </div>
+                <div class="landing-cta-band-actions">
+                    <button type="button" class="btn-primary-hero" id="footerRegisterCtaBtn" onclick="window.location.href='auth.html?register=1'">
+                        Зарегистрироваться
+                    </button>
+                    <button type="button" class="btn-outline" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">
+                        Условия
+                    </button>
+                </div>
+            </div>
+
+            <!-- Футер -->
+            <footer class="landing-footer">
+                <div>© 2024–2026 «Карта оптической сети». Все права защищены.</div>
+                <nav class="landing-footer-nav" aria-label="Нижняя навигация">
+                    <a href="#home">Главная</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="#capabilities">Возможности</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="#how">Как начать</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="#about">О продукте</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="#pricing">Условия</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="news.html">Новости</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="#faq">Вопросы</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="#contacts">Контакты</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="auth.html">Войти</a>
+                </nav>
+            </footer>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        var toggleBtn = document.getElementById('landingThemeToggle');
+        function setTheme(theme) {
+            var t = (theme === 'dark') ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', t);
+            try {
+                localStorage.setItem('networkMap_landingTheme', t);
+                localStorage.setItem('networkMap_theme', t);
+            } catch (e) {}
+            if (!toggleBtn) return;
+            if (t === 'dark') {
+                toggleBtn.innerHTML = '<span aria-hidden="true">☀️</span>';
+                toggleBtn.setAttribute('aria-label', 'Включить светлую тему');
+                toggleBtn.setAttribute('title', 'Светлая тема');
+            } else {
+                toggleBtn.innerHTML = '<span aria-hidden="true">🌙</span>';
+                toggleBtn.setAttribute('aria-label', 'Включить тёмную тему');
+                toggleBtn.setAttribute('title', 'Тёмная тема');
+            }
+        }
+        var initialTheme = document.documentElement.getAttribute('data-theme') || 'light';
+        setTheme(initialTheme);
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', function() {
+                var current = document.documentElement.getAttribute('data-theme') || 'light';
+                setTheme(current === 'dark' ? 'light' : 'dark');
+            });
+        }
+    })();
+    </script>
+    <script>
+    (function() {
+        var navLinks = document.querySelectorAll('.landing-nav-menu a[href^="#"]');
+        var sections = [];
+        navLinks.forEach(function(link) {
+            var id = (link.getAttribute('href') || '').slice(1);
+            var el = id ? document.getElementById(id) : null;
+            if (el) sections.push({ link: link, el: el });
+        });
+        function updateActiveNav() {
+            if (!sections.length) return;
+            var offset = 110;
+            var scrollY = window.scrollY || window.pageYOffset || 0;
+            var current = sections[0];
+            sections.forEach(function(s) {
+                if (s.el.offsetTop - offset <= scrollY) current = s;
+            });
+            navLinks.forEach(function(a) { a.classList.remove('is-active'); });
+            if (current && current.link) current.link.classList.add('is-active');
+        }
+        window.addEventListener('scroll', updateActiveNav, { passive: true });
+        updateActiveNav();
+    })();
+    </script>
+    <script>
+    (function() {
+        var HERO_STATS_REFRESH_MS = 5 * 60 * 1000;
+        var statIds = ['heroStatOrgs', 'heroStatUsers', 'heroStatNodes'];
+
+        function formatHeroStat(n) {
+            var x = Math.max(0, Math.floor(Number(n) || 0));
+            return String(x).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+        }
+
+        function setStatsLoading(loading) {
+            statIds.forEach(function(id) {
+                var el = document.getElementById(id);
+                if (el) el.classList.toggle('is-loading', loading);
+            });
+        }
+
+        function loadHeroStats() {
+            setStatsLoading(true);
+            var base = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : '';
+            var url = base + '/api/public-stats?_=' + Date.now();
+            return fetch(url, { cache: 'no-store' })
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(d) {
+                    if (!d) return;
+                    var o = document.getElementById('heroStatOrgs');
+                    var u = document.getElementById('heroStatUsers');
+                    var m = document.getElementById('heroStatNodes');
+                    if (o) o.textContent = formatHeroStat(d.organizationCount);
+                    if (u) u.textContent = formatHeroStat(d.userAccountCount);
+                    if (m) m.textContent = formatHeroStat(d.mapObjectCount);
+                })
+                .catch(function() {})
+                .finally(function() { setStatsLoading(false); });
+        }
+
+        loadHeroStats();
+        setInterval(loadHeroStats, HERO_STATS_REFRESH_MS);
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible') loadHeroStats();
+        });
+        window.addEventListener('focus', loadHeroStats);
+    })();
+    </script>
+    <script>
+    (function() {
+        function parseLocalDateStart(s) {
+            if (!s) return NaN;
+            var p = String(s).slice(0, 10).split('-');
+            if (p.length !== 3) return new Date(s).getTime();
+            return new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10), 0, 0, 0, 0).getTime();
+        }
+        function parseLocalDateEnd(s) {
+            if (!s) return NaN;
+            var p = String(s).slice(0, 10).split('-');
+            if (p.length !== 3) return new Date(s).getTime();
+            return new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10), 23, 59, 59, 999).getTime();
+        }
+        function promoPercentValue(p) {
+            var v = p && p.promoPercent;
+            if (typeof v === 'number' && !isNaN(v)) return v;
+            var f = parseFloat(v, 10);
+            return isNaN(f) ? 0 : f;
+        }
+        function trimDatePart(v) {
+            if (v == null || v === '') return '';
+            var s = String(v).trim();
+            if (!s) return '';
+            return s.length >= 10 ? s.slice(0, 10) : s;
+        }
+        function formatPricingMetaLine(p) {
+            var text = (p.maxUsersText && String(p.maxUsersText).trim()) ? String(p.maxUsersText).trim() : '';
+            if (text) return text;
+            var mcu = p.maxConcurrentUsers;
+            if (mcu === undefined || mcu === null || mcu === '') return '';
+            var n = typeof mcu === 'number' ? mcu : parseFloat(mcu);
+            if (isNaN(n)) return '';
+            if (n === -1) return 'Неограниченное число одновременных пользователей';
+            return 'До ' + n + ' одновременных пользователей';
+        }
+        function isLandingPromoActive(p) {
+            var pct = promoPercentValue(p);
+            if (pct <= 0) return false;
+            var rs = trimDatePart(p.promoStartsAt);
+            var re = trimDatePart(p.promoEndsAt);
+            var now = Date.now();
+            // Только процент без дат — показываем акцию (данные из админки до введения дат и т.п.)
+            if (!rs && !re) return true;
+            var st = rs ? parseLocalDateStart(rs) : -Infinity;
+            var en = re ? parseLocalDateEnd(re) : Infinity;
+            if (isNaN(st)) st = -Infinity;
+            if (isNaN(en)) en = Infinity;
+            return now >= st && now <= en;
+        }
+
+        function attachHandlers() {
+            document.querySelectorAll('.pricing-cta-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var plan = this.getAttribute('data-plan') || 'unlock';
+                    var kind = this.getAttribute('data-kind') || 'unlock';
+                    if (kind === 'free') {
+                        window.location.href = 'auth.html?register=1';
+                        return;
+                    }
+                    if (kind === 'contact' || kind === 'unlock') {
+                        window.location.hash = '#contacts';
+                        var contactsEl = document.getElementById('contacts');
+                        if (contactsEl) contactsEl.scrollIntoView({ behavior: 'smooth' });
+                        return;
+                    }
+                    window.location.hash = '#contacts';
+                });
+            });
+        }
+
+        function renderFreePricingCard(container, freeLimit, maxConcurrent, freeCard) {
+            maxConcurrent = maxConcurrent != null ? maxConcurrent : 4;
+            freeCard = freeCard && typeof freeCard === 'object' ? freeCard : {};
+            var title = (freeCard.title && String(freeCard.title).trim()) ? String(freeCard.title).trim() : 'Бесплатно';
+            var short = (freeCard.short != null) ? String(freeCard.short) : 'Полный функционал карты в пределах лимита объектов';
+            var price = (freeCard.price && String(freeCard.price).trim()) ? String(freeCard.price).trim() : '0 ₽';
+            var period = (freeCard.period != null) ? String(freeCard.period) : 'навсегда';
+            var cta = (freeCard.ctaText && String(freeCard.ctaText).trim()) ? String(freeCard.ctaText).trim() : 'Создать организацию';
+            var meta = (freeCard.metaLine && String(freeCard.metaLine).trim())
+                ? String(freeCard.metaLine).trim()
+                : ('До ' + freeLimit + ' объектов на карте · до ' + maxConcurrent + ' пользователей одновременно');
+            var card = document.createElement('div');
+            card.className = 'pricing-card';
+            card.innerHTML =
+                '<div class="pricing-card-head"><div>' +
+                    '<div class="pricing-name">' + title + '</div>' +
+                    '<div class="pricing-short">' + short + '</div>' +
+                '</div></div>' +
+                '<div class="pricing-price-row">' +
+                    '<div class="pricing-price">' + price + '</div>' +
+                    (period ? '<div class="pricing-period">' + period + '</div>' : '') +
+                '</div>' +
+                '<div class="pricing-meta">' + meta + '</div>' +
+                '<button class="pricing-cta-btn" data-plan="free" data-kind="free">' + cta + '</button>';
+            container.appendChild(card);
+        }
+
+        function initPricingCardsNetwork() {
+            var cards = document.querySelectorAll('.pricing-card');
+            if (!cards.length) return;
+            cards.forEach(function(card, idx) {
+                var old = card.querySelector('.pricing-card-network');
+                if (old) old.remove();
+                var canvas = document.createElement('canvas');
+                canvas.className = 'pricing-card-network';
+                card.insertBefore(canvas, card.firstChild);
+                var ctx = canvas.getContext('2d');
+                if (!ctx) return;
+                var nodes = [];
+                var nodeCount = 10 + (idx % 3);
+                var maxDistBase = 92 + (idx % 2) * 12;
+                var phase = Math.random() * Math.PI * 2;
+
+                function resize() {
+                    var rect = card.getBoundingClientRect();
+                    var w = Math.max(10, Math.floor(rect.width));
+                    var h = Math.max(10, Math.floor(rect.height));
+                    if (canvas.width !== w || canvas.height !== h) {
+                        canvas.width = w;
+                        canvas.height = h;
+                        if (!nodes.length) {
+                            for (var i = 0; i < nodeCount; i++) {
+                                nodes.push({
+                                    x: Math.random() * w,
+                                    y: Math.random() * h,
+                                    vx: (Math.random() - 0.5) * 0.35,
+                                    vy: (Math.random() - 0.5) * 0.35,
+                                    r: 1.3 + Math.random() * 1.1
+                                });
+                            }
+                        }
+                    }
+                }
+
+                function frame(now) {
+                    resize();
+                    var w = canvas.width, h = canvas.height;
+                    ctx.clearRect(0, 0, w, h);
+                    var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+                    var lineBase = dark ? '125,211,252' : '37,99,235';
+                    var dotBase = dark ? '186,230,253' : '59,130,246';
+                    var maxDist = maxDistBase + Math.sin((now / 1000) + phase) * 14;
+
+                    for (var i = 0; i < nodes.length; i++) {
+                        var a = nodes[i];
+                        a.x += a.vx;
+                        a.y += a.vy;
+                        if (a.x < 0 || a.x > w) a.vx *= -1;
+                        if (a.y < 0 || a.y > h) a.vy *= -1;
+                        a.x = Math.max(0, Math.min(w, a.x));
+                        a.y = Math.max(0, Math.min(h, a.y));
+                    }
+
+                    for (var ii = 0; ii < nodes.length; ii++) {
+                        for (var jj = ii + 1; jj < nodes.length; jj++) {
+                            var n1 = nodes[ii], n2 = nodes[jj];
+                            var dx = n2.x - n1.x, dy = n2.y - n1.y;
+                            var d = Math.sqrt(dx * dx + dy * dy);
+                            if (d < maxDist) {
+                                var alpha = (1 - d / maxDist) * (dark ? 0.33 : 0.26);
+                                ctx.beginPath();
+                                ctx.moveTo(n1.x, n1.y);
+                                ctx.lineTo(n2.x, n2.y);
+                                ctx.strokeStyle = 'rgba(' + lineBase + ',' + alpha.toFixed(3) + ')';
+                                ctx.lineWidth = 0.85;
+                                ctx.stroke();
+                            }
+                        }
+                    }
+
+                    for (var k = 0; k < nodes.length; k++) {
+                        var n = nodes[k];
+                        ctx.beginPath();
+                        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+                        ctx.fillStyle = 'rgba(' + dotBase + ',' + (dark ? 0.75 : 0.65) + ')';
+                        ctx.fill();
+                    }
+                    requestAnimationFrame(frame);
+                }
+                requestAnimationFrame(frame);
+            });
+        }
+
+        fetch((typeof window !== 'undefined' && window.location && window.location.origin ? window.location.origin : '') + '/api/pricing')
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(body) {
+                var container = document.getElementById('pricingCards');
+                if (!container) return;
+                container.innerHTML = '';
+                var plans = body && Array.isArray(body.plans) ? body.plans : [];
+                var freeLimit = body && body.freeMapObjectLimit != null ? body.freeMapObjectLimit : 2000;
+                var maxConc = body && body.defaultMaxConcurrentUsers != null ? body.defaultMaxConcurrentUsers : 4;
+                var heroLim = document.getElementById('heroFreeLimit');
+                var introLim = document.getElementById('pricingIntroFreeLimit');
+                var introMc = document.getElementById('pricingIntroMaxConcurrent');
+                if (heroLim) heroLim.textContent = String(freeLimit);
+                if (introLim) introLim.textContent = 'До ' + freeLimit + ' объектов';
+                if (introMc) introMc.textContent = String(maxConc);
+                var heroMc = document.getElementById('heroMaxConcurrent');
+                if (heroMc) heroMc.textContent = String(maxConc);
+                renderFreePricingCard(container, freeLimit, maxConc, body && body.freeCard);
+                if (!plans.length) {
+                    attachHandlers();
+                    initPricingCardsNetwork();
+                    return;
+                }
+                plans.forEach(function(p) {
+                    if (String(p.kind || '').toLowerCase() === 'trial') return;
+                    var promoOn = isLandingPromoActive(p);
+                    var pct = promoPercentValue(p);
+                    var endCaption = '';
+                    if (promoOn && p.promoEndsAt) {
+                        var endT = parseLocalDateEnd(p.promoEndsAt);
+                        if (!isNaN(endT)) {
+                            endCaption = 'Акция до ' + new Date(endT).toLocaleDateString('ru-RU');
+                        }
+                    }
+                    var oldPrice = (p.priceBeforePromo && String(p.priceBeforePromo).trim()) ? String(p.priceBeforePromo).trim() : '';
+                    var priceRowHtml = '';
+                    if (promoOn && oldPrice) {
+                        priceRowHtml =
+                            '<span class="pricing-price-old">' + oldPrice + '</span>' +
+                            '<div class="pricing-price">' + (p.price || '') + '</div>' +
+                            '<div class="pricing-period">' + (p.period || '') + '</div>';
+                    } else {
+                        priceRowHtml =
+                            '<div class="pricing-price">' + (p.price || '') + '</div>' +
+                            '<div class="pricing-period">' + (p.period || '') + '</div>';
+                    }
+                    var card = document.createElement('div');
+                    card.className = 'pricing-card' + (p.highlighted ? ' pro' : '');
+                    var ribbonHtml = (promoOn && pct > 0)
+                        ? '<div class="pricing-ribbon-wrap" aria-hidden="true"><span>−' + Math.round(pct) + '%</span></div>'
+                        : '';
+                    card.innerHTML =
+                        ribbonHtml +
+                        '<div class="pricing-card-head">' +
+                            '<div>' +
+                                '<div class="pricing-name">' + (p.title || p.id || 'Вариант') + '</div>' +
+                                '<div class="pricing-short">' + (p.short || '') + '</div>' +
+                            '</div>' +
+                        '</div>' +
+                        (promoOn && endCaption ? '<div class="pricing-promo-caption">' + endCaption + '</div>' : '') +
+                        '<div class="pricing-price-row">' + priceRowHtml + '</div>' +
+                        '<div class="pricing-meta">' + formatPricingMetaLine(p) + '</div>' +
+                        '<button class="pricing-cta-btn" data-plan="' + (p.id || '') + '" data-kind="' + (p.kind === 'unlock' ? 'contact' : (p.kind || 'contact')) + '">' +
+                            (p.ctaText || 'Выбрать') +
+                            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+                                '<line x1="5" y1="12" x2="19" y2="12"></line>' +
+                                '<polyline points="12 5 19 12 12 19"></polyline>' +
+                            '</svg>' +
+                        '</button>';
+                    container.appendChild(card);
+                });
+                attachHandlers();
+                initPricingCardsNetwork();
+            })
+            .catch(function() {});
+    })();
+    </script>
+    <script src="js/landing-nav.js"></script>
+    <script src="js/core/page-bg-plexus.js"></script>
+    <script src="js/core/cookie-consent.js"></script>
+    <script src="js/core/maintenance-notice.js"></script>
+    <script src="js/support-chat.js"></script>
+</body>
+</html>
+
+
