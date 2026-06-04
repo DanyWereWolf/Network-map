@@ -2779,7 +2779,7 @@ function getLocalIPs() {
     return ips;
 }
 
-function onServerListenError(err) {
+server.on('error', function(err) {
     if (err && err.code === 'EADDRINUSE') {
         console.error('[ОШИБКА] Порт ' + PORT + ' уже занят. Остановите старый процесс:');
         console.error('  systemctl stop <имя-сервиса>  или  fuser -k ' + PORT + '/tcp');
@@ -2788,10 +2788,7 @@ function onServerListenError(err) {
         console.error('[ОШИБКА] Не удалось запустить HTTP-сервер:', err && err.message ? err.message : err);
     }
     process.exit(1);
-}
-
-server.on('error', onServerListenError);
-wss.on('error', onServerListenError);
+});
 
 server.listen(PORT, HOST, () => {
     console.log('Приложение и API:');
