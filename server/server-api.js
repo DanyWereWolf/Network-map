@@ -13,6 +13,8 @@ const chatMedia = require('./chat-media');
 const newsMedia = require('./news-media');
 const security = require('./lib/security');
 const supportBot = require('./lib/support-bot');
+const nodeMonitor = require('./lib/node-monitor');
+const zabbixClient = require('./lib/zabbix-client');
 
 function loadServerConfig() {
     let config = {};
@@ -400,7 +402,43 @@ app.post('/api/map', (req, res) => {
             });
         }
         db.setMapData(orgId, data);
+        nodeMonitor.notifyMapSaved(orgId);
         res.json({ ok: true, mapLimits: getMapObjectLimitPayload(orgId) });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.get('/api/node-monitor/status', function(req, res) {
+    try {
+        var user = getSessionUser(req);
+        if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+        if (isGlobalAdmin(user)) return res.status(403).json({ error: 'Недоступно для главного администратора' });
+        var orgId = user.organizationId;
+        if (!orgId) return res.status(403).json({ error: 'Укажите организацию' });
+        res.json(nodeMonitor.getStatusPayload(orgId));
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/node-monitor/refresh', function(req, res) {
+    try {
+        var user = getSessionUser(req);
+        if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+        if (isGlobalAdmin(user)) return res.status(403).json({ error: 'Недоступно для главного администратора' });
+        var orgId = user.organizationId;
+        if (!orgId) return res.status(403).json({ error: 'Укажите организацию' });
+        var ip = getClientIp(req);
+        var rl = security.checkRateLimit('node-monitor-refresh:' + orgId + ':' + ip, { windowMs: 60000, maxAttempts: 6 });
+        if (!rl.ok) {
+            return res.status(429).json({ error: 'Слишком много запросов. Подождите.', retryAfterSec: rl.retryAfterSec });
+        }
+        nodeMonitor.runOrgCheck(orgId).then(function() {
+            res.json(nodeMonitor.getStatusPayload(orgId));
+        }).catch(function(e) {
+            res.status(500).json({ error: String(e.message) });
+        });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
     }
@@ -1286,6 +1324,66 @@ app.post('/api/organizations/me/security/2fa/disable', (req, res) => {
     res.json({ ok: true, twoFactorEnabled: false });
 });
 
+app.get('/api/organizations/me/zabbix', (req, res) => {
+    try {
+        var user = getSessionUser(req);
+        if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+        if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+        if (!user.organizationId) return res.status(403).json({ error: 'Нет привязки к организации' });
+        res.json(db.getZabbixConfigPublic(user.organizationId));
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.put('/api/organizations/me/zabbix', (req, res) => {
+    try {
+        var user = getSessionUser(req);
+        if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+        if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+        if (!user.organizationId) return res.status(403).json({ error: 'Нет привязки к организации' });
+        var body = req.body || {};
+        var patch = {};
+        if (body.enabled !== undefined) patch.enabled = !!body.enabled;
+        if (body.url !== undefined) patch.url = String(body.url || '').trim();
+        if (body.hostGroup !== undefined) patch.hostGroup = String(body.hostGroup || '').trim();
+        if (body.apiToken !== undefined) {
+            patch.apiToken = String(body.apiToken || '').trim();
+            if (!patch.apiToken) patch.clearToken = true;
+        }
+        db.setZabbixConfig(user.organizationId, patch);
+        nodeMonitor.invalidateOrgZabbix(user.organizationId);
+        res.json({ ok: true, config: db.getZabbixConfigPublic(user.organizationId) });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/organizations/me/zabbix/test', (req, res) => {
+    try {
+        var user = getSessionUser(req);
+        if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+        if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+        if (!user.organizationId) return res.status(403).json({ error: 'Нет привязки к организации' });
+        var body = req.body || {};
+        var stored = db.getZabbixConfigForMonitor(user.organizationId);
+        var url = body.url != null ? String(body.url).trim() : (stored && stored.url);
+        var token = body.apiToken != null && String(body.apiToken).trim()
+            ? String(body.apiToken).trim()
+            : (stored && stored.apiToken);
+        if (!url || !token) {
+            return res.status(400).json({ error: 'Укажите URL Zabbix и API-токен' });
+        }
+        zabbixClient.testConnection({ url: url, apiToken: token }).then(function(r) {
+            res.json({ ok: true, version: r.version });
+        }).catch(function(e) {
+            res.status(400).json({ error: String(e.message || e) });
+        });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
 app.get('/api/users', (req, res) => {
     const user = getSessionUser(req);
     if (!user || user.role !== 'admin') return res.status(403).json({ error: 'Доступ только для администратора' });
@@ -2107,7 +2205,10 @@ function scheduleMapDbSave(orgId) {
         mapDbSaveTimersByOrg[orgId] = null;
         try {
             var state = syncCurrentStateByOrg[orgId];
-            if (state && state.data) db.setMapData(orgId, state.data);
+            if (state && state.data) {
+                db.setMapData(orgId, state.data);
+                nodeMonitor.notifyMapSaved(orgId);
+            }
         } catch (e) {}
     }, MAP_DB_SAVE_DEBOUNCE_MS);
 }
@@ -2120,7 +2221,10 @@ function flushMapDbSave(orgId) {
     }
     try {
         var state = syncCurrentStateByOrg[orgId];
-        if (state && state.data) db.setMapData(orgId, state.data);
+        if (state && state.data) {
+            db.setMapData(orgId, state.data);
+            nodeMonitor.notifyMapSaved(orgId);
+        }
     } catch (e) {}
 }
 
@@ -2794,6 +2898,12 @@ server.on('error', onServerListenError);
 wss.on('error', onServerListenError);
 
 server.listen(PORT, HOST, () => {
+    nodeMonitor.startScheduler(serverConfig);
+    if (serverConfig.nodeMonitor && serverConfig.nodeMonitor.enabled === false) {
+        console.log('Мониторинг узлов (ping): отключён в server-config.json');
+    } else {
+        console.log('Мониторинг узлов (ping): включён, интервал ' + (serverConfig.nodeMonitor && serverConfig.nodeMonitor.intervalSec || 60) + ' с');
+    }
     console.log('Приложение и API:');
     console.log('  Локально:    http://localhost:' + PORT);
     const ips = getLocalIPs();

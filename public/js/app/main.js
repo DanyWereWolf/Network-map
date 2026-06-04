@@ -1951,6 +1951,7 @@ function openUsersModal() {
     modal.style.display = 'block';
     renderUsersList();
     loadOrgSecurityPanel();
+    loadOrgZabbixPanel();
 }
 
 var orgSecurityPendingSecret = '';
@@ -1977,6 +1978,107 @@ function loadOrgSecurityPanel() {
         renderOrgSecurityPanel(!!body.twoFactorEnabled);
     }).catch(function(e) {
         if (statusEl) statusEl.textContent = e.message || 'Не удалось загрузить настройки';
+    });
+}
+
+function loadOrgZabbixPanel() {
+    var section = document.getElementById('orgZabbixSection');
+    if (!section) return;
+    if (!isOrgMapAdmin() || !getApiBase()) {
+        section.style.display = 'none';
+        return;
+    }
+    section.style.display = 'block';
+    var statusEl = document.getElementById('orgZabbixStatus');
+    if (statusEl) statusEl.textContent = 'Загрузка…';
+    fetch(getApiBase() + '/api/organizations/me/zabbix', {
+        headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+    }).then(function(r) { return r.json(); })
+    .then(function(body) {
+        if (body.error) throw new Error(body.error);
+        renderOrgZabbixPanel(body);
+    }).catch(function(e) {
+        if (statusEl) statusEl.textContent = e.message || 'Не удалось загрузить настройки Zabbix';
+    });
+}
+
+function renderOrgZabbixPanel(cfg) {
+    cfg = cfg || {};
+    var statusEl = document.getElementById('orgZabbixStatus');
+    var en = document.getElementById('orgZabbixEnabled');
+    var urlEl = document.getElementById('orgZabbixUrl');
+    var tokEl = document.getElementById('orgZabbixToken');
+    var hintEl = document.getElementById('orgZabbixTokenHint');
+    if (en) en.checked = !!cfg.enabled;
+    if (urlEl) urlEl.value = cfg.url || '';
+    if (tokEl) tokEl.value = '';
+    if (hintEl) {
+        hintEl.textContent = cfg.tokenSet
+            ? 'Токен сохранён. Введите новый только для замены.'
+            : 'Укажите API-токен (Zabbix → Пользователи → API tokens).';
+    }
+    if (statusEl) {
+        var parts = [];
+        if (cfg.enabled && cfg.configured) {
+            parts.push('Zabbix подключён — узлы с IP/именем хоста проверяются через Zabbix API.');
+            if (cfg.lastOkAt) parts.push('Последняя успешная проверка: ' + cfg.lastOkAt);
+        } else if (cfg.enabled) {
+            parts.push('Zabbix включён, но не настроен: укажите URL и токен.');
+        } else {
+            parts.push('Zabbix выключен — для узлов используется ping с сервера приложения (если доступен).');
+        }
+        if (cfg.lastError) parts.push('Ошибка: ' + cfg.lastError);
+        statusEl.textContent = parts.join(' ');
+        statusEl.className = 'org-zabbix-status' + (cfg.enabled && cfg.configured ? ' is-on' : '');
+    }
+}
+
+function saveOrgZabbixConfig() {
+    if (!getApiBase()) return;
+    var body = {
+        enabled: !!(document.getElementById('orgZabbixEnabled') && document.getElementById('orgZabbixEnabled').checked),
+        url: (document.getElementById('orgZabbixUrl') && document.getElementById('orgZabbixUrl').value) || ''
+    };
+    var tok = document.getElementById('orgZabbixToken') && document.getElementById('orgZabbixToken').value;
+    if (tok && String(tok).trim()) body.apiToken = String(tok).trim();
+    fetch(getApiBase() + '/api/organizations/me/zabbix', {
+        method: 'PUT',
+        headers: { 'Authorization': 'Bearer ' + getAuthToken(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    }).then(function(r) { return r.json().then(function(b) { return { ok: r.ok, body: b }; }); })
+    .then(function(res) {
+        if (!res.ok) throw new Error((res.body && res.body.error) || 'Ошибка сохранения');
+        renderOrgZabbixPanel(res.body.config || {});
+        if (typeof showSuccess === 'function') showSuccess('Настройки Zabbix сохранены');
+        if (window.NodeMonitor && NodeMonitor.requestRefresh) NodeMonitor.requestRefresh();
+    }).catch(function(e) {
+        if (typeof showError === 'function') showError(e.message || 'Не удалось сохранить');
+    });
+}
+
+function testOrgZabbixConnection() {
+    if (!getApiBase()) return;
+    var body = {
+        url: (document.getElementById('orgZabbixUrl') && document.getElementById('orgZabbixUrl').value) || ''
+    };
+    var tok = document.getElementById('orgZabbixToken') && document.getElementById('orgZabbixToken').value;
+    if (tok && String(tok).trim()) body.apiToken = String(tok).trim();
+    var btn = document.getElementById('orgZabbixTestBtn');
+    if (btn) btn.disabled = true;
+    fetch(getApiBase() + '/api/organizations/me/zabbix/test', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + getAuthToken(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    }).then(function(r) { return r.json().then(function(b) { return { ok: r.ok, body: b }; }); })
+    .then(function(res) {
+        if (!res.ok) throw new Error((res.body && res.body.error) || 'Ошибка');
+        if (typeof showSuccess === 'function') {
+            showSuccess('Подключение успешно' + (res.body.version ? ' (Zabbix ' + res.body.version + ')' : ''));
+        }
+    }).catch(function(e) {
+        if (typeof showError === 'function') showError(e.message || 'Не удалось подключиться');
+    }).finally(function() {
+        if (btn) btn.disabled = false;
     });
 }
 
@@ -2627,6 +2729,11 @@ function setupUsersModalHandlers() {
     if (org2faDisableBtn) org2faDisableBtn.addEventListener('click', disableOrg2fa);
     var org2faConfirmDisableBtn = document.getElementById('org2faConfirmDisableBtn');
     if (org2faConfirmDisableBtn) org2faConfirmDisableBtn.addEventListener('click', confirmDisableOrg2fa);
+    var orgZabbixSaveBtn = document.getElementById('orgZabbixSaveBtn');
+    if (orgZabbixSaveBtn) orgZabbixSaveBtn.addEventListener('click', saveOrgZabbixConfig);
+    var orgZabbixTestBtn = document.getElementById('orgZabbixTestBtn');
+    if (orgZabbixTestBtn) orgZabbixTestBtn.addEventListener('click', testOrgZabbixConnection);
+
     var org2faCopySecretBtn = document.getElementById('org2faCopySecretBtn');
     if (org2faCopySecretBtn) {
         org2faCopySecretBtn.addEventListener('click', function() {
@@ -7696,6 +7803,10 @@ function buildNodeCardContent(obj, isEditMode, name) {
     var html = '';
     var nodeKind = obj.properties.get('nodeKind') || 'network';
     var comment = obj.properties.get('comment') || '';
+    var monitorIp = (obj.properties.get('monitorIp') || '').trim();
+    var monitorZabbixHost = (obj.properties.get('monitorZabbixHost') || '').trim();
+    var monitorZabbixHostId = (obj.properties.get('monitorZabbixHostId') || '').trim();
+    var monitorEnabled = obj.properties.get('monitorEnabled') !== false;
     var nodeKindLabel = nodeKind === 'aggregation' ? 'Узел агрегации' : 'Узел сети';
     var attachedList = getNodeAttachedSwitches(obj);
     var swSummary = getNodeSwitchesSummary(obj);
@@ -7717,6 +7828,11 @@ function buildNodeCardContent(obj, isEditMode, name) {
         html += '<div class="node-card-view-meta"><span class="node-kind-pill node-kind-pill--' + (nodeKind === 'aggregation' ? 'aggregation' : 'network') + '">' + escapeHtml(nodeKindLabel) + '</span></div>';
         if (comment) {
             html += '<div class="node-card-comment">' + escapeHtml(comment) + '</div>';
+        }
+        if (window.NodeMonitor && NodeMonitor.isMonitoringConfigured(obj)) {
+            html += '<div class="node-card-monitor-row">' + NodeMonitor.buildStatusBadgeHtml(obj) + '</div>';
+        } else if (monitorIp) {
+            html += '<div class="node-card-monitor-row"><span class="object-card-hint">Мониторинг отключён</span></div>';
         }
     } else {
         html += '<div class="node-card-view-name">' + escapeHtml(name || 'Новый узел') + '</div>';
@@ -7743,6 +7859,36 @@ function buildNodeCardContent(obj, isEditMode, name) {
         html += '</select></div></div>';
         html += '<div class="form-group" style="margin-top:12px;margin-bottom:0;"><label for="editNodeComment" class="object-card-label">Комментарий</label>';
         html += '<textarea id="editNodeComment" class="form-input" rows="2" placeholder="Необязательно">' + escapeHtml(comment) + '</textarea></div>';
+        html += '</section>';
+
+        html += '<section class="object-card-section object-card-section--monitor">';
+        html += '<h4 class="object-card-section-title">Доступность</h4>';
+        html += '<p class="object-card-hint node-card-monitor-hint" id="nodeCardMonitorProviderHint">При включённом Zabbix в настройках организации статус берётся из Zabbix. Иначе — ping с сервера приложения.</p>';
+        html += '<div class="node-card-fields-grid">';
+        html += '<div class="form-group"><label for="editNodeMonitorIp" class="object-card-label">IP (сопоставление с Zabbix)</label>';
+        html += '<input type="text" id="editNodeMonitorIp" class="form-input" value="' + escapeHtml(monitorIp) + '" placeholder="192.168.1.1" autocomplete="off" spellcheck="false"></div>';
+        html += '<div class="form-group"><label for="editNodeMonitorZabbixHost" class="object-card-label">Имя хоста в Zabbix</label>';
+        html += '<input type="text" id="editNodeMonitorZabbixHost" class="form-input" value="' + escapeHtml(monitorZabbixHost) + '" placeholder="switch-node-01" autocomplete="off" spellcheck="false"></div>';
+        html += '<div class="form-group"><label for="editNodeMonitorZabbixHostId" class="object-card-label">Host ID (необяз.)</label>';
+        html += '<input type="text" id="editNodeMonitorZabbixHostId" class="form-input" value="' + escapeHtml(monitorZabbixHostId) + '" placeholder="10451" inputmode="numeric" autocomplete="off"></div>';
+        html += '<div class="form-group"><label class="object-card-label object-card-label--checkbox"><input type="checkbox" id="editNodeMonitorEnabled"' + (monitorEnabled ? ' checked' : '') + ((monitorIp || monitorZabbixHost || monitorZabbixHostId) ? '' : ' disabled') + '> Включить мониторинг</label></div>';
+        html += '</div>';
+        html += '<div class="node-card-monitor-row" id="nodeCardMonitorStatus">';
+        if (window.NodeMonitor && NodeMonitor.isMonitoringConfigured(obj)) {
+            html += NodeMonitor.buildStatusBadgeHtml(obj);
+        }
+        var canRefreshMon = monitorEnabled && (monitorIp || monitorZabbixHost || monitorZabbixHostId);
+        html += '<button type="button" class="btn-secondary btn-sm" id="btnNodeMonitorRefresh"' + (canRefreshMon ? '' : ' disabled') + '>Проверить сейчас</button>';
+        html += '</div></section>';
+    } else if (monitorIp || monitorZabbixHost || monitorZabbixHostId) {
+        html += '<section class="object-card-section object-card-section--monitor">';
+        html += '<h4 class="object-card-section-title">Доступность</h4>';
+        html += '<p class="object-card-hint">IP: <strong>' + escapeHtml(monitorIp) + '</strong>';
+        if (!monitorEnabled) html += ' · мониторинг выключен';
+        html += '</p>';
+        if (window.NodeMonitor && NodeMonitor.isMonitoringConfigured(obj)) {
+            html += '<div class="node-card-monitor-row">' + NodeMonitor.buildStatusBadgeHtml(obj) + '</div>';
+        }
         html += '</section>';
     }
 
@@ -10567,6 +10713,13 @@ function serializeMapItemFromObject(obj) {
         if (props.type === 'node') {
             if (props.nodeKind) result.nodeKind = props.nodeKind;
             if (props.comment) result.comment = props.comment;
+            var monIp = props.monitorIp != null ? String(props.monitorIp).trim() : '';
+            if (monIp) result.monitorIp = monIp;
+            if (props.monitorEnabled === false) result.monitorEnabled = false;
+            var zHost = props.monitorZabbixHost != null ? String(props.monitorZabbixHost).trim() : '';
+            if (zHost) result.monitorZabbixHost = zHost;
+            var zHostId = props.monitorZabbixHostId != null ? String(props.monitorZabbixHostId).trim() : '';
+            if (zHostId) result.monitorZabbixHostId = zHostId;
             var attSw = props.attachedSwitches;
             if (Array.isArray(attSw) && attSw.length) result.attachedSwitches = JSON.parse(JSON.stringify(attSw));
         }
@@ -10594,6 +10747,9 @@ function saveData(opts) {
     var data = getSerializedData();
     lastSavedState = JSON.parse(JSON.stringify(data));
     if (!(opts && opts.skipSync) && !inUndoRedo) pushSaveDataToSync(opts || {});
+    if (!(opts && opts.skipSync) && window.NodeMonitor && NodeMonitor.scheduleRefreshAfterSave) {
+        NodeMonitor.scheduleRefreshAfterSave();
+    }
     if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
 }
 
@@ -11431,6 +11587,7 @@ function importDataPostProcess(opts) {
     if (migrateNodeLevelSwitchMetaToAttached() && !(opts && opts.skipSave)) saveData();
     rebuildAllCopperPortUsageFromCables();
     if (window.CameraPlayer && CameraPlayer.startStreamMonitor) CameraPlayer.startStreamMonitor();
+    if (window.NodeMonitor && NodeMonitor.onMapLoaded) NodeMonitor.onMapLoaded();
     if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
     if (window.MapRegions && MapRegions.sendAllRegionsToMapBack && myMap) {
         MapRegions.sendAllRegionsToMapBack(myMap, objects);
@@ -11556,6 +11713,19 @@ function populatePlacemarkFromSerializedData(placemark, data) {
     if (type === 'node') {
         placemark.properties.set('nodeKind', data.nodeKind || 'network');
         if (data.comment) placemark.properties.set('comment', data.comment);
+        else placemark.properties.unset('comment');
+        var impMonIp = data.monitorIp != null ? String(data.monitorIp).trim() : '';
+        if (impMonIp) placemark.properties.set('monitorIp', impMonIp);
+        else placemark.properties.unset('monitorIp');
+        if (data.monitorEnabled === false) placemark.properties.set('monitorEnabled', false);
+        else placemark.properties.unset('monitorEnabled');
+        var impZHost = data.monitorZabbixHost != null ? String(data.monitorZabbixHost).trim() : '';
+        if (impZHost) placemark.properties.set('monitorZabbixHost', impZHost);
+        else placemark.properties.unset('monitorZabbixHost');
+        var impZHostId = data.monitorZabbixHostId != null ? String(data.monitorZabbixHostId).trim() : '';
+        if (impZHostId) placemark.properties.set('monitorZabbixHostId', impZHostId);
+        else placemark.properties.unset('monitorZabbixHostId');
+        placemark.properties.unset('pingLive');
         if (Array.isArray(data.attachedSwitches) && data.attachedSwitches.length) {
             placemark.properties.set('attachedSwitches', JSON.parse(JSON.stringify(data.attachedSwitches)));
         } else {
@@ -12858,14 +13028,84 @@ function setupEditAndDeleteListeners() {
             });
             modalRoot.addEventListener('change', function(e) {
                 var t = e.target;
-                if (!t || t.id !== 'newNodeSwitchModel') return;
-                var mfrH = document.getElementById('newNodeSwitchManufacturer');
-                var pcEl = document.getElementById('newNodeSwitchPortCount');
-                var mfr = mfrH ? (mfrH.value || '').trim() : '';
-                var mod = (t.value || '').trim();
-                var n = typeof getSwitchModelDefaultPortCount === 'function' ? getSwitchModelDefaultPortCount(mfr, mod) : null;
-                if (n != null && n >= 1 && n <= 96 && pcEl) pcEl.value = String(n);
+                if (!t || !t.id) return;
+                if (t.id === 'newNodeSwitchModel') {
+                    var mfrH = document.getElementById('newNodeSwitchManufacturer');
+                    var pcEl = document.getElementById('newNodeSwitchPortCount');
+                    var mfr = mfrH ? (mfrH.value || '').trim() : '';
+                    var mod = (t.value || '').trim();
+                    var n = typeof getSwitchModelDefaultPortCount === 'function' ? getSwitchModelDefaultPortCount(mfr, mod) : null;
+                    if (n != null && n >= 1 && n <= 96 && pcEl) pcEl.value = String(n);
+                    return;
+                }
+                var coMon = currentModalObject;
+                if (!coMon || !coMon.properties || coMon.properties.get('type') !== 'node') return;
+                function syncNodeMonitorEnableUi(co) {
+                    var ipV = (co.properties.get('monitorIp') || '').trim();
+                    var hV = (co.properties.get('monitorZabbixHost') || '').trim();
+                    var idV = (co.properties.get('monitorZabbixHostId') || '').trim();
+                    var hasTarget = !!(ipV || hV || idV);
+                    var enChk = document.getElementById('editNodeMonitorEnabled');
+                    if (enChk) enChk.disabled = !hasTarget;
+                    var refBtn = document.getElementById('btnNodeMonitorRefresh');
+                    if (refBtn) refBtn.disabled = !hasTarget || (enChk && !enChk.checked);
+                }
+                if (t.id === 'editNodeMonitorIp') {
+                    var ipCh = (t.value || '').trim().slice(0, 253);
+                    t.value = ipCh;
+                    if (ipCh) coMon.properties.set('monitorIp', ipCh);
+                    else coMon.properties.unset('monitorIp');
+                    coMon.properties.unset('pingLive');
+                    syncNodeMonitorEnableUi(coMon);
+                    saveData();
+                    refreshNodeMapPresentation(coMon);
+                    if (window.NodeMonitor) NodeMonitor.scheduleRefreshAfterSave();
+                    return;
+                }
+                if (t.id === 'editNodeMonitorZabbixHost') {
+                    var zh = (t.value || '').trim().slice(0, 128);
+                    t.value = zh;
+                    if (zh) coMon.properties.set('monitorZabbixHost', zh);
+                    else coMon.properties.unset('monitorZabbixHost');
+                    coMon.properties.unset('pingLive');
+                    syncNodeMonitorEnableUi(coMon);
+                    saveData();
+                    refreshNodeMapPresentation(coMon);
+                    if (window.NodeMonitor) NodeMonitor.scheduleRefreshAfterSave();
+                    return;
+                }
+                if (t.id === 'editNodeMonitorZabbixHostId') {
+                    var zid = (t.value || '').trim().slice(0, 32);
+                    t.value = zid;
+                    if (zid) coMon.properties.set('monitorZabbixHostId', zid);
+                    else coMon.properties.unset('monitorZabbixHostId');
+                    coMon.properties.unset('pingLive');
+                    syncNodeMonitorEnableUi(coMon);
+                    saveData();
+                    refreshNodeMapPresentation(coMon);
+                    if (window.NodeMonitor) NodeMonitor.scheduleRefreshAfterSave();
+                    return;
+                }
+                if (t.id === 'editNodeMonitorEnabled') {
+                    if (t.checked) coMon.properties.unset('monitorEnabled');
+                    else coMon.properties.set('monitorEnabled', false);
+                    coMon.properties.unset('pingLive');
+                    syncNodeMonitorEnableUi(coMon);
+                    saveData();
+                    refreshNodeMapPresentation(coMon);
+                    if (window.NodeMonitor) NodeMonitor.scheduleRefreshAfterSave();
+                }
             }, true);
+            modalRoot.addEventListener('click', function(e) {
+                var btn = e.target && e.target.closest ? e.target.closest('#btnNodeMonitorRefresh') : null;
+                if (!btn || btn.disabled) return;
+                if (!window.NodeMonitor || !NodeMonitor.requestRefresh) return;
+                btn.disabled = true;
+                NodeMonitor.requestRefresh().finally(function() {
+                    btn.disabled = false;
+                    if (currentModalObject) refreshNodeMapPresentation(currentModalObject);
+                });
+            });
         }
     }
 
@@ -13467,8 +13707,38 @@ function getObjectLabelHtml(type, displayName, placemark) {
             CameraPlayer.getCameraStatusTitle(placemark)
         );
     }
+    if (type === 'node' && window.NodeMonitor && placemark) {
+        return NodeMonitor.buildMapLabelHtml(displayName, placemark);
+    }
     return '<div class="map-label">' + displayName + '</div>';
 }
+
+function refreshNodeMapPresentation(nodeObj) {
+    if (!nodeObj || !nodeObj.properties || nodeObj.properties.get('type') !== 'node') return;
+    var variant = 'normal';
+    if (selectedObjects.indexOf(nodeObj) >= 0 && !isEditMode) variant = 'selected';
+    if (hoveredObject === nodeObj) variant = 'hover';
+    applyMapPlacemarkIcon(nodeObj, 'node', variant, nodeObj);
+    updateObjectLabel(nodeObj, nodeObj.properties.get('name'));
+    if (typeof refreshMapPlacemarkIcons === 'function' &&
+        currentModalObject === nodeObj &&
+        typeof isInfoModalVisible === 'function' &&
+        isInfoModalVisible(document.getElementById('infoModal'))) {
+        var modalBody = document.getElementById('modalInfo');
+        if (modalBody && window.NodeMonitor) {
+            modalBody.querySelectorAll('.node-status-badge').forEach(function(badge) {
+                var online = NodeMonitor.isNodeOnline(nodeObj);
+                var offline = NodeMonitor.isNodeOffline(nodeObj);
+                var cls = online ? 'online' : (offline ? 'offline' : 'pending');
+                badge.className = 'node-status-badge node-status-badge--' + cls;
+                badge.title = NodeMonitor.getNodeStatusTitle(nodeObj);
+                var text = badge.querySelector('.node-status-badge-text');
+                if (text) text.textContent = NodeMonitor.getNodeStatusLabel(nodeObj);
+            });
+        }
+    }
+}
+window.refreshNodeMapPresentation = refreshNodeMapPresentation;
 
 function refreshCameraMapPresentation(cameraObj) {
     if (!cameraObj || !cameraObj.properties || cameraObj.properties.get('type') !== 'camera') return;
