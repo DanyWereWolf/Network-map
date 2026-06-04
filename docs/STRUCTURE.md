@@ -21,7 +21,7 @@ Network-map/
 │   │   ├── auth.css
 │   │   ├── landing.css, landing-header.css, pages-mobile.css
 │   │   ├── news.css, site-admin.css
-│   │   ├── cookie-consent.css, maintenance-notice.css, early-access-notice.css
+│   │   ├── cookie-consent.css, maintenance-notice.css
 │   │   └── support-chat.css
 │   ├── icons/                      # PNG/SVG для UI
 │   └── js/

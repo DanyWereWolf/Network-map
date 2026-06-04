@@ -97,7 +97,7 @@
     z-index: 10000;
     width: min(380px, calc(100vw - 32px));
     height: min(72dvh, 620px);
-    max-height: calc(100dvh - 100px - var(--early-access-notice-offset, 0px) - var(--maintenance-notice-offset, 0px));
+    max-height: calc(100dvh - 100px - var(--maintenance-notice-offset, 0px));
     display: none;
     flex-direction: column;
     border-radius: 16px;
@@ -605,7 +605,7 @@
         bottom: 0;
         width: 100%;
         max-width: none;
-        height: min(88dvh, calc(100dvh - var(--early-access-notice-offset, 0px) - var(--maintenance-notice-offset, 0px)));
+        height: min(88dvh, calc(100dvh - var(--maintenance-notice-offset, 0px)));
         max-height: none;
         border-radius: 16px 16px 0 0;
         margin: 0 auto;
@@ -648,7 +648,7 @@
         z-index: 9999;
         width: 100%;
         max-width: none;
-        height: min(92dvh, calc(100dvh - var(--early-access-notice-offset, 0px) - var(--maintenance-notice-offset, 0px)));
+        height: min(92dvh, calc(100dvh - var(--maintenance-notice-offset, 0px)));
         max-height: none;
         border-radius: 16px 16px 0 0;
         border-left: none;

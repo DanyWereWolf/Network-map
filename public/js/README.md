@@ -23,7 +23,6 @@
 | **updates.js** | Проверка обновлений с GitHub |
 | **cookie-consent.js** | Баннер cookies |
 | **maintenance-notice.js** | Техработы (с API) |
-| **early-access-notice.js** | Ранний доступ |
 | **page-bg-plexus.js** | Фон на auth/лендинге |
 
 ## Карта (`map/`)
