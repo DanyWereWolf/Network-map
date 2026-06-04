@@ -43,7 +43,6 @@
         'js/org-chat.js',
         'js/core/cookie-consent.js',
         'js/core/maintenance-notice.js',
-        'js/core/early-access-notice.js',
         'js/core/page-bg-plexus.js',
         'js/ui/modal-glass.js'
     ];
