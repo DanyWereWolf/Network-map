@@ -63,8 +63,12 @@
         var maxLat = Math.max(b[0][0], b[1][0]);
         var minLon = Math.min(b[0][1], b[1][1]);
         var maxLon = Math.max(b[0][1], b[1][1]);
-        var dLat = (maxLat - minLat) * VIEWPORT_BUFFER_RATIO;
-        var dLon = (maxLon - minLon) * VIEWPORT_BUFFER_RATIO;
+        var spanLat = maxLat - minLat;
+        var spanLon = maxLon - minLon;
+        // Пока контейнер карты не размечен (часто на мобильных), bounds вырождаются — не режем все объекты.
+        if (spanLat < 1e-5 && spanLon < 1e-5) return null;
+        var dLat = spanLat * VIEWPORT_BUFFER_RATIO;
+        var dLon = spanLon * VIEWPORT_BUFFER_RATIO;
         return {
             minLat: minLat - dLat,
             maxLat: maxLat + dLat,

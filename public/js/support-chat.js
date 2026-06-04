@@ -2,6 +2,9 @@
  * Виджет: FAQ-бот и переписка с владельцем (главный администратор).
  */
 (function() {
+    var ASSISTANT_NAME = 'Вола';
+    var ASSISTANT_TAGLINE = 'ассистент Volsmap';
+    var ASSISTANT_AVATAR = 'icons/assistant/volsmap-girl.png';
     var VISITOR_KEY = 'networkMap_supportVisitorId';
     var CONTACT_KEY = 'networkMap_supportContact';
     var POLL_BOT_MS = 20000;
@@ -11,6 +14,8 @@
     var statusDot = null;
     var statusText = null;
     var headerTitle = null;
+    var headerSub = null;
+    var headerIdentity = null;
     var quickWrap = null;
     var fabBadge = null;
     var fabWrap = null;
@@ -138,11 +143,24 @@
         var div = document.createElement('div');
         div.className = 'support-chat-msg ' + (from === 'visitor' ? 'visitor' : from === 'admin' ? 'admin' : from === 'system' ? 'system' : 'bot');
         if (msgId) div.setAttribute('data-msg-id', msgId);
-        var label = from === 'admin' ? 'Владелец' : from === 'visitor' ? 'Вы' : from === 'system' ? '' : 'Помощник';
+        var label = from === 'admin' ? 'Владелец' : from === 'visitor' ? 'Вы' : from === 'system' ? '' : ASSISTANT_NAME;
         div.innerHTML = '<div class="support-chat-msg-body">' + escapeHtml(text) + '</div>' +
             (label ? '<div class="support-chat-msg-meta">' + escapeHtml(label) +
             (at ? ' · ' + escapeHtml(formatTime(at)) : '') + '</div>' : '');
-        messagesEl.appendChild(div);
+        if (from === 'bot') {
+            var row = document.createElement('div');
+            row.className = 'support-chat-msg-row support-chat-msg-row--bot';
+            var avatar = document.createElement('img');
+            avatar.className = 'support-chat-msg-avatar';
+            avatar.src = ASSISTANT_AVATAR;
+            avatar.alt = '';
+            avatar.setAttribute('aria-hidden', 'true');
+            row.appendChild(avatar);
+            row.appendChild(div);
+            messagesEl.appendChild(row);
+        } else {
+            messagesEl.appendChild(div);
+        }
         scrollMessages();
         return div;
     }
@@ -154,7 +172,13 @@
     function removeMessageById(msgId) {
         if (!messagesEl || !msgId) return;
         var el = messagesEl.querySelector('[data-msg-id="' + msgId + '"]');
-        if (el && el.parentNode) el.parentNode.removeChild(el);
+        if (!el || !el.parentNode) return;
+        var wrap = el.parentNode;
+        if (wrap.classList && wrap.classList.contains('support-chat-msg-row')) {
+            wrap.parentNode.removeChild(wrap);
+        } else {
+            el.parentNode.removeChild(el);
+        }
     }
 
     function setFabBadge(show) {
@@ -165,7 +189,13 @@
 
     function setPresence(online) {
         adminOnline = !!online;
-        if (statusDot) statusDot.classList.toggle('online', adminOnline);
+        if (statusDot) {
+            if (mode === 'owner') {
+                statusDot.classList.toggle('online', adminOnline);
+            } else {
+                statusDot.classList.add('online');
+            }
+        }
         if (statusText) {
             if (mode === 'owner') {
                 statusText.textContent = adminOnline
@@ -173,8 +203,8 @@
                     : 'Не в сети — ответ появится здесь позже';
             } else {
                 statusText.textContent = adminOnline
-                    ? 'Владелец в сети — вкладка «Владельцу»'
-                    : 'Личное сообщение — вкладка «Владельцу»';
+                    ? 'На связи · личное сообщение — «Владельцу»'
+                    : 'На связи · спрашивайте, я рядом';
             }
         }
     }
@@ -295,11 +325,11 @@
                     appendMessage('bot', res.body.reply, new Date().toISOString());
                     if (res.body.quickReplies) renderQuickReplies(res.body.quickReplies);
                 } else {
-                    appendMessage('bot', (res.body && res.body.error) || 'Не удалось получить ответ.', new Date().toISOString());
+                    appendMessage('bot', (res.body && res.body.error) || 'Не получилось ответить — попробуйте ещё раз.', new Date().toISOString());
                 }
             })
             .catch(function() {
-                appendMessage('bot', 'Сервер недоступен. Попробуйте позже или напишите владельцу.', new Date().toISOString());
+                appendMessage('bot', 'Сейчас не могу связаться с сервером. Попробуйте чуть позже или напишите владельцу на вкладке «Владельцу».', new Date().toISOString());
             })
             .finally(function() {
                 if (sendBtn) sendBtn.disabled = false;
@@ -389,26 +419,34 @@
         if (ownerFields) ownerFields.classList.toggle('is-visible', mode === 'owner');
         var sendBtn = document.getElementById('supportChatSend');
         var input = document.getElementById('supportChatInput');
-        if (sendBtn) sendBtn.textContent = mode === 'owner' ? 'Отправить владельцу' : 'Спросить бота';
-        if (headerTitle) headerTitle.textContent = mode === 'owner' ? 'Сообщение владельцу' : 'Поддержка';
+        if (sendBtn) sendBtn.textContent = mode === 'owner' ? 'Отправить владельцу' : 'Спросить';
+        if (headerTitle) headerTitle.textContent = ASSISTANT_NAME;
+        if (headerSub) {
+            headerSub.textContent = ASSISTANT_TAGLINE;
+            headerSub.hidden = mode === 'owner';
+        }
+        if (headerIdentity) headerIdentity.hidden = mode === 'owner';
+        var ownerHeaderTitle = document.getElementById('supportChatOwnerTitle');
+        if (ownerHeaderTitle) ownerHeaderTitle.hidden = mode !== 'owner';
         if (input) {
             input.placeholder = mode === 'owner'
                 ? 'Опишите вопрос, предложение или проблему…'
-                : 'Спросите бота о сервисе…';
+                : 'Спросите меня о сервисе…';
         }
         var hint = document.getElementById('supportChatHint');
         if (hint) {
             hint.textContent = mode === 'owner'
                 ? 'E-mail — если нужен ответ на почту.'
-                : (ownerModeEnabled ? 'Бот — частые вопросы. Личное сообщение — «Владельцу».' : 'Бот — частые вопросы по сервису.');
+                : (ownerModeEnabled ? 'Я отвечу на частые вопросы. Личное сообщение — вкладка «Владельцу».' : 'Я отвечу на частые вопросы по сервису.');
         }
         if (mode === 'owner') {
             prefillContactFields();
             panel.classList.add('support-chat-panel--owner');
+            renderQuickReplies([]);
             syncThread(true).then(function() { showOwnerEmptyHint(); });
         } else {
             panel.classList.remove('support-chat-panel--owner');
-            renderQuickReplies(['Что такое ранний доступ?', 'Как зарегистрироваться?', 'Лимит объектов']);
+            renderQuickReplies(['Что такое ранний доступ?', 'Как зарегистрироваться?', 'Лимит объектов', 'Возможности карты']);
         }
         setPresence(adminOnline);
         resetPollInterval();
@@ -449,8 +487,8 @@
         fab.type = 'button';
         fab.id = 'supportChatFab';
         fab.className = 'support-chat-fab';
-        fab.title = 'Чат и поддержка';
-        fab.setAttribute('aria-label', 'Открыть чат поддержки');
+        fab.title = 'Чат с ' + ASSISTANT_NAME;
+        fab.setAttribute('aria-label', 'Открыть чат с ' + ASSISTANT_NAME);
         fab.innerHTML =
             '<span class="support-chat-fab-badge" id="supportChatFabBadge" hidden aria-label="Новый ответ"></span>' +
             '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>';
@@ -479,13 +517,20 @@
         panel.id = 'supportChatPanel';
         panel.className = 'support-chat-panel';
         panel.setAttribute('role', 'dialog');
-        panel.setAttribute('aria-label', 'Чат поддержки');
+        panel.setAttribute('aria-label', 'Чат с ' + ASSISTANT_NAME);
         panel.setAttribute('aria-hidden', 'true');
 
         panel.innerHTML =
             '<div class="support-chat-header">' +
                 '<div class="support-chat-header-row">' +
-                    '<h3 id="supportChatHeaderTitle">Поддержка</h3>' +
+                    '<div class="support-chat-header-identity" id="supportChatHeaderIdentity">' +
+                        '<img class="support-chat-header-avatar" src="' + ASSISTANT_AVATAR + '" alt="">' +
+                        '<div class="support-chat-header-titles">' +
+                            '<h3 id="supportChatHeaderTitle">' + ASSISTANT_NAME + '</h3>' +
+                            '<p class="support-chat-header-sub" id="supportChatHeaderSub">' + ASSISTANT_TAGLINE + '</p>' +
+                        '</div>' +
+                    '</div>' +
+                    '<h3 class="support-chat-header-owner-title" id="supportChatOwnerTitle" hidden>Сообщение владельцу</h3>' +
                     '<button type="button" class="support-chat-close" id="supportChatClose" aria-label="Закрыть чат">×</button>' +
                 '</div>' +
                 '<div class="support-chat-status">' +
@@ -499,7 +544,7 @@
             '</div>' +
             '<div class="support-chat-compose">' +
                 '<div class="support-chat-mode-tabs">' +
-                    '<button type="button" data-mode="bot" class="active">Бот</button>' +
+                    '<button type="button" data-mode="bot" class="active">' + ASSISTANT_NAME + '</button>' +
                     (ownerModeEnabled ? '<button type="button" data-mode="owner">Владельцу</button>' : '') +
                 '</div>' +
                 (ownerModeEnabled
@@ -510,8 +555,8 @@
                         '</div>' +
                     '</div>'
                     : '') +
-                '<textarea id="supportChatInput" rows="2" placeholder="Спросите бота о сервисе…" maxlength="4000"></textarea>' +
-                '<button type="button" class="support-chat-send" id="supportChatSend">Спросить бота</button>' +
+                '<textarea id="supportChatInput" rows="2" placeholder="Спросите меня о сервисе…" maxlength="4000"></textarea>' +
+                '<button type="button" class="support-chat-send" id="supportChatSend">Спросить</button>' +
                 '<p class="support-chat-hint" id="supportChatHint"></p>' +
             '</div>';
 
@@ -523,6 +568,8 @@
         statusDot = document.getElementById('supportChatStatusDot');
         statusText = document.getElementById('supportChatStatusText');
         headerTitle = document.getElementById('supportChatHeaderTitle');
+        headerSub = document.getElementById('supportChatHeaderSub');
+        headerIdentity = document.getElementById('supportChatHeaderIdentity');
         quickWrap = document.getElementById('supportChatQuick');
         fabBadge = document.getElementById('supportChatFabBadge');
 
@@ -557,13 +604,13 @@
         if (!botWelcomeShown) {
             appendMessage('bot',
                 ownerModeEnabled
-                    ? 'Здравствуйте! Я отвечу на частые вопросы о «Карте оптической сети». Для личного сообщения разработчику — вкладка «Владельцу».'
-                    : 'Здравствуйте! Я отвечу на частые вопросы о «Карте оптической сети».',
+                    ? 'Здравствуйте! Я ' + ASSISTANT_NAME + ', ассистент Volsmap — с радостью подскажу про регистрацию, лимиты, объекты на карте и совместную работу. Если нужен личный ответ от разработчика — вкладка «Владельцу».'
+                    : 'Здравствуйте! Я ' + ASSISTANT_NAME + ', ассистент Volsmap — расскажу про регистрацию, лимиты и возможности карты.',
                 new Date().toISOString()
             );
             botWelcomeShown = true;
         }
-        renderQuickReplies(['Что такое ранний доступ?', 'Как зарегистрироваться?', 'Лимит объектов']);
+        renderQuickReplies(['Что такое ранний доступ?', 'Как зарегистрироваться?', 'Лимит объектов', 'Возможности карты']);
         setMode('bot', { skipFocus: true });
         fetchPresence();
         syncThread(false).then(function() {

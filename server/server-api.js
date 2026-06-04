@@ -4,6 +4,9 @@ const path = require('path');
 const os = require('os');
 const cors = require('cors');
 const WebSocket = require('ws');
+const ROOT_DIR = path.join(__dirname, '..');
+const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
+const DATA_DIR = path.join(ROOT_DIR, 'data');
 const db = require('./database');
 const avatars = require('./avatars');
 const chatMedia = require('./chat-media');
@@ -14,7 +17,7 @@ const supportBot = require('./lib/support-bot');
 function loadServerConfig() {
     let config = {};
     try {
-        const configPath = path.join(__dirname, 'server-config.json');
+        const configPath = path.join(ROOT_DIR, 'server-config.json');
         if (require('fs').existsSync(configPath)) {
             config = JSON.parse(require('fs').readFileSync(configPath, 'utf8'));
         }
@@ -788,7 +791,8 @@ app.post('/api/support/bot', (req, res) => {
         res.json({
             reply: result.answer,
             matched: result.matched,
-            quickReplies: supportBot.getQuickReplies()
+            topicId: result.topicId || null,
+            quickReplies: result.quickReplies || supportBot.getQuickReplies()
         });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
@@ -2034,7 +2038,7 @@ app.get('/api/public-stats', (req, res) => {
 // Лицевая страница по умолчанию — условия (pricing.html)
 app.get('/', (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
-    res.sendFile(path.join(__dirname, 'pricing.html'));
+    res.sendFile(path.join(PUBLIC_DIR, 'pricing.html'));
 });
 
 app.get('/pricing.html', (req, res) => {
@@ -2049,11 +2053,11 @@ app.get('/updates.html', (req, res) => {
 app.get('/favicon.ico', (req, res) => {
     res.type('image/svg+xml');
     res.setHeader('Cache-Control', 'public, max-age=86400');
-    res.sendFile(path.join(__dirname, 'favicon.svg'));
+    res.sendFile(path.join(PUBLIC_DIR, 'favicon.svg'));
 });
 
 // Раздача JS с явным Content-Type (избегаем text/html от прокси/404)
-app.use('/js', express.static(path.join(__dirname, 'js'), {
+app.use('/js', express.static(path.join(PUBLIC_DIR, 'js'), {
     setHeaders: function (res, filePath) {
         if (filePath && String(filePath).endsWith('.js')) {
             res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
@@ -2061,7 +2065,7 @@ app.use('/js', express.static(path.join(__dirname, 'js'), {
     }
 }));
 
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(PUBLIC_DIR));
 
 db.getDb();
 db.initDefaultAdmin();
@@ -2795,9 +2799,9 @@ server.listen(PORT, HOST, () => {
         console.log('  На других устройствах откройте адрес «В сети» в браузере.');
     }
     console.log('Синхронизация: ws://...:' + PORT + '/sync (в одном процессе с API)');
-    console.log('Данные: ' + path.join(__dirname, 'data', 'store.json'));
+    console.log('Данные: ' + path.join(DATA_DIR, 'store.json'));
     if (db.createDailyBackup) console.log('Резервные копии: ежедневно в data/backups/, хранятся 30 дней.');
-    if (!require('fs').existsSync(path.join(__dirname, 'server-config.json'))) {
-        console.log('Настройки: порт/хост можно задать в server-config.json (скопируйте из server-config.example.json).');
+    if (!require('fs').existsSync(path.join(ROOT_DIR, 'server-config.json'))) {
+        console.log('Настройки: порт/хост — в server-config.json в корне (шаблон: server/config/server-config.example.json).');
     }
 });

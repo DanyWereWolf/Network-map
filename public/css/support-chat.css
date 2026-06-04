@@ -129,7 +129,7 @@
     display: flex;
 }
 
-.support-chat-panel--owner .support-chat-msg.bot {
+.support-chat-panel--owner .support-chat-msg-row--bot {
     display: none;
 }
 
@@ -150,6 +150,45 @@
     justify-content: space-between;
     gap: 8px;
     margin-bottom: 2px;
+}
+
+.support-chat-header-identity {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.support-chat-header-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    object-position: top center;
+    border: 2px solid rgba(255, 255, 255, 0.55);
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.support-chat-header-titles {
+    min-width: 0;
+}
+
+.support-chat-header-sub {
+    margin: 1px 0 0;
+    font-size: 0.72rem;
+    font-weight: 400;
+    opacity: 0.9;
+    line-height: 1.2;
+}
+
+.support-chat-header-owner-title {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .support-chat-header h3 {
@@ -234,6 +273,35 @@
     white-space: pre-wrap;
 }
 
+.support-chat-msg-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    max-width: 100%;
+}
+
+.support-chat-msg-row--bot {
+    align-self: flex-start;
+    max-width: 96%;
+}
+
+.support-chat-msg-row--bot .support-chat-msg.bot {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+}
+
+.support-chat-msg-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    object-position: top center;
+    flex-shrink: 0;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+}
+
 .support-chat-msg.bot {
     align-self: flex-start;
     background: #fff;
@@ -287,6 +355,10 @@
 .support-chat-msg.admin .support-chat-msg-meta {
     color: #047857;
     opacity: 0.85;
+}
+
+.support-chat-panel--owner .support-chat-quick {
+    display: none !important;
 }
 
 .support-chat-quick {
@@ -472,6 +544,11 @@
     background: #1e293b;
     border-color: #334155;
     color: #e2e8f0;
+}
+
+[data-theme="dark"] .support-chat-msg-avatar {
+    border-color: #475569;
+    background: #1e293b;
 }
 
 [data-theme="dark"] .support-chat-msg.admin {

@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const AVATARS_DIR = path.join(__dirname, 'data', 'avatars');
+const AVATARS_DIR = path.join(__dirname, '..', 'data', 'avatars');
 const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 const AVATAR_EXTS = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
 

@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const MEDIA_ROOT = path.join(__dirname, 'data', 'chat-media');
+const MEDIA_ROOT = path.join(__dirname, '..', 'data', 'chat-media');
 const STICKER_MAX_BYTES = 2 * 1024 * 1024;
 const GIF_MAX_BYTES = 8 * 1024 * 1024;
 const FILE_MAX_BYTES = 15 * 1024 * 1024;

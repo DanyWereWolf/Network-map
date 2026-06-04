@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const MEDIA_ROOT = path.join(__dirname, 'data', 'news-media');
+const MEDIA_ROOT = path.join(__dirname, '..', 'data', 'news-media');
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 const VIDEO_MAX_BYTES = 80 * 1024 * 1024;
 const FILE_MAX_BYTES = 20 * 1024 * 1024;
