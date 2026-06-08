@@ -62,11 +62,76 @@
 .updates-post-meta {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
+    align-items: flex-start;
+    justify-content: space-between;
     gap: 10px 14px;
     margin-bottom: 10px;
     font-size: 0.875rem;
     color: #64748b;
+}
+.updates-post-meta-main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 14px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+.updates-post-share {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    margin-left: auto;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    background: rgba(248, 250, 252, 0.9);
+    color: #475569;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.updates-post-share:hover {
+    background: rgba(37, 99, 235, 0.08);
+    border-color: rgba(37, 99, 235, 0.35);
+    color: #1d4ed8;
+}
+.updates-post-share:focus-visible {
+    outline: 2px solid rgba(37, 99, 235, 0.45);
+    outline-offset: 2px;
+}
+.updates-post-share:disabled {
+    opacity: 0.85;
+    cursor: default;
+}
+[data-theme="dark"] .updates-post-share {
+    background: rgba(15, 23, 42, 0.55);
+    border-color: rgba(71, 85, 105, 0.55);
+    color: #cbd5e1;
+}
+[data-theme="dark"] .updates-post-share:hover {
+    background: rgba(96, 165, 250, 0.12);
+    border-color: rgba(96, 165, 250, 0.35);
+    color: #93c5fd;
+}
+.updates-post--highlight {
+    animation: updates-post-highlight 2.2s ease-out;
+}
+@keyframes updates-post-highlight {
+    0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.35); }
+    35% { box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.18); }
+    100% { box-shadow: 0 12px 40px rgba(15, 23, 42, 0.06); }
+}
+[data-theme="dark"] .updates-post--highlight {
+    animation-name: updates-post-highlight-dark;
+}
+@keyframes updates-post-highlight-dark {
+    0% { box-shadow: 0 0 0 0 rgba(96, 165, 250, 0.35); }
+    35% { box-shadow: 0 0 0 6px rgba(96, 165, 250, 0.18); }
+    100% { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2); }
 }
 [data-theme="dark"] .updates-post-meta {
     color: #94a3b8;
