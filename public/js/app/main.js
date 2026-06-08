@@ -6901,9 +6901,43 @@ function getOltAtHostCableEnd(hostObj, cableId) {
     return {
         oltId: otherEnd.properties.get('uniqueId'),
         oltName: otherEnd.properties.get('name') || 'OLT',
-        incoming: true,
-        viaPhysicalCable: true
+        viaPhysicalCable: true,
+        physicalCableOnly: true
     };
+}
+
+/** Реальное назначение OLT на жиле (PON-порт, приход, наследование через сращение) — не «просто кабель к OLT». */
+function getFiberOltRealAssignment(hostObj, cableId, fiberNumber, skipSpliceInherit) {
+    if (!hostObj) return null;
+    var direct = getHostFiberMapEntry(hostObj, 'oltConnections', cableId, fiberNumber);
+    if (direct) return direct;
+    var key = fiberConnKey(cableId, fiberNumber);
+    for (var i = 0; i < objects.length; i++) {
+        var obj = objects[i];
+        if (!obj.properties || obj.properties.get('type') !== 'olt') continue;
+        var uid = getObjectUniqueId(obj);
+        var incoming = obj.properties.get('incomingFiber');
+        if (incoming && fiberConnKey(incoming.cableId, incoming.fiberNumber) === key) {
+            return { oltId: uid, oltName: obj.properties.get('name') || 'OLT', incoming: true };
+        }
+        var pa = obj.properties.get('portAssignments') || {};
+        for (var pk in pa) {
+            var a = pa[pk];
+            if (a && fiberConnKey(a.cableId, a.fiberNumber) === key) {
+                return { oltId: uid, oltName: obj.properties.get('name') || 'OLT', portNumber: parseInt(pk, 10), incoming: false };
+            }
+        }
+    }
+    if (!skipSpliceInherit) {
+        var group = getSplicedFiberGroup(hostObj, cableId, fiberNumber);
+        for (var gi = 0; gi < group.length; gi++) {
+            var g = group[gi];
+            if (g.cableId === cableId && g.fiberNumber === fiberNumber) continue;
+            var inh = getFiberOltRealAssignment(hostObj, g.cableId, g.fiberNumber, true);
+            if (inh) return inh;
+        }
+    }
+    return null;
 }
 
 /** OLT на жиле: явное назначение в муфте/кроссе или через сращённую жилу / кабель от OLT. */
@@ -6923,6 +6957,25 @@ function isFiberOltAssignmentDirect(hostObj, cableId, fiberNumber) {
     if (!hostObj || !hostObj.properties) return false;
     var map = hostObj.properties.get('oltConnections') || {};
     return !!map[fiberConnKey(cableId, fiberNumber)];
+}
+
+function getHostFiberMapEntry(hostObj, propName, cableId, fiberNumber) {
+    if (!hostObj || !hostObj.properties) return null;
+    var map = hostObj.properties.get(propName) || {};
+    return map[fiberConnKey(cableId, fiberNumber)] || null;
+}
+
+/** Блокирует сращивание: приход OLT (upstream) или GPON feeder на жиле. PON-порт можно назначить заранее — сращивание не блокируется. */
+function isFiberOltSpliceBlocked(hostObj, cableId, fiberNumber) {
+    if (!hostObj) return false;
+    var assign = getFiberOltRealAssignment(hostObj, cableId, fiberNumber);
+    if (assign && assign.incoming) return true;
+    var key = fiberConnKey(cableId, fiberNumber);
+    var oltMap = hostObj.properties.get('oltConnections') || {};
+    var onuMap = hostObj.properties.get('onuConnections') || {};
+    var spMap = hostObj.properties.get('splitterConnections') || {};
+    if (oltMap[key] && ((onuMap[key] && onuMap[key].onuId) || (spMap[key] && spMap[key].splitterId))) return true;
+    return false;
 }
 
 function isFiberFromOltAtHost(hostObj, cableId, fiberNumber) {
@@ -8065,10 +8118,11 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
                 if (exclude && exclude.type === 'nodeConn' && (exclude.crossId === uid || exclude.sleeveId === uid)) continue;
                 return { used: true, where: 'подключение к узлу' };
             }
-            var oltAss = getFiberOltAssignment(obj, cableId, fiberNumber);
+            var oltAss = getHostAssignment(obj, 'oltConnections', cableId, fiberNumber);
             if (oltAss) {
                 if (exclude && exclude.type === 'splitterInput') continue;
                 if (isGponBranchAssignmentExclude(exclude)) continue;
+                if (exclude && exclude.type === 'fiberConnection') continue;
                 return { used: true, where: 'порт OLT' };
             }
             var onuAss = getHostAssignment(obj, 'onuConnections', cableId, fiberNumber);
@@ -17374,9 +17428,11 @@ function closeNodeSelectionModal() {
 }
 
 function getAvailableOnus() {
-    return objects.filter(obj =>
-        obj.properties && obj.properties.get('type') === 'onu'
-    );
+    return objects.filter(function(obj) {
+        if (!obj.properties || obj.properties.get('type') !== 'onu') return false;
+        var uid = getObjectUniqueId(obj);
+        return !isOnuUsedInNetwork(uid);
+    });
 }
 
 function getAvailableMediaConverters() {
@@ -17400,7 +17456,11 @@ function setFiberTargetSelectionModalMode(mode) {
 function showOnuSelectionDialog(sleeveObj, cableId, fiberNumber) {
     const onus = getAvailableOnus();
     if (onus.length === 0) {
-        showWarning('Нет доступных ONU для подключения. Сначала создайте ONU на карте.', 'Нет ONU');
+        var hasAnyOnu = objects.some(function(o) { return o.properties && o.properties.get('type') === 'onu'; });
+        showWarning(
+            hasAnyOnu ? 'Нет свободных ONU. Все ONU уже подключены к сети — сначала отключите нужное ONU.' : 'Нет доступных ONU для подключения. Сначала создайте ONU на карте.',
+            'Нет ONU'
+        );
         return;
     }
     onuSelectionModalData = { mode: 'onu', sleeveObj: sleeveObj, cableId: cableId, fiberNumber: fiberNumber, targets: onus };
@@ -17863,17 +17923,16 @@ function isOnuUsedInNetwork(onuId) {
             if (onuConn[key] && onuConn[key].onuId === onuId) return true;
         }
     }
+    var onuObj = getMapObjectByUid(onuId, 'onu');
+    if (onuObj && onuObj.properties) {
+        var inc = onuObj.properties.get('incomingFiber');
+        if (inc && inc.cableId) return true;
+    }
     return false;
 }
 
 function getAvailableOnusForSplitterOutput(excludeSplitterId) {
-    return objects.filter(function(o) {
-        if (!o.properties || o.properties.get('type') !== 'onu') return false;
-        var uid = getObjectUniqueId(o);
-        if (isOnuUsedInNetwork(uid)) return false;
-        var inc = o.properties.get('incomingFiber');
-        return !(inc && inc.cableId);
-    });
+    return getAvailableOnus();
 }
 
 function getAvailableSplittersForSplitterOutput(sourceSplitterId) {
@@ -17992,6 +18051,10 @@ function completeSplitterFiberRouting() {
     
     var rootInput = getSplitterRootInputFiber(sp);
     if (data.targetType === 'onu') {
+        if (isOnuUsedInNetwork(data.targetId)) {
+            showError('Это ONU уже подключено к сети. Сначала отключите его от текущей жилы или выхода сплиттера.', 'ONU занято');
+            return;
+        }
         outputs[data.outIdx] = { onuId: data.targetId, routeIds: routeIds };
         if (rootInput && rootInput.cableId && rootInput.fiberNumber != null) {
             data.targetObj.properties.set('incomingFiber', { cableId: rootInput.cableId, fiberNumber: rootInput.fiberNumber });
@@ -18693,6 +18756,10 @@ function disconnectFiberFromOnu(sleeveObj, cableId, fiberNumber) {
 function connectFiberToOnuWithRoute(sleeveObj, cableId, fiberNumber, onuObj, routeIds) {
     const sleeveId = sleeveObj.properties.get('uniqueId');
     const onuId = getObjectUniqueId(onuObj);
+    if (isOnuUsedInNetwork(onuId)) {
+        showError('Это ONU уже подключено к сети. Сначала отключите его от текущей жилы или выхода сплиттера.', 'ONU занято');
+        return;
+    }
     const usage = getFiberUsage(cableId, fiberNumber, { type: 'onuConn', sleeveId: sleeveId, onuId: onuId, atSleeveId: sleeveId });
     if (usage.used) {
         showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
@@ -21923,24 +21990,31 @@ function computeFiberOccupancy(cableUniqueId, fiberNumber, cableData, fiberConne
             (conn.to.cableId === cableUniqueId && conn.to.fiberNumber === fiberNumber);
     });
     const nodeConn = hostObj ? getHostAssignment(hostObj, 'nodeConnections', cableUniqueId, fiberNumber) : (nodeConnections && nodeConnections[fiberKey]);
-    const oltConn = hostObj ? getFiberOltAssignment(hostObj, cableUniqueId, fiberNumber) : (oltConnections && oltConnections[fiberKey]);
+    const realOltAssign = hostObj ? getFiberOltRealAssignment(hostObj, cableUniqueId, fiberNumber) : null;
+    const oltConnDisplay = hostObj ? getFiberOltAssignment(hostObj, cableUniqueId, fiberNumber) : (oltConnections && oltConnections[fiberKey]);
     const onuConn = hostObj ? getHostAssignment(hostObj, 'onuConnections', cableUniqueId, fiberNumber) : (onuConnections && onuConnections[fiberKey]);
     const mcConn = hostObj ? getHostAssignment(hostObj, 'mediaConverterConnections', cableUniqueId, fiberNumber) : (mediaConverterConnections && mediaConverterConnections[fiberKey]);
     const spConn = hostObj ? getHostAssignment(hostObj, 'splitterConnections', cableUniqueId, fiberNumber) : (splitterConnections && splitterConnections[fiberKey]);
     const hasNodeConnection = !!nodeConn;
-    const hasOltConnection = !!oltConn;
+    const hasDirectOltConnection = !!realOltAssign;
+    const hasOltConnection = !!oltConnDisplay;
     const hasOnuConnection = !!onuConn;
     const hasMcConnection = !!(mcConn && mcConn.mediaConverterId);
     const hasSplitterConnection = !!(spConn && spConn.splitterId);
-    const hasAnyOutConnection = hasNodeConnection || hasOltConnection || hasOnuConnection || hasMcConnection || hasSplitterConnection;
-    const isGponFeeder = hasOltConnection && (hasOnuConnection || hasSplitterConnection);
-    const isGponUpstreamOnly = hasOltConnection && !hasOnuConnection && !hasSplitterConnection && !hasNodeConnection && !hasMcConnection;
+    const oltBlocksSplice = hostObj ? isFiberOltSpliceBlocked(hostObj, cableUniqueId, fiberNumber) : !!(realOltAssign && realOltAssign.incoming);
+    const hasAnyOutConnection = hasNodeConnection || hasDirectOltConnection || hasOnuConnection || hasMcConnection || hasSplitterConnection;
+    const isGponFeeder = hasDirectOltConnection && (hasOnuConnection || hasSplitterConnection);
+    const isGponUpstreamOnly = hasDirectOltConnection && !hasOnuConnection && !hasSplitterConnection && !hasNodeConnection && !hasMcConnection;
+    const isOltCableEnd = !!(cableData && cableData.isFromOlt) && !hasDirectOltConnection && !oltBlocksSplice;
     const isOccupied = isUsed || isConnected || hasAnyOutConnection;
     return {
         isUsed: isUsed,
         isConnected: isConnected,
         hasAnyOutConnection: hasAnyOutConnection,
         hasOltConnection: hasOltConnection,
+        hasDirectOltConnection: hasDirectOltConnection,
+        oltBlocksSplice: oltBlocksSplice,
+        isOltCableEnd: isOltCableEnd,
         hasOnuConnection: hasOnuConnection,
         hasSplitterConnection: hasSplitterConnection,
         hasNodeConnection: hasNodeConnection,
@@ -22030,7 +22104,7 @@ function buildFiberWorkspaceSidebarHtml(sleeveObj, isCross, cablesData, fiberCon
         h += '<p>1. Вкладка <strong>Схема</strong> — клик по жиле, затем по жиле другого кабеля.</p>';
         h += '<p>2. Вкладка <strong>Таблица</strong> — то же + кнопки OLT, ONU, узел.</p>';
         h += '<p>3. <strong>Подпись сращения</strong>: клик по жёлтой линии → окно по центру (закрыть ×, фон или Esc); также вкладка <strong>Соединения</strong>.</p>';
-        h += '<p>4. Занятые жилы (красная рамка) нельзя выбрать для сращивания. GPON feeder (синяя рамка) — жила OLT с ответвлением на ONU/сплиттер.</p>';
+        h += '<p>4. Сращивание: клик по жиле одного кабеля, затем по жиле другого. PON-порт (OLT, порт N) можно назначить заранее в карточке OLT — жилу всё равно можно сращивать. Блокирует только <strong>приход OLT</strong> (upstream) и GPON feeder.</p>';
         h += '<p>5. Удаление сращивания — кнопка ✕ в списке соединений.</p>';
         h += '<p>6. Масштаб: ползунок или Ctrl+колёсико в схеме.</p>';
         h += '</div></details>';
@@ -22247,12 +22321,12 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             const isGponUpstreamOnly = occ.isGponUpstreamOnly;
             var nodeAssScheme = getHostAssignment(sleeveObj, 'nodeConnections', cableData.cableUniqueId, fiber.number);
             var mcAssScheme = getHostAssignment(sleeveObj, 'mediaConverterConnections', cableData.cableUniqueId, fiber.number);
-            var oltAssScheme = getFiberOltAssignment(sleeveObj, cableData.cableUniqueId, fiber.number);
+            var oltBlocksSpliceScheme = occ.oltBlocksSplice;
             var onuAssScheme = getHostAssignment(sleeveObj, 'onuConnections', cableData.cableUniqueId, fiber.number);
             var spAssScheme = getHostAssignment(sleeveObj, 'splitterConnections', cableData.cableUniqueId, fiber.number);
-            const isSpliceSelectable = !isUsed && !isConnected && !nodeAssScheme && !(mcAssScheme && mcAssScheme.mediaConverterId) && !oltAssScheme && !onuAssScheme && !(spAssScheme && spAssScheme.splitterId);
+            const isSpliceSelectable = !isUsed && !isConnected && !nodeAssScheme && !(mcAssScheme && mcAssScheme.mediaConverterId) && !oltBlocksSpliceScheme && !onuAssScheme && !(spAssScheme && spAssScheme.splitterId);
             const clickable = isEditMode && isSpliceSelectable ? 'cursor: pointer;' : (!isSpliceSelectable && isOccupied ? 'cursor: not-allowed;' : '');
-            const portClass = 'fiber-scheme-port' + (isGponFeeder ? ' fiber-scheme-port--gpon-feeder' : (isGponUpstreamOnly ? ' fiber-scheme-port--gpon-upstream' : (isOccupied && !isSpliceSelectable ? ' fiber-scheme-port--occupied' : '')));
+            const portClass = 'fiber-scheme-port' + (isGponFeeder ? ' fiber-scheme-port--gpon-feeder' : (oltBlocksSpliceScheme ? ' fiber-scheme-port--gpon-upstream' : (occ.isOltCableEnd ? ' fiber-scheme-port--olt-cable' : (isOccupied && !isSpliceSelectable ? ' fiber-scheme-port--occupied' : ''))));
             const badgeX = isLeft ? pos.x - badgeW / 2 : pos.x - badgeW / 2;
             const badgeY = pos.y - badgeH / 2;
             const circleX = isLeft ? badgeX - nodeR - 2 : badgeX + badgeW + nodeR + 2;
@@ -22270,7 +22344,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             const statusText = isConnected ? ' (соед.)' : (isUsed ? ' (исп.)' : '');
             const labelText = connLabelOnLine ? ' ' + connLabelOnLine : (directLabel ? ' ' + directLabel : '');
             const portText = isCross && fiberPorts && fiberPorts[fiberLabelKey] ? ', порт ' + fiberPorts[fiberLabelKey] : '';
-            const occHint = isGponFeeder ? ' (GPON feeder)' : (isGponUpstreamOnly ? ' (приход OLT)' : (isOccupied ? ' (занята)' : ''));
+            const occHint = isGponFeeder ? ' (GPON feeder)' : (oltBlocksSpliceScheme ? ' (приход OLT)' : (occ.isOltCableEnd ? ' (кабель от OLT)' : (occ.hasDirectOltConnection ? ' (PON)' : (isOccupied ? ' (занята)' : ''))));
             const tooltipText = escapeHtml(fiber.name + labelText + statusText + portText + occHint);
             const textFill = (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00' || fiber.color === '#FFC0CB') ? '#000' : '#fff';
 
@@ -22411,8 +22485,11 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         }) : null;
         const spliceConnLabel = spliceConn ? resolveFiberConnectionLabel(spliceConn, fiberLabels) : '';
         const nodeConnection = getHostAssignment(sleeveObj, 'nodeConnections', cableData.cableUniqueId, fiber.number);
-        const oltConnection = getFiberOltAssignment(sleeveObj, cableData.cableUniqueId, fiber.number);
-        const hasDirectOltConnection = isFiberOltAssignmentDirect(sleeveObj, cableData.cableUniqueId, fiber.number);
+        const realOltAssign = getFiberOltRealAssignment(sleeveObj, cableData.cableUniqueId, fiber.number);
+        const oltConnection = realOltAssign;
+        const hasDirectOltConnection = !!realOltAssign;
+        const isOltCableEnd = occ.isOltCableEnd;
+        const oltOnCableEnd = getOltAtHostCableEnd(sleeveObj, cableData.cableUniqueId);
         const onuConnection = getHostAssignment(sleeveObj, 'onuConnections', cableData.cableUniqueId, fiber.number);
         const mcConnection = getHostAssignment(sleeveObj, 'mediaConverterConnections', cableData.cableUniqueId, fiber.number);
         const splitterConnection = getHostAssignment(sleeveObj, 'splitterConnections', cableData.cableUniqueId, fiber.number);
@@ -22427,16 +22504,17 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         const hasOltConnection = !!oltConnection;
         const hasOnuConnection = !!onuConnection;
         const hasMcConnection = !!mcConnection && !!mcConnection.mediaConverterId;
-        const hasAnyOutConnection = hasNodeConnection || hasOltConnection || hasOnuConnection || hasMcConnection || hasSplitterConnection;
+        const hasAnyOutConnection = occ.hasAnyOutConnection;
         var oltReachKey = (getObjectUniqueId(sleeveObj) || '') + ':' + fiberConnKey(cableData.cableUniqueId, fiber.number);
         if (!Object.prototype.hasOwnProperty.call(oltReachCache, oltReachKey)) {
             oltReachCache[oltReachKey] = isFiberReachableToOlt(sleeveObj, cableData.cableUniqueId, fiber.number);
         }
         const canConnectToOlt = oltReachCache[oltReachKey];
-        const isSpliceSelectable = !isUsed && !isConnected && !hasNodeConnection && !hasMcConnection && !hasOltConnection && !hasOnuConnection && !hasSplitterConnection;
-        const canConnectOltOnFiber = !isConnected && isEditMode && !hasOltConnection && !hasNodeConnection && !hasMcConnection;
-        const hasGponBranchOnly = (hasOnuConnection || hasSplitterConnection) && !hasOltConnection && !canConnectToOlt;
-        const showGponBranchButtons = isEditMode && !isConnected && !hasOnuConnection && !hasSplitterConnection && !hasNodeConnection && !hasMcConnection && (hasOltConnection || canConnectToOlt);
+        const oltBlocksSplice = occ.oltBlocksSplice;
+        const isSpliceSelectable = !isUsed && !isConnected && !hasNodeConnection && !hasMcConnection && !oltBlocksSplice && !hasOnuConnection && !hasSplitterConnection;
+        const canConnectOltOnFiber = !isConnected && isEditMode && !hasDirectOltConnection && !isOltCableEnd && !hasNodeConnection && !hasMcConnection;
+        const hasGponBranchOnly = (hasOnuConnection || hasSplitterConnection) && !hasDirectOltConnection && !canConnectToOlt;
+        const showGponBranchButtons = isEditMode && !isConnected && !hasOnuConnection && !hasSplitterConnection && !hasNodeConnection && !hasMcConnection && (hasDirectOltConnection || (canConnectToOlt && !isOltCableEnd));
         const showFullConnectButtons = canConnectOltOnFiber && !hasAnyOutConnection && !showGponBranchButtons;
         const showOltOnlyButton = canConnectOltOnFiber && hasGponBranchOnly;
         const canConnectGponBranch = !isConnected && canConnectToOlt;
@@ -22444,15 +22522,18 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         const isGponFeeder = occ.isGponFeeder;
         const isGponUpstreamOnly = occ.isGponUpstreamOnly;
         const fiberTextColor = (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00' || fiber.color === '#FFC0CB') ? '#000' : '#fff';
-        let statusText = isUsed ? '(исп.)' : (isGponFeeder ? 'GPON feeder' : (hasNodeConnection ? '(на узел)' : (hasOnuConnection ? '(на ONU)' : (hasMcConnection ? '(на МК)' : (hasSplitterConnection ? '(на сплит.)' : (hasOltConnection ? '(от OLT)' : '(своб.)'))))));
-        if (!isGponFeeder && hasOltConnection && oltConnection.oltId) {
-            const oltObj = objects.find(o => o.properties && o.properties.get('type') === 'olt' && o.properties.get('uniqueId') === oltConnection.oltId);
-            const oltName = oltObj ? (oltObj.properties.get('name') || 'OLT') : 'OLT';
-            statusText = oltConnection.incoming ? ('приход OLT ' + escapeHtml(oltName)) : ('OLT ' + escapeHtml(oltName) + ', порт ' + (oltConnection.portNumber || '?'));
+        let statusText = isUsed ? '(исп.)' : (isGponFeeder ? 'GPON feeder' : (hasNodeConnection ? '(на узел)' : (hasOnuConnection ? '(на ONU)' : (hasMcConnection ? '(на МК)' : (hasSplitterConnection ? '(на сплит.)' : (hasDirectOltConnection ? '(от OLT)' : (isOltCableEnd ? '(→ OLT)' : '(своб.)')))))));
+        if (!isGponFeeder && realOltAssign && realOltAssign.oltId) {
+            const oltObj = objects.find(o => o.properties && o.properties.get('type') === 'olt' && o.properties.get('uniqueId') === realOltAssign.oltId);
+            const oltName = oltObj ? (oltObj.properties.get('name') || 'OLT') : (realOltAssign.oltName || 'OLT');
+            statusText = realOltAssign.incoming ? ('приход OLT ' + escapeHtml(oltName)) : ('OLT ' + escapeHtml(oltName) + ', порт ' + (realOltAssign.portNumber || '?'));
+        } else if (isOltCableEnd && oltOnCableEnd) {
+            const oltNameEnd = oltOnCableEnd.oltName || 'OLT';
+            statusText = '→ OLT ' + escapeHtml(oltNameEnd);
         }
         if (isGponFeeder) {
             const parts = [];
-            if (hasOltConnection && oltConnection.oltId) {
+            if (hasDirectOltConnection && oltConnection && oltConnection.oltId) {
                 const oltObjG = objects.find(o => o.properties && o.properties.get('type') === 'olt' && o.properties.get('uniqueId') === oltConnection.oltId);
                 const oltNameG = oltObjG ? (oltObjG.properties.get('name') || 'OLT') : 'OLT';
                 parts.push(oltConnection.incoming ? ('приход ' + oltNameG) : ('OLT ' + oltNameG + ' п.' + (oltConnection.portNumber || '?')));
@@ -22465,19 +22546,21 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         }
         if (hasMcConnection) statusText = '→ МК ' + escapeHtml(mcConnection.mediaConverterName || 'Медиаконвертер');
         if (hasSplitterConnection && !isGponFeeder) statusText = '→ ' + escapeHtml(splitterName);
-        if (!hasOltConnection && canConnectToOlt && !hasOnuConnection && !hasSplitterConnection && !hasNodeConnection && !hasMcConnection && !isUsed && !isGponFeeder) {
+        if (!hasDirectOltConnection && !isOltCableEnd && canConnectToOlt && !hasOnuConnection && !hasSplitterConnection && !hasNodeConnection && !hasMcConnection && !isUsed && !isGponFeeder) {
             statusText = 'до OLT по сети';
         }
-        const statusColor = isUsed ? '#b91c1c' : (isGponFeeder ? '#0284c7' : (hasNodeConnection ? '#22c55e' : (hasOnuConnection ? '#a855f7' : (hasMcConnection ? '#0f766e' : (hasSplitterConnection ? '#f97316' : ((hasOltConnection || canConnectToOlt) ? '#0ea5e9' : '#22c55e'))))));
-        const itemBorder = isUsed ? '#dc2626' : (isGponFeeder ? '#0284c7' : (hasNodeConnection ? '#22c55e' : (hasOnuConnection ? '#a855f7' : (hasMcConnection ? '#14b8a6' : (hasSplitterConnection ? '#f97316' : ((hasOltConnection || canConnectToOlt) ? '#0ea5e9' : 'var(--border-color)'))))));
-        const isUpstreamReachable = canConnectToOlt && !hasOltConnection && !hasOnuConnection && !hasSplitterConnection;
-        const isStrictOccupied = isOccupied && !isGponFeeder && !isGponUpstreamOnly && !isUpstreamReachable;
-        const usedClass = isGponFeeder ? ' fiber-gpon-feeder' : ((isGponUpstreamOnly || isUpstreamReachable) ? ' fiber-gpon-upstream' : (isStrictOccupied ? ' fiber-used cross-fiber-used fiber-occupied' : (hasSplitterConnection ? ' fiber-splitter-connected' : '')));
+        const statusColor = isUsed ? '#b91c1c' : (isGponFeeder ? '#0284c7' : (hasNodeConnection ? '#22c55e' : (hasOnuConnection ? '#a855f7' : (hasMcConnection ? '#0f766e' : (hasSplitterConnection ? '#f97316' : ((hasDirectOltConnection || isOltCableEnd || canConnectToOlt) ? '#0ea5e9' : '#22c55e'))))));
+        const itemBorder = isUsed ? '#dc2626' : (isGponFeeder ? '#0284c7' : (hasNodeConnection ? '#22c55e' : (hasOnuConnection ? '#a855f7' : (hasMcConnection ? '#14b8a6' : (hasSplitterConnection ? '#f97316' : ((hasDirectOltConnection || isOltCableEnd || canConnectToOlt) ? '#0ea5e9' : 'var(--border-color)'))))));
+        const isUpstreamReachable = canConnectToOlt && !hasDirectOltConnection && !isOltCableEnd && !hasOnuConnection && !hasSplitterConnection;
+        const isStrictOccupied = isOccupied && !isGponFeeder && !isGponUpstreamOnly && !isOltCableEnd && !isUpstreamReachable;
+        const usedClass = isGponFeeder ? ' fiber-gpon-feeder' : (oltBlocksSplice ? ' fiber-gpon-upstream' : (isOltCableEnd ? ' fiber-olt-cable' : (isUpstreamReachable ? ' fiber-gpon-upstream' : (isStrictOccupied ? ' fiber-used cross-fiber-used fiber-occupied' : (hasSplitterConnection ? ' fiber-splitter-connected' : '')))));
         var cellTitle = '';
         if (spliceConnLabel) cellTitle = 'Подпись сращивания: ' + spliceConnLabel;
-        if (isGponFeeder) cellTitle = (cellTitle ? cellTitle + '. ' : '') + 'GPON feeder — сращивание недоступно';
-        else if (isOccupied) cellTitle = (cellTitle ? cellTitle + '. ' : '') + 'Жила занята — выбор для сращивания недоступен';
-        else if (isEditMode && !hasAnyOutConnection && !isConnected) cellTitle = (cellTitle ? cellTitle + '. ' : '') + 'Клик: выбрать жилу, затем клик по жиле в другом кабеле — создать соединение';
+        if (isGponFeeder || oltBlocksSplice) cellTitle = (cellTitle ? cellTitle + '. ' : '') + (isGponFeeder ? 'GPON feeder — сращивание недоступно' : 'Приход OLT — сращивание недоступно');
+        else if (realOltAssign && realOltAssign.portNumber != null && !realOltAssign.incoming && isSpliceSelectable) cellTitle = (cellTitle ? cellTitle + '. ' : '') + 'PON-порт назначен — жилу можно сращивать';
+        else if (isStrictOccupied || isUsed || isConnected) cellTitle = (cellTitle ? cellTitle + '. ' : '') + 'Жила занята — выбор для сращивания недоступен';
+        else if (isOltCableEnd && isSpliceSelectable) cellTitle = (cellTitle ? cellTitle + '. ' : '') + 'Кабель от OLT — жилу можно сращивать с другим кабелем';
+        else if (isEditMode && isSpliceSelectable) cellTitle = (cellTitle ? cellTitle + '. ' : '') + 'Клик: выбрать жилу, затем клик по жиле в другом кабеле — создать соединение';
         else if (directLabel && !isConnected) cellTitle = (cellTitle ? cellTitle + '. ' : '') + 'Подпись: ' + directLabel;
         const currentPort = isCross && fiberPorts ? (fiberPorts[fiberLabelKey] || '') : '';
         const portOptions = [];
@@ -22505,7 +22588,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
                 ${hasOnuConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #f5f3ff; border-radius: 3px; font-size: 0.75rem;"><span style="color: #6d28d9;">📡 → ${escapeHtml(onuConnection.onuName || 'ONU')}${onuConnection.routeIds && onuConnection.routeIds.length > 0 ? ' (' + onuConnection.routeIds.length + ' точ.)' : ''}</span>${isEditMode ? `<button class="btn-disconnect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от ONU" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
                 ${hasMcConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #ecfeff; border-radius: 3px; font-size: 0.75rem;"><span style="color: #0f766e;">⇄ → ${escapeHtml(mcConnection.mediaConverterName || 'Медиаконвертер')}${mcConnection.routeIds && mcConnection.routeIds.length > 0 ? ' (' + mcConnection.routeIds.length + ' точ.)' : ''}</span>${isEditMode ? `<button class="btn-disconnect-mc" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от медиаконвертера" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
                 ${hasSplitterConnection ? `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #fff7ed; border-radius: 3px; font-size: 0.75rem;"><span style="color: #c2410c;">🔀 → ${escapeHtml(splitterName)}${!hasDirectSplitterConnection ? ' (через сращ.)' : ''}${splitterConnection.routeIds && splitterConnection.routeIds.length > 0 ? ' (' + splitterConnection.routeIds.length + ' точ.)' : ''}</span>${isEditMode ? `<button class="btn-disconnect-splitter" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от сплиттера" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>` : ''}
-                ${hasOltConnection && oltConnection.oltId ? (function() { const o = objects.find(obj => obj.properties && obj.properties.get('type') === 'olt' && obj.properties.get('uniqueId') === oltConnection.oltId); const n = o ? (o.properties.get('name') || 'OLT') : (oltConnection.oltName || 'OLT'); const inheritedViaSplice = !hasDirectOltConnection && isConnected; const inheritedSuffix = inheritedViaSplice ? ' (через сращ.)' : (oltConnection.viaPhysicalCable && !cableData.isFromOlt ? ' (кабель от OLT)' : ''); const label = oltConnection.incoming ? ('приход OLT ' + escapeHtml(n) + inheritedSuffix) : ('OLT ' + escapeHtml(n) + ', порт ' + (oltConnection.portNumber || '?') + inheritedSuffix); return `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #e0f2fe; border-radius: 3px; font-size: 0.75rem;"><span style="color: #0369a1;">📶 ${label}</span>${isEditMode && hasDirectOltConnection ? `<button class="btn-disconnect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от OLT" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>`; }()) : ''}
+                ${realOltAssign && realOltAssign.oltId ? (function() { const o = objects.find(obj => obj.properties && obj.properties.get('type') === 'olt' && obj.properties.get('uniqueId') === realOltAssign.oltId); const n = o ? (o.properties.get('name') || 'OLT') : (realOltAssign.oltName || 'OLT'); const inheritedViaSplice = !getHostFiberMapEntry(sleeveObj, 'oltConnections', cableData.cableUniqueId, fiber.number) && !isFiberOnOltGlobally(cableData.cableUniqueId, fiber.number) && isConnected; const inheritedSuffix = inheritedViaSplice ? ' (через сращ.)' : ''; const label = realOltAssign.incoming ? ('приход OLT ' + escapeHtml(n) + inheritedSuffix) : ('OLT ' + escapeHtml(n) + ', порт ' + (realOltAssign.portNumber || '?') + inheritedSuffix); const canDisconnect = isEditMode && getHostFiberMapEntry(sleeveObj, 'oltConnections', cableData.cableUniqueId, fiber.number); return `<div style="display: flex; align-items: center; gap: 4px; margin-left: 30px; padding: 4px 6px; background: #e0f2fe; border-radius: 3px; font-size: 0.75rem;"><span style="color: #0369a1;">📶 ${label}</span>${canDisconnect ? `<button class="btn-disconnect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Отключить от OLT" style="padding: 2px 5px; background: #dc2626; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem; margin-left: auto;">✕</button>` : ''}</div>`; }()) : ''}
                 ${showFullConnectButtons && isCross ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;"><button class="btn-connect-node" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к узлу" style="padding: 4px 6px; background: #22c55e; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🖥️ Узел</button><button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Приход от кросса к OLT (upstream)" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 Приход OLT</button>${canConnectGponBranch ? `<button class="btn-connect-splitter" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к входу сплиттера" style="padding: 4px 6px; background: #f97316; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🔀 Сплиттер</button><button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}<button class="btn-connect-mc" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к медиаконвертеру" style="padding: 4px 6px; background: #14b8a6; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">⇄ МК</button></div>` : ''}
                 ${showFullConnectButtons && !isCross ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;"><button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Приход от муфты к OLT (upstream)" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 Приход OLT</button>${canConnectGponBranch ? `<button class="btn-connect-splitter" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к входу сплиттера" style="padding: 4px 6px; background: #f97316; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">🔀 Сплиттер</button><button class="btn-connect-onu" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к ONU" style="padding: 4px 6px; background: #a855f7; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📡 ONU</button>` : ''}<button class="btn-connect-mc" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Подключить к медиаконвертеру" style="padding: 4px 6px; background: #14b8a6; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">⇄ МК</button></div>` : ''}
                 ${showOltOnlyButton ? `<div style="margin-left: 30px; display: flex; gap: 4px; flex-wrap: wrap;"><button class="btn-connect-olt" data-cable-id="${cableData.cableUniqueId}" data-fiber-number="${fiber.number}" title="Приход к OLT (жила уже уходит на ONU или сплиттер)" style="padding: 4px 6px; background: #0ea5e9; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.65rem;">📶 Приход OLT</button></div>` : ''}

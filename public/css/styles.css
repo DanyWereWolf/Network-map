@@ -5530,6 +5530,14 @@ button {
     cursor: not-allowed;
 }
 
+.fiber-scheme-port--olt-cable {
+    cursor: pointer;
+}
+
+#fiber-connections-svg .fiber-scheme-port[data-fiber-selectable="true"] {
+    cursor: pointer;
+}
+
 .fiber-scheme-port .fiber-port-num {
     pointer-events: none;
 }
@@ -6920,6 +6928,12 @@ button {
     border-color: #0ea5e9;
 }
 
+.cross-fiber-table .fiber-item.fiber-olt-cable {
+    background: color-mix(in srgb, #f0f9ff 60%, var(--bg-card));
+    border-color: #7dd3fc;
+    cursor: pointer;
+}
+
 [data-theme="dark"] .cross-fiber-table .fiber-item.fiber-gpon-feeder {
     background: color-mix(in srgb, #082f49 45%, var(--bg-card));
     border-color: #0284c7;
@@ -6928,6 +6942,11 @@ button {
 [data-theme="dark"] .cross-fiber-table .fiber-item.fiber-gpon-upstream {
     background: color-mix(in srgb, #0c4a6e 35%, var(--bg-card));
     border-color: #0ea5e9;
+}
+
+[data-theme="dark"] .cross-fiber-table .fiber-item.fiber-olt-cable {
+    background: color-mix(in srgb, #0c4a6e 28%, var(--bg-card));
+    border-color: #38bdf8;
 }
 
 .cross-fiber-table .fiber-item.fiber-occupied {
