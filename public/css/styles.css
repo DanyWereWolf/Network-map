@@ -4928,6 +4928,16 @@ button {
     background: rgba(239, 68, 68, 0.15);
 }
 
+.fiber-ws-leg-gpon-feeder {
+    border-color: #0284c7;
+    background: rgba(2, 132, 199, 0.18);
+}
+
+.fiber-ws-leg-gpon-upstream {
+    border-color: #0ea5e9;
+    background: rgba(14, 165, 233, 0.15);
+}
+
 .fiber-ws-leg-free {
     border-color: var(--accent-success);
     background: rgba(34, 197, 94, 0.15);
@@ -5502,6 +5512,11 @@ button {
 
 .fiber-scheme-port--occupied .fiber-port-badge {
     opacity: 1;
+}
+
+.fiber-scheme-port--gpon-feeder,
+.fiber-scheme-port--gpon-upstream {
+    cursor: not-allowed;
 }
 
 .fiber-scheme-port .fiber-port-num {
@@ -6882,6 +6897,26 @@ button {
     padding: 3px 4px !important;
     gap: 1px !important;
     min-height: 0;
+}
+
+.cross-fiber-table .fiber-item.fiber-gpon-feeder {
+    background: color-mix(in srgb, #e0f2fe 70%, var(--bg-card));
+    border-color: #0284c7;
+}
+
+.cross-fiber-table .fiber-item.fiber-gpon-upstream {
+    background: color-mix(in srgb, #f0f9ff 75%, var(--bg-card));
+    border-color: #0ea5e9;
+}
+
+[data-theme="dark"] .cross-fiber-table .fiber-item.fiber-gpon-feeder {
+    background: color-mix(in srgb, #082f49 45%, var(--bg-card));
+    border-color: #0284c7;
+}
+
+[data-theme="dark"] .cross-fiber-table .fiber-item.fiber-gpon-upstream {
+    background: color-mix(in srgb, #0c4a6e 35%, var(--bg-card));
+    border-color: #0ea5e9;
 }
 
 .cross-fiber-table .fiber-item.fiber-occupied {
@@ -10781,6 +10816,13 @@ html.cable-split-mode-active #map {
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--text-muted);
+}
+
+.olt-card-incoming-hint {
+    flex: 1 1 100%;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    line-height: 1.35;
 }
 
 .olt-card-incoming-value {

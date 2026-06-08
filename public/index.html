@@ -1331,12 +1331,12 @@
         </div>
     </div>
 
-    <!-- Модальное окно для выбора OLT и порта (подключение жилы к порту OLT) -->
+    <!-- Модальное окно: приход жилы от кросса/муфты к OLT (upstream, не PON-порт) -->
     <div id="oltSelectionModal" class="modal">
         <div class="modal-content node-selection-modal-content">
             <div class="network-map-balloon node-selection-balloon">
                 <div class="group-balloon-header">
-                    <span class="group-balloon-title">Подключение жилы к порту OLT</span>
+                    <span class="group-balloon-title">Приход OLT (upstream)</span>
                     <button type="button" class="group-balloon-close close-olt-selection" title="Закрыть">&times;</button>
                 </div>
                 <div class="modal-body node-selection-body">
@@ -1344,12 +1344,12 @@
                         <p id="oltSelectionFiberInfo"></p>
                     </div>
                     <div class="form-group">
-                        <label for="oltSelectSelect">OLT (приходящая жила)</label>
+                        <label for="oltSelectSelect">OLT</label>
                         <select id="oltSelectSelect" class="form-input" style="width: 100%; padding: 8px;">
                             <option value="">— выберите OLT</option>
                         </select>
                     </div>
-                    <p class="node-selection-info" style="font-size: 0.8125rem; color: var(--text-secondary); margin-top: 8px;">Жила будет назначена как приход от кросса для выбранного OLT.</p>
+                    <p class="node-selection-info" style="font-size: 0.8125rem; color: var(--text-secondary); margin-top: 8px;">Это <strong>приход</strong> от кросса/муфты к OLT, не PON-порт. PON-порты назначаются в карточке OLT.</p>
                     <div class="node-selection-actions">
                         <button id="confirmOltSelection" class="btn-primary" disabled>Подключить</button>
                         <button id="cancelOltSelection" class="btn-secondary">Отмена</button>

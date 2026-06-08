@@ -5,7 +5,8 @@
     var objectsById = new Map();
     var VIEWPORT_CULL_MIN_OBJECTS = 120;
     var VIEWPORT_BUFFER_RATIO = 0.12;
-    var ZOOM_SHOW_CONNECTION_LINES = 17;
+    // Синхронно с EXPERT_ZOOM_HIDE_OBJECTS_BELOW в main.js — линии связи видны, пока видны кабели.
+    var ZOOM_SHOW_CONNECTION_LINES = 16;
 
     function uidFromObj(obj) {
         if (!obj || !obj.properties) return null;
@@ -145,6 +146,9 @@
     }
 
     function connectionLinesVisibleAtZoom(zoom) {
+        if (typeof global.mapObjectsVisibleAtZoom === 'function') {
+            return global.mapObjectsVisibleAtZoom(zoom);
+        }
         return typeof zoom !== 'number' || zoom >= ZOOM_SHOW_CONNECTION_LINES;
     }
 
