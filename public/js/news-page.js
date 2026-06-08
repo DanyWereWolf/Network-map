@@ -107,12 +107,21 @@
         });
     }
 
+    var BRAND_ICON_SVG =
+        '<svg class="updates-post-brand-icon" width="24" height="24" viewBox="0 0 32 32" aria-hidden="true">' +
+            '<rect width="32" height="32" rx="6" fill="currentColor"></rect>' +
+            '<path d="M16 6c-3.3 0-6 2.7-6 6 0 4.5 6 10 6 10s6-5.5 6-10c0-3.3-2.7-6-6-6z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"></path>' +
+            '<circle cx="16" cy="12" r="2.5" fill="#fff"></circle>' +
+        '</svg>';
+
     function renderPost(post) {
         var tags = Array.isArray(post.tags) ? post.tags : [];
         var tagsHtml = tags.length
-            ? '<ul class="updates-post-tags" aria-label="Теги">' + tags.map(function(t) {
-                return '<li class="updates-post-tag">' + escapeHtml(t) + '</li>';
-            }).join('') + '</ul>'
+            ? '<header class="updates-post-meta">' +
+                '<ul class="updates-post-tags" aria-label="Теги">' + tags.map(function(t) {
+                    return '<li class="updates-post-tag">' + escapeHtml(t) + '</li>';
+                }).join('') + '</ul>' +
+              '</header>'
             : '';
         var bodyHtml = bodyToDisplayHtml(post.body);
         var anchorId = getPostAnchorId(post.id);
@@ -122,6 +131,10 @@
         if (anchorId) article.id = anchorId;
         article.innerHTML =
             '<div class="updates-post-top">' +
+                '<div class="updates-post-top-left">' +
+                    '<span class="updates-post-brand" title="Карта оптической сети">' + BRAND_ICON_SVG + '</span>' +
+                    '<time class="updates-post-date" datetime="' + escapeHtml(post.date || '') + '">' + escapeHtml(formatDateRu(post.date)) + '</time>' +
+                '</div>' +
                 '<button type="button" class="updates-post-share" data-share-post title="Поделиться записью" aria-label="Поделиться записью">' +
                     '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">' +
                         '<circle cx="18" cy="5" r="3"></circle>' +
@@ -133,10 +146,7 @@
                     '<span class="updates-post-share-label">Поделиться</span>' +
                 '</button>' +
             '</div>' +
-            '<header class="updates-post-meta">' +
-                '<time class="updates-post-date" datetime="' + escapeHtml(post.date || '') + '">' + escapeHtml(formatDateRu(post.date)) + '</time>' +
-                tagsHtml +
-            '</header>' +
+            tagsHtml +
             '<h2 class="updates-post-title">' + escapeHtml(post.title) + '</h2>' +
             (post.summary ? '<p class="updates-post-summary">' + escapeHtml(post.summary) + '</p>' : '') +
             (bodyHtml ? '<div class="updates-post-body rich-html">' + bodyHtml + '</div>' : '');
