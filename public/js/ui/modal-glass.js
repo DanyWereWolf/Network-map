@@ -119,7 +119,6 @@
         });
     }
 
-    window.enhanceModalGlass = enhanceModal;
     window.refreshModalGlass = refreshModalGlass;
 
     if (document.readyState === 'loading') {

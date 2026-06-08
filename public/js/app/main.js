@@ -1649,16 +1649,6 @@ var mapLimitBannerCloseBound = false;
 var OWNER_CONTACT_EMAIL = 'danil.sechin3@gmail.com';
 var OWNER_CONTACT_MAILTO = 'mailto:' + OWNER_CONTACT_EMAIL + '?subject=' + encodeURIComponent('Снятие лимита объектов — Карта оптической сети');
 
-function getOwnerContactPageUrl() {
-    try {
-        var origin = window.location && window.location.origin ? window.location.origin : '';
-        if (origin && origin.indexOf('localhost') === -1 && origin.indexOf('127.0.0.1') === -1) {
-            return origin.replace(/\/$/, '') + '/#contacts';
-        }
-    } catch (e) {}
-    return '/#contacts';
-}
-
 function applyMapLimitsCache(limits) {
     if (!limits || typeof limits !== 'object') return;
     mapLimitsCache.count = limits.count != null ? limits.count : mapLimitsCache.count;
@@ -2077,12 +2067,6 @@ function closeUsersModal() {
 }
 
 var cachedOrganizationsList = null;
-function openOrganizationsModal() {
-    if (!requireAdmin()) return;
-    var modal = document.getElementById('organizationsModal');
-    if (modal) modal.style.display = 'block';
-    fetchOrganizationsAndRender();
-}
 function closeOrganizationsModal() {
     var modal = document.getElementById('organizationsModal');
     if (modal) modal.style.display = 'none';
@@ -4596,16 +4580,6 @@ function clearHoverHighlight() {
     updateCursorIndicator(null, null);
 }
 
-function handleDeleteSelected() {
-    if (!isEditMode) return;
-    if (selectedObjects.length === 0) return;
-    (async function() {
-        if (!(await showConfirm('Удалить ' + selectedObjects.length + ' объектов?', 'Удаление', { confirmText: 'Удалить' }))) return;
-        selectedObjects.slice().forEach(obj => deleteObject(obj, { fromBatch: true }));
-        clearSelection();
-    })();
-}
-
 function handleFileImport(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -6547,11 +6521,6 @@ function selectObject(obj) {
     }
 }
 
-function addSelectionPulse(obj) {
-    
-    return;
-}
-
 var dragUpdateRafId = null;
 var dragUpdatePlacemark = null;
 function scheduleDragUpdate(pm) {
@@ -7480,10 +7449,6 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
     return { used: false };
 }
 
-function isFiberUsed(cableId, fiberNumber, exclude) {
-    return getFiberUsage(cableId, fiberNumber, exclude).used;
-}
-
 function applySerializedUndergroundToCable(cable, item, pointsArr) {
     if (!cable || !item || !cable.properties) return;
     if (isCopperCableType(cable.properties.get('cableType'))) return;
@@ -8129,7 +8094,7 @@ function cameraHasCopperCable(camObj) {
     });
 }
 
-/** Для карточки камеры: медный аплинк и узел, по которому искать жилы кросса для трассировки. */
+/** Для карточки камеры: медный аплинк (коммутатор или медиаконвертер). */
 function getCameraCopperUpstreamTraceContext(cameraObj) {
     if (!cameraObj || !cameraObj.properties || cameraObj.properties.get('type') !== 'camera') return { kind: 'none' };
     var cable = null;
@@ -8167,8 +8132,7 @@ function getCameraCopperUpstreamTraceContext(cameraObj) {
         return { kind: 'node', nodeObj: parentNode, cable: cable, copperSwitchId: other.properties.get('uniqueId') || null };
     }
     if (ot === 'mediaConverter') {
-        var inc = other.properties.get('incomingFiber');
-        return { kind: 'media_converter', mcObj: other, incomingFiber: inc && inc.cableId ? inc : null, cable: cable };
+        return { kind: 'media_converter', mcObj: other, cable: cable };
     }
     return { kind: 'unknown', cable: cable };
 }
@@ -8185,15 +8149,25 @@ function getCopperSwitchPortForCameraOnCable(cable, cameraObj) {
     return pf != null && pf !== '' ? parseInt(pf, 10) : null;
 }
 
-/**
- * Контекст медного «хвоста» камеры для окна трассировки жилы с кросса:
- * коммутатор (объект на карте или в составе узла), медный кабель, камера.
- */
-function buildCameraLanTailTraceContext(cameraObj) {
+/** Медное подключение камеры: upstream-устройство, кабель, камера. */
+function buildCameraCopperConnectionContext(cameraObj) {
     var ctx = getCameraCopperUpstreamTraceContext(cameraObj);
     if (!cameraObj || !cameraObj.properties || ctx.kind === 'none' || ctx.kind === 'unknown' || ctx.kind === 'switch_no_parent') return null;
-    if (ctx.kind === 'media_converter') return null;
-    if (ctx.kind !== 'node' || !ctx.nodeObj || !ctx.cable) return null;
+    if (!ctx.cable) return null;
+
+    if (ctx.kind === 'media_converter' && ctx.mcObj) {
+        return {
+            cameraObj: cameraObj,
+            copperCable: ctx.cable,
+            upstreamObj: ctx.mcObj,
+            upstreamName: (ctx.mcObj.properties.get('name') || '').trim() || 'Медиаконвертер',
+            upstreamKind: 'медиаконвертер',
+            upstreamGlyph: '🔀',
+            copperPort: null
+        };
+    }
+
+    if (ctx.kind !== 'node' || !ctx.nodeObj) return null;
     var swId = ctx.copperSwitchId;
     if (!swId) return null;
     var copperPort = getCopperSwitchPortForCameraOnCable(ctx.cable, cameraObj);
@@ -8208,120 +8182,66 @@ function buildCameraLanTailTraceContext(cameraObj) {
     return {
         cameraObj: cameraObj,
         copperCable: ctx.cable,
-        nodeObj: ctx.nodeObj,
-        switchPlacemark: swPlacemark || null,
-        switchName: switchName,
+        upstreamObj: swPlacemark || ctx.nodeObj,
+        upstreamName: switchName,
+        upstreamKind: 'коммутатор',
+        upstreamGlyph: '🔌',
         copperPort: copperPort
     };
 }
 
-function cameraTraceMapBtn(obj) {
-    if (!obj || !getObjectUniqueId(obj)) return '';
-    return '<button type="button" class="trace-show-on-map-btn btn-map-pin" data-object-id="' + escapeHtml(getObjectUniqueId(obj)) + '" title="Показать на карте">На карте</button>';
-}
-
-function buildCameraLanTailTraceSectionHtml(tailCtx, opts) {
-    opts = opts || {};
-    if (!tailCtx || !tailCtx.cameraObj || !tailCtx.copperCable) return '';
-    var cableName = tailCtx.copperCable.properties.get('cableName') || getCableDescription(tailCtx.copperCable.properties.get('cableType'));
-    var camName = tailCtx.cameraObj.properties.get('name') || 'Камера';
-    var portPart = (tailCtx.copperPort != null && !isNaN(tailCtx.copperPort))
-        ? '<span class="trace-path-muted"> · порт ' + tailCtx.copperPort + '</span>'
+function buildCameraCopperConnectionSectionHtml(connCtx) {
+    if (!connCtx || !connCtx.cameraObj || !connCtx.copperCable) return '';
+    var cableName = connCtx.copperCable.properties.get('cableName') || getCableDescription(connCtx.copperCable.properties.get('cableType'));
+    var camName = connCtx.cameraObj.properties.get('name') || 'Камера';
+    var portTag = (connCtx.copperPort != null && !isNaN(connCtx.copperPort))
+        ? '<span class="trace-item-tag">п.' + connCtx.copperPort + '</span>'
         : '';
-    var swUidForBtn = tailCtx.switchPlacemark ? tailCtx.switchPlacemark : tailCtx.nodeObj;
-    var swRow = '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object" aria-hidden="true">🔌</span><div class="trace-path-block trace-path-object"><div><span class="trace-path-label">' + escapeHtml(tailCtx.switchName) + '</span><span class="trace-path-muted">коммутатор</span>' + portPart + '</div>' + cameraTraceMapBtn(swUidForBtn) + '</div></div>';
-    var cableRow = '<div class="trace-step-row"><span class="trace-step-num trace-step-num-cable" aria-hidden="true">➡</span><div class="trace-path-block trace-path-cable trace-path-cable--copper"><div><span class="trace-path-label">' + escapeHtml(cableName) + '</span><span class="trace-path-muted">медный кабель</span></div>' + cameraTraceMapBtn(tailCtx.copperCable) + '</div></div>';
-    var camRow = '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object" aria-hidden="true">📷</span><div class="trace-path-block trace-path-object"><div><span class="trace-path-label">' + escapeHtml(camName) + '</span><span class="trace-path-muted">камера</span></div>' + cameraTraceMapBtn(tailCtx.cameraObj) + '</div></div>';
-    var introP = opts.skipIntro ? '' : '<p class="object-card-hint camera-lan-intro">Медная линия от коммутатора до камеры (не оптическая жила с кросса).</p>';
-    return '<div class="camera-lan-trace' + (opts.skipIntro ? ' camera-lan-trace--nested' : '') + '">' +
-        '<h4 class="camera-lan-trace-title">Медный участок до камеры</h4>' +
-        introP +
-        '<div class="camera-lan-trace-steps">' + swRow + cableRow + camRow + '</div></div>';
-}
-
-function filterNodeFibersBySwitchIfPossible(nodeUniqueId, preferSwitchId) {
-    var list = getNodeConnectedFibers(nodeUniqueId);
-    if (!preferSwitchId || list.length === 0) return list;
-    var filtered = list.filter(function(conn) {
-        var nc = conn.crossObj && conn.crossObj.properties ? conn.crossObj.properties.get('nodeConnections') : null;
-        if (!nc) return false;
-        var key = conn.cableId + '-' + conn.fiberNumber;
-        var row = nc[key];
-        return row && row.switchId === preferSwitchId;
-    });
-    return filtered.length ? filtered : list;
+    var upstreamUid = connCtx.upstreamObj ? getObjectUniqueId(connCtx.upstreamObj) : '';
+    var cableUid = getObjectUniqueId(connCtx.copperCable);
+    var camUid = getObjectUniqueId(connCtx.cameraObj);
+    var pin = function(uid) {
+        return uid ? '<button type="button" class="trace-map-pin trace-show-on-map-btn" data-object-id="' + escapeHtml(uid) + '" title="На карте" aria-label="На карте"></button>' : '';
+    };
+    var glyph = connCtx.upstreamGlyph || '🔌';
+    var steps =
+        '<div class="trace-item trace-item--object"><span class="trace-item-glyph" aria-hidden="true">' + glyph + '</span><div class="trace-item-main"><span class="trace-item-title">' + escapeHtml(connCtx.upstreamName) + '</span>' + portTag + '<span class="trace-item-kind">' + escapeHtml(connCtx.upstreamKind) + '</span></div>' + pin(upstreamUid) + '</div>' +
+        '<div class="trace-item trace-item--cable trace-item--copper"><span class="trace-item-glyph trace-item-glyph--muted" aria-hidden="true">↳</span><div class="trace-item-main"><span class="trace-item-cable-name">' + escapeHtml(cableName) + '</span><span class="trace-item-kind">медь</span></div>' + pin(cableUid) + '</div>' +
+        '<div class="trace-item trace-item--object"><span class="trace-item-glyph" aria-hidden="true">📷</span><div class="trace-item-main"><span class="trace-item-title">' + escapeHtml(camName) + '</span><span class="trace-item-kind">камера</span></div>' + pin(camUid) + '</div>';
+    return '<div class="camera-lan-trace">' +
+        '<div class="trace-timeline trace-timeline--tail">' + steps + '</div></div>';
 }
 
 function buildCameraTraceSectionHtml(cameraObj) {
     var ctx = getCameraCopperUpstreamTraceContext(cameraObj);
     var html = '<section class="object-card-section object-card-section--trace camera-trace-section">';
-    html += '<h4 class="object-card-section-title">Подключение и трассировка</h4>';
+    html += '<h4 class="object-card-section-title">Подключение</h4>';
 
     if (ctx.kind === 'none') {
         html += '<div class="object-card-callout object-card-callout--warn">';
-        html += '<p>Подключите камеру <strong>медным кабелем</strong> к коммутатору узла, к коммутатору на карте или к медиаконвертеру с оптикой — здесь появятся маршрут и кнопки трассировки.</p>';
+        html += '<p>Подключите камеру <strong>медным кабелем</strong> к коммутатору узла, к коммутатору на карте или к медиаконвертеру — здесь появится маршрут подключения.</p>';
         html += '</div></section>';
         return html;
     }
     if (ctx.kind === 'switch_no_parent' || ctx.kind === 'unknown') {
         html += '<div class="object-card-callout object-card-callout--warn">';
-        html += '<p>Медный кабель найден, но узел сети для оптических жил не определён. Проверьте привязку коммутатора к узлу.</p>';
+        html += '<p>Медный кабель найден, но узел сети не определён. Проверьте привязку коммутатора к узлу.</p>';
         html += '</div></section>';
         return html;
     }
-    if (ctx.kind === 'media_converter') {
-        html += '<p class="object-card-hint">Камера на <strong>меди</strong> к медиаконвертеру. Оптика — с входной жилы МК (муфта или кросс).</p>';
-        if (ctx.incomingFiber && ctx.incomingFiber.cableId != null && ctx.incomingFiber.fiberNumber != null) {
-            var cid = escapeHtml(String(ctx.incomingFiber.cableId));
-            var fn = parseInt(ctx.incomingFiber.fiberNumber, 10);
-            html += '<button type="button" class="btn-primary btn-trace-camera-mc-incoming camera-trace-action" data-cable-id="' + cid + '" data-fiber-number="' + fn + '">Трассировка по жиле МК</button>';
-        } else {
-            html += '<div class="object-card-callout object-card-callout--warn"><p>Сначала подключите к медиаконвертеру оптическую жилу с муфты или кросса.</p></div>';
-        }
+
+    var conn = buildCameraCopperConnectionContext(cameraObj);
+    if (conn) {
+        html += buildCameraCopperConnectionSectionHtml(conn);
         html += '</section>';
         return html;
     }
+
     if (ctx.kind === 'node' && ctx.nodeObj) {
-        var nodeUid = getObjectUniqueId(ctx.nodeObj);
         var nodeTitle = ctx.nodeObj.properties.get('name') || 'Узел сети';
-        var fibers = filterNodeFibersBySwitchIfPossible(nodeUid, ctx.copperSwitchId);
-        var lanTail = buildCameraLanTailTraceContext(cameraObj);
-
-        if (lanTail) {
-            html += '<p class="object-card-hint">Медь к узлу «' + escapeHtml(nodeTitle) + '». Ниже — коммутатор, порт и оптические жилы с кросса (если заведены).</p>';
-            html += buildCameraLanTailTraceSectionHtml(lanTail, { skipIntro: false });
-        } else {
-            html += '<p class="object-card-hint">Оптические жилы с кроссов на узел «' + escapeHtml(nodeTitle) + '».</p>';
-        }
-
-        if (fibers.length > 0) {
-            if (lanTail) {
-                html += '<h5 class="camera-trace-subtitle">Оптика с кроссов</h5>';
-            }
-            html += '<div class="camera-fiber-list">';
-            fibers.forEach(function(conn) {
-                html += '<div class="camera-fiber-item">';
-                html += '<div class="camera-fiber-item-main">';
-                html += '<span class="camera-fiber-num">Жила ' + conn.fiberNumber + '</span>';
-                html += '<span class="camera-fiber-cross">' + escapeHtml(conn.crossName) + '</span>';
-                if (conn.fiberLabel) {
-                    html += '<span class="camera-fiber-label">' + escapeHtml(conn.fiberLabel) + '</span>';
-                }
-                html += '</div>';
-                html += '<button type="button" class="btn-trace-from-node btn-trace-compact" data-cross-id="' + escapeHtml(conn.crossUniqueId) + '" data-cable-id="' + escapeHtml(conn.cableId) + '" data-fiber-number="' + conn.fiberNumber + '">Трассировка</button>';
-                html += '</div>';
-            });
-            html += '</div>';
-        } else {
-            html += '<div class="object-card-callout object-card-callout--warn' + (lanTail ? ' object-card-callout--spaced' : '') + '">';
-            if (lanTail) {
-                html += '<p>Жил с кросса на этот коммутатор нет — трассировка оптики недоступна. Для камеры только по Ethernet маршрут указан выше.</p>';
-            } else {
-                html += '<p>К узлу не подключены жилы с кросса. При SFP заведите порт в карточке кросса; при чистой меди — укажите коммутатор при прокладке кабеля.</p>';
-            }
-            html += '</div>';
-        }
-        html += '</section>';
+        html += '<div class="object-card-callout object-card-callout--warn">';
+        html += '<p>Медный кабель к узлу «' + escapeHtml(nodeTitle) + '» найден, но коммутатор на кабеле не указан. Укажите его при прокладке кабеля — тогда здесь появится маршрут до камеры.</p>';
+        html += '</div></section>';
         return html;
     }
     html += '</section>';
@@ -8358,7 +8278,7 @@ function buildCameraCardContent(obj, isEditMode, name) {
         html += '<div class="camera-card-view-name">' + escapeHtml(name || 'Новая камера') + '</div>';
         if (window.CameraPlayer) html += CameraPlayer.buildStatusBadgeHtml(cameraOnline, CameraPlayer.getCameraStatusTitle(obj));
         html += '</div>';
-        html += '<p class="object-card-hint camera-card-hero-hint">На карте подключайте только <strong>медным кабелем</strong> к коммутатору узла, отдельному коммутатору или медиаконвертеру с оптикой.</p>';
+        html += '<p class="object-card-hint camera-card-hero-hint">На карте подключайте только <strong>медным кабелем</strong> к коммутатору узла, отдельному коммутатору или медиаконвертеру.</p>';
     }
     html += '</div></div></section>';
 
@@ -9417,7 +9337,7 @@ function resetInfoModalFiberLayout() {
 }
 
 var INFO_MODAL_DEVICE_SUBTITLES = {
-    camera: 'Видеопоток · медь · трассировка оптики',
+    camera: 'Видеопоток · медное подключение',
     node: 'Коммутаторы, оптика и медные порты',
     olt: 'GPON · приход и порты',
     onu: 'Подключение по оптике',
@@ -9498,12 +9418,16 @@ function closeInfoModal() {
     if (typeof window.isConfirmModalOpen === 'function' && window.isConfirmModalOpen()) {
         return;
     }
+    traceReturnContext = null;
+    var traceHeaderOnClose = document.getElementById('fiberModalHeader');
+    if (traceHeaderOnClose) traceHeaderOnClose.classList.remove('fiber-modal-header--trace');
     if (currentModalObject) {
         var flushUid = getObjectUniqueId(currentModalObject);
         if (flushUid) flushSyncPushForUid(flushUid);
     }
     var modal = document.getElementById('infoModal');
     if (!modal) return;
+    modal.removeAttribute('data-trace-view');
     var modalInfo = document.getElementById('modalInfo');
     if (window.CameraPlayer && modalInfo) CameraPlayer.destroyPlayersInRoot(modalInfo);
     resetInfoModalFiberLayout();
@@ -10644,10 +10568,6 @@ function updateUndoRedoButtons() {
         redoBtn.disabled = redoStack.length === 0;
         redoBtn.title = redoStack.length === 0 ? 'Повтор (Ctrl+Y)' : 'Повторить (Ctrl+Y)';
     }
-}
-
-function loadDataFromStorage() {
-    
 }
 
 function applyMapStartFromSettings(mapStart, force) {
@@ -13542,45 +13462,6 @@ function updateSupportLabel(placemark, name) {
     updateObjectLabel(placemark, name);
 }
 
-function updateSupportLabelLegacy(placemark, name) {
-    if (!placemark || !placemark.properties) return;
-    if (placemark.properties.get('type') !== 'support') return;
-    
-    var label = placemark.properties.get('label');
-    var coords = placemark.geometry.getCoordinates();
-    
-    if (!name || name.trim() === '') {
-        if (label) {
-            try { myMap.geoObjects.remove(label); } catch (e) {}
-            placemark.properties.unset('label');
-        }
-        return;
-    }
-    
-    var displayName = escapeHtml(name.trim());
-    var labelContent = '<div class="map-label">' + displayName + '</div>';
-    
-    if (!label) {
-        label = new ymaps.Placemark(coords, {}, {
-            iconLayout: 'default#imageWithContent',
-            iconImageHref: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==',
-            iconImageSize: [1, 1],
-            iconImageOffset: [0, 0],
-            iconContent: labelContent,
-            iconContentOffset: [0, 14],
-            zIndex: 1000,
-            zIndexHover: 1000,
-            cursor: 'default',
-            hasBalloon: false,
-            hasHint: false
-        });
-        placemark.properties.set('label', label);
-    } else {
-        label.properties.set({ iconContent: labelContent });
-        label.geometry.setCoordinates(coords);
-    }
-}
-
 function updateNodeIcon(placemark) {
     if (!placemark || !placemark.properties) return;
     if (placemark.properties.get('type') !== 'node') return;
@@ -13742,16 +13623,6 @@ function setupModalEventListeners() {
             const cableId = this.getAttribute('data-cable-id');
             const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
             traceFromNode(crossId, cableId, fiberNumber);
-        });
-    });
-
-    document.querySelectorAll('.btn-trace-camera-mc-incoming').forEach(function(btn) {
-        btn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            var mcCableId = btn.getAttribute('data-cable-id');
-            var mcFiber = parseInt(btn.getAttribute('data-fiber-number'), 10);
-            if (!mcCableId || !mcFiber) return;
-            showFiberTrace(mcCableId, mcFiber);
         });
     });
 
@@ -14999,233 +14870,6 @@ function updateFiberLabel(sleeveObj, cableId, fiberNumber, label) {
     refreshFiberSchemeFiberLabelDom(key, label ? String(label).trim() : '');
 }
 
-function inheritFiberLabels(sleeveObj, fromCableId, fromFiberNumber, toCableId, toFiberNumber) {
-    let fiberLabels = sleeveObj.properties.get('fiberLabels');
-    if (!fiberLabels) {
-        fiberLabels = {};
-    }
-    
-    const fromKey = `${fromCableId}-${fromFiberNumber}`;
-    const toKey = `${toCableId}-${toFiberNumber}`;
-
-    const fromInherited = getInheritedFiberLabel(sleeveObj, fromCableId, fromFiberNumber);
-    const toInherited = getInheritedFiberLabel(sleeveObj, toCableId, toFiberNumber);
-
-    let labelToSpread = '';
-    if (fromInherited.label && !toInherited.label) {
-        labelToSpread = fromInherited.label;
-    } else if (toInherited.label && !fromInherited.label) {
-        labelToSpread = toInherited.label;
-    } else if (fromInherited.label && toInherited.label) {
-        
-        if (fromInherited.label !== toInherited.label) {
-            labelToSpread = `${fromInherited.label} / ${toInherited.label}`;
-        } else {
-            labelToSpread = fromInherited.label;
-        }
-    }
-    
-    if (labelToSpread) {
-        
-        spreadLabelToConnectedFibers(sleeveObj, fromCableId, fromFiberNumber, labelToSpread, fiberLabels);
-        spreadLabelToConnectedFibers(sleeveObj, toCableId, toFiberNumber, labelToSpread, fiberLabels);
-        sleeveObj.properties.set('fiberLabels', fiberLabels);
-    }
-}
-
-function spreadLabelToConnectedFibers(sleeveObj, startCableId, startFiberNumber, label, fiberLabels) {
-    const fiberConnections = sleeveObj.properties.get('fiberConnections') || [];
-    const visited = new Set();
-    const queue = [{ cableId: startCableId, fiberNumber: startFiberNumber }];
-    
-    while (queue.length > 0) {
-        const current = queue.shift();
-        const currentKey = `${current.cableId}-${current.fiberNumber}`;
-        
-        if (visited.has(currentKey)) continue;
-        visited.add(currentKey);
-
-        if (!fiberLabels[currentKey]) {
-            fiberLabels[currentKey] = label;
-        }
-
-        for (const conn of fiberConnections) {
-            if (conn.from.cableId === current.cableId && conn.from.fiberNumber === current.fiberNumber) {
-                queue.push({ cableId: conn.to.cableId, fiberNumber: conn.to.fiberNumber });
-            } else if (conn.to.cableId === current.cableId && conn.to.fiberNumber === current.fiberNumber) {
-                queue.push({ cableId: conn.from.cableId, fiberNumber: conn.from.fiberNumber });
-            }
-        }
-    }
-}
-
-function getInheritedFiberLabel(sleeveObj, cableId, fiberNumber) {
-    const fiberLabels = sleeveObj.properties.get('fiberLabels') || {};
-    const key = `${cableId}-${fiberNumber}`;
-
-    if (fiberLabels[key]) {
-        return { label: fiberLabels[key], inherited: false };
-    }
-
-    const fiberConnections = sleeveObj.properties.get('fiberConnections') || [];
-    const visited = new Set();
-    const queue = [{ cableId, fiberNumber }];
-    
-    while (queue.length > 0) {
-        const current = queue.shift();
-        const currentKey = `${current.cableId}-${current.fiberNumber}`;
-        
-        if (visited.has(currentKey)) continue;
-        visited.add(currentKey);
-
-        if (currentKey !== key && fiberLabels[currentKey]) {
-            return { label: fiberLabels[currentKey], inherited: true };
-        }
-
-        for (const conn of fiberConnections) {
-            if (conn.label && (conn.from.cableId === current.cableId && conn.from.fiberNumber === current.fiberNumber ||
-                conn.to.cableId === current.cableId && conn.to.fiberNumber === current.fiberNumber)) {
-                return { label: conn.label, inherited: currentKey !== key };
-            }
-            if (conn.from.cableId === current.cableId && conn.from.fiberNumber === current.fiberNumber) {
-                queue.push({ cableId: conn.to.cableId, fiberNumber: conn.to.fiberNumber });
-            } else if (conn.to.cableId === current.cableId && conn.to.fiberNumber === current.fiberNumber) {
-                queue.push({ cableId: conn.from.cableId, fiberNumber: conn.from.fiberNumber });
-            }
-        }
-    }
-
-    const globalLabel = getGlobalFiberLabel(cableId, fiberNumber);
-    if (globalLabel) {
-        return { label: globalLabel, inherited: true };
-    }
-    
-    return { label: '', inherited: false };
-}
-
-function getGlobalFiberLabel(startCableId, startFiberNumber) {
-    const visited = new Set();
-    const visitedObjects = new Set();
-
-    function findCableById(cableId) {
-        return objects.find(obj => 
-            obj.properties && 
-            obj.properties.get('type') === 'cable' &&
-            obj.properties.get('uniqueId') === cableId
-        );
-    }
-
-    function searchLabel(cableId, fiberNumber, currentObject) {
-        const fiberKey = `${cableId}-${fiberNumber}`;
-        if (visited.has(fiberKey)) return null;
-        visited.add(fiberKey);
-
-        if (currentObject) {
-            const fiberLabels = currentObject.properties.get('fiberLabels') || {};
-            if (fiberLabels[fiberKey]) {
-                return fiberLabels[fiberKey];
-            }
-
-            const fiberConnections = currentObject.properties.get('fiberConnections') || [];
-            for (const conn of fiberConnections) {
-                let nextCableId = null;
-                let nextFiberNumber = null;
-                
-                if (conn.from.cableId === cableId && conn.from.fiberNumber === fiberNumber) {
-                    nextCableId = conn.to.cableId;
-                    nextFiberNumber = conn.to.fiberNumber;
-                } else if (conn.to.cableId === cableId && conn.to.fiberNumber === fiberNumber) {
-                    nextCableId = conn.from.cableId;
-                    nextFiberNumber = conn.from.fiberNumber;
-                }
-                
-                if (nextCableId) {
-                    
-                    const connKey = `${nextCableId}-${nextFiberNumber}`;
-                    if (fiberLabels[connKey]) {
-                        return fiberLabels[connKey];
-                    }
-
-                    const nextCable = findCableById(nextCableId);
-                    if (nextCable) {
-                        const result = searchAlongCable(nextCable, nextFiberNumber, currentObject);
-                        if (result) return result;
-                    }
-                }
-            }
-        }
-        
-        return null;
-    }
-
-    function searchAlongCable(cable, fiberNumber, excludeObject) {
-        const fromObj = cable.properties.get('from');
-        const toObj = cable.properties.get('to');
-        const cableId = cable.properties.get('uniqueId');
-
-        let nextObject = null;
-        if (excludeObject) {
-            const excludeId = getObjectUniqueId(excludeObject);
-            const fromId = fromObj ? getObjectUniqueId(fromObj) : null;
-            const toId = toObj ? getObjectUniqueId(toObj) : null;
-            
-            if (fromId === excludeId) {
-                nextObject = toObj;
-            } else if (toId === excludeId) {
-                nextObject = fromObj;
-            }
-        } else {
-            
-            if (fromObj) {
-                const result = searchInObject(fromObj, cableId, fiberNumber);
-                if (result) return result;
-            }
-            if (toObj) {
-                const result = searchInObject(toObj, cableId, fiberNumber);
-                if (result) return result;
-            }
-            return null;
-        }
-        
-        if (nextObject) {
-            return searchInObject(nextObject, cableId, fiberNumber);
-        }
-        
-        return null;
-    }
-
-    function searchInObject(obj, cableId, fiberNumber) {
-        if (!obj || !obj.properties) return null;
-        
-        const objId = getObjectUniqueId(obj);
-        if (visitedObjects.has(objId)) return null;
-        visitedObjects.add(objId);
-        
-        const objType = obj.properties.get('type');
-        if (objType !== 'sleeve' && objType !== 'cross') return null;
-        
-        return searchLabel(cableId, fiberNumber, obj);
-    }
-
-    const startCable = findCableById(startCableId);
-    if (!startCable) return null;
-
-    const fromObj = startCable.properties.get('from');
-    const toObj = startCable.properties.get('to');
-    
-    if (fromObj) {
-        const result = searchInObject(fromObj, startCableId, startFiberNumber);
-        if (result) return result;
-    }
-    
-    if (toObj) {
-        const result = searchInObject(toObj, startCableId, startFiberNumber);
-        if (result) return result;
-    }
-    
-    return null;
-}
-
 function getObjectUniqueId(obj) {
     if (!obj || !obj.properties) return null;
     let id = obj.properties.get('uniqueId');
@@ -15257,7 +14901,290 @@ function mapPerfUnregister(obj) {
     if (typeof MapPerf !== 'undefined' && obj) MapPerf.unregisterMapObject(obj);
 }
 
-function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
+function getCableRoutePointsForTrace(cable) {
+    if (!cable || !cable.properties) return null;
+    var pts = getCableRoutePoints(cable);
+    var spans = cable.properties.get('undergroundSpans') || [];
+    if (Array.isArray(pts) && pts.length > 2 && window.CableUnderground && CableUnderground.ensureRouteIncludesUndergroundManholes) {
+        return CableUnderground.ensureRouteIncludesUndergroundManholes(pts.slice(), spans);
+    }
+    return pts;
+}
+
+/** Другие узлы на той же жиле того же кабеля (кросс на противоположном конце магистрали). */
+function findPeerNodeTargetsOnCable(startCross, cableId, fiberNumber, originNodeId) {
+    var peers = [];
+    var startUid = getObjectUniqueId(startCross);
+    var key = cableId + '-' + fiberNumber;
+    objects.forEach(function(obj) {
+        if (!obj || !obj.properties || obj.properties.get('type') !== 'cross') return;
+        if (getObjectUniqueId(obj) === startUid) return;
+        var nc = obj.properties.get('nodeConnections') || {};
+        var conn = nc[key];
+        if (!conn || !conn.nodeId || conn.nodeId === originNodeId) return;
+        var nodeObj = objects.find(function(n) {
+            return n.properties && n.properties.get('type') === 'node' && n.properties.get('uniqueId') === conn.nodeId;
+        });
+        if (nodeObj) peers.push({ crossObj: obj, nodeObj: nodeObj, nodeConn: conn });
+    });
+    return peers;
+}
+
+/** Прямой проход по points[] кабеля от кросса до кросса соседнего узла. */
+function buildCableRouteWalkPath(startCross, endCross, cable, fiberNumber, endNodeConn) {
+    var pts = getCableRoutePoints(cable);
+    if (!pts || pts.length < 2 || !startCross || !endCross || !cable) return null;
+    var cableId = cable.properties.get('uniqueId');
+    var cableName = cable.properties.get('cableName') || getCableDescription(cable.properties.get('cableType'));
+    var startIdx = getPointIndexOnCableRoute(pts, startCross);
+    var endIdx = getPointIndexOnCableRoute(pts, endCross);
+    if (startIdx === -1 || endIdx === -1 || startIdx === endIdx) return null;
+
+    var path = [];
+    var startType = startCross.properties.get('type');
+    path.push({
+        type: 'start',
+        objectType: startType,
+        objectName: startCross.properties.get('name') || getObjectTypeName(startType),
+        object: startCross,
+        port: (startType === 'cross') ? ((startCross.properties.get('fiberPorts') || {})[cableId + '-' + fiberNumber] || null) : null
+    });
+
+    var step = endIdx > startIdx ? 1 : -1;
+    for (var i = startIdx; i !== endIdx; i += step) {
+        var nextPt = pts[i + step];
+        if (!nextPt) break;
+        path.push({ type: 'cable', cableId: cableId, cableName: cableName, fiberNumber: fiberNumber, cable: cable });
+        var ot = nextPt.properties.get('type');
+        path.push({
+            type: 'object',
+            objectType: ot,
+            objectName: nextPt.properties.get('name') || getObjectTypeName(ot),
+            object: nextPt,
+            port: (ot === 'cross') ? ((nextPt.properties.get('fiberPorts') || {})[cableId + '-' + fiberNumber] || null) : null
+        });
+    }
+
+    var connectedNode = endNodeConn && endNodeConn.nodeId ? objects.find(function(n) {
+        return n.properties && n.properties.get('type') === 'node' && n.properties.get('uniqueId') === endNodeConn.nodeId;
+    }) : null;
+    if (connectedNode) {
+        path.push({
+            type: 'nodeConnection',
+            cableId: cableId,
+            fiberNumber: fiberNumber,
+            nodeName: endNodeConn.nodeName || connectedNode.properties.get('name') || 'Узел',
+            cross: endCross,
+            node: connectedNode
+        });
+        path.push({
+            type: 'object',
+            objectType: 'node',
+            objectName: connectedNode.properties.get('name') || 'Узел сети',
+            object: connectedNode
+        });
+    }
+    return path.length > 1 ? path : null;
+}
+
+function tracePeerNodePathsOnSharedCable(startCross, cableId, fiberNumber, originNodeId) {
+    var cable = objects.find(function(c) {
+        return c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === cableId;
+    });
+    if (!cable) return [];
+    var paths = [];
+    findPeerNodeTargetsOnCable(startCross, cableId, fiberNumber, originNodeId).forEach(function(peer) {
+        var walk = buildCableRouteWalkPath(startCross, peer.crossObj, cable, fiberNumber, peer.nodeConn);
+        if (walk) paths.push(walk);
+    });
+    return paths;
+}
+
+function cableEndpointRole(cable, currentObj) {
+    if (!cable || !currentObj) return null;
+    var currentId = getObjectUniqueId(currentObj);
+    var fromObj = cable.properties.get('from');
+    var toObj = cable.properties.get('to');
+    if (fromObj && (fromObj === currentObj || getObjectUniqueId(fromObj) === currentId)) return 'from';
+    if (toObj && (toObj === currentObj || getObjectUniqueId(toObj) === currentId)) return 'to';
+    var currentCoords = currentObj.geometry ? currentObj.geometry.getCoordinates() : null;
+    if (currentCoords) {
+        if (fromObj && fromObj.geometry) {
+            var fc = fromObj.geometry.getCoordinates();
+            if (fc && Math.abs(fc[0] - currentCoords[0]) < 0.0001 && Math.abs(fc[1] - currentCoords[1]) < 0.0001) return 'from';
+        }
+        if (toObj && toObj.geometry) {
+            var tc = toObj.geometry.getCoordinates();
+            if (tc && Math.abs(tc[0] - currentCoords[0]) < 0.0001 && Math.abs(tc[1] - currentCoords[1]) < 0.0001) return 'to';
+        }
+    }
+    return null;
+}
+
+/**
+ * Следующая точка маршрута по кабелю. Кросс/муфта на конце (from/to), но не в points[],
+ * связывается с первой/последней промежуточной точкой.
+ */
+function getOtherEndOnCableRoute(cable, currentObj, previousObj) {
+    if (!cable || !currentObj) return null;
+    var pts = getCableRoutePointsForTrace(cable);
+    var fromObj = cable.properties.get('from');
+    var toObj = cable.properties.get('to');
+    var currentId = getObjectUniqueId(currentObj);
+    var previousId = previousObj ? getObjectUniqueId(previousObj) : null;
+    var endpointRole = cableEndpointRole(cable, currentObj);
+
+    if (pts && pts.length > 2) {
+        var idx = -1;
+        for (var i = 0; i < pts.length; i++) {
+            if (pts[i] === currentObj || (pts[i] && getObjectUniqueId(pts[i]) === currentId)) { idx = i; break; }
+        }
+        if (idx === -1 && endpointRole) {
+            var firstPt = pts[0];
+            var lastPt = pts[pts.length - 1];
+            var firstPtId = firstPt ? getObjectUniqueId(firstPt) : null;
+            var lastPtId = lastPt ? getObjectUniqueId(lastPt) : null;
+            if (endpointRole === 'from') {
+                if (!previousId) {
+                    if (firstPt && firstPtId !== currentId) return firstPt;
+                    return pts.length > 1 ? pts[1] : (toObj || null);
+                }
+                if (firstPt && (firstPt === previousObj || firstPtId === previousId)) {
+                    return pts.length > 1 ? pts[1] : (toObj || null);
+                }
+                if (toObj && (toObj === previousObj || getObjectUniqueId(toObj) === previousId)) return firstPt || null;
+                return toObj || null;
+            }
+            if (endpointRole === 'to') {
+                if (!previousId) {
+                    if (lastPt && lastPtId !== currentId) return lastPt;
+                    return pts.length > 1 ? pts[pts.length - 2] : (fromObj || null);
+                }
+                if (lastPt && (lastPt === previousObj || lastPtId === previousId)) {
+                    return pts.length > 1 ? pts[pts.length - 2] : (fromObj || null);
+                }
+                if (fromObj && (fromObj === previousObj || getObjectUniqueId(fromObj) === previousId)) return lastPt || null;
+                return fromObj || null;
+            }
+            return null;
+        }
+        if (idx === -1) return null;
+        var nextIdx = idx + 1;
+        var prevIdx = idx - 1;
+        if (previousId) {
+            var prevPtId = (prevIdx >= 0 && pts[prevIdx]) ? getObjectUniqueId(pts[prevIdx]) : null;
+            var nextPtId = (nextIdx < pts.length && pts[nextIdx]) ? getObjectUniqueId(pts[nextIdx]) : null;
+            if (prevPtId === previousId && nextIdx < pts.length) return pts[nextIdx];
+            if (nextPtId === previousId && prevIdx >= 0) return pts[prevIdx];
+        }
+        if (nextIdx < pts.length) return pts[nextIdx];
+        if (prevIdx >= 0) return pts[prevIdx];
+        return null;
+    }
+    if (!fromObj || !toObj) return null;
+    if (fromObj === currentObj) return toObj;
+    if (toObj === currentObj) return fromObj;
+    var fromId = getObjectUniqueId(fromObj);
+    var toId = getObjectUniqueId(toObj);
+    if (fromId === currentId) return toObj;
+    if (toId === currentId) return fromObj;
+    var currentCoords = currentObj.geometry ? currentObj.geometry.getCoordinates() : null;
+    var fromCoords = fromObj.geometry ? fromObj.geometry.getCoordinates() : null;
+    var toCoords = toObj.geometry ? toObj.geometry.getCoordinates() : null;
+    if (currentCoords && fromCoords && Math.abs(currentCoords[0] - fromCoords[0]) < 0.0001 && Math.abs(currentCoords[1] - fromCoords[1]) < 0.0001) return toObj;
+    if (currentCoords && toCoords && Math.abs(currentCoords[0] - toCoords[0]) < 0.0001 && Math.abs(currentCoords[1] - toCoords[1]) < 0.0001) return fromObj;
+    return null;
+}
+
+/** Соседи вперёд/назад по маршруту кабеля (для двунаправленной трассировки с кросса). */
+function getCableRoutePosition(cable, currentObj) {
+    if (!cable || !currentObj) return null;
+    var pts = getCableRoutePointsForTrace(cable);
+    var currentId = getObjectUniqueId(currentObj);
+    if (!pts || pts.length < 2) {
+        var fromObj = cable.properties.get('from');
+        var toObj = cable.properties.get('to');
+        if (fromObj && (fromObj === currentObj || getObjectUniqueId(fromObj) === currentId)) {
+            return { forward: toObj || null, backward: null };
+        }
+        if (toObj && (toObj === currentObj || getObjectUniqueId(toObj) === currentId)) {
+            return { forward: null, backward: fromObj || null };
+        }
+        return null;
+    }
+    var idx = -1;
+    for (var i = 0; i < pts.length; i++) {
+        if (pts[i] === currentObj || (pts[i] && getObjectUniqueId(pts[i]) === currentId)) {
+            idx = i;
+            break;
+        }
+    }
+    if (idx === -1) {
+        var role = cableEndpointRole(cable, currentObj);
+        if (role === 'from') {
+            var fh = pts[0];
+            return {
+                forward: (fh && getObjectUniqueId(fh) !== currentId) ? fh : (pts.length > 1 ? pts[1] : (cable.properties.get('to') || null)),
+                backward: null
+            };
+        }
+        if (role === 'to') {
+            var lh = pts[pts.length - 1];
+            var backHop = pts.length > 1 ? pts[pts.length - 2] : cable.properties.get('from');
+            if (lh && getObjectUniqueId(lh) !== currentId) {
+                return { forward: lh, backward: backHop || null };
+            }
+            return { forward: null, backward: backHop || null };
+        }
+        return null;
+    }
+    return {
+        forward: idx < pts.length - 1 ? pts[idx + 1] : null,
+        backward: idx > 0 ? pts[idx - 1] : null
+    };
+}
+
+function findNextCableThroughSupport(supportObj, excludeCable) {
+    var supportCoords = supportObj.geometry ? supportObj.geometry.getCoordinates() : null;
+    var supportId = getObjectUniqueId(supportObj);
+    var excludeId = excludeCable ? excludeCable.properties.get('uniqueId') : null;
+    for (var ci = 0; ci < objects.length; ci++) {
+        var cable = objects[ci];
+        if (!cable.properties || cable.properties.get('type') !== 'cable') continue;
+        var cableId = cable.properties.get('uniqueId');
+        if (excludeId && cableId === excludeId) continue;
+        var fromObj = cable.properties.get('from');
+        var toObj = cable.properties.get('to');
+        if (!fromObj || !toObj) continue;
+        if (fromObj === supportObj || toObj === supportObj) return cable;
+        var fromId = getObjectUniqueId(fromObj);
+        var toId = getObjectUniqueId(toObj);
+        if (supportId && (fromId === supportId || toId === supportId)) return cable;
+        if (supportCoords) {
+            var fromCoords = fromObj.geometry ? fromObj.geometry.getCoordinates() : null;
+            var toCoords = toObj.geometry ? toObj.geometry.getCoordinates() : null;
+            if (fromCoords && Math.abs(fromCoords[0] - supportCoords[0]) < 0.0001 && Math.abs(fromCoords[1] - supportCoords[1]) < 0.0001) return cable;
+            if (toCoords && Math.abs(toCoords[0] - supportCoords[0]) < 0.0001 && Math.abs(toCoords[1] - supportCoords[1]) < 0.0001) return cable;
+        }
+    }
+    return null;
+}
+
+function mergeTraceOptions(base, extra) {
+    var out = {};
+    var b = base || {};
+    var e = extra || {};
+    Object.keys(b).forEach(function(k) { out[k] = b[k]; });
+    Object.keys(e).forEach(function(k) { out[k] = e[k]; });
+    return out;
+}
+
+function isOriginNodePassthrough(nodeConn, traceOptions) {
+    return !!(traceOptions && traceOptions.originNodeId && nodeConn && nodeConn.nodeId === traceOptions.originNodeId);
+}
+
+function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, traceOptions) {
+    traceOptions = traceOptions || {};
     const path = [];
     const visitedFibers = new Set();
     const visitedObjects = new Set();
@@ -15285,51 +15212,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
     }
 
     function getOtherEnd(cable, currentObj, previousObj) {
-        var pts = cable.properties.get('points');
-        var fromObj = cable.properties.get('from');
-        var toObj = cable.properties.get('to');
-        if (pts && pts.length > 2) {
-            var currentId = getObjectUniqueId(currentObj);
-            var previousId = previousObj ? getObjectUniqueId(previousObj) : null;
-            var idx = -1;
-            for (var i = 0; i < pts.length; i++) {
-                if (pts[i] === currentObj || (pts[i] && getObjectUniqueId(pts[i]) === currentId)) { idx = i; break; }
-            }
-            if (idx === -1) return null;
-            
-            var nextIdx = idx + 1;
-            var prevIdx = idx - 1;
-            
-            if (previousId) {
-                var prevPtId = (prevIdx >= 0 && pts[prevIdx]) ? getObjectUniqueId(pts[prevIdx]) : null;
-                var nextPtId = (nextIdx < pts.length && pts[nextIdx]) ? getObjectUniqueId(pts[nextIdx]) : null;
-                
-                if (prevPtId === previousId && nextIdx < pts.length) {
-                    return pts[nextIdx];
-                }
-                if (nextPtId === previousId && prevIdx >= 0) {
-                    return pts[prevIdx];
-                }
-            }
-            
-            if (nextIdx < pts.length) return pts[nextIdx];
-            if (prevIdx >= 0) return pts[prevIdx];
-            return null;
-        }
-        if (!fromObj || !toObj) return null;
-        if (fromObj === currentObj) return toObj;
-        if (toObj === currentObj) return fromObj;
-        var currentId2 = getObjectUniqueId(currentObj);
-        var fromId = getObjectUniqueId(fromObj);
-        var toId = getObjectUniqueId(toObj);
-        if (fromId === currentId2) return toObj;
-        if (toId === currentId2) return fromObj;
-        var currentCoords = currentObj.geometry ? currentObj.geometry.getCoordinates() : null;
-        var fromCoords = fromObj.geometry ? fromObj.geometry.getCoordinates() : null;
-        var toCoords = toObj.geometry ? toObj.geometry.getCoordinates() : null;
-        if (currentCoords && fromCoords && Math.abs(currentCoords[0] - fromCoords[0]) < 0.0001 && Math.abs(currentCoords[1] - fromCoords[1]) < 0.0001) return toObj;
-        if (currentCoords && toCoords && Math.abs(currentCoords[0] - toCoords[0]) < 0.0001 && Math.abs(currentCoords[1] - toCoords[1]) < 0.0001) return fromObj;
-        return null;
+        return getOtherEndOnCableRoute(cable, currentObj, previousObj);
     }
 
     const startCable = findCableById(startCableId);
@@ -15354,7 +15237,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
     let currentFiberNumber = startFiberNumber;
     let currentCable = startCable;
     let currentObject = startObject;
-    let previousObject = null;
+    let previousObject = traceOptions.initialPreviousObject || null;
     
     const maxIterations = 100;
     let iterations = 0;
@@ -15391,7 +15274,20 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
         }
         
         const nextObjectId = getObjectUniqueId(nextObject);
-        if (visitedObjects.has(nextObjectId)) break;
+        if (visitedObjects.has(nextObjectId)) {
+            if (traceOptions.originNodeId && traceOptions.startCrossId && nextObjectId === traceOptions.startCrossId) {
+                var exitOnOriginCross = getOtherEnd(currentCable, nextObject, currentObject);
+                if (exitOnOriginCross) {
+                    if (path.length && path[path.length - 1].type === 'object' && path[path.length - 1].object === nextObject) {
+                        path.pop();
+                    }
+                    previousObject = nextObject;
+                    currentObject = exitOnOriginCross;
+                    continue;
+                }
+            }
+            break;
+        }
         visitedObjects.add(nextObjectId);
         
         const objType = nextObject.properties.get('type');
@@ -15508,13 +15404,16 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
                     break;
                 }
             }
-            if (foundPort !== null) {
+            var incomingFiberOlt = nextObject.properties.get('incomingFiber');
+            var isIncomingFiber = incomingFiberOlt && incomingFiberOlt.cableId === currentCableId && incomingFiberOlt.fiberNumber === currentFiberNumber;
+            if (foundPort !== null || isIncomingFiber) {
                 path.push({
                     type: 'oltPortConnection',
                     cableId: currentCableId,
                     fiberNumber: currentFiberNumber,
                     oltName: nextObject.properties.get('name') || 'OLT',
                     portNumber: foundPort,
+                    incoming: isIncomingFiber,
                     olt: nextObject
                 });
             }
@@ -15583,7 +15482,17 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
                     const connectedNode = objects.find(obj => 
                         obj.properties && obj.properties.get('type') === 'node' && obj.properties.get('uniqueId') === nodeConn.nodeId
                     );
-                    if (connectedNode) {
+                    if (connectedNode && isOriginNodePassthrough(nodeConn, traceOptions)) {
+                        var passExit = getOtherEnd(currentCable, nextObject, currentObject);
+                        if (passExit) {
+                            if (path.length && path[path.length - 1].type === 'object' && path[path.length - 1].object === nextObject) {
+                                path.pop();
+                            }
+                            previousObject = nextObject;
+                            currentObject = passExit;
+                            continue;
+                        }
+                    } else if (connectedNode) {
                         if (nodeConnCableId !== currentCableId || nodeConnFiberNumber !== currentFiberNumber) {
                             const crossFiberConnsForLabel = nextObject.properties.get('fiberConnections') || [];
                             const fiberLabels = nextObject.properties.get('fiberLabels') || {};
@@ -15604,8 +15513,10 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
                         }
                         path.push({ type: 'nodeConnection', cableId: nodeConnCableId, fiberNumber: nodeConnFiberNumber, nodeName: nodeConn.nodeName, cross: nextObject, node: connectedNode });
                         path.push({ type: 'object', objectType: 'node', objectName: connectedNode.properties.get('name') || 'Узел сети', object: connectedNode });
+                        break;
+                    } else {
+                        break;
                     }
-                    break;
                 }
             }
             if (objType === 'sleeve') {
@@ -15639,6 +15550,45 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
 
             var nextFiber = findFiberConnection(currentCableId, currentFiberNumber, nextObject);
             if (!nextFiber) {
+                var oltConnectionsAtSlot = nextObject.properties.get('oltConnections') || {};
+                var oltConnAtSlot = oltConnectionsAtSlot[nodeConnKey];
+                if (oltConnAtSlot && oltConnAtSlot.oltId) {
+                    var oltObjFromConn = objects.find(function(o) {
+                        return o.properties && o.properties.get('type') === 'olt' && o.properties.get('uniqueId') === oltConnAtSlot.oltId;
+                    });
+                    if (oltObjFromConn) {
+                        var oltPortFromConn = null;
+                        var oltIncoming = !!oltConnAtSlot.incoming;
+                        if (!oltIncoming && oltConnAtSlot.portNumber != null) {
+                            oltPortFromConn = oltConnAtSlot.portNumber;
+                        } else if (!oltIncoming) {
+                            var paFromConn = oltObjFromConn.properties.get('portAssignments') || {};
+                            Object.keys(paFromConn).forEach(function(pk) {
+                                var pa = paFromConn[pk];
+                                if (pa && pa.cableId === currentCableId && pa.fiberNumber === currentFiberNumber) {
+                                    oltPortFromConn = parseInt(pk, 10);
+                                }
+                            });
+                        }
+                        path.push({
+                            type: 'oltPortConnection',
+                            cableId: currentCableId,
+                            fiberNumber: currentFiberNumber,
+                            oltName: oltObjFromConn.properties.get('name') || 'OLT',
+                            portNumber: oltPortFromConn,
+                            incoming: oltIncoming,
+                            olt: oltObjFromConn
+                        });
+                        path.push({
+                            type: 'object',
+                            objectType: 'olt',
+                            objectName: oltObjFromConn.properties.get('name') || 'OLT',
+                            object: oltObjFromConn,
+                            port: null
+                        });
+                        break;
+                    }
+                }
                 var splitterConns = nextObject.properties.get('splitterConnections') || {};
                 var scEntry = splitterConns[nodeConnKey];
                 if (scEntry && scEntry.splitterId) {
@@ -15697,8 +15647,8 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
             previousObject = currentObject;
             currentObject = nextObject;
             
-        } else if (objType === 'support' || objType === 'attachment') {
-            var pts = currentCable.properties.get('points');
+        } else if (objType === 'support' || objType === 'attachment' || objType === 'manhole') {
+            var pts = getCableRoutePointsForTrace(currentCable);
             if (pts && Array.isArray(pts) && pts.length > 2) {
                 var currentIdx = -1;
                 var nextObjId = getObjectUniqueId(nextObject);
@@ -15731,9 +15681,20 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
                     }
                     
                     if (nextPointIdx !== -1 && nextPointIdx >= 0 && nextPointIdx < pts.length) {
-                        previousObject = currentObject;
-                        currentObject = nextObject;
-                        continue;
+                        var nextPt = pts[nextPointIdx];
+                        if (nextPt) {
+                            path.push({
+                                type: 'object',
+                                objectType: nextPt.properties.get('type'),
+                                objectName: nextPt.properties.get('name') || getObjectTypeName(nextPt.properties.get('type')),
+                                object: nextPt,
+                                port: (nextPt.properties.get('type') === 'cross') ? ((nextPt.properties.get('fiberPorts') || {})[currentCableId + '-' + currentFiberNumber] || null) : null
+                            });
+                            previousObject = nextObject;
+                            currentObject = nextPt;
+                            afterSplitterInputBranch = true;
+                            continue;
+                        }
                     }
                 }
             }
@@ -15744,58 +15705,37 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber) {
         }
     }
 
-    function findNextCableThroughObject(obj, excludeCable) {
-        const objCoords = obj.geometry ? obj.geometry.getCoordinates() : null;
-        const objId = getObjectUniqueId(obj);
-        const excludeId = excludeCable ? excludeCable.properties.get('uniqueId') : null;
-
-        for (const cable of objects) {
-            if (!cable.properties || cable.properties.get('type') !== 'cable') continue;
-            
-            const cableId = cable.properties.get('uniqueId');
-            if (excludeId && cableId === excludeId) continue;
-            
-            const fromObj = cable.properties.get('from');
-            const toObj = cable.properties.get('to');
-            
-            if (!fromObj || !toObj) continue;
-
-            if (fromObj === obj || toObj === obj) {
-                return cable;
-            }
-
-            const fromId = getObjectUniqueId(fromObj);
-            const toId = getObjectUniqueId(toObj);
-            
-            if (objId && (fromId === objId || toId === objId)) {
-                return cable;
-            }
-
-            if (objCoords) {
-                const fromCoords = fromObj.geometry ? fromObj.geometry.getCoordinates() : null;
-                const toCoords = toObj.geometry ? toObj.geometry.getCoordinates() : null;
-                
-                if (fromCoords && Math.abs(fromCoords[0] - objCoords[0]) < 0.0001 && Math.abs(fromCoords[1] - objCoords[1]) < 0.0001) {
-                    return cable;
-                }
-                if (toCoords && Math.abs(toCoords[0] - objCoords[0]) < 0.0001 && Math.abs(toCoords[1] - objCoords[1]) < 0.0001) {
-                    return cable;
-                }
-            }
-        }
-        
-        return null;
-    }
-    
     return { path, error: null };
 }
 
-function traceAllFiberPathsFromObject(startObject, startCableId, startFiberNumber) {
-    const first = traceFiberPathFromObject(startObject, startCableId, startFiberNumber);
+function traceAllFiberPathsFromObject(startObject, startCableId, startFiberNumber, traceOptions) {
+    traceOptions = traceOptions || {};
+    const first = traceFiberPathFromObject(startObject, startCableId, startFiberNumber, traceOptions);
     if (first.error) return { paths: [], error: first.error };
     var paths = [ first.path ];
     var startType = startObject.properties ? startObject.properties.get('type') : '';
     if (startType === 'sleeve' || startType === 'cross') {
+        var startCable = objects.find(function(c) {
+            return c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === startCableId;
+        });
+        if (startCable) {
+            var routePos = getCableRoutePosition(startCable, startObject);
+            if (routePos && routePos.forward && routePos.backward) {
+                var reversePath = traceFiberPathFromObject(startObject, startCableId, startFiberNumber, mergeTraceOptions(traceOptions, {
+                    initialPreviousObject: routePos.forward
+                }));
+                if (!reversePath.error && reversePath.path.length > 0) {
+                    paths.push(reversePath.path);
+                }
+            } else if (routePos && routePos.forward && !routePos.backward) {
+                var reverseFromEnd = traceFiberPathFromObject(startObject, startCableId, startFiberNumber, mergeTraceOptions(traceOptions, {
+                    initialPreviousObject: routePos.forward
+                }));
+                if (!reverseFromEnd.error && reverseFromEnd.path.length > 0) {
+                    paths.push(reverseFromEnd.path);
+                }
+            }
+        }
         var conns = startObject.properties.get('fiberConnections') || [];
         for (var ci = 0; ci < conns.length; ci++) {
             var c = conns[ci];
@@ -15803,8 +15743,25 @@ function traceAllFiberPathsFromObject(startObject, startCableId, startFiberNumbe
             if (c.from && c.from.cableId === startCableId && c.from.fiberNumber === startFiberNumber) { otherCable = c.to.cableId; otherFiber = c.to.fiberNumber; }
             else if (c.to && c.to.cableId === startCableId && c.to.fiberNumber === startFiberNumber) { otherCable = c.from.cableId; otherFiber = c.from.fiberNumber; }
             if (otherCable && otherFiber) {
-                var alt = traceFiberPathFromObject(startObject, otherCable, otherFiber);
+                var alt = traceFiberPathFromObject(startObject, otherCable, otherFiber, traceOptions);
                 if (!alt.error && alt.path.length > 0) paths.push(alt.path);
+                var altCable = objects.find(function(c) {
+                    return c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === otherCable;
+                });
+                if (altCable) {
+                    var altPos = getCableRoutePosition(altCable, startObject);
+                    if (altPos && altPos.forward && altPos.backward) {
+                        var altRev = traceFiberPathFromObject(startObject, otherCable, otherFiber, mergeTraceOptions(traceOptions, {
+                            initialPreviousObject: altPos.forward
+                        }));
+                        if (!altRev.error && altRev.path.length > 0) paths.push(altRev.path);
+                    } else if (altPos && altPos.forward && !altPos.backward) {
+                        var altRevEnd = traceFiberPathFromObject(startObject, otherCable, otherFiber, mergeTraceOptions(traceOptions, {
+                            initialPreviousObject: altPos.forward
+                        }));
+                        if (!altRevEnd.error && altRevEnd.path.length > 0) paths.push(altRevEnd.path);
+                    }
+                }
             }
         }
     }
@@ -15910,6 +15867,9 @@ function traceAllFiberPathsFromObject(startObject, startCableId, startFiberNumbe
             }
         }
     }
+    if (window.FiberTrace && FiberTrace.dedupePaths) {
+        paths = FiberTrace.dedupePaths(paths);
+    }
     return { paths: paths, error: null };
 }
 
@@ -15984,51 +15944,7 @@ function traceFiberPath(startCableId, startFiberNumber) {
     }
 
     function getOtherEnd(cable, currentObj, previousObj) {
-        var pts = cable.properties.get('points');
-        var fromObj = cable.properties.get('from');
-        var toObj = cable.properties.get('to');
-        if (pts && pts.length > 2) {
-            var currentId = getObjectUniqueId(currentObj);
-            var previousId = previousObj ? getObjectUniqueId(previousObj) : null;
-            var idx = -1;
-            for (var i = 0; i < pts.length; i++) {
-                if (pts[i] === currentObj || (pts[i] && getObjectUniqueId(pts[i]) === currentId)) { idx = i; break; }
-            }
-            if (idx === -1) return null;
-            
-            var nextIdx = idx + 1;
-            var prevIdx = idx - 1;
-            
-            if (previousId) {
-                var prevPtId = (prevIdx >= 0 && pts[prevIdx]) ? getObjectUniqueId(pts[prevIdx]) : null;
-                var nextPtId = (nextIdx < pts.length && pts[nextIdx]) ? getObjectUniqueId(pts[nextIdx]) : null;
-                
-                if (prevPtId === previousId && nextIdx < pts.length) {
-                    return pts[nextIdx];
-                }
-                if (nextPtId === previousId && prevIdx >= 0) {
-                    return pts[prevIdx];
-                }
-            }
-            
-            if (nextIdx < pts.length) return pts[nextIdx];
-            if (prevIdx >= 0) return pts[prevIdx];
-            return null;
-        }
-        if (!fromObj || !toObj) return null;
-        if (fromObj === currentObj) return toObj;
-        if (toObj === currentObj) return fromObj;
-        var currentId2 = getObjectUniqueId(currentObj);
-        var fromId = getObjectUniqueId(fromObj);
-        var toId = getObjectUniqueId(toObj);
-        if (fromId === currentId2) return toObj;
-        if (toId === currentId2) return fromObj;
-        var currentCoords = currentObj.geometry ? currentObj.geometry.getCoordinates() : null;
-        var fromCoords = fromObj.geometry ? fromObj.geometry.getCoordinates() : null;
-        var toCoords = toObj.geometry ? toObj.geometry.getCoordinates() : null;
-        if (currentCoords && fromCoords && Math.abs(currentCoords[0] - fromCoords[0]) < 0.0001 && Math.abs(currentCoords[1] - fromCoords[1]) < 0.0001) return toObj;
-        if (currentCoords && toCoords && Math.abs(currentCoords[0] - toCoords[0]) < 0.0001 && Math.abs(currentCoords[1] - toCoords[1]) < 0.0001) return fromObj;
-        return null;
+        return getOtherEndOnCableRoute(cable, currentObj, previousObj);
     }
 
     const startCable = findCableById(startCableId);
@@ -16151,7 +16067,44 @@ function traceFiberPath(startCableId, startFiberNumber) {
             const nextFiber = findFiberConnection(currentCableId, currentFiberNumber, currentObject);
             
             if (!nextFiber) {
-                
+                var oltConnLegacy = (currentObject.properties.get('oltConnections') || {})[fiberKey];
+                if (oltConnLegacy && oltConnLegacy.oltId) {
+                    var oltLegacy = objects.find(function(o) {
+                        return o.properties && o.properties.get('type') === 'olt' && o.properties.get('uniqueId') === oltConnLegacy.oltId;
+                    });
+                    if (oltLegacy) {
+                        var oltPortLegacy = null;
+                        var oltIncomingLegacy = !!oltConnLegacy.incoming;
+                        if (!oltIncomingLegacy && oltConnLegacy.portNumber != null) {
+                            oltPortLegacy = oltConnLegacy.portNumber;
+                        } else if (!oltIncomingLegacy) {
+                            var paLegacy = oltLegacy.properties.get('portAssignments') || {};
+                            Object.keys(paLegacy).forEach(function(pk) {
+                                var pa = paLegacy[pk];
+                                if (pa && pa.cableId === currentCableId && pa.fiberNumber === currentFiberNumber) {
+                                    oltPortLegacy = parseInt(pk, 10);
+                                }
+                            });
+                        }
+                        path.push({
+                            type: 'oltPortConnection',
+                            cableId: currentCableId,
+                            fiberNumber: currentFiberNumber,
+                            oltName: oltLegacy.properties.get('name') || 'OLT',
+                            portNumber: oltPortLegacy,
+                            incoming: oltIncomingLegacy,
+                            olt: oltLegacy
+                        });
+                        path.push({
+                            type: 'object',
+                            objectType: 'olt',
+                            objectName: oltLegacy.properties.get('name') || 'OLT',
+                            object: oltLegacy,
+                            port: null
+                        });
+                        break;
+                    }
+                }
                 break;
             }
 
@@ -16200,8 +16153,51 @@ function traceFiberPath(startCableId, startFiberNumber) {
             
             previousObject = currentObject;
             currentObject = nextObject;
-        } else if (objType === 'support') {
-            
+        } else if (objType === 'support' || objType === 'attachment' || objType === 'manhole') {
+            var ptsWp = getCableRoutePointsForTrace(currentCable);
+            if (ptsWp && Array.isArray(ptsWp) && ptsWp.length > 2) {
+                var wpIdx = -1;
+                var wpObjId = getObjectUniqueId(currentObject);
+                for (var wpi = 0; wpi < ptsWp.length; wpi++) {
+                    if (ptsWp[wpi] === currentObject || (ptsWp[wpi] && getObjectUniqueId(ptsWp[wpi]) === wpObjId)) {
+                        wpIdx = wpi;
+                        break;
+                    }
+                }
+                if (wpIdx !== -1) {
+                    var wpPrevObjId = previousObject ? getObjectUniqueId(previousObject) : null;
+                    var wpNextPointIdx = -1;
+                    if (wpPrevObjId) {
+                        var wpPrevIdx = wpIdx - 1;
+                        var wpNextIdx = wpIdx + 1;
+                        var wpPrevPtId = (wpPrevIdx >= 0 && ptsWp[wpPrevIdx]) ? getObjectUniqueId(ptsWp[wpPrevIdx]) : null;
+                        var wpNextPtId = (wpNextIdx < ptsWp.length && ptsWp[wpNextIdx]) ? getObjectUniqueId(ptsWp[wpNextIdx]) : null;
+                        if (wpPrevPtId === wpPrevObjId && wpNextIdx < ptsWp.length) {
+                            wpNextPointIdx = wpNextIdx;
+                        } else if (wpNextPtId === wpPrevObjId && wpPrevIdx >= 0) {
+                            wpNextPointIdx = wpPrevIdx;
+                        }
+                    }
+                    if (wpNextPointIdx === -1) {
+                        if (wpIdx < ptsWp.length - 1) wpNextPointIdx = wpIdx + 1;
+                        else if (wpIdx > 0) wpNextPointIdx = wpIdx - 1;
+                    }
+                    if (wpNextPointIdx !== -1 && wpNextPointIdx >= 0 && wpNextPointIdx < ptsWp.length) {
+                        path.push({
+                            type: 'cable',
+                            cableId: currentCableId,
+                            cableName: currentCable.properties.get('cableName') || getCableDescription(currentCable.properties.get('cableType')),
+                            fiberNumber: currentFiberNumber,
+                            cable: currentCable
+                        });
+                        previousObject = currentObject;
+                        currentObject = ptsWp[wpNextPointIdx];
+                        continue;
+                    }
+                }
+            }
+            if (objType !== 'support') break;
+
             const nextCableForSupport = findNextCableThroughSupport(currentObject, currentCable);
             
             if (!nextCableForSupport) {
@@ -16237,49 +16233,6 @@ function traceFiberPath(startCableId, startFiberNumber) {
         }
     }
 
-    function findNextCableThroughSupport(supportObj, excludeCable) {
-        const supportCoords = supportObj.geometry ? supportObj.geometry.getCoordinates() : null;
-        const supportId = getObjectUniqueId(supportObj);
-        const excludeId = excludeCable ? excludeCable.properties.get('uniqueId') : null;
-        
-        for (const cable of objects) {
-            if (!cable.properties || cable.properties.get('type') !== 'cable') continue;
-            
-            const cableId = cable.properties.get('uniqueId');
-            if (excludeId && cableId === excludeId) continue;
-            
-            const fromObj = cable.properties.get('from');
-            const toObj = cable.properties.get('to');
-            
-            if (!fromObj || !toObj) continue;
-
-            if (fromObj === supportObj || toObj === supportObj) {
-                return cable;
-            }
-
-            const fromId = getObjectUniqueId(fromObj);
-            const toId = getObjectUniqueId(toObj);
-            
-            if (supportId && (fromId === supportId || toId === supportId)) {
-                return cable;
-            }
-
-            if (supportCoords) {
-                const fromCoords = fromObj.geometry ? fromObj.geometry.getCoordinates() : null;
-                const toCoords = toObj.geometry ? toObj.geometry.getCoordinates() : null;
-                
-                if (fromCoords && Math.abs(fromCoords[0] - supportCoords[0]) < 0.0001 && Math.abs(fromCoords[1] - supportCoords[1]) < 0.0001) {
-                    return cable;
-                }
-                if (toCoords && Math.abs(toCoords[0] - supportCoords[0]) < 0.0001 && Math.abs(toCoords[1] - supportCoords[1]) < 0.0001) {
-                    return cable;
-                }
-            }
-        }
-        
-        return null;
-    }
-    
     return { path, iterations };
 }
 
@@ -16293,202 +16246,195 @@ function showFiberTrace(cableId, fiberNumber) {
     
     const path = result.path;
 
-    const modal = document.getElementById('infoModal');
-    const modalTitle = document.getElementById('modalTitle');
-    const modalContent = document.getElementById('modalInfo');
-    
-    if (!modal || !modalContent) return;
-    
-    modalTitle.textContent = 'Трассировка жилы';
-    resetInfoModalFiberLayout();
-    updateInfoModalChrome(null, '');
-
-    let html = '<div class="trace-result" style="padding: 10px;">';
-    html += '<div style="background: #e0f2fe; padding: 12px; border-radius: 8px; margin-bottom: 15px;">';
-    html += '<strong>Маршрут жилы:</strong>';
-    html += '</div>';
-    
-    html += '<div class="trace-path" style="position: relative; padding-left: 20px;">';
-
-    path.forEach((item, index) => {
-        const isLast = index === path.length - 1;
-        
-        if (item.type === 'start' || item.type === 'object') {
-            
-            let icon = '📍';
-            let color = '#6b7280';
-            if (item.objectType === 'sleeve') {
-                icon = '🔗';
-                color = '#ef4444';
-            } else if (item.objectType === 'cross') {
-                icon = '📦';
-                color = '#8b5cf6';
-            } else if (item.objectType === 'node') {
-                icon = '🖥️';
-                color = '#22c55e';
-            } else if (item.objectType === 'support') {
-                icon = '📡';
-                color = '#3b82f6';
-            }
-            
-            const portText = (item.objectType === 'cross' && item.port) ? ` <span style="font-size: 0.8rem; color: #7c3aed; font-weight: 600;">· Порт ${escapeHtml(String(item.port))}</span>` : '';
-            html += `<div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: ${isLast ? '0' : '8px'};">`;
-            html += `<div style="width: 32px; height: 32px; border-radius: 50%; background: ${color}; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 16px;">${icon}</div>`;
-            html += `<div style="flex: 1; padding-top: 4px;">`;
-            html += `<strong style="color: ${color};">${item.objectName}</strong>${portText}`;
-            html += `<div style="font-size: 0.8rem; color: #6b7280;">${getObjectTypeName(item.objectType)}</div>`;
-            html += `</div></div>`;
-        } else if (item.type === 'nodeConnection') {
-            html += `<div style="display: flex; align-items: center; gap: 4px; margin: 4px 0 4px 24px; font-size: 0.8rem; color: #22c55e;">`;
-            html += `<span>🔌 Вывод на узел:</span>`;
-            html += `<span style="background: #dcfce7; padding: 2px 6px; border-radius: 4px;">Жила ${item.fiberNumber} → ${item.nodeName}</span>`;
-            html += `</div>`;
-        } else if (item.type === 'cable') {
-            
-            const fiberColors = getFiberColors(item.cable);
-            const fiber = fiberColors.find(f => f.number === item.fiberNumber);
-            const fiberColor = fiber ? fiber.color : '#888';
-            const fiberName = fiber ? fiber.name : `Жила ${item.fiberNumber}`;
-            
-            html += `<div style="display: flex; align-items: center; gap: 8px; margin: 4px 0 4px 12px; padding: 8px 12px; background: var(--bg-tertiary); border-radius: 6px; border-left: 4px solid ${fiberColor};">`;
-            html += `<span style="font-size: 0.875rem;">📦 <strong>${item.cableName}</strong></span>`;
-            html += `<span style="background: ${fiberColor}; color: ${fiberColor === '#FFFFFF' || fiberColor === '#FFFACD' ? '#000' : '#fff'}; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">Жила ${item.fiberNumber}: ${fiberName}</span>`;
-            html += `</div>`;
-        } else if (item.type === 'splitterConnection') {
-            var spName = (item.splitter && item.splitter.properties) ? (item.splitter.properties.get('name') || 'Сплиттер') : 'Сплиттер';
-            html += `<div style="display: flex; align-items: center; gap: 8px; margin: 4px 0 4px 12px; padding: 8px 12px; background: #fffbeb; border-radius: 6px; border-left: 4px solid #f59e0b;">`;
-            html += `<span style="font-size: 0.875rem; font-weight: 600; color: #92400e;">→ Жила идёт на сплиттер «${escapeHtml(spName)}»</span><span style="color: #78716c; font-size: 0.8rem;"> (жила ${item.fiberNumber})</span>`;
-            html += `</div>`;
-        } else if (item.type === 'connection') {
-            
-            const fromCableObj = item.fromCable || (item.fromCableId ? objects.find(function(o) { return o.properties && o.properties.get('uniqueId') === item.fromCableId; }) : null);
-            const toCableObj = item.toCable || (item.toCableId ? objects.find(function(o) { return o.properties && o.properties.get('uniqueId') === item.toCableId; }) : null);
-            const fromFiberColors = fromCableObj ? getFiberColors(fromCableObj) : (item.fromCableType ? getFiberColors(item.fromCableType) : []);
-            const toFiberColors = toCableObj ? getFiberColors(toCableObj) : (item.toCableType ? getFiberColors(item.toCableType) : []);
-            const fromFiber = fromFiberColors.find(f => f.number === item.fromFiberNumber);
-            const toFiber = toFiberColors.find(f => f.number === item.toFiberNumber);
-            const fromColor = fromFiber ? fromFiber.color : '#6366f1';
-            const toColor = toFiber ? toFiber.color : '#6366f1';
-            const fromTextColor = (fromColor === '#FFFFFF' || fromColor === '#FFFACD' || fromColor === '#FFFF00') ? '#000' : '#fff';
-            const toTextColor = (toColor === '#FFFFFF' || toColor === '#FFFACD' || toColor === '#FFFF00') ? '#000' : '#fff';
-            const fromFiberName = fromFiber ? fromFiber.name : '';
-            const toFiberName = toFiber ? toFiber.name : '';
-            
-            html += `<div style="display: flex; align-items: center; gap: 6px; margin: 4px 0 4px 24px; font-size: 0.8rem; color: #6366f1; flex-wrap: wrap;">`;
-            html += `<span>↔️ Соединение:</span>`;
-            html += `<div style="display: flex; align-items: center; gap: 4px;">`;
-            html += `<div style="width: 14px; height: 14px; border-radius: 50%; background: ${fromColor}; border: 1px solid #333;"></div>`;
-            html += `<span style="background: ${fromColor}; color: ${fromTextColor}; padding: 2px 8px; border-radius: 4px; font-weight: 600;">Ж${item.fromFiberNumber}${fromFiberName ? ` (${fromFiberName})` : ''}</span>`;
-            html += `</div>`;
-            if (item.fromLabel) html += `<span style="color: #8b5cf6; font-weight: 500;">[${item.fromLabel}]</span>`;
-            html += `<span style="font-size: 1.1rem;">⟷</span>`;
-            html += `<div style="display: flex; align-items: center; gap: 4px;">`;
-            html += `<div style="width: 14px; height: 14px; border-radius: 50%; background: ${toColor}; border: 1px solid #333;"></div>`;
-            html += `<span style="background: ${toColor}; color: ${toTextColor}; padding: 2px 8px; border-radius: 4px; font-weight: 600;">Ж${item.toFiberNumber}${toFiberName ? ` (${toFiberName})` : ''}</span>`;
-            html += `</div>`;
-            if (item.toLabel) html += `<span style="color: #8b5cf6; font-weight: 500;">[${item.toLabel}]</span>`;
-            html += `</div>`;
-        }
+    var pathHtml = renderOnePathToTraceHtml(path, 1);
+    var bodyHtml = pathHtml.html;
+    if (window.FiberTrace && FiberTrace.buildTraceActionsHtml) {
+        bodyHtml += FiberTrace.buildTraceActionsHtml();
+    }
+    openFiberTraceModal({
+        title: 'Трассировка · жила ' + fiberNumber,
+        subtitle: 'Маршрут по кабелю',
+        bodyHtml: bodyHtml,
+        paths: [path]
     });
-    
-    html += '</div>';
-
-    html += '<div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--border-color);">';
-    html += `<button onclick="highlightTracePath()" class="btn-primary" style="width: 100%;">`;
-    html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">';
-    html += '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
-    html += '</svg>Показать на карте</button>';
-    html += '</div>';
-    
-    html += '</div>';
-    
-    modalContent.innerHTML = html;
-    modal.style.display = 'flex';
-    modal.classList.add('modal--centered');
-
-    window.currentTracePath = path;
 }
 
 let traceHighlightObjects = [];
+var traceHighlightClearTimer = null;
+var traceReturnContext = null;
 
-function highlightTracePath() {
-    
-    clearTraceHighlight();
-    
-    const path = window.currentTracePath;
-    if (!path || path.length === 0) return;
+function saveTraceReturnContext() {
+    if (!currentModalObject || !currentModalObject.properties) {
+        traceReturnContext = null;
+        return;
+    }
+    var type = currentModalObject.properties.get('type');
+    var name = currentModalObject.properties.get('name') || getObjectTypeName(type);
+    traceReturnContext = {
+        object: currentModalObject,
+        label: name,
+        type: type
+    };
+}
 
-    path.forEach(item => {
-        if (item.type === 'cable' && item.cable) {
-            
-            const coords = item.cable.geometry.getCoordinates();
-            const highlightLine = new ymaps.Polyline(coords, {}, {
-                strokeColor: '#f59e0b',
-                strokeWidth: 8,
-                strokeOpacity: 0.7,
-                zIndex: 1500
-            });
-            traceHighlightObjects.push(highlightLine);
-            myMap.geoObjects.add(highlightLine);
-        } else if ((item.type === 'start' || item.type === 'object') && item.object) {
-            
-            const coords = item.object.geometry.getCoordinates();
-            const highlightCircle = new ymaps.Circle([coords, 30], {}, {
-                fillColor: '#f59e0b',
-                fillOpacity: 0.5,
-                strokeColor: '#f59e0b',
-                strokeWidth: 3,
-                zIndex: 1500
-            });
-            traceHighlightObjects.push(highlightCircle);
-            myMap.geoObjects.add(highlightCircle);
-        } else if (item.type === 'splitterConnection') {
-            if (item.sleeve && item.sleeve.geometry) {
-                const sc = item.sleeve.geometry.getCoordinates();
-                const hc = new ymaps.Circle([sc, 30], {}, { fillColor: '#f59e0b', fillOpacity: 0.5, strokeColor: '#f59e0b', strokeWidth: 3, zIndex: 1500 });
-                traceHighlightObjects.push(hc);
-                myMap.geoObjects.add(hc);
-            }
-            if (item.splitter && item.splitter.geometry) {
-                const spc = item.splitter.geometry.getCoordinates();
-                const hc2 = new ymaps.Circle([spc, 30], {}, { fillColor: '#f59e0b', fillOpacity: 0.5, strokeColor: '#f59e0b', strokeWidth: 3, zIndex: 1500 });
-                traceHighlightObjects.push(hc2);
-                myMap.geoObjects.add(hc2);
-            }
-        }
-    });
+function returnFromTraceToObjectCard() {
+    var modal = document.getElementById('infoModal');
+    if (modal) {
+        modal.removeAttribute('data-trace-view');
+        modal.classList.remove('modal--centered');
+    }
+    var traceHeader = document.getElementById('fiberModalHeader');
+    if (traceHeader) traceHeader.classList.remove('fiber-modal-header--trace');
+    var ctx = traceReturnContext;
+    traceReturnContext = null;
+    if (ctx && ctx.object) {
+        showObjectInfo(ctx.object);
+        return;
+    }
+    if (typeof closeInfoModal === 'function') closeInfoModal();
+}
+window.returnFromTraceToObjectCard = returnFromTraceToObjectCard;
 
-    if (traceHighlightObjects.length > 0) {
-        const bounds = [];
-        path.forEach(item => {
-            if (item.object && item.object.geometry) {
-                bounds.push(item.object.geometry.getCoordinates());
-            } else if (item.type === 'splitterConnection') {
-                if (item.sleeve && item.sleeve.geometry) bounds.push(item.sleeve.geometry.getCoordinates());
-                if (item.splitter && item.splitter.geometry) bounds.push(item.splitter.geometry.getCoordinates());
-            } else if (item.cable && item.cable.geometry) {
-                const coords = item.cable.geometry.getCoordinates();
-                if (Array.isArray(coords[0])) {
-                    coords.forEach(c => bounds.push(c));
-                } else {
-                    bounds.push(coords);
-                }
-            }
-        });
-        
-        if (bounds.length > 0) {
-            myMap.setBounds(ymaps.util.bounds.fromPoints(bounds), {
-                checkZoomRange: true,
-                zoomMargin: 50
-            });
+function openFiberTraceModal(options) {
+    saveTraceReturnContext();
+    var modal = document.getElementById('infoModal');
+    var titleEl = document.getElementById('modalTitle');
+    var content = document.getElementById('modalInfo');
+    if (!modal || !content) return;
+
+    resetInfoModalFiberLayout();
+    updateInfoModalChrome(null, '');
+    modal.setAttribute('data-trace-view', '1');
+    modal.classList.remove('fiber-management-modal-open', 'modal--centered');
+    var header = document.getElementById('fiberModalHeader');
+    if (header) header.classList.add('fiber-modal-header--trace');
+    titleEl.textContent = options.title || 'Трассировка';
+
+    var subEl = document.getElementById('modalTitleSub');
+    if (subEl) {
+        if (options.subtitle) {
+            subEl.hidden = false;
+            subEl.textContent = options.subtitle;
+        } else {
+            subEl.hidden = true;
+            subEl.textContent = '';
         }
     }
 
-    setTimeout(clearTraceHighlight, 10000);
+    var returnLabel = traceReturnContext ? traceReturnContext.label : null;
+    var returnType = traceReturnContext ? traceReturnContext.type : null;
+    var bodyHtml = options.bodyHtml || '';
+    content.innerHTML = (window.FiberTrace && FiberTrace.buildTraceViewHtml)
+        ? FiberTrace.buildTraceViewHtml(bodyHtml, returnLabel, returnType)
+        : bodyHtml;
+
+    window.currentTracePaths = options.paths || [];
+    window.currentTracePath = (options.paths && options.paths.length) ? options.paths[0] : [];
+
+    modal.style.display = 'flex';
+    modal.classList.remove('modal--centered');
+
+    if (window.FiberTrace && FiberTrace.attachTraceModalHandlers) {
+        FiberTrace.attachTraceModalHandlers(content);
+    } else {
+        attachTraceShowOnMapHandlers(content);
+    }
+}
+
+function highlightTracePath() {
+    clearTraceHighlight();
+
+    var paths = window.currentTracePaths;
+    if (!paths || !paths.length) {
+        var single = window.currentTracePath;
+        paths = (single && single.length) ? [single] : [];
+    }
+    if (!paths.length) return;
+
+    var branchColors = ['#22c55e', '#16a34a', '#3b82f6', '#a855f7'];
+    var allBounds = [];
+
+    paths.forEach(function(path, pi) {
+        var color = branchColors[pi % branchColors.length];
+        if (window.FiberTrace && FiberTrace.buildHighlightGeometries) {
+            var geom = FiberTrace.buildHighlightGeometries(path);
+            geom.lines.forEach(function(line) {
+                if (!line.coords || line.coords.length < 2) return;
+                var highlightLine = new ymaps.Polyline(line.coords, {}, {
+                    strokeColor: line.underground ? '#6366f1' : color,
+                    strokeWidth: line.underground ? 6 : 8,
+                    strokeOpacity: 0.78,
+                    strokeStyle: line.underground ? 'shortdash' : 'solid',
+                    zIndex: 1500 + pi
+                });
+                traceHighlightObjects.push(highlightLine);
+                myMap.geoObjects.add(highlightLine);
+                line.coords.forEach(function(c) { if (c && c.length >= 2) allBounds.push(c); });
+            });
+            geom.points.forEach(function(pt) {
+                if (!pt.coords) return;
+                var highlightCircle = new ymaps.Circle([pt.coords, 28], {}, {
+                    fillColor: color,
+                    fillOpacity: 0.45,
+                    strokeColor: color,
+                    strokeWidth: 2,
+                    zIndex: 1501 + pi
+                });
+                traceHighlightObjects.push(highlightCircle);
+                myMap.geoObjects.add(highlightCircle);
+                allBounds.push(pt.coords);
+            });
+            return;
+        }
+        path.forEach(function(item) {
+            if (item.type === 'cable' && item.cable && item.cable.geometry) {
+                var coords = item.cable.geometry.getCoordinates();
+                var highlightLine = new ymaps.Polyline(coords, {}, {
+                    strokeColor: color,
+                    strokeWidth: 8,
+                    strokeOpacity: 0.7,
+                    zIndex: 1500 + pi
+                });
+                traceHighlightObjects.push(highlightLine);
+                myMap.geoObjects.add(highlightLine);
+                if (Array.isArray(coords[0])) coords.forEach(function(c) { allBounds.push(c); });
+                else allBounds.push(coords);
+            } else if ((item.type === 'start' || item.type === 'object') && item.object && item.object.geometry) {
+                var pt = item.object.geometry.getCoordinates();
+                var highlightCircle = new ymaps.Circle([pt, 30], {}, {
+                    fillColor: color,
+                    fillOpacity: 0.5,
+                    strokeColor: color,
+                    strokeWidth: 3,
+                    zIndex: 1500 + pi
+                });
+                traceHighlightObjects.push(highlightCircle);
+                myMap.geoObjects.add(highlightCircle);
+                allBounds.push(pt);
+            }
+        });
+    });
+
+    if (allBounds.length > 0) {
+        myMap.setBounds(ymaps.util.bounds.fromPoints(allBounds), {
+            checkZoomRange: true,
+            zoomMargin: 60
+        });
+    }
+
+    if (traceHighlightClearTimer) clearTimeout(traceHighlightClearTimer);
+    traceHighlightClearTimer = setTimeout(function() {
+        traceHighlightClearTimer = null;
+        clearTraceHighlight();
+    }, 15000);
 }
 
 function clearTraceHighlight() {
-    traceHighlightObjects.forEach(obj => {
+    if (traceHighlightClearTimer) {
+        clearTimeout(traceHighlightClearTimer);
+        traceHighlightClearTimer = null;
+    }
+    traceHighlightObjects.forEach(function(obj) {
         myMap.geoObjects.remove(obj);
     });
     traceHighlightObjects = [];
@@ -16930,41 +16876,6 @@ function closeSplitterSelectionModal() {
     const modal = document.getElementById('splitterSelectionModal');
     if (modal) modal.style.display = 'none';
     splitterSelectionModalData = null;
-}
-
-function connectFiberToSplitter(sleeveObj, cableId, fiberNumber, splitterObj) {
-    const splitterId = getObjectUniqueId(splitterObj);
-    const t = sleeveObj.properties.get('type');
-    const placeId = sleeveObj.properties.get('uniqueId');
-    const opts = { type: 'splitterInput', splitterId: splitterId };
-    if (t === 'cross') opts.atCrossId = placeId; else opts.atSleeveId = placeId;
-    const usage = getFiberUsage(cableId, fiberNumber, opts);
-    if (usage.used) {
-        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
-        return;
-    }
-    const key = cableId + '-' + fiberNumber;
-    const prevInput = splitterObj.properties.get('inputFiber');
-    if (prevInput) {
-        const prevKey = prevInput.cableId + '-' + prevInput.fiberNumber;
-        objects.forEach(function(slot) {
-            if (!slot.properties) return;
-            const t = slot.properties.get('type');
-            if (t !== 'cross' && t !== 'sleeve') return;
-            let sc = slot.properties.get('splitterConnections');
-            if (sc && sc[prevKey] && sc[prevKey].splitterId === splitterId) {
-                delete sc[prevKey];
-                slot.properties.set('splitterConnections', sc);
-            }
-        });
-    }
-    splitterObj.properties.set('inputFiber', { cableId: cableId, fiberNumber: fiberNumber });
-    let splitterConnections = sleeveObj.properties.get('splitterConnections') || {};
-    splitterConnections[key] = { splitterId: splitterId };
-    sleeveObj.properties.set('splitterConnections', splitterConnections);
-    createSplitterConnectionLine(sleeveObj, splitterObj, cableId, fiberNumber);
-    saveData();
-    showObjectInfo(sleeveObj);
 }
 
 function disconnectFiberFromSplitter(sleeveObj, cableId, fiberNumber) {
@@ -17896,31 +17807,6 @@ function disconnectFiberFromNode(crossObj, cableId, fiberNumber) {
     showObjectInfo(crossObj);
 }
 
-function connectFiberToOnu(sleeveObj, cableId, fiberNumber, onuObj) {
-    const sleeveId = sleeveObj.properties.get('uniqueId');
-    const onuId = getObjectUniqueId(onuObj);
-    const usage = getFiberUsage(cableId, fiberNumber, { type: 'onuConn', sleeveId: sleeveId, onuId: onuId, atSleeveId: sleeveId });
-    if (usage.used) {
-        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
-        return;
-    }
-    let onuConnections = sleeveObj.properties.get('onuConnections');
-    if (!onuConnections) {
-        onuConnections = {};
-    }
-    const key = cableId + '-' + fiberNumber;
-    const onuUniqueId = onuObj.properties.get('uniqueId') || generateUniqueId('onu');
-    const sleeveUniqueId = sleeveObj.properties.get('uniqueId') || generateUniqueId('cross');
-    if (!onuObj.properties.get('uniqueId')) onuObj.properties.set('uniqueId', onuUniqueId);
-    if (!sleeveObj.properties.get('uniqueId')) sleeveObj.properties.set('uniqueId', sleeveUniqueId);
-    onuConnections[key] = { onuId: onuUniqueId, onuName: onuObj.properties.get('name') || 'ONU' };
-    sleeveObj.properties.set('onuConnections', onuConnections);
-    onuObj.properties.set('incomingFiber', { cableId: cableId, fiberNumber: fiberNumber });
-    createOnuConnectionLine(sleeveObj, onuObj, cableId, fiberNumber);
-    saveData();
-    showObjectInfo(sleeveObj);
-}
-
 function disconnectFiberFromOnu(sleeveObj, cableId, fiberNumber) {
     let onuConnections = sleeveObj.properties.get('onuConnections');
     if (!onuConnections) return;
@@ -18772,12 +18658,14 @@ function traceFromNode(crossUniqueId, cableId, fiberNumber) {
         );
     }
 
-    var lanTailContext = null;
-    if (currentModalObject && currentModalObject.properties && currentModalObject.properties.get('type') === 'camera') {
-        lanTailContext = buildCameraLanTailTraceContext(currentModalObject);
+    var traceOptions = null;
+    if (nodeObj) {
+        traceOptions = {
+            originNodeId: getObjectUniqueId(nodeObj),
+            startCrossId: getObjectUniqueId(crossObj)
+        };
     }
-
-    showFiberTraceFromCross(crossObj, cableId, fiberNumber, nodeObj, lanTailContext);
+    showFiberTraceFromCross(crossObj, cableId, fiberNumber, nodeObj, nodeConn, traceOptions);
 }
 
 function traceFromOLTPort(oltObj, portNumber) {
@@ -18871,21 +18759,28 @@ function attachTraceShowOnMapHandlers(container) {
 }
 
 function renderOnePathToTraceHtml(path, startStepNumber) {
+    if (window.FiberTrace && FiberTrace.renderCompactPathHtml) {
+        return FiberTrace.renderCompactPathHtml(path, startStepNumber);
+    }
     var stepNumber = startStepNumber;
     var html = '';
-    path.forEach(function(item) {
+    var displayPath = (window.FiberTrace && FiberTrace.compressPathForDisplay) ? FiberTrace.compressPathForDisplay(path) : path;
+    if (window.FiberTrace && FiberTrace.renderPathStatusHtml) {
+        html += FiberTrace.renderPathStatusHtml(path);
+    }
+    displayPath.forEach(function(item) {
         var objUniqueId = item.object ? getObjectUniqueId(item.object) : null;
         var showOnMapBtn = objUniqueId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(objUniqueId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
+        var traceIcon = (window.FiberTrace && FiberTrace.getObjectIcon) ? FiberTrace.getObjectIcon(item.objectType) : '📍';
         
         if (item.type === 'start') {
-            var icon = item.objectType === 'cross' ? '📦' : (item.objectType === 'sleeve' ? '🔴' : (item.objectType === 'olt' ? '📶' : (item.objectType === 'onu' ? '📟' : (item.objectType === 'mediaConverter' ? '⇄' : (item.objectType === 'splitter' ? '🔀' : '📍')))));
             var portBadge = (item.objectType === 'cross' && item.port) ? ' <span class="trace-port-badge">Порт ' + escapeHtml(String(item.port)) + '</span>' : '';
-            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-start">' + stepNumber + '</span><div class="trace-path-block trace-path-start"><div><span>' + icon + ' ' + escapeHtml(item.objectName) + '</span>' + portBadge + '<span class="trace-path-muted"> (' + getObjectTypeName(item.objectType) + ')</span></div>' + showOnMapBtn + '</div></div>';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-start">' + stepNumber + '</span><div class="trace-path-block trace-path-start"><div><span>' + traceIcon + ' ' + escapeHtml(item.objectName) + '</span>' + portBadge + '<span class="trace-path-muted"> (' + getObjectTypeName(item.objectType) + ')</span></div>' + showOnMapBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'object') {
-            icon = item.objectType === 'cross' ? '📦' : (item.objectType === 'sleeve' ? '🔴' : (item.objectType === 'node' ? '🖥️' : (item.objectType === 'olt' ? '📶' : (item.objectType === 'onu' ? '📟' : (item.objectType === 'mediaConverter' ? '⇄' : (item.objectType === 'splitter' ? '🔀' : '📍'))))));
             portBadge = (item.objectType === 'cross' && item.port) ? ' <span class="trace-port-badge">Порт ' + escapeHtml(String(item.port)) + '</span>' : '';
-            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">' + stepNumber + '</span><div class="trace-path-block trace-path-object"><div><span>' + icon + ' ' + escapeHtml(item.objectName) + '</span>' + portBadge + '<span class="trace-path-muted"> (' + getObjectTypeName(item.objectType) + ')</span></div>' + showOnMapBtn + '</div></div>';
+            var wpMuted = (window.FiberTrace && FiberTrace.isWaypointType(item.objectType)) ? ' trace-path-block--waypoint' : '';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">' + stepNumber + '</span><div class="trace-path-block trace-path-object' + wpMuted + '"><div><span>' + traceIcon + ' ' + escapeHtml(item.objectName) + '</span>' + portBadge + '<span class="trace-path-muted"> (' + getObjectTypeName(item.objectType) + ')</span></div>' + showOnMapBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'onuConnection') {
             var onuConnObjId = item.onu ? getObjectUniqueId(item.onu) : null;
@@ -18907,7 +18802,8 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
             var fiberColor = fiber ? fiber.color : '#3b82f6';
             var fiberName = fiber ? fiber.name : '';
             var fiberTextColor = (fiberColor === '#FFFFFF' || fiberColor === '#FFFACD' || fiberColor === '#FFFF00') ? '#000' : '#fff';
-            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-cable">➡</span><div class="trace-path-block trace-path-cable" style="border-left-color: ' + fiberColor + ';"><div style="display: flex; align-items: center; flex-wrap: wrap;"><span>📡 ' + escapeHtml(item.cableName) + '</span><span style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;"><span style="width: 16px; height: 16px; border-radius: 50%; background: ' + fiberColor + '; border: 1px solid #333; display: inline-block;"></span><span style="background: ' + fiberColor + '; color: ' + fiberTextColor + '; padding: 2px 8px; border-radius: 4px; font-weight: 600;">Жила ' + item.fiberNumber + (fiberName ? ': ' + fiberName : '') + '</span></span></div>' + cableShowBtn + '</div></div>';
+            var waypointsHtml = (item.waypoints && window.FiberTrace && FiberTrace.renderWaypointsInlineHtml) ? FiberTrace.renderWaypointsInlineHtml(item.waypoints) : '';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-cable">➡</span><div class="trace-path-block trace-path-cable" style="border-left-color: ' + fiberColor + ';"><div style="display: flex; align-items: center; flex-wrap: wrap; gap: 4px;"><span>📡 ' + escapeHtml(item.cableName) + '</span><span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 16px; height: 16px; border-radius: 50%; background: ' + fiberColor + '; border: 1px solid #333; display: inline-block;"></span><span style="background: ' + fiberColor + '; color: ' + fiberTextColor + '; padding: 2px 8px; border-radius: 4px; font-weight: 600;">Жила ' + item.fiberNumber + (fiberName ? ': ' + fiberName : '') + '</span></span>' + waypointsHtml + '</div>' + cableShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'connection') {
             var fromCableTrace = item.fromCable || (item.fromCableId ? objects.find(function(o) { return o.properties && o.properties.get('uniqueId') === item.fromCableId; }) : null);
@@ -18951,7 +18847,8 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
         } else if (item.type === 'oltPortConnection') {
             var oltObjId = item.olt ? getObjectUniqueId(item.olt) : null;
             var oltShowBtn = oltObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(oltObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
-            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-olt">🔌</span><div class="trace-path-block trace-path-olt"><div><span>📶 Подключено к OLT «' + escapeHtml(item.oltName || 'OLT') + '», порт ' + item.portNumber + '</span><span class="trace-path-muted">(жила ' + item.fiberNumber + ')</span></div>' + oltShowBtn + '</div></div>';
+            var oltPortText = item.incoming ? 'приход' : ('порт ' + item.portNumber);
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-olt">🔌</span><div class="trace-path-block trace-path-olt"><div><span>📶 Подключено к OLT «' + escapeHtml(item.oltName || 'OLT') + '», ' + escapeHtml(String(oltPortText)) + '</span><span class="trace-path-muted">(жила ' + item.fiberNumber + ')</span></div>' + oltShowBtn + '</div></div>';
             stepNumber++;
         }
     });
@@ -18974,79 +18871,144 @@ function showFiberTraceFromOLTPort(oltObj, oltName, portNumber, startObj, cableI
         showWarning('Путь не найден', 'Трассировка');
         return;
     }
-    const modal = document.getElementById('infoModal');
-    const title = document.getElementById('modalTitle');
-    const content = document.getElementById('modalInfo');
-    if (!modal || !content) return;
-    title.textContent = 'Трассировка от OLT, порт ' + portNumber;
-    var header = '<div class="trace-path" style="padding: 10px;"><h4 class="trace-path-title">Трасса от OLT</h4><div class="trace-path-block trace-path-olt"><span>OLT: ' + escapeHtml(oltName) + ', порт ' + portNumber + '</span></div>';
-    if (res.paths.length > 1) {
-        var stepNum = 1;
-        for (var pi = 0; pi < res.paths.length; pi++) {
-            if (pi > 0) header += '<div style="margin: 12px 0 8px 0; padding: 6px 12px; background: var(--bg-tertiary); border-radius: 4px; font-size: 0.8rem; color: var(--text-secondary); font-weight: 600;">—— Ветвь ' + (pi + 1) + ' ——</div>';
-            var pathHtml = renderOnePathToTraceHtml(res.paths[pi], stepNum);
-            header += pathHtml.html;
-            stepNum = pathHtml.nextStepNumber;
-        }
-        header += '</div>';
-    } else {
-        showFiberTraceFromCross(startObj, cableId, fiberNumber, null);
-        var wrap = content.querySelector('.trace-path');
-        if (wrap) wrap.insertAdjacentHTML('afterbegin', header);
-        return;
+    var bodyHtml = '<p class="trace-intro">OLT «' + escapeHtml(oltName) + '», порт ' + portNumber + '</p>';
+    if (res.paths.length > 1 && window.FiberTrace && FiberTrace.renderPathsOverviewHtml) {
+        bodyHtml += FiberTrace.renderPathsOverviewHtml(res.paths);
     }
-    content.innerHTML = header;
-    attachTraceShowOnMapHandlers(content);
-    modal.style.display = 'block';
+    var stepNum = 1;
+    for (var pi = 0; pi < res.paths.length; pi++) {
+        if (res.paths.length > 1 && pi > 0) {
+            bodyHtml += '<div class="trace-branch-separator" data-branch-index="' + pi + '">Ветвь ' + (pi + 1) + '</div>';
+        }
+        var pathHtml = renderOnePathToTraceHtml(res.paths[pi], stepNum);
+        bodyHtml += '<div class="trace-branch-block" data-branch-index="' + pi + '">' + pathHtml.html + '</div>';
+        stepNum = pathHtml.nextStepNumber;
+    }
+    if (window.FiberTrace && FiberTrace.buildTraceActionsHtml) {
+        bodyHtml += FiberTrace.buildTraceActionsHtml();
+    }
+    openFiberTraceModal({
+        title: 'Трассировка от OLT',
+        subtitle: 'Порт ' + portNumber + ' · ' + oltName,
+        bodyHtml: bodyHtml,
+        paths: res.paths
+    });
 }
 
-function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeObj = null, lanTailContext = null) {
-    var res = traceAllFiberPathsFromObject(startCrossObj, cableId, fiberNumber);
+function pathReachesPeerNode(path, startNodeUid) {
+    if (!path || !startNodeUid) return false;
+    for (var i = 0; i < path.length; i++) {
+        var item = path[i];
+        if (item.type === 'nodeConnection' && item.node) {
+            if (item.fromNode) continue;
+            var uid = getObjectUniqueId(item.node);
+            if (uid && uid !== startNodeUid) return true;
+        }
+        if (item.type === 'object' && item.objectType === 'node' && item.object) {
+            var uid2 = getObjectUniqueId(item.object);
+            if (uid2 && uid2 !== startNodeUid) return true;
+        }
+    }
+    return false;
+}
+
+function filterPathsToPeerNodes(paths, startNodeObj) {
+    if (!startNodeObj || !paths || paths.length <= 1) return paths;
+    var startUid = getObjectUniqueId(startNodeObj);
+    var peerPaths = paths.filter(function(p) { return pathReachesPeerNode(p, startUid); });
+    return peerPaths.length ? peerPaths : paths;
+}
+
+function nodeTracePathScore(path, startNodeUid) {
+    if (!path || !path.length) return 0;
+    for (var i = path.length - 1; i >= 0; i--) {
+        var item = path[i];
+        if (item.type === 'nodeConnection' && item.node) {
+            if (item.fromNode) continue;
+            var uid = getObjectUniqueId(item.node);
+            if (uid && uid !== startNodeUid) return 1000 + path.length;
+            return path.length;
+        }
+        if (item.type === 'object' && item.objectType === 'node' && item.object) {
+            var uid2 = getObjectUniqueId(item.object);
+            if (uid2 && uid2 !== startNodeUid) return 1000 + path.length;
+            return path.length;
+        }
+    }
+    return path.length;
+}
+
+function preferNodeTracePaths(paths, startNodeObj) {
+    if (!startNodeObj || !paths || paths.length <= 1) return paths;
+    var startUid = getObjectUniqueId(startNodeObj);
+    return paths.slice().sort(function(a, b) {
+        return nodeTracePathScore(b, startUid) - nodeTracePathScore(a, startUid);
+    });
+}
+
+function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeObj = null, nodeConnMeta = null, traceOptions = null) {
+    var res = traceAllFiberPathsFromObject(startCrossObj, cableId, fiberNumber, traceOptions);
     
     if (res.error) {
         showError('Ошибка трассировки: ' + res.error, 'Трассировка');
         return;
     }
+
+    var paths = res.paths ? res.paths.slice() : [];
+    if (traceOptions && traceOptions.originNodeId && startCrossObj) {
+        var peerPaths = tracePeerNodePathsOnSharedCable(startCrossObj, cableId, fiberNumber, traceOptions.originNodeId);
+        if (peerPaths.length) {
+            // Два узла на одной жиле — один прямой маршрут по кабелю, без лишних веток обхода
+            paths = peerPaths;
+        }
+    }
     
-    if (!res.paths || res.paths.length === 0) {
+    if (!paths.length) {
         showWarning('Путь не найден', 'Трассировка');
         return;
     }
 
-    var modal = document.getElementById('infoModal');
-    var title = document.getElementById('modalTitle');
-    var content = document.getElementById('modalInfo');
-    
-    title.textContent = '🔍 Трассировка жилы ' + fiberNumber;
-    
-    var header = '<div class="trace-path" style="padding: 10px;"><h4 class="trace-path-title">📍 Трасса жилы по всей линии</h4>';
-    if (startNodeObj && !lanTailContext) {
-        var nodeName = startNodeObj.properties.get('name') || 'Узел сети';
-        header += '<div class="trace-path-block trace-path-start"><span>🖥️ ' + escapeHtml(nodeName) + '</span><span class="trace-path-muted">(Узел сети — начало)</span></div>';
-        header += '<div class="trace-path-block trace-path-info"><span>🔌 Подключение к кроссу через жилу ' + fiberNumber + '</span></div>';
-    } else if (lanTailContext) {
-        header += '<div class="trace-path-block trace-path-info" style="margin-bottom: 8px;"><span>Оптический путь от кросса; ниже — медный участок от коммутатора до камеры.</span></div>';
+    var nodePaths = startNodeObj ? filterPathsToPeerNodes(paths, startNodeObj) : paths;
+    var sortedPaths = startNodeObj ? preferNodeTracePaths(nodePaths, startNodeObj) : nodePaths;
+    var displayPaths = sortedPaths;
+    var highlightPaths = sortedPaths;
+    if (startNodeObj && window.FiberTrace && FiberTrace.prependNodePrefixToPath) {
+        displayPaths = sortedPaths.map(function(p) {
+            return FiberTrace.prependNodePrefixToPath(p, startNodeObj, startCrossObj, cableId, fiberNumber, nodeConnMeta);
+        });
+        highlightPaths = displayPaths;
     }
-    if (res.paths.length > 1) {
+
+    var traceSubtitle = 'Жила ' + fiberNumber;
+    if (startNodeObj) {
+        traceSubtitle = 'От узла «' + (startNodeObj.properties.get('name') || 'Узел') + '» · жила ' + fiberNumber;
+    }
+
+    var bodyHtml = '';
+    if (displayPaths.length > 1 && window.FiberTrace && FiberTrace.renderPathsOverviewHtml) {
+        bodyHtml += FiberTrace.renderPathsOverviewHtml(displayPaths);
+    }
+    if (displayPaths.length > 1) {
         var stepNum = 1;
-        for (var pi = 0; pi < res.paths.length; pi++) {
-            if (pi > 0) header += '<div style="margin: 12px 0 8px 0; padding: 6px 12px; background: var(--bg-tertiary); border-radius: 4px; font-size: 0.8rem; color: var(--text-secondary); font-weight: 600;">—— Ветвь ' + (pi + 1) + ' ——</div>';
-            var pathHtml = renderOnePathToTraceHtml(res.paths[pi], stepNum);
-            header += pathHtml.html;
+        for (var pi = 0; pi < displayPaths.length; pi++) {
+            if (pi > 0) bodyHtml += '<div class="trace-branch-separator" data-branch-index="' + pi + '">Ветвь ' + (pi + 1) + '</div>';
+            var pathHtml = renderOnePathToTraceHtml(displayPaths[pi], stepNum);
+            bodyHtml += '<div class="trace-branch-block" data-branch-index="' + pi + '">' + pathHtml.html + '</div>';
             stepNum = pathHtml.nextStepNumber;
         }
     } else {
-        var pathHtml = renderOnePathToTraceHtml(res.paths[0], 1);
-        header += pathHtml.html;
+        var pathHtmlSingle = renderOnePathToTraceHtml(displayPaths[0], 1);
+        bodyHtml += pathHtmlSingle.html;
     }
-    if (lanTailContext) {
-        header += buildCameraLanTailTraceSectionHtml(lanTailContext);
+    if (window.FiberTrace && FiberTrace.buildTraceActionsHtml) {
+        bodyHtml += FiberTrace.buildTraceActionsHtml();
     }
-    header += '</div>';
-    
-    content.innerHTML = header;
-    attachTraceShowOnMapHandlers(content);
-    modal.style.display = 'block';
+    openFiberTraceModal({
+        title: 'Трассировка',
+        subtitle: traceSubtitle,
+        bodyHtml: bodyHtml,
+        paths: highlightPaths
+    });
 }
 
 function updateFiberSelectionUI() {
@@ -21613,89 +21575,6 @@ function setupFiberWorkspaceUI() {
     }
     if (filterEl) filterEl.addEventListener('change', applyTableFilter);
     if (searchEl) searchEl.addEventListener('input', applyTableFilter);
-}
-
-function showMergeCablesDialog(sleeveObj) {
-    const connectedCables = getConnectedCables(sleeveObj);
-    
-    if (connectedCables.length < 2) {
-        showWarning('Для объединения нужно минимум 2 кабеля', 'Объединение кабелей');
-        return;
-    }
-
-    let totalFibers = 0;
-    const cablesInfo = connectedCables.map(cable => {
-        const cableType = cable.properties.get('cableType');
-        const fiberCount = getFiberCount(cable);
-        totalFibers += fiberCount;
-        const cableDescription = getCableDescription(cableType, cable);
-        return { cable, cableType, fiberCount, cableDescription };
-    });
-
-    var maxMergeFibers = window.FiberCableConfig ? window.FiberCableConfig.MAX_FIBERS : 96;
-    if (totalFibers > maxMergeFibers) {
-        showError('Общее количество жил (' + totalFibers + ') превышает максимум (' + maxMergeFibers + '). Невозможно объединить.', 'Объединение кабелей');
-        return;
-    }
-
-    const maxFibers = sleeveObj.properties.get('maxFibers');
-    if (maxFibers && maxFibers > 0) {
-        const usedFibersCount = getTotalUsedFibersInSleeve(sleeveObj);
-        if (usedFibersCount - totalFibers + totalFibers > maxFibers) {
-            showError('Объединение невозможно: новый кабель превысит максимальную вместимость муфты!', 'Переполнение муфты');
-            return;
-        }
-    }
-
-    const cablesList = cablesInfo.map(c => `- ${c.cableDescription} (${c.fiberCount} жил)`).join('\n');
-    const confirmMsg = 'Объединить кабели в один?\n\n' + cablesList + '\n\nИтого: ' + totalFibers + ' жил';
-    
-    (async function() {
-        if (!(await showConfirm(confirmMsg, 'Объединить кабели', { confirmText: 'Объединить' }))) return;
-
-    const targetObjects = new Set();
-    cablesInfo.forEach(info => {
-        const fromObj = info.cable.properties.get('from');
-        const toObj = info.cable.properties.get('to');
-        if (fromObj !== sleeveObj) targetObjects.add(fromObj);
-        if (toObj !== sleeveObj) targetObjects.add(toObj);
-    });
-    
-    if (targetObjects.size !== 1) {
-        showWarning('Объединение возможно только для кабелей, идущих от одной муфты к одному объекту', 'Объединение кабелей');
-        return;
-    }
-    
-    const targetObj = Array.from(targetObjects)[0];
-
-    const success = addCable(sleeveObj, targetObj, 'fiber');
-    if (!success) {
-        return;
-    }
-
-    const newCable = objects.find(obj => 
-        obj.properties && 
-        obj.properties.get('type') === 'cable' &&
-        ((obj.properties.get('from') === sleeveObj && obj.properties.get('to') === targetObj) ||
-         (obj.properties.get('from') === targetObj && obj.properties.get('to') === sleeveObj))
-    );
-    
-    if (!newCable) {
-        showError('Ошибка при создании объединённого кабеля', 'Объединение кабелей');
-        return;
-    }
-
-    updateCableFiberSettings(newCable.properties.get('uniqueId'), totalFibers, undefined);
-
-    cablesInfo.forEach(info => {
-        deleteCableByUniqueId(info.cable.properties.get('uniqueId'));
-    });
-
-    document.getElementById('infoModal').style.display = 'none';
-    showObjectInfo(sleeveObj);
-    
-    showSuccess('Кабели успешно объединены: ВОЛС, ' + totalFibers + ' жил', 'Объединение кабелей');
-    })();
 }
 
 function toggleFiberUsage(cableUniqueId, fiberNumber) {

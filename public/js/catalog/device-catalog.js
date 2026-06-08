@@ -483,57 +483,6 @@ function getCatalogDefault(kind) {
     return NODE_CATALOG_DEFAULT;
 }
 
-function getDeviceCatalog() {
-    var out = {};
-    Object.keys(nodeDeviceCatalog || {}).forEach(function(m) {
-        if (!m) return;
-        out[m] = (nodeDeviceCatalog[m] || []).slice();
-    });
-    return out;
-}
-
-function getNodeDeviceCatalog() {
-    return cloneDeepCatalog(nodeDeviceCatalog);
-}
-
-function getOltDeviceCatalog() {
-    return cloneDeepCatalog(oltDeviceCatalog);
-}
-
-function getOnuDeviceCatalog() {
-    return cloneDeepCatalog(onuDeviceCatalog);
-}
-
-function getCameraDeviceCatalog() {
-    return cloneDeepCatalog(cameraDeviceCatalog);
-}
-
-function getSwitchDeviceCatalog() {
-    return cloneDeepCatalog(switchDeviceCatalog);
-}
-
-function setDeviceCatalog(catalog) {
-    nodeDeviceCatalog = {};
-    if (catalog && typeof catalog === 'object') {
-        Object.keys(catalog).forEach(function(m) {
-            if (m && Array.isArray(catalog[m])) nodeDeviceCatalog[m] = catalog[m].filter(Boolean);
-        });
-    }
-    saveDeviceCatalog();
-}
-
-function resetDeviceCatalogToDefault() {
-    nodeDeviceCatalog = cloneDeepCatalog(NODE_CATALOG_DEFAULT);
-    oltDeviceCatalog = cloneDeepCatalog(OLT_CATALOG_DEFAULT);
-    onuDeviceCatalog = cloneDeepCatalog(ONU_CATALOG_DEFAULT);
-    cameraDeviceCatalog = cloneDeepCatalog(CAMERA_CATALOG_DEFAULT);
-    switchDeviceCatalog = cloneDeepCatalog(SWITCH_CATALOG_DEFAULT);
-    switchModelDefaultPorts = {};
-    customSleeveTypes = [];
-    saveDeviceCatalog();
-    refreshAllSleeveTypeSelects();
-}
-
 function resetDeviceCatalogTabToDefault(kind) {
     if (!DEVICE_CATALOG_ALLOWED_TABS[kind]) return;
     var def = getCatalogDefault(kind);
@@ -621,28 +570,8 @@ function getModelsForCatalog(kind, manufacturer) {
     return (cat[mfr] || []).slice();
 }
 
-function addDeviceManufacturer(name) {
-    return addManufacturerForCatalog('node', name);
-}
-
-function removeDeviceManufacturer(name) {
-    return removeManufacturerForCatalog('node', name);
-}
-
-function addDeviceModel(manufacturer, model) {
-    return addModelForCatalog('node', manufacturer, model);
-}
-
-function removeDeviceModel(manufacturer, model) {
-    return removeModelForCatalog('node', manufacturer, model);
-}
-
 function getDeviceManufacturers() {
     return getManufacturersForCatalog('node');
-}
-
-function getDeviceModels(manufacturer) {
-    return getModelsForCatalog('node', manufacturer);
 }
 
 function getSwitchModelDefaultPortCount(manufacturer, model) {
@@ -682,24 +611,6 @@ function setSwitchModelDefaultPortCount(manufacturer, model, portCount) {
     switchModelDefaultPorts[mfr][mod] = n;
     saveDeviceCatalog();
     return true;
-}
-
-function addCustomManufacturer(v) {
-    v = (v || '').trim();
-    if (!v) return;
-    addDeviceManufacturer(v);
-}
-
-function addCustomModel(v, manufacturer) {
-    v = (v || '').trim();
-    if (!v) return;
-    var mfr = (manufacturer || '').trim();
-    if (mfr) {
-        addDeviceModel(mfr, v);
-    } else {
-        addDeviceManufacturer('Другое');
-        addDeviceModel('Другое', v);
-    }
 }
 
 var CUSTOM_DEVICE_OPTIONS_STORAGE_KEY = 'networkmap_customDeviceOptions';
@@ -1118,15 +1029,6 @@ initDeviceComboboxes.resetPanelPosition = function(pnl) {
         pnl.style.minWidth = '';
     }
 };
-
-function setDeviceComboboxValue(valueId, value) {
-    var wrapper = document.querySelector('.device-combobox[data-value-id="' + valueId + '"]');
-    if (!wrapper) return;
-    var valueInput = document.getElementById(valueId) || wrapper.querySelector('input[type="hidden"]');
-    var trigger = wrapper.querySelector('.device-combobox-trigger');
-    if (valueInput) valueInput.value = value || '';
-    if (trigger) trigger.textContent = value || (wrapper.dataset.type === 'model' ? 'Выберите модель' : 'Выберите производителя');
-}
 
 function renderSleeveCatalogList(container, searchQ) {
     var types = getAllSleeveTypes();

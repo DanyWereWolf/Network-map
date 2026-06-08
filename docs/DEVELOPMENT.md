@@ -41,10 +41,21 @@ npm run api
 ## Проверка перед коммитом
 
 ```bash
-npm run check
+npm run verify
 ```
 
-Проверяются файлы в `public/js/`, `public/js/app/`, `server/` и `server/lib/`.
+Или по отдельности:
+
+| Команда | Назначение |
+|---------|------------|
+| `npm run check` | Синтаксис JS (`node --check`) |
+| `npm run lint` | ESLint: локальные неиспользуемые переменные, unreachable code |
+| `npm run dead-code` | Неиспользуемые top-level функции и глобальные экспорты (код выхода 1, если есть находки) |
+| `npm run knip` | Неиспользуемые npm-зависимости и файлы (entry из `knip.json`) |
+| `npm run format:check` | Prettier без записи |
+| `npm run format` | Автоформатирование (`.prettierignore` исключает CSS и `data/`) |
+
+**Мёртвый код:** клиент без ES-модулей — `npm run dead-code` ищет символы, на которые нет ссылок ни в одном `.js`/`.html`. ESLint для `public/js/` проверяет только *локальные* переменные внутри функций (`vars: local`), чтобы не шуметь на глобальных `function` в `main.js`.
 
 ## Переменные окружения
 

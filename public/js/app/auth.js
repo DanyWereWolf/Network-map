@@ -29,10 +29,6 @@ function saveUsers(users) {
     try { sessionStorage.setItem('networkMap_users', JSON.stringify(users)); } catch (e) {}
 }
 
-function generateUserId() {
-    return 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-}
-
 function findUserByUsername(username) {
     const users = getUsers();
     return users.find(u => u.username.toLowerCase() === username.toLowerCase());

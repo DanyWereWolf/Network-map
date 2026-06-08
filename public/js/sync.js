@@ -63,19 +63,6 @@
         el.style.display = 'block';
     }
 
-    function forceSendState(optionalData) {
-        if (sendTimer) clearTimeout(sendTimer);
-        sendTimer = null;
-        lastOpSendTime = 0;
-        var toSend = optionalData !== undefined && optionalData !== null ? optionalData : pendingState;
-        pendingState = null;
-        if (ws && ws.readyState === WebSocket.OPEN && toSend) {
-            try {
-                ws.send(JSON.stringify({ type: 'state', clientId: myClientId, data: toSend }));
-            } catch (e) {}
-        }
-    }
-
     function shouldDeferRemoteFullState() {
         if (typeof window.syncDragInProgress !== 'undefined' && window.syncDragInProgress) return true;
         if (typeof window.infoModalEditModeSession !== 'undefined' && window.infoModalEditModeSession) return true;
@@ -423,13 +410,6 @@
         } catch (e) {}
     }
 
-    function autoConnectIfSaved() {
-        try {
-            var saved = sessionStorage.getItem(SYNC_URL_KEY);
-            if (saved && saved.trim()) connect();
-        } catch (e) {}
-    }
-
     function autoConnectOnMapPage() {
         if (typeof getApiBase === 'function' && !getApiBase()) return;
         try {
@@ -562,9 +542,5 @@
     window.syncRemoteObjectLocks = remoteObjectLocks;
     window.syncMyClientId = myClientId;
     window.syncConnect = connect;
-    window.syncDisconnect = disconnect;
-    window.syncAutoConnectIfSaved = autoConnectIfSaved;
-    window.syncAutoConnect = autoConnectOnMapPage;
-    window.syncForceSendState = forceSendState;
     window.syncApplyPendingState = applyPendingStateAfterDrag;
 })();

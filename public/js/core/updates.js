@@ -45,25 +45,6 @@ function checkForUpdates(silent) {
             return { checked: true, error: e };
         });
 }
-function openUpdatesModal() {
-    var modal = document.getElementById('updatesModal');
-    if (!modal) return;
-    var versionEl = document.getElementById('updatesVersionDisplay');
-    if (versionEl) {
-        versionEl.textContent = APP_VERSION;
-        versionEl.className = 'version-current';
-    }
-    var checkBtn = document.getElementById('updatesCheckBtn');
-    if (checkBtn) checkBtn.disabled = false;
-    if (typeof lastUpdateCheckResult !== 'undefined' && lastUpdateCheckResult) {
-        renderUpdatesModalContent(lastUpdateCheckResult);
-    } else {
-        renderUpdatesModalContent(null);
-        var statusEl = document.getElementById('updatesStatus');
-        if (statusEl) statusEl.innerHTML = 'Проверка выполняется при загрузке приложения. Закройте и откройте окно через пару секунд или нажмите «Проверить обновления».';
-    }
-    modal.style.display = 'block';
-}
 function closeUpdatesModal() {
     var modal = document.getElementById('updatesModal');
     if (modal) modal.style.display = 'none';

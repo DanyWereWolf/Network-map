@@ -89,17 +89,6 @@
         showBanner();
     }
 
-    window.getCookieConsent = function() {
-        return getStored();
-    };
-
-    window.setCookieConsent = function(choice) {
-        if (choice !== 'all' && choice !== 'necessary') return;
-        saveChoice(choice);
-        var b = document.getElementById('cookieConsentBanner');
-        if (b) removeBanner(b);
-    };
-
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {

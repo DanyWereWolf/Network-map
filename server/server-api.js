@@ -149,17 +149,6 @@ function validateMapDataObjectLimit(orgId, data) {
     return { ok: true, count: count, limit: limit, unlocked: false };
 }
 
-function planIdsMatch(planIdFromOrg, planEntryId) {
-    return String(planIdFromOrg || '').trim().toLowerCase() === String(planEntryId || '').trim().toLowerCase();
-}
-
-function getUnlockProductFromPricing() {
-    const plans = db.getPricingPlans();
-    return plans.find(function(p) { return String(p.kind || '').toLowerCase() === 'unlock'; }) ||
-        plans.find(function(p) { return planIdsMatch(p.id, 'unlock'); }) ||
-        null;
-}
-
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 

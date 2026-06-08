@@ -987,13 +987,6 @@
         restartBackgroundChatWatch();
     }
 
-    function stopPolling() {
-        if (pollTimer) {
-            clearInterval(pollTimer);
-            pollTimer = null;
-        }
-    }
-
     function openPanel() {
         var panel = document.getElementById('orgChatPanel');
         var btn = document.getElementById('orgChatBtn');
@@ -1577,8 +1570,6 @@
         });
     }
 
-    window.orgChatRequestNotificationPermission = requestChatNotificationPermission;
-    window.orgChatStartBackgroundWatch = startBackgroundChatWatch;
     window.orgChatOnMessage = onIncomingMessage;
     window.orgChatOnDeleted = removeMessageFromUi;
     window.orgChatOnUpdated = updateMessageInUi;
@@ -1610,8 +1601,6 @@
             recalcUnreadFromMessages(messages);
         });
     }
-
-    window.orgChatRefreshNotifications = fetchChatForNotifications;
 
     if (typeof document !== 'undefined') {
         if (document.readyState === 'loading') {
