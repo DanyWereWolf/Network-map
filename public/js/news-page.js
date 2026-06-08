@@ -121,11 +121,7 @@
         article.setAttribute('data-post-id', post.id || '');
         if (anchorId) article.id = anchorId;
         article.innerHTML =
-            '<header class="updates-post-meta">' +
-                '<div class="updates-post-meta-main">' +
-                    '<time class="updates-post-date" datetime="' + escapeHtml(post.date || '') + '">' + escapeHtml(formatDateRu(post.date)) + '</time>' +
-                    tagsHtml +
-                '</div>' +
+            '<div class="updates-post-top">' +
                 '<button type="button" class="updates-post-share" data-share-post title="Поделиться записью" aria-label="Поделиться записью">' +
                     '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">' +
                         '<circle cx="18" cy="5" r="3"></circle>' +
@@ -136,6 +132,10 @@
                     '</svg>' +
                     '<span class="updates-post-share-label">Поделиться</span>' +
                 '</button>' +
+            '</div>' +
+            '<header class="updates-post-meta">' +
+                '<time class="updates-post-date" datetime="' + escapeHtml(post.date || '') + '">' + escapeHtml(formatDateRu(post.date)) + '</time>' +
+                tagsHtml +
             '</header>' +
             '<h2 class="updates-post-title">' + escapeHtml(post.title) + '</h2>' +
             (post.summary ? '<p class="updates-post-summary">' + escapeHtml(post.summary) + '</p>' : '') +
