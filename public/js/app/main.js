@@ -11017,6 +11017,27 @@ function applyRemoteStateMerged(data) {
     });
 }
 
+function refreshRemoteObjectVisuals(obj) {
+    if (!obj || !obj.properties) return;
+    var type = obj.properties.get('type');
+    if (type === 'cross') {
+        updateCrossDisplay(groupKey(obj.geometry.getCoordinates()));
+    } else if (type === 'node') {
+        updateNodeDisplay(groupKey(obj.geometry.getCoordinates()));
+    } else if (typeof applyMapFilter === 'function') {
+        applyMapFilter();
+    }
+    var name = obj.properties.get('name') || '';
+    updateObjectLabel(obj, name);
+    var label = obj.properties.get('label');
+    if (label) {
+        try {
+            if (myMap.geoObjects.indexOf(label) === -1) myMap.geoObjects.add(label);
+        } catch (e) {}
+    }
+    scheduleConnectionLinesUpdate(getObjectUniqueId(obj));
+}
+
 function applyOperationToMap(op) {
     if (!op || !op.type) return;
     var objCount = 0;
@@ -11033,9 +11054,7 @@ function applyOperationToMap(op) {
             if (existingAdd) {
                 populatePlacemarkFromSerializedData(existingAdd, op.data);
                 updateConnectedCables(existingAdd);
-                updateCrossDisplay();
-                updateNodeDisplay();
-                scheduleConnectionLinesUpdate();
+                refreshRemoteObjectVisuals(existingAdd);
                 return;
             }
         }
@@ -11052,28 +11071,16 @@ function applyOperationToMap(op) {
         objects.splice(objCount, 0, newObj);
         mapPerfRegister(newObj);
         if (newObj.properties.get('type') !== 'cross' && newObj.properties.get('type') !== 'node') myMap.geoObjects.add(newObj);
-        var newType = newObj.properties.get('type');
-        if (newType === 'cross') updateCrossDisplay(groupKey(newObj.geometry.getCoordinates()));
-        else if (newType === 'node') updateNodeDisplay(groupKey(newObj.geometry.getCoordinates()));
-        else { updateCrossDisplay(); updateNodeDisplay(); }
-        ensureNodeLabelsVisible();
-        scheduleConnectionLinesUpdate(getObjectUniqueId(newObj));
+        refreshRemoteObjectVisuals(newObj);
         updateStats();
         return;
     }
     if (op.type === 'update_object' && op.uniqueId != null && op.data) {
         var objUp = getMapObjectByUid(op.uniqueId);
         if (objUp) {
-            var objUpType = objUp.properties && objUp.properties.get('type');
             populatePlacemarkFromSerializedData(objUp, op.data);
             if (op.data.type !== 'region') updateConnectedCables(objUp);
-            if (objUpType === 'cross') updateCrossDisplay(groupKey(objUp.geometry.getCoordinates()));
-            else if (objUpType === 'node') updateNodeDisplay(groupKey(objUp.geometry.getCoordinates()));
-            else {
-                updateCrossDisplay();
-                updateNodeDisplay();
-            }
-            scheduleConnectionLinesUpdate(op.uniqueId);
+            refreshRemoteObjectVisuals(objUp);
             updateStats();
             if (currentModalObject === objUp && typeof refreshObjectModal === 'function') refreshObjectModal(objUp);
         }

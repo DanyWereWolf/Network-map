@@ -24,6 +24,9 @@
     var SUPPRESS_STATE_AFTER_OP_MS = 1200;
     var renderUsersListTimer = null;
     var RENDER_USERS_DEBOUNCE_MS = 80;
+    var remoteOpQueue = [];
+    var remoteOpFlushTimer = null;
+    var REMOTE_OP_BATCH_MS = 48;
     var pendingLockRequests = {};
     var remoteObjectLocks = {};
 
@@ -61,6 +64,31 @@
         });
         el.textContent = 'В сети: ' + parts.length + ' — ' + parts.join(', ');
         el.style.display = 'block';
+    }
+
+    function flushRemoteOpQueue() {
+        remoteOpFlushTimer = null;
+        var queue = remoteOpQueue;
+        remoteOpQueue = [];
+        if (!queue.length) return;
+        var run = function() {
+            for (var i = 0; i < queue.length; i++) {
+                try {
+                    if (typeof window.applyOperationToMap === 'function') window.applyOperationToMap(queue[i]);
+                } catch (eOp) {}
+            }
+            updateSyncUIStatus(true);
+        };
+        if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(run);
+        else setTimeout(run, 0);
+    }
+
+    function enqueueRemoteOp(op) {
+        if (!op) return;
+        remoteOpQueue.push(op);
+        if (!remoteOpFlushTimer) {
+            remoteOpFlushTimer = setTimeout(flushRemoteOpQueue, REMOTE_OP_BATCH_MS);
+        }
     }
 
     function shouldDeferRemoteFullState() {
@@ -204,6 +232,8 @@
         ws.onclose = function() {
             ws = null;
             window.syncIsConnected = false;
+            if (remoteOpFlushTimer) { clearTimeout(remoteOpFlushTimer); remoteOpFlushTimer = null; }
+            remoteOpQueue = [];
             if (applyStateTimer) { clearTimeout(applyStateTimer); applyStateTimer = null; }
             pendingApplyState = null;
             if (cursorFlushIntervalId) {
@@ -302,13 +332,7 @@
                     return;
                 }
                 if (msg.type === 'op' && msg.op && typeof window.applyOperationToMap === 'function') {
-                    var op = msg.op;
-                    setTimeout(function() {
-                        try {
-                            window.applyOperationToMap(op);
-                            updateSyncUIStatus(true);
-                        } catch (e) {}
-                    }, 0);
+                    enqueueRemoteOp(msg.op);
                     return;
                 }
                 if (msg.type === 'groupNames' && msg.groupNames && typeof window.applyGroupNames === 'function') {
