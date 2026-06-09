@@ -2656,6 +2656,7 @@ var MAP_BULK_IMPORT_MIN_ITEMS = 350;
 var MAP_BULK_IMPORT_BATCH_SIZE = 60;
 var MAP_UNDO_REDO_BATCH_MIN = 1;
 var MAP_UNDO_REDO_BATCH_SIZE = 50;
+var INCREMENTAL_UNDO_MAX_CHANGES = 50;
 
 function isMapBulkImportActive() {
     return !!_mapBulkImportActive;
@@ -11629,6 +11630,196 @@ function getSerializedData() {
     return objects.map(function(obj) { return serializeMapItemFromObject(obj); }).filter(Boolean);
 }
 
+function cloneMapSnapshot(state) {
+    return JSON.parse(JSON.stringify(state));
+}
+
+function indexMapSnapshot(state) {
+    var objectsByUid = Object.create(null);
+    var cablesByUid = Object.create(null);
+    var missingUid = 0;
+    if (!Array.isArray(state)) return { objectsByUid: objectsByUid, cablesByUid: cablesByUid, missingUid: 0 };
+    for (var i = 0; i < state.length; i++) {
+        var item = state[i];
+        if (!item || !item.type) continue;
+        if (item.uniqueId == null || item.uniqueId === '') {
+            missingUid++;
+            continue;
+        }
+        var uid = String(item.uniqueId);
+        if (item.type === 'cable') cablesByUid[uid] = item;
+        else objectsByUid[uid] = item;
+    }
+    return { objectsByUid: objectsByUid, cablesByUid: cablesByUid, missingUid: missingUid };
+}
+
+function snapshotItemEquals(a, b) {
+    if (!a || !b) return false;
+    if (a.revision != null && b.revision != null) return Number(a.revision) === Number(b.revision);
+    return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function diffMapSnapshots(fromState, toState) {
+    var from = indexMapSnapshot(fromState);
+    var to = indexMapSnapshot(toState);
+    if (from.missingUid || to.missingUid) return null;
+    var diff = {
+        added: [],
+        removed: [],
+        updated: [],
+        cablesAdded: [],
+        cablesRemoved: [],
+        cablesUpdated: [],
+        nodeGroupKeys: [],
+        crossGroupKeys: [],
+        hasRegion: false,
+        needsConnectionLines: false,
+        needsCopperRebuild: false,
+        changeCount: 0
+    };
+    var nodeKeySet = Object.create(null);
+    var crossKeySet = Object.create(null);
+    function trackItem(item) {
+        if (!item) return;
+        if (item.type === 'region') diff.hasRegion = true;
+        if (item.type === 'node' && item.geometry) {
+            var nk = groupKey(item.geometry);
+            if (!nodeKeySet[nk]) { nodeKeySet[nk] = true; diff.nodeGroupKeys.push(nk); }
+        } else if (item.type === 'cross' && item.geometry) {
+            var ck = groupKey(item.geometry);
+            if (!crossKeySet[ck]) { crossKeySet[ck] = true; diff.crossGroupKeys.push(ck); }
+        }
+        if (item.type === 'olt' || item.type === 'onu' || item.type === 'splitter' ||
+            item.type === 'mediaConverter' || item.type === 'cross' || item.type === 'sleeve' || item.type === 'node') {
+            diff.needsConnectionLines = true;
+        }
+    }
+    var uid;
+    for (uid in to.objectsByUid) {
+        if (!Object.prototype.hasOwnProperty.call(to.objectsByUid, uid)) continue;
+        var toItem = to.objectsByUid[uid];
+        if (!from.objectsByUid[uid]) {
+            diff.added.push(toItem);
+            trackItem(toItem);
+        } else if (!snapshotItemEquals(from.objectsByUid[uid], toItem)) {
+            diff.updated.push(toItem);
+            trackItem(toItem);
+        }
+    }
+    for (uid in from.objectsByUid) {
+        if (!Object.prototype.hasOwnProperty.call(from.objectsByUid, uid)) continue;
+        if (!to.objectsByUid[uid]) {
+            diff.removed.push(uid);
+            trackItem(from.objectsByUid[uid]);
+        }
+    }
+    for (uid in to.cablesByUid) {
+        if (!Object.prototype.hasOwnProperty.call(to.cablesByUid, uid)) continue;
+        var toCable = to.cablesByUid[uid];
+        if (!from.cablesByUid[uid]) diff.cablesAdded.push(toCable);
+        else if (!snapshotItemEquals(from.cablesByUid[uid], toCable)) diff.cablesUpdated.push(toCable);
+    }
+    for (uid in from.cablesByUid) {
+        if (!Object.prototype.hasOwnProperty.call(from.cablesByUid, uid)) continue;
+        if (!to.cablesByUid[uid]) diff.cablesRemoved.push(uid);
+    }
+    diff.needsCopperRebuild = diff.cablesRemoved.length > 0 ||
+        diff.cablesAdded.some(function(c) { return c && c.cableType === 'copper'; }) ||
+        diff.cablesUpdated.some(function(c) { return c && c.cableType === 'copper'; });
+    diff.changeCount = diff.added.length + diff.removed.length + diff.updated.length +
+        diff.cablesAdded.length + diff.cablesRemoved.length + diff.cablesUpdated.length;
+    return diff;
+}
+
+function finishIncrementalUndoRedoRefresh(diff, done) {
+    requestAnimationFrame(function() {
+        var cablesChanged = diff.cablesAdded.length || diff.cablesRemoved.length || diff.cablesUpdated.length;
+        if (cablesChanged) updateCableVisualization();
+        diff.crossGroupKeys.forEach(function(k) { updateCrossDisplay(k); });
+        diff.nodeGroupKeys.forEach(function(k) { updateNodeDisplay(k); });
+        if (diff.needsConnectionLines) scheduleConnectionLinesUpdate('full');
+        if (diff.needsCopperRebuild) rebuildAllCopperPortUsageFromCables();
+        if (diff.hasRegion) {
+            if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
+            if (window.MapRegions && MapRegions.syncAllRegionLabels && myMap) {
+                MapRegions.syncAllRegionLabels(myMap, objects);
+            }
+        }
+        if (diff.added.length || diff.removed.length || diff.updated.length || cablesChanged) {
+            if (typeof applyMapFilter === 'function') applyMapFilter();
+        }
+        updateStats();
+        if (typeof done === 'function') done();
+    });
+}
+
+function tryApplyMapStateIncrementally(fromState, toState, done) {
+    var diff = diffMapSnapshots(fromState, toState);
+    if (!diff) return false;
+    if (diff.changeCount === 0) {
+        requestAnimationFrame(function() { if (typeof done === 'function') done(); });
+        return true;
+    }
+    if (diff.changeCount > INCREMENTAL_UNDO_MAX_CHANGES) return false;
+    try {
+        _mapBulkImportActive = true;
+        var i;
+        for (i = 0; i < diff.cablesRemoved.length; i++) {
+            deleteCableByUniqueId(diff.cablesRemoved[i], { skipSync: true, deferMapRefresh: true });
+        }
+        for (i = 0; i < diff.removed.length; i++) {
+            var remObj = getMapObjectByUid(diff.removed[i]);
+            if (remObj) deleteObject(remObj, { skipSync: true, deferMapRefresh: true });
+        }
+        for (i = 0; i < diff.added.length; i++) {
+            importDataCreatePlacemarkRef(diff.added[i]);
+        }
+        for (i = 0; i < diff.updated.length; i++) {
+            var upItem = diff.updated[i];
+            var liveObj = getMapObjectByUid(upItem.uniqueId);
+            if (liveObj) populatePlacemarkFromSerializedData(liveObj, upItem);
+        }
+        if (diff.cablesAdded.length) {
+            importDataRunCables(diff.cablesAdded, new Array(diff.cablesAdded.length));
+        }
+        for (i = 0; i < diff.cablesUpdated.length; i++) {
+            var cableItem = diff.cablesUpdated[i];
+            var liveCable = objects.find(function(o) {
+                return o.properties && o.properties.get('type') === 'cable' &&
+                    o.properties.get('uniqueId') === cableItem.uniqueId;
+            });
+            if (liveCable) applySerializedCableToMap(liveCable, cableItem, { skipVisualRefresh: true });
+            else importDataRunCables([cableItem], [null]);
+        }
+        _mapBulkImportActive = false;
+        if (typeof MapPerf !== 'undefined') MapPerf.reindexAllObjects(objects);
+        finishIncrementalUndoRedoRefresh(diff, done);
+        return true;
+    } catch (eIncUndo) {
+        _mapBulkImportActive = false;
+        return false;
+    }
+}
+
+function finalizeUndoRedoRestoredState(stateToRestore, message, title) {
+    try {
+        lastSavedState = cloneMapSnapshot(stateToRestore);
+        pushSaveDataToSync({ syncFull: true, state: lastSavedState });
+        if (typeof showSuccess === 'function') showSuccess(message, title);
+    } finally {
+        inUndoRedo = false;
+        hideMapLoadingOverlay();
+        updateUndoRedoButtons();
+    }
+}
+
+function restoreMapStateFull(stateToRestore, message, title) {
+    showUndoRedoLoadingOverlay(title === 'Повтор' ? 'Применение изменения…' : 'Восстановление карты…');
+    importData(stateToRestore, { skipSave: true, skipHistory: true, undoRedo: true }, function() {
+        finalizeUndoRedoRestoredState(stateToRestore, message, title);
+    });
+}
+
 function saveData(opts) {
     if (currentModalObject && infoModalEditModeSession && !infoModalEditMode) return;
     if (!inUndoRedo && lastSavedState !== null) {
@@ -11645,41 +11836,31 @@ function saveData(opts) {
 function performUndo() {
     if (!canEdit() || undoStack.length === 0 || inUndoRedo) return;
     var stateToRestore = undoStack.pop();
-    redoStack.push(JSON.parse(JSON.stringify(lastSavedState != null ? lastSavedState : getSerializedData())));
+    var currentState = lastSavedState != null ? lastSavedState : getSerializedData();
+    redoStack.push(cloneMapSnapshot(currentState));
     inUndoRedo = true;
     updateUndoRedoButtons();
-    showUndoRedoLoadingOverlay('Восстановление карты…');
-    importData(stateToRestore, { skipSave: true, skipHistory: true, undoRedo: true }, function() {
-        try {
-            lastSavedState = JSON.parse(JSON.stringify(stateToRestore));
-            pushSaveDataToSync({ syncFull: true, state: lastSavedState });
-            if (typeof showSuccess === 'function') showSuccess('Действие отменено', 'Отмена');
-        } finally {
-            inUndoRedo = false;
-            hideMapLoadingOverlay();
-            updateUndoRedoButtons();
-        }
-    });
+    if (tryApplyMapStateIncrementally(currentState, stateToRestore, function() {
+        finalizeUndoRedoRestoredState(stateToRestore, 'Действие отменено', 'Отмена');
+    })) {
+        return;
+    }
+    restoreMapStateFull(stateToRestore, 'Действие отменено', 'Отмена');
 }
 
 function performRedo() {
     if (!canEdit() || redoStack.length === 0 || inUndoRedo) return;
     var stateToRestore = redoStack.pop();
-    undoStack.push(JSON.parse(JSON.stringify(lastSavedState != null ? lastSavedState : getSerializedData())));
+    var currentState = lastSavedState != null ? lastSavedState : getSerializedData();
+    undoStack.push(cloneMapSnapshot(currentState));
     inUndoRedo = true;
     updateUndoRedoButtons();
-    showUndoRedoLoadingOverlay('Применение изменения…');
-    importData(stateToRestore, { skipSave: true, skipHistory: true, undoRedo: true }, function() {
-        try {
-            lastSavedState = JSON.parse(JSON.stringify(stateToRestore));
-            pushSaveDataToSync({ syncFull: true, state: lastSavedState });
-            if (typeof showSuccess === 'function') showSuccess('Действие повторено', 'Повтор');
-        } finally {
-            inUndoRedo = false;
-            hideMapLoadingOverlay();
-            updateUndoRedoButtons();
-        }
-    });
+    if (tryApplyMapStateIncrementally(currentState, stateToRestore, function() {
+        finalizeUndoRedoRestoredState(stateToRestore, 'Действие повторено', 'Повтор');
+    })) {
+        return;
+    }
+    restoreMapStateFull(stateToRestore, 'Действие повторено', 'Повтор');
 }
 
 function updateUndoRedoButtons() {
@@ -12349,19 +12530,39 @@ function importDataCreatePlacemarkRef(item) {
     return createObjectFromData(item, null, { bulkImport: true });
 }
 
-function importDataRunCables(data, objectRefs) {
+function buildImportRefIndex(objectRefs) {
     var refsOnly = [];
     var refByUid = Object.create(null);
-    var ri, r, uid;
-    for (ri = 0; ri < objectRefs.length; ri++) {
-        r = objectRefs[ri];
-        if (!r) continue;
-        refsOnly.push(r);
+    var seen = typeof WeakSet !== 'undefined' ? new WeakSet() : null;
+    function addRef(r) {
+        if (!r || !r.properties) return;
+        if (seen && seen.has(r)) return;
+        if (seen) seen.add(r);
         try {
-            uid = r.properties && r.properties.get('uniqueId');
+            var uid = r.properties.get('uniqueId');
             if (uid != null && uid !== '') refByUid[uid] = r;
+            refsOnly.push(r);
         } catch (eRef) {}
     }
+    if (objectRefs) {
+        for (var ri = 0; ri < objectRefs.length; ri++) addRef(objectRefs[ri]);
+    }
+    if (objects) {
+        for (var oi = 0; oi < objects.length; oi++) {
+            var o = objects[oi];
+            if (!o || !o.properties) continue;
+            var t = o.properties.get('type');
+            if (t === 'cable' || t === 'cableLabel') continue;
+            addRef(o);
+        }
+    }
+    return { refsOnly: refsOnly, refByUid: refByUid };
+}
+
+function importDataRunCables(data, objectRefs) {
+    var refIndex = buildImportRefIndex(objectRefs);
+    var refsOnly = refIndex.refsOnly;
+    var refByUid = refIndex.refByUid;
     var cableByUid = Object.create(null);
 
     data.forEach(function(item) {
@@ -12712,7 +12913,7 @@ function populatePlacemarkFromSerializedData(placemark, data) {
     }
 }
 
-function applySerializedCableToMap(cable, data) {
+function applySerializedCableToMap(cable, data, opts) {
     if (!cable || !data || data.type !== 'cable') return;
     var opCuMeta = copperSerializedMetaFromItem(data);
     var refsOpMap = objects.filter(function(o) {
@@ -12758,8 +12959,10 @@ function applySerializedCableToMap(cable, data) {
             CableUnderground.syncAerialOverlayStroke(cable);
         } catch (eUgUp) {}
     }
-    updateCableVisualization();
-    scheduleConnectionLinesUpdate();
+    if (!(opts && opts.skipVisualRefresh)) {
+        updateCableVisualization();
+        scheduleConnectionLinesUpdate();
+    }
 }
 
 function createObjectFromData(data, opts, createOpts) {
