@@ -2659,6 +2659,30 @@ function isMapBulkImportActive() {
     return !!_mapBulkImportActive;
 }
 
+function mapHasOltObjects() {
+    if (!objects) return false;
+    for (var i = 0; i < objects.length; i++) {
+        if (objects[i].properties && objects[i].properties.get('type') === 'olt') return true;
+    }
+    return false;
+}
+
+function finishObjectDeleteVisualRefresh(plan) {
+    plan = plan || {};
+    if (plan.cableVisualization) updateCableVisualization();
+    if (plan.crossGroupKey != null) updateCrossDisplay(plan.crossGroupKey);
+    if (plan.nodeGroupKey != null) updateNodeDisplay(plan.nodeGroupKey);
+    if (plan.connectionLines === 'full') scheduleConnectionLinesUpdate('full');
+    else if (plan.connectionLines) scheduleConnectionLinesUpdate(plan.connectionLines);
+    updateStats();
+}
+
+function scheduleObjectDeleteVisualRefresh(plan) {
+    var run = function() { finishObjectDeleteVisualRefresh(plan); };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+    else setTimeout(run, 0);
+}
+
 function hideMapLoadingOverlay() {
     var el = document.getElementById('mapLoadingOverlay');
     if (!el || el.classList.contains('is-hidden')) return;
@@ -6481,6 +6505,11 @@ function deleteObject(obj, opts) {
     const objType = obj.properties.get('type');
     const objName = obj.properties.get('name') || '';
     const objUniqueId = obj.properties.get('uniqueId');
+    var objCoords = obj.geometry ? obj.geometry.getCoordinates() : null;
+    var objGroupKey = objCoords ? groupKey(objCoords) : null;
+    var nodeConnectionsCleared = false;
+    var cableRoutesUpdated = false;
+    var gponPurged = false;
 
     if (!(opts && opts.skipSync) && objUniqueId && isObjectLockedByOther(objUniqueId)) {
         if (typeof showWarning === 'function') showWarning('Объект редактирует другой пользователь', 'Удаление недоступно');
@@ -6516,6 +6545,7 @@ function deleteObject(obj, opts) {
                         removeNodeConnectionLine(crossObj, cableId, fiberNum);
                         delete nodeConnections[key];
                         changed = true;
+                        nodeConnectionsCleared = true;
                     }
                 }
             });
@@ -6622,38 +6652,36 @@ function deleteObject(obj, opts) {
     }
     
     if (objType === 'support' || objType === 'attachment' || objType === 'sleeve' || objType === 'cross') {
-        objects.forEach(cable => {
-            if (!cable.properties || cable.properties.get('type') !== 'cable') return;
+        var waypointUid = getObjectUniqueId(obj);
+        for (var ci = 0; ci < objects.length; ci++) {
+            var cable = objects[ci];
+            if (!cable.properties || cable.properties.get('type') !== 'cable') continue;
             var points = cable.properties.get('points');
-            if (!Array.isArray(points)) return;
-            
-            var objIdx = points.indexOf(obj);
-            if (objIdx === -1) {
-                var objUid = getObjectUniqueId(obj);
-                for (var pi = 0; pi < points.length; pi++) {
-                    if (points[pi] && getObjectUniqueId(points[pi]) === objUid) {
-                        objIdx = pi;
-                        break;
-                    }
+            if (!Array.isArray(points) || points.length <= 2) continue;
+            var objIdx = -1;
+            for (var pi = 0; pi < points.length; pi++) {
+                var pt = points[pi];
+                if (pt === obj || (waypointUid && pt && getObjectUniqueId(pt) === waypointUid)) {
+                    objIdx = pi;
+                    break;
                 }
             }
-            
-            if (objIdx !== -1 && objIdx > 0 && objIdx < points.length - 1) {
-                var newPoints = points.filter((p, idx) => idx !== objIdx);
-                cable.properties.set('points', newPoints);
-                
-                var newGeometry = newPoints.map(p => {
-                    if (p && p.geometry) {
-                        return p.geometry.getCoordinates();
-                    }
-                    return null;
-                }).filter(c => c !== null);
-                
-                if (newGeometry.length >= 2 && cable.geometry) {
-                    cable.geometry.setCoordinates(newGeometry);
+            if (objIdx <= 0 || objIdx >= points.length - 1) continue;
+            var newPoints = points.filter(function(p, idx) { return idx !== objIdx; });
+            cable.properties.set('points', newPoints);
+            var newGeometry = [];
+            for (var gi = 0; gi < newPoints.length; gi++) {
+                var np = newPoints[gi];
+                if (np && np.geometry) {
+                    var c = np.geometry.getCoordinates();
+                    if (c) newGeometry.push(c);
                 }
             }
-        });
+            if (newGeometry.length >= 2 && cable.geometry) {
+                cable.geometry.setCoordinates(newGeometry);
+                cableRoutesUpdated = true;
+            }
+        }
     }
 
     let cablesToRemove = objects.filter(cable => {
@@ -6665,7 +6693,7 @@ function deleteObject(obj, opts) {
     cablesToRemove.forEach(cable => {
         var cableUniqueId = cable.properties.get('uniqueId');
         if (cableUniqueId) {
-            deleteCableByUniqueId(cableUniqueId, { skipSync: true, skipRefreshModal: true });
+            deleteCableByUniqueId(cableUniqueId, { skipSync: true, skipRefreshModal: true, deferMapRefresh: true });
         } else {
             mapPerfUnregister(cable);
             myMap.geoObjects.remove(cable);
@@ -6682,30 +6710,39 @@ function deleteObject(obj, opts) {
     }
     mapPerfUnregister(obj);
     objects = objects.filter(o => o !== obj);
-    
-    updateCableVisualization();
-    if (objType === 'cross') updateCrossDisplay();
-    if (objType === 'node') updateNodeDisplay();
-    scheduleConnectionLinesUpdate(objUniqueId || 'full');
+
+    var gponRefreshOpts = { deferLineRefresh: true };
     if ((objType === 'sleeve' || objType === 'cross') && gponImpact && gponImpact.hasGpon) {
-        forcePurgeGponAfterHostRemoval(gponImpact);
+        forcePurgeGponAfterHostRemoval(gponImpact, gponRefreshOpts);
+        gponPurged = true;
     } else if (objType === 'olt' && oltGponImpact && oltGponImpact.hasGpon) {
-        forcePurgeGponAfterHostRemoval(oltGponImpact);
-    } else if (objType === 'support' || objType === 'attachment' || objType === 'manhole') {
-        cleanupGponAssignmentsWithoutOlt();
+        forcePurgeGponAfterHostRemoval(oltGponImpact, gponRefreshOpts);
+        gponPurged = true;
     }
 
     if (!(opts && opts.skipSync)) {
         if (typeof window.syncSendOp === 'function' && objUniqueId) {
             window.syncSendOp({ type: 'delete_object', uniqueId: objUniqueId });
         }
-        saveData();
+        saveData({ skipSync: true });
         logAction(ActionTypes.DELETE_OBJECT, {
             objectType: objType,
             name: objName
         });
     }
-    updateStats();
+    if (!(opts && opts.deferMapRefresh)) {
+        var refreshPlan = {};
+        if (cablesToRemove.length > 0 || cableRoutesUpdated) refreshPlan.cableVisualization = true;
+        if (objType === 'node' && objGroupKey) refreshPlan.nodeGroupKey = objGroupKey;
+        else if (objType === 'cross' && objGroupKey) refreshPlan.crossGroupKey = objGroupKey;
+        if (gponPurged) refreshPlan.connectionLines = 'full';
+        else if (objUniqueId && (objType === 'olt' || objType === 'onu' || objType === 'splitter' || objType === 'mediaConverter')) {
+            refreshPlan.connectionLines = objUniqueId;
+        } else if (objUniqueId && objType === 'node' && nodeConnectionsCleared) {
+            refreshPlan.connectionLines = objUniqueId;
+        }
+        scheduleObjectDeleteVisualRefresh(refreshPlan);
+    }
     if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
     
     closeInfoModalForDeletedHost((opts && opts.deletedModalUid) || objUniqueId);
@@ -7480,7 +7517,7 @@ function purgeSplitterGponTree(splitterObj) {
 }
 
 /** Принудительно снять GPON (ONU, сплиттер, выходы) после удаления муфты/кросса. */
-function forcePurgeGponAfterHostRemoval(impact) {
+function forcePurgeGponAfterHostRemoval(impact, opts) {
     if (!impact || !objects) return;
     objects.forEach(function(slot) {
         if (!slot.properties) return;
@@ -7525,12 +7562,14 @@ function forcePurgeGponAfterHostRemoval(impact) {
             isFiberReachableToOlt(findFiberHostForReachability(root.cableId, root.fiberNumber), root.cableId, root.fiberNumber)) return;
         purgeSplitterGponTree(slot);
     });
-    cleanupGponAssignmentsWithoutOlt();
-    updateSplitterOutputConnectionLines();
-    updateOnuConnectionLines();
-    updateSplitterConnectionLines();
-    updateOltConnectionLines();
-    saveData();
+    cleanupGponAssignmentsWithoutOlt(opts);
+    if (!(opts && opts.deferLineRefresh)) {
+        updateSplitterOutputConnectionLines();
+        updateOnuConnectionLines();
+        updateSplitterConnectionLines();
+        updateOltConnectionLines();
+        saveData();
+    }
 }
 
 function closeInfoModalForDeletedHost(deletedUid) {
@@ -7541,8 +7580,9 @@ function closeInfoModalForDeletedHost(deletedUid) {
     closeInfoModal({ force: true });
 }
 
-function cleanupGponAssignmentsWithoutOlt() {
+function cleanupGponAssignmentsWithoutOlt(opts) {
     if (!objects) return;
+    if (!mapHasOltObjects()) return;
     syncAllSplitterInputsFromHosts();
     var removed = { onu: 0, splitterInputs: 0, splitterOutputs: 0 };
     objects.forEach(function(slot) {
@@ -7605,10 +7645,12 @@ function cleanupGponAssignmentsWithoutOlt() {
         }
     });
     if (removed.onu || removed.splitterInputs || removed.splitterOutputs) {
-        saveData();
-        updateSplitterOutputConnectionLines();
-        updateOnuConnectionLines();
-        updateSplitterConnectionLines();
+        if (!(opts && opts.deferLineRefresh)) {
+            saveData();
+            updateSplitterOutputConnectionLines();
+            updateOnuConnectionLines();
+            updateSplitterConnectionLines();
+        }
     }
 }
 
@@ -13140,29 +13182,36 @@ function setStatCount(el, value) {
 }
 
 function updateStats() {
-    const networkNodeCount = objects.filter(function(obj) {
-        if (!obj.properties || obj.properties.get('type') !== 'node') return false;
-        return (obj.properties.get('nodeKind') || 'network') !== 'aggregation';
-    }).length;
-    const aggregationNodeCount = objects.filter(function(obj) {
-        if (!obj.properties || obj.properties.get('type') !== 'node') return false;
-        return obj.properties.get('nodeKind') === 'aggregation';
-    }).length;
-    const supportCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'support').length;
-    const sleeveCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'sleeve').length;
-    const crossCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'cross').length;
-    const oltCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'olt').length;
-    const splitterCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'splitter').length;
-    const onuCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'onu').length;
-    const cameraCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'camera').length;
-    const mediaConverterCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'mediaConverter').length;
+    var networkNodeCount = 0;
+    var aggregationNodeCount = 0;
+    var supportCount = 0;
+    var sleeveCount = 0;
+    var crossCount = 0;
+    var oltCount = 0;
+    var splitterCount = 0;
+    var onuCount = 0;
+    var cameraCount = 0;
+    var mediaConverterCount = 0;
     var switchCount = 0;
+    var cableCount = 0;
     objects.forEach(function(obj) {
         if (!obj || !obj.properties) return;
-        if (obj.properties.get('type') === 'switch') switchCount++;
-        if (obj.properties.get('type') === 'node') switchCount += getNodeAttachedSwitches(obj).length;
+        var type = obj.properties.get('type');
+        if (type === 'node') {
+            if ((obj.properties.get('nodeKind') || 'network') === 'aggregation') aggregationNodeCount++;
+            else networkNodeCount++;
+            switchCount += getNodeAttachedSwitches(obj).length;
+        } else if (type === 'support') supportCount++;
+        else if (type === 'sleeve') sleeveCount++;
+        else if (type === 'cross') crossCount++;
+        else if (type === 'olt') oltCount++;
+        else if (type === 'splitter') splitterCount++;
+        else if (type === 'onu') onuCount++;
+        else if (type === 'camera') cameraCount++;
+        else if (type === 'mediaConverter') mediaConverterCount++;
+        else if (type === 'switch') switchCount++;
+        else if (type === 'cable') cableCount++;
     });
-    const cableCount = objects.filter(obj => obj.properties && obj.properties.get('type') === 'cable').length;
 
     setStatCount(document.getElementById('networkNodeCount'), networkNodeCount);
     setStatCount(document.getElementById('aggregationNodeCount'), aggregationNodeCount);
@@ -20469,9 +20518,12 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
         });
     }
 
-    updateCableVisualization();
-    scheduleConnectionLinesUpdate();
-    cleanupGponAssignmentsWithoutOlt();
+    if (!(opts && opts.deferMapRefresh)) {
+        updateCableVisualization();
+        scheduleConnectionLinesUpdate();
+        cleanupGponAssignmentsWithoutOlt();
+        updateStats();
+    }
 
     const modal = document.getElementById('infoModal');
     if (isInfoModalVisible(modal)) {
@@ -20481,8 +20533,6 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
             closeInfoModal();
         }
     }
-    
-    updateStats();
 
     if (!(opts && opts.skipRefreshModal) && currentModalObject && currentModalObject !== cable) {
         if (currentModalObject.properties && isObjectOnMap(currentModalObject)) {
@@ -22145,11 +22195,14 @@ function updateCableVisualization() {
     const labelsToRemove = objects.filter(obj => 
         obj.properties && obj.properties.get('type') === 'cableLabel'
     );
-    
-    labelsToRemove.forEach(label => {
-        myMap.geoObjects.remove(label);
-        objects = objects.filter(o => o !== label);
-    });
+
+    if (labelsToRemove.length) {
+        labelsToRemove.forEach(function(label) {
+            myMap.geoObjects.remove(label);
+        });
+        var labelSet = new Set(labelsToRemove);
+        objects = objects.filter(function(o) { return !labelSet.has(o); });
+    }
 
     groups.forEach((group, key) => {
         if (group.cables.length > 1) {
