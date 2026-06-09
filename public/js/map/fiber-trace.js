@@ -154,7 +154,9 @@
         for (var i = path.length - 1; i >= 0; i--) {
             var item = path[i];
             if (item.type === 'oltPortConnection') {
-                var oltPortLabel = item.incoming ? 'приход' : ('порт ' + item.portNumber);
+                var oltPortLabel = item.incoming ? 'приход' : (typeof formatOltPortDisplay === 'function'
+                    ? formatOltPortDisplay(item.portNumber, item.portLabel || (item.olt && typeof getOltPortLabel === 'function' ? getOltPortLabel(item.olt, item.portNumber) : ''))
+                    : ('порт ' + item.portNumber));
                 return {
                     status: 'complete',
                     endpoint: 'olt',
@@ -404,7 +406,9 @@
             return '  🔀 → Сплиттер «' + toN + '»';
         }
         if (item.type === 'oltPortConnection') {
-            var portLabel = item.incoming ? 'приход' : ('порт ' + item.portNumber);
+            var portLabel = item.incoming ? 'приход' : (typeof formatOltPortDisplay === 'function'
+                ? formatOltPortDisplay(item.portNumber, item.portLabel || (item.olt && typeof getOltPortLabel === 'function' ? getOltPortLabel(item.olt, item.portNumber) : ''))
+                : ('порт ' + item.portNumber));
             return '  📶 OLT «' + (item.oltName || 'OLT') + '», ' + portLabel + ', жила ' + item.fiberNumber;
         }
         return '';
@@ -638,7 +642,9 @@
                     '<div class="trace-item-main"><span>Выход → «' + esc(toSp) + '»</span></div>' +
                     mapPinBtn(item.toSplitter ? getUid(item.toSplitter) : null) + '</div>';
             } else if (item.type === 'oltPortConnection') {
-                var oltPort = item.incoming ? 'приход' : ('п.' + item.portNumber);
+                var oltPort = item.incoming ? 'приход' : (typeof formatOltPortDisplay === 'function'
+                    ? formatOltPortDisplay(item.portNumber, item.portLabel || (item.olt && typeof getOltPortLabel === 'function' ? getOltPortLabel(item.olt, item.portNumber) : ''), true)
+                    : ('п.' + item.portNumber));
                 html += '<div class="trace-item trace-item--meta trace-item--olt">' +
                     '<span class="trace-item-glyph trace-item-glyph--muted" aria-hidden="true">📶</span>' +
                     '<div class="trace-item-main"><span>OLT «' + esc(item.oltName || 'OLT') + '» · ' + esc(String(oltPort)) + ' · ж' + item.fiberNumber + '</span></div>' +

@@ -10915,6 +10915,19 @@ html.cable-split-mode-active #map {
     color: var(--text-secondary);
 }
 
+.olt-ports-table-label {
+    color: var(--text-primary);
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.olt-ports-table .olt-port-label {
+    min-width: 120px;
+    font-size: 0.8125rem;
+}
+
 .olt-ports-table .olt-port-assign {
     min-width: 140px;
     font-size: 0.8125rem;
