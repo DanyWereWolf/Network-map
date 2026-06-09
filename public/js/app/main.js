@@ -2654,6 +2654,8 @@ var _mapLoadSafetyTimer = null;
 var _mapBulkImportActive = false;
 var MAP_BULK_IMPORT_MIN_ITEMS = 350;
 var MAP_BULK_IMPORT_BATCH_SIZE = 60;
+var MAP_UNDO_REDO_BATCH_MIN = 1;
+var MAP_UNDO_REDO_BATCH_SIZE = 50;
 
 function isMapBulkImportActive() {
     return !!_mapBulkImportActive;
@@ -2693,6 +2695,23 @@ function hideMapLoadingOverlay() {
     }, 400);
 }
 window.hideMapLoadingOverlay = hideMapLoadingOverlay;
+
+function showUndoRedoLoadingOverlay(text) {
+    var el = document.getElementById('mapLoadingOverlay');
+    if (!el) return;
+    if (text && typeof setMapLoadingOverlayText === 'function') setMapLoadingOverlayText(text);
+    el.removeAttribute('hidden');
+    el.classList.remove('is-hidden');
+    el.setAttribute('aria-busy', 'true');
+}
+
+function resetMapConnectionLineCaches() {
+    nodeConnectionLines = [];
+    onuConnectionLines = [];
+    oltConnectionLines = [];
+    splitterConnectionLines = [];
+    splitterOutputConnectionLines = [];
+}
 
 function setMapLoadingOverlayText(text) {
     var el = document.querySelector('#mapLoadingOverlay .map-loading-text');
@@ -11624,51 +11643,56 @@ function saveData(opts) {
 }
 
 function performUndo() {
-    if (!canEdit()) return;
-    if (undoStack.length === 0) return;
+    if (!canEdit() || undoStack.length === 0 || inUndoRedo) return;
+    var stateToRestore = undoStack.pop();
+    redoStack.push(JSON.parse(JSON.stringify(lastSavedState != null ? lastSavedState : getSerializedData())));
     inUndoRedo = true;
-    try {
-        var stateToRestore = undoStack.pop();
-        redoStack.push(JSON.parse(JSON.stringify(getSerializedData())));
-        clearMap({ skipSave: true, skipHistory: true });
-        importData(stateToRestore, { skipSave: true, skipHistory: true });
-        lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
-        pushSaveDataToSync({ syncFull: true, state: lastSavedState });
-        updateUndoRedoButtons();
-        if (typeof showSuccess === 'function') showSuccess('Действие отменено', 'Отмена');
-    } finally {
-        inUndoRedo = false;
-    }
+    updateUndoRedoButtons();
+    showUndoRedoLoadingOverlay('Восстановление карты…');
+    importData(stateToRestore, { skipSave: true, skipHistory: true, undoRedo: true }, function() {
+        try {
+            lastSavedState = JSON.parse(JSON.stringify(stateToRestore));
+            pushSaveDataToSync({ syncFull: true, state: lastSavedState });
+            if (typeof showSuccess === 'function') showSuccess('Действие отменено', 'Отмена');
+        } finally {
+            inUndoRedo = false;
+            hideMapLoadingOverlay();
+            updateUndoRedoButtons();
+        }
+    });
 }
 
 function performRedo() {
-    if (!canEdit()) return;
-    if (redoStack.length === 0) return;
+    if (!canEdit() || redoStack.length === 0 || inUndoRedo) return;
+    var stateToRestore = redoStack.pop();
+    undoStack.push(JSON.parse(JSON.stringify(lastSavedState != null ? lastSavedState : getSerializedData())));
     inUndoRedo = true;
-    try {
-        var stateToRestore = redoStack.pop();
-        undoStack.push(JSON.parse(JSON.stringify(getSerializedData())));
-        clearMap({ skipSave: true, skipHistory: true });
-        importData(stateToRestore, { skipSave: true, skipHistory: true });
-        lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
-        pushSaveDataToSync({ syncFull: true, state: lastSavedState });
-        updateUndoRedoButtons();
-        if (typeof showSuccess === 'function') showSuccess('Действие повторено', 'Повтор');
-    } finally {
-        inUndoRedo = false;
-    }
+    updateUndoRedoButtons();
+    showUndoRedoLoadingOverlay('Применение изменения…');
+    importData(stateToRestore, { skipSave: true, skipHistory: true, undoRedo: true }, function() {
+        try {
+            lastSavedState = JSON.parse(JSON.stringify(stateToRestore));
+            pushSaveDataToSync({ syncFull: true, state: lastSavedState });
+            if (typeof showSuccess === 'function') showSuccess('Действие повторено', 'Повтор');
+        } finally {
+            inUndoRedo = false;
+            hideMapLoadingOverlay();
+            updateUndoRedoButtons();
+        }
+    });
 }
 
 function updateUndoRedoButtons() {
     var undoBtn = document.getElementById('undoBtn');
     var redoBtn = document.getElementById('redoBtn');
+    var busy = !!inUndoRedo;
     if (undoBtn) {
-        undoBtn.disabled = undoStack.length === 0;
-        undoBtn.title = undoStack.length === 0 ? 'Отмена (Ctrl+Z)' : 'Отменить (Ctrl+Z)';
+        undoBtn.disabled = busy || undoStack.length === 0;
+        undoBtn.title = busy ? 'Подождите…' : (undoStack.length === 0 ? 'Отмена (Ctrl+Z)' : 'Отменить (Ctrl+Z)');
     }
     if (redoBtn) {
-        redoBtn.disabled = redoStack.length === 0;
-        redoBtn.title = redoStack.length === 0 ? 'Повтор (Ctrl+Y)' : 'Повторить (Ctrl+Y)';
+        redoBtn.disabled = busy || redoStack.length === 0;
+        redoBtn.title = busy ? 'Подождите…' : (redoStack.length === 0 ? 'Повтор (Ctrl+Y)' : 'Повторить (Ctrl+Y)');
     }
 }
 
@@ -12446,48 +12470,61 @@ function importDataRunCables(data, objectRefs) {
     });
 }
 
-function importDataPostProcess(opts) {
-    repairCablesAfterImport();
-    validateAndFixCableGeometryOnLoad();
-    refreshAllCableUndergroundOverlays();
-    applyAllOpticalCableMapStyles();
-    ensureNodeLabelsVisible();
-    updateCableVisualization();
-    updateCrossDisplay();
-    updateNodeDisplay();
-    scheduleConnectionLinesUpdate();
-    migrateStandaloneSwitchesIntoNodes();
-    if (migrateNodeLevelSwitchMetaToAttached() && !(opts && opts.skipSave)) saveData();
-    rebuildAllCopperPortUsageFromCables();
-    if (window.CameraPlayer && CameraPlayer.startStreamMonitor) CameraPlayer.startStreamMonitor();
-    if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
-    if (window.MapRegions && MapRegions.sendAllRegionsToMapBack && myMap) {
-        MapRegions.sendAllRegionsToMapBack(myMap, objects);
-    }
-    if (window.MapRegions && MapRegions.syncAllRegionLabels && myMap) {
-        MapRegions.syncAllRegionLabels(myMap, objects);
-    }
-    objects.forEach(function(obj) {
-        if (obj && obj.properties && obj.properties.get('type') === 'cable') ensureCableMapZIndex(obj);
-    });
-    if (typeof applyMapFilter === 'function') applyMapFilter();
+function importDataPostProcess(opts, onDone) {
+    var finish = function() {
+        if (typeof onDone === 'function') onDone();
+    };
+    var work = function() {
+        repairCablesAfterImport();
+        validateAndFixCableGeometryOnLoad();
+        refreshAllCableUndergroundOverlays();
+        applyAllOpticalCableMapStyles();
+        ensureNodeLabelsVisible();
+        updateCableVisualization();
+        updateCrossDisplay();
+        updateNodeDisplay();
+        scheduleConnectionLinesUpdate('full');
+        migrateStandaloneSwitchesIntoNodes();
+        if (migrateNodeLevelSwitchMetaToAttached() && !(opts && opts.skipSave)) saveData();
+        rebuildAllCopperPortUsageFromCables();
+        if (window.CameraPlayer && CameraPlayer.startStreamMonitor) CameraPlayer.startStreamMonitor();
+        if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
+        if (window.MapRegions && MapRegions.sendAllRegionsToMapBack && myMap) {
+            MapRegions.sendAllRegionsToMapBack(myMap, objects);
+        }
+        if (window.MapRegions && MapRegions.syncAllRegionLabels && myMap) {
+            MapRegions.syncAllRegionLabels(myMap, objects);
+        }
+        objects.forEach(function(obj) {
+            if (obj && obj.properties && obj.properties.get('type') === 'cable') ensureCableMapZIndex(obj);
+        });
+        if (typeof applyMapFilter === 'function') applyMapFilter();
+        if (opts && opts.undoRedo) requestAnimationFrame(finish);
+        else finish();
+    };
+    if (opts && opts.undoRedo) requestAnimationFrame(work);
+    else work();
 }
 
 function importData(data, opts, done) {
     opts = opts || {};
-    var useBulk = !!opts.bulkImport;
+    var undoRedo = !!opts.undoRedo;
+    var useBulk = !!opts.bulkImport || undoRedo;
+    var bulkMinItems = undoRedo ? MAP_UNDO_REDO_BATCH_MIN : MAP_BULK_IMPORT_MIN_ITEMS;
+    var importBatchSize = undoRedo ? MAP_UNDO_REDO_BATCH_SIZE : MAP_BULK_IMPORT_BATCH_SIZE;
     _mapBulkImportActive = useBulk;
     clearMap(opts || {});
     importDataAssignUniqueIds(data);
 
     function completeImport() {
-        importDataPostProcess(opts);
-        _mapBulkImportActive = false;
-        if (typeof MapPerf !== 'undefined') MapPerf.reindexAllObjects(objects);
-        if (typeof done === 'function') done();
+        importDataPostProcess(opts, function() {
+            _mapBulkImportActive = false;
+            if (typeof MapPerf !== 'undefined') MapPerf.reindexAllObjects(objects);
+            if (typeof done === 'function') done();
+        });
     }
 
-    if (useBulk && Array.isArray(data) && data.length >= MAP_BULK_IMPORT_MIN_ITEMS) {
+    if (useBulk && Array.isArray(data) && data.length >= bulkMinItems) {
         var objectRefs = new Array(data.length);
         var idx = 0;
         var placemarkLoaded = 0;
@@ -12495,7 +12532,7 @@ function importData(data, opts, done) {
         data.forEach(function(it) { if (it && it.type !== 'cable') placemarkTotal++; });
 
         function importPlacemarkBatch() {
-            var end = Math.min(idx + MAP_BULK_IMPORT_BATCH_SIZE, data.length);
+            var end = Math.min(idx + importBatchSize, data.length);
             for (; idx < end; idx++) {
                 var item = data[idx];
                 if (!item) continue;
@@ -12507,14 +12544,17 @@ function importData(data, opts, done) {
                 if (objectRefs[idx]) placemarkLoaded++;
             }
             if (typeof setMapLoadingOverlayText === 'function' && placemarkTotal > 0) {
-                setMapLoadingOverlayText('Загрузка объектов… ' + placemarkLoaded + ' / ' + placemarkTotal);
+                var progressText = undoRedo
+                    ? ('Восстановление объектов… ' + placemarkLoaded + ' / ' + placemarkTotal)
+                    : ('Загрузка объектов… ' + placemarkLoaded + ' / ' + placemarkTotal);
+                setMapLoadingOverlayText(progressText);
             }
             if (idx < data.length) {
                 requestAnimationFrame(importPlacemarkBatch);
                 return;
             }
             if (typeof setMapLoadingOverlayText === 'function') {
-                setMapLoadingOverlayText('Прокладка кабелей…');
+                setMapLoadingOverlayText(undoRedo ? 'Восстановление кабелей…' : 'Прокладка кабелей…');
             }
             requestAnimationFrame(function() {
                 importDataRunCables(data, objectRefs);
@@ -13156,6 +13196,7 @@ function clearMap(opts) {
     if (window.CameraPlayer && CameraPlayer.stopStreamMonitor) CameraPlayer.stopStreamMonitor();
     const count = objects.length;
     myMap.geoObjects.removeAll();
+    resetMapConnectionLineCaches();
     objects = [];
     selectedObjects = [];
     crossGroupPlacemarks = [];
