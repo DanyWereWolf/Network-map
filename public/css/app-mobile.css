@@ -234,12 +234,179 @@ html {
 
     .modal-content.fiber-management-modal .modal-body {
         max-height: none;
-        min-height: 200px;
+        min-height: 0;
+        padding: 8px 10px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .fiber-management-modal-open .object-gallery-section--compact {
+        margin-bottom: 8px;
+    }
+
+    .fiber-management-modal-open .object-gallery-section--compact .object-gallery-summary {
+        padding: 10px 12px;
+        min-height: 44px;
+    }
+
+    .fiber-management-modal-open .object-gallery-section--compact .object-gallery-body {
+        padding-top: 0;
+    }
+
+    .fiber-management-modal-open #modalInfo {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    .fiber-management-modal-open--view #modalInfo > .object-gallery-section {
+        order: 10;
+        flex-shrink: 0;
+        margin-top: 6px;
+        margin-bottom: 0;
+    }
+
+    .fiber-management-modal-open--view .fiber-connections-container {
+        order: 1;
+        flex: 1;
+        min-height: 0;
+        margin-top: 0;
+    }
+
+    .fiber-management-modal-open--view .fiber-modal-header-sub {
+        display: none;
+    }
+
+    .fiber-management-modal-open--view .fiber-ws-sidebar--view-compact {
+        display: none;
+    }
+
+    .fiber-management-modal-open--view .fiber-ws-side-tab {
+        padding: 8px 4px;
+        font-size: 0.625rem;
+    }
+
+    .fiber-management-modal-open--view .fiber-ws-main {
+        min-height: 0;
+        flex: 1;
+    }
+
+    .fiber-management-modal-open--view .fiber-ws-toolbar {
+        padding: 6px 8px;
+        gap: 6px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .fiber-management-modal-open--view .fiber-ws-tabs {
+        flex-shrink: 0;
+    }
+
+    .fiber-management-modal-open--view .fiber-ws-tab {
+        padding: 7px 10px;
+        min-height: 36px;
+        font-size: 0.75rem;
+    }
+
+    .fiber-management-modal-open--view .fiber-ws-toolbar-zoom {
+        margin-left: auto;
+        flex-shrink: 0;
+    }
+
+    .fiber-management-modal-open--view .fiber-scheme-zoom-slider,
+    .fiber-management-modal-open--view .fiber-scheme-zoom-label {
+        display: none;
+    }
+
+    .fiber-management-modal-open--view .fiber-scheme-zoom-controls {
+        padding: 2px 4px;
+        gap: 2px;
+    }
+
+    .fiber-management-modal-open--view .fiber-scheme-zoom-btn {
+        min-width: 32px;
+        height: 32px;
+    }
+
+    .fiber-management-modal-open--view .fiber-scheme-toolbar-btn {
+        margin-left: 4px;
+        padding: 5px 8px;
+        font-size: 0.75rem;
+    }
+
+    .fiber-management-modal-open--view .fiber-ws-panels {
+        flex: 1;
+        min-height: 0;
+    }
+
+    .fiber-management-modal-open--view .fiber-ws-panel-scheme .fiber-scheme-viewport {
+        flex: 1;
+        min-height: 0;
+        max-height: none;
+        padding: 6px 4px;
+    }
+
+    .fiber-management-modal-open--view .fiber-ws-panel-table .cross-fiber-table-wrap {
+        flex: 1;
+        min-height: 0;
+        max-height: none;
+    }
+
+    .fiber-management-modal-open .fiber-connections-container {
+        margin-top: 0;
+    }
+
+    .fiber-management-modal-open--edit .fiber-ws-sidebar {
+        padding: 6px 8px;
+        gap: 6px;
+    }
+
+    .fiber-management-modal-open--edit .fiber-ws-side-panels {
+        max-height: min(40dvh, 340px);
+    }
+
+    .fiber-management-modal-open--edit .fiber-ws-sidebar-actions {
+        position: static;
+        padding: 8px;
+    }
+
+    .fiber-management-modal-open--edit .fiber-ws-sidebar-actions-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    .fiber-management-modal-open--edit .fiber-ws-action-btn {
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        padding: 8px 4px;
+        font-size: 0.7rem;
+        gap: 4px;
+    }
+
+    .fiber-management-modal-open--edit .fiber-ws-action-btn span {
+        font-size: 0.65rem;
+    }
+
+    .fiber-management-modal-open--edit .fiber-ws-card-head {
+        display: none;
+    }
+
+    .fiber-management-modal-open--edit .fiber-ws-side-tab {
+        padding: 8px 4px;
+        font-size: 0.625rem;
     }
 
     .fiber-scheme-wrap,
     .fiber-connections-list-wrap {
         max-height: min(40dvh, 320px);
+    }
+
+    .fiber-management-modal-open--view .fiber-scheme-wrap,
+    .fiber-management-modal-open--view .fiber-connections-list-wrap {
+        max-height: none;
     }
 
     .fiber-view-toggle {
@@ -568,4 +735,10 @@ html {
     .fiber-connections-list-wrap {
         max-height: min(34dvh, 260px);
     }
+
+    .fiber-management-modal-open--view .fiber-scheme-wrap,
+    .fiber-management-modal-open--view .fiber-connections-list-wrap {
+        max-height: none;
+    }
+
 }

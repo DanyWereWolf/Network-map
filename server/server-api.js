@@ -10,6 +10,7 @@ const DATA_DIR = path.join(ROOT_DIR, 'data');
 const db = require('./database');
 const avatars = require('./avatars');
 const chatMedia = require('./chat-media');
+const objectMedia = require('./object-media');
 const newsMedia = require('./news-media');
 const security = require('./lib/security');
 const supportBot = require('./lib/support-bot');
@@ -1125,6 +1126,7 @@ app.delete('/api/organizations/:id', (req, res) => {
     try {
         db.deleteOrganization(orgId);
         try { chatMedia.removeOrgStorage(orgId); } catch (e) {}
+        try { objectMedia.removeOrgStorage(orgId); } catch (e) {}
         // Отключаем WebSocket‑клиентов удалённой организации
         try {
             wss.clients.forEach(function(client) {
@@ -1856,6 +1858,105 @@ app.get('/api/chat/media/file/:mediaId', (req, res) => {
     if (!chatMedia.shouldInlineFile(item)) {
         res.setHeader('Content-Disposition', 'attachment; filename="' + downloadName.replace(/"/g, '') + '"');
     }
+    res.sendFile(path.resolve(file));
+});
+
+app.get('/api/object-media/quota', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!user.organizationId) return res.status(403).json({ error: 'Доступно только участникам организации' });
+    try {
+        var orgId = user.organizationId;
+        var objectUniqueId = req.query && req.query.objectUniqueId ? String(req.query.objectUniqueId).trim() : '';
+        var mapData = db.getMapData(orgId);
+        res.json(objectMedia.getQuotaInfo(orgId, objectUniqueId || null, mapData));
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/object-media', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!user.organizationId) return res.status(403).json({ error: 'Доступно только участникам организации' });
+    var parsed = objectMedia.parseImagePayload(req.body);
+    if (!parsed) {
+        return res.status(400).json({ error: 'Некорректное изображение. Допустимы JPG, PNG, WebP или GIF до 5 МБ.' });
+    }
+    try {
+        var orgId = user.organizationId;
+        var objectUniqueId = req.body && req.body.objectUniqueId ? String(req.body.objectUniqueId).trim() : '';
+        var mapData = db.getMapData(orgId);
+        var quotaCheck = objectMedia.checkUploadQuotas(orgId, objectUniqueId, mapData, parsed.size);
+        if (!quotaCheck.ok) {
+            return res.status(413).json({
+                error: quotaCheck.error,
+                code: quotaCheck.code || 'quota',
+                orgUsedBytes: quotaCheck.orgUsedBytes,
+                orgMaxBytes: quotaCheck.orgMaxBytes,
+                objectUsedBytes: quotaCheck.objectUsedBytes,
+                objectMaxBytes: quotaCheck.objectMaxBytes
+            });
+        }
+        var mediaId = 'om_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+        objectMedia.saveOrgMedia(orgId, mediaId, parsed.buffer, parsed.ext);
+        var name = (req.body && req.body.name) ? String(req.body.name).trim().slice(0, 120) : '';
+        var item = {
+            id: mediaId,
+            ext: parsed.ext,
+            mime: parsed.mime,
+            size: parsed.size,
+            name: name,
+            uploadedBy: user.userId,
+            createdAt: new Date().toISOString()
+        };
+        res.json({
+            ok: true,
+            media: {
+                id: item.id,
+                name: item.name,
+                ext: item.ext,
+                mime: item.mime,
+                size: item.size,
+                url: objectMedia.getMediaApiPath(item.id, item.ext),
+                uploadedBy: item.uploadedBy,
+                createdAt: item.createdAt
+            }
+        });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.delete('/api/object-media/:mediaId', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!user.organizationId) return res.status(403).json({ error: 'Доступно только участникам организации' });
+    var mediaId = objectMedia.mediaIdFromRouteParam(req.params.mediaId);
+    if (!mediaId || mediaId.indexOf('om_') !== 0) return res.status(404).json({ error: 'Файл не найден' });
+    try {
+        objectMedia.removeMediaFile(user.organizationId, mediaId);
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.get('/api/object-media/file/:mediaId', (req, res) => {
+    const token = (req.headers.authorization && req.headers.authorization.startsWith('Bearer '))
+        ? req.headers.authorization.slice(7)
+        : (req.query && req.query.token ? String(req.query.token) : '');
+    const viewer = getSessionUserFromToken(token);
+    if (!viewer || !viewer.organizationId) return res.status(401).end();
+    var mediaId = objectMedia.mediaIdFromRouteParam(req.params.mediaId);
+    if (!mediaId || mediaId.indexOf('om_') !== 0) return res.status(404).end();
+    const file = objectMedia.findMediaFile(viewer.organizationId, mediaId);
+    if (!file) return res.status(404).end();
+    var mime = objectMedia.mimeForExt(path.extname(file));
+    var downloadName = objectMedia.safeDownloadName(null, path.extname(file));
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.type(mime);
+    res.setHeader('Content-Disposition', 'inline; filename="' + downloadName.replace(/"/g, '') + '"');
     res.sendFile(path.resolve(file));
 });
 

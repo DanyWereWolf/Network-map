@@ -446,7 +446,6 @@
                                     <span class="object-type-group-label">GPON</span>
                                     <div class="object-type-chips">
                                         <button type="button" class="object-type-chip object-type-chip--sky" data-type="olt">OLT</button>
-                                        <button type="button" class="object-type-chip object-type-chip--purple" data-type="splitter">Сплиттер</button>
                                         <button type="button" class="object-type-chip object-type-chip--cyan" data-type="onu">ONU</button>
                                     </div>
                                 </div>
@@ -464,7 +463,6 @@
                                 <option value="sleeve">Кабельные муфты</option>
                                 <option value="cross">Оптический кросс</option>
                                 <option value="olt">OLT (GPON)</option>
-                                <option value="splitter">Сплиттер</option>
                                 <option value="onu">ONU</option>
                                 <option value="camera">Камера</option>
                                 <option value="mediaConverter">Медиаконвертер</option>
@@ -1282,7 +1280,7 @@
                         </select>
                     </div>
                     <p class="node-selection-info" style="font-size: 0.8125rem; color: var(--text-secondary); margin-top: 8px;">
-                        Жила будет назначена как вход сплиттера (1&nbsp;→&nbsp;N). Выходы на ONU или следующий сплиттер настраиваются в карточке сплиттера.
+                        Жила будет назначена как вход сплиттера (1&nbsp;→&nbsp;N). OLT не обязателен — сплиттер можно использовать для деления сети внутри муфты. Выходы настраиваются в карточке сплиттера.
                     </p>
                     <div class="node-selection-actions">
                         <button id="confirmSplitterSelection" class="btn-primary" disabled>Подключить</button>
@@ -1306,6 +1304,26 @@
                     <div id="splitterOutputOnuList" class="node-list-container"></div>
                     <div class="node-selection-actions" style="margin-top: 12px;">
                         <button id="cancelSplitterOutputOnu" class="btn-secondary">Отмена</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Выбор муфты/кросса и жилы для выхода сплиттера -->
+    <div id="splitterOutputHostModal" class="modal">
+        <div class="modal-content node-selection-modal-content">
+            <div class="network-map-balloon node-selection-balloon">
+                <div class="group-balloon-header">
+                    <span class="group-balloon-title" id="splitterOutputHostTitle">Выбор муфты или кросса</span>
+                    <button type="button" class="group-balloon-close close-splitter-output-host" title="Закрыть">&times;</button>
+                </div>
+                <div class="modal-body node-selection-body">
+                    <p id="splitterOutputHostHint" class="node-selection-info" style="font-size: 0.8125rem; color: var(--text-secondary);">Выберите муфту или кросс, куда пойдёт выход сплиттера.</p>
+                    <div id="splitterOutputHostList" class="node-list-container"></div>
+                    <div class="node-selection-actions" style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button type="button" id="splitterOutputHostBack" class="btn-secondary" style="display: none;">Назад</button>
+                        <button type="button" id="cancelSplitterOutputHost" class="btn-secondary">Отмена</button>
                     </div>
                 </div>
             </div>
@@ -2061,6 +2079,7 @@
     <script src="js/map/map-icons.js"></script>
     <script src="js/map/cable-underground.js"></script>
     <script src="js/map/fiber-trace.js"></script>
+    <script src="js/map/embedded-splitters.js"></script>
     <script src="js/map/regions.js"></script>
     <script src="js/map/map-perf.js"></script>
     <script src="js/map/search.js"></script>

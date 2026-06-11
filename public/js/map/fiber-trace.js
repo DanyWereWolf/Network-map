@@ -107,6 +107,8 @@
         if (item.mediaConverter) return item.mediaConverter;
         if (item.olt) return item.olt;
         if (item.onuObj) return item.onuObj;
+        if (item.nodeObj) return item.nodeObj;
+        if (item.mediaConverterObj) return item.mediaConverterObj;
         if (item.splitter) return item.splitter;
         if (item.toSplitter) return item.toSplitter;
         return null;
@@ -177,6 +179,18 @@
                     status: 'complete',
                     endpoint: 'onu',
                     label: 'Доходит до ONU «' + (item.objectName || 'ONU') + '»',
+                    cssClass: 'trace-path-status--complete'
+                };
+            }
+            if (item.type === 'splitterOutputToNode' || (item.type === 'object' && item.objectType === 'node')) {
+                var nodeLabel = item.nodeName || item.objectName || 'Узел';
+                if (item.type === 'splitterOutputToNode') {
+                    nodeLabel = item.nodeName || (item.nodeObj && item.nodeObj.properties ? item.nodeObj.properties.get('name') : null) || 'Узел';
+                }
+                return {
+                    status: 'complete',
+                    endpoint: 'node',
+                    label: 'Доходит до узла «' + nodeLabel + '»',
                     cssClass: 'trace-path-status--complete'
                 };
             }
@@ -278,15 +292,17 @@
         var lastObj = null;
         path.forEach(function (item, idx) {
             if (item.type === 'start' || item.type === 'object') {
-                if (item.object && item.object.geometry) {
+                var traceObj = item.object;
+                if (traceObj && traceObj._embedded && traceObj._host) traceObj = traceObj._host;
+                if (traceObj && traceObj.geometry) {
                     try {
                         points.push({
-                            coords: item.object.geometry.getCoordinates(),
+                            coords: traceObj.geometry.getCoordinates(),
                             type: item.objectType
                         });
                     } catch (e) {}
                 }
-                lastObj = item.object || lastObj;
+                lastObj = traceObj || item.object || lastObj;
             } else if (item.type === 'cable' && item.cable && lastObj) {
                 var nextObj = null;
                 for (var k = idx + 1; k < path.length; k++) {
@@ -323,10 +339,17 @@
                 }
             } else if (item.type === 'splitterConnection') {
                 [item.sleeve, item.splitter].forEach(function (o) {
-                    if (o && o.geometry) {
-                        try { points.push({ coords: o.geometry.getCoordinates(), type: 'splitter' }); } catch (e2) {}
+                    var pin = o && o._embedded && o._host ? o._host : o;
+                    if (pin && pin.geometry) {
+                        try { points.push({ coords: pin.geometry.getCoordinates(), type: 'splitter' }); } catch (e2) {}
                     }
                 });
+            } else if (item.type === 'splitterOutputToHost' && item.host && item.host.geometry) {
+                try { points.push({ coords: item.host.geometry.getCoordinates(), type: 'splitter' }); } catch (e2b) {}
+            } else if (item.type === 'splitterOutputToNode' && item.nodeObj && item.nodeObj.geometry) {
+                try { points.push({ coords: item.nodeObj.geometry.getCoordinates(), type: 'node' }); } catch (e3a) {}
+            } else if (item.type === 'splitterOutputToMediaConverter' && item.mediaConverterObj && item.mediaConverterObj.geometry) {
+                try { points.push({ coords: item.mediaConverterObj.geometry.getCoordinates(), type: 'mediaConverter' }); } catch (e3b) {}
             } else if (item.type === 'nodeConnection' && item.node && item.node.geometry) {
                 try { points.push({ coords: item.node.geometry.getCoordinates(), type: 'node' }); } catch (e3) {}
             } else if (item.type === 'onuConnection' && item.onu && item.onu.geometry) {
@@ -401,9 +424,20 @@
         if (item.type === 'splitterOutputToOnu') {
             return '  🔀 → ONU «' + (item.onuName || 'ONU') + '»';
         }
+        if (item.type === 'splitterOutputToNode') {
+            var spNodePort = item.switchPort != null ? ', SFP ' + item.switchPort : '';
+            return '  🔀 → Узел «' + (item.nodeName || 'Узел') + '»' + spNodePort;
+        }
+        if (item.type === 'splitterOutputToMediaConverter') {
+            return '  🔀 → МК «' + (item.mediaConverterName || 'Медиаконвертер') + '»';
+        }
         if (item.type === 'splitterOutputToSplitter') {
             var toN = item.toSplitter && item.toSplitter.properties ? (item.toSplitter.properties.get('name') || 'Сплиттер') : 'Сплиттер';
             return '  🔀 → Сплиттер «' + toN + '»';
+        }
+        if (item.type === 'splitterOutputToHost') {
+            var hostN = item.host && item.host.properties ? (item.host.properties.get('name') || 'Муфта/кросс') : 'Муфта/кросс';
+            return '  🔀 → «' + hostN + '», жила ' + (item.fiberNumber != null ? item.fiberNumber : '?');
         }
         if (item.type === 'oltPortConnection') {
             var portLabel = item.incoming ? 'приход' : (typeof formatOltPortDisplay === 'function'
@@ -635,12 +669,29 @@
                     '<span class="trace-item-glyph trace-item-glyph--muted" aria-hidden="true">🔀</span>' +
                     '<div class="trace-item-main"><span>Выход → ONU «' + esc(item.onuName || 'ONU') + '»</span></div>' +
                     mapPinBtn(item.onuObj ? getUid(item.onuObj) : null) + '</div>';
+            } else if (item.type === 'splitterOutputToNode') {
+                var spNodePortLbl = item.switchPort != null ? ' · SFP ' + item.switchPort : '';
+                html += '<div class="trace-item trace-item--meta">' +
+                    '<span class="trace-item-glyph trace-item-glyph--muted" aria-hidden="true">🔀</span>' +
+                    '<div class="trace-item-main"><span>Выход → Узел «' + esc(item.nodeName || 'Узел') + '»' + esc(spNodePortLbl) + '</span></div>' +
+                    mapPinBtn(item.nodeObj ? getUid(item.nodeObj) : null) + '</div>';
+            } else if (item.type === 'splitterOutputToMediaConverter') {
+                html += '<div class="trace-item trace-item--meta">' +
+                    '<span class="trace-item-glyph trace-item-glyph--muted" aria-hidden="true">🔀</span>' +
+                    '<div class="trace-item-main"><span>Выход → МК «' + esc(item.mediaConverterName || 'Медиаконвертер') + '»</span></div>' +
+                    mapPinBtn(item.mediaConverterObj ? getUid(item.mediaConverterObj) : null) + '</div>';
             } else if (item.type === 'splitterOutputToSplitter') {
                 var toSp = item.toSplitter && item.toSplitter.properties ? (item.toSplitter.properties.get('name') || 'Сплиттер') : 'Сплиттер';
                 html += '<div class="trace-item trace-item--meta">' +
                     '<span class="trace-item-glyph trace-item-glyph--muted" aria-hidden="true">🔀</span>' +
                     '<div class="trace-item-main"><span>Выход → «' + esc(toSp) + '»</span></div>' +
                     mapPinBtn(item.toSplitter ? getUid(item.toSplitter) : null) + '</div>';
+            } else if (item.type === 'splitterOutputToHost') {
+                var hostN = item.host && item.host.properties ? (item.host.properties.get('name') || 'Муфта/кросс') : 'Муфта/кросс';
+                html += '<div class="trace-item trace-item--meta">' +
+                    '<span class="trace-item-glyph trace-item-glyph--muted" aria-hidden="true">🔀</span>' +
+                    '<div class="trace-item-main"><span>Выход → «' + esc(hostN) + '» · ж' + esc(String(item.fiberNumber != null ? item.fiberNumber : '?')) + '</span></div>' +
+                    mapPinBtn(item.host ? getUid(item.host) : null) + '</div>';
             } else if (item.type === 'oltPortConnection') {
                 var oltPort = item.incoming ? 'приход' : (typeof formatOltPortDisplay === 'function'
                     ? formatOltPortDisplay(item.portNumber, item.portLabel || (item.olt && typeof getOltPortLabel === 'function' ? getOltPortLabel(item.olt, item.portNumber) : ''), true)

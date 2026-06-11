@@ -33,7 +33,8 @@
 
     global.MAP_CORE_DEFERRED_SCRIPTS = [
         'js/catalog/device-catalog.js',
-        'js/history.js'
+        'js/history.js',
+        'js/ui/object-gallery.js'
     ];
     global.MAP_UI_DEFERRED_SCRIPTS = [
         'js/ui/help.js',
