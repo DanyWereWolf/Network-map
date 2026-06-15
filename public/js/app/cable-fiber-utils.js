@@ -1,0 +1,135 @@
+/**
+ * Жилы кабеля: usedFibers, группы, связанные кабели.
+ */
+function removeCableFromUsedFibers(obj, cableUniqueId) {
+    let usedFibersData = obj.properties.get('usedFibers');
+    if (usedFibersData && usedFibersData[cableUniqueId]) {
+        delete usedFibersData[cableUniqueId];
+        obj.properties.set('usedFibers', usedFibersData);
+        saveData();
+    }
+}
+
+async function changeCableType(cableUniqueId, newValue) {
+    var count = parseInt(newValue, 10);
+    if (isNaN(count)) count = getFiberCount(newValue);
+    return updateCableFiberSettings(cableUniqueId, count, undefined);
+}
+
+function getFiberCount(arg) {
+    if (window.FiberCableConfig) return window.FiberCableConfig.getFiberCount(arg);
+    if (arg === 'copper') return 1;
+    return 0;
+}
+
+/** Кабели через опору или крепление: концы маршрута (from/to) или промежуточная точка (points / геометрия). */
+function getCablesThroughSupport(supportObj) {
+    if (!supportObj || !supportObj.geometry) return [];
+    var supportCoords = supportObj.geometry.getCoordinates();
+    if (!supportCoords || supportCoords.length < 2) return [];
+    var supportId = getObjectUniqueId(supportObj);
+    var tol = 1e-6;
+    function coordsMatch(a, b) {
+        if (!a || !b || a.length < 2 || b.length < 2) return false;
+        return Math.abs(a[0] - b[0]) < tol && Math.abs(a[1] - b[1]) < tol;
+    }
+    var direct = objects.filter(function(cable) {
+        if (!cable.properties || cable.properties.get('type') !== 'cable') return false;
+        var from = cable.properties.get('from');
+        var to = cable.properties.get('to');
+        if (from === supportObj || to === supportObj) return true;
+        if (from && getObjectUniqueId(from) === supportId) return true;
+        if (to && getObjectUniqueId(to) === supportId) return true;
+        var points = cable.properties.get('points');
+        if (Array.isArray(points) && points.some(function(p) { return p === supportObj || (p && getObjectUniqueId(p) === supportId); })) return true;
+        var geom = cable.geometry && cable.geometry.getCoordinates && cable.geometry.getCoordinates();
+        if (!geom || !Array.isArray(geom)) return false;
+        return geom.some(function(c) { return coordsMatch(c, supportCoords); });
+    });
+    direct = direct.slice().sort(function(a, b) {
+        var idA = a.properties && a.properties.get('uniqueId');
+        var idB = b.properties && b.properties.get('uniqueId');
+        return (idA || '').localeCompare(idB || '', undefined, { numeric: true });
+    });
+    return direct;
+}
+
+function getConnectedCables(obj) {
+    var objUid = obj && obj.properties ? getObjectUniqueId(obj) : null;
+    var direct = objects.filter(function(cable) {
+        if (!cable.properties || cable.properties.get('type') !== 'cable') return false;
+        var from = cable.properties.get('from');
+        var to = cable.properties.get('to');
+        if (from === obj || to === obj) return true;
+        if (!objUid) return false;
+        return (from && getObjectUniqueId(from) === objUid) || (to && getObjectUniqueId(to) === objUid);
+    });
+    // Стабильная сортировка по uniqueId кабеля, чтобы порядок не «прыгал» при обновлении (опоры, муфта, кросс)
+    direct = direct.slice().sort(function(a, b) {
+        var idA = a.properties && a.properties.get('uniqueId');
+        var idB = b.properties && b.properties.get('uniqueId');
+        if (!idA) idA = '';
+        if (!idB) idB = '';
+        return (idA || '').localeCompare(idB || '', undefined, { numeric: true });
+    });
+    return direct;
+}
+
+function getOtherEndOfCable(cable, oneEnd) {
+    if (!cable || !oneEnd) return null;
+    const fromObj = cable.properties.get('from');
+    const toObj = cable.properties.get('to');
+    if (fromObj === oneEnd) return toObj;
+    if (toObj === oneEnd) return fromObj;
+    const oneId = getObjectUniqueId(oneEnd);
+    if (fromObj && getObjectUniqueId(fromObj) === oneId) return toObj;
+    if (toObj && getObjectUniqueId(toObj) === oneId) return fromObj;
+    return null;
+}
+
+function crossHasFiberForConnection(crossObj, cableId, fiberNumber) {
+    if (!crossObj || !cableId || fiberNumber == null) return false;
+    const cables = getConnectedCables(crossObj);
+    const cable = cables.find(c => c.properties && c.properties.get('uniqueId') === cableId);
+    if (!cable) return false;
+    const n = getFiberCount(cable);
+    return fiberNumber >= 1 && fiberNumber <= n;
+}
+
+function getTotalUsedPortsInCross(crossObj) {
+    if (!crossObj || !crossObj.properties || crossObj.properties.get('type') !== 'cross') {
+        return 0;
+    }
+    const keys = new Set();
+    const nodeConnections = crossObj.properties.get('nodeConnections') || {};
+    const fiberConnections = crossObj.properties.get('fiberConnections') || [];
+    Object.keys(nodeConnections).forEach(function(k) { keys.add(k); });
+    fiberConnections.forEach(function(conn) {
+        if (conn.from && conn.from.cableId != null) keys.add(conn.from.cableId + '-' + conn.from.fiberNumber);
+        if (conn.to && conn.to.cableId != null) keys.add(conn.to.cableId + '-' + conn.to.fiberNumber);
+    });
+    return keys.size;
+}
+
+function getTotalUsedFibersInSleeve(sleeveObj) {
+    if (!sleeveObj || !sleeveObj.properties || sleeveObj.properties.get('type') !== 'sleeve') {
+        return 0;
+    }
+
+    let totalFibers = 0;
+    objects.forEach(obj => {
+        if (obj.properties && obj.properties.get('type') === 'cable') {
+            const fromObj = obj.properties.get('from');
+            const toObj = obj.properties.get('to');
+
+            if ((fromObj && fromObj === sleeveObj) || (toObj && toObj === sleeveObj)) {
+                const cableType = obj.properties.get('cableType');
+                const fiberCount = getFiberCount(cableType);
+                totalFibers += fiberCount;
+            }
+        }
+    });
+    
+    return totalFibers;
+}
+

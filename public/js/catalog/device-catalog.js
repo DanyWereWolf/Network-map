@@ -133,6 +133,8 @@ var SLEEVE_TYPES_BUILTIN = [
 
 /** Дополнительные типы муфт из справочника: { id, label, maxFibers }. */
 var customSleeveTypes = [];
+/** Скрытые встроенные типы муфт (удалены из списка, но остаются на уже созданных объектах). */
+var hiddenBuiltinSleeveTypes = [];
 
 function normalizeSleeveTypeId(id) {
     return (id || '').trim();
@@ -165,10 +167,23 @@ function findSleeveTypeById(id) {
     return null;
 }
 
+function getHiddenBuiltinSleeveTypes() {
+    return (hiddenBuiltinSleeveTypes || []).slice();
+}
+
+function isBuiltinSleeveTypeHidden(id) {
+    id = normalizeSleeveTypeId(id);
+    if (!id) return false;
+    return (hiddenBuiltinSleeveTypes || []).indexOf(id) !== -1;
+}
+
 function getAllSleeveTypes() {
     var out = [];
+    var hidden = hiddenBuiltinSleeveTypes || [];
     SLEEVE_TYPES_BUILTIN.forEach(function(t) {
-        out.push(Object.assign({ builtin: true }, t));
+        if (hidden.indexOf(t.id) === -1) {
+            out.push(Object.assign({ builtin: true }, t));
+        }
     });
     (customSleeveTypes || []).forEach(function(t) {
         out.push(Object.assign({ builtin: false }, t));
@@ -249,8 +264,42 @@ function removeCustomSleeveType(id) {
     return true;
 }
 
+function hideBuiltinSleeveType(id) {
+    id = normalizeSleeveTypeId(id);
+    if (!id || isBuiltinSleeveTypeHidden(id)) return false;
+    var found = false;
+    for (var i = 0; i < SLEEVE_TYPES_BUILTIN.length; i++) {
+        if (SLEEVE_TYPES_BUILTIN[i].id === id) {
+            found = true;
+            break;
+        }
+    }
+    if (!found) return false;
+    hiddenBuiltinSleeveTypes.push(id);
+    hiddenBuiltinSleeveTypes.sort(function(a, b) {
+        return String(a).localeCompare(String(b), 'ru');
+    });
+    saveDeviceCatalog();
+    return true;
+}
+
+function removeSleeveType(id) {
+    id = normalizeSleeveTypeId(id);
+    if (!id) return false;
+    var found = findSleeveTypeById(id);
+    if (!found) return false;
+    if (found.builtin) return hideBuiltinSleeveType(id);
+    return removeCustomSleeveType(id);
+}
+
 function resetCustomSleeveTypes() {
     customSleeveTypes = [];
+    saveDeviceCatalog();
+}
+
+function resetSleeveCatalogToDefault() {
+    customSleeveTypes = [];
+    hiddenBuiltinSleeveTypes = [];
     saveDeviceCatalog();
 }
 
@@ -287,7 +336,7 @@ var DEVICE_CATALOG_TAB_META = {
     },
     sleeve: {
         label: 'Муфты',
-        desc: 'Типы кабельных муфт для списка при добавлении и редактировании. Встроенные типы нельзя удалить; свои — добавляются кнопкой «Добавить».'
+        desc: 'Типы кабельных муфт для списка при добавлении и редактировании. Лишние типы (включая встроенные) можно убрать кнопкой «Удалить»; свои — добавляются кнопкой «Добавить».'
     }
 };
 
@@ -318,9 +367,16 @@ var DEVICE_CATALOG_ALLOWED_TABS = { node: 1, olt: 1, onu: 1, camera: 1, switch: 
 
 function getDeviceCatalogStats(kind) {
     if (kind === 'sleeve') {
+        var visible = getAllSleeveTypes();
+        var builtinVisible = 0;
+        var customVisible = 0;
+        visible.forEach(function(t) {
+            if (t.builtin) builtinVisible++;
+            else customVisible++;
+        });
         return {
-            manufacturers: getBuiltinSleeveTypes().length,
-            models: getCustomSleeveTypes().length
+            manufacturers: builtinVisible,
+            models: customVisible
         };
     }
     var catalog = getCatalogObjectRef(kind);
@@ -494,7 +550,7 @@ function resetDeviceCatalogTabToDefault(kind) {
         switchDeviceCatalog = cloneDeepCatalog(def);
         switchModelDefaultPorts = {};
     } else if (kind === 'sleeve') {
-        resetCustomSleeveTypes();
+        resetSleeveCatalogToDefault();
         refreshAllSleeveTypeSelects();
         return;
     }
@@ -622,7 +678,8 @@ function saveDeviceCatalog() {
         cameraDeviceCatalog: cloneDeepCatalog(cameraDeviceCatalog),
         switchDeviceCatalog: cloneDeepCatalog(switchDeviceCatalog),
         switchModelDefaultPorts: JSON.parse(JSON.stringify(switchModelDefaultPorts || {})),
-        customSleeveTypes: getCustomSleeveTypes()
+        customSleeveTypes: getCustomSleeveTypes(),
+        hiddenBuiltinSleeveTypes: getHiddenBuiltinSleeveTypes()
     };
     try { localStorage.setItem(CUSTOM_DEVICE_OPTIONS_STORAGE_KEY, JSON.stringify(payload)); } catch (e) {}
     if (getApiBase() && getAuthToken()) {
@@ -733,19 +790,29 @@ function loadDeviceCatalog(opts) {
 
 function applyCustomSleeveTypesFromOpts(opts) {
     opts = opts || {};
-    if (!('customSleeveTypes' in opts)) return;
-    if (!Array.isArray(opts.customSleeveTypes)) {
-        customSleeveTypes = [];
-        return;
+    if ('customSleeveTypes' in opts) {
+        if (!Array.isArray(opts.customSleeveTypes)) {
+            customSleeveTypes = [];
+        } else {
+            customSleeveTypes = opts.customSleeveTypes.map(function(t) {
+                if (!t || !t.id) return null;
+                return {
+                    id: normalizeSleeveTypeId(t.id),
+                    label: (t.label || t.id || '').trim() || normalizeSleeveTypeId(t.id),
+                    maxFibers: normalizeSleeveMaxFibers(t.maxFibers)
+                };
+            }).filter(Boolean);
+        }
     }
-    customSleeveTypes = opts.customSleeveTypes.map(function(t) {
-        if (!t || !t.id) return null;
-        return {
-            id: normalizeSleeveTypeId(t.id),
-            label: (t.label || t.id || '').trim() || normalizeSleeveTypeId(t.id),
-            maxFibers: normalizeSleeveMaxFibers(t.maxFibers)
-        };
-    }).filter(Boolean);
+    if ('hiddenBuiltinSleeveTypes' in opts) {
+        if (!Array.isArray(opts.hiddenBuiltinSleeveTypes)) {
+            hiddenBuiltinSleeveTypes = [];
+        } else {
+            hiddenBuiltinSleeveTypes = opts.hiddenBuiltinSleeveTypes.map(function(id) {
+                return normalizeSleeveTypeId(id);
+            }).filter(Boolean);
+        }
+    }
 }
 
 function loadCustomDeviceOptions(opts) {
@@ -1048,11 +1115,9 @@ function renderSleeveCatalogList(container, searchQ) {
             html += '<span class="device-catalog-sleeve-badge">встроенный</span>';
         }
         html += '</div>';
-        if (!t.builtin) {
-            html += '<div class="device-catalog-mfr-actions">';
-            html += '<button type="button" class="device-catalog-remove-sleeve device-catalog-btn-remove-mfr" data-sleeve-id="' + escapeHtml(t.id) + '" title="Удалить тип">Удалить</button>';
-            html += '</div>';
-        }
+        html += '<div class="device-catalog-mfr-actions">';
+        html += '<button type="button" class="device-catalog-remove-sleeve device-catalog-btn-remove-mfr" data-sleeve-id="' + escapeHtml(t.id) + '" data-sleeve-builtin="' + (t.builtin ? '1' : '0') + '" title="Удалить тип">Удалить</button>';
+        html += '</div>';
         html += '</header></article>';
     });
     if (searchQ && visibleCount === 0) {
@@ -1062,9 +1127,13 @@ function renderSleeveCatalogList(container, searchQ) {
     container.querySelectorAll('.device-catalog-remove-sleeve').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var sid = btn.getAttribute('data-sleeve-id');
+            var isBuiltin = btn.getAttribute('data-sleeve-builtin') === '1';
             (async function() {
-                if (!(await showConfirm('Удалить тип муфты «' + sid + '» из справочника?', 'Удалить тип', { confirmText: 'Удалить' }))) return;
-                if (removeCustomSleeveType(sid)) {
+                var msg = isBuiltin
+                    ? 'Убрать встроенный тип муфты «' + sid + '» из списка? Уже созданные муфты на карте не изменятся.'
+                    : 'Удалить тип муфты «' + sid + '» из справочника?';
+                if (!(await showConfirm(msg, 'Удалить тип', { confirmText: 'Удалить' }))) return;
+                if (removeSleeveType(sid)) {
                     renderDeviceCatalogList();
                     refreshAllSleeveTypeSelects();
                     if (typeof showInfo === 'function') showInfo('Тип муфты удалён', '');
@@ -1457,7 +1526,7 @@ function setupDeviceCatalogHandlers() {
                 var tab = getActiveDeviceCatalogTab();
                 var meta = DEVICE_CATALOG_TAB_META[tab] || DEVICE_CATALOG_TAB_META.switch;
                 var resetMsg = tab === 'sleeve'
-                    ? 'Удалить все добавленные вами типы муфт? Встроенный список останется без изменений.'
+                    ? 'Вернуть полный заводской список типов муфт? Будут восстановлены все встроенные типы и удалены добавленные вами.'
                     : 'Сбросить раздел «' + meta.label + '» к заводским значениям? Ваши правки в этом разделе будут заменены.';
                 if (!(await showConfirm(resetMsg, 'Сброс раздела', { confirmText: 'Сбросить' }))) return;
                 resetDeviceCatalogTabToDefault(tab);

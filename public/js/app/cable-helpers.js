@@ -1,0 +1,409 @@
+/**
+ * Вспомогательные функции кабелей и меди.
+ */
+function markFiberAsUsed(obj, cableId, fiberNumber) {
+    let usedFibersData = obj.properties.get('usedFibers');
+    if (!usedFibersData) {
+        usedFibersData = {};
+    }
+    
+    if (!usedFibersData[cableId]) {
+        usedFibersData[cableId] = [];
+    }
+    
+    if (!usedFibersData[cableId].includes(fiberNumber)) {
+        usedFibersData[cableId].push(fiberNumber);
+    }
+    
+    obj.properties.set('usedFibers', usedFibersData);
+    saveData();
+}
+
+function getFiberRoutingTargetLabel(targetType, targetObj) {
+    var n = targetObj && targetObj.properties && targetObj.properties.get('name');
+    if (n) return n;
+    if (targetType === 'onu') return 'ONU';
+    if (targetType === 'mediaConverter') return 'Медиаконвертер';
+    if (targetType === 'olt') return 'OLT';
+    if (targetType === 'host') return 'Муфта/кросс';
+    return 'Сплиттер';
+}
+
+function getFiberRoutingPreviewStroke(targetType) {
+    if (targetType === 'onu') return '#22c55e';
+    if (targetType === 'mediaConverter') return '#14b8a6';
+    if (targetType === 'olt') return '#0ea5e9';
+    return '#f97316';
+}
+
+/**
+ * Проверяет, занята ли жила (cableId + fiberNumber) где-либо: порт OLT, подключение к узлу/ONU/медиаконвертеру,
+ * вход/выход сплиттера. exclude — контекст текущего назначения (чтобы не считать «занятой» ту же жилу при замене).
+ * atCrossId/atSleeveId — проверять использование только в этом кроссе/муфте (жила имеет два конца,
+ * подключение на одном конце не блокирует использование другого).
+ * Назначение на OLT (oltPort / oltIncoming) не блокируется ответвлениями GPON (ONU, сплиттер) на той же жиле.
+ * Назначение ONU/сплиттера (onuConn / splitterInput) не блокируется OLT на той же жиле (GPON feeder).
+ * @param {string} cableId
+ * @param {number} fiberNumber
+ * @param {{ type?: string, oltId?: string, portNumber?: number, splitterId?: string, outputIndex?: number, crossId?: string, sleeveId?: string, atCrossId?: string, atSleeveId?: string }} exclude
+ * @returns {{ used: boolean, where?: string }}
+ */
+function isOltFiberAssignmentExclude(exclude) {
+    return !!(exclude && (exclude.type === 'oltPort' || exclude.type === 'oltIncoming'));
+}
+
+function isGponBranchAssignmentExclude(exclude) {
+    return !!(exclude && (exclude.type === 'onuConn' || exclude.type === 'splitterInput'));
+}
+
+function isSplitterInputAssignmentExclude(exclude, hostUid, conn) {
+    if (!exclude || exclude.type !== 'splitterInput' || !hostUid) return false;
+    if (exclude.atSleeveId !== hostUid && exclude.atCrossId !== hostUid) return false;
+    if (!exclude.splitterId) return true;
+    return !!(conn && conn.splitterId === exclude.splitterId);
+}
+
+function getFiberUsage(cableId, fiberNumber, exclude) {
+    if (!objects) return { used: false };
+    const key = cableId + '-' + fiberNumber;
+    const atCrossId = exclude && exclude.atCrossId;
+    const atSleeveId = exclude && exclude.atSleeveId;
+    const onlyAtLocation = atCrossId || atSleeveId;
+
+    for (let i = 0; i < objects.length; i++) {
+        const obj = objects[i];
+        if (!obj.properties) continue;
+        const t = obj.properties.get('type');
+        const uid = obj.properties.get('uniqueId');
+
+        if (t === 'cross' || t === 'sleeve') {
+            if (onlyAtLocation) {
+                var matchLoc = (atCrossId && uid === atCrossId) || (atSleeveId && uid === atSleeveId);
+                if (!matchLoc) continue;
+            }
+            const fiberConnections = obj.properties.get('fiberConnections') || [];
+            const isConnected = fiberConnections.some(conn =>
+                (conn.from.cableId === cableId && conn.from.fiberNumber === fiberNumber) ||
+                (conn.to.cableId === cableId && conn.to.fiberNumber === fiberNumber)
+            );
+            if (isConnected) {
+                if (exclude && exclude.type === 'fiberConnection' && (exclude.crossId === uid || exclude.sleeveId === uid)) continue;
+                if (exclude && exclude.type === 'oltPort') continue;
+                if (isGponBranchAssignmentExclude(exclude)) continue;
+                return { used: true, where: 'соединение жил в ' + (t === 'cross' ? 'кроссе' : 'муфте') };
+            }
+            
+            var nodeAss = getHostAssignment(obj, 'nodeConnections', cableId, fiberNumber);
+            if (nodeAss) {
+                if (exclude && exclude.type === 'nodeConn' && (exclude.crossId === uid || exclude.sleeveId === uid)) continue;
+                return { used: true, where: 'подключение к узлу' };
+            }
+            var oltAss = getHostAssignment(obj, 'oltConnections', cableId, fiberNumber);
+            if (oltAss) {
+                if (exclude && exclude.type === 'splitterInput') continue;
+                if (isGponBranchAssignmentExclude(exclude)) continue;
+                if (exclude && exclude.type === 'fiberConnection') continue;
+                return { used: true, where: 'порт OLT' };
+            }
+            var onuAss = getHostAssignment(obj, 'onuConnections', cableId, fiberNumber);
+            if (onuAss) {
+                if (exclude && exclude.type === 'onuConn' && exclude.sleeveId === uid) continue;
+                if (isOltFiberAssignmentExclude(exclude)) continue;
+                return { used: true, where: 'подключение к ONU' };
+            }
+            var mcAss = getHostAssignment(obj, 'mediaConverterConnections', cableId, fiberNumber);
+            if (mcAss) {
+                if (exclude && exclude.type === 'mediaConverterConn' && ((exclude.sleeveId && exclude.sleeveId === uid) || (exclude.crossId && exclude.crossId === uid))) continue;
+                return { used: true, where: 'подключение к медиаконвертеру' };
+            }
+            var splitterAss = getHostAssignment(obj, 'splitterConnections', cableId, fiberNumber);
+            if (splitterAss) {
+                if (isSplitterInputAssignmentExclude(exclude, uid, splitterAss)) continue;
+                if (isOltFiberAssignmentExclude(exclude)) continue;
+                return { used: true, where: 'вход сплиттера' };
+            }
+            if (window.EmbeddedSplitters && EmbeddedSplitters.isHost(obj)) {
+                var embList = EmbeddedSplitters.getList(obj);
+                for (var esi = 0; esi < embList.length; esi++) {
+                    var er = embList[esi];
+                    if (!er) continue;
+                    var erIn = er.inputFiber;
+                    if (!erIn && er.inputCableId && er.inputFiberNumber != null) {
+                        erIn = { cableId: er.inputCableId, fiberNumber: er.inputFiberNumber };
+                    }
+                    if (!erIn || erIn.cableId !== cableId || erIn.fiberNumber !== fiberNumber) continue;
+                    if (exclude && exclude.type === 'splitterInput' && exclude.splitterId === er.id) continue;
+                    if (isOltFiberAssignmentExclude(exclude)) continue;
+                    return { used: true, where: 'вход сплиттера' };
+                }
+            }
+            var spOutAtHost = findSplitterOutputAtHost(obj, cableId, fiberNumber);
+            if (spOutAtHost) {
+                if (exclude && exclude.type === 'splitterOutput' &&
+                    exclude.splitterId === spOutAtHost.splitterId &&
+                    exclude.outputIndex === spOutAtHost.outputIndex) continue;
+                return { used: true, where: 'выход сплиттера' };
+            }
+        }
+        if (t === 'olt') {
+            const incomingFiber = obj.properties.get('incomingFiber');
+            if (incomingFiber && incomingFiber.cableId === cableId && incomingFiber.fiberNumber === fiberNumber) {
+                if (exclude && exclude.type === 'oltIncoming' && exclude.oltId === uid) continue;
+                if (isGponBranchAssignmentExclude(exclude)) continue;
+                return { used: true, where: 'приход OLT' };
+            }
+            const portAssignments = obj.properties.get('portAssignments') || {};
+            for (const portKey in portAssignments) {
+                const a = portAssignments[portKey];
+                if (a && a.cableId === cableId && a.fiberNumber === fiberNumber) {
+                    if (exclude && exclude.type === 'oltPort' && exclude.oltId === uid && exclude.portNumber === parseInt(portKey, 10)) continue;
+                    if (exclude && exclude.type === 'splitterInput') continue;
+                    if (isGponBranchAssignmentExclude(exclude)) continue;
+                    var portLblUsed = getOltPortLabel(obj, parseInt(portKey, 10));
+                    return { used: true, where: portLblUsed ? formatOltPortDisplay(parseInt(portKey, 10), portLblUsed) : 'порт OLT' };
+                }
+            }
+        }
+        if (t === 'onu') {
+            const onuIncoming = obj.properties.get('incomingFiber');
+            if (onuIncoming && onuIncoming.cableId === cableId && onuIncoming.fiberNumber === fiberNumber) {
+                if (exclude && exclude.type === 'onuConn' && exclude.onuId === uid) continue;
+                if (isOltFiberAssignmentExclude(exclude)) continue;
+                return { used: true, where: 'подключение к ONU' };
+            }
+        }
+        if (t === 'mediaConverter') {
+            const mcIncoming = obj.properties.get('incomingFiber');
+            if (mcIncoming && mcIncoming.cableId === cableId && mcIncoming.fiberNumber === fiberNumber) {
+                if (exclude && exclude.type === 'mediaConverterConn' && exclude.mediaConverterId === uid) continue;
+                return { used: true, where: 'подключение к медиаконвертеру' };
+            }
+        }
+        if (t === 'splitter') {
+            const inputFiber = obj.properties.get('inputFiber');
+            if (inputFiber && inputFiber.cableId === cableId && inputFiber.fiberNumber === fiberNumber) {
+                if (exclude && exclude.type === 'splitterInput' && exclude.splitterId === uid) continue;
+                if (exclude && exclude.type === 'oltPort') continue;
+                if (isGponBranchAssignmentExclude(exclude)) continue;
+                return { used: true, where: 'вход сплиттера' };
+            }
+            const outputConnections = obj.properties.get('outputConnections') || [];
+            for (let oi = 0; oi < outputConnections.length; oi++) {
+                const out = outputConnections[oi];
+                if (out && out.cableId === cableId && out.fiberNumber === fiberNumber) {
+                    if (exclude && exclude.type === 'splitterOutput' && exclude.splitterId === uid && exclude.outputIndex === oi) continue;
+                    return { used: true, where: 'выход сплиттера' };
+                }
+            }
+        }
+    }
+    return { used: false };
+}
+
+function applySerializedUndergroundToCable(cable, item, pointsArr) {
+    if (!cable || !item || !cable.properties) return;
+    if (isCopperCableType(cable.properties.get('cableType'))) return;
+    if (!Array.isArray(item.undergroundSpans) || !item.undergroundSpans.length) return;
+    cable.properties.set('undergroundSpans', window.CableUnderground
+        ? CableUnderground.cloneSpans(item.undergroundSpans)
+        : item.undergroundSpans);
+    var pts = pointsArr || cable.properties.get('points');
+    if (window.CableUnderground && Array.isArray(pts) && pts.length >= 2) {
+        pts = CableUnderground.ensureRouteIncludesUndergroundManholes(pts, item.undergroundSpans);
+        cable.properties.set('points', pts);
+        cable.properties.set('from', pts[0]);
+        cable.properties.set('to', pts[pts.length - 1]);
+    }
+    applyCableRouteAndOverlays(cable, pts);
+}
+
+function repairCablesAfterImport() {
+    if (!objects || !objects.length || !myMap) return;
+    objects.forEach(function (cable) {
+        if (!cable || !cable.properties || cable.properties.get('type') !== 'cable') return;
+        try {
+            if (myMap.geoObjects.indexOf(cable) === -1) myMap.geoObjects.add(cable);
+        } catch (eAdd) {}
+        var points = cable.properties.get('points');
+        var spans = cable.properties.get('undergroundSpans') || [];
+        if (window.CableUnderground && spans.length && Array.isArray(points) && points.length >= 2) {
+            points = CableUnderground.ensureRouteIncludesUndergroundManholes(points, spans);
+            cable.properties.set('points', points);
+            cable.properties.set('from', points[0]);
+            cable.properties.set('to', points[points.length - 1]);
+            applyCableRouteAndOverlays(cable, points);
+        } else if (cable.geometry && Array.isArray(points) && points.length >= 2) {
+            try {
+                var lin = points.map(function (p) {
+                    return p && p.geometry ? p.geometry.getCoordinates() : null;
+                }).filter(function (c) { return c && c.length >= 2; });
+                if (lin.length >= 2) cable.geometry.setCoordinates(lin);
+            } catch (eLin) {}
+        }
+        if (cable.options) {
+            try {
+                var op = cable.options.get('strokeOpacity');
+                if (op === 0 || op == null) cable.options.set('strokeOpacity', 0.8);
+            } catch (eOp) {}
+        }
+        if (window.CableUnderground) {
+            try { CableUnderground.syncAerialOverlayStroke(cable); } catch (eSyn) {}
+        }
+    });
+}
+
+function validateAndFixCableGeometryOnLoad() {
+    if (!objects || !objects.length) return;
+    var cables = objects.filter(function(o) {
+        return o.properties && o.properties.get('type') === 'cable' && o.geometry;
+    });
+    cables.forEach(function(cable) {
+        var fromObj = cable.properties.get('from');
+        var toObj = cable.properties.get('to');
+        var points = cable.properties.get('points');
+        var ugSpans = cable.properties.get('undergroundSpans') || [];
+        if (window.CableUnderground && ugSpans.length && Array.isArray(points) && points.length >= 2) {
+            try {
+                points = CableUnderground.ensureRouteIncludesUndergroundManholes(points, ugSpans);
+                cable.properties.set('points', points);
+                cable.properties.set('from', points[0]);
+                cable.properties.set('to', points[points.length - 1]);
+                CableUnderground.applyCableRouteGeometry(cable, points);
+                CableUnderground.refreshCableUndergroundOverlays(cable);
+            } catch (eUg) {}
+            return;
+        }
+        var coords = [];
+        if (Array.isArray(points) && points.length >= 2) {
+            coords = points
+                .map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; })
+                .filter(function(c) { return c && Array.isArray(c) && c.length >= 2; });
+        }
+        if (coords.length < 2 && fromObj && toObj && fromObj.geometry && toObj.geometry) {
+            try {
+                var fc = fromObj.geometry.getCoordinates();
+                var tc = toObj.geometry.getCoordinates();
+                if (fc && tc) coords = [fc, tc];
+            } catch (e) {}
+        }
+        if (coords.length >= 2) {
+            try {
+                cable.geometry.setCoordinates(coords);
+            } catch (e) {}
+        }
+    });
+}
+
+function updateConnectedCables(obj) {
+    const cables = objects.filter(cable => {
+        if (!cable.properties || cable.properties.get('type') !== 'cable') return false;
+        var from = cable.properties.get('from');
+        var to = cable.properties.get('to');
+        if (from === obj || to === obj) return true;
+        var points = cable.properties.get('points');
+        return Array.isArray(points) && points.indexOf(obj) !== -1;
+    });
+    
+    cables.forEach(cable => {
+        if (!cable.geometry) return;
+        var points = cable.properties.get('points');
+        if (Array.isArray(points) && points.length > 2) {
+            try {
+                if (window.CableUnderground) {
+                    CableUnderground.applyCableRouteGeometry(cable, points);
+                    CableUnderground.refreshCableUndergroundOverlays(cable);
+                } else {
+                    var coords = points
+                        .map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; })
+                        .filter(function(c) { return c && Array.isArray(c) && c.length >= 2; });
+                    if (coords.length >= 2) cable.geometry.setCoordinates(coords);
+                }
+            } catch (e) {}
+        } else {
+            var fromObj = cable.properties.get('from');
+            var toObj = cable.properties.get('to');
+            if (!fromObj || !toObj || !fromObj.geometry || !toObj.geometry) return;
+            try {
+                var fromCoords = fromObj.geometry.getCoordinates();
+                var toCoords = toObj.geometry.getCoordinates();
+                if (fromCoords && toCoords) cable.geometry.setCoordinates([fromCoords, toCoords]);
+            } catch (e) {}
+        }
+    });
+}
+
+function getCableColor(type) {
+    if (window.FiberCableConfig) return window.FiberCableConfig.getCableMapColor(type);
+    if (window.MapLegendConfig && window.MapLegendConfig.getCableMeta) {
+        var meta = window.MapLegendConfig.getCableMeta(type);
+        if (meta) return meta.color;
+    }
+    return '#64748b';
+}
+
+function getCableWidth(type) {
+    if (window.FiberCableConfig) return window.FiberCableConfig.getCableMapWidth(type);
+    return 2;
+}
+
+function getCableDescription(type, cable) {
+    if (cable && cable.properties && window.FiberCableConfig) {
+        return window.FiberCableConfig.getCableLabel(cable);
+    }
+    if (window.FiberCableConfig && window.FiberCableConfig.isOpticalCableType(type)) {
+        return window.FiberCableConfig.getCableLabel(type);
+    }
+    if (window.MapLegendConfig && window.MapLegendConfig.getCableMeta) {
+        var metaD = window.MapLegendConfig.getCableMeta(type);
+        if (metaD) return metaD.label;
+    }
+    if (type === 'copper') return 'Медный кабель';
+    return 'Кабель';
+}
+
+function isCopperCableType(cableType) {
+    return cableType === 'copper';
+}
+
+function isOpticalCableType(cableType) {
+    return window.FiberCableConfig
+        ? window.FiberCableConfig.isOpticalCableType(cableType)
+        : (cableType && cableType !== 'copper');
+}
+
+function buildSwitchPortTypesArray(count, defaultKind) {
+    var arr = [];
+    var k = defaultKind || 'RJ45 10/100/1000';
+    for (var i = 0; i < count; i++) arr.push(k);
+    return arr;
+}
+
+function getNodeAttachedSwitches(node) {
+    if (!node || !node.properties || node.properties.get('type') !== 'node') return [];
+    var a = node.properties.get('attachedSwitches');
+    return Array.isArray(a) ? a : [];
+}
+
+function getAttachedSwitchPortStats(swRow) {
+    var pts = (swRow && swRow.switchPortTypes) ? swRow.switchPortTypes : [];
+    var usageN = (swRow && swRow.copperPortUsage) ? swRow.copperPortUsage : {};
+    var fiberUsageN = (swRow && swRow.fiberPortUsage) ? swRow.fiberPortUsage : {};
+    var total = pts.length;
+    var busy = 0;
+    for (var i = 1; i <= total; i++) {
+        if (usageN[String(i)] || fiberUsageN[String(i)]) busy++;
+    }
+    return { total: total, busy: busy, free: Math.max(0, total - busy) };
+}
+
+function getNodeSwitchesSummary(node) {
+    var list = getNodeAttachedSwitches(node);
+    var totalPorts = 0;
+    var busyPorts = 0;
+    list.forEach(function(sw) {
+        var s = getAttachedSwitchPortStats(sw);
+        totalPorts += s.total;
+        busyPorts += s.busy;
+    });
+    return { swCount: list.length, totalPorts: totalPorts, busyPorts: busyPorts };
+}

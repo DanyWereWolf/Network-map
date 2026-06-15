@@ -1,0 +1,369 @@
+/**
+ * Создание объектов на карте (placemark).
+ */
+function findNodeByName(name, excludePlacemark) {
+    if (!name || typeof name !== 'string') return null;
+    var n = (name || '').trim().toLowerCase();
+    if (!n) return null;
+    return objects.find(function(obj) {
+        if (!obj.properties || obj.properties.get('type') !== 'node') return false;
+        if (obj === excludePlacemark) return false;
+        var objName = (obj.properties.get('name') || '').trim().toLowerCase();
+        return objName === n;
+    }) || null;
+}
+
+function createObject(type, name, coords, options = {}) {
+    if (!options.skipAddToObjects && wouldExceedMapObjectLimit(1)) {
+        notifyMapObjectLimitBlocked();
+        return null;
+    }
+    var balloonContent;
+    switch (type) {
+        case 'support': balloonContent = name ? 'Опора связи: ' + name : 'Опора связи'; break;
+        case 'sleeve': balloonContent = name ? 'Кабельная муфта: ' + name : 'Кабельная муфта'; break;
+        case 'cross': balloonContent = 'Оптический кросс: ' + name; break;
+        case 'node': balloonContent = 'Узел сети: ' + name; break;
+        case 'attachment': balloonContent = name ? 'Крепление узлов: ' + name : 'Крепление узлов'; break;
+        case 'manhole': balloonContent = name ? 'Колодец: ' + name : 'Колодец'; break;
+        case 'signalPost': balloonContent = name ? 'Сигнальный столб: ' + name : 'Сигнальный столб'; break;
+        case 'olt': balloonContent = name ? 'OLT: ' + name : 'OLT (GPON)'; break;
+        case 'splitter': balloonContent = name ? 'Сплиттер: ' + name : 'Сплиттер'; break;
+        case 'onu': balloonContent = name ? 'ONU: ' + name : 'ONU'; break;
+        case 'camera': balloonContent = name ? 'Камера: ' + name : 'Камера'; break;
+        case 'mediaConverter': balloonContent = name ? 'Медиаконвертер: ' + name : 'Медиаконвертер'; break;
+        case 'switch': balloonContent = name ? 'Коммутатор: ' + name : 'Коммутатор'; break;
+        default: balloonContent = 'Объект';
+    }
+
+    var mapIcon = buildMapPlacemarkIcon(type, 'normal', type === 'node' ? { nodeKind: options.nodeKind || 'network' } : null);
+    if (!mapIcon) return null;
+
+    const placemarkOptions = {
+        iconLayout: 'default#image',
+        iconImageHref: mapIcon.href,
+        iconImageSize: mapIcon.iconImageSize,
+        iconImageOffset: mapIcon.iconImageOffset,
+        draggable: isEditMode
+    };
+    
+    const placemarkProperties = {
+        type: type,
+        name: name,
+        balloonContent: balloonContent
+    };
+
+    if (type === 'node') {
+        placemarkProperties.nodeKind = (options.nodeKind || 'network');
+        placemarkProperties.comment = options.comment || '';
+        if (Array.isArray(options.attachedSwitches) && options.attachedSwitches.length) {
+            placemarkProperties.attachedSwitches = JSON.parse(JSON.stringify(options.attachedSwitches));
+        } else {
+            placemarkProperties.attachedSwitches = [];
+        }
+    }
+
+    if (type === 'sleeve' && options.sleeveType) {
+        placemarkProperties.sleeveType = options.sleeveType;
+        placemarkProperties.maxFibers = options.maxFibers || 0;
+    }
+
+    if (type === 'cross') {
+        placemarkProperties.crossPorts = options.crossPorts || 24;
+        var ccp = options.crossCopperPorts !== undefined && options.crossCopperPorts !== null ? parseInt(options.crossCopperPorts, 10) : 0;
+        placemarkProperties.crossCopperPorts = isNaN(ccp) ? 0 : Math.max(0, ccp);
+        placemarkProperties.copperPortUsage = {};
+    }
+    if (type === 'olt') {
+        placemarkProperties.ponPorts = options.ponPorts || 8;
+        placemarkProperties.incomingFiber = null;
+        placemarkProperties.portAssignments = {};
+        placemarkProperties.portLabels = {};
+        if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
+        if (options.model) placemarkProperties.model = options.model;
+        placemarkProperties.comment = options.comment || '';
+    }
+    if (type === 'splitter') {
+        placemarkProperties.splitRatio = options.splitRatio || 8;
+        placemarkProperties.inputFiber = null;
+        placemarkProperties.outputConnections = [];
+    }
+    if (type === 'onu') {
+        placemarkProperties.incomingFiber = null;
+        if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
+        if (options.model) placemarkProperties.model = options.model;
+        placemarkProperties.comment = options.comment || '';
+    }
+    if (type === 'camera') {
+        if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
+        if (options.model) placemarkProperties.model = options.model;
+        placemarkProperties.comment = options.comment || '';
+        placemarkProperties.streamType = (options.streamType && window.CameraPlayer)
+            ? CameraPlayer.normalizeStreamType(options.streamType) : (options.streamType || 'none');
+        placemarkProperties.streamUrl = options.streamUrl || '';
+        placemarkProperties.streamUser = options.streamUser || '';
+        placemarkProperties.streamPass = options.streamPass || '';
+        placemarkProperties.streamAutoplay = options.streamAutoplay !== false;
+        placemarkProperties.streamMuted = options.streamMuted !== false;
+        if (options.snapshotPhoto) placemarkProperties.snapshotPhoto = options.snapshotPhoto;
+    }
+    if (type === 'mediaConverter') {
+        if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
+        if (options.model) placemarkProperties.model = options.model;
+        placemarkProperties.comment = options.comment || '';
+        placemarkProperties.incomingFiber = null;
+    }
+    if (type === 'signalPost') {
+        placemarkProperties.comment = options.comment || '';
+    }
+    if (!placemarkProperties.uniqueId) {
+        placemarkProperties.uniqueId = 'obj-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    }
+    const placemark = new ymaps.Placemark(coords, placemarkProperties, placemarkOptions);
+
+    updateObjectLabel(placemark, name);
+    if (type === 'camera') refreshCameraMapPresentation(placemark);
+    var objLabel = placemark.properties.get('label');
+    if (objLabel) {
+        myMap.geoObjects.add(objLabel);
+    }
+    placemark.events.add('dragend', function() {
+        var c = placemark.geometry.getCoordinates();
+        var lbl = placemark.properties.get('label');
+        if (lbl && lbl.geometry) lbl.geometry.setCoordinates(c);
+    });
+
+    placemark.events.add('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation(); 
+
+        if (objectPlacementMode) {
+            return;
+        }
+
+        if (splitterFiberRoutingMode && splitterFiberRoutingData) {
+            if (Date.now() < placementPanBlockClickUntil) return;
+            var objId = getObjectUniqueId(placemark);
+            var objType = type;
+            
+            if (objId === splitterFiberRoutingData.targetId) {
+                completeSplitterFiberRouting();
+                return;
+            }
+            
+            if (objType === 'support' || objType === 'attachment') {
+                addSplitterFiberWaypoint(placemark);
+                updateSplitterFiberPreview();
+                return;
+            }
+            
+            var spRouteAnchor = splitterFiberRoutingData.routingAnchor || splitterFiberRoutingData.splitterObj;
+            if (objId === getObjectUniqueId(spRouteAnchor) || objId === getObjectUniqueId(splitterFiberRoutingData.splitterObj)) {
+                splitterFiberWaypoints = [];
+                updateSplitterFiberPreview();
+                return;
+            }
+            
+            var targetName = getFiberRoutingTargetLabel(splitterFiberRoutingData.targetType, splitterFiberRoutingData.targetObj);
+            showWarning('Кликните по опоре или креплению для добавления точки маршрута, или по целевому объекту (' + escapeHtml(targetName) + ') для завершения.', 'Режим прокладки');
+            return;
+        }
+
+        if (fiberRoutingMode && fiberRoutingData) {
+            if (Date.now() < placementPanBlockClickUntil) return;
+            var objId = getObjectUniqueId(placemark);
+            var objType = type;
+            
+            if (objId === fiberRoutingData.targetId) {
+                completeFiberRouting();
+                return;
+            }
+            
+            if (objType === 'support' || objType === 'attachment') {
+                addFiberRoutingWaypoint(placemark);
+                updateFiberRoutingPreview();
+                return;
+            }
+            
+            if (objId === getObjectUniqueId(fiberRoutingData.sleeveObj)) {
+                fiberRoutingWaypoints = [];
+                updateFiberRoutingPreview();
+                return;
+            }
+            
+            var targetName = getFiberRoutingTargetLabel(fiberRoutingData.targetType, fiberRoutingData.targetObj);
+            showWarning('Кликните по опоре или креплению для добавления точки маршрута, или по целевому объекту (' + escapeHtml(targetName) + ') для завершения.', 'Режим прокладки');
+            return;
+        }
+
+        if (currentCableTool && isEditMode) {
+            if (Date.now() < placementPanBlockClickUntil) {
+                return;
+            }
+            var cableTypeVal = getEffectiveCableLayingType();
+            if (handleCopperCablePlacemarkStep(placemark, type, cableTypeVal)) return;
+            if (type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter') {
+                showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU, камеры или медиаконвертера. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
+                return;
+            }
+            if (cableUndergroundActive) {
+                if (type === 'manhole') {
+                    handleManholeCableLayClick(placemark);
+                    syncMapPanLockForEditTools();
+                    return;
+                }
+                if (type === 'support' || type === 'attachment') {
+                    showError('В подземном участке выберите второй колодец (выход).', 'Подземная прокладка');
+                } else {
+                    showWarning('В подземном участке выберите второй колодец для выхода.', 'Колодец');
+                }
+                return;
+            }
+            var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment', 'manhole', 'olt'];
+            if (cableEndpointsPlacemark.indexOf(type) !== -1) {
+                if (!cableSource) {
+                    if (isCableIntermediateWaypoint(type)) {
+                        showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры, крепления и колодцы — только промежуточные точки.', 'Недопустимое действие');
+                        return;
+                    }
+                    cableSource = placemark;
+                    cableWaypoints = [];
+                    resetCableUndergroundPendingSpans();
+                    clearSelection();
+                    selectObject(cableSource);
+                    syncMapPanLockForEditTools();
+                    return;
+                }
+                if (placemark === cableSource) {
+                    cableWaypoints = [];
+                    resetCableUndergroundLayingState(false);
+                    clearSelection();
+                    selectObject(cableSource);
+                    return;
+                }
+                if (type === 'manhole') {
+                    handleManholeCableLayClick(placemark);
+                    return;
+                }
+                if (type === 'support' || type === 'attachment') {
+                    addCableWaypoint(placemark);
+                    clearSelection();
+                    selectObject(cableSource);
+                    return;
+                }
+                var points = [cableSource].concat(cableWaypoints).concat([placemark]);
+                var success = createCableFromPoints(points, cableTypeVal);
+                if (success) {
+                    cableSource = placemark;
+                    cableWaypoints = [];
+                    clearSelection();
+                    selectObject(cableSource);
+                    removeCablePreview();
+                    syncMapPanLockForEditTools();
+                }
+                return;
+            }
+            if (type === 'node') {
+                showError('Узел сети нельзя использовать для прокладки кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
+                return;
+            }
+            return;
+        }
+
+        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'switch')) {
+            showObjectInfo(placemark);
+            return;
+        }
+
+        if (type === 'support' || type === 'attachment' || type === 'manhole') {
+            if (isEditMode) {
+                clearSelection();
+                selectObject(placemark);
+            }
+            showSupportInfo(placemark);
+            return;
+        }
+
+        if (type === 'signalPost') {
+            if (isEditMode) {
+                clearSelection();
+                selectObject(placemark);
+            }
+            showSignalPostInfo(placemark);
+            return;
+        }
+
+        if (!isEditMode) {
+            return;
+        }
+        
+        if (selectedObjects.includes(placemark)) {
+            deselectObject(placemark);
+        } else {
+            selectObject(placemark);
+        }
+    });
+
+    placemark.events.add('dragend', function() {
+        window.syncDragInProgress = false;
+        if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
+        ensurePlacemarkUniqueIdForSync(placemark);
+        var uid = placemark.properties.get('uniqueId');
+        if (uid && isObjectLockedByOther(uid)) {
+            if (typeof showWarning === 'function') showWarning('Объект редактирует другой пользователь', 'Перемещение недоступно');
+            return;
+        }
+        updateConnectedCables(placemark);
+        const label = placemark.properties.get('label');
+        if (label) label.geometry.setCoordinates(placemark.geometry.getCoordinates());
+        scheduleConnectionLinesUpdate();
+        updateSelectionPulsePosition(placemark);
+        if (type === 'cross') updateCrossDisplay(); 
+        if (type === 'node') updateNodeDisplay();
+        saveData({ object: placemark, syncImmediate: true });
+        if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
+        if (typeof applyMapFilter === 'function') applyMapFilter();
+        releaseDragObjectLock(uid);
+    });
+    
+    placemark.events.add('drag', function() {
+        if (!window.syncDragInProgress) {
+            window.syncDragInProgress = true;
+            acquireDragObjectLock(placemark);
+        }
+        const label = placemark.properties.get('label');
+        if (label) { try { myMap.geoObjects.remove(label); } catch (e) {} } 
+        scheduleDragUpdate(placemark);
+    });
+
+    attachHoverEventsToObject(placemark);
+    objects.push(placemark);
+    mapPerfRegister(placemark);
+    if (!options.skipAddToObjects) {
+        mapLimitsCache.count = (mapLimitsCache.count || 0) + 1;
+        if (mapLimitsCache.limit != null) {
+            mapLimitsCache.remaining = Math.max(0, mapLimitsCache.limit - mapLimitsCache.count);
+        }
+        updateMapLimitBanner();
+    }
+    if (type === 'cross') {
+        updateCrossDisplay();
+    } else if (type === 'node') {
+        updateNodeDisplay();
+    } else {
+        myMap.geoObjects.add(placemark);
+        if (typeof applyMapFilter === 'function') applyMapFilter();
+        if (window.MapRegions && MapRegions.sendAllRegionsToMapBack) MapRegions.sendAllRegionsToMapBack(myMap, objects);
+    }
+    if (typeof window.syncSendOp === 'function') {
+        var data = serializeOneObject(placemark);
+        if (data) window.syncSendOp({ type: 'add_object', data: data });
+    }
+    saveData({ skipSync: true });
+    updateStats();
+    logAction(ActionTypes.CREATE_OBJECT, {
+        objectType: type,
+        name: name || ''
+    });
+    return placemark;
+}

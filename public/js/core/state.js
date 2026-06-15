@@ -12,6 +12,7 @@ var hoveredObjectOriginalIcon = null;
 var hoverCircle = null;
 var cursorIndicator = null;
 var phantomPlacemark = null;
+var placementCoordsPreviewPlacemark = null;
 var currentCableTool = false;
 var cableSource = null;
 /** При прокладке меди: если начало маршрута — узел, id коммутатора из attachedSwitches */

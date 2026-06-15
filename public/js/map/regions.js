@@ -26,7 +26,7 @@
     }
 
     var PLACEMARK_TYPES = [
-        'support', 'sleeve', 'cross', 'node', 'attachment', 'manhole',
+        'support', 'sleeve', 'cross', 'node', 'attachment', 'manhole', 'signalPost',
         'olt', 'splitter', 'onu', 'camera', 'mediaConverter', 'switch'
     ];
 
@@ -458,6 +458,7 @@
             support: 'опоры',
             attachment: 'крепления',
             manhole: 'колодцы',
+            signalPost: 'столбы',
             olt: 'OLT',
             splitter: 'сплиттеры',
             onu: 'ONU',

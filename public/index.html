@@ -352,6 +352,11 @@
                                             <span class="map-filter-chip-dot" aria-hidden="true"></span>
                                             <span class="map-filter-chip-text">Колодцы</span>
                                         </label>
+                                        <label class="map-filter-chip map-filter-chip--amber">
+                                            <input type="checkbox" id="mapFilterSignalPost" checked>
+                                            <span class="map-filter-chip-dot" aria-hidden="true"></span>
+                                            <span class="map-filter-chip-text">Столбы</span>
+                                        </label>
                                     </div>
                                 </div>
 
@@ -427,7 +432,7 @@
                     </div>
                     <div class="accordion-content" id="objects-content">
                         <div class="objects-panel">
-                        <p class="objects-panel-hint">Выберите тип, при необходимости заполните параметры и нажмите «Добавить на карту» — затем укажите место на карте.</p>
+                        <p class="objects-panel-hint">Выберите тип, при необходимости заполните параметры и нажмите «Добавить на карту». Укажите место кликом по карте или задайте координаты для размещения сразу.</p>
 
                         <div class="object-type-section">
                             <p class="object-type-section-label">Тип объекта</p>
@@ -440,6 +445,7 @@
                                         <button type="button" class="object-type-chip object-type-chip--violet" data-type="cross">Кроссы</button>
                                         <button type="button" class="object-type-chip object-type-chip--slate" data-type="attachment">Крепления</button>
                                         <button type="button" class="object-type-chip object-type-chip--teal" data-type="manhole">Колодцы</button>
+                                        <button type="button" class="object-type-chip object-type-chip--amber" data-type="signalPost">Столбы</button>
                                     </div>
                                 </div>
                                 <div class="object-type-group">
@@ -469,6 +475,7 @@
                                 <option value="node">Узлы сети</option>
                                 <option value="attachment">Крепление узлов</option>
                                 <option value="manhole">Колодец</option>
+                                <option value="signalPost">Сигнальный столб</option>
                             </select>
                         </div>
 
@@ -486,7 +493,7 @@
                                 <option value="32">32 порта</option>
                                 <option value="64">64 порта</option>
                             </select>
-                            <label for="oltManufacturer" class="form-group-sub">Производитель</label>
+                            <label for="oltManufacturerTrigger" class="form-group-sub">Производитель</label>
                             <div class="device-combobox" data-catalog="olt" data-type="manufacturer" data-value-id="oltManufacturer">
                                 <button type="button" class="device-combobox-trigger" id="oltManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button>
                                 <input type="hidden" id="oltManufacturer" name="oltManufacturer" value="">
@@ -495,7 +502,7 @@
                                     <ul class="device-combobox-list"></ul>
                                 </div>
                             </div>
-                            <label for="oltModel" class="form-group-sub">Модель</label>
+                            <label for="oltModelTrigger" class="form-group-sub">Модель</label>
                             <div class="device-combobox" data-catalog="olt" data-type="model" data-value-id="oltModel" data-manufacturer-id="oltManufacturer">
                                 <button type="button" class="device-combobox-trigger" id="oltModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
                                 <input type="hidden" id="oltModel" name="oltModel" value="">
@@ -507,7 +514,7 @@
                             <p class="form-hint">Приход от кросса — одна жила (не входит в порты). Порты задаются жилами кабелей, подключённых к OLT.</p>
                         </div>
                         <div class="form-group object-settings-card" id="onuSettingsGroup" style="display: none;">
-                            <label for="onuManufacturer">Производитель</label>
+                            <label for="onuManufacturerTrigger">Производитель</label>
                             <div class="device-combobox" data-catalog="onu" data-type="manufacturer" data-value-id="onuManufacturer">
                                 <button type="button" class="device-combobox-trigger" id="onuManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button>
                                 <input type="hidden" id="onuManufacturer" name="onuManufacturer" value="">
@@ -516,7 +523,7 @@
                                     <ul class="device-combobox-list"></ul>
                                 </div>
                             </div>
-                            <label for="onuModel" class="form-group-sub">Модель</label>
+                            <label for="onuModelTrigger" class="form-group-sub">Модель</label>
                             <div class="device-combobox" data-catalog="onu" data-type="model" data-value-id="onuModel" data-manufacturer-id="onuManufacturer">
                                 <button type="button" class="device-combobox-trigger" id="onuModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
                                 <input type="hidden" id="onuModel" name="onuModel" value="">
@@ -528,7 +535,7 @@
                         </div>
                         <div class="form-group object-settings-card" id="cameraSettingsGroup" style="display: none;">
                             <p class="form-hint object-settings-card-lead">Подключение к сети — только медным кабелем от порта коммутатора в узле (или отдельной точки коммутатора).</p>
-                            <label for="cameraManufacturer">Производитель</label>
+                            <label for="cameraManufacturerTrigger">Производитель</label>
                             <div class="device-combobox" data-catalog="camera" data-type="manufacturer" data-value-id="cameraManufacturer">
                                 <button type="button" class="device-combobox-trigger" id="cameraManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button>
                                 <input type="hidden" id="cameraManufacturer" name="cameraManufacturer" value="">
@@ -537,7 +544,7 @@
                                     <ul class="device-combobox-list"></ul>
                                 </div>
                             </div>
-                            <label for="cameraModel" class="form-group-sub">Модель</label>
+                            <label for="cameraModelTrigger" class="form-group-sub">Модель</label>
                             <div class="device-combobox" data-catalog="camera" data-type="model" data-value-id="cameraModel" data-manufacturer-id="cameraManufacturer">
                                 <button type="button" class="device-combobox-trigger" id="cameraModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
                                 <input type="hidden" id="cameraModel" name="cameraModel" value="">
@@ -571,7 +578,7 @@
                         </div>
                         <div class="form-group object-settings-card" id="mediaConverterSettingsGroup" style="display: none;">
                             <p class="form-hint object-settings-card-lead">Точка на карте: оптический медиаконвертер (марка и модель из справочника узла).</p>
-                            <label for="mediaConverterManufacturer">Производитель</label>
+                            <label for="mediaConverterManufacturerTrigger">Производитель</label>
                             <div class="device-combobox" data-catalog="node" data-type="manufacturer" data-value-id="mediaConverterManufacturer">
                                 <button type="button" class="device-combobox-trigger" id="mediaConverterManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button>
                                 <input type="hidden" id="mediaConverterManufacturer" name="mediaConverterManufacturer" value="">
@@ -580,7 +587,7 @@
                                     <ul class="device-combobox-list"></ul>
                                 </div>
                             </div>
-                            <label for="mediaConverterModel" class="form-group-sub">Модель</label>
+                            <label for="mediaConverterModelTrigger" class="form-group-sub">Модель</label>
                             <div class="device-combobox" data-catalog="node" data-type="model" data-value-id="mediaConverterModel" data-manufacturer-id="mediaConverterManufacturer">
                                 <button type="button" class="device-combobox-trigger" id="mediaConverterModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
                                 <input type="hidden" id="mediaConverterModel" name="mediaConverterModel" value="">
@@ -629,6 +636,47 @@
                             <input type="number" id="sleeveMaxFibers" class="form-input" placeholder="0" min="0" max="288" value="96">
                             <small class="text-muted-inline" style="display: block; margin-top: 5px; font-size: 11px;">0 = неограничено</small>
                         </div>
+                        </div>
+
+                        <div class="object-placement-coords-card">
+                            <div class="object-placement-coords-head">
+                                <span class="object-placement-coords-icon" aria-hidden="true">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                        <circle cx="12" cy="10" r="3"></circle>
+                                    </svg>
+                                </span>
+                                <div class="object-placement-coords-head-text">
+                                    <span class="object-placement-coords-title">Координаты</span>
+                                    <span class="object-placement-coords-badge">необязательно</span>
+                                </div>
+                            </div>
+                            <p class="object-placement-coords-hint">Укажите широту и долготу — объект разместится сразу, без клика по карте. Можно вставить пару из буфера: <code>55.7558, 37.6173</code>.</p>
+                            <div class="object-placement-coords-fields">
+                                <div class="object-placement-coords-field">
+                                    <label for="objectPlacementLat" class="object-placement-coords-label">Широта</label>
+                                    <input type="text" id="objectPlacementLat" class="form-input object-placement-coords-input" inputmode="decimal" placeholder="55.755800" autocomplete="off" spellcheck="false">
+                                </div>
+                                <div class="object-placement-coords-field">
+                                    <label for="objectPlacementLon" class="object-placement-coords-label">Долгота</label>
+                                    <input type="text" id="objectPlacementLon" class="form-input object-placement-coords-input" inputmode="decimal" placeholder="37.617300" autocomplete="off" spellcheck="false">
+                                </div>
+                            </div>
+                            <div class="object-placement-coords-actions">
+                                <button type="button" id="objectPlacementCoordsPaste" class="btn-secondary object-placement-coords-paste">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                    </svg>
+                                    <span>Вставить</span>
+                                </button>
+                                <button type="button" id="objectPlacementCoordsPreview" class="object-placement-coords-preview" title="Показать на карте" aria-label="Показать на карте">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                        <circle cx="12" cy="12" r="3"></circle>
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
 
                         <div class="objects-add-footer">
@@ -1070,6 +1118,7 @@
                     <div class="underground-draw-card__actions">
                         <button type="button" id="undergroundEditDone" class="btn-primary underground-draw-card__btn">Готово</button>
                         <button type="button" id="undergroundEditRelayout" class="btn-secondary underground-draw-card__btn">Заново</button>
+                        <button type="button" id="undergroundEditDeleteCable" class="btn-danger underground-draw-card__btn" hidden>Удалить</button>
                         <button type="button" id="undergroundEditCancelBar" class="btn-secondary underground-draw-card__btn">Отмена</button>
                     </div>
                 </div>
@@ -2085,6 +2134,44 @@
     <script src="js/map/search.js"></script>
     <script src="js/fiber-cable-config.js"></script>
     <script src="js/map-legend.js"></script>
+    <script src="js/app/object-sync.js"></script>
+    <script src="js/app/onboarding.js"></script>
+    <script src="js/app/user-ui.js"></script>
+    <script src="js/app/map-loading.js"></script>
+    <script src="js/app/backups.js"></script>
+    <script src="js/app/cable-split-sleeve.js"></script>
+    <script src="js/app/map-hover.js"></script>
+    <script src="js/app/object-placement.js"></script>
+    <script src="js/app/edit-mode.js"></script>
+    <script src="js/app/map-init.js"></script>
+    <script src="js/app/map-clicks.js"></script>
+    <script src="js/app/create-object.js"></script>
+    <script src="js/app/cable-routing.js"></script>
+    <script src="js/app/fiber-scheme.js"></script>
+    <script src="js/app/object-delete.js"></script>
+    <script src="js/app/map-selection.js"></script>
+    <script src="js/app/gpon-fiber.js"></script>
+    <script src="js/app/map-geometry.js"></script>
+    <script src="js/app/map-object-core.js"></script>
+    <script src="js/app/map-persistence.js"></script>
+    <script src="js/app/cable-laying.js"></script>
+    <script src="js/app/cable-helpers.js"></script>
+    <script src="js/app/object-modals.js"></script>
+    <script src="js/app/fiber-modal-handlers.js"></script>
+    <script src="js/app/fiber-labels.js"></script>
+    <script src="js/app/fiber-trace.js"></script>
+    <script src="js/app/fiber-routing-modals.js"></script>
+    <script src="js/app/fiber-routing-map.js"></script>
+    <script src="js/app/gpon-connect-modals.js"></script>
+    <script src="js/app/connection-lines.js"></script>
+    <script src="js/app/fiber-trace-extra.js"></script>
+    <script src="js/app/fiber-selection-ui.js"></script>
+    <script src="js/app/cable-delete.js"></script>
+    <script src="js/app/cable-fiber-utils.js"></script>
+    <script src="js/app/cross-node-display.js"></script>
+    <script src="js/app/regions-ui.js"></script>
+    <script src="js/app/map-filter.js"></script>
+    <script src="js/app/fiber-workspace.js"></script>
     <script src="js/app/main.js"></script>
     <script src="js/sync.js"></script>
 </body></html>

@@ -88,6 +88,13 @@ function searchObjects(query) {
             results.push({ object: obj, type: type, name: searchName, matchType: 'name' });
             return;
         }
+        if (type === 'signalPost') {
+            var comment = obj.properties.get('comment') || '';
+            if (comment && comment.toLowerCase().indexOf(lowerQuery) !== -1) {
+                results.push({ object: obj, type: type, name: searchName || comment, matchType: 'name' });
+                return;
+            }
+        }
         if (type === 'node' && typeof getNodeAttachedSwitches === 'function') {
             var attached = getNodeAttachedSwitches(obj);
             for (var ai = 0; ai < attached.length; ai++) {
@@ -131,6 +138,7 @@ function renderSearchResults(results, query) {
             case 'sleeve': return '🔴';
             case 'support': return '📍';
             case 'attachment': return '🔗';
+            case 'signalPost': return '🚏';
             case 'camera': return '📷';
             case 'cable': return '🔌';
             case 'region': return '⬡';
@@ -193,7 +201,8 @@ function goToSearchResult(result) {
     myMap.setCenter(coords, 21, { duration: 500 });
     setTimeout(function() {
         if (result.type === 'cable') showCableInfo(obj);
-        else if (result.type === 'support' || result.type === 'attachment') showSupportInfo(obj);
+        else if (result.type === 'support' || result.type === 'attachment' || result.type === 'manhole') showSupportInfo(obj);
+        else if (result.type === 'signalPost') showSignalPostInfo(obj);
         else if (result.type === 'region') focusRegionOnMap(obj);
         else if (result.type === 'node' || result.type === 'cross' || result.type === 'sleeve' || result.type === 'olt' || result.type === 'splitter' || result.type === 'onu' || result.type === 'camera') showObjectInfo(obj);
     }, 600);

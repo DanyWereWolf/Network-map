@@ -212,10 +212,10 @@
                 </div>
 
                 <div class="form-group reg-map-group">
-                    <label for="regMapPicker">Расположение карты</label>
+                    <label id="regMapPickerLabel">Расположение карты</label>
                     <p class="hint reg-map-hint">Укажите город или район, где будет ваша карта. Ищите адрес в строке поиска, кликайте по карте или перетаскивайте метку.</p>
                     <div class="reg-map-picker-wrap">
-                        <div id="regMapPicker" class="reg-map-picker" role="application" aria-label="Выбор расположения карты"></div>
+                        <div id="regMapPicker" class="reg-map-picker" role="application" aria-label="Выбор расположения карты" aria-labelledby="regMapPickerLabel"></div>
                     </div>
                     <div class="reg-map-toolbar">
                         <button type="button" class="btn-secondary btn-sm" id="regMapGeolocateBtn">Моё местоположение</button>

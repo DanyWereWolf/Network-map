@@ -10,6 +10,7 @@
         nodeAggregation: '#ef4444',
         attachment: '#64748b',
         manhole: '#92400e',
+        signalPost: '#f59e0b',
         olt: '#0ea5e9',
         splitter: '#a855f7',
         onu: '#06b6d4',
@@ -129,6 +130,14 @@
             '<path d="M16 11 V23" stroke="' + sw + '" stroke-width="1.2" opacity="' + (wo * 0.75) + '"/>';
     }
 
+    function drawSignalPost(fill, sw, w, fo, wo) {
+        return '<rect x="14.5" y="17" width="3" height="11" rx="0.8" fill="' + sw + '" opacity="' + wo + '"/>' +
+            '<rect x="8" y="5" width="16" height="11" rx="1.5" fill="' + fill + '" stroke="' + sw + '" stroke-width="' + w + '" opacity="' + fo + '"/>' +
+            '<path d="M10 9 H22" stroke="' + sw + '" stroke-width="1.1" opacity="' + (wo * 0.75) + '"/>' +
+            '<path d="M10 12 H22" stroke="' + sw + '" stroke-width="1.1" opacity="' + (wo * 0.75) + '"/>' +
+            '<ellipse cx="16" cy="28.5" rx="3.5" ry="1.2" fill="' + sw + '" opacity="' + (wo * 0.55) + '"/>';
+    }
+
     function drawOlt(fill, sw, w, fo, wo) {
         return '<rect x="5" y="7" width="22" height="18" rx="2.5" fill="' + fill + '" stroke="' + sw + '" stroke-width="' + w + '" opacity="' + fo + '"/>' +
             '<rect x="8" y="11" width="3" height="2.2" rx="0.6" fill="#4ade80" opacity="' + wo + '"/>' +
@@ -219,6 +228,7 @@
             case 'node': body = drawNode(fill, sw, w, fo, wo, nodeKind); break;
             case 'attachment': body = drawAttachment(fill, sw, w, fo, wo); break;
             case 'manhole': body = drawManhole(fill, sw, w, fo, wo); break;
+            case 'signalPost': body = drawSignalPost(fill, sw, w, fo, wo); break;
             case 'olt': body = drawOlt(fill, sw, w, fo, wo); break;
             case 'splitter': body = drawSplitter(fill, sw, w, fo, wo); break;
             case 'onu': body = drawOnu(fill, sw, w, fo, wo); break;
@@ -236,7 +246,7 @@
     }
 
     function getIconMetrics(type, variant) {
-        var large = { support: 1, sleeve: 1, cross: 1, node: 1, attachment: 1, olt: 1, splitter: 1, onu: 1, camera: 1, mediaConverter: 1, switch: 1, crossGroup: 1, nodeGroup: 1 };
+        var large = { support: 1, sleeve: 1, cross: 1, node: 1, attachment: 1, manhole: 1, signalPost: 1, olt: 1, splitter: 1, onu: 1, camera: 1, mediaConverter: 1, switch: 1, crossGroup: 1, nodeGroup: 1 };
         var isLarge = !!large[type];
         if (variant === 'selected') {
             return {
