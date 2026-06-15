@@ -100,6 +100,11 @@ function switchToViewMode(silent) {
     makeObjectsNonDraggable();
     syncMapPanLockForEditTools();
     if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
+    if (infoModalEditModeSession && currentModalObject) {
+        infoModalEditMode = false;
+        if (typeof releaseHeldObjectLock === 'function') releaseHeldObjectLock();
+        if (typeof refreshObjectModal === 'function') refreshObjectModal(currentModalObject);
+    }
 }
 
 function switchToEditMode() {

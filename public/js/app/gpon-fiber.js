@@ -224,17 +224,33 @@ function findFiberOltRealAssignmentViaNetwork(startHost, startCableId, startFibe
 
     function expandFiberOltNetworkState(state) {
         if (state.host) {
-            getSplicedFiberGroup(state.host, state.cableId, state.fiberNumber).forEach(function(g) {
-                enqueueNetworkState({ host: state.host, cableId: g.cableId, fiberNumber: g.fiberNumber });
-            });
+            expandFiberOltWalkFromHost(queue, visited, state.host, state.cableId, state.fiberNumber);
         }
         var cable = objects.find(function(c) {
             return c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === state.cableId;
         });
         if (!cable) return;
-        var endpoints = [];
         var fromObj = cable.properties.get('from');
         var toObj = cable.properties.get('to');
+        if (fromObj && fromObj.properties && fromObj.properties.get('type') === 'olt') {
+            return {
+                oltId: getObjectUniqueId(fromObj),
+                oltName: fromObj.properties.get('name') || 'OLT',
+                physicalCableOnly: true,
+                viaPhysicalCable: true,
+                inheritedFromNetwork: true
+            };
+        }
+        if (toObj && toObj.properties && toObj.properties.get('type') === 'olt') {
+            return {
+                oltId: getObjectUniqueId(toObj),
+                oltName: toObj.properties.get('name') || 'OLT',
+                physicalCableOnly: true,
+                viaPhysicalCable: true,
+                inheritedFromNetwork: true
+            };
+        }
+        var endpoints = [];
         if (fromObj) endpoints.push(fromObj);
         if (toObj) endpoints.push(toObj);
         var routePts = getCableRoutePointsForTrace(cable);
@@ -255,14 +271,53 @@ function findFiberOltRealAssignmentViaNetwork(startHost, startCableId, startFibe
         });
     }
 
-    expandFiberOltNetworkState({ host: startHost, cableId: startCableId, fiberNumber: startFiberNumber });
+    var cableHit = expandFiberOltNetworkState({ host: startHost, cableId: startCableId, fiberNumber: startFiberNumber });
+    if (cableHit) return cableHit;
     while (queue.length && visited.size <= maxVisits) {
         var cur = queue.shift();
         var found = resolveFiberOltUpstreamAtHost(cur.host, cur.cableId, cur.fiberNumber, true, false);
         if (found) return Object.assign({}, found, { inheritedFromNetwork: true });
-        expandFiberOltNetworkState(cur);
+        cableHit = expandFiberOltNetworkState(cur);
+        if (cableHit) return cableHit;
     }
     return null;
+}
+
+/** Выход сплиттера на жиле → корневой вход с хостом для наследования OLT. */
+function getSplitterOutputUpstreamFiber(hostObj, cableId, fiberNumber) {
+    if (!hostObj || typeof findSplitterOutputAtHost !== 'function') return null;
+    var outHit = findSplitterOutputAtHost(hostObj, cableId, fiberNumber);
+    if (!outHit || !outHit.splitterObj || typeof getSplitterRootInputFiber !== 'function') return null;
+    var root = getSplitterRootInputFiber(outHit.splitterObj);
+    if (!root || !root.cableId || root.fiberNumber == null) return null;
+    var inputHost = hostObj;
+    if (typeof getSplitterHostInputFiber === 'function') {
+        var hostIn = getSplitterHostInputFiber(outHit.splitterObj);
+        if (hostIn && hostIn.hostObj) inputHost = hostIn.hostObj;
+    }
+    return { hostObj: inputHost, cableId: root.cableId, fiberNumber: root.fiberNumber };
+}
+
+function enqueueFiberOltWalkState(queue, visited, state) {
+    var stateKey = (state.host ? getObjectUniqueId(state.host) : '_') + '|' + fiberConnKey(state.cableId, state.fiberNumber);
+    if (visited.has(stateKey)) return;
+    visited.add(stateKey);
+    queue.push(state);
+}
+
+function expandFiberOltWalkFromHost(queue, visited, host, cableId, fiberNumber) {
+    if (!host) return;
+    getSplicedFiberGroup(host, cableId, fiberNumber).forEach(function(g) {
+        enqueueFiberOltWalkState(queue, visited, { host: host, cableId: g.cableId, fiberNumber: g.fiberNumber });
+    });
+    var viaSp = getSplitterOutputUpstreamFiber(host, cableId, fiberNumber);
+    if (viaSp) {
+        enqueueFiberOltWalkState(queue, visited, {
+            host: viaSp.hostObj,
+            cableId: viaSp.cableId,
+            fiberNumber: viaSp.fiberNumber
+        });
+    }
 }
 
 /** Кабель от OLT на жиле в кроссе/муфте (напрямую или через сращение с кабелем к OLT). */
@@ -305,6 +360,12 @@ function resolveFiberOltUpstreamAtHost(hostObj, cableId, fiberNumber, skipNetwor
                 return { oltId: uid, oltName: obj.properties.get('name') || 'OLT', portNumber: parseInt(pk, 10), incoming: false };
             }
         }
+    }
+    var viaSpOut = getSplitterOutputUpstreamFiber(hostObj, cableId, fiberNumber);
+    if (viaSpOut) {
+        var fromSplitter = resolveFiberOltUpstreamAtHost(
+            viaSpOut.hostObj, viaSpOut.cableId, viaSpOut.fiberNumber, skipNetworkWalk, skipSpliceInherit);
+        if (fromSplitter) return Object.assign({}, fromSplitter, { viaSplitter: true });
     }
     if (!skipSpliceInherit) {
         var group = getSplicedFiberGroup(hostObj, cableId, fiberNumber);
@@ -473,9 +534,7 @@ function isFiberConnectedToOltNetworkWalk(startHost, startCableId, startFiberNum
         if (isFiberOnOltGlobally(cur.cableId, cur.fiberNumber)) return true;
         if (cur.host) {
             if (getFiberOltRealAssignment(cur.host, cur.cableId, cur.fiberNumber, false, true)) return true;
-            getSplicedFiberGroup(cur.host, cur.cableId, cur.fiberNumber).forEach(function(g) {
-                queue.push({ host: cur.host, cableId: g.cableId, fiberNumber: g.fiberNumber });
-            });
+            expandFiberOltWalkFromHost(queue, visited, cur.host, cur.cableId, cur.fiberNumber);
         }
         var cable = objects.find(function(c) {
             return c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === cur.cableId;

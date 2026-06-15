@@ -707,6 +707,7 @@ function setupFiberConnectionHandlers() {
     setupFiberWorkspaceUI();
     bindModalObjectNameEditors();
     bindFiberSchemeCanvasHandlers(sleeveObj);
+    setupFiberSchemeCableSideHandlers(sleeveObj);
 
     document.querySelectorAll('.fiber-conn-delete').forEach(function(btn) {
         btn.addEventListener('click', function(e) {
@@ -727,6 +728,32 @@ function setupFiberConnectionHandlers() {
     setupFiberSchemeZoomHandlers(sleeveObj);
     setupFiberSchemeSplitterHandlers(sleeveObj);
     updateSchemeSplitterPickUI();
+}
+
+function setupFiberSchemeCableSideHandlers(hostObj) {
+    if (!hostObj || !isEditMode) return;
+    function flipCableSide(cableId) {
+        if (!cableId || typeof toggleFiberSchemeCableSide !== 'function') return;
+        if (!toggleFiberSchemeCableSide(hostObj, cableId)) return;
+        if (typeof refreshObjectModal === 'function') refreshObjectModal(hostObj);
+        else if (typeof showObjectInfo === 'function') showObjectInfo(hostObj);
+    }
+    document.querySelectorAll('.fiber-ws-cable-side-flip').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            flipCableSide(this.getAttribute('data-cable-id'));
+        });
+    });
+    var svg = document.getElementById('fiber-connections-svg');
+    if (!svg) return;
+    svg.querySelectorAll('.fiber-cable-side-flip-hit').forEach(function(hit) {
+        hit.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+        hit.addEventListener('click', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            flipCableSide(hit.getAttribute('data-cable-id'));
+        });
+    });
 }
 
 function setupFiberSchemeSplitterHandlers(hostObj) {

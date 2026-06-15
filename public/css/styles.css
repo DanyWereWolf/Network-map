@@ -6505,6 +6505,81 @@ button {
     transition: opacity 0.15s ease;
 }
 
+#fiber-connections-svg .fiber-cable-side-flip-hit {
+    pointer-events: all;
+    cursor: pointer;
+    stroke: rgba(148, 163, 184, 0.45);
+    stroke-width: 1;
+}
+
+#fiber-connections-svg .fiber-cable-side-flip-hit:hover {
+    stroke: #f97316;
+    filter: brightness(1.08);
+}
+
+.fiber-ws-cable-sides-block {
+    padding-bottom: 4px;
+}
+
+.fiber-ws-cable-side-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.fiber-ws-cable-side-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border: 1px solid var(--panel-glass-border);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, #f0f9ff 45%, var(--panel-glass-surface));
+}
+
+.fiber-ws-cable-side-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fiber-ws-cable-side-label {
+    flex-shrink: 0;
+    font-size: 0.6875rem;
+    color: var(--text-secondary);
+}
+
+.fiber-ws-cable-side-flip {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--panel-glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.875rem;
+    line-height: 1;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.fiber-ws-cable-side-flip:hover {
+    background: #fff7ed;
+    border-color: #fdba74;
+    color: #9a3412;
+}
+
 .fiber-scheme-port {
     cursor: default;
     transition: opacity 0.15s ease;

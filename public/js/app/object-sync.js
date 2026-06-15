@@ -28,6 +28,13 @@ function releaseHeldObjectLock() {
     myHeldObjectLockId = null;
 }
 
+function shouldSkipRemoteModalRefresh(obj) {
+    if (!obj || !currentModalObject || currentModalObject !== obj) return false;
+    if (!infoModalEditModeSession || !modalIsEditMode()) return false;
+    var uid = getObjectUniqueId(obj);
+    return !!(uid && myHeldObjectLockId === uid);
+}
+
 function applyModalEditModeForObject(obj, callback) {
     infoModalEditModeSession = true;
     if (!isEditMode) {
@@ -49,13 +56,19 @@ function applyModalEditModeForObject(obj, callback) {
     if (myHeldObjectLockId && myHeldObjectLockId !== uid) {
         releaseHeldObjectLock();
     }
+    if (myHeldObjectLockId === uid && !isObjectLockedByOther(uid)) {
+        infoModalEditMode = true;
+        if (typeof callback === 'function') callback();
+        return;
+    }
     window.syncRequestObjectLock(uid, function(ok, lockedBy) {
-        if (ok) {
+        if (ok && isEditMode) {
             myHeldObjectLockId = uid;
             infoModalEditMode = true;
         } else {
             infoModalEditMode = false;
-            if (lockedBy && typeof showWarning === 'function') {
+            if (!ok && myHeldObjectLockId === uid) releaseHeldObjectLock();
+            if (!ok && lockedBy && typeof showWarning === 'function') {
                 showWarning('Сейчас редактирует: ' + lockedBy, 'Объект занят');
             }
         }
@@ -75,13 +88,13 @@ function updateModalLockBanner(uniqueId) {
         el.className = 'object-lock-banner object-lock-banner--remote';
         return;
     }
-    if (uniqueId && myHeldObjectLockId === uniqueId && infoModalEditMode) {
+    if (uniqueId && myHeldObjectLockId === uniqueId && modalIsEditMode()) {
         el.hidden = false;
         el.textContent = 'Вы редактируете этот объект';
         el.className = 'object-lock-banner object-lock-banner--mine';
         return;
     }
-    if (!infoModalEditMode && uniqueId && lock) {
+    if (!modalIsEditMode() && uniqueId && lock) {
         el.hidden = false;
         el.textContent = 'Только просмотр — редактирует ' + (lock.displayName || 'другой пользователь');
         el.className = 'object-lock-banner object-lock-banner--remote';

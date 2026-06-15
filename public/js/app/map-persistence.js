@@ -100,10 +100,12 @@ function serializeMapItemFromObject(obj) {
             if (props.maxFibers !== undefined) result.maxFibers = props.maxFibers;
             appendFiberSchemeCanvasPropsToResult(props, result);
             appendFiberSchemeViewPropsToResult(props, result);
+            appendFiberSchemeCableSidesToResult(props, result);
         }
         if (props.type === 'cross') {
             appendFiberSchemeCanvasPropsToResult(props, result);
             appendFiberSchemeViewPropsToResult(props, result);
+            appendFiberSchemeCableSidesToResult(props, result);
             if (props.crossPorts) result.crossPorts = props.crossPorts;
             if (props.crossCopperPorts !== undefined && props.crossCopperPorts !== null) result.crossCopperPorts = props.crossCopperPorts;
             if (props.copperPortUsage) result.copperPortUsage = props.copperPortUsage;
@@ -950,7 +952,10 @@ function applyOperationToMap(op) {
             if (op.data.type !== 'region') updateConnectedCables(objUp);
             refreshRemoteObjectVisuals(objUp);
             updateStats();
-            if (currentModalObject === objUp && typeof refreshObjectModal === 'function') refreshObjectModal(objUp);
+            if (currentModalObject === objUp && typeof refreshObjectModal === 'function' &&
+                !(typeof shouldSkipRemoteModalRefresh === 'function' && shouldSkipRemoteModalRefresh(objUp))) {
+                refreshObjectModal(objUp);
+            }
         }
         return;
     }
@@ -1414,6 +1419,7 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         if (Array.isArray(data.embeddedSplitters)) placemark.properties.set('embeddedSplitters', data.embeddedSplitters);
         loadFiberSchemeCanvasPropsFromData(data, placemark);
         loadFiberSchemeViewPropsFromData(data, placemark);
+        loadFiberSchemeCableSidesFromData(data, placemark);
     }
     if (type === 'cross') {
         if (data.crossPorts) placemark.properties.set('crossPorts', data.crossPorts);
@@ -1429,6 +1435,7 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         if (Array.isArray(data.embeddedSplitters)) placemark.properties.set('embeddedSplitters', data.embeddedSplitters);
         loadFiberSchemeCanvasPropsFromData(data, placemark);
         loadFiberSchemeViewPropsFromData(data, placemark);
+        loadFiberSchemeCableSidesFromData(data, placemark);
     }
     if (type === 'olt') {
         placemark.properties.set('ponPorts', data.ponPorts || 8);
@@ -1825,155 +1832,8 @@ function createObjectFromData(data, opts, createOpts) {
 }
 
 function exportData() {
-    const data = objects.map(obj => {
-        const props = obj.properties.getAll();
-        const geometry = obj.geometry.getCoordinates();
-        
-        if (props.type === 'cable') {
-            const fromObj = props.from, toObj = props.to;
-            const result = {
-                type: 'cable',
-                cableType: props.cableType,
-                from: objects.indexOf(fromObj),
-                to: objects.indexOf(toObj),
-                geometry: geometry
-            };
-            if (fromObj && toObj && fromObj.properties && toObj.properties) {
-                const fu = fromObj.properties.get('uniqueId');
-                const tu = toObj.properties.get('uniqueId');
-                if (fu) result.fromUniqueId = fu;
-                if (tu) result.toUniqueId = tu;
-            }
-            if (props.uniqueId) result.uniqueId = props.uniqueId;
-            
-            if (props.distance !== undefined) {
-                result.distance = props.distance;
-            }
-            
-            result.cableName = props.cableName ?? null;
-            var ptsRouteEx = props.points;
-            if (Array.isArray(ptsRouteEx) && ptsRouteEx.length > 2) {
-                var routeIdsEx = [];
-                for (var pxi = 0; pxi < ptsRouteEx.length; pxi++) {
-                    var pex = ptsRouteEx[pxi];
-                    var uidEx = pex && pex.properties && pex.properties.get('uniqueId');
-                    if (!uidEx) {
-                        routeIdsEx = null;
-                        break;
-                    }
-                    routeIdsEx.push(uidEx);
-                }
-                if (routeIdsEx && routeIdsEx.length === ptsRouteEx.length) result.routeUniqueIds = routeIdsEx;
-            }
-            if (props.cableType === 'copper') {
-                if (props.copperPortFrom != null && props.copperPortFrom !== '') result.copperPortFrom = props.copperPortFrom;
-                if (props.copperPortTo != null && props.copperPortTo !== '') result.copperPortTo = props.copperPortTo;
-                if (props.copperSwitchFromId) result.copperSwitchFromId = props.copperSwitchFromId;
-                if (props.copperSwitchToId) result.copperSwitchToId = props.copperSwitchToId;
-            }
-            return result;
-        } else {
-            const result = {
-                type: props.type,
-                name: props.name,
-                geometry: geometry
-            };
-            
-            if (props.uniqueId) {
-                result.uniqueId = props.uniqueId;
-            }
-            
-            if (props.usedFibers) {
-                result.usedFibers = props.usedFibers;
-            }
-            
-            if (props.fiberConnections) {
-                result.fiberConnections = props.fiberConnections;
-            }
-            
-            if (props.fiberLabels) {
-                result.fiberLabels = props.fiberLabels;
-            }
-            
-            if (props.type === 'sleeve') {
-                if (props.sleeveType) {
-                    result.sleeveType = props.sleeveType;
-                }
-                if (props.maxFibers !== undefined) {
-                    result.maxFibers = props.maxFibers;
-                }
-            }
-            
-            if (props.type === 'cross') {
-                if (props.crossPorts) {
-                    result.crossPorts = props.crossPorts;
-                }
-                if (props.crossCopperPorts !== undefined && props.crossCopperPorts !== null) {
-                    result.crossCopperPorts = props.crossCopperPorts;
-                }
-                if (props.nodeConnections) {
-                    result.nodeConnections = props.nodeConnections;
-                }
-                if (props.fiberPorts) {
-                    result.fiberPorts = props.fiberPorts;
-                }
-                if (props.oltConnections) {
-                    result.oltConnections = props.oltConnections;
-                }
-                if (props.onuConnections) {
-                    result.onuConnections = props.onuConnections;
-                }
-                if (props.mediaConverterConnections) {
-                    result.mediaConverterConnections = props.mediaConverterConnections;
-                }
-                if (props.splitterConnections) result.splitterConnections = props.splitterConnections;
-            }
-            if (props.type === 'sleeve') {
-                if (props.nodeConnections) result.nodeConnections = props.nodeConnections;
-                if (props.oltConnections) result.oltConnections = props.oltConnections;
-                if (props.onuConnections) result.onuConnections = props.onuConnections;
-                if (props.mediaConverterConnections) result.mediaConverterConnections = props.mediaConverterConnections;
-                if (props.splitterConnections) result.splitterConnections = props.splitterConnections;
-            }
-            if (props.type === 'olt') {
-                if (props.ponPorts !== undefined) result.ponPorts = props.ponPorts;
-                if (props.incomingFiber) result.incomingFiber = props.incomingFiber;
-                if (props.portAssignments) result.portAssignments = props.portAssignments;
-                if (props.portLabels) result.portLabels = props.portLabels;
-            }
-            if (props.type === 'splitter') {
-                if (props.splitRatio !== undefined) result.splitRatio = props.splitRatio;
-                if (props.inputFiber) result.inputFiber = props.inputFiber;
-                if (props.outputConnections) result.outputConnections = props.outputConnections;
-            }
-            if (props.type === 'onu') {
-                if (props.incomingFiber) result.incomingFiber = props.incomingFiber;
-            }
-            if (props.type === 'camera') {
-                if (props.manufacturer) result.manufacturer = props.manufacturer;
-                if (props.model) result.model = props.model;
-                if (props.comment) result.comment = props.comment;
-            }
-            if (props.type === 'mediaConverter') {
-                if (props.incomingFiber) result.incomingFiber = props.incomingFiber;
-                if (props.manufacturer) result.manufacturer = props.manufacturer;
-                if (props.model) result.model = props.model;
-                if (props.comment) result.comment = props.comment;
-            }
-            if (props.type === 'node') {
-                var asEx = props.attachedSwitches;
-                if (Array.isArray(asEx) && asEx.length) result.attachedSwitches = JSON.parse(JSON.stringify(asEx));
-            }
-            if (props.type === 'switch') {
-                if (props.parentNodeId) result.parentNodeId = props.parentNodeId;
-                if (props.switchPortTypes) result.switchPortTypes = props.switchPortTypes;
-                if (props.manufacturer) result.manufacturer = props.manufacturer;
-                if (props.model) result.model = props.model;
-            }
-            return result;
-        }
-    });
-    
+    var data = getSerializedData();
+
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     

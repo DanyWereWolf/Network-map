@@ -242,6 +242,26 @@ function buildFiberSchemeCanvasSizeHtml(sleeveObj, isEditMode, schemeSize) {
     return h;
 }
 
+function buildFiberSchemeCableSidesHtml(sleeveObj, isEditMode, cablesData) {
+    if (!isEditMode || !cablesData || cablesData.length < 1) return '';
+    var h = '<div class="fiber-ws-cable-sides-block">';
+    h += '<h4 class="fiber-ws-subsection-title">Стороны кабелей</h4>';
+    h += '<p class="fiber-ws-scheme-size-hint">Расположение кабелей слева и справа на схеме. Кнопка ⇄ на схеме делает то же.</p>';
+    h += '<ul class="fiber-ws-cable-side-list">';
+    cablesData.forEach(function(cableData, index) {
+        var title = cableData.cableName || ('Кабель ' + cableData.index);
+        var side = resolveCableSchemeSide(sleeveObj, cableData.cableUniqueId, index, cablesData.length);
+        var sideLabel = side === 'left' ? 'Слева' : 'Справа';
+        h += '<li class="fiber-ws-cable-side-item">';
+        h += '<span class="fiber-ws-cable-side-name" title="' + escapeHtml(title) + '">' + escapeHtml(title) + '</span>';
+        h += '<span class="fiber-ws-cable-side-label">' + sideLabel + '</span>';
+        h += '<button type="button" class="fiber-ws-cable-side-flip" data-cable-id="' + escapeHtml(cableData.cableUniqueId) + '" title="Перенести на ' + (side === 'left' ? 'правую' : 'левую') + ' сторону">⇄</button>';
+        h += '</li>';
+    });
+    h += '</ul></div>';
+    return h;
+}
+
 function buildFiberWorkspaceSidebarHtml(sleeveObj, isCross, cablesData, fiberConnections, isEditMode, schemeSize) {
     const name = sleeveObj.properties.get('name') || '';
     const typeBadgeClass = isCross ? 'fiber-ws-type-badge--cross' : 'fiber-ws-type-badge--sleeve';
@@ -306,9 +326,9 @@ function buildFiberWorkspaceSidebarHtml(sleeveObj, isCross, cablesData, fiberCon
     }
     mainHtml += '</div></div>';
 
-    var toolsHtml = buildFiberWorkspaceSidebarToolsHtml(sleeveObj, isEditMode, schemeSize);
+    var toolsHtml = buildFiberWorkspaceSidebarToolsHtml(sleeveObj, isEditMode, schemeSize, cablesData);
     var helpHtml = buildFiberWorkspaceSidebarHelpHtml(isEditMode);
-    var hasToolsTab = isEditMode || toolsHtml.indexOf('fiber-ws-splitters-block') >= 0 || toolsHtml.indexOf('fiber-ws-scheme-size-block') >= 0;
+    var hasToolsTab = isEditMode || toolsHtml.indexOf('fiber-ws-splitters-block') >= 0 || toolsHtml.indexOf('fiber-ws-scheme-size-block') >= 0 || toolsHtml.indexOf('fiber-ws-cable-sides-block') >= 0;
     var toolsTabLabel = isEditMode ? 'Схема' : 'Сплиттеры';
 
     var h = '<nav class="fiber-ws-side-tabs" role="tablist" aria-label="Разделы панели">';
@@ -333,21 +353,24 @@ function buildFiberWorkspaceHelpHtml() {
     h += '<p>1. Вкладка <strong>Схема</strong> — клик по жиле, затем по жиле другого кабеля (сращивание).</p>';
     h += '<p>2. Вкладка <strong>Таблица</strong> — сращивание и кнопки OLT, ONU, узел, МК. Колонка <strong>Сплиттер</strong> — входы и выходы.</p>';
     h += '<p>3. <strong>Размер схемы</strong> — ширина/высота рабочей области (S/M/L/XL или своё). Ниже жил — место для сплиттеров.</p>';
-    h += '<p>4. <strong>Сплиттер</strong>: 🔀 на схеме → число выходов. <strong>Вход</strong>: клик по жиле → клик по сплиттеру (карточка или «вх»), либо наоборот — «вх» → жила.</p>';
-    h += '<p>5. <strong>Выход</strong>: клик по точке выхода справа (или слева в зеркальном режиме) → клик по жиле на схеме или в таблице.</p>';
-    h += '<p>6. <strong>Зеркало</strong>: кнопка ⇄ на карточке — отразить сплиттер (вход справа, выходы слева). Также в окне ✎.</p>';
-    h += '<p>7. Сплиттеры только в <strong>центральной зоне</strong> схемы. Список слева → клик для прокрутки. «↺ Сбросить позиции» — вернуть в зону.</p>';
-    h += '<p>8. <strong>Оранжевая линия</strong> сплиттера: клик → подпись или удаление (как у сращиваний). Также ✕ в колонке «Сплиттер».</p>';
-    h += '<p>9. <strong>Изменить</strong> сплиттер: ✎ на карточке, двойной клик по карточке или ✎ в списке слева (название, число выходов, зеркало).</p>';
-    h += '<p>10. Удаление сплиттера целиком — × на карточке на схеме.</p>';
+    h += '<p>4. <strong>Стороны кабелей</strong>: кнопка ⇄ у кабеля на схеме или в панели «Схема» — перенести кабель на другую сторону.</p>';
+    h += '<p>5. <strong>Сплиттер</strong>: 🔀 на схеме → число выходов. <strong>Вход</strong>: клик по жиле → клик по сплиттеру (карточка или «вх»), либо наоборот — «вх» → жила.</p>';
+    h += '<p>6. <strong>Выход</strong>: клик по точке выхода справа (или слева в зеркальном режиме) → клик по жиле на схеме или в таблице.</p>';
+    h += '<p>7. <strong>Зеркало</strong>: кнопка ⇄ на карточке — отразить сплиттер (вход справа, выходы слева). Также в окне ✎.</p>';
+    h += '<p>8. Сплиттеры только в <strong>центральной зоне</strong> схемы. Список слева → клик для прокрутки. «↺ Сбросить позиции» — вернуть в зону.</p>';
+    h += '<p>9. <strong>Оранжевая линия</strong> сплиттера: клик → подпись или удаление (как у сращиваний). Также ✕ в колонке «Сплиттер».</p>';
+    h += '<p>10. <strong>Изменить</strong> сплиттер: ✎ на карточке, двойной клик по карточке или ✎ в списке слева (название, число выходов, зеркало).</p>';
+    h += '<p>11. Удаление сплиттера целиком — × на карточке на схеме.</p>';
     return h;
 }
 
-function buildFiberWorkspaceSidebarToolsHtml(sleeveObj, isEditMode, schemeSize) {
+function buildFiberWorkspaceSidebarToolsHtml(sleeveObj, isEditMode, schemeSize, cablesData) {
     var schemeSizeHtml = buildFiberSchemeCanvasSizeHtml(sleeveObj, isEditMode, schemeSize);
+    var cableSidesHtml = buildFiberSchemeCableSidesHtml(sleeveObj, isEditMode, cablesData);
     var splittersHtml = buildFiberSidebarSplittersHtml(sleeveObj, isEditMode);
     var h = '';
     if (schemeSizeHtml) h += schemeSizeHtml;
+    if (cableSidesHtml) h += cableSidesHtml;
     if (splittersHtml) h += splittersHtml;
     if (!h) {
         h = '<p class="fiber-ws-hint fiber-ws-panel-empty">' + (isEditMode
@@ -476,8 +499,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     });
     
     const maxFibers = Math.max(...cablesData.map(function(c) { return c.fibers.length; }), 1);
-    const leftCableCount = Math.ceil(cablesData.length / 2);
-    const rightCableCount = cablesData.length - leftCableCount;
+    const cableSidePartition = partitionCablesBySchemeSide(sleeveObj, cablesData);
     const schemeMaxW = 1400;
     const schemeLayoutBase = getFiberSchemeLayoutOpts(cablesData, maxFibers);
     const sidePad = schemeLayoutBase.sidePad;
@@ -497,7 +519,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         rowHeight: rowHeight, sidePad: sidePad, panelW: panelW, fiberFanLen: fiberFanLen,
         blockGap: blockGap, labelH: labelH, minSvgHeight: schemeLayoutBase.minSvgHeight
     };
-    const schemeLayout = layoutFiberSchemeReference(cablesData, autoSvgWidth, schemeLayoutOpts);
+    const schemeLayout = layoutFiberSchemeReference(cablesData, autoSvgWidth, schemeLayoutOpts, cableSidePartition);
     const layoutHeight = schemeLayout.svgHeight;
     const canvasSize = resolveFiberSchemeCanvasSize(sleeveObj, autoSvgWidth, layoutHeight, layoutMinWidth);
     const svgWidth = canvasSize.width;
@@ -611,11 +633,20 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         const subLine = cableData.cableDescription + (cableData.isFromSleeve ? ' · ← вход' : ' · → выход');
         const labelAnchorX = block.labelX;
 
-        html += `<g class="fiber-cable-block" data-cable-id="${cableData.cableUniqueId}">`;
+        html += `<g class="fiber-cable-block" data-cable-id="${cableData.cableUniqueId}" data-cable-side="${isLeft ? 'left' : 'right'}">`;
         html += `<text x="${labelAnchorX}" y="${block.blockTop + 12}" text-anchor="${anchor}" style="font-size: 9px; font-weight: 700; fill: ${svgTextColor};">${escapeHtml(title)}</text>`;
         html += `<text x="${labelAnchorX}" y="${block.blockTop + 22}" text-anchor="${anchor}" style="font-size: 7px; fill: ${svgTextMuted};">${escapeHtml(subLine)}</text>`;
         html += `<line x1="${block.barX1}" y1="${block.cableBarY}" x2="${block.barX2}" y2="${block.cableBarY}" stroke="${cableBarStroke}" stroke-width="5" stroke-linecap="round"/>`;
         html += `<text x="${labelAnchorX}" y="${block.cableBarY + 14}" text-anchor="${anchor}" style="font-size: 7px; fill: ${svgTextMuted};">${escapeHtml(cableData.isFromSleeve ? 'от муфты/кросса' : 'к муфте/кроссу')}</text>`;
+        if (isEditMode) {
+            var flipX = isLeft ? block.barX2 - 18 : block.barX1;
+            var flipY = block.blockTop;
+            var actionBg = isDark ? 'rgba(30,41,59,0.9)' : 'rgba(255,255,255,0.94)';
+            var actionIcon = isDark ? '#94a3b8' : '#475569';
+            var flipTitle = isLeft ? 'Перенести на правую сторону' : 'Перенести на левую сторону';
+            html += `<rect class="fiber-cable-side-flip-hit" data-cable-id="${cableData.cableUniqueId}" x="${flipX}" y="${flipY}" width="18" height="18" rx="4" fill="${actionBg}"><title>${flipTitle}</title></rect>`;
+            html += `<text class="fiber-cable-side-flip-icon" x="${flipX + 9}" y="${flipY + 13}" text-anchor="middle" style="font-size:10px;fill:${actionIcon};pointer-events:none;">⇄</text>`;
+        }
         html += '</g>';
     });
     html += '</g>';
@@ -931,7 +962,16 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         }
         if (hasMcConnection) statusText = '→ МК ' + escapeHtml(mcConnection.mediaConverterName || 'Медиаконвертер');
         if (hasSplitterConnection && !isGponFeeder) statusText = '→ ' + escapeHtml(splitterName);
-        if (hasSplitterOutputAtHost) statusText = '← от «' + escapeHtml(splitterOutputName) + '»';
+        if (hasSplitterOutputAtHost) {
+            if (realOltAssign && realOltAssign.oltId) {
+                const oltObjSpOut = objects.find(o => o.properties && o.properties.get('type') === 'olt' && o.properties.get('uniqueId') === realOltAssign.oltId);
+                const oltNameSpOut = oltObjSpOut ? (oltObjSpOut.properties.get('name') || 'OLT') : (realOltAssign.oltName || 'OLT');
+                const spOltSuffix = realOltAssign.viaSplitter ? ' (через сплит.)' : (realOltAssign.inheritedFromNetwork ? ' (по сети)' : (realOltAssign.viaSplice ? ' (через сращ.)' : ''));
+                statusText = '← «' + escapeHtml(splitterOutputName) + '» · OLT ' + escapeHtml(oltNameSpOut) + spOltSuffix;
+            } else {
+                statusText = '← от «' + escapeHtml(splitterOutputName) + '»';
+            }
+        }
         if (!hasDirectOltConnection && !isOltCableEnd && canConnectToOlt && !hasOnuConnection && !hasSplitterConnection && !hasSplitterOutputAtHost && !hasNodeConnection && !hasMcConnection && !isUsed && !isGponFeeder) {
             statusText = 'до OLT по сети';
         }
@@ -1402,7 +1442,7 @@ function buildFiberSchemeConnectionPath(x1, y1, x2, y2, portHalf, opts) {
 }
 
 /** Раскладка по образцу: слева/справа столбцы кабелей (гориз. магистраль + подписи), жилы веером к центру. */
-function layoutFiberSchemeReference(cablesData, svgWidth, opts) {
+function layoutFiberSchemeReference(cablesData, svgWidth, opts, sidePartition) {
     const rowHeight = opts.rowHeight;
     const sidePad = opts.sidePad;
     const panelW = opts.panelW;
@@ -1411,9 +1451,8 @@ function layoutFiberSchemeReference(cablesData, svgWidth, opts) {
     const labelH = opts.labelH;
     const fiberPositions = new Map();
     const blocks = [];
-    const leftCount = Math.ceil(cablesData.length / 2);
-    const leftCables = cablesData.slice(0, leftCount);
-    const rightCables = cablesData.slice(leftCount);
+    const leftCables = sidePartition ? sidePartition.left : cablesData.slice(0, Math.ceil(cablesData.length / 2));
+    const rightCables = sidePartition ? sidePartition.right : cablesData.slice(leftCables.length);
 
     function addSide(cables, side) {
         let y = sidePad;

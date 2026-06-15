@@ -6,6 +6,12 @@ function isObjectOnMap(obj) {
     return !!(obj && objects && objects.indexOf(obj) !== -1);
 }
 
+function refreshFiberHostModal(hostObj) {
+    if (!hostObj) return;
+    if (typeof refreshObjectModal === 'function') refreshObjectModal(hostObj);
+    else if (typeof showObjectInfo === 'function') showObjectInfo(hostObj);
+}
+
 function resolveSplitterObject(splitterId) {
     if (!splitterId) return null;
     if (window.EmbeddedSplitters) {
@@ -148,7 +154,7 @@ function applyFiberSchemeCanvasSize(hostObj, width, height) {
     hostObj.properties.set('fiberSchemeTableScrollTop', Math.max(0, Math.round(pos.table) || 0));
     savedFiberConnectionsScrollPos = pos;
     saveData({ fiberSchemeViewOnly: true, object: hostObj, syncImmediate: true });
-    showObjectInfo(hostObj);
+    refreshFiberHostModal(hostObj);
 }
 
 function bindFiberSchemeCanvasHandlers(hostObj) {
@@ -730,6 +736,65 @@ function loadFiberSchemeViewPropsFromData(data, placemark) {
     if (data.fiberSchemeTableScrollTop != null) placemark.properties.set('fiberSchemeTableScrollTop', data.fiberSchemeTableScrollTop);
 }
 
+function getFiberSchemeCableSides(hostObj) {
+    if (!hostObj || !hostObj.properties) return {};
+    var sides = hostObj.properties.get('fiberSchemeCableSides');
+    return (sides && typeof sides === 'object') ? sides : {};
+}
+
+function getDefaultCableSchemeSide(cableIndex, totalCount) {
+    if (totalCount <= 0) return 'left';
+    return cableIndex < Math.ceil(totalCount / 2) ? 'left' : 'right';
+}
+
+function resolveCableSchemeSide(hostObj, cableUniqueId, cableIndex, totalCount) {
+    var stored = getFiberSchemeCableSides(hostObj)[cableUniqueId];
+    if (stored === 'left' || stored === 'right') return stored;
+    return getDefaultCableSchemeSide(cableIndex, totalCount);
+}
+
+function partitionCablesBySchemeSide(hostObj, cablesData) {
+    var left = [];
+    var right = [];
+    var total = cablesData.length;
+    cablesData.forEach(function(cableData, index) {
+        var side = resolveCableSchemeSide(hostObj, cableData.cableUniqueId, index, total);
+        if (side === 'right') right.push(cableData);
+        else left.push(cableData);
+    });
+    return { left: left, right: right };
+}
+
+function toggleFiberSchemeCableSide(hostObj, cableUniqueId) {
+    if (!hostObj || !cableUniqueId) return false;
+    var cables = typeof getConnectedCables === 'function' ? getConnectedCables(hostObj) : [];
+    var cableIds = cables.map(function(c) {
+        return (c.properties && c.properties.get('uniqueId')) || '';
+    });
+    var idx = cableIds.indexOf(cableUniqueId);
+    var total = cables.length;
+    var sides = Object.assign({}, getFiberSchemeCableSides(hostObj));
+    var current = resolveCableSchemeSide(hostObj, cableUniqueId, idx >= 0 ? idx : 0, total);
+    sides[cableUniqueId] = current === 'left' ? 'right' : 'left';
+    hostObj.properties.set('fiberSchemeCableSides', sides);
+    if (typeof saveData === 'function') saveData({ fiberSchemeViewOnly: true, object: hostObj, syncImmediate: true });
+    return true;
+}
+
+function appendFiberSchemeCableSidesToResult(props, result) {
+    var sides = props.fiberSchemeCableSides;
+    if (sides && typeof sides === 'object' && Object.keys(sides).length) {
+        result.fiberSchemeCableSides = sides;
+    }
+}
+
+function loadFiberSchemeCableSidesFromData(data, placemark) {
+    if (!placemark || !placemark.properties || !data) return;
+    if (data.fiberSchemeCableSides && typeof data.fiberSchemeCableSides === 'object') {
+        placemark.properties.set('fiberSchemeCableSides', data.fiberSchemeCableSides);
+    }
+}
+
 if (!window._fiberSchemeViewUnloadBound) {
     window._fiberSchemeViewUnloadBound = true;
     window.addEventListener('beforeunload', function() {
@@ -821,7 +886,7 @@ function refreshSplitterUiAfterChange(splitterObj) {
         persistEmbeddedSplittersOnHost(splitterObj._host);
     }
     savedFiberConnectionsScrollPos = getFiberSchemeScrollPos();
-    showObjectInfo(hostObj);
+    refreshFiberHostModal(hostObj);
 }
 
 function buildEmbeddedSplitterRatioOptionsHtml(selected) {
@@ -1358,7 +1423,7 @@ function confirmFiberSchemeSplitterEdit(hostObj) {
             svgHeight: svgH
         });
         closeFiberSchemeSplitterEditPanel();
-        showObjectInfo(hostObj);
+        refreshFiberHostModal(hostObj);
         if (typeof showSuccess === 'function') showSuccess('Сплиттер обновлён.', 'Схема');
     };
     if (newRatio < oldRatio && lost > 0) {
