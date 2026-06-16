@@ -320,6 +320,7 @@ function connectFiberToOltWithRoute(sleeveObj, cableId, fiberNumber, oltObj, rou
             return;
         }
     }
+    var syncObjects = [sleeveObj, oltObj];
     withSuppressedMapSave(function() {
         if (prevIncoming) {
             var prevKeyClear = fiberConnKey(prevIncoming.cableId, prevIncoming.fiberNumber);
@@ -331,6 +332,7 @@ function connectFiberToOltWithRoute(sleeveObj, cableId, fiberNumber, oltObj, rou
                 if (oltConn[prevKeyClear] && oltConn[prevKeyClear].incoming) {
                     delete oltConn[prevKeyClear];
                     slot.properties.set('oltConnections', oltConn);
+                    syncObjects.push(slot);
                 }
             });
         }
@@ -342,7 +344,7 @@ function connectFiberToOltWithRoute(sleeveObj, cableId, fiberNumber, oltObj, rou
         });
     });
     createOltConnectionLine(sleeveObj, oltObj, cableId, fiberNumber, routeIds);
-    saveData();
+    saveLinkedMapObjects(syncObjects);
     savedFiberConnectionsScrollPos = getFiberSchemeScrollPos();
     showObjectInfo(sleeveObj);
 }
@@ -353,7 +355,7 @@ function disconnectFiberFromOlt(sleeveObj, cableId, fiberNumber) {
     var conn = oltConnections[key];
     if (!conn || !conn.oltId) {
         setHostFiberAssignment(sleeveObj, 'oltConnections', cableId, fiberNumber, null);
-        saveData();
+        saveLinkedMapObjects([sleeveObj]);
         updateOltConnectionLines();
         savedFiberConnectionsScrollPos = getFiberSchemeScrollPos();
         showObjectInfo(sleeveObj);
@@ -369,7 +371,7 @@ function disconnectFiberFromOlt(sleeveObj, cableId, fiberNumber) {
     }
     removeOltConnectionLine(sleeveObj, cableId, fiberNumber);
     setHostFiberAssignment(sleeveObj, 'oltConnections', cableId, fiberNumber, null);
-    saveData();
+    saveLinkedMapObjects([sleeveObj, oltObj]);
     savedFiberConnectionsScrollPos = getFiberSchemeScrollPos();
     showObjectInfo(sleeveObj);
     cleanupGponAssignmentsWithoutOlt();

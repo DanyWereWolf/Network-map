@@ -226,6 +226,24 @@ function syncPushCableUpdate(cable, immediate) {
     return false;
 }
 
+function saveLinkedMapObjects(objectsToSave) {
+    if (!objectsToSave || !objectsToSave.length) {
+        saveData();
+        return;
+    }
+    var seen = {};
+    var list = [];
+    for (var i = 0; i < objectsToSave.length; i++) {
+        var o = objectsToSave[i];
+        if (!o || !o.properties) continue;
+        var uid = getObjectUniqueId(o);
+        if (!uid || seen[uid]) continue;
+        seen[uid] = true;
+        list.push(o);
+    }
+    saveData(list.length ? { objects: list, syncImmediate: true } : {});
+}
+
 function pushSaveDataToSync(opts) {
     opts = opts || {};
     if (opts.syncFull) {

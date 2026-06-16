@@ -2517,7 +2517,7 @@ function mountObjectGalleryInModal(modalInfo, obj) {
     if (!modalInfo || !obj || !window.ObjectGallery || !ObjectGallery.canHaveGallery(obj)) return;
     var isEdit = typeof modalIsEditMode === 'function' ? modalIsEditMode() : false;
     var objType = obj.properties && obj.properties.get('type');
-    var galleryOpts = (objType === 'cross' || objType === 'sleeve') ? { open: isEdit, compact: true } : undefined;
+    var galleryOpts = (objType === 'cross' || objType === 'sleeve') ? { compact: true } : undefined;
     var html = ObjectGallery.buildGallerySectionHtml(obj, isEdit, galleryOpts);
     if (!html) {
         modalInfo.querySelectorAll('[data-object-gallery-mount], [data-object-gallery]').forEach(function(el) { el.remove(); });
@@ -2854,7 +2854,7 @@ function showObjectInfoBody(obj) {
         if (['splitter', 'onu', 'mediaConverter', 'switch'].indexOf(type) !== -1) {
             html += buildObjectCoordsSectionHtml(obj);
         }
-        var galleryOpts = fiberUsesWorkspace ? { open: modalIsEditMode(), compact: true } : undefined;
+        var galleryOpts = fiberUsesWorkspace ? { compact: true } : undefined;
         html += buildObjectGallerySectionHtml(obj, modalIsEditMode(), galleryOpts);
     }
 

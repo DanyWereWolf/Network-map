@@ -4713,6 +4713,15 @@ button {
 }
 
 .fiber-modal-header-text {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+    flex: 1;
+}
+
+.fiber-modal-header-titles {
     min-width: 0;
     flex: 1;
 }
@@ -4731,7 +4740,9 @@ button {
 }
 
 .object-lock-banner {
-    margin: 8px 0 0;
+    margin: 0;
+    flex-shrink: 0;
+    align-self: center;
     padding: 6px 10px;
     font-size: 0.8125rem;
     line-height: 1.35;

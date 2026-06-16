@@ -132,6 +132,7 @@ function serializeMapItemFromObject(obj) {
         if (props.type === 'olt') {
             if (props.ponPorts !== undefined) result.ponPorts = props.ponPorts;
             if (props.incomingFiber) result.incomingFiber = props.incomingFiber;
+            else if (props.incomingFiber === null) result.incomingFiber = null;
             if (props.portAssignments) result.portAssignments = props.portAssignments;
             if (props.portLabels) result.portLabels = props.portLabels;
             if (props.manufacturer) result.manufacturer = props.manufacturer;
@@ -694,10 +695,7 @@ function applyRemoteStateMerged(data) {
             return t && t !== 'cable' && t !== 'cableLabel' && o.properties.get('uniqueId') === item.uniqueId;
         });
         if (existing) {
-            if (existing.geometry && item.geometry) existing.geometry.setCoordinates(item.geometry);
-            if (item.name != null) existing.properties.set('name', item.name);
-            label = existing.properties.get('label');
-            if (label && label.geometry && item.geometry) label.geometry.setCoordinates(item.geometry);
+            populatePlacemarkFromSerializedData(existing, item);
             refs.push(existing);
         } else {
             created = createObjectFromData(item);
@@ -841,6 +839,11 @@ function applyRemoteStateMerged(data) {
     updateNodeDisplay();
     ensureNodeLabelsVisible();
     scheduleConnectionLinesUpdate();
+    if (currentModalObject && refs.indexOf(currentModalObject) !== -1 &&
+        typeof refreshObjectModal === 'function' &&
+        !(typeof shouldSkipRemoteModalRefresh === 'function' && shouldSkipRemoteModalRefresh(currentModalObject))) {
+        refreshObjectModal(currentModalObject);
+    }
     updateStats();
     if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
     if (window.MapRegions && MapRegions.sendAllRegionsToMapBack && myMap) {
