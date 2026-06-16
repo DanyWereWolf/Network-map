@@ -597,6 +597,20 @@ html {
     .confirm-modal-actions button {
         width: 100%;
         min-height: 48px;
+        height: 48px;
+        max-height: 48px;
+        margin: 0;
+        border-width: 1px;
+        border-style: solid;
+        box-sizing: border-box;
+    }
+
+    .confirm-modal-actions .btn-secondary {
+        border-color: var(--border-color);
+    }
+
+    .confirm-modal-actions .btn-primary {
+        border-color: var(--accent-danger, #dc2626);
     }
 
     /* ---------- Toast ---------- */

@@ -294,14 +294,17 @@ function placeObjectAtCoords(coords) {
     } else if (type === 'sleeve') {
         const sleeveName = getPlacementObjectName();
         const sleeveType = document.getElementById('sleeveType').value;
-        const maxFibers = parseInt(document.getElementById('sleeveMaxFibers').value) || 0;
-        if (!createObject(type, sleeveName || '', coords, { sleeveType: sleeveType, maxFibers: maxFibers })) return false;
+        if (!createObject(type, sleeveName || '', coords, { sleeveType: sleeveType, maxFibers: 0 })) return false;
     } else if (type === 'cross') {
         const name = getPlacementObjectName();
-        const crossPorts = parseInt(document.getElementById('crossPorts').value) || 24;
+        const crossTypeEl = document.getElementById('crossType');
+        const crossType = crossTypeEl ? crossTypeEl.value : 'SNR-ODF-W24';
+        const crossPorts = typeof getDefaultPortsForCrossType === 'function'
+            ? getDefaultPortsForCrossType(crossType)
+            : 24;
         var ccpElPl = document.getElementById('crossCopperPorts');
         var crossCopperPortsPl = ccpElPl ? (parseInt(ccpElPl.value, 10) || 0) : 0;
-        if (!createObject(type, name || '', coords, { crossPorts: crossPorts, crossCopperPorts: crossCopperPortsPl })) return false;
+        if (!createObject(type, name || '', coords, { crossType: crossType, crossPorts: crossPorts, crossCopperPorts: crossCopperPortsPl })) return false;
         currentPlacementName = name || '';
     } else if (type === 'support') {
         const name = document.getElementById('objectName').value.trim();
@@ -521,8 +524,107 @@ var OBJECT_TYPE_LABELS = {
     mediaConverter: 'Медиаконв.'
 };
 
+var OBJECT_TYPE_CHIP_ICONS = {
+    support: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="21"/><circle cx="12" cy="5" r="2"/></svg>',
+    sleeve: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/></svg>',
+    cross: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="12" y1="4" x2="12" y2="20"/></svg>',
+    attachment: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l2.92-2.92a5 5 0 0 0-7.07-7.07l-1.6 1.6"/><path d="M14 11a5 5 0 0 0-7.54-.54l-2.92 2.92a5 5 0 0 0 7.07 7.07l1.6-1.6"/></svg>',
+    manhole: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>',
+    signalPost: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="4" x2="12" y2="20"/><rect x="7" y="6" width="10" height="5" rx="1"/></svg>',
+    olt: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="6" rx="1"/><rect x="4" y="14" width="16" height="6" rx="1"/><line x1="8" y1="7" x2="8.01" y2="7" stroke-width="3" stroke-linecap="round"/><line x1="8" y1="17" x2="8.01" y2="17" stroke-width="3" stroke-linecap="round"/></svg>',
+    onu: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="7" width="14" height="11" rx="2"/><line x1="8" y1="11" x2="8.01" y2="11" stroke-width="3" stroke-linecap="round"/><line x1="12" y1="11" x2="12.01" y2="11" stroke-width="3" stroke-linecap="round"/><line x1="16" y1="11" x2="16.01" y2="11" stroke-width="3" stroke-linecap="round"/></svg>',
+    node: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="6" rx="1"/><rect x="4" y="14" width="16" height="6" rx="1"/><line x1="8" y1="7" x2="8.01" y2="7" stroke-width="3" stroke-linecap="round"/><line x1="8" y1="17" x2="8.01" y2="17" stroke-width="3" stroke-linecap="round"/></svg>',
+    camera: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>',
+    mediaConverter: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>'
+};
+
+function ensureObjectTypeChipIcons() {
+    document.querySelectorAll('.object-type-chip[data-type]').forEach(function(chip) {
+        if (chip.querySelector('.object-type-chip__icon')) return;
+        var type = chip.getAttribute('data-type');
+        var icon = OBJECT_TYPE_CHIP_ICONS[type];
+        if (!icon) return;
+        var label = (OBJECT_TYPE_LABELS[type] || chip.textContent || '').trim();
+        chip.innerHTML =
+            '<span class="object-type-chip__icon" aria-hidden="true">' + icon + '</span>' +
+            '<span class="object-type-chip__label">' + (typeof escapeHtml === 'function' ? escapeHtml(label) : label) + '</span>';
+    });
+}
+
 function getObjectTypeLabel(type) {
     return OBJECT_TYPE_LABELS[type] || type || '';
+}
+
+function syncObjectsAccordionContentHeight() {
+    var content = document.getElementById('objects-content');
+    if (!content) return;
+    var section = content.closest('.accordion-section');
+    if (!section || !section.classList.contains('active')) {
+        content.style.maxHeight = '';
+        return;
+    }
+    content.style.maxHeight = '';
+}
+
+function ensureObjectsAddButtonVisible() {
+    var footer = document.querySelector('.accordion-section--objects.active .objects-add-footer');
+    var sidebar = document.querySelector('.sidebar-content');
+    if (!footer || !sidebar) return;
+    requestAnimationFrame(function() {
+        var footerRect = footer.getBoundingClientRect();
+        var sidebarRect = sidebar.getBoundingClientRect();
+        if (footerRect.bottom > sidebarRect.bottom - 8) {
+            sidebar.scrollTop += footerRect.bottom - sidebarRect.bottom + 12;
+        }
+        if (footerRect.top < sidebarRect.top + 4) {
+            sidebar.scrollTop -= sidebarRect.top - footerRect.top + 4;
+        }
+    });
+}
+
+function setupObjectsAccordionAutoHeight() {
+    var content = document.getElementById('objects-content');
+    if (!content || content._objectsAccordionHeightBound) return;
+    content._objectsAccordionHeightBound = true;
+
+    function onObjectsPanelLayoutChange() {
+        syncObjectsAccordionContentHeight();
+        ensureObjectsAddButtonVisible();
+    }
+
+    document.addEventListener('toggle', function(e) {
+        var t = e.target;
+        if (!t || !content.contains(t)) return;
+        if (t.classList && (
+            t.classList.contains('object-settings-advanced') ||
+            t.classList.contains('object-placement-coords-card--collapsible')
+        )) {
+            requestAnimationFrame(onObjectsPanelLayoutChange);
+            setTimeout(onObjectsPanelLayoutChange, 50);
+            setTimeout(onObjectsPanelLayoutChange, 380);
+        }
+    }, true);
+
+    var objectsHeader = document.querySelector('[data-accordion="objects"]');
+    if (objectsHeader) {
+        objectsHeader.addEventListener('click', function() {
+            setTimeout(onObjectsPanelLayoutChange, 50);
+            setTimeout(onObjectsPanelLayoutChange, 380);
+        });
+    }
+
+    var objectTypeSelect = document.getElementById('objectType');
+    if (objectTypeSelect) {
+        objectTypeSelect.addEventListener('change', function() {
+            requestAnimationFrame(onObjectsPanelLayoutChange);
+            setTimeout(onObjectsPanelLayoutChange, 50);
+            setTimeout(onObjectsPanelLayoutChange, 200);
+        });
+    }
+
+    window.addEventListener('resize', onObjectsPanelLayoutChange);
+
+    requestAnimationFrame(onObjectsPanelLayoutChange);
 }
 
 function syncObjectTypePickerUI() {
@@ -541,6 +643,7 @@ function syncObjectTypePickerUI() {
 function setupObjectTypePicker() {
     var select = document.getElementById('objectType');
     if (!select) return;
+    ensureObjectTypeChipIcons();
     try {
         var stored = localStorage.getItem(OBJECT_TYPE_STORAGE_KEY);
         if (stored && select.querySelector('option[value="' + stored + '"]')) {
@@ -556,6 +659,7 @@ function setupObjectTypePicker() {
         });
     });
     syncObjectTypePickerUI();
+    setupObjectsAccordionAutoHeight();
 }
 
 function getCableTypeLabel(type) {

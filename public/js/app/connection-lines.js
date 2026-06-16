@@ -17,7 +17,7 @@ function connectFiberToNode(crossObj, cableId, fiberNumber, nodeObj, switchId, s
         return;
     }
     if (!switchId || switchPort == null || isNaN(parseInt(switchPort, 10))) {
-        showError('Выберите коммутатор и порт SFP/SFP+/Комбо для оптического подключения.', 'Порт');
+        showError('Выберите коммутатор и оптический порт (SFP, SFP+, QSFP, Комбо) для подключения.', 'Порт');
         return;
     }
     var portNum = parseInt(switchPort, 10);
@@ -32,7 +32,7 @@ function connectFiberToNode(crossObj, cableId, fiberNumber, nodeObj, switchId, s
         return;
     }
     if (!isSwitchPortSfpFiberType(typesAtt[portNum - 1])) {
-        showError('К кроссу или муфте можно подключить жилу только в порт типа SFP, SFP+ или Комбо RJ45/SFP.', 'Тип порта');
+        showError('К кроссу или муфте можно подключить жилу только в оптический порт коммутатора (SFP, SFP+, QSFP, Комбо).', 'Тип порта');
         return;
     }
     var fusAtt = swAtt.fiberPortUsage || {};

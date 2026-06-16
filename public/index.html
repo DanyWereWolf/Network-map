@@ -533,8 +533,8 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="form-group object-settings-card" id="cameraSettingsGroup" style="display: none;">
-                            <p class="form-hint object-settings-card-lead">Подключение к сети — только медным кабелем от порта коммутатора в узле (или отдельной точки коммутатора).</p>
+                        <div class="form-group object-settings-card object-settings-card--compact" id="cameraSettingsGroup" style="display: none;">
+                            <p class="form-hint object-settings-card-lead object-settings-card-lead--compact">Подключение — медным кабелем от порта коммутатора в узле.</p>
                             <label for="cameraManufacturerTrigger">Производитель</label>
                             <div class="device-combobox" data-catalog="camera" data-type="manufacturer" data-value-id="cameraManufacturer">
                                 <button type="button" class="device-combobox-trigger" id="cameraManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button>
@@ -544,7 +544,7 @@
                                     <ul class="device-combobox-list"></ul>
                                 </div>
                             </div>
-                            <label for="cameraModelTrigger" class="form-group-sub">Модель</label>
+                            <label for="cameraModelTrigger" class="form-group-sub form-group-sub--compact">Модель</label>
                             <div class="device-combobox" data-catalog="camera" data-type="model" data-value-id="cameraModel" data-manufacturer-id="cameraManufacturer">
                                 <button type="button" class="device-combobox-trigger" id="cameraModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
                                 <input type="hidden" id="cameraModel" name="cameraModel" value="">
@@ -553,28 +553,33 @@
                                     <ul class="device-combobox-list"></ul>
                                 </div>
                             </div>
-                            <p class="form-hint form-group-sub" style="margin-top: 12px;">Видеопоток (можно изменить в карточке камеры)</p>
-                            <label for="cameraStreamType">Тип потока</label>
-                            <select id="cameraStreamType" class="form-select">
-                                <option value="none">Без видео</option>
-                                <option value="hls">HLS (.m3u8)</option>
-                                <option value="http">HTTP (MP4 / WebM)</option>
-                                <option value="mjpeg">MJPEG</option>
-                                <option value="iframe">iframe</option>
-                                <option value="rtsp">RTSP</option>
-                            </select>
-                            <label for="cameraStreamUrl" class="form-group-sub">URL потока</label>
-                            <input type="url" id="cameraStreamUrl" class="form-input" placeholder="https://…/stream.m3u8" autocomplete="off">
-                            <div class="camera-stream-auth-grid camera-stream-auth-grid--placement">
-                                <div>
-                                    <label for="cameraStreamUser" class="form-group-sub">Логин</label>
-                                    <input type="text" id="cameraStreamUser" class="form-input" autocomplete="off">
+                            <details class="object-settings-advanced">
+                                <summary class="object-settings-advanced-summary">Видеопоток <span class="object-settings-advanced-note">необязательно</span></summary>
+                                <div class="object-settings-advanced-body">
+                                    <p class="form-hint object-settings-advanced-hint">Можно настроить позже в карточке камеры на карте.</p>
+                                    <label for="cameraStreamType">Тип потока</label>
+                                    <select id="cameraStreamType" class="form-select">
+                                        <option value="none">Без видео</option>
+                                        <option value="hls">HLS (.m3u8)</option>
+                                        <option value="http">HTTP (MP4 / WebM)</option>
+                                        <option value="mjpeg">MJPEG</option>
+                                        <option value="iframe">iframe</option>
+                                        <option value="rtsp">RTSP</option>
+                                    </select>
+                                    <label for="cameraStreamUrl" class="form-group-sub form-group-sub--compact">URL потока</label>
+                                    <input type="url" id="cameraStreamUrl" class="form-input" placeholder="https://…/stream.m3u8" autocomplete="off">
+                                    <div class="camera-stream-auth-grid camera-stream-auth-grid--placement">
+                                        <div>
+                                            <label for="cameraStreamUser" class="form-group-sub form-group-sub--compact">Логин</label>
+                                            <input type="text" id="cameraStreamUser" class="form-input" autocomplete="off">
+                                        </div>
+                                        <div>
+                                            <label for="cameraStreamPass" class="form-group-sub form-group-sub--compact">Пароль</label>
+                                            <input type="password" id="cameraStreamPass" class="form-input" autocomplete="new-password">
+                                        </div>
+                                    </div>
                                 </div>
-                                <div>
-                                    <label for="cameraStreamPass" class="form-group-sub">Пароль</label>
-                                    <input type="password" id="cameraStreamPass" class="form-input" autocomplete="new-password">
-                                </div>
-                            </div>
+                            </details>
                         </div>
                         <div class="form-group object-settings-card" id="mediaConverterSettingsGroup" style="display: none;">
                             <p class="form-hint object-settings-card-lead">Точка на карте: оптический медиаконвертер (марка и модель из справочника узла).</p>
@@ -616,15 +621,9 @@
                             </select>
                         </div>
                         <div class="form-group object-settings-card" id="crossSettingsGroup" style="display: none;">
-                            <label for="crossPorts">Количество портов</label>
-                            <select id="crossPorts" class="form-select">
-                                <option value="4">4 порта</option>
-                                <option value="8">8 портов</option>
-                                <option value="12">12 портов</option>
-                                <option value="16">16 портов</option>
-                                <option value="24" selected>24 порта</option>
-                                <option value="48">48 портов</option>
-                                <option value="96">96 портов</option>
+                            <label for="crossType">Тип кросса</label>
+                            <select id="crossType" class="form-select">
+                                <option value="SNR-ODF-W24" selected>SNR-ODF-W24 (24 порта)</option>
                             </select>
                         </div>
                         <div class="form-group object-settings-card" id="sleeveSettingsGroup" style="display: none;">
@@ -632,25 +631,21 @@
                             <select id="sleeveType" class="form-select">
                                 <option value="SNR-FOSC-L" selected>SNR-FOSC-L (до 96 волокон)</option>
                             </select>
-                            <label for="sleeveMaxFibers" style="margin-top: 8px;">Макс. количество волокон</label>
-                            <input type="number" id="sleeveMaxFibers" class="form-input" placeholder="0" min="0" max="288" value="96">
-                            <small class="text-muted-inline" style="display: block; margin-top: 5px; font-size: 11px;">0 = неограничено</small>
                         </div>
                         </div>
 
-                        <div class="object-placement-coords-card">
-                            <div class="object-placement-coords-head">
+                        <details class="object-placement-coords-card object-placement-coords-card--collapsible">
+                            <summary class="object-placement-coords-summary">
                                 <span class="object-placement-coords-icon" aria-hidden="true">
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
                                         <circle cx="12" cy="10" r="3"></circle>
                                     </svg>
                                 </span>
-                                <div class="object-placement-coords-head-text">
-                                    <span class="object-placement-coords-title">Координаты</span>
-                                    <span class="object-placement-coords-badge">необязательно</span>
-                                </div>
-                            </div>
+                                <span class="object-placement-coords-title">Координаты</span>
+                                <span class="object-placement-coords-badge">необязательно</span>
+                            </summary>
+                            <div class="object-placement-coords-body">
                             <p class="object-placement-coords-hint">Укажите широту и долготу — объект разместится сразу, без клика по карте. Можно вставить пару из буфера: <code>55.7558, 37.6173</code>.</p>
                             <div class="object-placement-coords-fields">
                                 <div class="object-placement-coords-field">
@@ -677,9 +672,12 @@
                                     </svg>
                                 </button>
                             </div>
-                        </div>
+                            </div>
+                        </details>
 
-                        <div class="objects-add-footer">
+                        </div>
+                    </div>
+                    <div class="objects-add-footer">
                         <button type="button" id="addObject" class="btn-primary btn-add-object">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                                 <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -687,8 +685,6 @@
                             </svg>
                             <span class="btn-add-object-text">Добавить на карту</span>
                         </button>
-                        </div>
-                        </div>
                     </div>
                 </div>
 
@@ -715,6 +711,28 @@
                                 <p class="cable-type-section-label">ВОЛС</p>
                                 <div class="cable-type-picker" id="cableTypePicker" role="group" aria-label="Вид кабеля на карте">
                                     <!-- Превью линии — js/fiber-cable-config.js -->
+                                </div>
+                                <div class="cable-product-lay-section">
+                                    <p class="cable-type-section-label">Тип кабеля</p>
+                                    <label for="layCableManufacturerTrigger" class="cable-fiber-lay-label">Марка</label>
+                                    <div class="device-combobox" data-catalog="cable" data-type="manufacturer" data-value-id="layCableManufacturer">
+                                        <button type="button" class="device-combobox-trigger" id="layCableManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите марку</button>
+                                        <input type="hidden" id="layCableManufacturer" name="layCableManufacturer" value="">
+                                        <div class="device-combobox-panel" role="listbox">
+                                            <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                            <ul class="device-combobox-list"></ul>
+                                        </div>
+                                    </div>
+                                    <label for="layCableModelTrigger" class="cable-fiber-lay-label">Модель</label>
+                                    <div class="device-combobox" data-catalog="cable" data-type="model" data-value-id="layCableModel" data-manufacturer-id="layCableManufacturer">
+                                        <button type="button" class="device-combobox-trigger" id="layCableModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
+                                        <input type="hidden" id="layCableModel" name="layCableModel" value="">
+                                        <div class="device-combobox-panel" role="listbox">
+                                            <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                            <ul class="device-combobox-list"></ul>
+                                        </div>
+                                    </div>
+                                    <p class="form-hint">Марка и модель — из справочника. После выбора модели подставятся жилы и цвета; их можно изменить ниже.</p>
                                 </div>
                                 <div class="cable-fiber-lay-row">
                                     <label class="cable-fiber-lay-label" for="layFiberCount">Жил</label>
@@ -883,68 +901,73 @@
                     </div>
 
                     <div class="stats-body" id="statsBody">
-                    <div class="stats-group">
-                        <p class="stats-group-label">Узлы</p>
+                    <div class="stats-group" id="statsGroupNodes">
+                        <p class="stats-group-label"><span>Узлы</span><span class="stats-group-sum" id="statsSumNodes">0</span></p>
                         <div class="stats-grid">
-                        <div class="stat-item stat-item--tone-green">
-                            <div class="stat-icon">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="12" r="10"></circle>
-                                    <polyline points="12 6 12 12 16 14"></polyline>
-                                </svg>
-                            </div>
+                        <div class="stat-item stat-item--tone-green" data-stat-key="networkNode">
+                            <div class="stat-icon" aria-hidden="true"></div>
                             <div class="stat-info">
                                 <div class="stat-value" id="networkNodeCount">0</div>
                                 <div class="stat-label">Узлы сети</div>
                             </div>
                         </div>
-                        <div class="stat-item stat-item--tone-red">
-                            <div class="stat-icon">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="12" r="10"></circle>
-                                    <circle cx="12" cy="12" r="4" fill="currentColor" opacity="0.35"></circle>
-                                </svg>
-                            </div>
+                        <div class="stat-item stat-item--tone-red" data-stat-key="aggregationNode">
+                            <div class="stat-icon" aria-hidden="true"></div>
                             <div class="stat-info">
                                 <div class="stat-value" id="aggregationNodeCount">0</div>
                                 <div class="stat-label">Агрегация</div>
                             </div>
                         </div>
+                        <div class="stat-item stat-item--tone-orange" data-stat-key="switch">
+                            <div class="stat-icon" aria-hidden="true"></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="switchCount">0</div>
+                                <div class="stat-label">Коммутаторы</div>
+                            </div>
+                        </div>
                         </div>
                     </div>
 
-                    <div class="stats-group">
-                        <p class="stats-group-label">Инфраструктура</p>
+                    <div class="stats-group" id="statsGroupInfra">
+                        <p class="stats-group-label"><span>Инфраструктура</span><span class="stats-group-sum" id="statsSumInfra">0</span></p>
                         <div class="stats-grid">
-                        <div class="stat-item stat-item--tone-blue">
-                            <div class="stat-icon">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                                </svg>
-                            </div>
+                        <div class="stat-item stat-item--tone-blue" data-stat-key="support">
+                            <div class="stat-icon" aria-hidden="true"></div>
                             <div class="stat-info">
                                 <div class="stat-value" id="supportCount">0</div>
                                 <div class="stat-label">Опоры</div>
                             </div>
                         </div>
-                        <div class="stat-item stat-item--tone-rose">
-                            <div class="stat-icon">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="12" r="10"></circle>
-                                </svg>
+                        <div class="stat-item stat-item--tone-slate" data-stat-key="attachment">
+                            <div class="stat-icon" aria-hidden="true"></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="attachmentCount">0</div>
+                                <div class="stat-label">Крепления</div>
                             </div>
+                        </div>
+                        <div class="stat-item stat-item--tone-teal" data-stat-key="manhole">
+                            <div class="stat-icon" aria-hidden="true"></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="manholeCount">0</div>
+                                <div class="stat-label">Колодцы</div>
+                            </div>
+                        </div>
+                        <div class="stat-item stat-item--tone-amber" data-stat-key="signalPost">
+                            <div class="stat-icon" aria-hidden="true"></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="signalPostCount">0</div>
+                                <div class="stat-label" title="Сигнальные столбы">Сигн. столбы</div>
+                            </div>
+                        </div>
+                        <div class="stat-item stat-item--tone-rose" data-stat-key="sleeve">
+                            <div class="stat-icon" aria-hidden="true"></div>
                             <div class="stat-info">
                                 <div class="stat-value" id="sleeveCount">0</div>
                                 <div class="stat-label">Муфты</div>
                             </div>
                         </div>
-                        <div class="stat-item stat-item--tone-violet">
-                            <div class="stat-icon">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-                                    <line x1="9" y1="3" x2="9" y2="21"></line>
-                                </svg>
-                            </div>
+                        <div class="stat-item stat-item--tone-violet" data-stat-key="cross">
+                            <div class="stat-icon" aria-hidden="true"></div>
                             <div class="stat-info">
                                 <div class="stat-value" id="crossCount">0</div>
                                 <div class="stat-label">Кроссы</div>
@@ -953,37 +976,25 @@
                         </div>
                     </div>
 
-                    <div class="stats-group">
-                        <p class="stats-group-label">GPON</p>
+                    <div class="stats-group" id="statsGroupGpon">
+                        <p class="stats-group-label"><span>GPON</span><span class="stats-group-sum" id="statsSumGpon">0</span></p>
                         <div class="stats-grid">
-                        <div class="stat-item stat-item--tone-sky">
-                            <div class="stat-icon">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M5 12h14"></path><path d="M12 5v14"></path><circle cx="12" cy="12" r="3"></circle>
-                                </svg>
-                            </div>
+                        <div class="stat-item stat-item--tone-sky" data-stat-key="olt">
+                            <div class="stat-icon" aria-hidden="true"></div>
                             <div class="stat-info">
                                 <div class="stat-value" id="oltCount">0</div>
                                 <div class="stat-label">OLT</div>
                             </div>
                         </div>
-                        <div class="stat-item stat-item--tone-purple">
-                            <div class="stat-icon">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="6" r="2"></circle><path d="M12 8v4"></path><circle cx="8" cy="14" r="2"></circle><circle cx="16" cy="14" r="2"></circle><path d="M10 14l2-2 2 2"></path>
-                                </svg>
-                            </div>
+                        <div class="stat-item stat-item--tone-purple" data-stat-key="splitter">
+                            <div class="stat-icon" aria-hidden="true"></div>
                             <div class="stat-info">
                                 <div class="stat-value" id="splitterCount">0</div>
                                 <div class="stat-label">Сплиттеры</div>
                             </div>
                         </div>
-                        <div class="stat-item stat-item--tone-cyan">
-                            <div class="stat-icon">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="6.01" y2="10"></line><line x1="10" y1="10" x2="10.01" y2="10"></line>
-                                </svg>
-                            </div>
+                        <div class="stat-item stat-item--tone-cyan" data-stat-key="onu">
+                            <div class="stat-icon" aria-hidden="true"></div>
                             <div class="stat-info">
                                 <div class="stat-value" id="onuCount">0</div>
                                 <div class="stat-label">ONU</div>
@@ -992,55 +1003,41 @@
                         </div>
                     </div>
 
-                    <div class="stats-group">
-                        <p class="stats-group-label">Прочее</p>
+                    <div class="stats-group" id="statsGroupEquip">
+                        <p class="stats-group-label"><span>Оборудование</span><span class="stats-group-sum" id="statsSumEquip">0</span></p>
                         <div class="stats-grid">
-                        <div class="stat-item stat-item--tone-slate">
-                            <div class="stat-icon">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
-                                    <circle cx="12" cy="13" r="4"></circle>
-                                </svg>
-                            </div>
+                        <div class="stat-item stat-item--tone-slate" data-stat-key="camera">
+                            <div class="stat-icon" aria-hidden="true"></div>
                             <div class="stat-info">
                                 <div class="stat-value" id="cameraCount">0</div>
                                 <div class="stat-label">Камеры</div>
                             </div>
                         </div>
-                        <div class="stat-item stat-item--tone-teal">
-                            <div class="stat-icon">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <rect x="4" y="7" width="16" height="10" rx="2"></rect>
-                                    <path d="M8 12h8M12 8v8" stroke-linecap="round"></path>
-                                </svg>
-                            </div>
+                        <div class="stat-item stat-item--tone-teal" data-stat-key="mediaConverter">
+                            <div class="stat-icon" aria-hidden="true"></div>
                             <div class="stat-info">
                                 <div class="stat-value" id="mediaConverterCount">0</div>
                                 <div class="stat-label">Медиаконв.</div>
                             </div>
                         </div>
-                        <div class="stat-item stat-item--tone-orange">
-                            <div class="stat-icon">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <rect x="4" y="6" width="16" height="12" rx="2"></rect>
-                                    <line x1="8" y1="10" x2="8.01" y2="10"></line><line x1="12" y1="10" x2="12.01" y2="10"></line><line x1="16" y1="10" x2="16.01" y2="10"></line>
-                                    <line x1="8" y1="14" x2="16" y2="14"></line>
-                                </svg>
-                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stats-group" id="statsGroupCables">
+                        <p class="stats-group-label"><span>Кабели</span><span class="stats-group-sum" id="statsSumCables">0</span></p>
+                        <div class="stats-grid">
+                        <div class="stat-item stat-item--tone-violet" data-stat-key="cableOptical">
+                            <div class="stat-icon" aria-hidden="true"></div>
                             <div class="stat-info">
-                                <div class="stat-value" id="switchCount">0</div>
-                                <div class="stat-label">Коммутаторы</div>
+                                <div class="stat-value" id="cableOpticalCount">0</div>
+                                <div class="stat-label">ВОЛС</div>
                             </div>
                         </div>
-                        <div class="stat-item stat-item--tone-amber">
-                            <div class="stat-icon">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-                                </svg>
-                            </div>
+                        <div class="stat-item stat-item--tone-amber" data-stat-key="cableCopper">
+                            <div class="stat-icon" aria-hidden="true"></div>
                             <div class="stat-info">
-                                <div class="stat-value" id="cableCount">0</div>
-                                <div class="stat-label">Кабели</div>
+                                <div class="stat-value" id="cableCopperCount">0</div>
+                                <div class="stat-label">Медь</div>
                             </div>
                         </div>
                         </div>
@@ -1898,6 +1895,14 @@
                             <span class="device-catalog-tab-label">Муфты</span>
                             <span class="device-catalog-tab-badge" data-stat-tab="sleeve"></span>
                         </button>
+                        <button type="button" class="device-catalog-tab device-catalog-tab--purple" data-tab="cross" role="tab" aria-selected="false">
+                            <span class="device-catalog-tab-label">Кроссы</span>
+                            <span class="device-catalog-tab-badge" data-stat-tab="cross"></span>
+                        </button>
+                        <button type="button" class="device-catalog-tab device-catalog-tab--amber" data-tab="cable" role="tab" aria-selected="false">
+                            <span class="device-catalog-tab-label">Кабели</span>
+                            <span class="device-catalog-tab-badge" data-stat-tab="cable"></span>
+                        </button>
                     </nav>
                     <div class="device-catalog-sidebar-actions">
                         <button type="button" id="deviceCatalogOpenAddBtn" class="btn-primary device-catalog-sidebar-add">
@@ -1966,10 +1971,14 @@
                         <label for="deviceCatalogEntryModelName">Модель устройства</label>
                         <input type="text" id="deviceCatalogEntryModelName" class="form-input" placeholder="Например: CRS326-24G-2S+" autocomplete="off">
                     </div>
-                    <div id="deviceCatalogEntryPortsGroup" class="form-group" hidden>
-                        <label for="deviceCatalogEntryDefaultPorts">Портов по умолчанию</label>
-                        <input type="number" id="deviceCatalogEntryDefaultPorts" class="form-input" min="1" max="96" placeholder="24" style="max-width: 120px;">
-                        <p class="form-hint device-catalog-entry-ports-hint">Подставится при добавлении коммутатора в узел на карте</p>
+                    <div id="deviceCatalogEntryCableFibersGroup" class="form-group" hidden>
+                        <label for="deviceCatalogEntryCableFibers">Жил по умолчанию</label>
+                        <input type="number" id="deviceCatalogEntryCableFibers" class="form-input" min="1" max="96" placeholder="8" style="max-width: 120px;">
+                        <p class="form-hint device-catalog-entry-ports-hint">Подставится при прокладке; если пусто — попробуем определить из названия модели (например, «-8»)</p>
+                        <button type="button" id="deviceCatalogEntryCablePaletteBtn" class="device-catalog-cable-palette-btn device-catalog-entry-cable-palette-btn" title="Настроить цвета жил для новой модели">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>
+                            <span class="device-catalog-cable-palette-btn__label">Настроить цвета жил</span>
+                        </button>
                     </div>
                 </div>
                 <div id="deviceCatalogEntrySleevePanel" class="device-catalog-entry-panel" hidden>
@@ -1982,17 +1991,75 @@
                         <label for="deviceCatalogEntrySleeveLabel">Подпись в списке</label>
                         <input type="text" id="deviceCatalogEntrySleeveLabel" class="form-input" placeholder="Необязательно — по умолчанию как код" autocomplete="off">
                     </div>
+                </div>
+                <div id="deviceCatalogEntryCrossPanel" class="device-catalog-entry-panel" hidden>
                     <div class="form-group">
-                        <label for="deviceCatalogEntrySleeveMaxFibers">Макс. волокон</label>
-                        <input type="number" id="deviceCatalogEntrySleeveMaxFibers" class="form-input" min="0" max="288" value="96" style="max-width: 120px;">
-                        <p class="form-hint">0 — без лимита; подставится при выборе типа на карте</p>
+                        <label for="deviceCatalogEntryCrossId">Код типа</label>
+                        <input type="text" id="deviceCatalogEntryCrossId" class="form-input" placeholder="Например: SNR-ODF-W24" autocomplete="off">
+                        <p class="form-hint">Значение в списке «Тип кросса» при добавлении объекта</p>
+                    </div>
+                    <div class="form-group">
+                        <label for="deviceCatalogEntryCrossLabel">Подпись в списке</label>
+                        <input type="text" id="deviceCatalogEntryCrossLabel" class="form-input" placeholder="Необязательно — по умолчанию как код" autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label for="deviceCatalogEntryCrossPorts">Портов по умолчанию</label>
+                        <input type="number" id="deviceCatalogEntryCrossPorts" class="form-input" min="1" max="96" placeholder="24" style="max-width: 120px;">
+                        <p class="form-hint">Подставится при добавлении кросса на карту</p>
                     </div>
                 </div>
+            </div>
+            <div id="deviceCatalogEntryPortsGroup" class="device-catalog-entry-ports-bar" hidden>
+                <div class="device-catalog-entry-ports-bar-row">
+                    <label class="device-catalog-entry-ports-field" for="deviceCatalogEntryDefaultPorts">
+                        <span class="device-catalog-entry-ports-field-label">Портов по умолчанию</span>
+                        <input type="number" id="deviceCatalogEntryDefaultPorts" class="form-input" min="1" max="96" placeholder="24">
+                    </label>
+                    <button type="button" id="deviceCatalogEntrySwitchPortsBtn" class="device-catalog-switch-ports-btn device-catalog-entry-switch-ports-btn" title="Настроить тип каждого порта для новой модели">
+                        <span class="device-catalog-switch-ports-btn__label">Настроить порты</span>
+                    </button>
+                </div>
+                <p class="form-hint device-catalog-entry-ports-hint">Подставится при добавлении коммутатора в узел на карте</p>
             </div>
             <div class="device-catalog-entry-footer">
                 <button type="button" id="deviceCatalogEntryCancel" class="btn-secondary">Отмена</button>
                 <button type="button" id="deviceCatalogEntrySave" class="btn-primary">Сохранить</button>
             </div>
+        </div>
+    </div>
+
+    <div id="switchModelPortsModal" class="modal modal--centered device-catalog-switch-ports-modal" style="display: none;" role="dialog" aria-labelledby="switchModelPortsModalTitle" aria-modal="true" aria-hidden="true">
+        <div class="modal-content panel-glass device-catalog-switch-ports-modal-content">
+            <header class="modal-header">
+                <h2 id="switchModelPortsModalTitle">Порты коммутатора</h2>
+                <span class="close close-switch-model-ports" title="Закрыть">&times;</span>
+            </header>
+            <div class="modal-body device-catalog-switch-ports-body">
+                <p id="switchModelPortsModalHint" class="form-hint device-catalog-switch-ports-hint"></p>
+                <div class="switch-ports-modal-toolbar">
+                    <label class="switch-ports-modal-field">
+                        <span class="switch-ports-modal-field-label">Число портов</span>
+                        <input type="number" id="switchModelPortsCount" class="form-input" min="1" max="96" value="24">
+                    </label>
+                    <div class="switch-ports-modal-field switch-ports-modal-field--action">
+                        <span class="switch-ports-modal-field-label switch-ports-modal-field-label--spacer" aria-hidden="true">Число портов</span>
+                        <button type="button" id="switchModelPortsFillLikeFirstBtn" class="switch-ports-modal-fill-btn" title="Скопировать тип порта №1 на все строки">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            <span>Заполнить все как порт №1</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="switch-ports-modal-table-wrap node-ports-table-wrap">
+                    <table class="node-ports-table switch-ports-modal-table">
+                        <thead><tr><th>#</th><th>Тип порта</th></tr></thead>
+                        <tbody id="switchModelPortsTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <footer class="device-catalog-switch-ports-footer">
+                <button type="button" id="switchModelPortsCancelBtn" class="btn-secondary">Отмена</button>
+                <button type="button" id="switchModelPortsSaveBtn" class="btn-primary">Сохранить</button>
+            </footer>
         </div>
     </div>
 
@@ -2095,10 +2162,10 @@
                 <span class="close-confirm-modal">&times;</span>
             </div>
             <div class="modal-body">
-                <p id="confirmModalMessage" style="margin: 0 0 16px;"></p>
-                <div class="confirm-modal-actions" style="display: flex; gap: 8px; justify-content: flex-end;">
+                <p id="confirmModalMessage" class="confirm-modal-message"></p>
+                <div class="confirm-modal-actions">
                     <button type="button" id="confirmModalCancel" class="btn-secondary">Отмена</button>
-                    <button type="button" id="confirmModalConfirm" class="btn-primary" style="background: var(--accent-danger, #dc2626); border-color: var(--accent-danger, #dc2626);">Удалить</button>
+                    <button type="button" id="confirmModalConfirm" class="btn-primary">Удалить</button>
                 </div>
             </div>
         </div>

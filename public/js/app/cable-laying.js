@@ -100,26 +100,6 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
         }
     }
 
-    {
-        const fiberCount = getFiberCount(cableType);
-        if (!isCopperCableType(cableType) && fiberCount > 0) {
-            for (let i = 0; i < points.length; i++) {
-                const obj = points[i];
-                if (obj && obj.properties && obj.properties.get('type') === 'sleeve') {
-                    const maxFibers = obj.properties.get('maxFibers');
-                    if (maxFibers && maxFibers > 0) {
-                        const usedFibersCount = getTotalUsedFibersInSleeve(obj);
-                        const segmentsCount = (i === 0 || i === points.length - 1) ? 1 : 2;
-                        if (usedFibersCount + (fiberCount * segmentsCount) > maxFibers) {
-                            if (!skipSync) showError(`Превышена максимальная вместимость муфты! Использовано: ${usedFibersCount}/${maxFibers} волокон. Попытка добавить: ${fiberCount * segmentsCount} волокон`, 'Переполнение муфты');
-                            return false;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
     const fiberCount = getFiberCount(cableType);
 
     var spansForCable = undergroundSpans != null ? undergroundSpans : mergeUndergroundSpansForCreate(null);
@@ -304,6 +284,10 @@ function buildAddCableSyncOp(polyline, points) {
             cableName: polyline.properties.get('cableName') || null
         }
     };
+    var cpMfr = polyline.properties.get('cableManufacturer');
+    var cpMod = polyline.properties.get('cableModel');
+    if (cpMfr) addCableOp.data.cableManufacturer = cpMfr;
+    if (cpMod) addCableOp.data.cableModel = cpMod;
     if (!isCopperCableType(cableType)) {
         var fcOp = polyline.properties.get('fiberCount');
         if (fcOp != null && fcOp !== '') addCableOp.data.fiberCount = parseInt(fcOp, 10);

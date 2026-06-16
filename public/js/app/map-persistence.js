@@ -38,6 +38,10 @@ function serializeMapItemFromObject(obj) {
             if (props.uniqueId) result.uniqueId = props.uniqueId;
             if (props.distance !== undefined) result.distance = props.distance;
             result.cableName = props.cableName ?? null;
+            var cpMfrSer = props.cableManufacturer;
+            var cpModSer = props.cableModel;
+            if (cpMfrSer) result.cableManufacturer = cpMfrSer;
+            if (cpModSer) result.cableModel = cpModSer;
             if (!isCopperCableType(props.cableType)) {
                 var fcSer = props.fiberCount;
                 if (fcSer != null && fcSer !== '') result.fiberCount = parseInt(fcSer, 10);
@@ -106,6 +110,7 @@ function serializeMapItemFromObject(obj) {
             appendFiberSchemeCanvasPropsToResult(props, result);
             appendFiberSchemeViewPropsToResult(props, result);
             appendFiberSchemeCableSidesToResult(props, result);
+            if (props.crossType) result.crossType = props.crossType;
             if (props.crossPorts) result.crossPorts = props.crossPorts;
             if (props.crossCopperPorts !== undefined && props.crossCopperPorts !== null) result.crossCopperPorts = props.crossCopperPorts;
             if (props.copperPortUsage) result.copperPortUsage = props.copperPortUsage;
@@ -798,6 +803,7 @@ function applyRemoteStateMerged(data) {
             }
             if (item.distance !== undefined) existingCable.properties.set('distance', item.distance);
             if (item.cableName != null) existingCable.properties.set('cableName', item.cableName);
+            if (typeof applySerializedCableProduct === 'function') applySerializedCableProduct(existingCable, item);
             applySerializedUndergroundToCable(existingCable, item, pointsArr);
             applySerializedCopperMetadataToCable(existingCable, item);
             applyImportedCableFiberProps(existingCable, item);
@@ -826,6 +832,7 @@ function applyRemoteStateMerged(data) {
                 } else if (cable.geometry && coords && coords.length >= 2) cable.geometry.setCoordinates(coords);
                 if (item.distance !== undefined) cable.properties.set('distance', item.distance);
                 if (item.cableName != null) cable.properties.set('cableName', item.cableName);
+                if (typeof applySerializedCableProduct === 'function') applySerializedCableProduct(cable, item);
                 applySerializedUndergroundToCable(cable, item, cable.properties.get('points'));
                 applyImportedCableFiberProps(cable, item);
             }
@@ -998,6 +1005,7 @@ function applyOperationToMap(op) {
             }
             if (op.data.distance !== undefined) existingByOp.properties.set('distance', op.data.distance);
             if (op.data.cableName != null) existingByOp.properties.set('cableName', op.data.cableName);
+            if (typeof applySerializedCableProduct === 'function') applySerializedCableProduct(existingByOp, op.data);
             if (op.data.cableType === 'copper' && opCuMeta) {
                 if (opCuMeta.copperSwitchFromId) existingByOp.properties.set('copperSwitchFromId', opCuMeta.copperSwitchFromId);
                 else existingByOp.properties.set('copperSwitchFromId', null);
@@ -1044,6 +1052,7 @@ function applyOperationToMap(op) {
                 } else if (cable.geometry && opCoordsNorm && opCoordsNorm.length >= 2) cable.geometry.setCoordinates(opCoordsNorm);
                 if (op.data.distance !== undefined) cable.properties.set('distance', op.data.distance);
                 if (op.data.cableName != null) cable.properties.set('cableName', op.data.cableName);
+                if (typeof applySerializedCableProduct === 'function') applySerializedCableProduct(cable, op.data);
                 applySerializedUndergroundToCable(cable, op.data, cable.properties.get('points'));
                 applyImportedCableFiberProps(cable, op.data);
             }
@@ -1193,6 +1202,7 @@ function importDataRunCables(data, objectRefs) {
                 } catch (eEx) {}
             }
             if (item && 'cableName' in item) existingCableImport.properties.set('cableName', item.cableName);
+            if (typeof applySerializedCableProduct === 'function') applySerializedCableProduct(existingCableImport, item);
             if (item.distance !== undefined) existingCableImport.properties.set('distance', item.distance);
             applySerializedUndergroundToCable(existingCableImport, item, ptsArr);
             applySerializedCopperMetadataToCable(existingCableImport, item);
@@ -1234,6 +1244,7 @@ function importDataRunCables(data, objectRefs) {
                 cable.properties.set('distance', calculateDistance(fromCoords, toCoords));
             }
             if (item && 'cableName' in item) cable.properties.set('cableName', item.cableName);
+            if (typeof applySerializedCableProduct === 'function') applySerializedCableProduct(cable, item);
             applySerializedUndergroundToCable(cable, item, cable.properties.get('points'));
             applyImportedCableFiberProps(cable, item);
         }
@@ -1425,6 +1436,7 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         loadFiberSchemeCableSidesFromData(data, placemark);
     }
     if (type === 'cross') {
+        if (data.crossType) placemark.properties.set('crossType', data.crossType);
         if (data.crossPorts) placemark.properties.set('crossPorts', data.crossPorts);
         var ccp = data.crossCopperPorts !== undefined && data.crossCopperPorts !== null ? parseInt(data.crossCopperPorts, 10) : 0;
         placemark.properties.set('crossCopperPorts', isNaN(ccp) ? 0 : Math.max(0, ccp));
@@ -1497,7 +1509,7 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         placemark.properties.set('parentNodeId', data.parentNodeId || '');
         placemark.properties.set('switchPortTypes', Array.isArray(data.switchPortTypes) && data.switchPortTypes.length
             ? data.switchPortTypes.slice()
-            : buildSwitchPortTypesArray(24, 'RJ45 10/100/1000'));
+            : buildSwitchPortTypesArray(24, typeof getSwitchPortDefaultKind === 'function' ? getSwitchPortDefaultKind() : 'RJ45 1000Base-T (Gigabit, порт G)'));
         placemark.properties.set('copperPortUsage', data.copperPortUsage && typeof data.copperPortUsage === 'object' ? data.copperPortUsage : {});
         if (data.manufacturer) placemark.properties.set('manufacturer', data.manufacturer);
         if (data.model) placemark.properties.set('model', data.model);
@@ -1534,6 +1546,7 @@ function applySerializedCableToMap(cable, data, opts) {
     }
     if (data.distance !== undefined) cable.properties.set('distance', data.distance);
     if (data.cableName != null) cable.properties.set('cableName', data.cableName);
+    if (typeof applySerializedCableProduct === 'function') applySerializedCableProduct(cable, data);
     if (data.cableType === 'copper' && opCuMeta) {
         if (opCuMeta.copperSwitchFromId) cable.properties.set('copperSwitchFromId', opCuMeta.copperSwitchFromId);
         else cable.properties.set('copperSwitchFromId', null);
@@ -1560,7 +1573,7 @@ function applySerializedCableToMap(cable, data, opts) {
 
 function createObjectFromData(data, opts, createOpts) {
     createOpts = createOpts || opts || {};
-    const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, fiberPorts, sleeveType, maxFibers, crossPorts, crossCopperPorts, copperPortUsage, nodeConnections, oltConnections, onuConnections, mediaConverterConnections, uniqueId, nodeKind, manufacturer, model, comment, ponPorts, splitRatio, splitterConnections, incomingFiber, portAssignments, portLabels, inputFiber, outputConnections, parentNodeId, switchPortTypes, attachedSwitches, streamType, streamUrl, streamUser, streamPass, streamAutoplay, streamMuted, snapshotPhoto } = data;
+    const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, fiberPorts, sleeveType, maxFibers, crossType, crossPorts, crossCopperPorts, copperPortUsage, nodeConnections, oltConnections, onuConnections, mediaConverterConnections, uniqueId, nodeKind, manufacturer, model, comment, ponPorts, splitRatio, splitterConnections, incomingFiber, portAssignments, portLabels, inputFiber, outputConnections, parentNodeId, switchPortTypes, attachedSwitches, streamType, streamUrl, streamUser, streamPass, streamAutoplay, streamMuted, snapshotPhoto } = data;
     
     var balloonContent;
     switch (type) {

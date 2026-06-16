@@ -373,9 +373,31 @@ function isOpticalCableType(cableType) {
 
 function buildSwitchPortTypesArray(count, defaultKind) {
     var arr = [];
-    var k = defaultKind || 'RJ45 10/100/1000';
+    var k = defaultKind || (typeof getSwitchPortDefaultKind === 'function' ? getSwitchPortDefaultKind() : 'RJ45 1000Base-T (Gigabit, порт G)');
     for (var i = 0; i < count; i++) arr.push(k);
     return arr;
+}
+
+/** Порт коммутатора под оптику с кросса: SFP/QSFP/CFP/FC/Комбо и т.п. */
+function isSwitchPortSfpFiberType(portTypeLabel) {
+    if (typeof isSwitchPortOpticalFiberType === 'function') {
+        return isSwitchPortOpticalFiberType(portTypeLabel);
+    }
+    if (!portTypeLabel || typeof portTypeLabel !== 'string') return false;
+    var L = portTypeLabel.trim();
+    if (!L || L === 'Консоль' || L === 'Uplink/stack') return false;
+    if (L.indexOf('Комбо') === 0) return true;
+    if (L.indexOf('RJ45') === 0) return false;
+    if (L.indexOf('GBIC') === 0) return true;
+    if (L.indexOf('SFP') === 0) return true;
+    if (L.indexOf('XFP') === 0) return true;
+    if (L.indexOf('X2') === 0) return true;
+    if (L.indexOf('XENPAK') === 0) return true;
+    if (L.indexOf('CFP') === 0) return true;
+    if (L.indexOf('QSFP') === 0) return true;
+    if (L.indexOf('OSFP') === 0) return true;
+    if (L.indexOf('FC') === 0 || L.indexOf('Fibre Channel') !== -1) return true;
+    return false;
 }
 
 function getNodeAttachedSwitches(node) {

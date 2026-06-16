@@ -734,6 +734,7 @@ function setupFiberSchemeCableSideHandlers(hostObj) {
     if (!hostObj || !isEditMode) return;
     function flipCableSide(cableId) {
         if (!cableId || typeof toggleFiberSchemeCableSide !== 'function') return;
+        if (typeof captureFiberWorkspaceUiState === 'function') captureFiberWorkspaceUiState();
         if (!toggleFiberSchemeCableSide(hostObj, cableId)) return;
         if (typeof refreshObjectModal === 'function') refreshObjectModal(hostObj);
         else if (typeof showObjectInfo === 'function') showObjectInfo(hostObj);

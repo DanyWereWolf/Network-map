@@ -290,8 +290,11 @@ function buildFiberWorkspaceSidebarHtml(sleeveObj, isCross, cablesData, fiberCon
         mainHtml += buildFiberWorkspaceActionsHtml();
         mainHtml += '<div class="fiber-ws-card fiber-ws-card--edit"><h4 class="fiber-ws-section-title">Редактирование</h4><div class="fiber-ws-side-edit">';
         if (isCross) {
+            const storedCrossType = sleeveObj.properties.get('crossType');
             mainHtml += '<div class="form-group"><label class="fiber-ws-label" for="editCrossName">Название</label>';
             mainHtml += '<input type="text" id="editCrossName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Название кросса"></div>';
+            mainHtml += '<div class="form-group"><label class="fiber-ws-label" for="editCrossType">Тип кросса</label>';
+            mainHtml += '<select id="editCrossType" class="form-select">' + getCrossTypeSelectOptionsHtml(storedCrossType ? String(storedCrossType) : '') + '</select></div>';
         } else {
             const storedSleeveType = sleeveObj.properties.get('sleeveType');
             mainHtml += '<div class="form-group"><label class="fiber-ws-label" for="editSleeveName">Название</label>';
@@ -315,14 +318,8 @@ function buildFiberWorkspaceSidebarHtml(sleeveObj, isCross, cablesData, fiberCon
         const pct = crossPorts > 0 ? Math.round((usedPorts / crossPorts) * 100) : 0;
         mainHtml += '<div class="fiber-ws-stat"><span class="fiber-ws-stat-val">' + usedPorts + '/' + crossPorts + '</span><span class="fiber-ws-stat-lbl">портов (' + pct + '%)</span></div>';
     } else {
-        const maxFibers = sleeveObj.properties.get('maxFibers');
         const usedFibers = getTotalUsedFibersInSleeve(sleeveObj);
-        if (maxFibers && maxFibers > 0) {
-            const pct = Math.round((usedFibers / maxFibers) * 100);
-            mainHtml += '<div class="fiber-ws-stat"><span class="fiber-ws-stat-val">' + usedFibers + '/' + maxFibers + '</span><span class="fiber-ws-stat-lbl">волокон (' + pct + '%)</span></div>';
-        } else {
-            mainHtml += '<div class="fiber-ws-stat"><span class="fiber-ws-stat-val">' + usedFibers + '</span><span class="fiber-ws-stat-lbl">волокон</span></div>';
-        }
+        mainHtml += '<div class="fiber-ws-stat"><span class="fiber-ws-stat-val">' + usedFibers + '</span><span class="fiber-ws-stat-lbl">волокон</span></div>';
     }
     mainHtml += '</div></div>';
 
@@ -1171,6 +1168,26 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     return html;
 }
 
+function captureFiberWorkspaceUiState() {
+    var root = document.querySelector('.fiber-workspace');
+    if (root) {
+        var activeMain = root.querySelector('.fiber-ws-tab.active');
+        if (activeMain) {
+            try { sessionStorage.setItem('fiberWorkspaceTab', activeMain.getAttribute('data-tab') || 'scheme'); } catch (e) {}
+        }
+    }
+    var sidebar = document.querySelector('.fiber-ws-sidebar');
+    if (sidebar) {
+        var activeSide = sidebar.querySelector('.fiber-ws-side-tab.active');
+        if (activeSide) {
+            try { sessionStorage.setItem('fiberWorkspaceSideTab', activeSide.getAttribute('data-side-tab') || 'main'); } catch (e) {}
+        }
+    }
+    if (typeof getFiberSchemeScrollPos === 'function') {
+        savedFiberConnectionsScrollPos = getFiberSchemeScrollPos();
+    }
+}
+
 function setupFiberSidebarTabs() {
     var sidebar = document.querySelector('.fiber-ws-sidebar');
     if (!sidebar) return;
@@ -1178,6 +1195,11 @@ function setupFiberSidebarTabs() {
     var sidePanels = sidebar.querySelectorAll('.fiber-ws-side-panel');
     if (!sideTabs.length) return;
     function showSideTab(tabName) {
+        var exists = false;
+        sideTabs.forEach(function(t) {
+            if (t.getAttribute('data-side-tab') === tabName) exists = true;
+        });
+        if (!exists) tabName = 'main';
         sideTabs.forEach(function(t) {
             var on = t.getAttribute('data-side-tab') === tabName;
             t.classList.toggle('active', on);
@@ -1189,12 +1211,16 @@ function setupFiberSidebarTabs() {
             if (on) p.removeAttribute('hidden');
             else p.setAttribute('hidden', '');
         });
+        try { sessionStorage.setItem('fiberWorkspaceSideTab', tabName); } catch (e) {}
     }
     sideTabs.forEach(function(tab) {
         tab.addEventListener('click', function() {
             showSideTab(this.getAttribute('data-side-tab'));
         });
     });
+    var savedSideTab = 'main';
+    try { savedSideTab = sessionStorage.getItem('fiberWorkspaceSideTab') || 'main'; } catch (e) {}
+    showSideTab(savedSideTab);
 }
 
 function setupFiberWorkspaceUI() {

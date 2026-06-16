@@ -1,6 +1,21 @@
 /**
  * Карточки объектов и кабелей, модальное окно infoModal.
  */
+function buildNodeSwitchPortKindOptionsHtml(currentKind, kindOpts) {
+    kindOpts = kindOpts || (typeof getSwitchPortKindOptions === 'function' ? getSwitchPortKindOptions() : []);
+    var cur = String(currentKind || '').trim();
+    var canon = typeof canonicalizeSwitchPortKindLabel === 'function' ? canonicalizeSwitchPortKindLabel(cur) : cur;
+    var opts = kindOpts.slice();
+    if (cur && opts.indexOf(cur) === -1 && opts.indexOf(canon) === -1) {
+        opts.unshift(cur);
+    }
+    var html = '';
+    opts.forEach(function(ko) {
+        html += '<option value="' + escapeHtml(ko) + '"' + (ko === cur || ko === canon ? ' selected' : '') + '>' + escapeHtml(ko) + '</option>';
+    });
+    return html;
+}
+
 function buildNodeCardContent(obj, isEditMode, name) {
     var html = '';
     var nodeKind = obj.properties.get('nodeKind') || 'network';
@@ -8,7 +23,10 @@ function buildNodeCardContent(obj, isEditMode, name) {
     var nodeKindLabel = nodeKind === 'aggregation' ? 'Узел агрегации' : 'Узел сети';
     var attachedList = getNodeAttachedSwitches(obj);
     var swSummary = getNodeSwitchesSummary(obj);
-    var kindOptsNodeSw = ['RJ45 10/100/1000', 'RJ45 PoE', 'SFP', 'SFP+', 'Комбо RJ45/SFP', 'Консоль', 'Uplink/stack'];
+    var kindOptsNodeSw = typeof getSwitchPortKindOptions === 'function'
+        ? getSwitchPortKindOptions()
+        : ['RJ45 1000Base-T (Gigabit, порт G)', 'RJ45 PoE', 'SFP (mini-GBIC, 1G)', 'SFP+ (10G)', 'Комбо RJ45/SFP', 'Консоль', 'Uplink/stack'];
+    var defaultPortKind = typeof getSwitchPortDefaultKind === 'function' ? getSwitchPortDefaultKind() : 'RJ45 1000Base-T (Gigabit, порт G)';
     var nodeUniqueId = getObjectUniqueId(obj);
     var connectedFibers = getNodeConnectedFibers(nodeUniqueId);
     var kindMod = nodeKind === 'aggregation' ? 'node-card--aggregation' : 'node-card--network';
@@ -121,7 +139,7 @@ function buildNodeCardContent(obj, isEditMode, name) {
         html += '<div class="form-group node-card-add-portkind"><label for="newNodeSwitchPortKind" class="object-card-label">Тип порта по умолчанию</label>';
         html += '<select id="newNodeSwitchPortKind" class="form-select">';
         kindOptsNodeSw.forEach(function(kk) {
-            html += '<option value="' + escapeHtml(kk) + '"' + (kk === 'RJ45 10/100/1000' ? ' selected' : '') + '>' + escapeHtml(kk) + '</option>';
+            html += '<option value="' + escapeHtml(kk) + '"' + (kk === defaultPortKind ? ' selected' : '') + '>' + escapeHtml(kk) + '</option>';
         });
         html += '</select></div></div>';
         html += '<p class="object-card-hint">Число портов подставится из справочника при выборе модели.</p>';
@@ -188,9 +206,7 @@ function buildNodeCardContent(obj, isEditMode, name) {
             html += '<td>' + pnumSw + '</td><td>';
             if (isEditMode) {
                 html += '<select class="edit-node-switch-port-kind form-select form-select-compact" data-switch-id="' + escapeHtml(swRow.uniqueId) + '" data-idx="' + swi + '">';
-                kindOptsNodeSw.forEach(function(ko) {
-                    html += '<option value="' + escapeHtml(ko) + '"' + ((pts[swi] || '') === ko ? ' selected' : '') + '>' + escapeHtml(ko) + '</option>';
-                });
+                html += buildNodeSwitchPortKindOptionsHtml(pts[swi], kindOptsNodeSw);
                 html += '</select>';
             } else {
                 html += escapeHtml(pts[swi] || '—');
@@ -248,13 +264,6 @@ function findAttachedSwitchOnNode(node, switchId) {
         if (arr[i] && arr[i].uniqueId === switchId) return arr[i];
     }
     return null;
-}
-
-/** Порт коммутатора под оптику с кросса: SFP, SFP+, комбо с SFP */
-function isSwitchPortSfpFiberType(portTypeLabel) {
-    if (!portTypeLabel || typeof portTypeLabel !== 'string') return false;
-    var L = portTypeLabel.trim();
-    return L === 'SFP' || L === 'SFP+' || L.indexOf('Комбо') === 0;
 }
 
 function collectFreeSfpPortOptionsOnNode(nodeObj) {
@@ -330,7 +339,7 @@ function migrateNodeLevelSwitchMetaToAttached() {
         if (!mfr && !mod) return;
         var arr = getNodeAttachedSwitches(node).slice();
         if (arr.length === 0) {
-            addAttachedSwitchToNode(node, '', 24, 'RJ45 10/100/1000', mfr, mod);
+            addAttachedSwitchToNode(node, '', 24, typeof getSwitchPortDefaultKind === 'function' ? getSwitchPortDefaultKind() : 'RJ45 1000Base-T (Gigabit, порт G)', mfr, mod);
         } else {
             var sw = Object.assign({}, arr[0]);
             if (mfr && !(sw.manufacturer || '').trim()) sw.manufacturer = mfr;
@@ -362,7 +371,7 @@ function migrateStandaloneSwitchesIntoNodes() {
             name: sw.properties.get('name') || '',
             switchPortTypes: Array.isArray(sw.properties.get('switchPortTypes')) && sw.properties.get('switchPortTypes').length
                 ? sw.properties.get('switchPortTypes').slice()
-                : buildSwitchPortTypesArray(24, 'RJ45 10/100/1000'),
+                : buildSwitchPortTypesArray(24, typeof getSwitchPortDefaultKind === 'function' ? getSwitchPortDefaultKind() : 'RJ45 1000Base-T (Gigabit, порт G)'),
             copperPortUsage: Object.assign({}, sw.properties.get('copperPortUsage') || {}),
             fiberPortUsage: Object.assign({}, sw.properties.get('fiberPortUsage') || {})
         };
@@ -417,13 +426,18 @@ function addAttachedSwitchToNode(node, name, portCount, defaultKind, manufacture
     var arr = getNodeAttachedSwitches(node).slice();
     var uid = 'sw-' + Date.now() + '-' + Math.random().toString(36).substr(2, 8);
     var nPorts = Math.max(1, parseInt(portCount, 10) || 24);
-    var dk = defaultKind || 'RJ45 10/100/1000';
+    var dk = defaultKind || (typeof getSwitchPortDefaultKind === 'function' ? getSwitchPortDefaultKind() : 'RJ45 1000Base-T (Gigabit, порт G)');
     var mfr = (manufacturer || '').trim();
     var mod = (model || '').trim();
+    var portTypes = typeof resolveSwitchPortTypesForModel === 'function'
+        ? resolveSwitchPortTypesForModel(mfr, mod, nPorts, dk)
+        : buildSwitchPortTypesArray(nPorts, dk);
+    if (!portTypes || !portTypes.length) portTypes = buildSwitchPortTypesArray(nPorts, dk);
+    nPorts = portTypes.length;
     var entry = {
         uniqueId: uid,
         name: (name || '').trim(),
-        switchPortTypes: buildSwitchPortTypesArray(nPorts, dk),
+        switchPortTypes: portTypes,
         copperPortUsage: {},
         fiberPortUsage: {}
     };
@@ -1523,7 +1537,7 @@ function startCopperCableFromNodeSwitchPort(nodeObj, switchId, portNum) {
         return;
     }
     if (isSwitchPortSfpFiberType(pts[p - 1] || '')) {
-        if (typeof showError === 'function') showError('Медный кабель не подключается к порту SFP, SFP+ или Комбо — для оптики используйте жилу с кросса.', 'Недопустимое действие');
+        if (typeof showError === 'function') showError('Медный кабель не подключается к оптическому порту (SFP, SFP+, QSFP, Комбо) — для оптики используйте жилу с кросса.', 'Недопустимое действие');
         return;
     }
     var fusStart = sw.fiberPortUsage || {};
@@ -1997,6 +2011,8 @@ function showCableInfoBody(cable) {
     const toObj = cable.properties.get('to');
     const uniqueId = cable.properties.get('uniqueId');
     const cableName = cable.properties.get('cableName') || '';
+    const cableProduct = getCableProductFromObject(cable);
+    const cableProductLabel = getCableProductLabel(cableProduct.manufacturer, cableProduct.model);
     const fiberCount = getFiberCount(cable);
     const fibers = getFiberColors(cable);
     
@@ -2125,7 +2141,30 @@ function showCableInfoBody(cable) {
     html += `<div style="width: 40px; height: 40px; background: ${cableColor}; border-radius: 8px; display: flex; align-items: center; justify-content: center;">`;
     html += `<span style="color: white; font-size: 18px;">🔌</span></div>`;
     html += `<div><h3 style="margin: 0; color: var(--text-primary); font-size: 1rem;">${cableDescription}</h3>`;
-    html += `<span style="font-size: 0.8rem; color: var(--text-muted);">${fiberCount} жил</span></div></div>`;
+    html += `<span style="font-size: 0.8rem; color: var(--text-muted);">${fiberCount} жил</span>`;
+    if (cableProductLabel) {
+        html += `<div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px;">${escapeHtml(cableProductLabel)}</div>`;
+    }
+    html += `</div></div>`;
+
+    html += '<div class="form-group" style="margin-bottom: 16px;">';
+    html += '<label style="display: block; margin-bottom: 6px; font-weight: 600; color: var(--text-primary); font-size: 0.8125rem;">Тип кабеля (марка и модель)</label>';
+    if (modalIsEditMode()) {
+        html += '<label for="editCableManufacturerTrigger" class="form-group-sub">Марка</label>';
+        html += '<div class="device-combobox" data-catalog="cable" data-type="manufacturer" data-value-id="editCableManufacturer">';
+        html += '<button type="button" class="device-combobox-trigger" id="editCableManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">' + (cableProduct.manufacturer ? escapeHtml(cableProduct.manufacturer) : 'Выберите марку') + '</button>';
+        html += '<input type="hidden" id="editCableManufacturer" value="' + escapeHtml(cableProduct.manufacturer) + '">';
+        html += '<div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div>';
+        html += '<label for="editCableModelTrigger" class="form-group-sub">Модель</label>';
+        html += '<div class="device-combobox" data-catalog="cable" data-type="model" data-value-id="editCableModel" data-manufacturer-id="editCableManufacturer">';
+        html += '<button type="button" class="device-combobox-trigger" id="editCableModelTrigger" aria-expanded="false" aria-haspopup="listbox">' + (cableProduct.model ? escapeHtml(cableProduct.model) : 'Выберите модель') + '</button>';
+        html += '<input type="hidden" id="editCableModel" value="' + escapeHtml(cableProduct.model) + '">';
+        html += '<div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div>';
+        html += '<button type="button" class="btn-secondary btn-inline" id="saveCableProductBtn" style="margin-top: 8px;">Сохранить тип кабеля</button>';
+    } else {
+        html += `<div style="padding: 10px 12px; background: var(--bg-tertiary); border-radius: 6px; font-size: 0.875rem; border: 1px solid var(--border-color); color: var(--text-primary);">${cableProductLabel ? escapeHtml(cableProductLabel) : '<span style="color: var(--text-muted); font-style: italic;">Не указано</span>'}</div>`;
+    }
+    html += '</div>';
 
     html += '<div class="form-group" style="margin-bottom: 16px;">';
     html += '<label style="display: block; margin-bottom: 6px; font-weight: 600; color: var(--text-primary); font-size: 0.8125rem;">Название кабеля</label>';
@@ -2255,7 +2294,16 @@ function showCableInfoBody(cable) {
     html += '</div>';
     
     modalContent.innerHTML = html;
+    initDeviceComboboxes(modalContent);
     bindCableSplitSleeveFields(modalContent);
+    var saveCableProductBtn = modalContent.querySelector('#saveCableProductBtn');
+    if (saveCableProductBtn) {
+        saveCableProductBtn.addEventListener('click', function() {
+            var mEl = document.getElementById('editCableManufacturer');
+            var modEl = document.getElementById('editCableModel');
+            updateCableProduct(uniqueId, mEl ? mEl.value : '', modEl ? modEl.value : '');
+        });
+    }
     var fiberCountSaveBtn = modalContent.querySelector('#cableFiberCountSaveBtn');
     var fiberCountInput = modalContent.querySelector('#cableFiberCountInput');
     var fiberPaletteBtn = modalContent.querySelector('#cableFiberPaletteBtn');
@@ -2319,6 +2367,30 @@ function updateCableName(cableUniqueId, newName) {
         cable.properties.set('cableName', newName);
         saveData();
     }
+}
+
+function updateCableProduct(cableUniqueId, manufacturer, model) {
+    var cable = objects.find(function(obj) {
+        return obj.properties &&
+            obj.properties.get('type') === 'cable' &&
+            obj.properties.get('uniqueId') === cableUniqueId;
+    });
+    if (!cable) return;
+    setCableProductOnObject(cable, manufacturer, model);
+    var settings = typeof getEffectiveCableModelFiberSettings === 'function'
+        ? getEffectiveCableModelFiberSettings(manufacturer, model)
+        : null;
+    if (settings && settings.fiberCount && isOpticalCableType(cable.properties.get('cableType'))) {
+        updateCableFiberSettings(cableUniqueId, settings.fiberCount, settings.fiberPalette || null).then(function() {
+            saveData({ objects: [cable], syncImmediate: true });
+            if (currentModalObject === cable) showCableInfo(cable);
+            if (typeof showInfo === 'function') showInfo('Тип кабеля сохранён', '');
+        });
+        return;
+    }
+    saveData({ objects: [cable], syncImmediate: true });
+    if (currentModalObject === cable) showCableInfo(cable);
+    if (typeof showInfo === 'function') showInfo('Тип кабеля сохранён', '');
 }
 
 function buildCablePreviewCoordsList(sourceObj, waypoints, targetCoords) {
@@ -2388,6 +2460,48 @@ function removeCablePreview() {
 }
 
 
+var STATS_ICON_CONFIG = {
+    networkNode: { type: 'node', nodeKind: 'network' },
+    aggregationNode: { type: 'node', nodeKind: 'aggregation' },
+    switch: { type: 'switch' },
+    support: { type: 'support' },
+    attachment: { type: 'attachment' },
+    manhole: { type: 'manhole' },
+    signalPost: { type: 'signalPost' },
+    sleeve: { type: 'sleeve' },
+    cross: { type: 'cross' },
+    olt: { type: 'olt' },
+    splitter: { type: 'splitter' },
+    onu: { type: 'onu' },
+    camera: { type: 'camera', cameraOnline: true },
+    mediaConverter: { type: 'mediaConverter' }
+};
+
+var STATS_CABLE_ICON_SVG = {
+    cableOptical: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>',
+    cableCopper: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7c4 0 4 3 8 3s4-3 8-3"></path><path d="M4 12c4 0 4 3 8 3s4-3 8-3"></path><path d="M4 17c4 0 4 3 8 3s4-3 8-3"></path></svg>'
+};
+
+function initStatsIcons() {
+    if (window._statsIconsInited) return;
+    window._statsIconsInited = true;
+    document.querySelectorAll('.stat-item[data-stat-key]').forEach(function(item) {
+        var key = item.getAttribute('data-stat-key');
+        var iconEl = item.querySelector('.stat-icon');
+        if (!iconEl || iconEl.innerHTML.trim()) return;
+        if (STATS_CABLE_ICON_SVG[key]) {
+            iconEl.innerHTML = STATS_CABLE_ICON_SVG[key];
+            return;
+        }
+        var cfg = STATS_ICON_CONFIG[key];
+        if (!cfg || !window.MapIcons) return;
+        var opts = { variant: 'normal' };
+        if (cfg.nodeKind) opts.nodeKind = cfg.nodeKind;
+        if (cfg.cameraOnline != null) opts.cameraOnline = cfg.cameraOnline;
+        iconEl.innerHTML = MapIcons.buildIconSvg(cfg.type, opts);
+    });
+}
+
 function setStatCount(el, value) {
     if (!el) return;
     var n = Number(value) || 0;
@@ -2396,10 +2510,23 @@ function setStatCount(el, value) {
     if (item) item.classList.toggle('stat-item--empty', n === 0);
 }
 
+function setStatsGroupSum(elId, value) {
+    var el = document.getElementById(elId);
+    if (!el) return;
+    var n = Number(value) || 0;
+    el.textContent = String(n);
+    var group = el.closest('.stats-group');
+    if (group) group.classList.toggle('stats-group--empty', n === 0);
+}
+
 function updateStats() {
+    initStatsIcons();
     var networkNodeCount = 0;
     var aggregationNodeCount = 0;
     var supportCount = 0;
+    var attachmentCount = 0;
+    var manholeCount = 0;
+    var signalPostCount = 0;
     var sleeveCount = 0;
     var crossCount = 0;
     var oltCount = 0;
@@ -2408,7 +2535,8 @@ function updateStats() {
     var cameraCount = 0;
     var mediaConverterCount = 0;
     var switchCount = 0;
-    var cableCount = 0;
+    var cableOpticalCount = 0;
+    var cableCopperCount = 0;
     objects.forEach(function(obj) {
         if (!obj || !obj.properties) return;
         var type = obj.properties.get('type');
@@ -2417,6 +2545,9 @@ function updateStats() {
             else networkNodeCount++;
             switchCount += getNodeAttachedSwitches(obj).length;
         } else if (type === 'support') supportCount++;
+        else if (type === 'attachment') attachmentCount++;
+        else if (type === 'manhole') manholeCount++;
+        else if (type === 'signalPost') signalPostCount++;
         else if (type === 'sleeve') {
             sleeveCount++;
             if (window.EmbeddedSplitters) splitterCount += EmbeddedSplitters.getList(obj).length;
@@ -2429,12 +2560,22 @@ function updateStats() {
         else if (type === 'camera') cameraCount++;
         else if (type === 'mediaConverter') mediaConverterCount++;
         else if (type === 'switch') switchCount++;
-        else if (type === 'cable') cableCount++;
+        else if (type === 'cable') {
+            if (typeof isCopperCableType === 'function' && isCopperCableType(obj.properties.get('cableType'))) {
+                cableCopperCount++;
+            } else {
+                cableOpticalCount++;
+            }
+        }
     });
 
     setStatCount(document.getElementById('networkNodeCount'), networkNodeCount);
     setStatCount(document.getElementById('aggregationNodeCount'), aggregationNodeCount);
+    setStatCount(document.getElementById('switchCount'), switchCount);
     setStatCount(document.getElementById('supportCount'), supportCount);
+    setStatCount(document.getElementById('attachmentCount'), attachmentCount);
+    setStatCount(document.getElementById('manholeCount'), manholeCount);
+    setStatCount(document.getElementById('signalPostCount'), signalPostCount);
     setStatCount(document.getElementById('sleeveCount'), sleeveCount);
     setStatCount(document.getElementById('crossCount'), crossCount);
     setStatCount(document.getElementById('oltCount'), oltCount);
@@ -2442,14 +2583,24 @@ function updateStats() {
     setStatCount(document.getElementById('onuCount'), onuCount);
     setStatCount(document.getElementById('cameraCount'), cameraCount);
     setStatCount(document.getElementById('mediaConverterCount'), mediaConverterCount);
-    setStatCount(document.getElementById('switchCount'), switchCount);
-    setStatCount(document.getElementById('cableCount'), cableCount);
+    setStatCount(document.getElementById('cableOpticalCount'), cableOpticalCount);
+    setStatCount(document.getElementById('cableCopperCount'), cableCopperCount);
+
+    var sumNodes = networkNodeCount + aggregationNodeCount + switchCount;
+    var sumInfra = supportCount + attachmentCount + manholeCount + signalPostCount + sleeveCount + crossCount;
+    var sumGpon = oltCount + splitterCount + onuCount;
+    var sumEquip = cameraCount + mediaConverterCount;
+    var sumCables = cableOpticalCount + cableCopperCount;
+
+    setStatsGroupSum('statsSumNodes', sumNodes);
+    setStatsGroupSum('statsSumInfra', sumInfra);
+    setStatsGroupSum('statsSumGpon', sumGpon);
+    setStatsGroupSum('statsSumEquip', sumEquip);
+    setStatsGroupSum('statsSumCables', sumCables);
 
     var statsTotalEl = document.getElementById('statsTotal');
     if (statsTotalEl) {
-        var total = networkNodeCount + aggregationNodeCount + supportCount + sleeveCount + crossCount
-            + oltCount + splitterCount + onuCount + cameraCount + mediaConverterCount + switchCount + cableCount;
-        statsTotalEl.textContent = String(total);
+        statsTotalEl.textContent = String(sumNodes + sumInfra + sumGpon + sumEquip + sumCables);
     }
 }
 
@@ -2781,28 +2932,13 @@ function showObjectInfoBody(obj) {
     if (type === 'sleeve' && !fiberUsesWorkspace) {
         const storedSleeveType = obj.properties.get('sleeveType');
         const sleeveTypeLabel = storedSleeveType ? String(storedSleeveType) : 'Не указан';
-        const maxFibers = obj.properties.get('maxFibers');
         const usedFibers = getTotalUsedFibersInSleeve(obj);
         
         html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
         html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Информация о муфте</h4>';
         if (name) html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Название:</strong> ${escapeHtml(name)}</div>`;
         html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Тип муфты:</strong> ${escapeHtml(sleeveTypeLabel)}</div>`;
-        
-        if (maxFibers !== undefined && maxFibers !== null && maxFibers > 0) {
-            const usagePercent = Math.round((usedFibers / maxFibers) * 100);
-            const isOverloaded = usedFibers > maxFibers;
-            const statusColor = isOverloaded ? '#dc2626' : (usagePercent >= 80 ? '#f59e0b' : '#22c55e');
-            
-            html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;">`;
-            html += `<strong>Вместимость:</strong> <span style="color: ${statusColor}; font-weight: 600;">${usedFibers}/${maxFibers} волокон</span> (${usagePercent}%)`;
-            if (isOverloaded) {
-                html += ` <span style="color: #dc2626; font-weight: 600;">⚠ Превышена вместимость!</span>`;
-            }
-            html += `</div>`;
-        } else {
-            html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Использовано волокон:</strong> ${usedFibers}</div>`;
-        }
+        html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Использовано волокон:</strong> ${usedFibers}</div>`;
         
         html += buildObjectCoordsInlineHtml(obj);
         html += '</div>';
@@ -2816,7 +2952,6 @@ function showObjectInfoBody(obj) {
             html += '<div class="form-group" style="margin-bottom: 12px;">';
             html += '<label for="editSleeveType" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Тип муфты</label>';
             html += '<select id="editSleeveType" class="form-select">' + getSleeveTypeSelectOptionsHtml(storedSleeveType ? String(storedSleeveType) : '') + '</select>';
-            html += '<p style="font-size: 0.7rem; color: var(--text-muted); margin: 8px 0 0 0;">Вместимость пересчитывается по выбранному типу; для «Пользовательская» лимита нет (как при добавлении муфты).</p>';
             html += '</div>';
             html += '</div>';
         }
@@ -2827,6 +2962,8 @@ function showObjectInfoBody(obj) {
     }
 
     if (type === 'cross' && !fiberUsesWorkspace) {
+        const storedCrossType = obj.properties.get('crossType');
+        const crossTypeLabel = storedCrossType ? getCrossTypeLabel(storedCrossType) : 'Не указан';
         const crossPorts = Math.max(1, parseInt(obj.properties.get('crossPorts'), 10) || 24);
         const usedPorts = getTotalUsedPortsInCross(obj);
         const usagePercent = crossPorts > 0 ? Math.round((usedPorts / crossPorts) * 100) : 0;
@@ -2834,6 +2971,8 @@ function showObjectInfoBody(obj) {
 
         html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
         html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Информация о кроссе</h4>';
+        if (name) html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Название:</strong> ${escapeHtml(name)}</div>`;
+        html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Тип кросса:</strong> ${escapeHtml(crossTypeLabel)}</div>`;
         html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Количество портов:</strong> ${crossPorts}</div>`;
         html += `<div style="color: var(--text-secondary); font-size: 0.875rem;"><strong>Использовано:</strong> <span style="color: ${statusColor}; font-weight: 600;">${usedPorts}/${crossPorts} портов</span> (${usagePercent}%)</div>`;
         html += buildObjectCoordsInlineHtml(obj);
@@ -2845,6 +2984,10 @@ function showObjectInfoBody(obj) {
             html += '<div class="form-group" style="margin-bottom: 12px;">';
             html += '<label for="editCrossName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название кросса</label>';
             html += `<input type="text" id="editCrossName" class="form-input" value="${escapeHtml(name)}" placeholder="Введите название кросса">`;
+            html += '</div>';
+            html += '<div class="form-group" style="margin-bottom: 12px;">';
+            html += '<label for="editCrossType" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Тип кросса</label>';
+            html += '<select id="editCrossType" class="form-select">' + getCrossTypeSelectOptionsHtml(storedCrossType ? String(storedCrossType) : '') + '</select>';
             html += '</div>';
             html += '</div>';
         }
@@ -3319,8 +3462,15 @@ function setupEditAndDeleteListeners() {
                 if (!t || t.id !== 'newNodeSwitchModel') return;
                 var mfrH = document.getElementById('newNodeSwitchManufacturer');
                 var pcEl = document.getElementById('newNodeSwitchPortCount');
+                var pkEl = document.getElementById('newNodeSwitchPortKind');
                 var mfr = mfrH ? (mfrH.value || '').trim() : '';
                 var mod = (t.value || '').trim();
+                var catalogTypes = typeof getSwitchModelPortTypes === 'function' ? getSwitchModelPortTypes(mfr, mod) : null;
+                if (catalogTypes && catalogTypes.length && pcEl) {
+                    pcEl.value = String(catalogTypes.length);
+                    if (pkEl && catalogTypes[0]) pkEl.value = catalogTypes[0];
+                    return;
+                }
                 var n = typeof getSwitchModelDefaultPortCount === 'function' ? getSwitchModelDefaultPortCount(mfr, mod) : null;
                 if (n != null && n >= 1 && n <= 96 && pcEl) pcEl.value = String(n);
             }, true);
@@ -3445,24 +3595,33 @@ function setupEditAndDeleteListeners() {
         editSleeveTypeSelect.addEventListener('change', function() {
             if (!currentModalObject || currentModalObject.properties.get('type') !== 'sleeve') return;
             var newType = this.value;
-            var newMax = getDefaultMaxFibersForSleeveType(newType);
-            var used = typeof getTotalUsedFibersInSleeve === 'function' ? getTotalUsedFibersInSleeve(currentModalObject) : 0;
-            if (newMax > 0 && used > newMax) {
-                if (typeof showError === 'function') {
-                    showError('Для выбранного типа допускается не более ' + newMax + ' волокон, а в муфте уже задействовано ' + used + '. Снимите соединения или выберите другой тип.', 'Вместимость муфты');
-                }
-                var prev = currentModalObject.properties.get('sleeveType');
-                this.value = prev ? String(prev) : '';
-                return;
-            }
             if (!newType) {
                 try {
                     currentModalObject.properties.unset('sleeveType');
                 } catch (eUnset) {}
-                currentModalObject.properties.set('maxFibers', 0);
             } else {
                 currentModalObject.properties.set('sleeveType', newType);
-                currentModalObject.properties.set('maxFibers', newMax);
+            }
+            currentModalObject.properties.set('maxFibers', 0);
+            saveData();
+            refreshObjectModal(currentModalObject);
+        });
+    }
+
+    var editCrossTypeSelect = document.getElementById('editCrossType');
+    if (editCrossTypeSelect) {
+        editCrossTypeSelect.addEventListener('change', function() {
+            if (!currentModalObject || currentModalObject.properties.get('type') !== 'cross') return;
+            var newType = this.value;
+            if (!newType) {
+                try {
+                    currentModalObject.properties.unset('crossType');
+                } catch (eUnsetCross) {}
+            } else {
+                currentModalObject.properties.set('crossType', newType);
+                if (typeof getDefaultPortsForCrossType === 'function') {
+                    currentModalObject.properties.set('crossPorts', getDefaultPortsForCrossType(newType));
+                }
             }
             saveData();
             refreshObjectModal(currentModalObject);
@@ -3481,7 +3640,7 @@ function setupEditAndDeleteListeners() {
             var nm = nmEl ? nmEl.value.trim() : '';
             var pcRaw = pcEl ? pcEl.value : '24';
             var pc = Math.max(1, Math.min(96, parseInt(pcRaw, 10) || 24));
-            var pk = pkEl ? pkEl.value : 'RJ45 10/100/1000';
+            var pk = pkEl ? pkEl.value : (typeof getSwitchPortDefaultKind === 'function' ? getSwitchPortDefaultKind() : 'RJ45 1000Base-T (Gigabit, порт G)');
             var mfr = mfrEl ? mfrEl.value.trim() : '';
             var mod = modEl ? modEl.value.trim() : '';
             addAttachedSwitchToNode(currentModalObject, nm, pc, pk, mfr, mod);
@@ -3513,7 +3672,7 @@ function setupEditAndDeleteListeners() {
                 if (ix < 0) return;
                 var sw = Object.assign({}, arr[ix]);
                 var pt = (sw.switchPortTypes || []).slice();
-                while (pt.length <= idx) pt.push('RJ45 10/100/1000');
+                while (pt.length <= idx) pt.push(typeof getSwitchPortDefaultKind === 'function' ? getSwitchPortDefaultKind() : 'RJ45 1000Base-T (Gigabit, порт G)');
                 pt[idx] = this.value;
                 sw.switchPortTypes = pt;
                 arr[ix] = sw;

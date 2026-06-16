@@ -86,6 +86,17 @@ var CAMERA_CATALOG_DEFAULT = {
     'Trassir': ['TR-D2141IR3']
 };
 
+/** Справочник типов оптического кабеля (марка и модель/маркировка). */
+var CABLE_CATALOG_DEFAULT = {
+    'SNR': ['ОКЛК-01', 'ОКЛК-02', 'ОКЛК-03', 'ОКГТ-А-4', 'ОКГТ-А-8', 'ОКГТ-А-12', 'ОКГТ-А-24', 'ОКГТ-А-48'],
+    'Incab': ['ОКГТ-А-4', 'ОКГТ-А-8', 'ОКГТ-А-12', 'ОКГТ-А-24', 'ОКГТ-А-48', 'ОКГТ-А-96'],
+    'Corning': ['SMF-28', 'FREEDM One', 'Altos'],
+    'Furukawa': ['FITEL', 'LITEAD'],
+    'Yangtze': ['GYTA', 'GYTS', 'GYTA53'],
+    'Opten': ['ОКГТ-А-4', 'ОКГТ-А-8', 'ОКГТ-А-12', 'ОКГТ-А-24'],
+    'General Cable': ['Lo-Soft', 'Standard']
+};
+
 /** Справочник только для коммутаторов в узле (отдельно от узла/OLT/ONU). */
 var SWITCH_CATALOG_DEFAULT = {
     'MikroTik': ['CRS326-24G-2S+', 'CSS326-24G-2S+', 'CRS312-4C+8XG', 'CRS354-48G-4S+2Q+'],
@@ -131,10 +142,30 @@ var SLEEVE_TYPES_BUILTIN = [
     { id: 'custom', label: 'Пользовательская (вручную на карте)', maxFibers: 0 }
 ];
 
+/** Встроенные типы кроссов: id, подпись в списке, портов по умолчанию. */
+var CROSS_TYPES_BUILTIN = [
+    { id: 'SNR-ODF-W4', label: 'SNR-ODF-W4 (4 порта)', defaultPorts: 4 },
+    { id: 'SNR-ODF-W8', label: 'SNR-ODF-W8 (8 портов)', defaultPorts: 8 },
+    { id: 'SNR-ODF-W12', label: 'SNR-ODF-W12 (12 портов)', defaultPorts: 12 },
+    { id: 'SNR-ODF-W16', label: 'SNR-ODF-W16 (16 портов)', defaultPorts: 16 },
+    { id: 'SNR-ODF-W24', label: 'SNR-ODF-W24 (24 порта)', defaultPorts: 24 },
+    { id: 'SNR-ODF-W48', label: 'SNR-ODF-W48 (48 портов)', defaultPorts: 48 },
+    { id: 'SNR-ODF-W96', label: 'SNR-ODF-W96 (96 портов)', defaultPorts: 96 },
+    { id: 'SNR-ODF-19-12', label: 'SNR-ODF-19 12SC (стоечный)', defaultPorts: 12 },
+    { id: 'SNR-ODF-19-24', label: 'SNR-ODF-19 24SC (стоечный)', defaultPorts: 24 },
+    { id: 'SNR-ODF-19-48', label: 'SNR-ODF-19 48SC (стоечный)', defaultPorts: 48 },
+    { id: 'SNR-ODF-19-96', label: 'SNR-ODF-19 96SC (стоечный)', defaultPorts: 96 },
+    { id: 'custom', label: 'Пользовательский (вручную на карте)', defaultPorts: 24 }
+];
+
 /** Дополнительные типы муфт из справочника: { id, label, maxFibers }. */
 var customSleeveTypes = [];
 /** Скрытые встроенные типы муфт (удалены из списка, но остаются на уже созданных объектах). */
 var hiddenBuiltinSleeveTypes = [];
+/** Дополнительные типы кроссов из справочника: { id, label, defaultPorts }. */
+var customCrossTypes = [];
+/** Скрытые встроенные типы кроссов. */
+var hiddenBuiltinCrossTypes = [];
 
 function normalizeSleeveTypeId(id) {
     return (id || '').trim();
@@ -192,14 +223,11 @@ function getAllSleeveTypes() {
 }
 
 function getDefaultMaxFibersForSleeveType(sleeveType) {
-    var found = findSleeveTypeById(sleeveType);
-    if (found) return found.maxFibers;
     return 0;
 }
 
 function formatSleeveMaxFibersHint(maxFibers) {
-    if (!maxFibers) return 'без лимита';
-    return maxFibers + ' волокон';
+    return 'без лимита';
 }
 
 function getSleeveTypeSelectOptionsHtml(selectedValue) {
@@ -303,20 +331,267 @@ function resetSleeveCatalogToDefault() {
     saveDeviceCatalog();
 }
 
+function normalizeCrossTypeId(id) {
+    return (id || '').trim();
+}
+
+function normalizeCrossDefaultPorts(n) {
+    var v = parseInt(n, 10);
+    if (isNaN(v) || v < 1) return 24;
+    return Math.min(96, v);
+}
+
+function getBuiltinCrossTypes() {
+    return CROSS_TYPES_BUILTIN.slice();
+}
+
+function getCustomCrossTypes() {
+    return (customCrossTypes || []).slice();
+}
+
+function findCrossTypeById(id) {
+    var sid = normalizeCrossTypeId(id);
+    if (!sid) return null;
+    var i;
+    for (i = 0; i < CROSS_TYPES_BUILTIN.length; i++) {
+        if (CROSS_TYPES_BUILTIN[i].id === sid) return Object.assign({ builtin: true }, CROSS_TYPES_BUILTIN[i]);
+    }
+    for (i = 0; i < (customCrossTypes || []).length; i++) {
+        if (customCrossTypes[i].id === sid) return Object.assign({ builtin: false }, customCrossTypes[i]);
+    }
+    return null;
+}
+
+function getCrossTypeLabel(id) {
+    var t = findCrossTypeById(id);
+    return t ? t.label : ((id || '').trim() || 'Не указан');
+}
+
+function getDefaultPortsForCrossType(crossType) {
+    var t = findCrossTypeById(crossType);
+    if (t && t.defaultPorts) return normalizeCrossDefaultPorts(t.defaultPorts);
+    return 24;
+}
+
+function getHiddenBuiltinCrossTypes() {
+    return (hiddenBuiltinCrossTypes || []).slice();
+}
+
+function isBuiltinCrossTypeHidden(id) {
+    id = normalizeCrossTypeId(id);
+    if (!id) return false;
+    return (hiddenBuiltinCrossTypes || []).indexOf(id) !== -1;
+}
+
+function getAllCrossTypes() {
+    var out = [];
+    var hidden = hiddenBuiltinCrossTypes || [];
+    CROSS_TYPES_BUILTIN.forEach(function(t) {
+        if (hidden.indexOf(t.id) === -1) {
+            out.push(Object.assign({ builtin: true }, t));
+        }
+    });
+    (customCrossTypes || []).forEach(function(t) {
+        out.push(Object.assign({ builtin: false }, t));
+    });
+    return out;
+}
+
+function formatCrossDefaultPortsHint(defaultPorts) {
+    var n = normalizeCrossDefaultPorts(defaultPorts);
+    return n + ' порт.';
+}
+
+function getCrossTypeSelectOptionsHtml(selectedValue) {
+    var sel = (selectedValue != null && selectedValue !== '') ? String(selectedValue) : '';
+    var html = '';
+    if (!sel) {
+        html += '<option value="" selected>— Не указано —</option>';
+    }
+    var found = false;
+    getAllCrossTypes().forEach(function(t) {
+        if (t.id === sel) found = true;
+        html += '<option value="' + escapeHtml(t.id) + '"' + (t.id === sel ? ' selected' : '') + '>' + escapeHtml(t.label) + '</option>';
+    });
+    if (sel && !found) {
+        html += '<option value="' + escapeHtml(sel) + '" selected>' + escapeHtml(sel) + '</option>';
+    }
+    return html;
+}
+
+function populateCrossTypeSelect(selectEl, selectedValue) {
+    if (!selectEl) return;
+    var prev = selectedValue != null ? selectedValue : selectEl.value;
+    selectEl.innerHTML = getCrossTypeSelectOptionsHtml(prev);
+}
+
+function refreshAllCrossTypeSelects() {
+    populateCrossTypeSelect(document.getElementById('crossType'));
+    var editSel = document.getElementById('editCrossType');
+    if (editSel) populateCrossTypeSelect(editSel, editSel.value);
+}
+
+function addCustomCrossType(id, label, defaultPorts) {
+    id = normalizeCrossTypeId(id);
+    if (!id) return false;
+    if (findCrossTypeById(id)) return false;
+    label = (label || '').trim() || id;
+    customCrossTypes.push({
+        id: id,
+        label: label,
+        defaultPorts: normalizeCrossDefaultPorts(defaultPorts)
+    });
+    customCrossTypes.sort(function(a, b) {
+        return String(a.label).localeCompare(String(b.label), 'ru');
+    });
+    saveDeviceCatalog();
+    return true;
+}
+
+function removeCustomCrossType(id) {
+    id = normalizeCrossTypeId(id);
+    var idx = -1;
+    (customCrossTypes || []).forEach(function(t, i) {
+        if (t.id === id) idx = i;
+    });
+    if (idx === -1) return false;
+    customCrossTypes.splice(idx, 1);
+    saveDeviceCatalog();
+    return true;
+}
+
+function hideBuiltinCrossType(id) {
+    id = normalizeCrossTypeId(id);
+    if (!id || isBuiltinCrossTypeHidden(id)) return false;
+    var found = false;
+    for (var i = 0; i < CROSS_TYPES_BUILTIN.length; i++) {
+        if (CROSS_TYPES_BUILTIN[i].id === id) {
+            found = true;
+            break;
+        }
+    }
+    if (!found) return false;
+    hiddenBuiltinCrossTypes.push(id);
+    hiddenBuiltinCrossTypes.sort(function(a, b) {
+        return String(a).localeCompare(String(b), 'ru');
+    });
+    saveDeviceCatalog();
+    return true;
+}
+
+function removeCrossType(id) {
+    id = normalizeCrossTypeId(id);
+    if (!id) return false;
+    var found = findCrossTypeById(id);
+    if (!found) return false;
+    if (found.builtin) return hideBuiltinCrossType(id);
+    return removeCustomCrossType(id);
+}
+
+function resetCrossCatalogToDefault() {
+    customCrossTypes = [];
+    hiddenBuiltinCrossTypes = [];
+    saveDeviceCatalog();
+}
+
 var nodeDeviceCatalog = {};
 var oltDeviceCatalog = {};
 var onuDeviceCatalog = {};
 var cameraDeviceCatalog = {};
 var switchDeviceCatalog = {};
+var cableDeviceCatalog = {};
 /** switchModelDefaultPorts[manufacturer][model] = число портов по умолчанию при добавлении коммутатора. */
 var switchModelDefaultPorts = {};
+/** switchModelPortTypes[manufacturer][model] = массив типов портов (по одному на порт). */
+var switchModelPortTypes = {};
+
+/** Тип порта RJ45 по умолчанию при добавлении коммутатора. */
+var SWITCH_PORT_DEFAULT_KIND = 'RJ45 1000Base-T (Gigabit, порт G)';
+
+var SWITCH_PORT_KIND_OPTIONS = [
+    'RJ45 10Base-T (10 Мбит/с)',
+    'RJ45 100Base-T (Fast Ethernet, порт F)',
+    'RJ45 1000Base-T (Gigabit, порт G)',
+    'RJ45 2.5G (2.5G Ethernet)',
+    'RJ45 5G (5G Ethernet)',
+    'RJ45 10G (10G Ethernet)',
+    'RJ45 PoE',
+    'RJ45 PoE+',
+    'RJ45 PoE++',
+    'GBIC (1G, устар.)',
+    'SFP (mini-GBIC, 1G)',
+    'SFP+ (10G)',
+    'SFP28 (25G)',
+    'SFP56 (50G)',
+    'XFP (10G)',
+    'X2 (10G, устар.)',
+    'XENPAK (10G, устар.)',
+    'CFP (40G)',
+    'CFP2 (100G)',
+    'CFP4 (100G)',
+    'QSFP+ (40G)',
+    'QSFP28 (100G)',
+    'QSFP56 (50G/200G)',
+    'QSFP-DD (400G/800G)',
+    'OSFP (400G/800G)',
+    'FC (Fibre Channel, 2–128G)',
+    'Комбо RJ45/SFP',
+    'Комбо RJ45/SFP+',
+    'Консоль',
+    'Uplink/stack'
+];
+
+/** Старые короткие подписи → актуальные из справочника (для сохранённых моделей). */
+var SWITCH_PORT_LEGACY_LABELS = {
+    'RJ45 10/100': 'RJ45 100Base-T (Fast Ethernet, порт F)',
+    'RJ45 10/100/1000': SWITCH_PORT_DEFAULT_KIND,
+    'RJ45 2.5G': 'RJ45 2.5G (2.5G Ethernet)',
+    'RJ45 5G': 'RJ45 5G (5G Ethernet)',
+    'RJ45 10G': 'RJ45 10G (10G Ethernet)',
+    'GBIC': 'GBIC (1G, устар.)',
+    'SFP': 'SFP (mini-GBIC, 1G)',
+    'SFP+': 'SFP+ (10G)',
+    'SFP28': 'SFP28 (25G)',
+    'SFP56': 'SFP56 (50G)',
+    'XFP': 'XFP (10G)',
+    'X2': 'X2 (10G, устар.)',
+    'XENPAK': 'XENPAK (10G, устар.)',
+    'CFP': 'CFP (40G)',
+    'CFP2': 'CFP2 (100G)',
+    'CFP4': 'CFP4 (100G)',
+    'QSFP+': 'QSFP+ (40G)',
+    'QSFP': 'QSFP+ (40G)',
+    'QSFP28': 'QSFP28 (100G)',
+    'QSFP56': 'QSFP56 (50G/200G)',
+    'QSFP56 (200G)': 'QSFP56 (50G/200G)',
+    'QSFP-DD': 'QSFP-DD (400G/800G)',
+    'QSFP-DD (400G)': 'QSFP-DD (400G/800G)',
+    'OSFP': 'OSFP (400G/800G)',
+    'FC': 'FC (Fibre Channel, 2–128G)',
+    'FC (Fibre Channel)': 'FC (Fibre Channel, 2–128G)'
+};
+/** cableModelFiberSettings[manufacturer][model] = { fiberCount, fiberPalette }. */
+var cableModelFiberSettings = {};
+
+var LAY_CABLE_MFR_KEY = 'networkMap_layCableManufacturer';
+var LAY_CABLE_MODEL_KEY = 'networkMap_layCableModel';
+
+var DEVICE_CATALOG_PALETTE_BTN_ICON = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>';
+
+function getDeviceCatalogPaletteBtnHtml(extraClass, attrs) {
+    extraClass = extraClass || '';
+    attrs = attrs || '';
+    return '<button type="button" class="device-catalog-cable-palette-btn' + extraClass + '" ' + attrs + '>' +
+        DEVICE_CATALOG_PALETTE_BTN_ICON +
+        '<span class="device-catalog-cable-palette-btn__label">Цвета</span></button>';
+}
 
 window.deviceCatalogActiveTab = 'switch';
 
 var DEVICE_CATALOG_TAB_META = {
     switch: {
         label: 'Коммутаторы',
-        desc: 'Коммутаторы в узле на карте: производитель и модель при редактировании узла и при добавлении коммутатора. Для модели можно задать число портов по умолчанию.'
+        desc: 'Коммутаторы в узле на карте: производитель и модель при редактировании узла и при добавлении коммутатора. Для модели можно задать число портов и тип каждого порта — они подставятся при добавлении коммутатора в узел.'
     },
     olt: {
         label: 'OLT',
@@ -337,6 +612,14 @@ var DEVICE_CATALOG_TAB_META = {
     sleeve: {
         label: 'Муфты',
         desc: 'Типы кабельных муфт для списка при добавлении и редактировании. Лишние типы (включая встроенные) можно убрать кнопкой «Удалить»; свои — добавляются кнопкой «Добавить».'
+    },
+    cross: {
+        label: 'Кроссы',
+        desc: 'Типы оптических кроссов для списка при добавлении и редактировании. Для каждого типа задаётся число портов по умолчанию.'
+    },
+    cable: {
+        label: 'Кабели',
+        desc: 'Марки и модели оптического кабеля. Для каждой модели можно задать число жил и цвета — они подставятся при прокладке и в карточке кабеля.'
     }
 };
 
@@ -346,7 +629,9 @@ var DEVICE_CATALOG_TAB_TONE = {
     onu: '#06b6d4',
     camera: '#64748b',
     node: '#14b8a6',
-    sleeve: '#22c55e'
+    sleeve: '#22c55e',
+    cross: '#a855f7',
+    cable: '#f59e0b'
 };
 
 function syncDeviceCatalogTabButtons() {
@@ -363,11 +648,11 @@ function syncDeviceCatalogTabButtons() {
     }
 }
 
-var DEVICE_CATALOG_ALLOWED_TABS = { node: 1, olt: 1, onu: 1, camera: 1, switch: 1, sleeve: 1 };
+var DEVICE_CATALOG_ALLOWED_TABS = { node: 1, olt: 1, onu: 1, camera: 1, switch: 1, sleeve: 1, cross: 1, cable: 1 };
 
 function getDeviceCatalogStats(kind) {
-    if (kind === 'sleeve') {
-        var visible = getAllSleeveTypes();
+    if (kind === 'sleeve' || kind === 'cross') {
+        var visible = kind === 'sleeve' ? getAllSleeveTypes() : getAllCrossTypes();
         var builtinVisible = 0;
         var customVisible = 0;
         visible.forEach(function(t) {
@@ -415,7 +700,7 @@ function updateDeviceCatalogChrome() {
 
     var tabStatsEl = document.getElementById('deviceCatalogTabStats');
     if (tabStatsEl) {
-        if (tab === 'sleeve') {
+        if (tab === 'sleeve' || tab === 'cross') {
             tabStatsEl.textContent = stats.manufacturers + ' / ' + stats.models;
             tabStatsEl.title = stats.manufacturers + ' встроенных типов, ' + stats.models + ' добавленных вами';
         } else {
@@ -426,8 +711,8 @@ function updateDeviceCatalogChrome() {
 
     var searchInp = document.getElementById('deviceCatalogSearch');
     if (searchInp) {
-        searchInp.placeholder = tab === 'sleeve'
-            ? 'Поиск типа муфты…'
+        searchInp.placeholder = (tab === 'sleeve' || tab === 'cross')
+            ? (tab === 'cross' ? 'Поиск типа кросса…' : 'Поиск типа муфты…')
             : 'Поиск производителя или модели…';
     }
 
@@ -452,7 +737,7 @@ function updateDeviceCatalogChrome() {
         if (!k || !DEVICE_CATALOG_ALLOWED_TABS[k]) return;
         var s = getDeviceCatalogStats(k);
         badge.textContent = s.manufacturers + ' / ' + s.models;
-        badge.title = k === 'sleeve'
+        badge.title = (k === 'sleeve' || k === 'cross')
             ? (s.manufacturers + ' встроенных, ' + s.models + ' своих')
             : (s.manufacturers + ' производителей, ' + s.models + ' моделей');
     });
@@ -462,7 +747,7 @@ function applyDeviceCatalogSearchFilter() {
     var q = getDeviceCatalogSearchQuery();
     var list = document.getElementById('deviceCatalogList');
     if (!list) return;
-    var cards = list.querySelectorAll('.device-catalog-mfr, .device-catalog-sleeve-row');
+    var cards = list.querySelectorAll('.device-catalog-mfr, .device-catalog-sleeve-row, .device-catalog-cross-row');
     var visible = 0;
     cards.forEach(function(card) {
         var mfr = card.getAttribute('data-mfr') || card.getAttribute('data-sleeve-id') || '';
@@ -526,6 +811,7 @@ function getCatalogObjectRef(kind) {
     if (kind === 'onu') return onuDeviceCatalog;
     if (kind === 'camera') return cameraDeviceCatalog;
     if (kind === 'switch') return switchDeviceCatalog;
+    if (kind === 'cable') return cableDeviceCatalog;
     if (kind === 'general') return nodeDeviceCatalog;
     return nodeDeviceCatalog;
 }
@@ -536,6 +822,7 @@ function getCatalogDefault(kind) {
     if (kind === 'onu') return ONU_CATALOG_DEFAULT;
     if (kind === 'camera') return CAMERA_CATALOG_DEFAULT;
     if (kind === 'switch') return SWITCH_CATALOG_DEFAULT;
+    if (kind === 'cable') return CABLE_CATALOG_DEFAULT;
     return NODE_CATALOG_DEFAULT;
 }
 
@@ -549,9 +836,17 @@ function resetDeviceCatalogTabToDefault(kind) {
     else if (kind === 'switch') {
         switchDeviceCatalog = cloneDeepCatalog(def);
         switchModelDefaultPorts = {};
+        switchModelPortTypes = {};
+    } else if (kind === 'cable') {
+        cableDeviceCatalog = cloneDeepCatalog(def);
+        cableModelFiberSettings = {};
     } else if (kind === 'sleeve') {
         resetSleeveCatalogToDefault();
         refreshAllSleeveTypeSelects();
+        return;
+    } else if (kind === 'cross') {
+        resetCrossCatalogToDefault();
+        refreshAllCrossTypeSelects();
         return;
     }
     saveDeviceCatalog();
@@ -573,6 +868,12 @@ function removeManufacturerForCatalog(kind, name) {
     delete cat[name];
     if (kind === 'switch' && switchModelDefaultPorts[name]) {
         delete switchModelDefaultPorts[name];
+    }
+    if (kind === 'switch' && switchModelPortTypes[name]) {
+        delete switchModelPortTypes[name];
+    }
+    if (kind === 'cable' && cableModelFiberSettings[name]) {
+        delete cableModelFiberSettings[name];
     }
     saveDeviceCatalog();
     return true;
@@ -603,6 +904,22 @@ function removeModelForCatalog(kind, manufacturer, model) {
         }
         if (Object.keys(switchModelDefaultPorts[manufacturer]).length === 0) {
             delete switchModelDefaultPorts[manufacturer];
+        }
+    }
+    if (kind === 'switch' && switchModelPortTypes[manufacturer]) {
+        if (switchModelPortTypes[manufacturer][model] !== undefined) {
+            delete switchModelPortTypes[manufacturer][model];
+        }
+        if (Object.keys(switchModelPortTypes[manufacturer]).length === 0) {
+            delete switchModelPortTypes[manufacturer];
+        }
+    }
+    if (kind === 'cable' && cableModelFiberSettings[manufacturer]) {
+        if (cableModelFiberSettings[manufacturer][model] !== undefined) {
+            delete cableModelFiberSettings[manufacturer][model];
+        }
+        if (Object.keys(cableModelFiberSettings[manufacturer]).length === 0) {
+            delete cableModelFiberSettings[manufacturer];
         }
     }
     saveDeviceCatalog();
@@ -665,8 +982,507 @@ function setSwitchModelDefaultPortCount(manufacturer, model, portCount) {
     n = Math.min(96, Math.max(1, n));
     if (!switchModelDefaultPorts[mfr]) switchModelDefaultPorts[mfr] = {};
     switchModelDefaultPorts[mfr][mod] = n;
+    var customTypes = getSwitchModelPortTypes(mfr, mod);
+    if (customTypes && customTypes.length) {
+        var padKind = customTypes[customTypes.length - 1] || SWITCH_PORT_DEFAULT_KIND;
+        setSwitchModelPortTypes(mfr, mod, normalizeSwitchPortTypesList(n, customTypes, padKind), true);
+    }
     saveDeviceCatalog();
     return true;
+}
+
+function getSwitchPortDefaultKind() {
+    return SWITCH_PORT_DEFAULT_KIND;
+}
+
+function getSwitchPortKindOptions() {
+    return SWITCH_PORT_KIND_OPTIONS.slice();
+}
+
+function canonicalizeSwitchPortKindLabel(label) {
+    var L = String(label || '').trim();
+    if (!L) return SWITCH_PORT_DEFAULT_KIND;
+    if (SWITCH_PORT_KIND_OPTIONS.indexOf(L) !== -1) return L;
+    if (SWITCH_PORT_LEGACY_LABELS[L]) return SWITCH_PORT_LEGACY_LABELS[L];
+    return L;
+}
+
+function isSwitchPortOpticalFiberType(portTypeLabel) {
+    if (!portTypeLabel || typeof portTypeLabel !== 'string') return false;
+    var L = portTypeLabel.trim();
+    if (!L || L === 'Консоль' || L === 'Uplink/stack') return false;
+    if (L.indexOf('Комбо') === 0) return true;
+    if (L.indexOf('RJ45') === 0) return false;
+    if (L.indexOf('GBIC') === 0) return true;
+    if (L.indexOf('SFP') === 0) return true;
+    if (L.indexOf('XFP') === 0) return true;
+    if (L.indexOf('X2') === 0) return true;
+    if (L.indexOf('XENPAK') === 0) return true;
+    if (L.indexOf('CFP') === 0) return true;
+    if (L.indexOf('QSFP') === 0) return true;
+    if (L.indexOf('OSFP') === 0) return true;
+    if (L.indexOf('FC') === 0 || L.indexOf('Fibre Channel') !== -1) return true;
+    return false;
+}
+
+function normalizeSwitchPortTypesList(count, types, defaultKind) {
+    var n = Math.min(96, Math.max(1, parseInt(count, 10) || 1));
+    var dk = canonicalizeSwitchPortKindLabel(defaultKind || SWITCH_PORT_DEFAULT_KIND);
+    var src = Array.isArray(types) ? types : [];
+    var out = [];
+    for (var i = 0; i < n; i++) out.push(canonicalizeSwitchPortKindLabel(src[i] || dk));
+    return out;
+}
+
+function getSwitchModelPortTypes(manufacturer, model) {
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (!mfr || !mod) return null;
+    var byM = switchModelPortTypes[mfr];
+    if (!byM || typeof byM !== 'object') return null;
+    var arr = byM[mod];
+    if (!Array.isArray(arr) || !arr.length) return null;
+    return arr.map(function(t) { return String(t || SWITCH_PORT_DEFAULT_KIND); });
+}
+
+function switchModelHasCustomPortTypes(manufacturer, model) {
+    var types = getSwitchModelPortTypes(manufacturer, model);
+    return !!(types && types.length);
+}
+
+function setSwitchModelPortTypes(manufacturer, model, types, skipSave) {
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (!mfr || !mod) return false;
+    if (!types || !types.length) {
+        if (switchModelPortTypes[mfr] && switchModelPortTypes[mfr][mod] !== undefined) {
+            delete switchModelPortTypes[mfr][mod];
+            if (Object.keys(switchModelPortTypes[mfr]).length === 0) delete switchModelPortTypes[mfr];
+        }
+        if (!skipSave) saveDeviceCatalog();
+        return true;
+    }
+    var normalized = normalizeSwitchPortTypesList(types.length, types, types[types.length - 1] || SWITCH_PORT_DEFAULT_KIND);
+    if (!switchModelPortTypes[mfr]) switchModelPortTypes[mfr] = {};
+    switchModelPortTypes[mfr][mod] = normalized;
+    if (!switchModelDefaultPorts[mfr]) switchModelDefaultPorts[mfr] = {};
+    switchModelDefaultPorts[mfr][mod] = normalized.length;
+    if (!skipSave) saveDeviceCatalog();
+    return true;
+}
+
+function resolveSwitchPortTypesForModel(manufacturer, model, portCount, defaultKind) {
+    var custom = getSwitchModelPortTypes(manufacturer, model);
+    if (custom && custom.length) return custom.slice();
+    var n = parseInt(portCount, 10);
+    if (isNaN(n) || n < 1) {
+        var defN = getSwitchModelDefaultPortCount(manufacturer, model);
+        n = defN != null ? defN : 24;
+    }
+    n = Math.min(96, Math.max(1, n));
+    var dk = defaultKind || SWITCH_PORT_DEFAULT_KIND;
+    return typeof buildSwitchPortTypesArray === 'function'
+        ? buildSwitchPortTypesArray(n, dk)
+        : normalizeSwitchPortTypesList(n, [], dk);
+}
+
+function normalizeCableModelFiberCount(n) {
+    var v = parseInt(n, 10);
+    if (isNaN(v) || v < 1) return null;
+    return Math.min(96, Math.max(1, v));
+}
+
+function inferCableModelFiberCount(model) {
+    if (!model) return null;
+    var m = String(model).trim().match(/[-–/](\d{1,2})$/);
+    if (!m) return null;
+    return normalizeCableModelFiberCount(m[1]);
+}
+
+function getCableModelFiberSettingsRef(manufacturer, model) {
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (!mfr || !mod) return null;
+    var byM = cableModelFiberSettings[mfr];
+    if (!byM || typeof byM !== 'object') return null;
+    return byM[mod] || null;
+}
+
+function getCableModelFiberSettings(manufacturer, model) {
+    var entry = getCableModelFiberSettingsRef(manufacturer, model);
+    if (!entry || typeof entry !== 'object') return null;
+    var fc = entry.fiberCount != null && entry.fiberCount !== ''
+        ? normalizeCableModelFiberCount(entry.fiberCount)
+        : null;
+    var pal = Array.isArray(entry.fiberPalette) && entry.fiberPalette.length
+        ? entry.fiberPalette.slice()
+        : null;
+    if (!fc && !pal) return null;
+    return { fiberCount: fc, fiberPalette: pal };
+}
+
+function cleanupCableModelFiberEntry(manufacturer, model) {
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (!mfr || !mod || !cableModelFiberSettings[mfr] || !cableModelFiberSettings[mfr][mod]) return;
+    var entry = cableModelFiberSettings[mfr][mod];
+    var hasCount = entry.fiberCount != null && entry.fiberCount !== '' && normalizeCableModelFiberCount(entry.fiberCount) != null;
+    var hasPal = Array.isArray(entry.fiberPalette) && entry.fiberPalette.length > 0;
+    if (!hasCount && !hasPal) {
+        delete cableModelFiberSettings[mfr][mod];
+        if (Object.keys(cableModelFiberSettings[mfr]).length === 0) delete cableModelFiberSettings[mfr];
+    }
+}
+
+function ensureCableModelFiberEntry(manufacturer, model) {
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (!cableModelFiberSettings[mfr]) cableModelFiberSettings[mfr] = {};
+    if (!cableModelFiberSettings[mfr][mod]) {
+        cableModelFiberSettings[mfr][mod] = { fiberCount: null, fiberPalette: null };
+    }
+    return cableModelFiberSettings[mfr][mod];
+}
+
+function setCableModelFiberCount(manufacturer, model, fiberCount) {
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (!mfr || !mod) return false;
+    if (fiberCount === null || fiberCount === undefined || fiberCount === '') {
+        if (cableModelFiberSettings[mfr] && cableModelFiberSettings[mfr][mod]) {
+            cableModelFiberSettings[mfr][mod].fiberCount = null;
+            cleanupCableModelFiberEntry(mfr, mod);
+        }
+        saveDeviceCatalog();
+        return true;
+    }
+    var n = normalizeCableModelFiberCount(fiberCount);
+    if (n === null) {
+        if (cableModelFiberSettings[mfr] && cableModelFiberSettings[mfr][mod]) {
+            cableModelFiberSettings[mfr][mod].fiberCount = null;
+            cleanupCableModelFiberEntry(mfr, mod);
+        }
+        saveDeviceCatalog();
+        return true;
+    }
+    var entry = ensureCableModelFiberEntry(mfr, mod);
+    entry.fiberCount = n;
+    if (Array.isArray(entry.fiberPalette) && entry.fiberPalette.length && window.FiberCableConfig && window.FiberCableConfig.trimPaletteToCount) {
+        entry.fiberPalette = window.FiberCableConfig.trimPaletteToCount(entry.fiberPalette, n);
+    }
+    saveDeviceCatalog();
+    return true;
+}
+
+function setCableModelFiberPalette(manufacturer, model, fiberPalette) {
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (!mfr || !mod) return false;
+    if (!fiberPalette || !fiberPalette.length) {
+        if (cableModelFiberSettings[mfr] && cableModelFiberSettings[mfr][mod]) {
+            cableModelFiberSettings[mfr][mod].fiberPalette = null;
+            cleanupCableModelFiberEntry(mfr, mod);
+        }
+        saveDeviceCatalog();
+        return true;
+    }
+    var entry = ensureCableModelFiberEntry(mfr, mod);
+    var fc = entry.fiberCount != null && entry.fiberCount !== ''
+        ? normalizeCableModelFiberCount(entry.fiberCount)
+        : null;
+    if (!fc) fc = normalizeCableModelFiberCount(fiberPalette.length) || 4;
+    entry.fiberCount = fc;
+    entry.fiberPalette = window.FiberCableConfig && window.FiberCableConfig.trimPaletteToCount
+        ? window.FiberCableConfig.trimPaletteToCount(fiberPalette, fc)
+        : fiberPalette.slice();
+    saveDeviceCatalog();
+    return true;
+}
+
+function cableModelHasCustomPalette(manufacturer, model) {
+    var entry = getCableModelFiberSettingsRef(manufacturer, model);
+    return !!(entry && Array.isArray(entry.fiberPalette) && entry.fiberPalette.length);
+}
+
+function getEffectiveCableModelFiberSettings(manufacturer, model) {
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (!mod) return null;
+    var settings = getCableModelFiberSettings(mfr, mod);
+    if (settings) {
+        if (!settings.fiberCount && settings.fiberPalette && settings.fiberPalette.length) {
+            settings.fiberCount = normalizeCableModelFiberCount(settings.fiberPalette.length);
+        }
+        if (settings.fiberCount || (settings.fiberPalette && settings.fiberPalette.length)) {
+            return settings;
+        }
+    }
+    var inferred = inferCableModelFiberCount(mod);
+    if (inferred) return { fiberCount: inferred, fiberPalette: null };
+    return null;
+}
+
+function applyCableModelSettingsToLayPanel(manufacturer, model) {
+    if (!window.FiberCableConfig) return;
+    var settings = getEffectiveCableModelFiberSettings(manufacturer, model);
+    if (!settings) return;
+    if (settings.fiberCount) {
+        window.FiberCableConfig.setLayFiberCount(settings.fiberCount);
+    }
+    if (settings.fiberPalette && settings.fiberPalette.length) {
+        window.FiberCableConfig.setLayFiberPalette(settings.fiberPalette);
+    } else {
+        window.FiberCableConfig.setLayFiberPalette(null);
+    }
+    if (window.FiberCableConfig.syncLayPaletteButtonState) {
+        window.FiberCableConfig.syncLayPaletteButtonState();
+    }
+}
+
+function getEffectiveLayCableFiberSettings() {
+    return getEffectiveCableModelFiberSettings(getLayCableManufacturer(), getLayCableModel());
+}
+
+var _switchEntryPendingPortTypes = null;
+var _switchPortsEditorCtx = null;
+
+function buildSwitchPortKindSelectHtml(selected, extraClass, dataAttrs) {
+    extraClass = extraClass || '';
+    dataAttrs = dataAttrs || '';
+    var sel = String(selected || SWITCH_PORT_DEFAULT_KIND).trim();
+    var canon = canonicalizeSwitchPortKindLabel(sel);
+    var options = SWITCH_PORT_KIND_OPTIONS.slice();
+    if (sel && options.indexOf(sel) === -1 && options.indexOf(canon) === -1) {
+        options.unshift(sel);
+    }
+    var html = '<select class="form-select form-select-compact switch-port-kind-select' + extraClass + '" ' + dataAttrs + '>';
+    options.forEach(function(ko) {
+        var isSel = ko === sel || ko === canon;
+        html += '<option value="' + escapeHtml(ko) + '"' + (isSel ? ' selected' : '') + '>' + escapeHtml(ko) + '</option>';
+    });
+    html += '</select>';
+    return html;
+}
+
+function renderSwitchModelPortsTableBody(tbody, types) {
+    if (!tbody) return;
+    var html = '';
+    (types || []).forEach(function(kind, idx) {
+        html += '<tr><td class="switch-ports-modal-num">' + (idx + 1) + '</td><td>';
+        html += buildSwitchPortKindSelectHtml(kind || SWITCH_PORT_DEFAULT_KIND, '', 'data-port-idx="' + idx + '"');
+        html += '</td></tr>';
+    });
+    tbody.innerHTML = html;
+}
+
+function readSwitchModelPortsFromTable(tbody) {
+    if (!tbody) return [];
+    var rows = tbody.querySelectorAll('tr');
+    var out = [];
+    rows.forEach(function(row) {
+        var sel = row.querySelector('.switch-port-kind-select');
+        out.push(sel ? (sel.value || SWITCH_PORT_DEFAULT_KIND) : SWITCH_PORT_DEFAULT_KIND);
+    });
+    return out;
+}
+
+function syncSwitchEntryPortsBtnState() {
+    var btn = document.getElementById('deviceCatalogEntrySwitchPortsBtn');
+    if (!btn) return;
+    btn.classList.toggle('device-catalog-switch-ports-btn--custom', !!(_switchEntryPendingPortTypes && _switchEntryPendingPortTypes.length));
+}
+
+function openSwitchModelPortsEditor(manufacturer, model, opts) {
+    opts = opts || {};
+    var modal = document.getElementById('switchModelPortsModal');
+    if (!modal) return;
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    var isEntry = !!opts.entryMode;
+    var defPorts = 24;
+    if (isEntry) {
+        var portsInp = document.getElementById('deviceCatalogEntryDefaultPorts');
+        var pv = portsInp ? parseInt(portsInp.value, 10) : NaN;
+        defPorts = !isNaN(pv) && pv >= 1 ? Math.min(96, pv) : 24;
+    } else {
+        var custom = getSwitchModelPortTypes(mfr, mod);
+        var defN = getSwitchModelDefaultPortCount(mfr, mod);
+        defPorts = custom && custom.length ? custom.length : (defN != null ? defN : 24);
+    }
+    var types = isEntry
+        ? (_switchEntryPendingPortTypes ? _switchEntryPendingPortTypes.slice() : null)
+        : getSwitchModelPortTypes(mfr, mod);
+    if (!types || !types.length) {
+        types = normalizeSwitchPortTypesList(defPorts, [], SWITCH_PORT_DEFAULT_KIND);
+    }
+    _switchPortsEditorCtx = {
+        manufacturer: mfr,
+        model: mod,
+        entryMode: isEntry
+    };
+    var titleEl = document.getElementById('switchModelPortsModalTitle');
+    var hintEl = document.getElementById('switchModelPortsModalHint');
+    if (titleEl) {
+        titleEl.textContent = isEntry
+            ? 'Порты новой модели'
+            : ('Порты — ' + (mfr && mod ? mfr + ' ' + mod : (mod || mfr || 'коммутатор')));
+    }
+    if (hintEl) {
+        hintEl.textContent = isEntry
+            ? 'Настройка сохранится вместе с новой моделью в справочнике.'
+            : 'Типы портов подставятся при добавлении этой модели коммутатора в узел на карте.';
+    }
+    var countInp = document.getElementById('switchModelPortsCount');
+    var tbody = document.getElementById('switchModelPortsTableBody');
+    if (countInp) countInp.value = String(types.length);
+    renderSwitchModelPortsTableBody(tbody, types);
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    requestAnimationFrame(function() {
+        if (typeof window.initPanelPlexusCanvases === 'function') window.initPanelPlexusCanvases(modal);
+    });
+}
+
+function closeSwitchModelPortsModal() {
+    var modal = document.getElementById('switchModelPortsModal');
+    if (!modal) return;
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+    _switchPortsEditorCtx = null;
+    var entryModal = document.getElementById('deviceCatalogEntryModal');
+    var catalogModal = document.getElementById('deviceCatalogModal');
+    if ((entryModal && entryModal.style.display === 'flex') || (catalogModal && catalogModal.style.display === 'flex')) {
+        document.body.style.overflow = 'hidden';
+    } else {
+        document.body.style.overflow = '';
+    }
+}
+
+function saveSwitchModelPortsModal() {
+    var ctx = _switchPortsEditorCtx;
+    if (!ctx) return;
+    var tbody = document.getElementById('switchModelPortsTableBody');
+    var types = readSwitchModelPortsFromTable(tbody);
+    if (!types.length) {
+        if (typeof showError === 'function') showError('Укажите хотя бы один порт', '');
+        return;
+    }
+    if (ctx.entryMode) {
+        _switchEntryPendingPortTypes = types.slice();
+        var portsInp = document.getElementById('deviceCatalogEntryDefaultPorts');
+        if (portsInp) portsInp.value = String(types.length);
+        syncSwitchEntryPortsBtnState();
+        closeSwitchModelPortsModal();
+        if (typeof showInfo === 'function') showInfo('Порты настроены', 'Сохраните модель в справочнике');
+        return;
+    }
+    setSwitchModelPortTypes(ctx.manufacturer, ctx.model, types);
+    closeSwitchModelPortsModal();
+    renderDeviceCatalogList();
+    if (typeof showInfo === 'function') showInfo('Типы портов сохранены', '');
+}
+
+function setupSwitchModelPortsModalHandlers() {
+    var modal = document.getElementById('switchModelPortsModal');
+    if (!modal || modal._switchPortsModalBound) return;
+    modal._switchPortsModalBound = true;
+
+    var closeBtn = modal.querySelector('.close-switch-model-ports');
+    if (closeBtn) closeBtn.addEventListener('click', closeSwitchModelPortsModal);
+
+    var cancelBtn = document.getElementById('switchModelPortsCancelBtn');
+    if (cancelBtn) cancelBtn.addEventListener('click', closeSwitchModelPortsModal);
+
+    var saveBtn = document.getElementById('switchModelPortsSaveBtn');
+    if (saveBtn) saveBtn.addEventListener('click', saveSwitchModelPortsModal);
+
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) closeSwitchModelPortsModal();
+    });
+
+    var countInp = document.getElementById('switchModelPortsCount');
+    if (countInp) {
+        countInp.addEventListener('change', function() {
+            var n = parseInt(this.value, 10);
+            if (isNaN(n) || n < 1) n = 1;
+            n = Math.min(96, Math.max(1, n));
+            this.value = String(n);
+            var tbody = document.getElementById('switchModelPortsTableBody');
+            var current = readSwitchModelPortsFromTable(tbody);
+            var pad = current.length ? current[current.length - 1] : SWITCH_PORT_DEFAULT_KIND;
+            renderSwitchModelPortsTableBody(tbody, normalizeSwitchPortTypesList(n, current, pad));
+        });
+    }
+
+    var fillBtn = document.getElementById('switchModelPortsFillLikeFirstBtn');
+    if (fillBtn) {
+        fillBtn.addEventListener('click', function() {
+            var tbody = document.getElementById('switchModelPortsTableBody');
+            var current = readSwitchModelPortsFromTable(tbody);
+            if (!current.length) return;
+            var first = current[0] || SWITCH_PORT_DEFAULT_KIND;
+            renderSwitchModelPortsTableBody(tbody, current.map(function() { return first; }));
+        });
+    }
+}
+
+var _cableEntryPendingFiber = null;
+
+function syncCableEntryPaletteBtnState() {
+    var btn = document.getElementById('deviceCatalogEntryCablePaletteBtn');
+    if (!btn) return;
+    btn.classList.toggle('device-catalog-cable-palette-btn--custom', !!(_cableEntryPendingFiber && _cableEntryPendingFiber.palette && _cableEntryPendingFiber.palette.length));
+}
+
+function openCableCatalogEntryPaletteEditor() {
+    if (!window.FiberCableConfig) return;
+    var fibersInp = document.getElementById('deviceCatalogEntryCableFibers');
+    var modelInp = document.getElementById('deviceCatalogEntryModelName');
+    var fc = fibersInp && fibersInp.value ? parseInt(fibersInp.value, 10) : NaN;
+    if (isNaN(fc) || fc < 1) {
+        fc = inferCableModelFiberCount(modelInp ? modelInp.value : '') || 4;
+    }
+    var palette = _cableEntryPendingFiber && _cableEntryPendingFiber.palette && _cableEntryPendingFiber.palette.length
+        ? _cableEntryPendingFiber.palette
+        : null;
+    window.FiberCableConfig.openFiberPaletteEditor({
+        title: 'Цвета жил — новая модель кабеля',
+        fiberCount: fc,
+        palette: palette || window.FiberCableConfig.buildStandardPalette(fc),
+        onSave: function(r) {
+            _cableEntryPendingFiber = { fiberCount: r.fiberCount, palette: r.palette };
+            if (fibersInp) fibersInp.value = String(r.fiberCount);
+            syncCableEntryPaletteBtnState();
+        }
+    });
+}
+
+function openCableCatalogPaletteEditor(manufacturer, model, fiberCountOverride) {
+    if (!window.FiberCableConfig) return;
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (!mfr || !mod) return;
+    var settings = getCableModelFiberSettings(mfr, mod);
+    var fc = fiberCountOverride != null && fiberCountOverride !== ''
+        ? normalizeCableModelFiberCount(fiberCountOverride)
+        : null;
+    if (fc == null && settings && settings.fiberCount) fc = settings.fiberCount;
+    if (fc == null) fc = inferCableModelFiberCount(mod) || 4;
+    var palette = settings && settings.fiberPalette && settings.fiberPalette.length
+        ? settings.fiberPalette
+        : window.FiberCableConfig.buildStandardPalette(fc);
+    window.FiberCableConfig.openFiberPaletteEditor({
+        title: 'Цвета жил — ' + getCableProductLabel(mfr, mod),
+        fiberCount: fc,
+        palette: palette,
+        onSave: function(r) {
+            setCableModelFiberCount(mfr, mod, r.fiberCount);
+            setCableModelFiberPalette(mfr, mod, r.palette);
+            renderDeviceCatalogList();
+            if (typeof showInfo === 'function') showInfo('Настройки жил сохранены', '');
+        }
+    });
 }
 
 var CUSTOM_DEVICE_OPTIONS_STORAGE_KEY = 'networkmap_customDeviceOptions';
@@ -678,8 +1494,13 @@ function saveDeviceCatalog() {
         cameraDeviceCatalog: cloneDeepCatalog(cameraDeviceCatalog),
         switchDeviceCatalog: cloneDeepCatalog(switchDeviceCatalog),
         switchModelDefaultPorts: JSON.parse(JSON.stringify(switchModelDefaultPorts || {})),
+        switchModelPortTypes: JSON.parse(JSON.stringify(switchModelPortTypes || {})),
+        cableDeviceCatalog: cloneDeepCatalog(cableDeviceCatalog),
+        cableModelFiberSettings: JSON.parse(JSON.stringify(cableModelFiberSettings || {})),
         customSleeveTypes: getCustomSleeveTypes(),
-        hiddenBuiltinSleeveTypes: getHiddenBuiltinSleeveTypes()
+        hiddenBuiltinSleeveTypes: getHiddenBuiltinSleeveTypes(),
+        customCrossTypes: getCustomCrossTypes(),
+        hiddenBuiltinCrossTypes: getHiddenBuiltinCrossTypes()
     };
     try { localStorage.setItem(CUSTOM_DEVICE_OPTIONS_STORAGE_KEY, JSON.stringify(payload)); } catch (e) {}
     if (getApiBase() && getAuthToken()) {
@@ -723,14 +1544,31 @@ function loadDeviceCatalog(opts) {
         } else {
             switchDeviceCatalog = cloneDeepCatalog(SWITCH_CATALOG_DEFAULT);
         }
+        if ('cableDeviceCatalog' in opts && opts.cableDeviceCatalog && typeof opts.cableDeviceCatalog === 'object') {
+            cableDeviceCatalog = cloneDeepCatalog(opts.cableDeviceCatalog);
+        } else {
+            cableDeviceCatalog = cloneDeepCatalog(CABLE_CATALOG_DEFAULT);
+        }
         if (opts.switchModelDefaultPorts && typeof opts.switchModelDefaultPorts === 'object') {
             switchModelDefaultPorts = JSON.parse(JSON.stringify(opts.switchModelDefaultPorts));
         } else {
             switchModelDefaultPorts = {};
         }
+        if (opts.switchModelPortTypes && typeof opts.switchModelPortTypes === 'object') {
+            switchModelPortTypes = JSON.parse(JSON.stringify(opts.switchModelPortTypes));
+        } else {
+            switchModelPortTypes = {};
+        }
+        if (opts.cableModelFiberSettings && typeof opts.cableModelFiberSettings === 'object') {
+            cableModelFiberSettings = JSON.parse(JSON.stringify(opts.cableModelFiberSettings));
+        } else {
+            cableModelFiberSettings = {};
+        }
         applyCustomSleeveTypesFromOpts(opts);
+        applyCustomCrossTypesFromOpts(opts);
         saveDeviceCatalog();
         refreshAllSleeveTypeSelects();
+        refreshAllCrossTypeSelects();
         return;
     }
 
@@ -776,16 +1614,36 @@ function loadDeviceCatalog(opts) {
         switchDeviceCatalog = cloneDeepCatalog(SWITCH_CATALOG_DEFAULT);
     }
 
+    if ('cableDeviceCatalog' in opts && opts.cableDeviceCatalog && typeof opts.cableDeviceCatalog === 'object') {
+        cableDeviceCatalog = cloneDeepCatalog(opts.cableDeviceCatalog);
+    } else if (!('cableDeviceCatalog' in opts)) {
+        cableDeviceCatalog = cloneDeepCatalog(CABLE_CATALOG_DEFAULT);
+    }
+
     if (opts.switchModelDefaultPorts && typeof opts.switchModelDefaultPorts === 'object') {
         switchModelDefaultPorts = JSON.parse(JSON.stringify(opts.switchModelDefaultPorts));
     } else {
         switchModelDefaultPorts = {};
     }
 
+    if (opts.switchModelPortTypes && typeof opts.switchModelPortTypes === 'object') {
+        switchModelPortTypes = JSON.parse(JSON.stringify(opts.switchModelPortTypes));
+    } else if (!('switchModelPortTypes' in opts)) {
+        switchModelPortTypes = {};
+    }
+
+    if (opts.cableModelFiberSettings && typeof opts.cableModelFiberSettings === 'object') {
+        cableModelFiberSettings = JSON.parse(JSON.stringify(opts.cableModelFiberSettings));
+    } else if (!('cableModelFiberSettings' in opts)) {
+        cableModelFiberSettings = {};
+    }
+
     applyCustomSleeveTypesFromOpts(opts);
+    applyCustomCrossTypesFromOpts(opts);
 
     if (mergeNodeCatalogIntoSwitch()) saveDeviceCatalog();
     refreshAllSleeveTypeSelects();
+    refreshAllCrossTypeSelects();
 }
 
 function applyCustomSleeveTypesFromOpts(opts) {
@@ -815,6 +1673,33 @@ function applyCustomSleeveTypesFromOpts(opts) {
     }
 }
 
+function applyCustomCrossTypesFromOpts(opts) {
+    opts = opts || {};
+    if ('customCrossTypes' in opts) {
+        if (!Array.isArray(opts.customCrossTypes)) {
+            customCrossTypes = [];
+        } else {
+            customCrossTypes = opts.customCrossTypes.map(function(t) {
+                if (!t || !t.id) return null;
+                return {
+                    id: normalizeCrossTypeId(t.id),
+                    label: (t.label || t.id || '').trim() || normalizeCrossTypeId(t.id),
+                    defaultPorts: normalizeCrossDefaultPorts(t.defaultPorts)
+                };
+            }).filter(Boolean);
+        }
+    }
+    if ('hiddenBuiltinCrossTypes' in opts) {
+        if (!Array.isArray(opts.hiddenBuiltinCrossTypes)) {
+            hiddenBuiltinCrossTypes = [];
+        } else {
+            hiddenBuiltinCrossTypes = opts.hiddenBuiltinCrossTypes.map(function(id) {
+                return normalizeCrossTypeId(id);
+            }).filter(Boolean);
+        }
+    }
+}
+
 function loadCustomDeviceOptions(opts) {
     loadDeviceCatalog(opts || {});
 }
@@ -825,7 +1710,10 @@ function loadCustomDeviceOptionsFromStorage() {
         if (!raw) return;
         var parsed = JSON.parse(raw);
         if (parsed && typeof parsed === 'object') loadDeviceCatalog(parsed);
-        else refreshAllSleeveTypeSelects();
+        else {
+            refreshAllSleeveTypeSelects();
+            refreshAllCrossTypeSelects();
+        }
     } catch (e) {}
 }
 
@@ -835,7 +1723,126 @@ function ensureDeviceCatalogsNonEmpty() {
     if (Object.keys(onuDeviceCatalog || {}).length === 0) onuDeviceCatalog = cloneDeepCatalog(ONU_CATALOG_DEFAULT);
     if (Object.keys(cameraDeviceCatalog || {}).length === 0) cameraDeviceCatalog = cloneDeepCatalog(CAMERA_CATALOG_DEFAULT);
     if (Object.keys(switchDeviceCatalog || {}).length === 0) switchDeviceCatalog = cloneDeepCatalog(SWITCH_CATALOG_DEFAULT);
+    if (Object.keys(cableDeviceCatalog || {}).length === 0) cableDeviceCatalog = cloneDeepCatalog(CABLE_CATALOG_DEFAULT);
     if (mergeNodeCatalogIntoSwitch()) saveDeviceCatalog();
+}
+
+function getCableProductLabel(manufacturer, model) {
+    var m = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (m && mod) return m + ' · ' + mod;
+    if (mod) return mod;
+    if (m) return m;
+    return '';
+}
+
+function getCableProductFromObject(cableOrProps) {
+    if (!cableOrProps) return { manufacturer: '', model: '' };
+    var props = cableOrProps.properties ? cableOrProps.properties : cableOrProps;
+    var get = typeof props.get === 'function'
+        ? function(k) { return props.get(k); }
+        : function(k) { return props[k]; };
+    return {
+        manufacturer: (get('cableManufacturer') || '').trim(),
+        model: (get('cableModel') || '').trim()
+    };
+}
+
+function setCableProductOnObject(cable, manufacturer, model) {
+    if (!cable || !cable.properties) return;
+    var m = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (m) cable.properties.set('cableManufacturer', m);
+    else cable.properties.unset('cableManufacturer');
+    if (mod) cable.properties.set('cableModel', mod);
+    else cable.properties.unset('cableModel');
+}
+
+function applySerializedCableProduct(cable, item) {
+    if (!cable || !cable.properties || !item) return;
+    var m = item.cableManufacturer != null ? String(item.cableManufacturer).trim() : '';
+    var mod = item.cableModel != null ? String(item.cableModel).trim() : '';
+    if ('cableManufacturer' in item || 'cableModel' in item) {
+        setCableProductOnObject(cable, m, mod);
+    }
+}
+
+function getLayCableManufacturer() {
+    var el = document.getElementById('layCableManufacturer');
+    if (el && el.value) return el.value.trim();
+    try {
+        var s = localStorage.getItem(LAY_CABLE_MFR_KEY);
+        if (s) return s.trim();
+    } catch (e) {}
+    return '';
+}
+
+function getLayCableModel() {
+    var el = document.getElementById('layCableModel');
+    if (el && el.value) return el.value.trim();
+    try {
+        var s = localStorage.getItem(LAY_CABLE_MODEL_KEY);
+        if (s) return s.trim();
+    } catch (e) {}
+    return '';
+}
+
+function setLayCableProduct(manufacturer, model) {
+    var m = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    try {
+        if (m) localStorage.setItem(LAY_CABLE_MFR_KEY, m);
+        else localStorage.removeItem(LAY_CABLE_MFR_KEY);
+        if (mod) localStorage.setItem(LAY_CABLE_MODEL_KEY, mod);
+        else localStorage.removeItem(LAY_CABLE_MODEL_KEY);
+    } catch (e) {}
+    setDeviceComboboxValue('layCableManufacturer', m, 'Выберите марку');
+    setDeviceComboboxValue('layCableModel', mod, 'Выберите модель');
+    applyCableModelSettingsToLayPanel(m, mod);
+}
+
+function applyLayCableProductToCable(cable) {
+    if (!cable || !cable.properties) return;
+    var m = getLayCableManufacturer();
+    var mod = getLayCableModel();
+    if (m || mod) setCableProductOnObject(cable, m, mod);
+}
+
+function setDeviceComboboxValue(valueId, value, placeholder) {
+    var valueInput = document.getElementById(valueId);
+    if (!valueInput) return;
+    var wrapper = valueInput.closest('.device-combobox');
+    var trigger = wrapper && wrapper.querySelector('.device-combobox-trigger');
+    valueInput.value = value || '';
+    if (trigger) trigger.textContent = value || placeholder || 'Выберите';
+}
+
+function restoreLayCableProductUI() {
+    var m = '';
+    var mod = '';
+    try {
+        m = (localStorage.getItem(LAY_CABLE_MFR_KEY) || '').trim();
+        mod = (localStorage.getItem(LAY_CABLE_MODEL_KEY) || '').trim();
+    } catch (e) {}
+    setDeviceComboboxValue('layCableManufacturer', m, 'Выберите марку');
+    setDeviceComboboxValue('layCableModel', mod, 'Выберите модель');
+    if (m && mod) applyCableModelSettingsToLayPanel(m, mod);
+}
+
+function setupLayCableProductHandlers() {
+    var mfrInp = document.getElementById('layCableManufacturer');
+    var modelInp = document.getElementById('layCableModel');
+    if (!mfrInp || mfrInp._layCableProductBound) return;
+    mfrInp._layCableProductBound = true;
+    function persistLayProduct() {
+        setLayCableProduct(getLayCableManufacturer(), getLayCableModel());
+    }
+    mfrInp.addEventListener('change', function() {
+        persistLayProduct();
+        applyCableModelSettingsToLayPanel(getLayCableManufacturer(), getLayCableModel());
+    });
+    if (modelInp) modelInp.addEventListener('change', persistLayProduct);
+    restoreLayCableProductUI();
 }
 
 function populateDeviceDatalists() {
@@ -886,7 +1893,7 @@ function initDeviceComboboxes(container) {
         var type = wrapper.dataset.type;
         var catalogKind = (wrapper.dataset.catalog || 'node').trim();
         if (catalogKind === 'general') catalogKind = 'node';
-        var allowedCatalogKinds = { node: 1, olt: 1, onu: 1, camera: 1, switch: 1 };
+        var allowedCatalogKinds = { node: 1, olt: 1, onu: 1, camera: 1, switch: 1, cable: 1 };
         if (!allowedCatalogKinds[catalogKind]) catalogKind = 'node';
         var valueId = wrapper.dataset.valueId;
         var manufacturerId = wrapper.dataset.manufacturerId;
@@ -1143,6 +2150,52 @@ function renderSleeveCatalogList(container, searchQ) {
     });
 }
 
+function renderCrossCatalogList(container, searchQ) {
+    var types = getAllCrossTypes();
+    var html = '';
+    var visibleCount = 0;
+    types.forEach(function(t) {
+        var models = [t.label, formatCrossDefaultPortsHint(t.defaultPorts)];
+        var matches = catalogEntryMatchesSearch(t.id, models, searchQ);
+        if (matches) visibleCount++;
+        html += '<article class="device-catalog-cross-row device-catalog-mfr' + (matches ? '' : ' is-hidden-by-search') + '" data-cross-id="' + escapeHtml(t.id) + '">';
+        html += '<header class="device-catalog-mfr-header">';
+        html += '<div class="device-catalog-mfr-title">';
+        html += '<span class="device-catalog-mfr-name device-catalog-model-name">' + escapeHtml(t.id) + '</span>';
+        html += '<span class="device-catalog-sleeve-label">' + escapeHtml(t.label) + '</span>';
+        html += '<span class="device-catalog-mfr-count">' + escapeHtml(formatCrossDefaultPortsHint(t.defaultPorts)) + '</span>';
+        if (t.builtin) {
+            html += '<span class="device-catalog-sleeve-badge">встроенный</span>';
+        }
+        html += '</div>';
+        html += '<div class="device-catalog-mfr-actions">';
+        html += '<button type="button" class="device-catalog-remove-cross device-catalog-btn-remove-mfr" data-cross-id="' + escapeHtml(t.id) + '" data-cross-builtin="' + (t.builtin ? '1' : '0') + '" title="Удалить тип">Удалить</button>';
+        html += '</div>';
+        html += '</header></article>';
+    });
+    if (searchQ && visibleCount === 0) {
+        html += '<p class="device-catalog-no-results">Ничего не найдено по запросу «' + escapeHtml(searchQ) + '».</p>';
+    }
+    container.innerHTML = html;
+    container.querySelectorAll('.device-catalog-remove-cross').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var cid = btn.getAttribute('data-cross-id');
+            var isBuiltin = btn.getAttribute('data-cross-builtin') === '1';
+            (async function() {
+                var msg = isBuiltin
+                    ? 'Убрать встроенный тип кросса «' + cid + '» из списка? Уже созданные кроссы на карте не изменятся.'
+                    : 'Удалить тип кросса «' + cid + '» из справочника?';
+                if (!(await showConfirm(msg, 'Удалить тип', { confirmText: 'Удалить' }))) return;
+                if (removeCrossType(cid)) {
+                    renderDeviceCatalogList();
+                    refreshAllCrossTypeSelects();
+                    if (typeof showInfo === 'function') showInfo('Тип кросса удалён', '');
+                }
+            })();
+        });
+    });
+}
+
 function renderDeviceCatalogList() {
     var container = document.getElementById('deviceCatalogList');
     if (!container) return;
@@ -1154,6 +2207,11 @@ function renderDeviceCatalogList() {
 
     if (tab === 'sleeve') {
         renderSleeveCatalogList(container, searchQ);
+        return;
+    }
+
+    if (tab === 'cross') {
+        renderCrossCatalogList(container, searchQ);
         return;
     }
 
@@ -1191,11 +2249,24 @@ function renderDeviceCatalogList() {
             html += '<span class="device-catalog-mfr-count">Нет моделей — нажмите «+ Добавить»</span>';
         }
         models.forEach(function(mod) {
-            html += '<span class="device-catalog-model-tag">';
+            html += '<span class="device-catalog-model-tag' + (tab === 'cable' ? ' device-catalog-model-tag--cable' : '') + (tab === 'switch' ? ' device-catalog-model-tag--switch' : '') + '">';
             html += '<span class="device-catalog-model-name">' + escapeHtml(mod) + '</span>';
             if (tab === 'switch') {
                 var defN = getSwitchModelDefaultPortCount(mfr, mod);
+                var customPorts = switchModelHasCustomPortTypes(mfr, mod);
                 html += '<label class="device-catalog-ports-label" title="Портов по умолчанию при добавлении коммутатора в узел">Портов<input type="number" class="form-input device-catalog-ports-input switch-catalog-def-ports" min="1" max="96" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" value="' + (defN != null ? String(defN) : '') + '" placeholder="—" aria-label="Портов по умолчанию"></label>';
+                html += '<button type="button" class="device-catalog-switch-ports-btn' + (customPorts ? ' device-catalog-switch-ports-btn--custom' : '') + '" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" title="Настроить тип каждого порта">';
+                html += '<span class="device-catalog-switch-ports-btn__label">Порты</span></button>';
+            }
+            if (tab === 'cable') {
+                var cableSettings = getCableModelFiberSettings(mfr, mod);
+                var cableFc = cableSettings && cableSettings.fiberCount ? cableSettings.fiberCount : '';
+                var cableFcHint = inferCableModelFiberCount(mod);
+                html += '<label class="device-catalog-ports-label" title="Число жил по умолчанию при прокладке">Жил<input type="number" class="form-input device-catalog-ports-input cable-catalog-fiber-count" min="1" max="96" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" value="' + (cableFc !== '' ? String(cableFc) : '') + '" placeholder="' + (cableFcHint != null ? String(cableFcHint) : '—') + '" aria-label="Жил по умолчанию"></label>';
+                html += getDeviceCatalogPaletteBtnHtml(
+                    cableModelHasCustomPalette(mfr, mod) ? ' device-catalog-cable-palette-btn--custom' : '',
+                    'data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" title="Настроить цвета жил"'
+                );
             }
             html += '<button type="button" class="device-catalog-remove-model" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" title="Удалить модель" aria-label="Удалить модель">×</button>';
             html += '</span>';
@@ -1229,12 +2300,15 @@ function renderDeviceCatalogList() {
         btn.addEventListener('click', function() {
             var mfr = btn.getAttribute('data-mfr');
             var mod = btn.getAttribute('data-model');
-            if (removeModelForCatalog(tab, mfr, mod)) {
-                renderDeviceCatalogList();
-                populateDeviceDatalists();
-                populateModelDatalistForManufacturer(mfr, 'deviceModelsList', tab);
-                if (typeof showInfo === 'function') showInfo('Модель удалена', '');
-            }
+            (async function() {
+                if (!(await showConfirm('Удалить модель «' + mod + '»' + (mfr ? ' (' + mfr + ')' : '') + '?', 'Удалить модель', { confirmText: 'Удалить' }))) return;
+                if (removeModelForCatalog(tab, mfr, mod)) {
+                    renderDeviceCatalogList();
+                    populateDeviceDatalists();
+                    populateModelDatalistForManufacturer(mfr, 'deviceModelsList', tab);
+                    if (typeof showInfo === 'function') showInfo('Модель удалена', '');
+                }
+            })();
         });
     });
     if (tab === 'switch') {
@@ -1252,6 +2326,41 @@ function renderDeviceCatalogList() {
                 }
             });
         });
+        container.querySelectorAll('.device-catalog-switch-ports-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                openSwitchModelPortsEditor(btn.getAttribute('data-mfr'), btn.getAttribute('data-model'));
+            });
+        });
+    }
+    if (tab === 'cable') {
+        container.querySelectorAll('.cable-catalog-fiber-count').forEach(function(inp) {
+            inp.addEventListener('change', function() {
+                var mf = this.getAttribute('data-mfr');
+                var md = this.getAttribute('data-model');
+                var v = parseInt(this.value, 10);
+                if (isNaN(v) || v < 1) {
+                    setCableModelFiberCount(mf, md, null);
+                    this.value = '';
+                } else {
+                    setCableModelFiberCount(mf, md, v);
+                    this.value = String(Math.min(96, Math.max(1, v)));
+                }
+            });
+        });
+        container.querySelectorAll('.device-catalog-cable-palette-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                var mf = btn.getAttribute('data-mfr');
+                var md = btn.getAttribute('data-model');
+                var rowInp = btn.closest('.device-catalog-model-tag');
+                rowInp = rowInp ? rowInp.querySelector('.cable-catalog-fiber-count') : null;
+                var fcOverride = rowInp && rowInp.value ? parseInt(rowInp.value, 10) : null;
+                openCableCatalogPaletteEditor(mf, md, fcOverride);
+            });
+        });
     }
 }
 
@@ -1266,16 +2375,29 @@ function setDeviceCatalogEntryType(entryType) {
     var mfrPanel = document.getElementById('deviceCatalogEntryMfrPanel');
     var modelPanel = document.getElementById('deviceCatalogEntryModelPanel');
     var sleevePanel = document.getElementById('deviceCatalogEntrySleevePanel');
+    var crossPanel = document.getElementById('deviceCatalogEntryCrossPanel');
     var typeTabs = document.querySelector('.device-catalog-entry-type-tabs');
     if (tab === 'sleeve') {
         if (typeTabs) typeTabs.hidden = true;
         if (mfrPanel) mfrPanel.hidden = true;
         if (modelPanel) modelPanel.hidden = true;
+        if (crossPanel) crossPanel.hidden = true;
         if (sleevePanel) sleevePanel.hidden = false;
+        syncDeviceCatalogEntryPortsGroupVisibility();
+        return;
+    }
+    if (tab === 'cross') {
+        if (typeTabs) typeTabs.hidden = true;
+        if (mfrPanel) mfrPanel.hidden = true;
+        if (modelPanel) modelPanel.hidden = true;
+        if (sleevePanel) sleevePanel.hidden = true;
+        if (crossPanel) crossPanel.hidden = false;
+        syncDeviceCatalogEntryPortsGroupVisibility();
         return;
     }
     if (typeTabs) typeTabs.hidden = false;
     if (sleevePanel) sleevePanel.hidden = true;
+    if (crossPanel) crossPanel.hidden = true;
     var isMfr = entryType === 'manufacturer';
     document.querySelectorAll('.device-catalog-entry-type').forEach(function(btn) {
         var active = btn.getAttribute('data-entry-type') === entryType;
@@ -1284,6 +2406,15 @@ function setDeviceCatalogEntryType(entryType) {
     });
     if (mfrPanel) mfrPanel.hidden = !isMfr;
     if (modelPanel) modelPanel.hidden = isMfr;
+    syncDeviceCatalogEntryPortsGroupVisibility();
+}
+
+function syncDeviceCatalogEntryPortsGroupVisibility() {
+    var portsGroup = document.getElementById('deviceCatalogEntryPortsGroup');
+    if (!portsGroup) return;
+    var tab = getActiveDeviceCatalogTab();
+    var entryType = (document.querySelector('.device-catalog-entry-type-active') || {}).getAttribute('data-entry-type');
+    portsGroup.hidden = tab !== 'switch' || entryType !== 'model';
 }
 
 function refreshDeviceCatalogEntryMfrSelect(preselect) {
@@ -1306,10 +2437,11 @@ function updateDeviceCatalogEntryModalChrome() {
     var tab = getActiveDeviceCatalogTab();
     var meta = DEVICE_CATALOG_TAB_META[tab] || DEVICE_CATALOG_TAB_META.switch;
     var hint = document.getElementById('deviceCatalogEntrySectionHint');
-    var portsGroup = document.getElementById('deviceCatalogEntryPortsGroup');
+    var cableFibersGroup = document.getElementById('deviceCatalogEntryCableFibersGroup');
     if (hint) hint.textContent = 'Раздел: «' + meta.label + '». ' + meta.desc;
-    if (portsGroup) portsGroup.hidden = tab !== 'switch';
-    setDeviceCatalogEntryType(tab === 'sleeve' ? 'sleeve' : (document.querySelector('.device-catalog-entry-type-active') || {}).getAttribute('data-entry-type') || 'manufacturer');
+    if (cableFibersGroup) cableFibersGroup.hidden = tab !== 'cable';
+    syncDeviceCatalogEntryPortsGroupVisibility();
+    setDeviceCatalogEntryType(tab === 'sleeve' ? 'sleeve' : (tab === 'cross' ? 'cross' : ((document.querySelector('.device-catalog-entry-type-active') || {}).getAttribute('data-entry-type') || 'manufacturer')));
 }
 
 function openDeviceCatalogEntryModal(entryType, presetMfr) {
@@ -1324,15 +2456,25 @@ function openDeviceCatalogEntryModal(entryType, presetMfr) {
     var mfrNameInp = document.getElementById('deviceCatalogEntryMfrName');
     var modelNameInp = document.getElementById('deviceCatalogEntryModelName');
     var portsInp = document.getElementById('deviceCatalogEntryDefaultPorts');
+    var cableFibersInp = document.getElementById('deviceCatalogEntryCableFibers');
     var sleeveIdInp = document.getElementById('deviceCatalogEntrySleeveId');
     var sleeveLabelInp = document.getElementById('deviceCatalogEntrySleeveLabel');
-    var sleeveMaxInp = document.getElementById('deviceCatalogEntrySleeveMaxFibers');
+    var crossIdInp = document.getElementById('deviceCatalogEntryCrossId');
+    var crossLabelInp = document.getElementById('deviceCatalogEntryCrossLabel');
+    var crossPortsInp = document.getElementById('deviceCatalogEntryCrossPorts');
     if (mfrNameInp) mfrNameInp.value = '';
     if (modelNameInp) modelNameInp.value = '';
     if (portsInp) portsInp.value = '';
+    if (cableFibersInp) cableFibersInp.value = '';
+    _cableEntryPendingFiber = null;
+    _switchEntryPendingPortTypes = null;
+    syncCableEntryPaletteBtnState();
+    syncSwitchEntryPortsBtnState();
     if (sleeveIdInp) sleeveIdInp.value = '';
     if (sleeveLabelInp) sleeveLabelInp.value = '';
-    if (sleeveMaxInp) sleeveMaxInp.value = '96';
+    if (crossIdInp) crossIdInp.value = '';
+    if (crossLabelInp) crossLabelInp.value = '';
+    if (crossPortsInp) crossPortsInp.value = '';
     if (entryType === 'model' && presetMfr) {
         var sel = document.getElementById('deviceCatalogEntryMfrSelect');
         if (sel) sel.value = presetMfr;
@@ -1342,7 +2484,9 @@ function openDeviceCatalogEntryModal(entryType, presetMfr) {
     if (titleEl) {
         titleEl.textContent = tab === 'sleeve'
             ? 'Добавить тип муфты'
-            : (entryType === 'model' ? 'Добавить модель' : 'Добавить производителя');
+            : (tab === 'cross'
+                ? 'Добавить тип кросса'
+                : (entryType === 'model' ? 'Добавить модель' : 'Добавить производителя'));
     }
 
     modal.style.display = 'flex';
@@ -1353,21 +2497,25 @@ function openDeviceCatalogEntryModal(entryType, presetMfr) {
     });
     var focusEl = tab === 'sleeve'
         ? document.getElementById('deviceCatalogEntrySleeveId')
-        : (entryType === 'model'
-            ? (document.getElementById('deviceCatalogEntryModelName') || document.getElementById('deviceCatalogEntryMfrSelect'))
-            : document.getElementById('deviceCatalogEntryMfrName'));
+        : (tab === 'cross'
+            ? document.getElementById('deviceCatalogEntryCrossId')
+            : (entryType === 'model'
+                ? (document.getElementById('deviceCatalogEntryModelName') || document.getElementById('deviceCatalogEntryMfrSelect'))
+                : document.getElementById('deviceCatalogEntryMfrName')));
     if (focusEl) setTimeout(function() { focusEl.focus(); }, 50);
 }
 
 function closeDeviceCatalogEntryModal() {
+    closeSwitchModelPortsModal();
     var modal = document.getElementById('deviceCatalogEntryModal');
     if (modal) modal.style.display = 'none';
+    _switchEntryPendingPortTypes = null;
+    syncSwitchEntryPortsBtnState();
 }
 
 function saveDeviceCatalogEntrySleeve() {
     var idInp = document.getElementById('deviceCatalogEntrySleeveId');
     var labelInp = document.getElementById('deviceCatalogEntrySleeveLabel');
-    var maxInp = document.getElementById('deviceCatalogEntrySleeveMaxFibers');
     var id = idInp ? idInp.value.trim() : '';
     if (!id) {
         if (typeof showError === 'function') showError('Введите код типа муфты', '');
@@ -1378,12 +2526,11 @@ function saveDeviceCatalogEntrySleeve() {
         return;
     }
     var label = labelInp ? labelInp.value.trim() : '';
-    var maxFibers = maxInp ? normalizeSleeveMaxFibers(maxInp.value) : 0;
     if (findSleeveTypeById(id)) {
         if (typeof showError === 'function') showError('Такой тип муфты уже есть в справочнике', '');
         return;
     }
-    if (!addCustomSleeveType(id, label, maxFibers)) {
+    if (!addCustomSleeveType(id, label, 0)) {
         if (typeof showError === 'function') showError('Не удалось добавить тип муфты', '');
         return;
     }
@@ -1393,10 +2540,44 @@ function saveDeviceCatalogEntrySleeve() {
     if (typeof showInfo === 'function') showInfo('Тип муфты добавлен', '');
 }
 
+function saveDeviceCatalogEntryCross() {
+    var idInp = document.getElementById('deviceCatalogEntryCrossId');
+    var labelInp = document.getElementById('deviceCatalogEntryCrossLabel');
+    var portsInp = document.getElementById('deviceCatalogEntryCrossPorts');
+    var id = idInp ? idInp.value.trim() : '';
+    if (!id) {
+        if (typeof showError === 'function') showError('Введите код типа кросса', '');
+        return;
+    }
+    if (id === 'custom') {
+        if (typeof showError === 'function') showError('Код «custom» зарезервирован для ручного ввода на карте', '');
+        return;
+    }
+    var label = labelInp ? labelInp.value.trim() : '';
+    var ports = portsInp ? parseInt(portsInp.value, 10) : 24;
+    if (isNaN(ports) || ports < 1) ports = 24;
+    if (findCrossTypeById(id)) {
+        if (typeof showError === 'function') showError('Такой тип кросса уже есть в справочнике', '');
+        return;
+    }
+    if (!addCustomCrossType(id, label, ports)) {
+        if (typeof showError === 'function') showError('Не удалось добавить тип кросса', '');
+        return;
+    }
+    closeDeviceCatalogEntryModal();
+    renderDeviceCatalogList();
+    refreshAllCrossTypeSelects();
+    if (typeof showInfo === 'function') showInfo('Тип кросса добавлен', '');
+}
+
 function saveDeviceCatalogEntry() {
     var tab = getActiveDeviceCatalogTab();
     if (tab === 'sleeve') {
         saveDeviceCatalogEntrySleeve();
+        return;
+    }
+    if (tab === 'cross') {
+        saveDeviceCatalogEntryCross();
         return;
     }
     var entryType = document.querySelector('.device-catalog-entry-type-active');
@@ -1438,9 +2619,28 @@ function saveDeviceCatalogEntry() {
     if (!addModelForCatalog(tab, mfr, model)) return;
 
     if (tab === 'switch') {
-        var portsInp = document.getElementById('deviceCatalogEntryDefaultPorts');
-        var pv = portsInp ? parseInt(portsInp.value, 10) : NaN;
-        if (!isNaN(pv) && pv >= 1) setSwitchModelDefaultPortCount(mfr, model, Math.min(96, pv));
+        var portsInpSave = document.getElementById('deviceCatalogEntryDefaultPorts');
+        var pv = portsInpSave ? parseInt(portsInpSave.value, 10) : NaN;
+        if (_switchEntryPendingPortTypes && _switchEntryPendingPortTypes.length) {
+            setSwitchModelPortTypes(mfr, model, _switchEntryPendingPortTypes);
+        } else if (!isNaN(pv) && pv >= 1) {
+            setSwitchModelDefaultPortCount(mfr, model, Math.min(96, pv));
+        }
+        _switchEntryPendingPortTypes = null;
+    }
+    if (tab === 'cable') {
+        var fibersInpSave = document.getElementById('deviceCatalogEntryCableFibers');
+        var fv = fibersInpSave ? parseInt(fibersInpSave.value, 10) : NaN;
+        if (_cableEntryPendingFiber && _cableEntryPendingFiber.fiberCount) {
+            setCableModelFiberCount(mfr, model, _cableEntryPendingFiber.fiberCount);
+            setCableModelFiberPalette(mfr, model, _cableEntryPendingFiber.palette || null);
+        } else if (!isNaN(fv) && fv >= 1) {
+            setCableModelFiberCount(mfr, model, Math.min(96, fv));
+        } else {
+            var inferred = inferCableModelFiberCount(model);
+            if (inferred) setCableModelFiberCount(mfr, model, inferred);
+        }
+        _cableEntryPendingFiber = null;
     }
 
     closeDeviceCatalogEntryModal();
@@ -1465,6 +2665,39 @@ function setupDeviceCatalogEntryHandlers() {
     var saveBtn = document.getElementById('deviceCatalogEntrySave');
     if (saveBtn) saveBtn.addEventListener('click', saveDeviceCatalogEntry);
 
+    var cableEntryPaletteBtn = document.getElementById('deviceCatalogEntryCablePaletteBtn');
+    if (cableEntryPaletteBtn && !cableEntryPaletteBtn._bound) {
+        cableEntryPaletteBtn._bound = true;
+        cableEntryPaletteBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            openCableCatalogEntryPaletteEditor();
+        });
+    }
+
+    var switchEntryPortsBtn = document.getElementById('deviceCatalogEntrySwitchPortsBtn');
+    if (switchEntryPortsBtn && !switchEntryPortsBtn._bound) {
+        switchEntryPortsBtn._bound = true;
+        switchEntryPortsBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            openSwitchModelPortsEditor('', '', { entryMode: true });
+        });
+    }
+
+    var switchEntryPortsInp = document.getElementById('deviceCatalogEntryDefaultPorts');
+    if (switchEntryPortsInp && !switchEntryPortsInp._switchPortsSyncBound) {
+        switchEntryPortsInp._switchPortsSyncBound = true;
+        switchEntryPortsInp.addEventListener('change', function() {
+            if (!_switchEntryPendingPortTypes || !_switchEntryPendingPortTypes.length) return;
+            var n = parseInt(this.value, 10);
+            if (isNaN(n) || n < 1) return;
+            n = Math.min(96, Math.max(1, n));
+            var pad = _switchEntryPendingPortTypes[_switchEntryPendingPortTypes.length - 1] || SWITCH_PORT_DEFAULT_KIND;
+            _switchEntryPendingPortTypes = normalizeSwitchPortTypesList(n, _switchEntryPendingPortTypes, pad);
+        });
+    }
+
     var cancelBtn = document.getElementById('deviceCatalogEntryCancel');
     if (cancelBtn) cancelBtn.addEventListener('click', closeDeviceCatalogEntryModal);
 
@@ -1475,7 +2708,7 @@ function setupDeviceCatalogEntryHandlers() {
         if (e.target === entryModal) closeDeviceCatalogEntryModal();
     });
 
-    ['deviceCatalogEntryMfrName', 'deviceCatalogEntryModelName', 'deviceCatalogEntrySleeveId', 'deviceCatalogEntrySleeveLabel', 'deviceCatalogEntrySleeveMaxFibers'].forEach(function(id) {
+    ['deviceCatalogEntryMfrName', 'deviceCatalogEntryModelName', 'deviceCatalogEntrySleeveId', 'deviceCatalogEntrySleeveLabel', 'deviceCatalogEntryCrossId', 'deviceCatalogEntryCrossLabel', 'deviceCatalogEntryCrossPorts', 'deviceCatalogEntryCableFibers'].forEach(function(id) {
         var inp = document.getElementById(id);
         if (inp) {
             inp.addEventListener('keydown', function(e) {
@@ -1495,6 +2728,7 @@ function setupDeviceCatalogHandlers() {
     var catModal = document.getElementById('deviceCatalogModal');
 
     setupDeviceCatalogEntryHandlers();
+    setupSwitchModelPortsModalHandlers();
 
     if (searchInp && !searchInp._deviceCatalogSearchBound) {
         searchInp._deviceCatalogSearchBound = true;
@@ -1527,12 +2761,15 @@ function setupDeviceCatalogHandlers() {
                 var meta = DEVICE_CATALOG_TAB_META[tab] || DEVICE_CATALOG_TAB_META.switch;
                 var resetMsg = tab === 'sleeve'
                     ? 'Вернуть полный заводской список типов муфт? Будут восстановлены все встроенные типы и удалены добавленные вами.'
-                    : 'Сбросить раздел «' + meta.label + '» к заводским значениям? Ваши правки в этом разделе будут заменены.';
+                    : (tab === 'cross'
+                        ? 'Вернуть полный заводской список типов кроссов? Будут восстановлены все встроенные типы и удалены добавленные вами.'
+                        : 'Сбросить раздел «' + meta.label + '» к заводским значениям? Ваши правки в этом разделе будут заменены.');
                 if (!(await showConfirm(resetMsg, 'Сброс раздела', { confirmText: 'Сбросить' }))) return;
                 resetDeviceCatalogTabToDefault(tab);
                 renderDeviceCatalogList();
                 populateDeviceDatalists();
                 if (tab === 'sleeve') refreshAllSleeveTypeSelects();
+                if (tab === 'cross') refreshAllCrossTypeSelects();
                 if (typeof showInfo === 'function') showInfo('Раздел «' + meta.label + '» сброшен', '');
             })();
         });
@@ -1587,6 +2824,7 @@ function openDeviceCatalogModal() {
 
 function closeDeviceCatalogModal() {
     closeDeviceCatalogEntryModal();
+    closeSwitchModelPortsModal();
     var modal = document.getElementById('deviceCatalogModal');
     if (modal) {
         modal.classList.remove('device-catalog-modal-open');

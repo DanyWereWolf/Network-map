@@ -1590,7 +1590,7 @@ function showNodeSelectionDialog(crossObj, cableId, fiberNumber) {
     const fiberInfo = document.getElementById('nodeSelectionFiberInfo');
     const searchInput = document.getElementById('nodeSearchInput');
 
-    fiberInfo.textContent = `Подключение жилы #${fiberNumber} к узлу: выберите узел, затем свободный порт SFP/SFP+/Комбо на коммутаторе.`;
+    fiberInfo.textContent = `Подключение жилы #${fiberNumber} к узлу: выберите узел, затем свободный оптический порт на коммутаторе.`;
 
     searchInput.value = '';
 
@@ -1682,7 +1682,7 @@ function selectNodeFromList(nodeIndex) {
     const opts = collectFreeSfpPortOptionsOnNode(nodeObj);
     if (!opts.length) {
         if (typeof showError === 'function') {
-            showError('В этом узле нет коммутатора со свободным портом SFP, SFP+ или Комбо RJ45/SFP. Добавьте коммутатор в карточке узла и укажите типы портов.', 'Нет SFP-порта');
+            showError('В этом узле нет коммутатора со свободным оптическим портом (SFP, SFP+, QSFP, Комбо). Добавьте коммутатор в карточке узла и укажите типы портов.', 'Нет оптического порта');
         }
         return;
     }

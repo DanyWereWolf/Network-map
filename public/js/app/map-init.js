@@ -316,10 +316,6 @@ function setupEventListeners() {
                 }
             }
 
-        if (type === 'sleeve') {
-            updateSleeveMaxFibers();
-        }
-
         if (objectPlacementMode) {
             const newType = this.value;
             currentPlacementType = newType;
@@ -393,27 +389,14 @@ function setupEventListeners() {
     }
     setupDeviceFieldsNoPasswordSuggestions();
 
-    const sleeveTypeSelect = document.getElementById('sleeveType');
-    if (sleeveTypeSelect) {
-        sleeveTypeSelect.addEventListener('change', function() {
-            updateSleeveMaxFibers();
-        });
-    }
-
-    function updateSleeveMaxFibers() {
-        const sleeveTypeEl = document.getElementById('sleeveType');
-        const maxFibersInput = document.getElementById('sleeveMaxFibers');
-        if (!maxFibersInput) return;
-        const sleeveType = sleeveTypeEl ? sleeveTypeEl.value : '';
-        maxFibersInput.value = String(getDefaultMaxFibersForSleeveType(sleeveType));
-    }
-
     setupAccordions();
 
     if (typeof loadCustomDeviceOptionsFromStorage === 'function') loadCustomDeviceOptionsFromStorage();
     if (typeof refreshAllSleeveTypeSelects === 'function') refreshAllSleeveTypeSelects();
+    if (typeof refreshAllCrossTypeSelects === 'function') refreshAllCrossTypeSelects();
 
     initDeviceComboboxes(document);
+    if (typeof setupLayCableProductHandlers === 'function') setupLayCableProductHandlers();
 
     initNodeSelectionModal();
     initOnuSelectionModal();

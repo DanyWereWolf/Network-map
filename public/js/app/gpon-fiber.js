@@ -53,6 +53,7 @@ function applyNewCableFiberProps(cable) {
         cable.properties.unset('fiberPalette');
     }
     window.FiberCableConfig.applyOpticalMapStyle(cable);
+    if (typeof applyLayCableProductToCable === 'function') applyLayCableProductToCable(cable);
 }
 
 function applyImportedCableFiberProps(cable, item) {

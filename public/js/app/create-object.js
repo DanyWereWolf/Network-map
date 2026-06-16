@@ -69,7 +69,11 @@ function createObject(type, name, coords, options = {}) {
     }
 
     if (type === 'cross') {
-        placemarkProperties.crossPorts = options.crossPorts || 24;
+        if (options.crossType) placemarkProperties.crossType = options.crossType;
+        placemarkProperties.crossPorts = options.crossPorts
+            || (options.crossType && typeof getDefaultPortsForCrossType === 'function'
+                ? getDefaultPortsForCrossType(options.crossType)
+                : 24);
         var ccp = options.crossCopperPorts !== undefined && options.crossCopperPorts !== null ? parseInt(options.crossCopperPorts, 10) : 0;
         placemarkProperties.crossCopperPorts = isNaN(ccp) ? 0 : Math.max(0, ccp);
         placemarkProperties.copperPortUsage = {};

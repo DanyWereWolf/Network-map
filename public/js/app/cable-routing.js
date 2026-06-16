@@ -954,26 +954,13 @@ function splitCableAt(cable, splitOptions) {
     }
 
     var sleeveType = splitOptions.sleeveType || 'SNR-FOSC-L';
-    var maxFibers = splitOptions.maxFibers !== undefined && splitOptions.maxFibers !== null
-        ? splitOptions.maxFibers
-        : getDefaultMaxFibersForSleeveType(sleeveType);
     var newSleeve = createObject('sleeve', splitOptions.sleeveName || '', splitCoords, {
         sleeveType: sleeveType,
-        maxFibers: maxFibers
+        maxFibers: 0
     });
     if (!newSleeve) {
         showError('Не удалось создать муфту.', 'Разрез кабеля');
         return false;
-    }
-
-    var fiberCount = getFiberCount(cableType);
-    if (maxFibers > 0) {
-        var usedAtNew = getTotalUsedFibersInSleeve(newSleeve);
-        if (usedAtNew + fiberCount * 2 > maxFibers) {
-            deleteObject(newSleeve, { skipSync: true });
-            showError('Вместимости выбранного типа муфты недостаточно для двух кабельных сегментов (' + (fiberCount * 2) + ' волокон).', 'Переполнение муфты');
-            return false;
-        }
     }
 
     var routes;

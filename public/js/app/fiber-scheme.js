@@ -1020,7 +1020,7 @@ function connectSplitterOutputToNode(hostObj, splitterId, outputIndex, nodeObj, 
         return false;
     }
     if (!switchId || switchPort == null || isNaN(parseInt(switchPort, 10))) {
-        if (typeof showError === 'function') showError('Выберите коммутатор и порт SFP/SFP+/Комбо.', 'Порт');
+        if (typeof showError === 'function') showError('Выберите коммутатор и оптический порт (SFP, SFP+, QSFP, Комбо).', 'Порт');
         return false;
     }
     var portNum = parseInt(switchPort, 10);
@@ -1031,7 +1031,7 @@ function connectSplitterOutputToNode(hostObj, splitterId, outputIndex, nodeObj, 
     }
     var typesAtt = swAtt.switchPortTypes || [];
     if (portNum < 1 || portNum > typesAtt.length || !isSwitchPortSfpFiberType(typesAtt[portNum - 1])) {
-        if (typeof showError === 'function') showError('К кроссу или муфте можно подключить жилу только в порт типа SFP, SFP+ или Комбо RJ45/SFP.', 'Тип порта');
+        if (typeof showError === 'function') showError('К кроссу или муфте можно подключить жилу только в оптический порт коммутатора (SFP, SFP+, QSFP, Комбо).', 'Тип порта');
         return false;
     }
     var fusAtt = swAtt.fiberPortUsage || {};
@@ -1095,7 +1095,7 @@ function showSplitterOutputNodeDialog(hostObj, splitterId, outputIndex) {
     var fiberInfo = document.getElementById('nodeSelectionFiberInfo');
     var searchInput = document.getElementById('nodeSearchInput');
     if (fiberInfo) {
-        fiberInfo.textContent = 'Выход ' + (outputIndex + 1) + ' «' + spName + '»: выберите узел, затем свободный порт SFP/SFP+/Комбо на коммутаторе.';
+        fiberInfo.textContent = 'Выход ' + (outputIndex + 1) + ' «' + spName + '»: выберите узел, затем свободный оптический порт на коммутаторе.';
     }
     if (searchInput) searchInput.value = '';
     renderNodeList(nodes, '');

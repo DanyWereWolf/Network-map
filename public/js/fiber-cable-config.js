@@ -148,6 +148,7 @@
         if (el) el.value = String(v);
         try { localStorage.setItem(LAY_FIBER_COUNT_KEY, String(v)); } catch (e) {}
         syncLayFiberPresetsUI();
+        syncLayPaletteButtonState();
         return v;
     }
 
@@ -176,6 +177,7 @@
                 localStorage.setItem(LAY_FIBER_PALETTE_KEY, JSON.stringify(trimmed));
             }
         } catch (e) {}
+        syncLayPaletteButtonState();
     }
 
     function applyOpticalMapStyle(cable) {
@@ -208,8 +210,33 @@
         if (!modal) return;
         modal.style.display = 'none';
         modal.setAttribute('aria-hidden', 'true');
+        modal.classList.remove('fiber-palette-modal-open');
         _paletteEditorState.onSave = null;
         _paletteEditorState.working = [];
+    }
+
+    function syncLayPaletteButtonState() {
+        var btn = document.getElementById('layFiberPaletteBtn');
+        if (btn) {
+            var pal = getLayFiberPalette();
+            btn.classList.toggle('cable-fiber-palette-btn--custom', !!(pal && pal.length));
+        }
+    }
+
+    function openLayCablePaletteEditor(options) {
+        options = options || {};
+        var c = getLayFiberCount();
+        openFiberPaletteEditor({
+            title: options.title || 'Цвета жил для прокладки',
+            fiberCount: c,
+            palette: getLayFiberPalette() || buildStandardPalette(c),
+            onSave: function(r) {
+                setLayFiberCount(r.fiberCount);
+                setLayFiberPalette(r.palette);
+                syncLayPaletteButtonState();
+                if (typeof options.onSave === 'function') options.onSave(r);
+            }
+        });
     }
 
     function ensureFiberPaletteModalBound() {
@@ -372,6 +399,7 @@
 
         modal.style.display = 'flex';
         modal.setAttribute('aria-hidden', 'false');
+        modal.classList.add('fiber-palette-modal-open');
 
         if (typeof global.initPanelPlexusCanvases === 'function') {
             requestAnimationFrame(function() { global.initPanelPlexusCanvases(modal); });
@@ -398,23 +426,20 @@
         document.querySelectorAll('.cable-fiber-preset').forEach(function(btn) {
             btn.addEventListener('click', function() { setLayFiberCount(btn.getAttribute('data-count')); });
         });
-        var palBtn = document.getElementById('layFiberPaletteBtn');
-        if (palBtn && !palBtn._bound) {
-            palBtn._bound = true;
-            palBtn.addEventListener('click', function() {
-                var c = getLayFiberCount();
-                openFiberPaletteEditor({
-                    title: 'Цвета жил для новых кабелей',
-                    fiberCount: c,
-                    palette: getLayFiberPalette() || buildStandardPalette(c),
-                    onSave: function(r) {
-                        setLayFiberCount(r.fiberCount);
-                        setLayFiberPalette(r.palette);
-                    }
-                });
+        function bindLayPaletteBtn(btn) {
+            if (!btn || btn._bound) return;
+            btn._bound = true;
+            btn.addEventListener('click', function(e) {
+                if (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                openLayCablePaletteEditor();
             });
         }
+        bindLayPaletteBtn(document.getElementById('layFiberPaletteBtn'));
         syncLayFiberPresetsUI();
+        syncLayPaletteButtonState();
     }
 
     function renderCableLayPanel() {
@@ -457,6 +482,8 @@
         applyOpticalMapStyle: applyOpticalMapStyle,
         applyCableFiberSettings: applyCableFiberSettings,
         openFiberPaletteEditor: openFiberPaletteEditor,
+        openLayCablePaletteEditor: openLayCablePaletteEditor,
+        syncLayPaletteButtonState: syncLayPaletteButtonState,
         setupLayFiberControls: setupLayFiberControls,
         renderCableLayPanel: renderCableLayPanel,
         syncLayFiberPresetsUI: syncLayFiberPresetsUI,
