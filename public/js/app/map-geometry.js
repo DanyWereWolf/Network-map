@@ -264,12 +264,9 @@ function findRefClosestToCoord(refs, coord, tolerance, preferCableEndpoint, pref
     if (preferredUniqueId) {
         for (var rp = 0; rp < refs.length; rp++) {
             var op = refs[rp];
-            if (!op || !op.geometry || !op.properties) continue;
+            if (!op || !op.properties) continue;
             if (op.properties.get('uniqueId') !== preferredUniqueId) continue;
-            var cp = op.geometry.getCoordinates();
-            if (!cp || cp.length < 2) continue;
-            var dp = Math.sqrt(Math.pow(cp[0] - coord[0], 2) + Math.pow(cp[1] - coord[1], 2));
-            if (dp < tolerance) return op;
+            return op;
         }
     }
     var best = null, bestDist = tolerance;

@@ -294,8 +294,9 @@ function validateAndFixCableGeometryOnLoad() {
     });
 }
 
-function updateConnectedCables(obj) {
-    const cables = objects.filter(cable => {
+function getCablesTouchingObject(obj) {
+    if (!obj) return [];
+    return objects.filter(function(cable) {
         if (!cable.properties || cable.properties.get('type') !== 'cable') return false;
         var from = cable.properties.get('from');
         var to = cable.properties.get('to');
@@ -303,7 +304,11 @@ function updateConnectedCables(obj) {
         var points = cable.properties.get('points');
         return Array.isArray(points) && points.indexOf(obj) !== -1;
     });
-    
+}
+
+function updateConnectedCables(obj) {
+    const cables = getCablesTouchingObject(obj);
+
     cables.forEach(cable => {
         if (!cable.geometry) return;
         var points = cable.properties.get('points');

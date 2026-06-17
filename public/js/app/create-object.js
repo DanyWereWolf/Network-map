@@ -341,7 +341,8 @@ function createObject(type, name, coords, options = {}) {
         updateSelectionPulsePosition(placemark);
         if (type === 'cross') updateCrossDisplay(); 
         if (type === 'node') updateNodeDisplay();
-        saveData({ object: placemark, syncImmediate: true });
+        if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(placemark);
+        else saveData({ object: placemark, syncImmediate: true });
         if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
         if (typeof applyMapFilter === 'function') applyMapFilter();
         releaseDragObjectLock(uid);

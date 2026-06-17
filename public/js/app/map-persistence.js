@@ -746,8 +746,10 @@ function applyRemoteStateMerged(data) {
         var coords = normalizeCableGeometry(item.geometry);
         var fromObj = null, toObj = null;
         
-        if (item.fromUniqueId && item.toUniqueId) {
+        if (item.fromUniqueId) {
             fromObj = refs.find(function(r) { return r.properties && r.properties.get('uniqueId') === item.fromUniqueId; });
+        }
+        if (item.toUniqueId) {
             toObj = refs.find(function(r) { return r.properties && r.properties.get('uniqueId') === item.toUniqueId; });
         }
         if (!fromObj || !toObj) {
@@ -1153,17 +1155,17 @@ function importDataRunCables(data, objectRefs) {
         if (item.fromUniqueId) fromObj = refByUid[item.fromUniqueId] || null;
         if (item.toUniqueId) toObj = refByUid[item.toUniqueId] || null;
         if (!fromObj || !toObj) {
-            if (coords && coords.length >= 2) {
-                var preferFiberEpImp = item.cableType !== 'copper';
-                fromObj = fromObj || findRefClosestToCoord(refsOnly, coords[0], undefined, preferFiberEpImp, item.fromUniqueId);
-                toObj = toObj || findRefClosestToCoord(refsOnly, coords[coords.length - 1], undefined, preferFiberEpImp, item.toUniqueId);
-            }
-        }
-        if (!fromObj || !toObj) {
             if (item.from !== undefined && item.to !== undefined &&
                 item.from < objectRefs.length && item.to < objectRefs.length) {
                 fromObj = fromObj || objectRefs[item.from];
                 toObj = toObj || objectRefs[item.to];
+            }
+        }
+        if (!fromObj || !toObj) {
+            if (coords && coords.length >= 2) {
+                var preferFiberEpImp = item.cableType !== 'copper';
+                fromObj = fromObj || findRefClosestToCoord(refsOnly, coords[0], undefined, preferFiberEpImp, item.fromUniqueId);
+                toObj = toObj || findRefClosestToCoord(refsOnly, coords[coords.length - 1], undefined, preferFiberEpImp, item.toUniqueId);
             }
         }
         if ((!fromObj || !toObj) && coords && coords.length >= 2) {
@@ -1826,7 +1828,8 @@ function createObjectFromData(data, opts, createOpts) {
             }
             scheduleConnectionLinesUpdate();
             updateSelectionPulsePosition(placemark);
-            saveData({ object: placemark, syncImmediate: true });
+            if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(placemark);
+            else saveData({ object: placemark, syncImmediate: true });
             releaseDragObjectLock(uid);
         });
 

@@ -268,7 +268,8 @@ function updateCrossDisplay(scope) {
                             updateConnectedCables(crossObj);
                             scheduleConnectionLinesUpdate();
                             ensurePlacemarkUniqueIdForSync(crossObj);
-                            saveData({ object: crossObj, syncImmediate: true });
+                            if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(crossObj);
+                            else saveData({ object: crossObj, syncImmediate: true });
                             myMap.balloon.close();
                             updateCrossDisplay([groupKey(coords), groupKey(offsetCoords)]);
                         });
@@ -314,13 +315,19 @@ function updateCrossDisplay(scope) {
             const oldCoords = crosses[0].geometry.getCoordinates();
             const oldKey = groupKey(oldCoords);
             const savedName = crossGroupNames.get(oldKey);
+            var movedGroupObjects = [];
             crosses.forEach(c => {
                 c.geometry.setCoordinates(newCoords);
                 const lbl = c.properties.get('label');
                 if (lbl && lbl.geometry) lbl.geometry.setCoordinates(newCoords);
                 updateConnectedCables(c);
                 ensurePlacemarkUniqueIdForSync(c);
-                syncPushObjectUpdate(c, true);
+                movedGroupObjects.push(c);
+                if (typeof getCablesTouchingObject === 'function') {
+                    getCablesTouchingObject(c).forEach(function(cable) {
+                        if (movedGroupObjects.indexOf(cable) === -1) movedGroupObjects.push(cable);
+                    });
+                }
             });
             scheduleConnectionLinesUpdate();
             if (savedName) {
@@ -328,7 +335,8 @@ function updateCrossDisplay(scope) {
                 crossGroupNames.set(groupKey(newCoords), savedName);
                 saveGroupNames();
             }
-            saveData({ skipSync: true });
+            if (typeof saveLinkedMapObjects === 'function') saveLinkedMapObjects(movedGroupObjects);
+            else saveData({ skipSync: true });
             updateCrossDisplay([oldKey, groupKey(newCoords)]);
         });
         attachHoverEventsToObject(groupPlacemark);
@@ -505,7 +513,8 @@ function updateNodeDisplay(scope) {
                             updateConnectedCables(nodes[i]);
                             scheduleConnectionLinesUpdate();
                             ensurePlacemarkUniqueIdForSync(nodes[i]);
-                            saveData({ object: nodes[i], syncImmediate: true });
+                            if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(nodes[i]);
+                            else saveData({ object: nodes[i], syncImmediate: true });
                             myMap.balloon.close();
                             updateNodeDisplay();
                         });
@@ -533,13 +542,19 @@ function updateNodeDisplay(scope) {
             const oldCoords = nodes[0].geometry.getCoordinates();
             const oldKey = groupKey(oldCoords);
             const savedName = nodeGroupNames.get(oldKey);
+            var movedNodeGroupObjects = [];
             nodes.forEach(n => {
                 n.geometry.setCoordinates(newCoords);
                 const lbl = n.properties.get('label');
                 if (lbl && lbl.geometry) lbl.geometry.setCoordinates(newCoords);
                 updateConnectedCables(n);
                 ensurePlacemarkUniqueIdForSync(n);
-                syncPushObjectUpdate(n, true);
+                movedNodeGroupObjects.push(n);
+                if (typeof getCablesTouchingObject === 'function') {
+                    getCablesTouchingObject(n).forEach(function(cable) {
+                        if (movedNodeGroupObjects.indexOf(cable) === -1) movedNodeGroupObjects.push(cable);
+                    });
+                }
             });
             scheduleConnectionLinesUpdate();
             if (savedName) {
@@ -547,7 +562,8 @@ function updateNodeDisplay(scope) {
                 nodeGroupNames.set(groupKey(newCoords), savedName);
                 saveGroupNames();
             }
-            saveData({ skipSync: true });
+            if (typeof saveLinkedMapObjects === 'function') saveLinkedMapObjects(movedNodeGroupObjects);
+            else saveData({ skipSync: true });
             updateNodeDisplay([oldKey, groupKey(newCoords)]);
         });
         attachHoverEventsToObject(groupPlacemark);

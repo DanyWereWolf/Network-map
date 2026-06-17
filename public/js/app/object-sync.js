@@ -226,6 +226,22 @@ function syncPushCableUpdate(cable, immediate) {
     return false;
 }
 
+function saveObjectWithConnectedCables(obj) {
+    if (!obj || !obj.properties) {
+        saveData();
+        return;
+    }
+    var toSave = [obj];
+    if (typeof getCablesTouchingObject === 'function') {
+        getCablesTouchingObject(obj).forEach(function(cable) {
+            if (!cable || toSave.indexOf(cable) !== -1) return;
+            ensurePlacemarkUniqueIdForSync(cable);
+            toSave.push(cable);
+        });
+    }
+    saveLinkedMapObjects(toSave);
+}
+
 function saveLinkedMapObjects(objectsToSave) {
     if (!objectsToSave || !objectsToSave.length) {
         saveData();
