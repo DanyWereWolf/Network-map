@@ -2,6 +2,7 @@
  * Тема (светлая/тёмная): персонально на пользователя, при первом запуске — из ОС.
  */
 var THEME_STORAGE_PREFIX = 'networkMap_theme';
+var THEME_TRANSITION_MS = 450;
 
 function getThemeUserIdFromSession() {
     try {
@@ -47,6 +48,24 @@ function resolveInitialTheme() {
     return saved || getSystemPreferredTheme();
 }
 
+function prefersReducedMotion() {
+    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+
+function runThemeTransition(applyFn) {
+    if (prefersReducedMotion()) {
+        applyFn();
+        return;
+    }
+    var root = document.documentElement;
+    root.classList.add('theme-changing');
+    void root.offsetHeight;
+    applyFn();
+    window.setTimeout(function() {
+        root.classList.remove('theme-changing');
+    }, THEME_TRANSITION_MS + 40);
+}
+
 function initTheme() {
     const themeToggle = document.getElementById('themeToggle');
     setTheme(resolveInitialTheme(), { syncServer: false });
@@ -80,23 +99,32 @@ function applyThemeToDocument(theme) {
 function setTheme(theme, options) {
     options = options || {};
     if (theme !== 'dark' && theme !== 'light') theme = resolveInitialTheme();
-    applyThemeToDocument(theme);
-    if (options.persist !== false) {
-        try { localStorage.setItem(getThemeStorageKey(), theme); } catch (e) {}
-    }
-    if (options.syncServer && getApiBase() && getAuthToken()) {
-        fetch(getApiBase() + '/api/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
-            body: JSON.stringify({ theme: theme })
-        }).catch(function() {});
+
+    var doApply = function() {
+        applyThemeToDocument(theme);
+        if (options.persist !== false) {
+            try { localStorage.setItem(getThemeStorageKey(), theme); } catch (e) {}
+        }
+        if (options.syncServer && getApiBase() && getAuthToken()) {
+            fetch(getApiBase() + '/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
+                body: JSON.stringify({ theme: theme })
+            }).catch(function() {});
+        }
+    };
+
+    if (options.animate) {
+        runThemeTransition(doApply);
+    } else {
+        doApply();
     }
 }
 
 function toggleTheme() {
     const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    setTheme(newTheme, { syncServer: true });
+    setTheme(newTheme, { syncServer: true, animate: true });
 }
 
 window.getThemeStorageKey = getThemeStorageKey;

@@ -120,7 +120,7 @@ function serializeMapItemFromObject(obj) {
             if (props.onuConnections) result.onuConnections = props.onuConnections;
             if (props.mediaConverterConnections) result.mediaConverterConnections = props.mediaConverterConnections;
             if (props.splitterConnections) result.splitterConnections = props.splitterConnections;
-            if (Array.isArray(props.embeddedSplitters) && props.embeddedSplitters.length) {
+            if (Array.isArray(props.embeddedSplitters)) {
                 result.embeddedSplitters = props.embeddedSplitters;
             }
         }
@@ -130,7 +130,7 @@ function serializeMapItemFromObject(obj) {
             if (props.onuConnections) result.onuConnections = props.onuConnections;
             if (props.mediaConverterConnections) result.mediaConverterConnections = props.mediaConverterConnections;
             if (props.splitterConnections) result.splitterConnections = props.splitterConnections;
-            if (Array.isArray(props.embeddedSplitters) && props.embeddedSplitters.length) {
+            if (Array.isArray(props.embeddedSplitters)) {
                 result.embeddedSplitters = props.embeddedSplitters;
             }
         }
@@ -140,6 +140,7 @@ function serializeMapItemFromObject(obj) {
             else if (props.incomingFiber === null) result.incomingFiber = null;
             if (props.portAssignments) result.portAssignments = props.portAssignments;
             if (props.portLabels) result.portLabels = props.portLabels;
+            if (props.ponPortTypes) result.ponPortTypes = props.ponPortTypes;
             if (props.manufacturer) result.manufacturer = props.manufacturer;
             if (props.model) result.model = props.model;
             if (props.comment) result.comment = props.comment;
@@ -1430,7 +1431,7 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         if (data.onuConnections) placemark.properties.set('onuConnections', data.onuConnections);
         if (data.mediaConverterConnections) placemark.properties.set('mediaConverterConnections', data.mediaConverterConnections);
         if (data.splitterConnections) placemark.properties.set('splitterConnections', data.splitterConnections);
-        if (Array.isArray(data.embeddedSplitters)) placemark.properties.set('embeddedSplitters', data.embeddedSplitters);
+        placemark.properties.set('embeddedSplitters', Array.isArray(data.embeddedSplitters) ? data.embeddedSplitters : []);
         loadFiberSchemeCanvasPropsFromData(data, placemark);
         loadFiberSchemeViewPropsFromData(data, placemark);
         loadFiberSchemeCableSidesFromData(data, placemark);
@@ -1447,7 +1448,7 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         if (data.onuConnections) placemark.properties.set('onuConnections', data.onuConnections);
         if (data.mediaConverterConnections) placemark.properties.set('mediaConverterConnections', data.mediaConverterConnections);
         if (data.splitterConnections) placemark.properties.set('splitterConnections', data.splitterConnections);
-        if (Array.isArray(data.embeddedSplitters)) placemark.properties.set('embeddedSplitters', data.embeddedSplitters);
+        placemark.properties.set('embeddedSplitters', Array.isArray(data.embeddedSplitters) ? data.embeddedSplitters : []);
         loadFiberSchemeCanvasPropsFromData(data, placemark);
         loadFiberSchemeViewPropsFromData(data, placemark);
         loadFiberSchemeCableSidesFromData(data, placemark);
@@ -1457,6 +1458,9 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         placemark.properties.set('incomingFiber', data.incomingFiber || null);
         placemark.properties.set('portAssignments', data.portAssignments || {});
         placemark.properties.set('portLabels', data.portLabels || {});
+        placemark.properties.set('ponPortTypes', Array.isArray(data.ponPortTypes) && data.ponPortTypes.length
+            ? data.ponPortTypes.slice()
+            : []);
         if (data.manufacturer) placemark.properties.set('manufacturer', data.manufacturer);
         if (data.model) placemark.properties.set('model', data.model);
         if (data.comment != null) placemark.properties.set('comment', data.comment || '');
@@ -1748,9 +1752,17 @@ function createObjectFromData(data, opts, createOpts) {
                     selectObject(cableSource);
                     return;
                 }
+                if (!validatePendingOltPortCableEndpoint(placemark)) return;
                 var points = [cableSource].concat(cableWaypoints).concat([placemark]);
                 var success = createCableFromPoints(points, cableTypeVal);
                 if (success) {
+                    if (oltPortCableJustFinished) {
+                        oltPortCableJustFinished = false;
+                        clearSelection();
+                        removeCablePreview();
+                        syncMapPanLockForEditTools();
+                        return;
+                    }
                     cableSource = placemark;
                     cableWaypoints = [];
                     clearSelection();

@@ -13,7 +13,10 @@ function updateFiberSelectionUI() {
             var splitterHint = (schemeSplitterWirePick && schemeSplitterWirePick.hostObj && schemeSplitterWirePick.cableId === sc.cableId && schemeSplitterWirePick.fiberNumber === sc.fiberNumber)
                 ? ' Или кликните <strong>сплиттер на схеме</strong> (карточка или «вх») для подключения входа.'
                 : '';
-            bar.innerHTML = '<span class="fiber-selection-text">Выбрана жила: кабель ' + escapeHtml(shortId) + ', жила ' + sc.fiberNumber + '. Выберите вторую жилу в другом кабеле (в таблице или в схеме).' + splitterHint + '</span> ' +
+            var crossHint = (currentModalObject && isCrossLikeHostType(currentModalObject.properties.get('type')))
+                ? ' Или кликните <strong>порт кросса</strong> внизу схемы (только для несращённых жил).'
+                : '';
+            bar.innerHTML = '<span class="fiber-selection-text">Выбрана жила: кабель ' + escapeHtml(shortId) + ', жила ' + sc.fiberNumber + '. Выберите вторую жилу в другом кабеле (в таблице или в схеме).' + splitterHint + crossHint + '</span> ' +
                 '<button type="button" class="fiber-selection-cancel" id="fiberSelectionCancelBtn">Отменить выбор</button>';
             const cancelBtn = document.getElementById('fiberSelectionCancelBtn');
             if (cancelBtn) cancelBtn.addEventListener('click', function() { resetFiberSelection(); });
@@ -50,6 +53,7 @@ function updateFiberSelectionUI() {
     });
     const hint = document.querySelector('.connection-hint');
     if (hint) hint.remove();
+    if (typeof updateSchemeCrossPortPickUI === 'function') updateSchemeCrossPortPickUI();
 }
 
 function resetFiberSelection() {
@@ -59,6 +63,7 @@ function resetFiberSelection() {
         updateSchemeSplitterPickUI();
     }
     updateFiberSelectionUI();
+    if (typeof updateSchemeCrossPortPickUI === 'function') updateSchemeCrossPortPickUI();
 }
 
 function getCableOltImpact(cableUniqueId) {

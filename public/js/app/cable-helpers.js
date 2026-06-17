@@ -76,7 +76,7 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
         const t = obj.properties.get('type');
         const uid = obj.properties.get('uniqueId');
 
-        if (t === 'cross' || t === 'sleeve') {
+        if (isFiberHostType(t)) {
             if (onlyAtLocation) {
                 var matchLoc = (atCrossId && uid === atCrossId) || (atSleeveId && uid === atSleeveId);
                 if (!matchLoc) continue;
@@ -408,14 +408,30 @@ function getNodeAttachedSwitches(node) {
 
 function getAttachedSwitchPortStats(swRow) {
     var pts = (swRow && swRow.switchPortTypes) ? swRow.switchPortTypes : [];
-    var usageN = (swRow && swRow.copperPortUsage) ? swRow.copperPortUsage : {};
-    var fiberUsageN = (swRow && swRow.fiberPortUsage) ? swRow.fiberPortUsage : {};
     var total = pts.length;
     var busy = 0;
     for (var i = 1; i <= total; i++) {
-        if (usageN[String(i)] || fiberUsageN[String(i)]) busy++;
+        if (isAttachedSwitchPortOccupied(swRow, i)) busy++;
     }
     return { total: total, busy: busy, free: Math.max(0, total - busy) };
+}
+
+function getAttachedSwitchPortLabels(swRow) {
+    var pl = swRow && swRow.portLabels;
+    return (pl && typeof pl === 'object') ? pl : {};
+}
+
+function isAttachedSwitchPortManuallyBusy(swRow, portNum) {
+    var mu = swRow && swRow.manualPortUsage;
+    return !!(mu && mu[String(portNum)]);
+}
+
+function isAttachedSwitchPortOccupied(swRow, portNum) {
+    if (!swRow || portNum == null) return false;
+    var p = String(portNum);
+    var usageN = swRow.copperPortUsage || {};
+    var fiberUsageN = swRow.fiberPortUsage || {};
+    return !!(usageN[p] || fiberUsageN[p] || isAttachedSwitchPortManuallyBusy(swRow, portNum));
 }
 
 function getNodeSwitchesSummary(node) {

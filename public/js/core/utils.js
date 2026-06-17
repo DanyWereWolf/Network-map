@@ -5,6 +5,14 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function isCrossLikeHostType(type) {
+    return type === 'cross';
+}
+
+function isFiberHostType(type) {
+    return type === 'sleeve' || type === 'cross';
+}
+
 function getObjectTypeName(type) {
     switch (type) {
         case 'support': return 'Опора связи';

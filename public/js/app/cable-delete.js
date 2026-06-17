@@ -83,7 +83,7 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
     objects.forEach(function(slot) {
         if (!slot.properties) return;
         var t = slot.properties.get('type');
-        if (t === 'cross' || t === 'sleeve') {
+        if (isFiberHostType(t)) {
             var oltConn = slot.properties.get('oltConnections');
             var onuConn = slot.properties.get('onuConnections');
             var mcConn = slot.properties.get('mediaConverterConnections');

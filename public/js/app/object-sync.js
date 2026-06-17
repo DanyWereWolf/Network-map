@@ -267,7 +267,15 @@ function pushSaveDataToSync(opts) {
         return;
     }
     if (opts && opts.objects && opts.objects.length) {
-        for (var i = 0; i < opts.objects.length; i++) syncPushObjectUpdate(opts.objects[i], !!opts.syncImmediate);
+        for (var i = 0; i < opts.objects.length; i++) {
+            var syncObj = opts.objects[i];
+            if (!syncObj || !syncObj.properties) continue;
+            if (syncObj.properties.get('type') === 'cable') {
+                syncPushCableUpdate(syncObj, !!opts.syncImmediate);
+            } else {
+                syncPushObjectUpdate(syncObj, !!opts.syncImmediate);
+            }
+        }
         return;
     }
     if (opts && opts.cables && opts.cables.length) {

@@ -293,7 +293,7 @@ function connectFiberToOltWithRoute(sleeveObj, cableId, fiberNumber, oltObj, rou
     const t = sleeveObj.properties.get('type');
     const placeId = sleeveObj.properties.get('uniqueId');
     const opts = { type: 'oltIncoming', oltId: getObjectUniqueId(oltObj) };
-    if (t === 'cross') opts.atCrossId = placeId; else opts.atSleeveId = placeId;
+    if (isCrossLikeHostType(t)) opts.atCrossId = placeId; else opts.atSleeveId = placeId;
     const usage = getFiberUsage(cableId, fiberNumber, opts);
     if (usage.used) {
         showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');

@@ -603,12 +603,41 @@ function updateFiberPort(crossObj, cableId, fiberNumber, portValue) {
     }
     const key = `${cableId}-${fiberNumber}`;
     const value = (portValue !== undefined && portValue !== null && String(portValue).trim() !== '') ? String(portValue).trim() : null;
+    if (value && typeof isFiberSplicedAtHost === 'function' && isFiberSplicedAtHost(crossObj, cableId, fiberNumber)) {
+        return false;
+    }
     if (value) {
         fiberPorts[key] = value;
     } else {
         delete fiberPorts[key];
     }
     crossObj.properties.set('fiberPorts', fiberPorts);
+    return true;
+}
+
+function releaseCrossFiberPortsForSplice(crossObj, cableIdA, fiberA, cableIdB, fiberB) {
+    if (!crossObj || !isCrossLikeHostType(crossObj.properties.get('type'))) return;
+    if (cableIdA != null && fiberA != null) updateFiberPort(crossObj, cableIdA, fiberA, null);
+    if (cableIdB != null && fiberB != null) updateFiberPort(crossObj, cableIdB, fiberB, null);
+}
+
+function sanitizeCrossFiberPorts(crossObj) {
+    if (!crossObj || !isCrossLikeHostType(crossObj.properties.get('type'))) return false;
+    var fiberPorts = crossObj.properties.get('fiberPorts');
+    if (!fiberPorts || typeof isFiberSplicedAtHost !== 'function') return false;
+    var changed = false;
+    Object.keys(fiberPorts).slice().forEach(function(key) {
+        var lastDash = key.lastIndexOf('-');
+        if (lastDash < 0) return;
+        var cableId = key.substring(0, lastDash);
+        var fiberNumber = parseInt(key.substring(lastDash + 1), 10);
+        if (isFiberSplicedAtHost(crossObj, cableId, fiberNumber)) {
+            delete fiberPorts[key];
+            changed = true;
+        }
+    });
+    if (changed) crossObj.properties.set('fiberPorts', fiberPorts);
+    return changed;
 }
 
 function updateFiberLabel(sleeveObj, cableId, fiberNumber, label) {

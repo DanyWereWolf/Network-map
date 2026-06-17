@@ -61,6 +61,28 @@ function ensurePlacemarkUniqueIdForSync(pm) {
     pm.properties.set('uniqueId', generateUniqueId(t));
 }
 
+/** Сохраняет uniqueId точек маршрута на сервер до add_cable. */
+function syncCableRoutePlacemarkUids(points) {
+    if (!points || points.length < 2) return [];
+    var changed = [];
+    for (var i = 0; i < points.length; i++) {
+        var pm = points[i];
+        if (!pm || !pm.properties) continue;
+        var t = pm.properties.get('type');
+        if (!t || t === 'cable' || t === 'cableLabel') continue;
+        var hadUid = pm.properties.get('uniqueId');
+        ensurePlacemarkUniqueIdForSync(pm);
+        var nowUid = pm.properties.get('uniqueId');
+        if (nowUid && (hadUid == null || hadUid === '')) {
+            if (changed.indexOf(pm) === -1) changed.push(pm);
+        }
+    }
+    if (changed.length && typeof saveLinkedMapObjects === 'function') {
+        saveLinkedMapObjects(changed);
+    }
+    return changed;
+}
+
 function createCableFromPoints(points, cableType, existingCableId = null, fiberNumber = null, skipHistoryLog = false, skipSync = false, copperMeta = null, undergroundSpans = null) {
     if (!points || points.length < 2) return false;
     points = dedupeSupportAttachmentInCablePoints(points);
@@ -226,7 +248,17 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
 
     if (!isMapBulkImportActive()) updateCableVisualization();
     
+    if (!existingCableId && !isCopperCableType(cableType) && pendingOltPortPreset &&
+        typeof resolveOltPortCableEnds === 'function' && typeof buildOltPortFeederCableName === 'function') {
+        var oltEnds = resolveOltPortCableEnds(points, pendingOltPortPreset);
+        if (oltEnds) {
+            var oltFeederName = buildOltPortFeederCableName(oltEnds.oltObj, pendingOltPortPreset.portNumber, oltEnds.hostObj);
+            if (oltFeederName) polyline.properties.set('cableName', oltFeederName);
+        }
+    }
+
     if (!skipSync) {
+        syncCableRoutePlacemarkUids(points);
         saveData();
         if (typeof window.syncSendOp === 'function') {
             var addCableOp = buildAddCableSyncOp(polyline, points);
@@ -246,6 +278,11 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
         resetCableUndergroundPendingSpans();
     }
     if (!isMapBulkImportActive()) updateStats();
+    if (!existingCableId && !isCopperCableType(cableType) && typeof tryApplyOltPortPresetOnCableCreated === 'function') {
+        tryApplyOltPortPresetOnCableCreated(points, polyline);
+    } else if (!existingCableId && !isCopperCableType(cableType) && typeof notifyOltCableConnectivityIfNeeded === 'function') {
+        notifyOltCableConnectivityIfNeeded(points, polyline);
+    }
     return true;
 }
 

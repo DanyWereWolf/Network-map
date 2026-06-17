@@ -45,6 +45,7 @@
     function renderSidebarLegend(containerId) {
         var root = document.getElementById(containerId || 'legend-content');
         if (!root) return;
+        var target = root.querySelector('.accordion-content-inner') || root;
 
         var html = '';
 
@@ -90,7 +91,7 @@
         });
         html += '</div>';
 
-        root.innerHTML = html;
+        target.innerHTML = html;
     }
 
     function renderCableTypePicker(containerId) {

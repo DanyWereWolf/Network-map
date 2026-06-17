@@ -180,7 +180,7 @@ function setupRectSelection() {
                             }
                         } else {
                             var delOpts = { skipConfirmGpon: true };
-                            if (t === 'sleeve' || t === 'cross') {
+                            if (isFiberHostType(t)) {
                                 var imp = collectGponImpactFromHost(obj);
                                 if (imp && imp.hasGpon) delOpts.gponImpact = imp;
                             }
@@ -282,7 +282,7 @@ function findRefClosestToCoord(refs, coord, tolerance, preferCableEndpoint, pref
         var d = Math.sqrt(Math.pow(c[0] - coord[0], 2) + Math.pow(c[1] - coord[1], 2));
         if (d >= tolerance) continue;
         var t = o.properties && o.properties.get('type');
-        if (preferCableEndpoint && (t === 'sleeve' || t === 'cross' || t === 'olt')) {
+        if (preferCableEndpoint && (isFiberHostType(t) || t === 'olt')) {
             if (d < bestEndpointDist) { bestEndpointDist = d; bestEndpoint = o; }
         }
         if (d < bestDist) { bestDist = d; best = o; }

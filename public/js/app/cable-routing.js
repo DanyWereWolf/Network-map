@@ -165,7 +165,7 @@ function migrateCableIdReferences(cable, oldId, idA, idB, splitAfterIndex) {
             }
         }
 
-        if (t === 'cross' || t === 'sleeve') {
+        if (isFiberHostType(t)) {
             ['oltConnections', 'onuConnections', 'mediaConverterConnections', 'splitterConnections', 'nodeConnections'].forEach(function(prop) {
                 var conn = slot.properties.get(prop);
                 if (!conn) return;

@@ -389,6 +389,7 @@ function handleAddObject() {
         resetCableUndergroundPendingSpans();
         pendingCopperPortPreset = null;
         pendingCopperRouteFinish = null;
+        if (typeof finishOltPortCableLayingSession === 'function') finishOltPortCableLayingSession();
         copperCableLayingActive = false;
         if (myMap && myMap.container) {
             const mapEl = myMap.container.getElement();
@@ -660,6 +661,20 @@ function setupObjectTypePicker() {
     });
     syncObjectTypePickerUI();
     setupObjectsAccordionAutoHeight();
+    setupOltPlacementCatalogHandlers();
+}
+
+function setupOltPlacementCatalogHandlers() {
+    var oltModelEl = document.getElementById('oltModel');
+    if (oltModelEl && !oltModelEl._oltCatalogBound) {
+        oltModelEl._oltCatalogBound = true;
+        oltModelEl.addEventListener('change', function() {
+            if (typeof syncOltPlacementPortsFromCatalog === 'function') syncOltPlacementPortsFromCatalog();
+        });
+        oltModelEl.addEventListener('input', function() {
+            if (typeof syncOltPlacementPortsFromCatalog === 'function') syncOltPlacementPortsFromCatalog();
+        });
+    }
 }
 
 function getCableTypeLabel(type) {

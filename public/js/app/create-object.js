@@ -79,10 +79,19 @@ function createObject(type, name, coords, options = {}) {
         placemarkProperties.copperPortUsage = {};
     }
     if (type === 'olt') {
-        placemarkProperties.ponPorts = options.ponPorts || 8;
+        var oltPorts = options.ponPorts || 8;
+        var oltMfr = (options.manufacturer || '').trim();
+        var oltMod = (options.model || '').trim();
+        var oltPortTypes = Array.isArray(options.ponPortTypes) ? options.ponPortTypes.slice() : [];
+        if ((!oltPortTypes.length) && oltMfr && oltMod && typeof resolveOltPortTypesForModel === 'function') {
+            oltPortTypes = resolveOltPortTypesForModel(oltMfr, oltMod, oltPorts);
+        }
+        if (oltPortTypes.length) oltPorts = oltPortTypes.length;
+        placemarkProperties.ponPorts = oltPorts;
         placemarkProperties.incomingFiber = null;
         placemarkProperties.portAssignments = {};
         placemarkProperties.portLabels = {};
+        placemarkProperties.ponPortTypes = oltPortTypes;
         if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
         if (options.model) placemarkProperties.model = options.model;
         placemarkProperties.comment = options.comment || '';
@@ -255,9 +264,17 @@ function createObject(type, name, coords, options = {}) {
                     selectObject(cableSource);
                     return;
                 }
+                if (!validatePendingOltPortCableEndpoint(placemark)) return;
                 var points = [cableSource].concat(cableWaypoints).concat([placemark]);
                 var success = createCableFromPoints(points, cableTypeVal);
                 if (success) {
+                    if (oltPortCableJustFinished) {
+                        oltPortCableJustFinished = false;
+                        clearSelection();
+                        removeCablePreview();
+                        syncMapPanLockForEditTools();
+                        return;
+                    }
                     cableSource = placemark;
                     cableWaypoints = [];
                     clearSelection();

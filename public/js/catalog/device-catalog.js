@@ -504,6 +504,10 @@ var cableDeviceCatalog = {};
 var switchModelDefaultPorts = {};
 /** switchModelPortTypes[manufacturer][model] = массив типов портов (по одному на порт). */
 var switchModelPortTypes = {};
+/** oltModelDefaultPorts[manufacturer][model] = число PON-портов по умолчанию. */
+var oltModelDefaultPorts = {};
+/** oltModelPortTypes[manufacturer][model] = массив типов PON-портов. */
+var oltModelPortTypes = {};
 
 /** Тип порта RJ45 по умолчанию при добавлении коммутатора. */
 var SWITCH_PORT_DEFAULT_KIND = 'RJ45 1000Base-T (Gigabit, порт G)';
@@ -595,7 +599,7 @@ var DEVICE_CATALOG_TAB_META = {
     },
     olt: {
         label: 'OLT',
-        desc: 'Оптические линейные терминалы на карте: производитель и модель при создании и редактировании OLT.'
+        desc: 'Оптические линейные терминалы на карте: производитель и модель при создании и редактировании OLT. Для модели можно задать число PON-портов и тип каждого — они подставятся на карте.'
     },
     onu: {
         label: 'ONU',
@@ -837,6 +841,10 @@ function resetDeviceCatalogTabToDefault(kind) {
         switchDeviceCatalog = cloneDeepCatalog(def);
         switchModelDefaultPorts = {};
         switchModelPortTypes = {};
+    } else if (kind === 'olt') {
+        oltDeviceCatalog = cloneDeepCatalog(def);
+        oltModelDefaultPorts = {};
+        oltModelPortTypes = {};
     } else if (kind === 'cable') {
         cableDeviceCatalog = cloneDeepCatalog(def);
         cableModelFiberSettings = {};
@@ -871,6 +879,12 @@ function removeManufacturerForCatalog(kind, name) {
     }
     if (kind === 'switch' && switchModelPortTypes[name]) {
         delete switchModelPortTypes[name];
+    }
+    if (kind === 'olt' && oltModelDefaultPorts[name]) {
+        delete oltModelDefaultPorts[name];
+    }
+    if (kind === 'olt' && oltModelPortTypes[name]) {
+        delete oltModelPortTypes[name];
     }
     if (kind === 'cable' && cableModelFiberSettings[name]) {
         delete cableModelFiberSettings[name];
@@ -912,6 +926,22 @@ function removeModelForCatalog(kind, manufacturer, model) {
         }
         if (Object.keys(switchModelPortTypes[manufacturer]).length === 0) {
             delete switchModelPortTypes[manufacturer];
+        }
+    }
+    if (kind === 'olt' && oltModelDefaultPorts[manufacturer]) {
+        if (oltModelDefaultPorts[manufacturer][model] !== undefined) {
+            delete oltModelDefaultPorts[manufacturer][model];
+        }
+        if (Object.keys(oltModelDefaultPorts[manufacturer]).length === 0) {
+            delete oltModelDefaultPorts[manufacturer];
+        }
+    }
+    if (kind === 'olt' && oltModelPortTypes[manufacturer]) {
+        if (oltModelPortTypes[manufacturer][model] !== undefined) {
+            delete oltModelPortTypes[manufacturer][model];
+        }
+        if (Object.keys(oltModelPortTypes[manufacturer]).length === 0) {
+            delete oltModelPortTypes[manufacturer];
         }
     }
     if (kind === 'cable' && cableModelFiberSettings[manufacturer]) {
@@ -1086,6 +1116,127 @@ function resolveSwitchPortTypesForModel(manufacturer, model, portCount, defaultK
         : normalizeSwitchPortTypesList(n, [], dk);
 }
 
+function getOltCatalogPonDefaultKind() {
+    return typeof getPonPortDefaultKind === 'function' ? getPonPortDefaultKind() : 'GPON';
+}
+
+function getOltCatalogPonKindOptions() {
+    return typeof getPonPortKindOptions === 'function' ? getPonPortKindOptions() : ['GPON', 'XGS-PON', 'EPON'];
+}
+
+function normalizeOltPortTypesList(count, types, defaultKind) {
+    var n = Math.min(96, Math.max(1, parseInt(count, 10) || 1));
+    var dk = String(defaultKind || getOltCatalogPonDefaultKind()).trim() || 'GPON';
+    var src = Array.isArray(types) ? types : [];
+    var out = [];
+    for (var i = 0; i < n; i++) out.push(String(src[i] || dk).trim() || dk);
+    return out;
+}
+
+function inferOltModelPortCount(model) {
+    if (!model) return null;
+    var m = String(model).trim().match(/[-–_/](\d{1,2})$/);
+    if (!m) return null;
+    return normalizeOltPortTypesList(m[1], [], getOltCatalogPonDefaultKind()).length;
+}
+
+function getOltModelDefaultPortCount(manufacturer, model) {
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (!mfr || !mod) return null;
+    var byM = oltModelDefaultPorts[mfr];
+    if (byM && typeof byM === 'object') {
+        var n = parseInt(byM[mod], 10);
+        if (!isNaN(n) && n >= 1) return Math.min(96, n);
+    }
+    var custom = getOltModelPortTypes(mfr, mod);
+    if (custom && custom.length) return custom.length;
+    return inferOltModelPortCount(mod);
+}
+
+function setOltModelDefaultPortCount(manufacturer, model, portCount) {
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (!mfr || !mod) return false;
+    if (portCount === null || portCount === undefined || portCount === '') {
+        if (oltModelDefaultPorts[mfr] && oltModelDefaultPorts[mfr][mod] !== undefined) {
+            delete oltModelDefaultPorts[mfr][mod];
+            if (Object.keys(oltModelDefaultPorts[mfr]).length === 0) delete oltModelDefaultPorts[mfr];
+        }
+        saveDeviceCatalog();
+        return true;
+    }
+    var n = parseInt(portCount, 10);
+    if (isNaN(n) || n < 1) {
+        if (oltModelDefaultPorts[mfr] && oltModelDefaultPorts[mfr][mod] !== undefined) {
+            delete oltModelDefaultPorts[mfr][mod];
+            if (Object.keys(oltModelDefaultPorts[mfr]).length === 0) delete oltModelDefaultPorts[mfr];
+        }
+        saveDeviceCatalog();
+        return true;
+    }
+    n = Math.min(96, Math.max(1, n));
+    if (!oltModelDefaultPorts[mfr]) oltModelDefaultPorts[mfr] = {};
+    oltModelDefaultPorts[mfr][mod] = n;
+    var customTypes = getOltModelPortTypes(mfr, mod);
+    if (customTypes && customTypes.length) {
+        var padKind = customTypes[customTypes.length - 1] || getOltCatalogPonDefaultKind();
+        setOltModelPortTypes(mfr, mod, normalizeOltPortTypesList(n, customTypes, padKind), true);
+    }
+    saveDeviceCatalog();
+    return true;
+}
+
+function getOltModelPortTypes(manufacturer, model) {
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (!mfr || !mod) return null;
+    var byM = oltModelPortTypes[mfr];
+    if (!byM || typeof byM !== 'object') return null;
+    var arr = byM[mod];
+    if (!Array.isArray(arr) || !arr.length) return null;
+    return arr.map(function(t) { return String(t || getOltCatalogPonDefaultKind()); });
+}
+
+function oltModelHasCustomPortTypes(manufacturer, model) {
+    var types = getOltModelPortTypes(manufacturer, model);
+    return !!(types && types.length);
+}
+
+function setOltModelPortTypes(manufacturer, model, types, skipSave) {
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (!mfr || !mod) return false;
+    if (!types || !types.length) {
+        if (oltModelPortTypes[mfr] && oltModelPortTypes[mfr][mod] !== undefined) {
+            delete oltModelPortTypes[mfr][mod];
+            if (Object.keys(oltModelPortTypes[mfr]).length === 0) delete oltModelPortTypes[mfr];
+        }
+        if (!skipSave) saveDeviceCatalog();
+        return true;
+    }
+    var normalized = normalizeOltPortTypesList(types.length, types, types[types.length - 1] || getOltCatalogPonDefaultKind());
+    if (!oltModelPortTypes[mfr]) oltModelPortTypes[mfr] = {};
+    oltModelPortTypes[mfr][mod] = normalized;
+    if (!oltModelDefaultPorts[mfr]) oltModelDefaultPorts[mfr] = {};
+    oltModelDefaultPorts[mfr][mod] = normalized.length;
+    if (!skipSave) saveDeviceCatalog();
+    return true;
+}
+
+function resolveOltPortTypesForModel(manufacturer, model, portCount, defaultKind) {
+    var custom = getOltModelPortTypes(manufacturer, model);
+    if (custom && custom.length) return custom.slice();
+    var n = parseInt(portCount, 10);
+    if (isNaN(n) || n < 1) {
+        var defN = getOltModelDefaultPortCount(manufacturer, model);
+        n = defN != null ? defN : 8;
+    }
+    n = Math.min(96, Math.max(1, n));
+    var dk = defaultKind || getOltCatalogPonDefaultKind();
+    return normalizeOltPortTypesList(n, [], dk);
+}
+
 function normalizeCableModelFiberCount(n) {
     var v = parseInt(n, 10);
     if (isNaN(v) || v < 1) return null;
@@ -1244,7 +1395,42 @@ function getEffectiveLayCableFiberSettings() {
 }
 
 var _switchEntryPendingPortTypes = null;
+var _oltEntryPendingPortTypes = null;
 var _switchPortsEditorCtx = null;
+
+function getCatalogPortDefaultKind(catalogKind) {
+    return catalogKind === 'olt' ? getOltCatalogPonDefaultKind() : SWITCH_PORT_DEFAULT_KIND;
+}
+
+function buildCatalogPortKindSelectHtml(catalogKind, selected, extraClass, dataAttrs) {
+    extraClass = extraClass || '';
+    dataAttrs = dataAttrs || '';
+    if (catalogKind === 'olt') {
+        var selO = String(selected || getOltCatalogPonDefaultKind()).trim();
+        var optsO = getOltCatalogPonKindOptions();
+        if (selO && optsO.indexOf(selO) === -1) optsO = [selO].concat(optsO);
+        var htmlO = '<select class="form-select form-select-compact switch-port-kind-select' + extraClass + '" ' + dataAttrs + '>';
+        optsO.forEach(function(ko) {
+            htmlO += '<option value="' + escapeHtml(ko) + '"' + (ko === selO ? ' selected' : '') + '>' + escapeHtml(ko) + '</option>';
+        });
+        htmlO += '</select>';
+        return htmlO;
+    }
+    return buildSwitchPortKindSelectHtml(selected, extraClass, dataAttrs);
+}
+
+function renderSwitchModelPortsTableBody(tbody, types, catalogKind) {
+    if (!tbody) return;
+    catalogKind = catalogKind || (_switchPortsEditorCtx && _switchPortsEditorCtx.catalogKind) || 'switch';
+    var html = '';
+    (types || []).forEach(function(kind, idx) {
+        var defKind = getCatalogPortDefaultKind(catalogKind);
+        html += '<tr><td class="switch-ports-modal-num">' + (idx + 1) + '</td><td>';
+        html += buildCatalogPortKindSelectHtml(catalogKind, kind || defKind, '', 'data-port-idx="' + idx + '"');
+        html += '</td></tr>';
+    });
+    tbody.innerHTML = html;
+}
 
 function buildSwitchPortKindSelectHtml(selected, extraClass, dataAttrs) {
     extraClass = extraClass || '';
@@ -1264,78 +1450,92 @@ function buildSwitchPortKindSelectHtml(selected, extraClass, dataAttrs) {
     return html;
 }
 
-function renderSwitchModelPortsTableBody(tbody, types) {
-    if (!tbody) return;
-    var html = '';
-    (types || []).forEach(function(kind, idx) {
-        html += '<tr><td class="switch-ports-modal-num">' + (idx + 1) + '</td><td>';
-        html += buildSwitchPortKindSelectHtml(kind || SWITCH_PORT_DEFAULT_KIND, '', 'data-port-idx="' + idx + '"');
-        html += '</td></tr>';
-    });
-    tbody.innerHTML = html;
-}
-
 function readSwitchModelPortsFromTable(tbody) {
     if (!tbody) return [];
     var rows = tbody.querySelectorAll('tr');
     var out = [];
+    var catalogKind = (_switchPortsEditorCtx && _switchPortsEditorCtx.catalogKind) || 'switch';
+    var defKind = getCatalogPortDefaultKind(catalogKind);
     rows.forEach(function(row) {
         var sel = row.querySelector('.switch-port-kind-select');
-        out.push(sel ? (sel.value || SWITCH_PORT_DEFAULT_KIND) : SWITCH_PORT_DEFAULT_KIND);
+        out.push(sel ? (sel.value || defKind) : defKind);
     });
     return out;
 }
 
-function syncSwitchEntryPortsBtnState() {
+function syncCatalogEntryPortsBtnState() {
     var btn = document.getElementById('deviceCatalogEntrySwitchPortsBtn');
     if (!btn) return;
-    btn.classList.toggle('device-catalog-switch-ports-btn--custom', !!(_switchEntryPendingPortTypes && _switchEntryPendingPortTypes.length));
+    var tab = typeof getActiveDeviceCatalogTab === 'function' ? getActiveDeviceCatalogTab() : 'switch';
+    var pending = tab === 'olt' ? _oltEntryPendingPortTypes : _switchEntryPendingPortTypes;
+    btn.classList.toggle('device-catalog-switch-ports-btn--custom', !!(pending && pending.length));
+}
+
+function syncSwitchEntryPortsBtnState() {
+    syncCatalogEntryPortsBtnState();
 }
 
 function openSwitchModelPortsEditor(manufacturer, model, opts) {
     opts = opts || {};
+    var catalogKind = opts.catalogKind || (opts.entryMode && typeof getActiveDeviceCatalogTab === 'function' ? getActiveDeviceCatalogTab() : 'switch');
+    if (catalogKind !== 'olt') catalogKind = 'switch';
+    var isOlt = catalogKind === 'olt';
     var modal = document.getElementById('switchModelPortsModal');
     if (!modal) return;
     var mfr = (manufacturer || '').trim();
     var mod = (model || '').trim();
     var isEntry = !!opts.entryMode;
-    var defPorts = 24;
+    var defPorts = isOlt ? 8 : 24;
+    var defKind = getCatalogPortDefaultKind(catalogKind);
     if (isEntry) {
         var portsInp = document.getElementById('deviceCatalogEntryDefaultPorts');
         var pv = portsInp ? parseInt(portsInp.value, 10) : NaN;
-        defPorts = !isNaN(pv) && pv >= 1 ? Math.min(96, pv) : 24;
+        defPorts = !isNaN(pv) && pv >= 1 ? Math.min(96, pv) : defPorts;
+    } else if (isOlt) {
+        var customO = getOltModelPortTypes(mfr, mod);
+        var defNO = getOltModelDefaultPortCount(mfr, mod);
+        defPorts = customO && customO.length ? customO.length : (defNO != null ? defNO : 8);
     } else {
         var custom = getSwitchModelPortTypes(mfr, mod);
         var defN = getSwitchModelDefaultPortCount(mfr, mod);
         defPorts = custom && custom.length ? custom.length : (defN != null ? defN : 24);
     }
     var types = isEntry
-        ? (_switchEntryPendingPortTypes ? _switchEntryPendingPortTypes.slice() : null)
-        : getSwitchModelPortTypes(mfr, mod);
+        ? (isOlt
+            ? (_oltEntryPendingPortTypes ? _oltEntryPendingPortTypes.slice() : null)
+            : (_switchEntryPendingPortTypes ? _switchEntryPendingPortTypes.slice() : null))
+        : (isOlt ? getOltModelPortTypes(mfr, mod) : getSwitchModelPortTypes(mfr, mod));
     if (!types || !types.length) {
-        types = normalizeSwitchPortTypesList(defPorts, [], SWITCH_PORT_DEFAULT_KIND);
+        types = isOlt
+            ? normalizeOltPortTypesList(defPorts, [], defKind)
+            : normalizeSwitchPortTypesList(defPorts, [], defKind);
     }
     _switchPortsEditorCtx = {
         manufacturer: mfr,
         model: mod,
-        entryMode: isEntry
+        entryMode: isEntry,
+        catalogKind: catalogKind
     };
     var titleEl = document.getElementById('switchModelPortsModalTitle');
     var hintEl = document.getElementById('switchModelPortsModalHint');
+    var thType = document.getElementById('switchModelPortsTableTypeHeader');
     if (titleEl) {
         titleEl.textContent = isEntry
-            ? 'Порты новой модели'
-            : ('Порты — ' + (mfr && mod ? mfr + ' ' + mod : (mod || mfr || 'коммутатор')));
+            ? (isOlt ? 'PON-порты новой модели' : 'Порты новой модели')
+            : ((isOlt ? 'PON-порты — ' : 'Порты — ') + (mfr && mod ? mfr + ' ' + mod : (mod || mfr || (isOlt ? 'OLT' : 'коммутатор'))));
     }
     if (hintEl) {
         hintEl.textContent = isEntry
             ? 'Настройка сохранится вместе с новой моделью в справочнике.'
-            : 'Типы портов подставятся при добавлении этой модели коммутатора в узел на карте.';
+            : (isOlt
+                ? 'Типы PON-портов подставятся при добавлении этой модели OLT на карту.'
+                : 'Типы портов подставятся при добавлении этой модели коммутатора в узел на карте.');
     }
+    if (thType) thType.textContent = isOlt ? 'Тип PON' : 'Тип порта';
     var countInp = document.getElementById('switchModelPortsCount');
     var tbody = document.getElementById('switchModelPortsTableBody');
     if (countInp) countInp.value = String(types.length);
-    renderSwitchModelPortsTableBody(tbody, types);
+    renderSwitchModelPortsTableBody(tbody, types, catalogKind);
     modal.style.display = 'flex';
     modal.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
@@ -1362,6 +1562,8 @@ function closeSwitchModelPortsModal() {
 function saveSwitchModelPortsModal() {
     var ctx = _switchPortsEditorCtx;
     if (!ctx) return;
+    var isOlt = ctx.catalogKind === 'olt';
+    var defKind = getCatalogPortDefaultKind(ctx.catalogKind || 'switch');
     var tbody = document.getElementById('switchModelPortsTableBody');
     var types = readSwitchModelPortsFromTable(tbody);
     if (!types.length) {
@@ -1369,15 +1571,23 @@ function saveSwitchModelPortsModal() {
         return;
     }
     if (ctx.entryMode) {
-        _switchEntryPendingPortTypes = types.slice();
+        if (isOlt) {
+            _oltEntryPendingPortTypes = types.slice();
+        } else {
+            _switchEntryPendingPortTypes = types.slice();
+        }
         var portsInp = document.getElementById('deviceCatalogEntryDefaultPorts');
         if (portsInp) portsInp.value = String(types.length);
-        syncSwitchEntryPortsBtnState();
+        syncCatalogEntryPortsBtnState();
         closeSwitchModelPortsModal();
         if (typeof showInfo === 'function') showInfo('Порты настроены', 'Сохраните модель в справочнике');
         return;
     }
-    setSwitchModelPortTypes(ctx.manufacturer, ctx.model, types);
+    if (isOlt) {
+        setOltModelPortTypes(ctx.manufacturer, ctx.model, types);
+    } else {
+        setSwitchModelPortTypes(ctx.manufacturer, ctx.model, types);
+    }
     closeSwitchModelPortsModal();
     renderDeviceCatalogList();
     if (typeof showInfo === 'function') showInfo('Типы портов сохранены', '');
@@ -1410,8 +1620,12 @@ function setupSwitchModelPortsModalHandlers() {
             this.value = String(n);
             var tbody = document.getElementById('switchModelPortsTableBody');
             var current = readSwitchModelPortsFromTable(tbody);
-            var pad = current.length ? current[current.length - 1] : SWITCH_PORT_DEFAULT_KIND;
-            renderSwitchModelPortsTableBody(tbody, normalizeSwitchPortTypesList(n, current, pad));
+            var catalogKind = (_switchPortsEditorCtx && _switchPortsEditorCtx.catalogKind) || 'switch';
+            var pad = current.length ? current[current.length - 1] : getCatalogPortDefaultKind(catalogKind);
+            var normalized = catalogKind === 'olt'
+                ? normalizeOltPortTypesList(n, current, pad)
+                : normalizeSwitchPortTypesList(n, current, pad);
+            renderSwitchModelPortsTableBody(tbody, normalized, catalogKind);
         });
     }
 
@@ -1421,8 +1635,9 @@ function setupSwitchModelPortsModalHandlers() {
             var tbody = document.getElementById('switchModelPortsTableBody');
             var current = readSwitchModelPortsFromTable(tbody);
             if (!current.length) return;
-            var first = current[0] || SWITCH_PORT_DEFAULT_KIND;
-            renderSwitchModelPortsTableBody(tbody, current.map(function() { return first; }));
+            var catalogKind = (_switchPortsEditorCtx && _switchPortsEditorCtx.catalogKind) || 'switch';
+            var first = current[0] || getCatalogPortDefaultKind(catalogKind);
+            renderSwitchModelPortsTableBody(tbody, current.map(function() { return first; }), catalogKind);
         });
     }
 }
@@ -1495,6 +1710,8 @@ function saveDeviceCatalog() {
         switchDeviceCatalog: cloneDeepCatalog(switchDeviceCatalog),
         switchModelDefaultPorts: JSON.parse(JSON.stringify(switchModelDefaultPorts || {})),
         switchModelPortTypes: JSON.parse(JSON.stringify(switchModelPortTypes || {})),
+        oltModelDefaultPorts: JSON.parse(JSON.stringify(oltModelDefaultPorts || {})),
+        oltModelPortTypes: JSON.parse(JSON.stringify(oltModelPortTypes || {})),
         cableDeviceCatalog: cloneDeepCatalog(cableDeviceCatalog),
         cableModelFiberSettings: JSON.parse(JSON.stringify(cableModelFiberSettings || {})),
         customSleeveTypes: getCustomSleeveTypes(),
@@ -1558,6 +1775,16 @@ function loadDeviceCatalog(opts) {
             switchModelPortTypes = JSON.parse(JSON.stringify(opts.switchModelPortTypes));
         } else {
             switchModelPortTypes = {};
+        }
+        if (opts.oltModelDefaultPorts && typeof opts.oltModelDefaultPorts === 'object') {
+            oltModelDefaultPorts = JSON.parse(JSON.stringify(opts.oltModelDefaultPorts));
+        } else {
+            oltModelDefaultPorts = {};
+        }
+        if (opts.oltModelPortTypes && typeof opts.oltModelPortTypes === 'object') {
+            oltModelPortTypes = JSON.parse(JSON.stringify(opts.oltModelPortTypes));
+        } else {
+            oltModelPortTypes = {};
         }
         if (opts.cableModelFiberSettings && typeof opts.cableModelFiberSettings === 'object') {
             cableModelFiberSettings = JSON.parse(JSON.stringify(opts.cableModelFiberSettings));
@@ -1630,6 +1857,18 @@ function loadDeviceCatalog(opts) {
         switchModelPortTypes = JSON.parse(JSON.stringify(opts.switchModelPortTypes));
     } else if (!('switchModelPortTypes' in opts)) {
         switchModelPortTypes = {};
+    }
+
+    if (opts.oltModelDefaultPorts && typeof opts.oltModelDefaultPorts === 'object') {
+        oltModelDefaultPorts = JSON.parse(JSON.stringify(opts.oltModelDefaultPorts));
+    } else if (!('oltModelDefaultPorts' in opts)) {
+        oltModelDefaultPorts = {};
+    }
+
+    if (opts.oltModelPortTypes && typeof opts.oltModelPortTypes === 'object') {
+        oltModelPortTypes = JSON.parse(JSON.stringify(opts.oltModelPortTypes));
+    } else if (!('oltModelPortTypes' in opts)) {
+        oltModelPortTypes = {};
     }
 
     if (opts.cableModelFiberSettings && typeof opts.cableModelFiberSettings === 'object') {
@@ -2249,13 +2488,20 @@ function renderDeviceCatalogList() {
             html += '<span class="device-catalog-mfr-count">Нет моделей — нажмите «+ Добавить»</span>';
         }
         models.forEach(function(mod) {
-            html += '<span class="device-catalog-model-tag' + (tab === 'cable' ? ' device-catalog-model-tag--cable' : '') + (tab === 'switch' ? ' device-catalog-model-tag--switch' : '') + '">';
+            html += '<span class="device-catalog-model-tag' + (tab === 'cable' ? ' device-catalog-model-tag--cable' : '') + (tab === 'switch' || tab === 'olt' ? ' device-catalog-model-tag--switch' : '') + '">';
             html += '<span class="device-catalog-model-name">' + escapeHtml(mod) + '</span>';
             if (tab === 'switch') {
                 var defN = getSwitchModelDefaultPortCount(mfr, mod);
                 var customPorts = switchModelHasCustomPortTypes(mfr, mod);
                 html += '<label class="device-catalog-ports-label" title="Портов по умолчанию при добавлении коммутатора в узел">Портов<input type="number" class="form-input device-catalog-ports-input switch-catalog-def-ports" min="1" max="96" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" value="' + (defN != null ? String(defN) : '') + '" placeholder="—" aria-label="Портов по умолчанию"></label>';
-                html += '<button type="button" class="device-catalog-switch-ports-btn' + (customPorts ? ' device-catalog-switch-ports-btn--custom' : '') + '" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" title="Настроить тип каждого порта">';
+                html += '<button type="button" class="device-catalog-switch-ports-btn' + (customPorts ? ' device-catalog-switch-ports-btn--custom' : '') + '" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" data-catalog-kind="switch" title="Настроить тип каждого порта">';
+                html += '<span class="device-catalog-switch-ports-btn__label">Порты</span></button>';
+            }
+            if (tab === 'olt') {
+                var defOltN = getOltModelDefaultPortCount(mfr, mod);
+                var customOltPorts = oltModelHasCustomPortTypes(mfr, mod);
+                html += '<label class="device-catalog-ports-label" title="PON-портов по умолчанию при добавлении OLT на карту">PON<input type="number" class="form-input device-catalog-ports-input olt-catalog-def-ports" min="1" max="96" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" value="' + (defOltN != null ? String(defOltN) : '') + '" placeholder="—" aria-label="PON-портов по умолчанию"></label>';
+                html += '<button type="button" class="device-catalog-switch-ports-btn' + (customOltPorts ? ' device-catalog-switch-ports-btn--custom' : '') + '" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" data-catalog-kind="olt" title="Настроить тип каждого PON-порта">';
                 html += '<span class="device-catalog-switch-ports-btn__label">Порты</span></button>';
             }
             if (tab === 'cable') {
@@ -2326,11 +2572,34 @@ function renderDeviceCatalogList() {
                 }
             });
         });
-        container.querySelectorAll('.device-catalog-switch-ports-btn').forEach(function(btn) {
+        container.querySelectorAll('.device-catalog-switch-ports-btn[data-catalog-kind="switch"]').forEach(function(btn) {
             btn.addEventListener('click', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
-                openSwitchModelPortsEditor(btn.getAttribute('data-mfr'), btn.getAttribute('data-model'));
+                openSwitchModelPortsEditor(btn.getAttribute('data-mfr'), btn.getAttribute('data-model'), { catalogKind: 'switch' });
+            });
+        });
+    }
+    if (tab === 'olt') {
+        container.querySelectorAll('.olt-catalog-def-ports').forEach(function(inp) {
+            inp.addEventListener('change', function() {
+                var mf = this.getAttribute('data-mfr');
+                var md = this.getAttribute('data-model');
+                var v = parseInt(this.value, 10);
+                if (isNaN(v) || v < 1) {
+                    setOltModelDefaultPortCount(mf, md, null);
+                    this.value = '';
+                } else {
+                    setOltModelDefaultPortCount(mf, md, v);
+                    this.value = String(Math.min(96, Math.max(1, v)));
+                }
+            });
+        });
+        container.querySelectorAll('.device-catalog-switch-ports-btn[data-catalog-kind="olt"]').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                openSwitchModelPortsEditor(btn.getAttribute('data-mfr'), btn.getAttribute('data-model'), { catalogKind: 'olt' });
             });
         });
     }
@@ -2414,7 +2683,19 @@ function syncDeviceCatalogEntryPortsGroupVisibility() {
     if (!portsGroup) return;
     var tab = getActiveDeviceCatalogTab();
     var entryType = (document.querySelector('.device-catalog-entry-type-active') || {}).getAttribute('data-entry-type');
-    portsGroup.hidden = tab !== 'switch' || entryType !== 'model';
+    portsGroup.hidden = (tab !== 'switch' && tab !== 'olt') || entryType !== 'model';
+    var hintEl = document.querySelector('.device-catalog-entry-ports-hint');
+    var portsLabel = portsGroup.querySelector('.device-catalog-entry-ports-field-label');
+    if (hintEl) {
+        hintEl.textContent = tab === 'olt'
+            ? 'Подставится при добавлении OLT на карту'
+            : 'Подставится при добавлении коммутатора в узел на карте';
+    }
+    if (portsLabel) {
+        portsLabel.textContent = tab === 'olt' ? 'PON-портов по умолчанию' : 'Портов по умолчанию';
+    }
+    var portsInp = document.getElementById('deviceCatalogEntryDefaultPorts');
+    if (portsInp) portsInp.placeholder = tab === 'olt' ? '8' : '24';
 }
 
 function refreshDeviceCatalogEntryMfrSelect(preselect) {
@@ -2468,8 +2749,9 @@ function openDeviceCatalogEntryModal(entryType, presetMfr) {
     if (cableFibersInp) cableFibersInp.value = '';
     _cableEntryPendingFiber = null;
     _switchEntryPendingPortTypes = null;
+    _oltEntryPendingPortTypes = null;
     syncCableEntryPaletteBtnState();
-    syncSwitchEntryPortsBtnState();
+    syncCatalogEntryPortsBtnState();
     if (sleeveIdInp) sleeveIdInp.value = '';
     if (sleeveLabelInp) sleeveLabelInp.value = '';
     if (crossIdInp) crossIdInp.value = '';
@@ -2510,7 +2792,8 @@ function closeDeviceCatalogEntryModal() {
     var modal = document.getElementById('deviceCatalogEntryModal');
     if (modal) modal.style.display = 'none';
     _switchEntryPendingPortTypes = null;
-    syncSwitchEntryPortsBtnState();
+    _oltEntryPendingPortTypes = null;
+    syncCatalogEntryPortsBtnState();
 }
 
 function saveDeviceCatalogEntrySleeve() {
@@ -2628,6 +2911,16 @@ function saveDeviceCatalogEntry() {
         }
         _switchEntryPendingPortTypes = null;
     }
+    if (tab === 'olt') {
+        var portsInpOlt = document.getElementById('deviceCatalogEntryDefaultPorts');
+        var pvOlt = portsInpOlt ? parseInt(portsInpOlt.value, 10) : NaN;
+        if (_oltEntryPendingPortTypes && _oltEntryPendingPortTypes.length) {
+            setOltModelPortTypes(mfr, model, _oltEntryPendingPortTypes);
+        } else if (!isNaN(pvOlt) && pvOlt >= 1) {
+            setOltModelDefaultPortCount(mfr, model, Math.min(96, pvOlt));
+        }
+        _oltEntryPendingPortTypes = null;
+    }
     if (tab === 'cable') {
         var fibersInpSave = document.getElementById('deviceCatalogEntryCableFibers');
         var fv = fibersInpSave ? parseInt(fibersInpSave.value, 10) : NaN;
@@ -2686,15 +2979,21 @@ function setupDeviceCatalogEntryHandlers() {
     }
 
     var switchEntryPortsInp = document.getElementById('deviceCatalogEntryDefaultPorts');
-    if (switchEntryPortsInp && !switchEntryPortsInp._switchPortsSyncBound) {
-        switchEntryPortsInp._switchPortsSyncBound = true;
+    if (switchEntryPortsInp && !switchEntryPortsInp._catalogPortsSyncBound) {
+        switchEntryPortsInp._catalogPortsSyncBound = true;
         switchEntryPortsInp.addEventListener('change', function() {
-            if (!_switchEntryPendingPortTypes || !_switchEntryPendingPortTypes.length) return;
+            var tab = typeof getActiveDeviceCatalogTab === 'function' ? getActiveDeviceCatalogTab() : 'switch';
+            var pending = tab === 'olt' ? _oltEntryPendingPortTypes : _switchEntryPendingPortTypes;
+            if (!pending || !pending.length) return;
             var n = parseInt(this.value, 10);
             if (isNaN(n) || n < 1) return;
             n = Math.min(96, Math.max(1, n));
-            var pad = _switchEntryPendingPortTypes[_switchEntryPendingPortTypes.length - 1] || SWITCH_PORT_DEFAULT_KIND;
-            _switchEntryPendingPortTypes = normalizeSwitchPortTypesList(n, _switchEntryPendingPortTypes, pad);
+            var pad = pending[pending.length - 1] || getCatalogPortDefaultKind(tab === 'olt' ? 'olt' : 'switch');
+            if (tab === 'olt') {
+                _oltEntryPendingPortTypes = normalizeOltPortTypesList(n, pending, pad);
+            } else {
+                _switchEntryPendingPortTypes = normalizeSwitchPortTypesList(n, pending, pad);
+            }
         });
     }
 
@@ -2776,7 +3075,20 @@ function setupDeviceCatalogHandlers() {
     }
 }
 
+function ensureAccordionContentInners() {
+    document.querySelectorAll('.accordion-content').forEach(function(content) {
+        if (content.querySelector(':scope > .accordion-content-inner')) return;
+        var inner = document.createElement('div');
+        inner.className = 'accordion-content-inner';
+        while (content.firstChild) {
+            inner.appendChild(content.firstChild);
+        }
+        content.appendChild(inner);
+    });
+}
+
 function setupAccordions() {
+    ensureAccordionContentInners();
     const accordionHeaders = document.querySelectorAll('.accordion-header');
 
     accordionHeaders.forEach(header => {

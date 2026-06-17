@@ -96,19 +96,31 @@ function crossHasFiberForConnection(crossObj, cableId, fiberNumber) {
     return fiberNumber >= 1 && fiberNumber <= n;
 }
 
+function isFiberSplicedAtHost(hostObj, cableId, fiberNumber) {
+    if (!hostObj || !cableId || fiberNumber == null) return false;
+    const fiberConnections = hostObj.properties.get('fiberConnections') || [];
+    return fiberConnections.some(function(conn) {
+        return (conn.from && conn.from.cableId === cableId && conn.from.fiberNumber === fiberNumber) ||
+            (conn.to && conn.to.cableId === cableId && conn.to.fiberNumber === fiberNumber);
+    });
+}
+
 function getTotalUsedPortsInCross(crossObj) {
-    if (!crossObj || !crossObj.properties || crossObj.properties.get('type') !== 'cross') {
+    if (!crossObj || !crossObj.properties || !isCrossLikeHostType(crossObj.properties.get('type'))) {
         return 0;
     }
-    const keys = new Set();
-    const nodeConnections = crossObj.properties.get('nodeConnections') || {};
-    const fiberConnections = crossObj.properties.get('fiberConnections') || [];
-    Object.keys(nodeConnections).forEach(function(k) { keys.add(k); });
-    fiberConnections.forEach(function(conn) {
-        if (conn.from && conn.from.cableId != null) keys.add(conn.from.cableId + '-' + conn.from.fiberNumber);
-        if (conn.to && conn.to.cableId != null) keys.add(conn.to.cableId + '-' + conn.to.fiberNumber);
+    const fiberPorts = crossObj.properties.get('fiberPorts') || {};
+    const usedPortNums = new Set();
+    Object.keys(fiberPorts).forEach(function(key) {
+        const lastDash = key.lastIndexOf('-');
+        if (lastDash < 0) return;
+        const cableId = key.substring(0, lastDash);
+        const fiberNumber = parseInt(key.substring(lastDash + 1), 10);
+        if (isFiberSplicedAtHost(crossObj, cableId, fiberNumber)) return;
+        const port = parseInt(fiberPorts[key], 10);
+        if (!isNaN(port) && port > 0) usedPortNums.add(port);
     });
-    return keys.size;
+    return usedPortNums.size;
 }
 
 function getTotalUsedFibersInSleeve(sleeveObj) {

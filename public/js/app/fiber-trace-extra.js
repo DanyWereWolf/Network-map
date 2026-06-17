@@ -61,7 +61,7 @@ function getNodeConnectedFibers(nodeUniqueId) {
     objects.forEach(obj => {
         if (!obj.properties) return;
         var ht = obj.properties.get('type');
-        if (ht !== 'cross' && ht !== 'sleeve') return;
+        if (!isFiberHostType(ht)) return;
         const nodeConnections = obj.properties.get('nodeConnections');
         const fiberLabels = obj.properties.get('fiberLabels') || {};
         const hostName = obj.properties.get('name') || (ht === 'cross' ? 'Кросс без имени' : 'Муфта без имени');

@@ -164,7 +164,7 @@ function handleMapClick(e) {
             }
             return;
         }
-        var cableEndpoints = ['cross', 'sleeve', 'support', 'attachment', 'manhole', 'olt'];
+        var cableEndpoints = ['cross', 'cabinet', 'sleeve', 'support', 'attachment', 'manhole', 'olt'];
 
         if (cableUndergroundActive && clickedObject && clickedObject.geometry) {
             var ugType = clickedObject.properties.get('type');
@@ -222,9 +222,16 @@ function handleMapClick(e) {
                     showError('Завершите подземный участок: кликайте по карте и выберите второй колодец, или Escape для отмены.', 'Колодец');
                     return;
                 }
+                if (!validatePendingOltPortCableEndpoint(clickedObject)) return;
                 var pointsEnd = [cableSource].concat(cableWaypoints).concat([clickedObject]);
                 var successEnd = createCableFromPoints(pointsEnd, cableType);
                 if (successEnd) {
+                    if (oltPortCableJustFinished) {
+                        oltPortCableJustFinished = false;
+                        clearSelection();
+                        removeCablePreview();
+                        return;
+                    }
                     cableSource = clickedObject;
                     cableWaypoints = [];
                     clearSelection();
@@ -275,9 +282,16 @@ function handleMapClick(e) {
                     showError('Завершите подземный участок: кликайте по карте и выберите второй колодец, или Escape для отмены.', 'Колодец');
                     return;
                 }
+                if (!validatePendingOltPortCableEndpoint(clickedObject)) return;
                 const pointsFin = [cableSource].concat(cableWaypoints).concat([clickedObject]);
                 const successFin = createCableFromPoints(pointsFin, cableType);
                 if (successFin) {
+                    if (oltPortCableJustFinished) {
+                        oltPortCableJustFinished = false;
+                        clearSelection();
+                        removeCablePreview();
+                        return;
+                    }
                     cableSource = clickedObject;
                     cableWaypoints = [];
                     clearSelection();
@@ -308,7 +322,7 @@ function handleMapClick(e) {
                 const autoSelectTolerance = getCableAutoSelectTolerance(zoom);
                 let nearestObject = null;
                 let minDist = Infinity;
-                var validCableEndpoints = ['cross', 'sleeve', 'support', 'attachment', 'manhole', 'olt'];
+                var validCableEndpoints = ['cross', 'cabinet', 'sleeve', 'support', 'attachment', 'manhole', 'olt'];
                 objects.forEach(obj => {
                     if (obj && obj.geometry && obj.properties) {
                         const t = obj.properties.get('type');
@@ -335,10 +349,17 @@ function handleMapClick(e) {
                         clearSelection();
                         selectObject(cableSource);
                     } else {
+                        if (!validatePendingOltPortCableEndpoint(nearestObject)) return;
                         const pointsNear = [cableSource].concat(cableWaypoints).concat([nearestObject]);
                         const cableTypeVal = getEffectiveCableLayingType();
                         const successNear = createCableFromPoints(pointsNear, cableTypeVal);
                         if (successNear) {
+                            if (oltPortCableJustFinished) {
+                                oltPortCableJustFinished = false;
+                                clearSelection();
+                                removeCablePreview();
+                                return;
+                            }
                             cableSource = nearestObject;
                             cableWaypoints = [];
                             clearSelection();

@@ -194,7 +194,7 @@ function connectFiberToSplitterWithRoute(sleeveObj, cableId, fiberNumber, splitt
     const t = sleeveObj.properties.get('type');
     const placeId = sleeveObj.properties.get('uniqueId');
     const opts = { type: 'splitterInput', splitterId: splitterId };
-    if (t === 'cross') opts.atCrossId = placeId; else opts.atSleeveId = placeId;
+    if (isCrossLikeHostType(t)) opts.atCrossId = placeId; else opts.atSleeveId = placeId;
     const usage = getFiberUsage(cableId, fiberNumber, opts);
     if (usage.used) {
         showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
@@ -413,7 +413,7 @@ function getSplitterHostInputFiber(splitterObj) {
         var slot = objects[i];
         if (!slot.properties) continue;
         var t = slot.properties.get('type');
-        if (t !== 'cross' && t !== 'sleeve') continue;
+        if (!isFiberHostType(t)) continue;
         var sc = slot.properties.get('splitterConnections') || {};
         for (var key in sc) {
             if (!sc[key] || sc[key].splitterId !== splitterId) continue;
@@ -622,7 +622,7 @@ function getAvailableFibersAtHostForSplitterOutput(hostObj, sourceSplitterId, ou
                 splitterId: sourceSplitterId,
                 outputIndex: outputIndex,
                 atSleeveId: hostObj.properties.get('type') === 'sleeve' ? hostUid : undefined,
-                atCrossId: hostObj.properties.get('type') === 'cross' ? hostUid : undefined
+                atCrossId: isCrossLikeHostType(hostObj.properties.get('type')) ? hostUid : undefined
             });
             if (usage.used) return;
             options.push({

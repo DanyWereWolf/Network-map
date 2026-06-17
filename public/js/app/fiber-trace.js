@@ -19,7 +19,7 @@ function findPeerNodeTargetsOnCable(startCross, cableId, fiberNumber, originNode
     objects.forEach(function(obj) {
         if (!obj || !obj.properties) return;
         var ht = obj.properties.get('type');
-        if (ht !== 'cross' && ht !== 'sleeve') return;
+        if (!isFiberHostType(ht)) return;
         if (getObjectUniqueId(obj) === startUid) return;
         var nc = obj.properties.get('nodeConnections') || {};
         var conn = nc[key];
@@ -1812,7 +1812,7 @@ function showOnuSelectionDialog(sleeveObj, cableId, fiberNumber) {
 function showMediaConverterSelectionDialog(sleeveObj, cableId, fiberNumber) {
     const placeId = sleeveObj.properties.get('uniqueId');
     const stMcDlg = sleeveObj.properties.get('type');
-    const usageOptsMcDlg = stMcDlg === 'cross' ? { atCrossId: placeId } : { atSleeveId: placeId };
+    const usageOptsMcDlg = isCrossLikeHostType(stMcDlg) ? { atCrossId: placeId } : { atSleeveId: placeId };
     const usage = getFiberUsage(cableId, fiberNumber, usageOptsMcDlg);
     if (usage.used) {
         showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');

@@ -157,6 +157,7 @@ function setupEventListeners() {
             cableWaypoints = [];
             pendingCopperPortPreset = null;
             pendingCopperRouteFinish = null;
+            if (typeof finishOltPortCableLayingSession === 'function') finishOltPortCableLayingSession();
             const mapEl = myMap.container.getElement();
             mapEl.style.cursor = '';
             mapEl.classList.remove('map-crosshair-active');

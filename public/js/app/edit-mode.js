@@ -59,6 +59,7 @@ function switchToViewMode(silent) {
     resetCableUndergroundPendingSpans();
     pendingCopperPortPreset = null;
     pendingCopperRouteFinish = null;
+    if (typeof finishOltPortCableLayingSession === 'function') finishOltPortCableLayingSession();
 
     if (objectPlacementMode) {
         cancelObjectPlacement();

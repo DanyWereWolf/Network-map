@@ -23,6 +23,10 @@ var pendingCopperPortPreset = null;
 var pendingCopperRouteFinish = null;
 /** Прокладка меди только с портов коммутатора/кросса (не из списка типа кабеля) */
 var copperCableLayingActive = false;
+/** Прокладка одножильного feeder с PON-порта OLT в муфту/кросс */
+var pendingOltPortPreset = null;
+var pendingOltPortLayFiberBackup = null;
+var oltPortCableJustFinished = false;
 var cableWaypoints = [];
 /** Подземный участок: вход в колодец — клики по карте — выход во второй колодец */
 var cableUndergroundActive = false;

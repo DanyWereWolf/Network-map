@@ -232,7 +232,7 @@
                 cssClass: 'trace-path-status--incomplete'
             };
         }
-        if (t === 'sleeve' || t === 'cross') {
+        if (isFiberHostType(t)) {
             return {
                 status: 'incomplete',
                 endpoint: t,

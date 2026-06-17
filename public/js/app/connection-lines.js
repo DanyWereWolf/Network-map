@@ -156,7 +156,7 @@ function connectFiberToMediaConverterWithRoute(sleeveObj, cableId, fiberNumber, 
     const mcId = getObjectUniqueId(mcObj);
     const slotTypeMc = sleeveObj.properties.get('type');
     const usageOptsMc = { type: 'mediaConverterConn', mediaConverterId: mcId };
-    if (slotTypeMc === 'cross') {
+    if (isCrossLikeHostType(slotTypeMc)) {
         usageOptsMc.crossId = placeId;
         usageOptsMc.atCrossId = placeId;
     } else {
@@ -387,7 +387,7 @@ function removeSplitterOutputLinesForSplitter(splitterUid) {
 function rebuildHostFiberConnections(obj) {
     if (!obj || !obj.properties) return;
     var type = obj.properties.get('type');
-    if (type !== 'cross' && type !== 'sleeve') return;
+    if (!isFiberHostType(type)) return;
     var hostUid = getObjectUniqueId(obj);
     var onuConnections = obj.properties.get('onuConnections');
     if (onuConnections) {
@@ -472,7 +472,7 @@ function rebuildSplitterOutputLines(splitterObj) {
         else if (out.nodeId) target = getMapObjectByUid(out.nodeId, 'node');
         else if (out.splitterId) target = getMapObjectByUid(out.splitterId, 'splitter');
         else if (out.hostId) {
-            target = getMapObjectByUid(out.hostId, 'sleeve') || getMapObjectByUid(out.hostId, 'cross');
+            target = getMapObjectByUid(out.hostId, 'sleeve') || getMapObjectByUid(out.hostId, 'cross') || getMapObjectByUid(out.hostId, 'cabinet');
         }
         var sourceObj = getSplitterRoutingAnchor(splitterObj) || splitterObj;
         if (target) createSplitterOutputConnectionLine(sourceObj, target, oi, out.routeIds || out.route || []);
@@ -490,7 +490,7 @@ function rebuildLinesThroughWaypoint(wpUid) {
     objects.forEach(function(obj) {
         if (!obj.properties) return;
         var t = obj.properties.get('type');
-        if (t === 'cross' || t === 'sleeve') {
+        if (isFiberHostType(t)) {
             var hostUid = getObjectUniqueId(obj);
             var needsRebuild = false;
             ['oltConnections', 'onuConnections', 'mediaConverterConnections', 'splitterConnections'].forEach(function(prop) {
@@ -529,7 +529,7 @@ function rebuildLinesTargetingEndpoint(endpointUid, endpointType) {
     objects.forEach(function(obj) {
         if (!obj.properties) return;
         var t = obj.properties.get('type');
-        if (t !== 'cross' && t !== 'sleeve') return;
+        if (!isFiberHostType(t)) return;
         var changed = false;
         if (endpointType === 'onu') {
             var onuC = obj.properties.get('onuConnections');
@@ -587,7 +587,7 @@ function syncConnectionLinesForObject(obj) {
     } else if (type === 'node') {
         objects.forEach(function(host) {
             var ht = host.properties ? host.properties.get('type') : null;
-            if (!host.properties || (ht !== 'cross' && ht !== 'sleeve')) return;
+            if (!host.properties || (!isFiberHostType(ht))) return;
             var nc = host.properties.get('nodeConnections');
             if (!nc) return;
             if (Object.keys(nc).some(function(k) { return nc[k] && nc[k].nodeId === uid; })) {
@@ -656,7 +656,7 @@ function createSplitterOutputConnectionLine(sourceObj, targetObj, outIdx, routeI
     
     var lineCoords = [sourceCoords].concat(gponRouteWaypointCoords(routeIds)).concat([targetCoords]);
     
-    var stroke = targetType === 'onu' ? '#a855f7' : (targetType === 'mediaConverter' ? '#14b8a6' : (targetType === 'node' ? '#22c55e' : (targetType === 'sleeve' || targetType === 'cross' ? '#ef4444' : '#f97316')));
+    var stroke = targetType === 'onu' ? '#a855f7' : (targetType === 'mediaConverter' ? '#14b8a6' : (targetType === 'node' ? '#22c55e' : (isFiberHostType(targetType) ? '#ef4444' : '#f97316')));
     var line = new ymaps.Polyline(lineCoords, {}, getConnectionLinePolylineOptions(stroke));
     line.properties.set('type', 'splitterOutputConnectionLine');
     line.properties.set('connectionKey', key);
@@ -711,12 +711,12 @@ function updateSplitterOutputConnectionLines() {
                 else if (out.mediaConverterId) target = getMapObjectByUid(out.mediaConverterId, 'mediaConverter');
                 else if (out.nodeId) target = getMapObjectByUid(out.nodeId, 'node');
                 else if (out.splitterId) target = getMapObjectByUid(out.splitterId, 'splitter');
-                else if (out.hostId) target = getMapObjectByUid(out.hostId, 'sleeve') || getMapObjectByUid(out.hostId, 'cross');
+                else if (out.hostId) target = getMapObjectByUid(out.hostId, 'sleeve') || getMapObjectByUid(out.hostId, 'cross') || getMapObjectByUid(out.hostId, 'cabinet');
                 if (target) createSplitterOutputConnectionLine(obj, target, oi, out.routeIds || out.route || []);
             }
             return;
         }
-        if (t !== 'cross' && t !== 'sleeve') return;
+        if (!isFiberHostType(t)) return;
         if (!window.EmbeddedSplitters) return;
         var hostUid = getObjectUniqueId(obj);
         var embedded = EmbeddedSplitters.getList(obj) || [];
@@ -731,7 +731,7 @@ function updateSplitterOutputConnectionLines() {
                 else if (eout.mediaConverterId) etarget = getMapObjectByUid(eout.mediaConverterId, 'mediaConverter');
                 else if (eout.nodeId) etarget = getMapObjectByUid(eout.nodeId, 'node');
                 else if (eout.hostId && eout.hostId !== hostUid) {
-                    etarget = getMapObjectByUid(eout.hostId, 'sleeve') || getMapObjectByUid(eout.hostId, 'cross');
+                    etarget = getMapObjectByUid(eout.hostId, 'sleeve') || getMapObjectByUid(eout.hostId, 'cross') || getMapObjectByUid(eout.hostId, 'cabinet');
                 }
                 if (etarget) {
                     createSplitterOutputConnectionLine(obj, etarget, ei, eout.routeIds || eout.route || [], hostUid + '-esp-' + rec.id + '-out-' + ei);
@@ -747,7 +747,7 @@ function updateOnuConnectionLines() {
     objects.forEach(function(obj) {
         if (!obj.properties) return;
         const type = obj.properties.get('type');
-        if (type !== 'cross' && type !== 'sleeve') return;
+        if (!isFiberHostType(type)) return;
         const onuConnections = obj.properties.get('onuConnections');
         if (onuConnections) {
             Object.keys(onuConnections).forEach(function(key) {
@@ -815,7 +815,7 @@ function updateOltConnectionLines() {
     objects.forEach(function(obj) {
         if (!obj.properties) return;
         const type = obj.properties.get('type');
-        if (type !== 'cross' && type !== 'sleeve') return;
+        if (!isFiberHostType(type)) return;
         const oltConnections = obj.properties.get('oltConnections');
         if (!oltConnections) return;
         Object.keys(oltConnections).forEach(function(key) {
@@ -875,7 +875,7 @@ function updateSplitterConnectionLines() {
     objects.forEach(function(obj) {
         if (!obj.properties) return;
         const type = obj.properties.get('type');
-        if (type !== 'cross' && type !== 'sleeve') return;
+        if (!isFiberHostType(type)) return;
         const splitterConnections = obj.properties.get('splitterConnections');
         if (!splitterConnections) return;
         Object.keys(splitterConnections).forEach(function(key) {
@@ -901,7 +901,7 @@ function updateAllNodeConnectionLines() {
     objects.forEach(obj => {
         if (!obj.properties) return;
         const ht = obj.properties.get('type');
-        if (ht !== 'cross' && ht !== 'sleeve') return;
+        if (!isFiberHostType(ht)) return;
         const nodeConnections = obj.properties.get('nodeConnections');
         if (!nodeConnections) return;
         Object.keys(nodeConnections).forEach(key => {
