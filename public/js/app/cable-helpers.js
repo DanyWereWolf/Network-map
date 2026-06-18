@@ -100,6 +100,7 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
             }
             var oltAss = getHostAssignment(obj, 'oltConnections', cableId, fiberNumber);
             if (oltAss) {
+                if (exclude && exclude.type === 'oltPort') continue;
                 if (exclude && exclude.type === 'splitterInput') continue;
                 if (isGponBranchAssignmentExclude(exclude)) continue;
                 if (exclude && exclude.type === 'fiberConnection') continue;
@@ -149,6 +150,7 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
             const incomingFiber = obj.properties.get('incomingFiber');
             if (incomingFiber && incomingFiber.cableId === cableId && incomingFiber.fiberNumber === fiberNumber) {
                 if (exclude && exclude.type === 'oltIncoming' && exclude.oltId === uid) continue;
+                if (exclude && exclude.type === 'oltPort') continue;
                 if (isGponBranchAssignmentExclude(exclude)) continue;
                 return { used: true, where: 'приход OLT' };
             }
@@ -157,6 +159,7 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
                 const a = portAssignments[portKey];
                 if (a && a.cableId === cableId && a.fiberNumber === fiberNumber) {
                     if (exclude && exclude.type === 'oltPort' && exclude.oltId === uid && exclude.portNumber === parseInt(portKey, 10)) continue;
+                    if (exclude && exclude.type === 'oltPort' && (a.crossId == null || a.crossPort == null)) continue;
                     if (exclude && exclude.type === 'splitterInput') continue;
                     if (isGponBranchAssignmentExclude(exclude)) continue;
                     var portLblUsed = getOltPortLabel(obj, parseInt(portKey, 10));

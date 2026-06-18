@@ -63,10 +63,11 @@ function getUsedFibers(obj, cableUniqueId) {
 function computeFiberOccupancy(cableUniqueId, fiberNumber, cableData, fiberConnections, nodeConnections, oltConnections, onuConnections, mediaConverterConnections, splitterConnections, hostObj) {
     const fiberKey = cableUniqueId + '-' + fiberNumber;
     const isUsed = cableData ? cableData.usedFibers.includes(fiberNumber) : false;
-    const isConnected = (fiberConnections || []).some(function(conn) {
+    const isDirectSpliced = (fiberConnections || []).some(function(conn) {
         return (conn.from.cableId === cableUniqueId && conn.from.fiberNumber === fiberNumber) ||
             (conn.to.cableId === cableUniqueId && conn.to.fiberNumber === fiberNumber);
     });
+    const isConnected = isDirectSpliced;
     const nodeConn = hostObj ? getHostAssignment(hostObj, 'nodeConnections', cableUniqueId, fiberNumber) : (nodeConnections && nodeConnections[fiberKey]);
     const realOltAssign = hostObj ? getFiberOltRealAssignment(hostObj, cableUniqueId, fiberNumber) : null;
     const oltConnDisplay = hostObj ? getFiberOltAssignment(hostObj, cableUniqueId, fiberNumber) : (oltConnections && oltConnections[fiberKey]);
@@ -706,7 +707,11 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             if (!pos) return;
             const occ = computeFiberOccupancy(cableData.cableUniqueId, fiber.number, cableData, fiberConnections, nodeConnections, oltConnections, onuConnections, mediaConverterConnections, splitterConnections, sleeveObj);
             const isUsed = occ.isUsed;
-            const isConnected = occ.isConnected;
+            const isDirectSpliced = fiberConnections.some(function(c) {
+                return (c.from.cableId === cableData.cableUniqueId && c.from.fiberNumber === fiber.number) ||
+                    (c.to.cableId === cableData.cableUniqueId && c.to.fiberNumber === fiber.number);
+            });
+            const isConnected = isDirectSpliced;
             const isOccupied = occ.isOccupied;
             const isGponFeeder = occ.isGponFeeder;
             const isGponUpstreamOnly = occ.isGponUpstreamOnly;
@@ -726,7 +731,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             const badgeStrokeOcc = isGponFeeder ? '#0284c7' : (isGponUpstreamOnly ? '#0ea5e9' : (isOccupied ? '#dc2626' : badgeStroke));
 
             const fiberLabelKey = cableData.cableUniqueId + '-' + fiber.number;
-            const spliceConn = isConnected ? fiberConnections.find(function(c) {
+            const spliceConn = isDirectSpliced ? fiberConnections.find(function(c) {
                 return (c.from.cableId === cableData.cableUniqueId && c.from.fiberNumber === fiber.number) ||
                     (c.to.cableId === cableData.cableUniqueId && c.to.fiberNumber === fiber.number);
             }) : null;
@@ -734,7 +739,9 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             const directLabel = !isConnected ? (fiberLabels[fiberLabelKey] || '') : '';
             const statusText = isConnected ? ' (соед.)' : (isUsed ? ' (исп.)' : '');
             const labelText = connLabelOnLine ? ' ' + connLabelOnLine : (directLabel ? ' ' + directLabel : '');
-            const portText = isCross && fiberPorts && fiberPorts[fiberLabelKey] && !isConnected ? ', порт ' + fiberPorts[fiberLabelKey] : '';
+            const portText = isCross && fiberPorts && fiberPorts[fiberLabelKey] && !isDirectSpliced
+                ? (', порт ' + fiberPorts[fiberLabelKey])
+                : '';
             const occHint = isGponFeeder ? ' (GPON feeder)' : (oltBlocksSpliceScheme ? ' (приход OLT)' : (occ.isOltCableEnd ? ' (кабель от OLT)' : (occ.hasDirectOltConnection ? ' (от OLT)' : (isOccupied ? ' (занята)' : ''))));
             const tooltipText = escapeHtml(fiber.name + labelText + statusText + portText + occHint);
             const textFill = (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00' || fiber.color === '#FFC0CB') ? '#000' : '#fff';
@@ -829,7 +836,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     html += '</g>';
 
     if (crossPanelLayout && fiberPorts) {
-        html += buildCrossSchemePanelSvg(crossPanelLayout, fiberPorts, fiberPositions, schemeBlocks, isDark, badgeH, isEditMode, sleeveObj);
+        html += buildCrossSchemePanelSvg(crossPanelLayout, fiberPorts, fiberPositions, schemeBlocks, isDark, badgeH, isEditMode, sleeveObj, nodeR, badgeW);
     }
 
     html += '</svg>';
@@ -895,15 +902,17 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         const isUsed = occ.isUsed;
         const isOccupied = occ.isOccupied;
         const directLabel = fiberLabels[fiberLabelKey] || '';
-        const isConnected = fiberConnections.some(conn =>
+        const isDirectSpliced = fiberConnections.some(conn =>
             (conn.from.cableId === cableData.cableUniqueId && conn.from.fiberNumber === fiber.number) ||
             (conn.to.cableId === cableData.cableUniqueId && conn.to.fiberNumber === fiber.number)
         );
-        const spliceConn = isConnected ? fiberConnections.find(function(c) {
+        const isConnected = isDirectSpliced;
+        const spliceConn = isDirectSpliced ? fiberConnections.find(function(c) {
             return (c.from.cableId === cableData.cableUniqueId && c.from.fiberNumber === fiber.number) ||
                 (c.to.cableId === cableData.cableUniqueId && c.to.fiberNumber === fiber.number);
         }) : null;
         const spliceConnLabel = spliceConn ? resolveFiberConnectionLabel(spliceConn, fiberLabels) : '';
+        const crossPortNum = isCross && fiberPorts ? (fiberPorts[fiberLabelKey] || '') : '';
         const nodeConnection = getHostAssignment(sleeveObj, 'nodeConnections', cableData.cableUniqueId, fiber.number);
         const realOltAssign = getFiberOltRealAssignment(sleeveObj, cableData.cableUniqueId, fiber.number);
         const oltConnection = realOltAssign;
@@ -1023,14 +1032,14 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         else if (isEditMode && isSpliceSelectable) cellTitle = (cellTitle ? cellTitle + '. ' : '') + 'Клик: выбрать жилу, затем клик по жиле в другом кабеле — создать соединение';
         else if (hasSplitterOutputAtHost && isEditMode && !isConnected && !isUsed) cellTitle = (cellTitle ? cellTitle + '. ' : '') + 'Жила от выхода сплиттера — можно сращивать с жилой другого кабеля';
         else if (directLabel && !isConnected) cellTitle = (cellTitle ? cellTitle + '. ' : '') + 'Подпись: ' + directLabel;
-        const currentPort = isCross && fiberPorts && !isConnected ? (fiberPorts[fiberLabelKey] || '') : '';
+        const currentPort = isCross && fiberPorts && !isDirectSpliced ? (fiberPorts[fiberLabelKey] || '') : '';
         const portOptions = [];
-        if (isCross && crossPorts && !isConnected) {
+        if (isCross && crossPorts && !isDirectSpliced) {
             portOptions.push('<option value="">—</option>');
             for (let p = 1; p <= crossPorts; p++) portOptions.push(`<option value="${p}"${currentPort === String(p) ? ' selected' : ''}>${p}</option>`);
         }
         const portRow = isCross
-            ? (isConnected
+            ? (isDirectSpliced
                 ? '<div class="fiber-port-row fiber-port-row--view"><span class="fiber-port-row__lbl">Порт</span><span class="fiber-port-row__val">—</span><span class="fiber-port-row__hint">сращена</span></div>'
                 : (isEditMode && crossPorts
                     ? '<div class="fiber-port-row"><span class="fiber-port-row__lbl">Порт</span><select class="fiber-port-select form-select" data-cable-id="' + cableData.cableUniqueId + '" data-fiber-number="' + fiber.number + '" title="Порт кросса">' + portOptions.join('') + '</select></div>'
@@ -1558,11 +1567,12 @@ function buildCrossPortAssignments(fiberPorts, crossPorts, hostObj) {
         const cableId = key.substring(0, lastDash);
         const fiberNumber = parseInt(key.substring(lastDash + 1), 10);
         if (hostObj && typeof isFiberSplicedAtHost === 'function' && isFiberSplicedAtHost(hostObj, cableId, fiberNumber)) return;
-        assignments[portNum] = {
+        if (!assignments[portNum]) assignments[portNum] = [];
+        assignments[portNum].push({
             fiberKey: key,
             cableId: cableId,
             fiberNumber: fiberNumber
-        };
+        });
     });
     return assignments;
 }
@@ -1580,7 +1590,7 @@ function buildCrossFiberPortLinkPath(fx, fy, px, py, opts) {
     return 'M ' + fx + ' ' + fy + ' C ' + c1x + ' ' + c1y + ', ' + c2x + ' ' + c2y + ', ' + px + ' ' + py;
 }
 
-function buildCrossSchemePanelSvg(crossLayout, fiberPorts, fiberPositions, schemeBlocks, isDark, badgeH, isEditMode, hostObj) {
+function buildCrossSchemePanelSvg(crossLayout, fiberPorts, fiberPositions, schemeBlocks, isDark, badgeH, isEditMode, hostObj, nodeR, badgeW) {
     if (!crossLayout || !crossLayout.portPositions) return '';
     const crossPorts = crossLayout.portPositions.size;
     const assignments = buildCrossPortAssignments(fiberPorts, crossPorts, hostObj);
@@ -1601,30 +1611,36 @@ function buildCrossSchemePanelSvg(crossLayout, fiberPorts, fiberPositions, schem
     html += '<g class="fiber-scheme-cross-links" fill="none">';
     Object.keys(assignments).forEach(function(portKey) {
         const portNum = parseInt(portKey, 10);
-        const assign = assignments[portNum];
+        const assignList = assignments[portNum] || [];
         const portPos = crossLayout.portPositions.get(portNum);
-        const fiberPos = fiberPositions.get(assign.fiberKey);
-        if (!portPos || !fiberPos) return;
-        const fiber = lookupSchemeFiber(schemeBlocks, assign.cableId, assign.fiberNumber);
-        const fiberAnchorY = fiberPos.y + (badgeH || 16) / 2 + 3;
-        const pathD = buildCrossFiberPortLinkPath(fiberPos.x, fiberAnchorY, portPos.x, portPos.y - portPos.portR, {
-            isLeft: fiberPos.isLeft
+        if (!portPos || !assignList.length) return;
+        assignList.forEach(function(assign) {
+            const fiberPos = fiberPositions.get(assign.fiberKey);
+            if (!fiberPos) return;
+            const fiber = lookupSchemeFiber(schemeBlocks, assign.cableId, assign.fiberNumber);
+            const isLeft = fiberPos.isLeft;
+            const fiberAnchorX = isLeft ? fiberPos.x - badgeW / 2 - nodeR * 2 - 1 : fiberPos.x + badgeW / 2 + nodeR * 2 + 1;
+            const fiberAnchorY = fiberPos.y;
+            const pathD = buildCrossFiberPortLinkPath(fiberAnchorX, fiberAnchorY, portPos.x, portPos.y - portPos.portR, {
+                isLeft: isLeft
+            });
+            const strokeColor = fiber && fiber.color ? fiberSchemeLinkStrokeColor(fiber.color, isDark) : linkStroke;
+            html += '<path class="fiber-scheme-cross-link" data-fiber-key="' + escapeHtml(assign.fiberKey) + '" data-cross-port="' + portNum + '" d="' + pathD + '" stroke="' + strokeColor + '" stroke-width="2" stroke-linecap="round" opacity="0.75"/>';
         });
-        const strokeColor = fiber && fiber.color ? fiberSchemeLinkStrokeColor(fiber.color, isDark) : linkStroke;
-        html += '<path class="fiber-scheme-cross-link" data-fiber-key="' + escapeHtml(assign.fiberKey) + '" data-cross-port="' + portNum + '" d="' + pathD + '" stroke="' + strokeColor + '" stroke-width="2" stroke-linecap="round" opacity="0.75"/>';
     });
     html += '</g>';
     html += '<g class="fiber-scheme-cross-ports">';
     crossLayout.portPositions.forEach(function(portPos, portNum) {
-        const assign = assignments[portNum];
-        const fiber = assign ? lookupSchemeFiber(schemeBlocks, assign.cableId, assign.fiberNumber) : null;
-        const isAssigned = !!assign;
+        const assignList = assignments[portNum] || [];
+        const isAssigned = assignList.length > 0;
+        const primaryAssign = assignList[0] || null;
+        const fiber = primaryAssign ? lookupSchemeFiber(schemeBlocks, primaryAssign.cableId, primaryAssign.fiberNumber) : null;
         const fill = isAssigned && fiber && fiber.color ? fiber.color : portIdle;
         const stroke = isAssigned ? portActiveStroke : portIdleStroke;
         const textFill = isAssigned ? ((fiber && (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00' || fiber.color === '#FFC0CB')) ? '#000' : '#fff') : portTextIdle;
         let tooltip = 'Порт ' + portNum;
         if (isAssigned && fiber) {
-            tooltip += ' · ж.' + assign.fiberNumber + (fiber.name ? ' (' + fiber.name + ')' : '');
+            tooltip += ' · ж.' + primaryAssign.fiberNumber + (fiber.name ? ' (' + fiber.name + ')' : '');
             if (isEditMode) tooltip += ' · клик — освободить';
         } else if (isEditMode) {
             tooltip += ' · свободен · клик — выбрать жилу';

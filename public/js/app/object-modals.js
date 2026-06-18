@@ -785,14 +785,15 @@ function buildOltIncomingFiberLabel(incomingFiber, cables) {
 function buildOltPortFiberLabel(ass, cables) {
     if (!ass || ass.cableId == null) return '—';
     if (!isFiberExistingOnCable(ass.cableId, ass.fiberNumber)) return '—';
-    var c = cables.find(function(cab) { return (cab.properties.get('uniqueId') || '') === ass.cableId; });
-    if (!c) {
-        c = objects.find(function(cab) {
-            return cab.properties && cab.properties.get('type') === 'cable' &&
-                cab.properties.get('uniqueId') === ass.cableId;
+    if (ass.crossPort != null && ass.crossId) {
+        var cross = objects.find(function(o) {
+            return o.properties && isCrossLikeHostType(o.properties.get('type')) &&
+                getObjectUniqueId(o) === ass.crossId;
         });
+        var crossName = cross ? (cross.properties.get('name') || 'Кросс') : 'Кросс';
+        return crossName + ', порт ' + ass.crossPort;
     }
-    return c ? (c.properties.get('cableName') || getCableDescription(c.properties.get('cableType'))) + ', ж.' + ass.fiberNumber : ass.cableId + '-' + ass.fiberNumber;
+    return '—';
 }
 
 function getOltPortLabels(oltObj) {
@@ -841,26 +842,16 @@ function buildOltCardContent(obj, isEditMode, name) {
     var cables = getConnectedCables(obj);
     var assignedCount = Object.keys(portAssignments).filter(function(k) {
         var a = portAssignments[k];
-        return a && a.cableId != null && a.fiberNumber != null &&
+        return a && a.cableId != null && a.fiberNumber != null && a.crossPort != null && a.crossId != null &&
             (!isFiberExistingOnCable || isFiberExistingOnCable(a.cableId, a.fiberNumber));
     }).length;
     var incomingLabel = buildOltIncomingFiberLabel(incomingFiber, cables);
+    var hasIncoming = !!(incomingFiber && incomingFiber.cableId &&
+        isFiberExistingOnCable(incomingFiber.cableId, incomingFiber.fiberNumber));
     var oltConnectivityIssues = typeof getOltConnectivityIssues === 'function' ? getOltConnectivityIssues(obj) : [];
     var physicalCableCount = cables.length;
 
-    var fiberOptions = [];
-    cables.forEach(function(cable) {
-        var cid = cable.properties.get('uniqueId') || ('cable-' + Date.now());
-        if (!cable.properties.get('uniqueId')) cable.properties.set('uniqueId', cid);
-        var cableName = cable.properties.get('cableName') || getCableDescription(cable.properties.get('cableType'));
-        var n = getFiberCount(cable);
-        for (var f = 1; f <= n; f++) {
-            if (typeof isFiberExistingOnCable === 'function' && !isFiberExistingOnCable(cid, f)) continue;
-            fiberOptions.push({ cableId: cid, fiberNumber: f, label: cableName + ', жила ' + f, value: cid + '-' + f });
-        }
-    });
-
-    var html = '<div class="olt-card">';
+    var html = '<div class="olt-card olt-card--gpon">';
 
     html += '<section class="object-card-section olt-card-hero">';
     html += '<div class="olt-card-hero-row">';
@@ -870,20 +861,25 @@ function buildOltCardContent(obj, isEditMode, name) {
     html += '<div class="olt-card-hero-text">';
     if (!isEditMode) {
         html += '<div class="olt-card-view-name">' + escapeHtml(name || 'Без названия') + '</div>';
-        html += '<div class="olt-card-view-meta">' + escapeHtml(deviceLine || 'OLT · GPON') + '</div>';
+        html += '<div class="olt-card-view-meta">';
+        html += '<span class="olt-kind-pill">GPON</span>';
+        if (deviceLine) {
+            html += '<span class="olt-card-device-inline">' + escapeHtml(deviceLine) + '</span>';
+        }
+        html += '</div>';
         if (comment) {
             html += '<div class="olt-card-comment">' + escapeHtml(comment) + '</div>';
         }
     } else {
         html += '<div class="olt-card-view-name">' + escapeHtml(name || 'Новый OLT') + '</div>';
-        html += '<p class="object-card-hint olt-card-hero-hint"><strong>Приход</strong> — жила от кросса/муфты к OLT (кнопка «Приход OLT» у жилы). <strong>PON-порты</strong> — feeder от OLT в сеть: в таблице ниже для свободного порта нажмите «Подключить жилу».</p>';
+        html += '<div class="olt-card-view-meta"><span class="olt-kind-pill">GPON</span></div>';
+        html += '<p class="object-card-hint olt-card-hero-hint"><strong>Приход</strong> — жила от кросса/муфты к OLT. <strong>PON-порты</strong> — логическая связь с портом кросса без кабеля OLT ↔ кросс.</p>';
     }
     html += '</div></div>';
     html += '<dl class="olt-card-stats">';
     html += '<div class="olt-card-stat"><dt>PON-портов</dt><dd>' + ponPorts + '</dd></div>';
     html += '<div class="olt-card-stat"><dt>Назначено</dt><dd>' + assignedCount + ' / ' + ponPorts + '</dd></div>';
     html += '<div class="olt-card-stat"><dt>Кабелей</dt><dd>' + physicalCableCount + '</dd></div>';
-    html += '<div class="olt-card-stat olt-card-stat--wide"><dt>Приход (upstream)</dt><dd>' + escapeHtml(incomingLabel) + '</dd></div>';
     html += '</dl></section>';
 
     html += buildObjectCoordsSectionHtml(obj);
@@ -901,28 +897,29 @@ function buildOltCardContent(obj, isEditMode, name) {
         html += '<div class="form-group" style="margin-bottom:0;"><label for="editOltComment" class="object-card-label">Комментарий</label>';
         html += '<textarea id="editOltComment" class="form-input" rows="2" placeholder="Дополнительные сведения">' + escapeHtml(comment) + '</textarea></div>';
         html += '</section>';
-    } else if (manufacturer || model || comment) {
-        html += '<section class="object-card-section">';
-        html += '<h4 class="object-card-section-title">Устройство</h4>';
-        if (manufacturer || model) {
-            html += '<p class="olt-card-device-line">' + escapeHtml(deviceLine || '—') + '</p>';
-        }
-        if (comment) {
-            html += '<p class="olt-card-device-comment">' + escapeHtml(comment) + '</p>';
-        }
-        html += '</section>';
     }
 
     html += '<section class="object-card-section object-card-section--gpon">';
+    html += '<div class="object-card-section-head">';
     html += '<h4 class="object-card-section-title">GPON</h4>';
-    html += '<p class="object-card-hint olt-card-gpon-hint">Два независимых назначения: <strong>приход</strong> (от кросса/муфты к OLT) и <strong>PON-порты</strong> (feeder от OLT в GPON-сеть). В таблице — все порты: тип, подпись, назначение и действия.</p>';
+    html += '<span class="object-card-badge object-card-badge--gpon" title="Назначено PON-портов">' + assignedCount + ' / ' + ponPorts + '</span>';
+    html += '</div>';
+    if (isEditMode) {
+        html += '<p class="object-card-hint olt-card-gpon-hint">Два независимых назначения: <strong>приход</strong> (от кросса/муфты к OLT) и <strong>PON-порты</strong> (логическая связь с жилой на порту кросса).</p>';
+    }
     if (oltConnectivityIssues.length) {
         oltConnectivityIssues.forEach(function(issue) {
             html += '<div class="object-card-callout object-card-callout--warn"><p>' + escapeHtml(issue.message) + '</p></div>';
         });
     }
-    html += '<div class="olt-card-incoming"><span class="olt-card-incoming-label">Приход (upstream)</span><span class="olt-card-incoming-value">' + escapeHtml(incomingLabel) + '</span><span class="olt-card-incoming-hint">Задаётся кнопкой «Приход OLT» у жилы в кроссе или муфте</span></div>';
-    html += '<h5 class="olt-card-ports-title">PON-порты (feeder в сеть)</h5>';
+    html += '<div class="olt-card-incoming' + (hasIncoming ? ' olt-card-incoming--ok' : ' olt-card-incoming--empty') + '">';
+    html += '<div class="olt-card-incoming-main">';
+    html += '<span class="olt-card-incoming-label">Приход (upstream)</span>';
+    html += '<span class="olt-card-incoming-value">' + escapeHtml(incomingLabel) + '</span>';
+    html += '</div>';
+    html += '<span class="olt-card-incoming-hint">Задаётся кнопкой «Приход OLT» у жилы в кроссе или муфте</span>';
+    html += '</div>';
+    html += '<h5 class="olt-card-ports-title">PON-порты</h5>';
     var ponPortTypes = typeof getOltPonPortTypes === 'function' ? getOltPonPortTypes(obj) : [];
     var kindOptsOlt = typeof getPonPortKindOptions === 'function' ? getPonPortKindOptions() : ['GPON'];
 
@@ -932,22 +929,21 @@ function buildOltCardContent(obj, isEditMode, name) {
     html += '</tr></thead><tbody>';
     for (var p = 1; p <= ponPorts; p++) {
         var ass = portAssignments[String(p)] || null;
-        var assValid = ass && ass.cableId != null && ass.fiberNumber != null &&
-            (!isFiberExistingOnCable || isFiberExistingOnCable(ass.cableId, ass.fiberNumber));
-        var assVal = assValid ? (ass.cableId + '-' + ass.fiberNumber) : '';
-        var assLabel = buildOltPortFiberLabel(ass, cables);
+        var crossConnected = ass && ass.crossPort != null && ass.crossId != null &&
+            isFiberExistingOnCable(ass.cableId, ass.fiberNumber);
+        var assLabel = crossConnected ? buildOltPortFiberLabel(ass, cables) : '—';
         var portLabel = (portLabels[String(p)] || '').trim();
         var portType = ponPortTypes[p - 1] || (typeof getPonPortDefaultKind === 'function' ? getPonPortDefaultKind() : 'GPON');
-        var rowBusy = !!assValid;
-        html += '<tr class="' + (rowBusy ? 'node-port-row--busy' : 'node-port-row--free') + '" data-port="' + p + '">';
+        var rowBusy = !!crossConnected;
+        html += '<tr class="olt-port-row ' + (rowBusy ? 'olt-port-row--busy' : 'olt-port-row--free') + '" data-port="' + p + '">';
         html += '<td class="olt-ports-table-port">' + p + '</td>';
-        html += '<td>';
+        html += '<td class="olt-ports-table-type">';
         if (isEditMode) {
             html += '<select class="olt-port-type form-select form-select-compact" data-port="' + p + '" title="Тип PON-порта">';
             html += buildOltPortTypeOptionsHtml(portType, kindOptsOlt);
             html += '</select>';
         } else {
-            html += escapeHtml(portType);
+            html += '<span class="olt-port-type-pill">' + escapeHtml(portType) + '</span>';
         }
         html += '</td>';
         if (isEditMode) {
@@ -955,35 +951,23 @@ function buildOltCardContent(obj, isEditMode, name) {
         } else {
             html += '<td class="olt-ports-table-label">' + (portLabel ? escapeHtml(portLabel) : '—') + '</td>';
         }
-        if (isEditMode && rowBusy && fiberOptions.length) {
-            html += '<td><select class="olt-port-assign form-input form-input-compact" data-port="' + p + '">';
-            html += '<option value="">— отключить —</option>';
-            fiberOptions.forEach(function(opt) {
-                var taken = Object.keys(portAssignments).some(function(k) {
-                    if (k === String(p)) return false;
-                    var a = portAssignments[k];
-                    return a && a.cableId != null && a.fiberNumber != null &&
-                        isFiberExistingOnCable(a.cableId, a.fiberNumber) &&
-                        (a.cableId + '-' + a.fiberNumber) === opt.value;
-                });
-                var selected = (assVal === opt.value) ? opt.value : '';
-                html += '<option value="' + escapeHtml(opt.value) + '"' + (opt.value === selected ? ' selected' : '') + (taken ? ' disabled' : '') + '>' + escapeHtml(opt.label) + (taken ? ' (занято)' : '') + '</option>';
-            });
-            html += '</select></td>';
-        } else if (rowBusy) {
-            html += '<td class="node-port-assign">' + escapeHtml(assLabel) + '</td>';
+        if (rowBusy) {
+            html += '<td class="node-port-assign olt-port-assign">' + escapeHtml(assLabel) + '</td>';
         } else {
-            html += '<td class="node-port-assign node-port-assign--free">—</td>';
+            html += '<td class="node-port-assign node-port-assign--free olt-port-assign">—</td>';
         }
-        html += '<td class="node-ports-table-actions">';
-        if (rowBusy && assValid) {
+        html += '<td class="node-ports-table-actions"><div class="olt-port-actions">';
+        if (crossConnected) {
             html += '<button type="button" class="btn-trace-olt-port btn-olt-trace" data-port="' + p + '">Трассировка</button>';
+            if (isEditMode) {
+                html += '<button type="button" class="btn-disconnect-olt-port btn-compact btn-olt-disconnect" data-port="' + p + '" title="Отключить PON-порт">Отключить</button>';
+            }
         } else if (isEditMode) {
-            html += '<button type="button" class="btn-olt-port-cable btn-compact" data-port="' + p + '" title="Прокладка одножильного кабеля в муфту или кросс">Подключить жилу</button>';
+            html += '<button type="button" class="btn-olt-port-connect-cross btn-compact btn-olt-connect" data-port="' + p + '" title="Подключить к порту кросса">Подключить</button>';
         } else {
             html += '<span class="node-port-status node-port-status--muted">Свободен</span>';
         }
-        html += '</td>';
+        html += '</div></td>';
         html += '</tr>';
     }
     html += '</tbody></table></div>';
@@ -4554,76 +4538,26 @@ function setupModalEventListeners() {
                 saveData();
             });
         });
-        modalInfo.querySelectorAll('.olt-port-assign').forEach(select => {
-            select.addEventListener('change', function() {
-                if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
-                const portNum = parseInt(this.getAttribute('data-port'), 10);
-                const oltId = getObjectUniqueId(currentModalObject);
-                let portAssignments = currentModalObject.properties.get('portAssignments') || {};
-                const oldAss = portAssignments[String(portNum)];
-                if (oldAss && oldAss.cableId != null && oldAss.fiberNumber != null) {
-                    const oldCable = objects.find(c => c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === oldAss.cableId);
-                    if (oldCable) {
-                        const oldOther = getOtherEndOfCable(oldCable, currentModalObject);
-                        if (oldOther && (isFiberHostType(oldOther.properties.get('type')))) {
-                            let oltConn = oldOther.properties.get('oltConnections') || {};
-                            const oldKey = oldAss.cableId + '-' + oldAss.fiberNumber;
-                            delete oltConn[oldKey];
-                            oldOther.properties.set('oltConnections', oltConn);
-                        }
-                    }
-                }
-                const val = this.value;
-                if (!val) {
-                    delete portAssignments[String(portNum)];
-                } else {
-                    const idx = val.lastIndexOf('-');
-                    const cableId = idx >= 0 ? val.substring(0, idx) : val;
-                    const fiberNumber = parseInt(val.substring(idx + 1), 10);
-                    const usage = getFiberUsage(cableId, fiberNumber, { type: 'oltPort', oltId: oltId, portNumber: portNum });
-                    if (usage.used) {
-                        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
-                        this.value = oldAss ? (oldAss.cableId + '-' + oldAss.fiberNumber) : '';
-                        return;
-                    }
-                    portAssignments[String(portNum)] = { cableId: cableId, fiberNumber: fiberNumber };
-                    const cable = objects.find(c => c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === cableId);
-                    if (cable) {
-                        const otherEnd = getOtherEndOfCable(cable, currentModalObject);
-                        if (!otherEnd || (!isFiberHostType(otherEnd.properties.get('type')))) {
-                            showError('Жила должна быть на кабеле между этим OLT и муфтой или кроссом.', 'Нет физической связи');
-                            delete portAssignments[String(portNum)];
-                            this.value = oldAss ? (oldAss.cableId + '-' + oldAss.fiberNumber) : '';
-                            return;
-                        }
-                        if (typeof isOltCableLinkedToHost === 'function' && !isOltCableLinkedToHost(currentModalObject, otherEnd, cableId)) {
-                            showError('Кабель не соединяет этот OLT с выбранной муфтой или кроссом.', 'Нет связи');
-                            delete portAssignments[String(portNum)];
-                            this.value = oldAss ? (oldAss.cableId + '-' + oldAss.fiberNumber) : '';
-                            return;
-                        }
-                        if (otherEnd && (isFiberHostType(otherEnd.properties.get('type')))) {
-                            let oltConn = otherEnd.properties.get('oltConnections') || {};
-                            oltConn[cableId + '-' + fiberNumber] = { oltId: oltId, portNumber: portNum };
-                            otherEnd.properties.set('oltConnections', oltConn);
-                        }
-                    }
-                }
-                currentModalObject.properties.set('portAssignments', portAssignments);
-                saveData();
-                scheduleConnectionLinesUpdate();
-                if (typeof refreshObjectModal === 'function') refreshObjectModal(currentModalObject);
-            });
-        });
-        modalInfo.querySelectorAll('.btn-olt-port-cable').forEach(function(btn) {
+        modalInfo.querySelectorAll('.btn-olt-port-connect-cross').forEach(function(btn) {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
                 var port = parseInt(this.getAttribute('data-port'), 10);
-                if (typeof startOltPortFiberCable === 'function') startOltPortFiberCable(currentModalObject, port);
+                if (typeof showOltCrossPortConnectDialog === 'function') {
+                    showOltCrossPortConnectDialog(currentModalObject, port);
+                }
             });
         });
-        modalInfo.querySelectorAll('.btn-trace-olt-port').forEach(btn => {
+        modalInfo.querySelectorAll('.btn-disconnect-olt-port').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
+                var port = parseInt(this.getAttribute('data-port'), 10);
+                if (typeof disconnectOltPonPort === 'function') disconnectOltPonPort(currentModalObject, port);
+                if (typeof refreshObjectModal === 'function') refreshObjectModal(currentModalObject);
+            });
+        });
+        modalInfo.querySelectorAll('.btn-trace-olt-port').forEach(function(btn) {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 const port = parseInt(this.getAttribute('data-port'), 10);

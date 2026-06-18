@@ -1400,6 +1400,7 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         return;
     }
     if (data.geometry && placemark.geometry) placemark.geometry.setCoordinates(data.geometry);
+    if (type) placemark.properties.set('type', type);
     if (data.name != null) {
         placemark.properties.set('name', data.name);
         var opName = data.name;

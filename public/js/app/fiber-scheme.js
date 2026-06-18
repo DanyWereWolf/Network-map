@@ -227,14 +227,17 @@ function clearAllSchemeSplitterPicks() {
     }
 }
 
-function findFiberKeyByCrossPort(fiberPorts, portNumber) {
-    if (!fiberPorts || portNumber == null) return null;
+function findFiberKeysByCrossPort(fiberPorts, portNumber) {
+    if (!fiberPorts || portNumber == null) return [];
     var portStr = String(portNumber);
-    var found = null;
-    Object.keys(fiberPorts).forEach(function(key) {
-        if (String(fiberPorts[key]) === portStr) found = key;
+    return Object.keys(fiberPorts).filter(function(key) {
+        return String(fiberPorts[key]) === portStr;
     });
-    return found;
+}
+
+function findFiberKeyByCrossPort(fiberPorts, portNumber) {
+    var keys = findFiberKeysByCrossPort(fiberPorts, portNumber);
+    return keys.length ? keys[0] : null;
 }
 
 function parseFiberKey(fiberKey) {
@@ -277,8 +280,7 @@ function tryDisconnectCrossPort(crossObj, portNumber) {
     var fiberKey = findFiberKeyByCrossPort(fiberPorts, portNumber);
     if (!fiberKey) return false;
     var parsed = parseFiberKey(fiberKey);
-    if (!parsed) return false;
-    updateFiberPort(crossObj, parsed.cableId, parsed.fiberNumber, null);
+    if (parsed) updateFiberPort(crossObj, parsed.cableId, parsed.fiberNumber, null);
     saveData();
     if (typeof showSuccess === 'function') {
         showSuccess('Порт ' + portNumber + ' освобождён.', 'Кросс');
@@ -314,7 +316,7 @@ function handleSchemeCrossPortClick(crossObj, portNumber) {
         return;
     }
     var fiberPorts = crossObj.properties.get('fiberPorts') || {};
-    if (findFiberKeyByCrossPort(fiberPorts, portNumber)) {
+    if (findFiberKeysByCrossPort(fiberPorts, portNumber).length) {
         tryDisconnectCrossPort(crossObj, portNumber);
         clearSchemeCrossPortPick();
         return;
@@ -337,7 +339,7 @@ function updateSchemeCrossPortPickUI() {
     if (schemeCrossPortPick && schemeCrossPortPick.hostObj && !schemeSplitterWirePick && !schemeSplitterOutputPick) {
         if (bar) {
             bar.style.display = 'flex';
-            bar.innerHTML = '<span class="fiber-selection-text fiber-scheme-wire-bar-text">Порт <strong>' + schemeCrossPortPick.portNumber + '</strong>: кликните <strong>жилу на схеме или в таблице</strong>.</span>' +
+            bar.innerHTML = '<span class="fiber-selection-text fiber-scheme-wire-bar-text">Порт <strong>' + schemeCrossPortPick.portNumber + '</strong>: кликните <strong>жилу на схеме или в таблице</strong> для назначения на порт.</span>' +
                 '<button type="button" class="fiber-selection-cancel" id="fiberSchemeCrossPortCancelBtn">Отмена</button>';
             var cancelBtn = document.getElementById('fiberSchemeCrossPortCancelBtn');
             if (cancelBtn) cancelBtn.addEventListener('click', clearSchemeCrossPortPick);

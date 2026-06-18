@@ -731,7 +731,11 @@ function setupFiberConnectionHandlers() {
                 this.value = '';
                 return;
             }
-            if (!updateFiberPort(sleeveObj, cableId, fiberNumber, portValue)) return;
+            if (!updateFiberPort(sleeveObj, cableId, fiberNumber, portValue)) {
+                const fiberPorts = sleeveObj.properties.get('fiberPorts') || {};
+                this.value = fiberPorts[cableId + '-' + fiberNumber] || '';
+                return;
+            }
             saveData();
             if (typeof refreshObjectModal === 'function') refreshObjectModal(sleeveObj);
             else if (typeof showObjectInfo === 'function') showObjectInfo(sleeveObj);

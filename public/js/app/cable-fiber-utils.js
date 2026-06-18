@@ -96,6 +96,51 @@ function crossHasFiberForConnection(crossObj, cableId, fiberNumber) {
     return fiberNumber >= 1 && fiberNumber <= n;
 }
 
+function parseFiberPortKey(key) {
+    if (!key) return null;
+    const lastDash = key.lastIndexOf('-');
+    if (lastDash < 0) return null;
+    const fiberNumber = parseInt(key.substring(lastDash + 1), 10);
+    if (isNaN(fiberNumber)) return null;
+    return { cableId: key.substring(0, lastDash), fiberNumber: fiberNumber, key: key };
+}
+
+function getCrossPortForFiber(crossObj, cableId, fiberNumber) {
+    if (!crossObj || !cableId || fiberNumber == null) return null;
+    const fiberPorts = crossObj.properties.get('fiberPorts') || {};
+    const port = fiberPorts[cableId + '-' + fiberNumber];
+    if (port == null || String(port).trim() === '') return null;
+    const portNum = parseInt(port, 10);
+    return isNaN(portNum) ? null : portNum;
+}
+
+function findFiberKeysByCrossPort(fiberPorts, portNumber) {
+    if (!fiberPorts || portNumber == null) return [];
+    const portStr = String(portNumber);
+    return Object.keys(fiberPorts).filter(function(key) {
+        return String(fiberPorts[key]) === portStr;
+    });
+}
+
+function getCrossPortMateFibers(crossObj, cableId, fiberNumber) {
+    if (!crossObj || !isCrossLikeHostType(crossObj.properties.get('type'))) return [];
+    const port = getCrossPortForFiber(crossObj, cableId, fiberNumber);
+    if (port == null) return [];
+    const fiberPorts = crossObj.properties.get('fiberPorts') || {};
+    const selfKey = cableId + '-' + fiberNumber;
+    return findFiberKeysByCrossPort(fiberPorts, port)
+        .filter(function(key) { return key !== selfKey; })
+        .map(function(key) {
+            const parsed = parseFiberPortKey(key);
+            return parsed ? { cableId: parsed.cableId, fiberNumber: parsed.fiberNumber } : null;
+        })
+        .filter(Boolean);
+}
+
+function isFiberPortSplicedAtHost(crossObj, cableId, fiberNumber) {
+    return getCrossPortMateFibers(crossObj, cableId, fiberNumber).length > 0;
+}
+
 function isFiberSplicedAtHost(hostObj, cableId, fiberNumber) {
     if (!hostObj || !cableId || fiberNumber == null) return false;
     const fiberConnections = hostObj.properties.get('fiberConnections') || [];
@@ -103,6 +148,25 @@ function isFiberSplicedAtHost(hostObj, cableId, fiberNumber) {
         return (conn.from && conn.from.cableId === cableId && conn.from.fiberNumber === fiberNumber) ||
             (conn.to && conn.to.cableId === cableId && conn.to.fiberNumber === fiberNumber);
     });
+}
+
+function isFiberConnectedAtHost(hostObj, cableId, fiberNumber) {
+    return isFiberSplicedAtHost(hostObj, cableId, fiberNumber);
+}
+
+function getFiberNeighborsAtHost(hostObj, cableId, fiberNumber) {
+    if (!hostObj || !cableId || fiberNumber == null) return [];
+    const neighbors = [];
+    const connections = hostObj.properties.get('fiberConnections') || [];
+    connections.forEach(function(conn) {
+        if (!conn || !conn.from || !conn.to) return;
+        if (conn.from.cableId === cableId && conn.from.fiberNumber === fiberNumber) {
+            neighbors.push({ cableId: conn.to.cableId, fiberNumber: conn.to.fiberNumber });
+        } else if (conn.to.cableId === cableId && conn.to.fiberNumber === fiberNumber) {
+            neighbors.push({ cableId: conn.from.cableId, fiberNumber: conn.from.fiberNumber });
+        }
+    });
+    return neighbors;
 }
 
 function getTotalUsedPortsInCross(crossObj) {

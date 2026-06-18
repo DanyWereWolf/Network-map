@@ -256,6 +256,44 @@
         };
     }
 
+    function getPathEndpointLabel(path) {
+        if (!path || !path.length) return '—';
+        for (var i = path.length - 1; i >= 0; i--) {
+            var item = path[i];
+            if (item.type === 'oltPortConnection') {
+                var oltPortLabel = item.incoming ? 'приход' : (typeof formatOltPortDisplay === 'function'
+                    ? formatOltPortDisplay(item.portNumber, item.portLabel || (item.olt && typeof getOltPortLabel === 'function' ? getOltPortLabel(item.olt, item.portNumber) : ''))
+                    : ('порт ' + item.portNumber));
+                return (item.oltName || 'OLT') + ', ' + oltPortLabel;
+            }
+            if (item.type === 'object' && item.objectType === 'olt') {
+                return item.objectName || 'OLT';
+            }
+            if (item.type === 'object' && item.objectType === 'onu') {
+                return item.objectName || 'ONU';
+            }
+            if (item.type === 'splitterOutputToNode' || (item.type === 'object' && item.objectType === 'node')) {
+                if (item.type === 'splitterOutputToNode') {
+                    return item.nodeName || (item.nodeObj && item.nodeObj.properties ? item.nodeObj.properties.get('name') : null) || 'Узел';
+                }
+                return item.objectName || 'Узел';
+            }
+            if (item.type === 'object' && item.objectType === 'mediaConverter') {
+                return item.objectName || 'Медиаконвертер';
+            }
+            if (item.type === 'nodeConnection') {
+                if (item.fromNode) continue;
+                return item.nodeName || 'Узел';
+            }
+        }
+        for (var j = path.length - 1; j >= 0; j--) {
+            if (path[j].type === 'object' || path[j].type === 'start') {
+                return path[j].objectName || getTypeName(path[j].objectType);
+            }
+        }
+        return '—';
+    }
+
     function estimatePathDistanceM(path) {
         if (!path || !path.length || typeof global.calculateDistance !== 'function') return null;
         var total = 0;
@@ -479,7 +517,7 @@
         var out = [];
         paths.forEach(function (path, i) {
             if (i > 0) out.push('');
-            out.push('=== Ветвь ' + (i + 1) + ' ===');
+            out.push('=== ' + getPathEndpointLabel(path) + ' ===');
             out.push(pathToPlainText(path, { startStep: 1 }));
         });
         return out.join('\n');
@@ -548,9 +586,10 @@
             if (st.status === 'complete') complete++;
             var dist = estimatePathDistanceM(path);
             var icon = st.status === 'complete' ? '✓' : '⚠';
+            var endpointLabel = getPathEndpointLabel(path);
             html += '<button type="button" class="trace-branch-chip" data-branch-index="' + i + '" title="' +
-                (typeof global.escapeHtml === 'function' ? global.escapeHtml(st.label) : st.label) + '">';
-            html += icon + ' Ветвь ' + (i + 1);
+                esc(st.label) + '">';
+            html += icon + ' ' + esc(endpointLabel);
             if (dist != null) html += ' · ~' + dist + ' м';
             html += '</button>';
         });
@@ -837,6 +876,7 @@
         getObjectIcon: getObjectIcon,
         compressPathForDisplay: compressPathForDisplay,
         analyzePathStatus: analyzePathStatus,
+        getPathEndpointLabel: getPathEndpointLabel,
         estimatePathDistanceM: estimatePathDistanceM,
         buildHighlightGeometries: buildHighlightGeometries,
         getCableSegmentCoords: getCableSegmentCoords,

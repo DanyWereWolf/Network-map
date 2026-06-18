@@ -606,7 +606,10 @@ function updateFiberPort(crossObj, cableId, fiberNumber, portValue) {
     if (value && typeof isFiberSplicedAtHost === 'function' && isFiberSplicedAtHost(crossObj, cableId, fiberNumber)) {
         return false;
     }
-    if (value) {
+    if (value && typeof findFiberKeysByCrossPort === 'function') {
+        findFiberKeysByCrossPort(fiberPorts, value).forEach(function(occupiedKey) {
+            if (occupiedKey !== key) delete fiberPorts[occupiedKey];
+        });
         fiberPorts[key] = value;
     } else {
         delete fiberPorts[key];

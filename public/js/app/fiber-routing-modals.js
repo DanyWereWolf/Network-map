@@ -20,12 +20,20 @@ function initNodeSelectionModal() {
     modal.addEventListener('click', function(e) {
         if (e.target.id === 'nodeFiberBackBtn') {
             e.stopPropagation();
-            backNodeSelectionToList();
+            if (nodeSelectionModalData && nodeSelectionModalData.mode === 'oltCrossConnect') {
+                backOltCrossSelectionToList();
+            } else {
+                backNodeSelectionToList();
+            }
             return;
         }
         if (e.target.id === 'nodeFiberConfirmBtn') {
             e.stopPropagation();
-            confirmNodeFiberToSfpPort();
+            if (nodeSelectionModalData && nodeSelectionModalData.mode === 'oltCrossConnect') {
+                confirmOltCrossPortConnect();
+            } else {
+                confirmNodeFiberToSfpPort();
+            }
             return;
         }
         if (e.target === modal) {
@@ -35,7 +43,15 @@ function initNodeSelectionModal() {
 
     if (searchInput) {
         searchInput.addEventListener('input', function() {
-            if (nodeSelectionModalData && nodeSelectionModalData.phase === 'list') {
+            if (!nodeSelectionModalData) return;
+            if (nodeSelectionModalData.mode === 'oltCrossConnect' && nodeSelectionModalData.phase === 'crossList') {
+                var crosses = typeof refreshOltCrossConnectModalCrosses === 'function'
+                    ? refreshOltCrossConnectModalCrosses()
+                    : (nodeSelectionModalData.crosses || []);
+                renderOltCrossListForModal(crosses, this.value);
+                return;
+            }
+            if (nodeSelectionModalData.phase === 'list') {
                 renderNodeList(nodeSelectionModalData.nodes, this.value);
             }
         });
@@ -43,7 +59,9 @@ function initNodeSelectionModal() {
 
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape' && modal.style.display === 'block') {
-            if (nodeSelectionModalData && nodeSelectionModalData.phase === 'sfp') {
+            if (nodeSelectionModalData && nodeSelectionModalData.mode === 'oltCrossConnect' && nodeSelectionModalData.phase === 'crossPort') {
+                backOltCrossSelectionToList();
+            } else if (nodeSelectionModalData && nodeSelectionModalData.phase === 'sfp') {
                 backNodeSelectionToList();
             } else {
                 closeNodeSelectionModal();

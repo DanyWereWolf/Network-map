@@ -154,7 +154,7 @@ function traceFromNodeSplitter(nodeObj, splitterId, outputIndex) {
     var stepNum = 1;
     for (var pi = 0; pi < paths.length; pi++) {
         if (paths.length > 1 && pi > 0) {
-            bodyHtml += '<div class="trace-branch-separator" data-branch-index="' + pi + '">Ветвь ' + (pi + 1) + '</div>';
+            bodyHtml += '<div class="trace-branch-separator" data-branch-index="' + pi + '">' + escapeHtml(FiberTrace.getPathEndpointLabel(paths[pi])) + '</div>';
         }
         var pathHtml = renderOnePathToTraceHtml(paths[pi], stepNum);
         bodyHtml += '<div class="trace-branch-block" data-branch-index="' + pi + '">' + pathHtml.html + '</div>';
@@ -243,6 +243,22 @@ function traceFromOLTPort(oltObj, portNumber) {
         }
         return;
     }
+    const oltName = oltObj.properties.get('name') || 'OLT';
+    if (ass.crossId != null && ass.crossPort != null) {
+        const cross = objects.find(function(o) {
+            return o.properties && isCrossLikeHostType(o.properties.get('type')) &&
+                getObjectUniqueId(o) === ass.crossId;
+        });
+        if (!cross) {
+            showError('Кросс подключения не найден. Информация обновлена.', 'Данные устарели');
+            if (currentModalObject && currentModalObject.properties && currentModalObject.properties.get('type') === 'olt') {
+                showObjectInfo(currentModalObject);
+            }
+            return;
+        }
+        showFiberTraceFromOLTPort(oltObj, oltName, portNumber, cross, ass.cableId, ass.fiberNumber);
+        return;
+    }
     const cable = objects.find(c => c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === ass.cableId);
     if (!cable) {
         showError('Кабель был удалён. Информация обновлена.', 'Данные устарели');
@@ -259,7 +275,6 @@ function traceFromOLTPort(oltObj, portNumber) {
         }
         return;
     }
-    const oltName = oltObj.properties.get('name') || 'OLT';
     showFiberTraceFromOLTPort(oltObj, oltName, portNumber, oltObj, ass.cableId, ass.fiberNumber);
 }
 
@@ -532,7 +547,7 @@ function showFiberTraceFromOLTPort(oltObj, oltName, portNumber, startObj, cableI
     var stepNum = 1;
     for (var pi = 0; pi < res.paths.length; pi++) {
         if (res.paths.length > 1 && pi > 0) {
-            bodyHtml += '<div class="trace-branch-separator" data-branch-index="' + pi + '">Ветвь ' + (pi + 1) + '</div>';
+            bodyHtml += '<div class="trace-branch-separator" data-branch-index="' + pi + '">' + escapeHtml(FiberTrace.getPathEndpointLabel(res.paths[pi])) + '</div>';
         }
         var pathHtml = renderOnePathToTraceHtml(res.paths[pi], stepNum);
         bodyHtml += '<div class="trace-branch-block" data-branch-index="' + pi + '">' + pathHtml.html + '</div>';
@@ -654,7 +669,7 @@ function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeO
     if (displayPaths.length > 1) {
         var stepNum = 1;
         for (var pi = 0; pi < displayPaths.length; pi++) {
-            if (pi > 0) bodyHtml += '<div class="trace-branch-separator" data-branch-index="' + pi + '">Ветвь ' + (pi + 1) + '</div>';
+            if (pi > 0) bodyHtml += '<div class="trace-branch-separator" data-branch-index="' + pi + '">' + escapeHtml(FiberTrace.getPathEndpointLabel(displayPaths[pi])) + '</div>';
             var pathHtml = renderOnePathToTraceHtml(displayPaths[pi], stepNum);
             bodyHtml += '<div class="trace-branch-block" data-branch-index="' + pi + '">' + pathHtml.html + '</div>';
             stepNum = pathHtml.nextStepNumber;

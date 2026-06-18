@@ -363,8 +363,17 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
     }
 
     function findFiberConnection(cableId, fiberNumber, sleeveObj) {
+        if (typeof getSplicedFiberGroup === 'function') {
+            const group = getSplicedFiberGroup(sleeveObj, cableId, fiberNumber);
+            for (let i = 0; i < group.length; i++) {
+                const g = group[i];
+                if (g.cableId !== cableId || g.fiberNumber !== fiberNumber) {
+                    return { cableId: g.cableId, fiberNumber: g.fiberNumber };
+                }
+            }
+            return null;
+        }
         const connections = sleeveObj.properties.get('fiberConnections') || [];
-        
         for (const conn of connections) {
             if (conn.from.cableId === cableId && conn.from.fiberNumber === fiberNumber) {
                 return { cableId: conn.to.cableId, fiberNumber: conn.to.fiberNumber };
@@ -1029,8 +1038,17 @@ function traceFiberPath(startCableId, startFiberNumber) {
     const visitedObjects = new Set();
 
     function findFiberConnection(cableId, fiberNumber, sleeveObj) {
+        if (typeof getSplicedFiberGroup === 'function') {
+            const group = getSplicedFiberGroup(sleeveObj, cableId, fiberNumber);
+            for (let i = 0; i < group.length; i++) {
+                const g = group[i];
+                if (g.cableId !== cableId || g.fiberNumber !== fiberNumber) {
+                    return { cableId: g.cableId, fiberNumber: g.fiberNumber };
+                }
+            }
+            return null;
+        }
         const connections = sleeveObj.properties.get('fiberConnections') || [];
-        
         for (const conn of connections) {
             if (conn.from.cableId === cableId && conn.from.fiberNumber === fiberNumber) {
                 return { cableId: conn.to.cableId, fiberNumber: conn.to.fiberNumber };
@@ -1754,6 +1772,12 @@ function closeNodeSelectionModal() {
     var searchInput = document.getElementById('nodeSearchInput');
     var searchGroup = searchInput && searchInput.closest('.form-group');
     if (searchGroup) searchGroup.style.display = '';
+    var title = modal && modal.querySelector('.group-balloon-title');
+    if (title) title.textContent = 'Подключение жилы к узлу';
+    var labels = modal ? modal.querySelectorAll('.modal-body .form-group > label') : [];
+    if (labels[0]) labels[0].textContent = 'Поиск узла';
+    if (labels[1]) labels[1].textContent = 'Выберите узел';
+    if (searchInput) searchInput.placeholder = 'Введите имя узла...';
     nodeSelectionModalData = null;
 }
 

@@ -411,3 +411,239 @@ function initOltSelectionModal() {
     }
 }
 
+function setOltCrossSelectionModalChrome(titleText, listLabel, searchPlaceholder) {
+    var modal = document.getElementById('nodeSelectionModal');
+    if (!modal) return;
+    var title = modal.querySelector('.group-balloon-title');
+    if (title) title.textContent = titleText || 'Подключение PON-порта к кроссу';
+    var labels = modal.querySelectorAll('.modal-body .form-group > label');
+    if (labels[0]) labels[0].textContent = 'Поиск кросса';
+    if (labels[1]) labels[1].textContent = listLabel || 'Выберите кросс';
+    var searchInput = document.getElementById('nodeSearchInput');
+    if (searchInput) searchInput.placeholder = searchPlaceholder || 'Введите имя кросса...';
+}
+
+function refreshOltCrossConnectModalCrosses() {
+    if (!nodeSelectionModalData || nodeSelectionModalData.mode !== 'oltCrossConnect') return [];
+    var crosses = typeof getAvailableCrossesForOltPort === 'function'
+        ? getAvailableCrossesForOltPort(nodeSelectionModalData.oltObj, nodeSelectionModalData.portNumber)
+        : (typeof getMapCrossObjects === 'function' ? getMapCrossObjects() : []);
+    nodeSelectionModalData.crosses = crosses;
+    return crosses;
+}
+
+function renderOltCrossListForModal(crosses, searchQuery) {
+    var nodeListContainer = document.getElementById('nodeListContainer');
+    if (!nodeListContainer) return;
+    if (!crosses || !crosses.length) {
+        nodeListContainer.innerHTML = '<div class="node-list-empty"><p>На карте нет кроссов</p></div>';
+        return;
+    }
+    var query = (searchQuery || '').toLowerCase().trim();
+    var filtered = query ? crosses.filter(function(cross) {
+        var name = (cross.properties.get('name') || 'Кросс').toLowerCase();
+        return name.indexOf(query) !== -1;
+    }) : crosses;
+    if (!filtered.length) {
+        nodeListContainer.innerHTML = '<div class="node-list-no-results">Кроссы не найдены по запросу «' + escapeHtml(searchQuery) + '»</div>';
+        return;
+    }
+    var html = '';
+    filtered.forEach(function(cross) {
+        var crossUid = cross.properties.get('uniqueId') || '';
+        var name = cross.properties.get('name') || 'Кросс';
+        var coords = cross.geometry && cross.geometry.getCoordinates ? cross.geometry.getCoordinates() : null;
+        var coordsStr = coords ? (coords[0].toFixed(6) + ', ' + coords[1].toFixed(6)) : '';
+        var displayName = escapeHtml(name);
+        if (query) {
+            var regex = new RegExp('(' + escapeRegExpForSearch(query) + ')', 'gi');
+            displayName = name.replace(regex, '<mark>$1</mark>');
+        }
+        html += '<div class="node-list-item" data-cross-uid="' + escapeHtml(crossUid) + '" onclick="selectOltCrossForOltPortByUid(\'' + escapeHtml(crossUid) + '\')">';
+        html += '<div class="node-list-item-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg></div>';
+        html += '<div class="node-list-item-info"><div class="node-list-item-name">' + displayName + '</div>';
+        if (coordsStr) html += '<div class="node-list-item-coords">' + coordsStr + '</div>';
+        html += '</div></div>';
+    });
+    nodeListContainer.innerHTML = html;
+}
+
+function showOltCrossPortConnectDialog(oltObj, portNumber) {
+    if (!oltObj || portNumber == null) return;
+    if (isOltPortCrossConnected(oltObj, portNumber)) {
+        showWarning('PON-порт уже подключён к порту кросса.', 'Порт занят');
+        return;
+    }
+    var mapCrosses = typeof getMapCrossObjects === 'function' ? getMapCrossObjects() : [];
+    if (!mapCrosses.length) {
+        showWarning('На карте нет кроссов. Добавьте оптический кросс, назначьте жилы на порты панели и повторите подключение.', 'Нет кроссов');
+        return;
+    }
+    nodeSelectionModalData = {
+        mode: 'oltCrossConnect',
+        oltObj: oltObj,
+        portNumber: portNumber,
+        crosses: [],
+        phase: 'crossList'
+    };
+    var crosses = refreshOltCrossConnectModalCrosses();
+    var modal = document.getElementById('nodeSelectionModal');
+    var fiberInfo = document.getElementById('nodeSelectionFiberInfo');
+    var searchInput = document.getElementById('nodeSearchInput');
+    var portLbl = typeof formatOltPortDisplay === 'function'
+        ? formatOltPortDisplay(portNumber, typeof getOltPortLabel === 'function' ? getOltPortLabel(oltObj, portNumber) : '', true)
+        : ('порт ' + portNumber);
+    setOltCrossSelectionModalChrome('Подключение PON-порта к кроссу', 'Выберите кросс', 'Введите имя кросса...');
+    if (fiberInfo) {
+        fiberInfo.textContent = 'PON ' + portLbl + ': выберите кросс и порт с жилой — кабель OLT ↔ кросс не нужен, на карте появится линия.';
+    }
+    if (searchInput) searchInput.value = '';
+    var searchGroup = searchInput && searchInput.closest('.form-group');
+    if (searchGroup) searchGroup.style.display = crosses.length > 1 ? '' : 'none';
+    renderOltCrossListForModal(crosses, '');
+    if (modal) modal.style.display = 'block';
+    if (crosses.length === 1) {
+        selectOltCrossForOltPortByUid(crosses[0].properties.get('uniqueId'));
+        return;
+    }
+    setTimeout(function() { if (searchInput) searchInput.focus(); }, 100);
+}
+
+function resolveOltCrossForConnect(crossUid) {
+    if (!crossUid) return null;
+    if (typeof getMapObjectByUid === 'function') {
+        var byUid = getMapObjectByUid(crossUid, 'cross');
+        if (byUid) return byUid;
+        byUid = getMapObjectByUid(crossUid);
+        if (byUid && typeof isCrossConnectHost === 'function' && isCrossConnectHost(byUid)) return byUid;
+    }
+    return objects.find(function(o) {
+        if (!o || !o.properties || o.properties.get('uniqueId') !== crossUid) return false;
+        if (typeof isCrossConnectHost === 'function') return isCrossConnectHost(o);
+        return o.properties.get('type') === 'cross';
+    }) || null;
+}
+
+function selectOltCrossForOltPortByUid(crossUid) {
+    if (!nodeSelectionModalData || nodeSelectionModalData.mode !== 'oltCrossConnect') return;
+    var crossObj = resolveOltCrossForConnect(crossUid);
+    if (!crossObj) {
+        refreshOltCrossConnectModalCrosses();
+        showError('Кросс не найден. Список обновлён — выберите кросс снова.', 'Кросс');
+        var searchInput = document.getElementById('nodeSearchInput');
+        renderOltCrossListForModal(nodeSelectionModalData.crosses || [], searchInput ? searchInput.value : '');
+        return;
+    }
+    var oltObj = typeof rehydrateOltConnectHost === 'function'
+        ? rehydrateOltConnectHost(nodeSelectionModalData.oltObj)
+        : nodeSelectionModalData.oltObj;
+    crossObj = typeof rehydrateCrossConnectHost === 'function'
+        ? rehydrateCrossConnectHost(crossObj)
+        : crossObj;
+    if (!oltObj || !crossObj) {
+        showError('Не удалось открыть подключение: объект OLT или кросс не найден на карте.', 'Ошибка');
+        return;
+    }
+    var allOpts = getConnectableCrossPortsForOlt(crossObj, oltObj, nodeSelectionModalData.portNumber);
+    var connectable = allOpts.filter(function(o) { return o.hasSpliceTarget; });
+    if (!connectable.length) {
+        var crossName = crossObj.properties.get('name') || 'Кросс';
+        var fiberPorts = crossObj.properties.get('fiberPorts') || {};
+        var hasAssignedFibers = Object.keys(fiberPorts).length > 0 || allOpts.some(function(o) {
+            return typeof getCrossPortFiberKeys === 'function' && getCrossPortFiberKeys(crossObj, o.portNumber).length > 0;
+        });
+        if (!isCrossConnectHost(crossObj)) {
+            showError('Объект «' + crossName + '» не распознан как кросс. Обновите страницу (Ctrl+F5) и повторите.', 'Кросс');
+        } else if (!allOpts.length) {
+            showError('На кроссе «' + crossName + '» все порты панели заняты другими PON-портами OLT. Выберите другой кросс.', 'Нет портов');
+        } else if (hasAssignedFibers) {
+            showError('На кроссе «' + crossName + '» жилы на портах недоступны для PON (порт занят, приход OLT или жила на другом OLT). Попробуйте порты 2–4 или отключите приход с порта 1.', 'Нет свободных жил');
+        } else {
+            showError('На кроссе «' + crossName + '» нет портов с жилами. Назначьте жилу на порт в карточке кросса.', 'Нет портов');
+        }
+        return;
+    }
+    nodeSelectionModalData.phase = 'crossPort';
+    nodeSelectionModalData.selectedCross = crossObj;
+    nodeSelectionModalData.crossPortOptions = connectable;
+    renderOltCrossPortSelectionUI();
+}
+
+function selectOltCrossForOltPort(crossIndex) {
+    if (!nodeSelectionModalData || nodeSelectionModalData.mode !== 'oltCrossConnect') return;
+    var crosses = refreshOltCrossConnectModalCrosses();
+    if (crossIndex < 0 || crossIndex >= crosses.length) return;
+    selectOltCrossForOltPortByUid(crosses[crossIndex].properties.get('uniqueId'));
+}
+
+function renderOltCrossPortSelectionUI() {
+    var d = nodeSelectionModalData;
+    if (!d || d.mode !== 'oltCrossConnect' || d.phase !== 'crossPort' || !d.selectedCross || !d.crossPortOptions) return;
+    var container = document.getElementById('nodeListContainer');
+    var searchInput = document.getElementById('nodeSearchInput');
+    var searchGroup = searchInput && searchInput.closest('.form-group');
+    if (searchGroup) searchGroup.style.display = 'none';
+    var crossName = escapeHtml(d.selectedCross.properties.get('name') || 'Кросс');
+    var selOpts = d.crossPortOptions.map(function(o, idx) {
+        return '<option value="' + idx + '">' + escapeHtml(o.label) + '</option>';
+    }).join('');
+    var html = '<div style="padding: 8px 0;">';
+    html += '<p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 12px;">Кросс: <strong>' + crossName + '</strong>. Выберите порт с назначенной жилой — связь логическая, физический кабель до OLT не требуется.</p>';
+    html += '<div class="form-group" style="margin-bottom: 12px;"><label for="oltCrossPortSelect" style="font-size: 0.8125rem;">Порт кросса</label>';
+    html += '<select id="oltCrossPortSelect" class="form-select">' + selOpts + '</select></div>';
+    html += '<div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;">';
+    html += '<button type="button" id="nodeFiberBackBtn" class="btn-secondary">Назад</button>';
+    html += '<button type="button" id="nodeFiberConfirmBtn" class="btn-primary">Подключить</button></div></div>';
+    if (container) container.innerHTML = html;
+}
+
+function backOltCrossSelectionToList() {
+    var d = nodeSelectionModalData;
+    if (!d || d.mode !== 'oltCrossConnect') return;
+    d.phase = 'crossList';
+    d.selectedCross = null;
+    d.crossPortOptions = null;
+    var searchInput = document.getElementById('nodeSearchInput');
+    var searchGroup = searchInput && searchInput.closest('.form-group');
+    var crosses = refreshOltCrossConnectModalCrosses();
+    if (searchGroup) searchGroup.style.display = crosses.length > 1 ? '' : 'none';
+    setOltCrossSelectionModalChrome('Подключение PON-порта к кроссу', 'Выберите кросс', 'Введите имя кросса...');
+    renderOltCrossListForModal(crosses, searchInput ? searchInput.value : '');
+}
+
+function confirmOltCrossPortConnect() {
+    var d = nodeSelectionModalData;
+    if (!d || d.mode !== 'oltCrossConnect' || d.phase !== 'crossPort' || !d.selectedCross) return;
+    var sel = document.getElementById('oltCrossPortSelect');
+    var idx = sel && sel.value !== '' ? parseInt(sel.value, 10) : NaN;
+    if (isNaN(idx) || !d.crossPortOptions || idx < 0 || idx >= d.crossPortOptions.length) {
+        showError('Выберите порт кросса.', 'Порт');
+        return;
+    }
+    var opt = d.crossPortOptions[idx];
+    var portNumber = d.portNumber;
+    var crossObj = typeof rehydrateCrossConnectHost === 'function'
+        ? rehydrateCrossConnectHost(resolveOltCrossForConnect(d.selectedCross.properties.get('uniqueId')) || d.selectedCross)
+        : (resolveOltCrossForConnect(d.selectedCross.properties.get('uniqueId')) || d.selectedCross);
+    var oltObj = typeof rehydrateOltConnectHost === 'function'
+        ? rehydrateOltConnectHost(d.oltObj)
+        : d.oltObj;
+    var spliceTargets = typeof getOltSpliceTargetsOnCrossPort === 'function'
+        ? getOltSpliceTargetsOnCrossPort(crossObj, opt.portNumber) : [];
+    if (!spliceTargets.length) {
+        if (typeof getCrossPortFiberKeys === 'function' && getCrossPortFiberKeys(crossObj, opt.portNumber).length) {
+            showError('Жила на этом порту уже занята другим PON-портом OLT. Выберите другой порт.', 'Порт недоступен');
+        } else {
+            showError('Порт пустой. Сначала назначьте жилу на этот порт в карточке кросса.', 'Нет жилы');
+        }
+        return;
+    }
+    closeNodeSelectionModal();
+    if (!connectOltPortToCrossPort(oltObj, portNumber, crossObj, opt.portNumber)) return;
+    if (typeof showSuccess === 'function') {
+        var crossName = crossObj.properties.get('name') || 'Кросс';
+        showSuccess('PON-порт ' + portNumber + ' подключён к порту ' + opt.portNumber + ' кросса «' + crossName + '».', 'OLT');
+    }
+    if (typeof refreshObjectModal === 'function') refreshObjectModal(oltObj);
+    else if (typeof showObjectInfo === 'function') showObjectInfo(oltObj);
+}
