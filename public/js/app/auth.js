@@ -79,9 +79,6 @@ function getStoredSession() {
 }
 
 var authPublicConfig = null;
-var authCaptchaEnabled = false;
-var authTurnstileSiteKey = '';
-var turnstileWidgets = { login: null, register: null, forgot: null };
 var pendingLoginId = null;
 var pendingLoginRememberMe = false;
 var activeResetToken = null;
@@ -92,60 +89,9 @@ function loadAuthPublicConfig() {
         .then(function(r) { return r.json(); })
         .then(function(cfg) {
             authPublicConfig = cfg || {};
-            authCaptchaEnabled = !!(cfg && cfg.captchaEnabled && cfg.turnstileSiteKey);
-            authTurnstileSiteKey = authCaptchaEnabled ? String(cfg.turnstileSiteKey) : '';
             return cfg;
         })
         .catch(function() { return null; });
-}
-
-function whenTurnstileReady(cb) {
-    if (window.turnstile) { cb(); return; }
-    var attempts = 0;
-    var timer = setInterval(function() {
-        attempts++;
-        if (window.turnstile) {
-            clearInterval(timer);
-            cb();
-        } else if (attempts > 80) {
-            clearInterval(timer);
-        }
-    }, 100);
-}
-
-function renderAuthCaptcha(formKey, containerId, wrapId) {
-    if (!authCaptchaEnabled || !authTurnstileSiteKey) return;
-    var wrap = document.getElementById(wrapId);
-    var el = document.getElementById(containerId);
-    if (!wrap || !el) return;
-    wrap.style.display = 'block';
-    whenTurnstileReady(function() {
-        if (turnstileWidgets[formKey]) {
-            try { window.turnstile.remove(turnstileWidgets[formKey]); } catch (e) {}
-            turnstileWidgets[formKey] = null;
-        }
-        el.innerHTML = '';
-        turnstileWidgets[formKey] = window.turnstile.render('#' + containerId, {
-            sitekey: authTurnstileSiteKey,
-            theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'
-        });
-    });
-}
-
-function resetAuthCaptcha(formKey) {
-    if (turnstileWidgets[formKey] && window.turnstile) {
-        try { window.turnstile.reset(turnstileWidgets[formKey]); } catch (e) {}
-    }
-}
-
-function getCaptchaToken(formKey) {
-    if (!authCaptchaEnabled) return '';
-    if (!turnstileWidgets[formKey] || !window.turnstile) return '';
-    try {
-        return window.turnstile.getResponse(turnstileWidgets[formKey]) || '';
-    } catch (e) {
-        return '';
-    }
 }
 
 function storeAuthSession(body, rememberMe) {
@@ -165,16 +111,14 @@ function storeAuthSession(body, rememberMe) {
     }
 }
 
-function loginUser(username, password, rememberMe, captchaToken) {
+function loginUser(username, password, rememberMe) {
     if (!getApiBase()) {
         return Promise.resolve({ success: false, error: 'Запустите сервер: npm run api, затем откройте http://localhost:3000' });
     }
-    var payload = { username: username, password: password };
-    if (captchaToken) payload.captchaToken = captchaToken;
     return fetch(getApiBase() + '/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ username: username, password: password })
     }).then(function(r) { return r.json().then(function(body) { return { status: r.status, body: body }; }); })
     .then(function(res) {
         var body = res.body || {};
@@ -411,7 +355,7 @@ function tryRegisterMapGeolocation() {
     }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
 }
 
-function registerUser(username, password, fullName, organizationName, contactEmail, mapStart, captchaToken) {
+function registerUser(username, password, fullName, organizationName, contactEmail, mapStart) {
     if (username.length < 3) return Promise.resolve({ success: false, error: 'Имя пользователя должно быть не менее 3 символов' });
     if (!organizationName || organizationName.trim().length < 3) return Promise.resolve({ success: false, error: 'Укажите название организации (не менее 3 символов)' });
     if (password.length < 6) return Promise.resolve({ success: false, error: 'Пароль должен быть не менее 6 символов' });
@@ -422,7 +366,6 @@ function registerUser(username, password, fullName, organizationName, contactEma
     var start = mapStart && Array.isArray(mapStart.center) && mapStart.center.length >= 2 ? mapStart : null;
     if (!start) start = getRegisterMapStart();
     body.mapStart = start;
-    if (captchaToken) body.captchaToken = captchaToken;
     return fetch(getApiBase() + '/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -433,18 +376,16 @@ function registerUser(username, password, fullName, organizationName, contactEma
     }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
 }
 
-function requestPasswordReset(usernameOrEmail, captchaToken) {
+function requestPasswordReset(usernameOrEmail) {
     if (!getApiBase()) {
         return Promise.resolve({ success: false, error: 'Запустите сервер: npm run api, затем откройте http://localhost:3000' });
     }
     var input = (usernameOrEmail && String(usernameOrEmail).trim()) || '';
     if (!input) return Promise.resolve({ success: false, error: 'Укажите имя пользователя или e-mail' });
-    var payload = { usernameOrEmail: input };
-    if (captchaToken) payload.captchaToken = captchaToken;
     return fetch(getApiBase() + '/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ usernameOrEmail: input })
     }).then(function(r) { return r.json().then(function(body) { return { status: r.status, body: body }; }); })
     .then(function(res) {
         var body = res.body || {};
@@ -674,12 +615,10 @@ function switchForm(formType) {
         loginForm.classList.add('active');
         if (authContainer) authContainer.classList.remove('auth-register-active');
         destroyRegisterMapPicker();
-        renderAuthCaptcha('login', 'loginCaptcha', 'loginCaptchaWrap');
     } else if (formType === 'forgot') {
         if (forgotForm) forgotForm.classList.add('active');
         if (authContainer) authContainer.classList.remove('auth-register-active');
         destroyRegisterMapPicker();
-        renderAuthCaptcha('forgot', 'forgotCaptcha', 'forgotCaptchaWrap');
     } else if (formType === 'reset') {
         if (resetForm) resetForm.classList.add('active');
         if (authContainer) authContainer.classList.remove('auth-register-active');
@@ -688,7 +627,6 @@ function switchForm(formType) {
         registerForm.classList.add('active');
         if (authContainer) authContainer.classList.add('auth-register-active');
         initRegisterMapPicker();
-        renderAuthCaptcha('register', 'registerCaptcha', 'registerCaptchaWrap');
     }
 }
 
@@ -762,16 +700,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     switchForm('forgot');
                 }
             });
-            return;
-        }
-        var registerForm = document.getElementById('registerForm');
-        var forgotForm = document.getElementById('forgotPasswordForm');
-        if (registerForm && registerForm.classList.contains('active')) {
-            renderAuthCaptcha('register', 'registerCaptcha', 'registerCaptchaWrap');
-        } else if (forgotForm && forgotForm.classList.contains('active')) {
-            renderAuthCaptcha('forgot', 'forgotCaptcha', 'forgotCaptchaWrap');
-        } else {
-            renderAuthCaptcha('login', 'loginCaptcha', 'loginCaptchaWrap');
         }
     });
 
@@ -779,7 +707,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (totpBackBtn) {
         totpBackBtn.addEventListener('click', function() {
             hideTotpStep();
-            resetAuthCaptcha('login');
             showMessage('', '');
         });
     }
@@ -823,12 +750,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var username = document.getElementById('loginUsername').value.trim();
             var password = document.getElementById('loginPassword').value;
             var rememberMe = document.getElementById('loginRememberMe') ? document.getElementById('loginRememberMe').checked : false;
-            var captchaToken = getCaptchaToken('login');
-            if (authCaptchaEnabled && !captchaToken) {
-                showMessage('Подтвердите, что вы не робот', 'error');
-                return;
-            }
-            Promise.resolve(loginUser(username, password, rememberMe, captchaToken)).then(function(result) {
+            Promise.resolve(loginUser(username, password, rememberMe)).then(function(result) {
                 if (result.success) {
                     showMessage('Вход выполнен успешно! Перенаправление...', 'success');
                     setTimeout(function() {
@@ -846,7 +768,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     showMessage('', '');
                 } else {
                     showMessage(result.error, 'error');
-                    resetAuthCaptcha('login');
                 }
             });
         });
@@ -863,12 +784,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var passwordConfirm = document.getElementById('regPasswordConfirm').value;
             if (password !== passwordConfirm) { showMessage('Пароли не совпадают', 'error'); return; }
             var mapStart = syncRegisterMapCoordsFromMap();
-            var captchaToken = getCaptchaToken('register');
-            if (authCaptchaEnabled && !captchaToken) {
-                showMessage('Подтвердите, что вы не робот', 'error');
-                return;
-            }
-            var regChain = registerUser(username, password, fullName, organizationName, contactEmail, mapStart, captchaToken);
+            var regChain = registerUser(username, password, fullName, organizationName, contactEmail, mapStart);
             Promise.resolve(regChain).then(function(result) {
                 if (result.success) {
                     if (result.organizationId) {
@@ -879,7 +795,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     setTimeout(function() { switchForm('login'); }, 2500);
                 } else {
                     showMessage(result.error, 'error');
-                    resetAuthCaptcha('register');
                 }
             });
         });
@@ -890,18 +805,11 @@ document.addEventListener('DOMContentLoaded', function() {
         forgotPasswordForm.addEventListener('submit', function(e) {
             e.preventDefault();
             var input = document.getElementById('forgotUsernameOrEmail').value.trim();
-            var captchaToken = getCaptchaToken('forgot');
-            if (authCaptchaEnabled && !captchaToken) {
-                showMessage('Подтвердите, что вы не робот', 'error');
-                return;
-            }
-            Promise.resolve(requestPasswordReset(input, captchaToken)).then(function(result) {
+            Promise.resolve(requestPasswordReset(input)).then(function(result) {
                 if (result.success) {
                     showMessage(result.message || 'Если аккаунт найден, письмо отправлено.', 'success');
-                    resetAuthCaptcha('forgot');
                 } else {
                     showMessage(result.error, 'error');
-                    resetAuthCaptcha('forgot');
                 }
             });
         });

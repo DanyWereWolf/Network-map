@@ -24,9 +24,35 @@ function loadServerConfig() {
         if (require('fs').existsSync(configPath)) {
             config = JSON.parse(require('fs').readFileSync(configPath, 'utf8'));
         }
-    } catch (e) {}
+    } catch (e) {
+        console.error('[Config] Не удалось прочитать server-config.json:', e && e.message ? e.message : e);
+    }
     return config;
 }
+
+function logServerConfigWarnings() {
+    const configPath = path.join(ROOT_DIR, 'server-config.json');
+    if (!require('fs').existsSync(configPath)) {
+        console.warn('[Config] Файл server-config.json не найден в корне проекта:', configPath);
+        return;
+    }
+    const mapsKey = String(serverConfig.yandexMapsApiKey || process.env.YANDEX_MAPS_API_KEY || '').trim();
+    if (!mapsKey || mapsKey === 'YOUR_YANDEX_MAPS_API_KEY') {
+        console.warn('[Config] yandexMapsApiKey не задан — карты Яндекса не будут работать.');
+    }
+    const smtpCfg = mail.getSmtpConfig ? mail.getSmtpConfig(serverConfig) : null;
+    const smtpRaw = (serverConfig && serverConfig.smtp) || {};
+    if (smtpRaw.host || smtpRaw.user || smtpRaw.pass) {
+        if (!smtpCfg) {
+            console.warn('[Config] SMTP задан некорректно: smtp.user должен быть полным e-mail (например support@volsmap.ru).');
+        } else {
+            console.log('[Config] SMTP: ' + smtpCfg.auth.user + ' @ ' + smtpCfg.host + ':' + smtpCfg.port);
+        }
+    } else {
+        console.warn('[Config] SMTP не настроен — восстановление пароля будет недоступно (503).');
+    }
+}
+
 const serverConfig = loadServerConfig();
 const PORT = parseInt(process.env.PORT || process.argv[2] || serverConfig.port || '3000', 10);
 const HOST = process.env.HOST || serverConfig.host || '0.0.0.0';
@@ -408,31 +434,26 @@ app.post('/api/auth/login', function(req, res) {
         });
     }
     var body = req.body || {};
-    security.verifyTurnstile(body.captchaToken, ip, serverConfig).then(function(captcha) {
-        if (!captcha.ok) {
-            return res.status(400).json({ success: false, error: captcha.error || 'Ошибка капчи' });
-        }
-        var cred = validateCredentials(body.username, body.password);
-        if (!cred.ok) {
-            if (cred.status === 400) return res.status(400).json({ success: false, error: cred.error });
-            return res.json({ success: false, error: cred.error });
-        }
-        var user = cred.user;
-        var organizationId = cred.organizationId;
-        var organization = cred.organization;
-        var isMainAdminAccount = isGlobalAdmin({ role: user.role, organizationId: user.organizationId });
+    var cred = validateCredentials(body.username, body.password);
+    if (!cred.ok) {
+        if (cred.status === 400) return res.status(400).json({ success: false, error: cred.error });
+        return res.json({ success: false, error: cred.error });
+    }
+    var user = cred.user;
+    var organizationId = cred.organizationId;
+    var organization = cred.organization;
+    var isMainAdminAccount = isGlobalAdmin({ role: user.role, organizationId: user.organizationId });
 
-        if (!isMainAdminAccount && security.orgRequiresTotp(organization)) {
-            var pendingId = security.createPendingLogin({ userId: user.id, organizationId: organizationId });
-            return res.json({
-                success: false,
-                requiresTotp: true,
-                pendingLoginId: pendingId,
-                organizationName: organization ? organization.name : ''
-            });
-        }
-        completeUserLogin(req, res, user, organizationId, organization);
-    });
+    if (!isMainAdminAccount && security.orgRequiresTotp(organization)) {
+        var pendingId = security.createPendingLogin({ userId: user.id, organizationId: organizationId });
+        return res.json({
+            success: false,
+            requiresTotp: true,
+            pendingLoginId: pendingId,
+            organizationName: organization ? organization.name : ''
+        });
+    }
+    completeUserLogin(req, res, user, organizationId, organization);
 });
 
 app.post('/api/auth/verify-totp', function(req, res) {
@@ -1169,12 +1190,7 @@ app.post('/api/auth/register', function(req, res) {
         });
     }
     var body = req.body || {};
-    security.verifyTurnstile(body.captchaToken, ip, serverConfig).then(function(captcha) {
-        if (!captcha.ok) {
-            return res.status(400).json({ success: false, error: captcha.error || 'Ошибка капчи' });
-        }
-        handleAuthRegister(req, res, body);
-    });
+    handleAuthRegister(req, res, body);
 });
 
 function handleAuthRegister(req, res, body) {
@@ -1230,36 +1246,33 @@ app.post('/api/auth/forgot-password', function(req, res) {
         });
     }
     var body = req.body || {};
-    security.verifyTurnstile(body.captchaToken, ip, serverConfig).then(function(captcha) {
-        if (!captcha.ok) {
-            return res.status(400).json({ success: false, error: captcha.error || 'Ошибка капчи' });
+    var input = body.usernameOrEmail != null ? String(body.usernameOrEmail).trim() : '';
+    if (!input) {
+        return res.status(400).json({ success: false, error: 'Укажите имя пользователя или e-mail' });
+    }
+    var user = passwordReset.findUserForPasswordReset(input);
+    if (!user || !passwordReset.canResetPassword(user)) {
+        return res.json({ success: true, message: PASSWORD_RESET_GENERIC_MSG });
+    }
+    var email = passwordReset.resolveUserEmail(user, serverConfig);
+    if (!email) {
+        return res.json({ success: true, message: PASSWORD_RESET_GENERIC_MSG });
+    }
+    var token = passwordReset.createResetToken(user.id);
+    var siteUrl = serverConfig.publicSiteUrl || process.env.PUBLIC_SITE_URL || getSiteBaseUrl(req);
+    var mailContent = passwordReset.buildResetEmail(siteUrl, token, user.username);
+    return mail.sendMail(serverConfig, {
+        to: email,
+        subject: mailContent.subject,
+        text: mailContent.text,
+        html: mailContent.html
+    }).then(function(result) {
+        if (!result.ok) {
+            console.error('[Auth] forgot-password mail failed for user', user.id, 'to', email, '-', result.error || 'unknown');
+        } else {
+            console.log('[Auth] forgot-password mail sent for user', user.id, 'to', email);
         }
-        var input = body.usernameOrEmail != null ? String(body.usernameOrEmail).trim() : '';
-        if (!input) {
-            return res.status(400).json({ success: false, error: 'Укажите имя пользователя или e-mail' });
-        }
-        var user = passwordReset.findUserForPasswordReset(input);
-        if (!user || !passwordReset.canResetPassword(user)) {
-            return res.json({ success: true, message: PASSWORD_RESET_GENERIC_MSG });
-        }
-        var email = passwordReset.resolveUserEmail(user, serverConfig);
-        if (!email) {
-            return res.json({ success: true, message: PASSWORD_RESET_GENERIC_MSG });
-        }
-        var token = passwordReset.createResetToken(user.id);
-        var siteUrl = serverConfig.publicSiteUrl || process.env.PUBLIC_SITE_URL || getSiteBaseUrl(req);
-        var mailContent = passwordReset.buildResetEmail(siteUrl, token, user.username);
-        return mail.sendMail(serverConfig, {
-            to: email,
-            subject: mailContent.subject,
-            text: mailContent.text,
-            html: mailContent.html
-        }).then(function(result) {
-            if (!result.ok) {
-                console.error('[Auth] forgot-password mail failed for user', user.id);
-            }
-            return res.json({ success: true, message: PASSWORD_RESET_GENERIC_MSG });
-        });
+        return res.json({ success: true, message: PASSWORD_RESET_GENERIC_MSG });
     });
 });
 
@@ -1316,8 +1329,7 @@ app.get('/api/organizations/me/security', (req, res) => {
     var org = db.getOrganization(user.organizationId);
     if (!org) return res.status(404).json({ error: 'Организация не найдена' });
     res.json({
-        twoFactorEnabled: !!org.twoFactorEnabled,
-        captchaEnabled: security.isTurnstileConfigured(serverConfig)
+        twoFactorEnabled: !!org.twoFactorEnabled
     });
 });
 
@@ -2175,14 +2187,11 @@ function getSiteBaseUrl(req) {
 app.get('/api/public-config', (req, res) => {
     const key = serverConfig.yandexMapsApiKey || process.env.YANDEX_MAPS_API_KEY || '';
     const publicSiteUrl = serverConfig.publicSiteUrl || process.env.PUBLIC_SITE_URL || getSiteBaseUrl(req);
-    const turnstileSiteKey = security.getTurnstileSiteKey(serverConfig);
     res.json({
         yandexMapsApiKey: key,
         publicSiteUrl: publicSiteUrl ? String(publicSiteUrl).trim().replace(/\/$/, '') : '',
         freeMapObjectLimit: getDefaultFreeMapObjectLimit(),
-        defaultMaxConcurrentUsers: getDefaultMaxConcurrentUsers(),
-        turnstileSiteKey: turnstileSiteKey,
-        captchaEnabled: security.isTurnstileConfigured(serverConfig)
+        defaultMaxConcurrentUsers: getDefaultMaxConcurrentUsers()
     });
 });
 
@@ -2990,7 +2999,14 @@ server.listen(PORT, HOST, () => {
     console.log('Синхронизация: ws://...:' + PORT + '/sync (в одном процессе с API)');
     console.log('Данные: ' + path.join(DATA_DIR, 'store.json'));
     if (db.createDailyBackup) console.log('Резервные копии: ежедневно в data/backups/, хранятся 30 дней.');
-    if (!require('fs').existsSync(path.join(ROOT_DIR, 'server-config.json'))) {
-        console.log('Настройки: порт/хост — в server-config.json в корне (шаблон: server/config/server-config.example.json).');
+    logServerConfigWarnings();
+    if (mail.isMailConfigured(serverConfig) && mail.verifySmtp) {
+        mail.verifySmtp(serverConfig).then(function(result) {
+            if (result.ok) {
+                console.log('[Mail] SMTP проверка при старте: OK (' + result.user + ')');
+            } else {
+                console.error('[Mail] SMTP проверка при старте: ОШИБКА —', result.error || 'неизвестно');
+            }
+        });
     }
 });

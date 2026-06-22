@@ -15,7 +15,7 @@
 cp server/config/server-config.example.json server-config.json
 ```
 
-Обязательно задайте `yandexMapsApiKey`. Для локальной разработки ключи Turnstile в шаблоне — [тестовые](https://developers.cloudflare.com/turnstile/troubleshooting/testing/).
+Обязательно задайте `yandexMapsApiKey`. Ключи Yandex SmartCaptcha — в [консоли Yandex Cloud](https://console.yandex.cloud/folders?section=smartcaptcha) (бесплатный тариф).
 
 ## Поля
 
@@ -27,8 +27,8 @@ cp server/config/server-config.example.json server-config.json
 | `publicSiteUrl` | — | Публичный URL сайта |
 | `freeMapObjectLimit` | `2000` | Лимит объектов на карте |
 | `maxConcurrentUsers` | `4` | Одновременные пользователи организации |
-| `turnstileSiteKey` | — | Cloudflare Turnstile (клиент) |
-| `turnstileSecretKey` | — | Turnstile (сервер) |
+| `smartCaptchaClientKey` | — | Yandex SmartCaptcha (клиент, `ysc1_…`) |
+| `smartCaptchaServerKey` | — | Yandex SmartCaptcha (сервер, `ysc2_…`) |
 | `authRateLimitWindowMs` | `900000` | Окно rate limit (15 мин) |
 | `authRateLimitMax` | `20` | Попыток входа за окно |
 

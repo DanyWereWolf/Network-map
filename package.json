@@ -17,7 +17,8 @@
     "format:check": "prettier --check .",
     "dead-code": "node scripts/find-dead-globals.js",
     "knip": "knip",
-    "verify": "npm run check && npm run lint"
+    "verify": "npm run check && npm run lint",
+    "test-smtp": "node scripts/test-smtp.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

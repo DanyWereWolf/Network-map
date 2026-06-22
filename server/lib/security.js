@@ -34,49 +34,6 @@ function checkRateLimit(key, options) {
     return { ok: true, remaining: Math.max(0, maxAttempts - entry.count) };
 }
 
-function isTurnstileConfigured(config) {
-    const secret = (config && config.turnstileSecretKey) || process.env.TURNSTILE_SECRET_KEY || '';
-    return !!String(secret).trim();
-}
-
-function getTurnstileSiteKey(config) {
-    return String((config && config.turnstileSiteKey) || process.env.TURNSTILE_SITE_KEY || '').trim();
-}
-
-// Cloudflare test keys — https://developers.cloudflare.com/turnstile/troubleshooting/testing/
-var TURNSTILE_TEST_SECRET_PASS = '1x0000000000000000000000000000000AA';
-var TURNSTILE_TEST_SECRET_FAIL = '2x0000000000000000000000000000000AA';
-var TURNSTILE_TEST_SECRET_INVISIBLE_PASS = '3x0000000000000000000000000000000AA';
-
-function verifyTurnstile(token, remoteIp, config) {
-    if (!isTurnstileConfigured(config)) return Promise.resolve({ ok: true, skipped: true });
-    const secret = String((config && config.turnstileSecretKey) || process.env.TURNSTILE_SECRET_KEY || '').trim();
-    if (!token || !String(token).trim()) {
-        return Promise.resolve({ ok: false, error: 'Подтвердите, что вы не робот' });
-    }
-    if (secret === TURNSTILE_TEST_SECRET_FAIL) {
-        return Promise.resolve({ ok: false, error: 'Проверка капчи не пройдена. Обновите страницу и попробуйте снова.' });
-    }
-    if (secret === TURNSTILE_TEST_SECRET_PASS || secret === TURNSTILE_TEST_SECRET_INVISIBLE_PASS) {
-        return Promise.resolve({ ok: true, testMode: true });
-    }
-    const body = new URLSearchParams({
-        secret: secret,
-        response: String(token).trim()
-    });
-    if (remoteIp) body.set('remoteip', String(remoteIp));
-    return fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: body.toString()
-    }).then(function(r) { return r.json(); }).then(function(data) {
-        if (data && data.success) return { ok: true };
-        return { ok: false, error: 'Проверка капчи не пройдена. Обновите страницу и попробуйте снова.' };
-    }).catch(function() {
-        return { ok: false, error: 'Сервис капчи недоступен. Попробуйте позже.' };
-    });
-}
-
 function generateTotpSecret(label) {
     const secret = speakeasy.generateSecret({
         name: label || 'Network Map',
@@ -133,9 +90,6 @@ function orgRequiresTotp(org) {
 
 module.exports = {
     checkRateLimit: checkRateLimit,
-    isTurnstileConfigured: isTurnstileConfigured,
-    getTurnstileSiteKey: getTurnstileSiteKey,
-    verifyTurnstile: verifyTurnstile,
     generateTotpSecret: generateTotpSecret,
     verifyTotpCode: verifyTotpCode,
     createPendingLogin: createPendingLogin,

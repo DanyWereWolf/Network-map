@@ -1,16 +1,31 @@
 const nodemailer = require('nodemailer');
 
+function extractEmailAddress(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const angle = raw.match(/<([^>]+@[^>]+)>/);
+    if (angle) return angle[1].trim();
+    if (raw.includes('@')) return raw;
+    return '';
+}
+
 function getSmtpConfig(serverConfig) {
     const cfg = (serverConfig && serverConfig.smtp) || {};
     const host = String(cfg.host || process.env.SMTP_HOST || '').trim();
-    const user = String(cfg.user || process.env.SMTP_USER || '').trim();
+    let user = String(cfg.user || process.env.SMTP_USER || '').trim();
     const pass = String(cfg.pass || process.env.SMTP_PASS || '');
     const port = parseInt(cfg.port || process.env.SMTP_PORT || '465', 10);
     const secure = cfg.secure !== undefined
         ? !!cfg.secure
         : (String(process.env.SMTP_SECURE || 'true').toLowerCase() !== 'false');
-    const from = String(cfg.from || process.env.SMTP_FROM || user || '').trim();
+    const fromRaw = String(cfg.from || process.env.SMTP_FROM || user || '').trim();
+    if (user && !user.includes('@')) {
+        const fromEmail = extractEmailAddress(fromRaw);
+        if (fromEmail) user = fromEmail;
+    }
+    const from = fromRaw || user;
     if (!host || !user || !pass) return null;
+    if (!user.includes('@')) return null;
     return {
         host: host,
         port: isNaN(port) ? 465 : port,
@@ -69,7 +84,26 @@ function sendMail(serverConfig, options) {
     });
 }
 
+function verifySmtp(serverConfig) {
+    const smtp = getSmtpConfig(serverConfig);
+    if (!smtp) {
+        return Promise.resolve({ ok: false, error: 'Почтовый сервер не настроен' });
+    }
+    const transporter = getTransporter(serverConfig);
+    if (!transporter) {
+        return Promise.resolve({ ok: false, error: 'Не удалось создать SMTP-транспорт' });
+    }
+    return transporter.verify().then(function() {
+        return { ok: true, user: smtp.auth.user };
+    }).catch(function(err) {
+        const message = err && err.message ? err.message : String(err);
+        return { ok: false, error: message, user: smtp.auth.user };
+    });
+}
+
 module.exports = {
     isMailConfigured: isMailConfigured,
-    sendMail: sendMail
+    sendMail: sendMail,
+    verifySmtp: verifySmtp,
+    getSmtpConfig: getSmtpConfig
 };

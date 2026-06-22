@@ -59,7 +59,6 @@ const clientGlobals = {
     ...readStateGlobals(),
     ymaps: 'readonly',
     Quill: 'readonly',
-    turnstile: 'readonly',
     AuthSystem: 'writable',
     loadAppScript: 'writable',
     loadAppScripts: 'writable',
