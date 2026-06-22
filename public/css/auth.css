@@ -619,6 +619,14 @@ html {
         touch-action: manipulation;
     }
 
+    .auth-form-actions .btn-secondary,
+    .auth-form-actions .auth-form-back {
+        min-height: 48px;
+        padding: 14px 20px;
+        font-size: 1rem;
+        touch-action: manipulation;
+    }
+
     .auth-footer {
         margin-top: 18px;
         padding-top: 18px;
@@ -649,9 +657,28 @@ html {
     min-height: 65px;
 }
 
-.auth-totp-form .auth-totp-back {
+.auth-form-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.auth-form-actions .btn-primary {
+    margin-top: 0;
+}
+
+.auth-form-actions .btn-secondary,
+.auth-form-actions .auth-form-back {
     width: 100%;
-    margin-top: 10px;
+    padding: 12px 24px;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    border-radius: 10px;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .auth-totp-form .hint {

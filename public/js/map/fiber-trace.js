@@ -739,6 +739,12 @@
                     '<span class="trace-item-glyph trace-item-glyph--muted" aria-hidden="true">📶</span>' +
                     '<div class="trace-item-main"><span>OLT «' + esc(item.oltName || 'OLT') + '» · ' + esc(String(oltPort)) + ' · ж' + item.fiberNumber + '</span></div>' +
                     mapPinBtn(item.olt ? getUid(item.olt) : null) + '</div>';
+            } else if (item.type === 'crossPortPatch') {
+                html += '<div class="trace-item trace-item--meta trace-item--link">' +
+                    '<span class="trace-item-glyph trace-item-glyph--muted" aria-hidden="true">⇄</span>' +
+                    '<div class="trace-item-main"><span>Кроссировка: «' + esc(item.fromCrossName || 'Кросс') + '» п.' + item.fromPort +
+                    ' → «' + esc(item.toCrossName || 'Кросс') + '» п.' + item.toPort + '</span></div>' +
+                    mapPinBtn(item.toCross ? getUid(item.toCross) : null) + '</div>';
             }
         });
         html += '</div>';

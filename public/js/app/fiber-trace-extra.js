@@ -518,6 +518,12 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
             var oltPortText = item.incoming ? 'приход' : formatOltPortDisplay(item.portNumber, item.portLabel || (item.olt ? getOltPortLabel(item.olt, item.portNumber) : ''));
             html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-olt">🔌</span><div class="trace-path-block trace-path-olt"><div><span>📶 Подключено к OLT «' + escapeHtml(item.oltName || 'OLT') + '», ' + escapeHtml(String(oltPortText)) + '</span><span class="trace-path-muted">(жила ' + item.fiberNumber + ')</span></div>' + oltShowBtn + '</div></div>';
             stepNumber++;
+        } else if (item.type === 'crossPortPatch') {
+            var fromCrossId = item.fromCross ? getObjectUniqueId(item.fromCross) : null;
+            var toCrossId = item.toCross ? getObjectUniqueId(item.toCross) : null;
+            var patchPin = toCrossId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(toCrossId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-connection">⇄</span><div class="trace-path-block trace-path-connection"><span>⇄ Кроссировка: «' + escapeHtml(item.fromCrossName || 'Кросс') + '» п.' + item.fromPort + ' → «' + escapeHtml(item.toCrossName || 'Кросс') + '» п.' + item.toPort + '</span>' + patchPin + '</div></div>';
+            stepNumber++;
         }
     });
     var cablesCount = path.filter(function(p) { return p.type === 'cable'; }).length;

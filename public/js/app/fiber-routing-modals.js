@@ -22,6 +22,8 @@ function initNodeSelectionModal() {
             e.stopPropagation();
             if (nodeSelectionModalData && nodeSelectionModalData.mode === 'oltCrossConnect') {
                 backOltCrossSelectionToList();
+            } else if (nodeSelectionModalData && nodeSelectionModalData.mode === 'crossPortPatch') {
+                backCrossPortPatchToList();
             } else {
                 backNodeSelectionToList();
             }
@@ -31,6 +33,8 @@ function initNodeSelectionModal() {
             e.stopPropagation();
             if (nodeSelectionModalData && nodeSelectionModalData.mode === 'oltCrossConnect') {
                 confirmOltCrossPortConnect();
+            } else if (nodeSelectionModalData && nodeSelectionModalData.mode === 'crossPortPatch') {
+                confirmCrossPortPatchConnect();
             } else {
                 confirmNodeFiberToSfpPort();
             }
@@ -51,6 +55,10 @@ function initNodeSelectionModal() {
                 renderOltCrossListForModal(crosses, this.value);
                 return;
             }
+            if (nodeSelectionModalData.mode === 'crossPortPatch' && nodeSelectionModalData.phase === 'crossList') {
+                renderCrossPortPatchCrossList(nodeSelectionModalData.crosses || [], this.value);
+                return;
+            }
             if (nodeSelectionModalData.phase === 'list') {
                 renderNodeList(nodeSelectionModalData.nodes, this.value);
             }
@@ -61,6 +69,8 @@ function initNodeSelectionModal() {
         if (e.key === 'Escape' && modal.style.display === 'block') {
             if (nodeSelectionModalData && nodeSelectionModalData.mode === 'oltCrossConnect' && nodeSelectionModalData.phase === 'crossPort') {
                 backOltCrossSelectionToList();
+            } else if (nodeSelectionModalData && nodeSelectionModalData.mode === 'crossPortPatch' && nodeSelectionModalData.phase === 'crossPort') {
+                backCrossPortPatchToList();
             } else if (nodeSelectionModalData && nodeSelectionModalData.phase === 'sfp') {
                 backNodeSelectionToList();
             } else {

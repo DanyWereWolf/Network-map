@@ -6453,7 +6453,51 @@ button {
 
 #fiber-connections-svg .fiber-scheme-cross-link {
     pointer-events: none;
+    transition: opacity 0.15s ease, stroke-width 0.15s ease;
+}
+
+#fiber-connections-svg .fiber-scheme-cross-link-hit {
+    pointer-events: stroke;
+    cursor: pointer;
+}
+
+#fiber-connections-svg .fiber-scheme-cross-link-hovered {
+    opacity: 1 !important;
+    stroke-width: 4 !important;
+    filter: drop-shadow(0 0 4px rgba(109, 40, 217, 0.45));
+}
+
+#fiber-connections-svg .fiber-scheme-cross-link-dimmed {
+    opacity: 0.2 !important;
+}
+
+#fiber-connections-svg .fiber-scheme-cross-link-selected {
+    opacity: 1 !important;
+    stroke-width: 4.5 !important;
+    filter: drop-shadow(0 0 5px rgba(245, 158, 11, 0.55));
+}
+
+#fiber-connections-svg .fiber-scheme-cross-port-hovered .fiber-scheme-cross-port-node {
+    stroke-width: 3;
+    filter: drop-shadow(0 0 4px rgba(109, 40, 217, 0.5));
+}
+
+.fiber-scheme-cross-link-label {
+    pointer-events: all;
+    opacity: 0;
     transition: opacity 0.15s ease;
+}
+
+.fiber-scheme-cross-link-label.is-visible {
+    opacity: 1;
+}
+
+#fiber-connections-svg.fiber-scheme-hover-active .fiber-scheme-cross-link-label.is-visible {
+    opacity: 1;
+}
+
+#fiber-connections-svg.fiber-scheme-svg--view .fiber-scheme-cross-link-label {
+    opacity: 1;
 }
 
 #fiber-connections-svg .fiber-scheme-cross-port--assigned .fiber-scheme-cross-port-node {
@@ -6483,6 +6527,124 @@ button {
 @keyframes fiber-scheme-cross-port-pulse {
     0%, 100% { filter: drop-shadow(0 0 2px rgba(167, 139, 250, 0.4)); }
     50% { filter: drop-shadow(0 0 6px rgba(167, 139, 250, 0.85)); }
+}
+
+#fiber-connections-svg .fiber-scheme-cross-port--patched .fiber-scheme-cross-port-node {
+    stroke: #ea580c;
+    stroke-width: 2.5;
+}
+
+#fiber-connections-svg .fiber-scheme-cross-port--link-source .fiber-scheme-cross-port-node {
+    stroke: #2563eb;
+    stroke-width: 2.5;
+    filter: drop-shadow(0 0 4px rgba(37, 99, 235, 0.55));
+}
+
+#fiber-connections-svg .fiber-scheme-cross-port--link-target .fiber-scheme-cross-port-node {
+    stroke: #ea580c;
+    stroke-dasharray: 3 2;
+}
+
+.fiber-scheme-toolbar-btn--active {
+    background: var(--accent-primary, #3b82f6) !important;
+    color: #fff !important;
+    border-color: var(--accent-primary, #3b82f6) !important;
+}
+
+.cross-port-patch-section {
+    margin: 0 0 1rem;
+    padding: 0 0.25rem;
+}
+
+.cross-port-patch-hint {
+    margin: 0 0 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    line-height: 1.45;
+}
+
+.cross-port-patch-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--bg-secondary);
+}
+
+.cross-port-patch-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+}
+
+.cross-port-patch-table th,
+.cross-port-patch-table td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+    vertical-align: middle;
+}
+
+.cross-port-patch-table th {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+}
+
+.cross-port-patch-row--patched {
+    background: rgba(234, 88, 12, 0.06);
+}
+
+.cross-port-patch-td-num {
+    font-weight: 700;
+    width: 3rem;
+}
+
+.cross-port-patch-status--free { color: #22c55e; }
+.cross-port-patch-status--patched { color: #ea580c; font-weight: 600; }
+.cross-port-patch-status--busy { color: #f59e0b; }
+.cross-port-patch-status--fiber { color: var(--text-secondary); }
+
+.cross-port-patch-muted {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.fiber-cross-patch-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.35rem;
+    padding: 0.35rem 0.5rem;
+    border-radius: 6px;
+    background: rgba(234, 88, 12, 0.08);
+    border: 1px dashed rgba(234, 88, 12, 0.35);
+}
+
+.fiber-cross-patch-row--linked {
+    background: rgba(234, 88, 12, 0.12);
+    border-style: solid;
+}
+
+.fiber-cross-patch-row__lbl {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #ea580c;
+}
+
+.fiber-cross-patch-row__val {
+    flex: 1;
+    font-size: 0.75rem;
+    color: var(--text-primary);
+}
+
+.fiber-chip--cross-patch {
+    background: rgba(234, 88, 12, 0.15);
+    border-color: rgba(234, 88, 12, 0.45);
+    color: #c2410c;
 }
 
 .fiber-connections-container .fiber-item.fiber-item--cross-port-target {
@@ -8786,6 +8948,9 @@ button {
 .fiber-item--mc .fiber-item__status { color: #0f766e; background: #ecfeff; border-color: #a5f3fc; }
 .fiber-item--splitter-in .fiber-item__status { color: #c2410c; background: #fff7ed; border-color: #fed7aa; }
 .fiber-item--splitter-out .fiber-item__status { color: #b91c1c; background: #fef2f2; border-color: #fecaca; }
+.fiber-item--cross-patch { border-color: #fdba74; background: color-mix(in srgb, #fff7ed 55%, var(--bg-card)); }
+.fiber-item--cross-patch .fiber-item__status { color: #c2410c; background: #fff7ed; border-color: #fed7aa; }
+.fiber-item.fiber-cross-patch-locked { border-left: 3px solid #ea580c; }
 
 .fiber-port-row {
     display: flex;
@@ -8815,9 +8980,79 @@ button {
 .fiber-port-row .fiber-port-select {
     padding: 3px 6px;
     font-size: 0.6875rem;
-    min-width: 52px;
-    max-width: 64px;
+    min-width: 72px;
+    max-width: 120px;
+    flex: 1;
     border-radius: var(--radius-sm);
+}
+
+.fiber-port-row__controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+}
+
+.fiber-port-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 20px;
+    padding: 0 5px;
+    border-radius: 4px;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    line-height: 1;
+    border: 1px solid transparent;
+    flex-shrink: 0;
+}
+
+.fiber-port-badge--free { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+.fiber-port-badge--fiber { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.fiber-port-badge--patched { background: #fff7ed; color: #c2410c; border-color: #fdba74; }
+.fiber-port-badge--olt { background: #e0f2fe; color: #0369a1; border-color: #7dd3fc; }
+.fiber-port-badge--none { background: var(--bg-tertiary); color: var(--text-muted); border-color: var(--border-color); }
+
+.fiber-port-state {
+    font-size: 0.625rem;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 140px;
+}
+
+.fiber-port-state--free { color: #166534; }
+.fiber-port-state--fiber { color: #1d4ed8; }
+.fiber-port-state--patched { color: #c2410c; font-weight: 600; }
+.fiber-port-state--olt { color: #0369a1; }
+
+.fiber-port-row--patched { background: color-mix(in srgb, #fff7ed 70%, var(--bg-tertiary)); }
+.fiber-port-row--olt { background: color-mix(in srgb, #e0f2fe 60%, var(--bg-tertiary)); }
+.fiber-port-row--fiber { background: color-mix(in srgb, #eff6ff 55%, var(--bg-tertiary)); }
+.fiber-port-row--free { background: color-mix(in srgb, #f0fdf4 45%, var(--bg-tertiary)); }
+.fiber-port-row--spliced { opacity: 0.75; }
+
+.fiber-port-row__disconnect {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-card);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.fiber-port-row__disconnect:hover {
+    color: #dc2626;
+    border-color: #fecaca;
+    background: #fef2f2;
 }
 
 .fiber-port-row--view {
@@ -8859,6 +9094,7 @@ button {
 .fiber-assign--splitter { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
 .fiber-assign--mc { background: #ecfeff; color: #0f766e; border-color: #a5f3fc; }
 .fiber-assign--olt { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; }
+.fiber-assign--cross-patch { background: #fff7ed; color: #c2410c; border-color: #fdba74; }
 
 .fiber-assign__disconnect {
     padding: 2px 7px;

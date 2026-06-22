@@ -80,6 +80,7 @@ function loadStore() {
     if (!Array.isArray(store.pricingPlans)) store.pricingPlans = [];
     if (!Array.isArray(store.visitLogs)) store.visitLogs = [];
     if (!Array.isArray(store.supportThreads)) store.supportThreads = [];
+    if (!Array.isArray(store.passwordResetTokens)) store.passwordResetTokens = [];
     migrateToOrganizations();
     stripNetboxFromStore(store);
     return store;
@@ -1002,6 +1003,66 @@ function initDefaultAdmin() {
     }
 }
 
+function purgeExpiredPasswordResetTokens() {
+    const s = loadStore();
+    if (!Array.isArray(s.passwordResetTokens)) {
+        s.passwordResetTokens = [];
+        return;
+    }
+    const now = Date.now();
+    const filtered = s.passwordResetTokens.filter(function(t) {
+        if (!t || !t.expiresAt) return false;
+        const exp = new Date(t.expiresAt).getTime();
+        return !isNaN(exp) && exp > now;
+    });
+    if (filtered.length !== s.passwordResetTokens.length) {
+        s.passwordResetTokens = filtered;
+        saveStore();
+    }
+}
+
+function addPasswordResetToken(entry) {
+    const s = loadStore();
+    if (!Array.isArray(s.passwordResetTokens)) s.passwordResetTokens = [];
+    purgeExpiredPasswordResetTokens();
+    s.passwordResetTokens = s.passwordResetTokens.filter(function(t) {
+        return !t || String(t.userId) !== String(entry.userId);
+    });
+    s.passwordResetTokens.push({
+        token: String(entry.token),
+        userId: String(entry.userId),
+        expiresAt: String(entry.expiresAt)
+    });
+    saveStore();
+}
+
+function getPasswordResetToken(token) {
+    purgeExpiredPasswordResetTokens();
+    const s = loadStore();
+    if (!Array.isArray(s.passwordResetTokens)) return null;
+    const now = Date.now();
+    const item = s.passwordResetTokens.find(function(t) {
+        return t && t.token === String(token);
+    });
+    if (!item) return null;
+    const exp = new Date(item.expiresAt).getTime();
+    if (isNaN(exp) || exp <= now) {
+        deletePasswordResetToken(token);
+        return null;
+    }
+    return { token: item.token, userId: item.userId, expiresAt: item.expiresAt };
+}
+
+function deletePasswordResetToken(token) {
+    const s = loadStore();
+    if (!Array.isArray(s.passwordResetTokens)) return;
+    const before = s.passwordResetTokens.length;
+    s.passwordResetTokens = s.passwordResetTokens.filter(function(t) {
+        return !t || t.token !== String(token);
+    });
+    if (s.passwordResetTokens.length !== before) saveStore();
+}
+
 function addVisitLog(entry) {
     const s = loadStore();
     if (!Array.isArray(s.visitLogs)) s.visitLogs = [];
@@ -1531,6 +1592,10 @@ module.exports = {
     countActualMapObjectsInArray,
     countMapObjectsForOrganization,
     addVisitLog,
+    purgeExpiredPasswordResetTokens,
+    addPasswordResetToken,
+    getPasswordResetToken,
+    deletePasswordResetToken,
     getVisitLogs,
     getSupportThreads,
     findSupportThreadById,

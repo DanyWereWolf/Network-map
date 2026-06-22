@@ -43,11 +43,22 @@ function getTurnstileSiteKey(config) {
     return String((config && config.turnstileSiteKey) || process.env.TURNSTILE_SITE_KEY || '').trim();
 }
 
+// Cloudflare test keys — https://developers.cloudflare.com/turnstile/troubleshooting/testing/
+var TURNSTILE_TEST_SECRET_PASS = '1x0000000000000000000000000000000AA';
+var TURNSTILE_TEST_SECRET_FAIL = '2x0000000000000000000000000000000AA';
+var TURNSTILE_TEST_SECRET_INVISIBLE_PASS = '3x0000000000000000000000000000000AA';
+
 function verifyTurnstile(token, remoteIp, config) {
     if (!isTurnstileConfigured(config)) return Promise.resolve({ ok: true, skipped: true });
     const secret = String((config && config.turnstileSecretKey) || process.env.TURNSTILE_SECRET_KEY || '').trim();
     if (!token || !String(token).trim()) {
         return Promise.resolve({ ok: false, error: 'Подтвердите, что вы не робот' });
+    }
+    if (secret === TURNSTILE_TEST_SECRET_FAIL) {
+        return Promise.resolve({ ok: false, error: 'Проверка капчи не пройдена. Обновите страницу и попробуйте снова.' });
+    }
+    if (secret === TURNSTILE_TEST_SECRET_PASS || secret === TURNSTILE_TEST_SECRET_INVISIBLE_PASS) {
+        return Promise.resolve({ ok: true, testMode: true });
     }
     const body = new URLSearchParams({
         secret: secret,

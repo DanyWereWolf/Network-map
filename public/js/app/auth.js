@@ -81,9 +81,10 @@ function getStoredSession() {
 var authPublicConfig = null;
 var authCaptchaEnabled = false;
 var authTurnstileSiteKey = '';
-var turnstileWidgets = { login: null, register: null };
+var turnstileWidgets = { login: null, register: null, forgot: null };
 var pendingLoginId = null;
 var pendingLoginRememberMe = false;
+var activeResetToken = null;
 
 function loadAuthPublicConfig() {
     if (!getApiBase()) return Promise.resolve(null);
@@ -432,6 +433,54 @@ function registerUser(username, password, fullName, organizationName, contactEma
     }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
 }
 
+function requestPasswordReset(usernameOrEmail, captchaToken) {
+    if (!getApiBase()) {
+        return Promise.resolve({ success: false, error: 'Запустите сервер: npm run api, затем откройте http://localhost:3000' });
+    }
+    var input = (usernameOrEmail && String(usernameOrEmail).trim()) || '';
+    if (!input) return Promise.resolve({ success: false, error: 'Укажите имя пользователя или e-mail' });
+    var payload = { usernameOrEmail: input };
+    if (captchaToken) payload.captchaToken = captchaToken;
+    return fetch(getApiBase() + '/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    }).then(function(r) { return r.json().then(function(body) { return { status: r.status, body: body }; }); })
+    .then(function(res) {
+        var body = res.body || {};
+        if (body.success) return { success: true, message: body.message || 'Письмо отправлено' };
+        return { success: false, error: body.error || 'Ошибка запроса', status: res.status };
+    }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
+}
+
+function submitPasswordReset(token, password, passwordConfirm) {
+    if (!getApiBase()) return Promise.resolve({ success: false, error: 'Сервер недоступен' });
+    if (!token) return Promise.resolve({ success: false, error: 'Недействительная ссылка восстановления' });
+    if (!password || password.length < 6) return Promise.resolve({ success: false, error: 'Пароль не менее 6 символов' });
+    if (password !== passwordConfirm) return Promise.resolve({ success: false, error: 'Пароли не совпадают' });
+    return fetch(getApiBase() + '/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: token, password: password, passwordConfirm: passwordConfirm })
+    }).then(function(r) { return r.json().then(function(body) { return { status: r.status, body: body }; }); })
+    .then(function(res) {
+        var body = res.body || {};
+        if (body.success) return { success: true, message: body.message || 'Пароль изменён' };
+        return { success: false, error: body.error || 'Ошибка', status: res.status };
+    }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
+}
+
+function validateResetToken(token) {
+    if (!getApiBase() || !token) return Promise.resolve({ valid: false });
+    return fetch(getApiBase() + '/api/auth/reset-token/' + encodeURIComponent(token), { cache: 'no-store' })
+        .then(function(r) { return r.json(); })
+        .then(function(body) {
+            if (body && body.valid) return { valid: true, username: body.username || '' };
+            return { valid: false };
+        })
+        .catch(function() { return { valid: false }; });
+}
+
 function approveUser(userId) {
     if (!getApiBase()) return Promise.resolve({ success: false, error: 'Сервер недоступен' });
     var token = getAuthToken();
@@ -599,9 +648,18 @@ function initInactivityLogoutWatcher() {
     });
 }
 
+function hideAllAuthForms() {
+    ['loginForm', 'registerForm', 'totpForm', 'forgotPasswordForm', 'resetPasswordForm'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+    });
+}
+
 function switchForm(formType) {
     const loginForm = document.getElementById('loginForm');
     const registerForm = document.getElementById('registerForm');
+    const forgotForm = document.getElementById('forgotPasswordForm');
+    const resetForm = document.getElementById('resetPasswordForm');
     const message = document.getElementById('authMessage');
     const authContainer = document.querySelector('.auth-container');
     
@@ -609,17 +667,24 @@ function switchForm(formType) {
     message.textContent = '';
     
     var totpForm = document.getElementById('totpForm');
-    if (totpForm) totpForm.classList.remove('active');
+    hideAllAuthForms();
     pendingLoginId = null;
 
     if (formType === 'login') {
         loginForm.classList.add('active');
-        registerForm.classList.remove('active');
         if (authContainer) authContainer.classList.remove('auth-register-active');
         destroyRegisterMapPicker();
         renderAuthCaptcha('login', 'loginCaptcha', 'loginCaptchaWrap');
+    } else if (formType === 'forgot') {
+        if (forgotForm) forgotForm.classList.add('active');
+        if (authContainer) authContainer.classList.remove('auth-register-active');
+        destroyRegisterMapPicker();
+        renderAuthCaptcha('forgot', 'forgotCaptcha', 'forgotCaptchaWrap');
+    } else if (formType === 'reset') {
+        if (resetForm) resetForm.classList.add('active');
+        if (authContainer) authContainer.classList.remove('auth-register-active');
+        destroyRegisterMapPicker();
     } else {
-        loginForm.classList.remove('active');
         registerForm.classList.add('active');
         if (authContainer) authContainer.classList.add('auth-register-active');
         initRegisterMapPicker();
@@ -656,7 +721,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
     }
 
-    // Открыть форму регистрации по ссылке с лендинга (?register=1)
+    // Открыть форму регистрации по ссылке с лендинга (?register=1) или сброс пароля (?reset=...)
     if (isAuthPage) {
         try {
             var search = window.location.search.replace(/^\?/, '').split('&').reduce(function(acc, part) {
@@ -665,7 +730,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 acc[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || '');
                 return acc;
             }, {});
-            if (search.register === '1' || search.register === 'true') {
+            if (search.reset) {
+                activeResetToken = String(search.reset).trim();
+                var tokenInput = document.getElementById('resetPasswordToken');
+                if (tokenInput) tokenInput.value = activeResetToken;
+            } else if (search.register === '1' || search.register === 'true') {
                 switchForm('register');
             }
         } catch (e) {}
@@ -680,9 +749,27 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     loadAuthPublicConfig().then(function() {
+        if (activeResetToken) {
+            validateResetToken(activeResetToken).then(function(result) {
+                if (result.valid) {
+                    switchForm('reset');
+                    var hint = document.getElementById('resetPasswordHint');
+                    if (hint && result.username) {
+                        hint.textContent = 'Задайте новый пароль для учётной записи «' + result.username + '».';
+                    }
+                } else {
+                    showMessage('Ссылка восстановления недействительна или истекла. Запросите новую.', 'error');
+                    switchForm('forgot');
+                }
+            });
+            return;
+        }
         var registerForm = document.getElementById('registerForm');
+        var forgotForm = document.getElementById('forgotPasswordForm');
         if (registerForm && registerForm.classList.contains('active')) {
             renderAuthCaptcha('register', 'registerCaptcha', 'registerCaptchaWrap');
+        } else if (forgotForm && forgotForm.classList.contains('active')) {
+            renderAuthCaptcha('forgot', 'forgotCaptcha', 'forgotCaptchaWrap');
         } else {
             renderAuthCaptcha('login', 'loginCaptcha', 'loginCaptchaWrap');
         }
@@ -793,6 +880,50 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else {
                     showMessage(result.error, 'error');
                     resetAuthCaptcha('register');
+                }
+            });
+        });
+    }
+
+    var forgotPasswordForm = document.getElementById('forgotPasswordForm');
+    if (forgotPasswordForm) {
+        forgotPasswordForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var input = document.getElementById('forgotUsernameOrEmail').value.trim();
+            var captchaToken = getCaptchaToken('forgot');
+            if (authCaptchaEnabled && !captchaToken) {
+                showMessage('Подтвердите, что вы не робот', 'error');
+                return;
+            }
+            Promise.resolve(requestPasswordReset(input, captchaToken)).then(function(result) {
+                if (result.success) {
+                    showMessage(result.message || 'Если аккаунт найден, письмо отправлено.', 'success');
+                    resetAuthCaptcha('forgot');
+                } else {
+                    showMessage(result.error, 'error');
+                    resetAuthCaptcha('forgot');
+                }
+            });
+        });
+    }
+
+    var resetPasswordForm = document.getElementById('resetPasswordForm');
+    if (resetPasswordForm) {
+        resetPasswordForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var token = (document.getElementById('resetPasswordToken') && document.getElementById('resetPasswordToken').value) || activeResetToken || '';
+            var password = document.getElementById('resetPassword').value;
+            var passwordConfirm = document.getElementById('resetPasswordConfirm').value;
+            Promise.resolve(submitPasswordReset(token, password, passwordConfirm)).then(function(result) {
+                if (result.success) {
+                    showMessage(result.message || 'Пароль изменён. Перенаправление на вход...', 'success');
+                    activeResetToken = null;
+                    if (window.history && window.history.replaceState) {
+                        window.history.replaceState({}, '', 'auth.html');
+                    }
+                    setTimeout(function() { switchForm('login'); }, 2500);
+                } else {
+                    showMessage(result.error, 'error');
                 }
             });
         });

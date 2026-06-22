@@ -184,6 +184,13 @@ function getTotalUsedPortsInCross(crossObj) {
         const port = parseInt(fiberPorts[key], 10);
         if (!isNaN(port) && port > 0) usedPortNums.add(port);
     });
+    var patches = typeof getCrossPortPatches === 'function'
+        ? getCrossPortPatches(crossObj)
+        : (crossObj.properties.get('crossPortPatches') || {});
+    Object.keys(patches).forEach(function(portKey) {
+        var port = parseInt(portKey, 10);
+        if (!isNaN(port) && port > 0) usedPortNums.add(port);
+    });
     return usedPortNums.size;
 }
 

@@ -116,6 +116,7 @@ function serializeMapItemFromObject(obj) {
             if (props.copperPortUsage) result.copperPortUsage = props.copperPortUsage;
             if (props.nodeConnections) result.nodeConnections = props.nodeConnections;
             if (props.fiberPorts) result.fiberPorts = props.fiberPorts;
+            if (props.crossPortPatches) result.crossPortPatches = props.crossPortPatches;
             if (props.oltConnections) result.oltConnections = props.oltConnections;
             if (props.onuConnections) result.onuConnections = props.onuConnections;
             if (props.mediaConverterConnections) result.mediaConverterConnections = props.mediaConverterConnections;
@@ -1447,6 +1448,7 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         placemark.properties.set('copperPortUsage', data.copperPortUsage && typeof data.copperPortUsage === 'object' ? data.copperPortUsage : {});
         if (data.nodeConnections) placemark.properties.set('nodeConnections', data.nodeConnections);
         if (data.fiberPorts) placemark.properties.set('fiberPorts', data.fiberPorts);
+        if (data.crossPortPatches) placemark.properties.set('crossPortPatches', data.crossPortPatches);
         if (data.oltConnections) placemark.properties.set('oltConnections', data.oltConnections);
         if (data.onuConnections) placemark.properties.set('onuConnections', data.onuConnections);
         if (data.mediaConverterConnections) placemark.properties.set('mediaConverterConnections', data.mediaConverterConnections);

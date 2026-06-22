@@ -618,6 +618,16 @@ function purgeConnectionLinesForMissingUid(uid) {
     });
 }
 
+function rebuildConnectionLinesAfterEndpointDeleted(uid) {
+    if (!uid) return;
+    purgeConnectionLinesForMissingUid(uid);
+    ['onu', 'olt', 'mediaConverter', 'splitter', 'node'].forEach(function(endpointType) {
+        rebuildLinesTargetingEndpoint(uid, endpointType);
+    });
+    rebuildLinesThroughWaypoint(uid);
+    updateSplitterOutputConnectionLines();
+}
+
 window.flushMapConnectionLines = function(pendingUids) {
     if (!pendingUids || !(pendingUids instanceof Set) || pendingUids.size === 0) {
         updateAllConnectionLines();
@@ -626,7 +636,7 @@ window.flushMapConnectionLines = function(pendingUids) {
     pendingUids.forEach(function(uid) {
         var obj = getMapObjectByUid(uid);
         if (obj) syncConnectionLinesForObject(obj);
-        else purgeConnectionLinesForMissingUid(uid);
+        else rebuildConnectionLinesAfterEndpointDeleted(uid);
     });
     applyConnectionLinesVisibility();
 };

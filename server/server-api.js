@@ -14,6 +14,8 @@ const objectMedia = require('./object-media');
 const newsMedia = require('./news-media');
 const security = require('./lib/security');
 const supportBot = require('./lib/support-bot');
+const mail = require('./lib/mail');
+const passwordReset = require('./lib/password-reset');
 
 function loadServerConfig() {
     let config = {};
@@ -1209,6 +1211,103 @@ function handleAuthRegister(req, res, body) {
     }
     res.json({ success: true, pending: !organizationId, organizationId: organizationId });
 }
+
+var PASSWORD_RESET_GENERIC_MSG = 'Если указанный аккаунт существует и привязан к e-mail, на почту отправлена ссылка для сброса пароля. Проверьте входящие и папку «Спам».';
+
+app.post('/api/auth/forgot-password', function(req, res) {
+    var ip = getClientIp(req);
+    var rate = security.checkRateLimit('forgot:' + ip, getAuthRateLimitOptions());
+    if (!rate.ok) {
+        return res.status(429).json({
+            success: false,
+            error: 'Слишком много запросов. Повторите через ' + rate.retryAfterSec + ' с.'
+        });
+    }
+    if (!mail.isMailConfigured(serverConfig)) {
+        return res.status(503).json({
+            success: false,
+            error: 'Восстановление пароля временно недоступно. Обратитесь в поддержку.'
+        });
+    }
+    var body = req.body || {};
+    security.verifyTurnstile(body.captchaToken, ip, serverConfig).then(function(captcha) {
+        if (!captcha.ok) {
+            return res.status(400).json({ success: false, error: captcha.error || 'Ошибка капчи' });
+        }
+        var input = body.usernameOrEmail != null ? String(body.usernameOrEmail).trim() : '';
+        if (!input) {
+            return res.status(400).json({ success: false, error: 'Укажите имя пользователя или e-mail' });
+        }
+        var user = passwordReset.findUserForPasswordReset(input);
+        if (!user || !passwordReset.canResetPassword(user)) {
+            return res.json({ success: true, message: PASSWORD_RESET_GENERIC_MSG });
+        }
+        var email = passwordReset.resolveUserEmail(user, serverConfig);
+        if (!email) {
+            return res.json({ success: true, message: PASSWORD_RESET_GENERIC_MSG });
+        }
+        var token = passwordReset.createResetToken(user.id);
+        var siteUrl = serverConfig.publicSiteUrl || process.env.PUBLIC_SITE_URL || getSiteBaseUrl(req);
+        var mailContent = passwordReset.buildResetEmail(siteUrl, token, user.username);
+        return mail.sendMail(serverConfig, {
+            to: email,
+            subject: mailContent.subject,
+            text: mailContent.text,
+            html: mailContent.html
+        }).then(function(result) {
+            if (!result.ok) {
+                console.error('[Auth] forgot-password mail failed for user', user.id);
+            }
+            return res.json({ success: true, message: PASSWORD_RESET_GENERIC_MSG });
+        });
+    });
+});
+
+app.get('/api/auth/reset-token/:token', function(req, res) {
+    db.purgeExpiredPasswordResetTokens();
+    var entry = db.getPasswordResetToken(req.params.token);
+    if (!entry) return res.json({ valid: false });
+    var users = db.getUsers();
+    var user = users.find(function(u) { return String(u.id) === String(entry.userId); });
+    if (!user || !passwordReset.canResetPassword(user)) return res.json({ valid: false });
+    res.json({ valid: true, username: user.username });
+});
+
+app.post('/api/auth/reset-password', function(req, res) {
+    var ip = getClientIp(req);
+    var rate = security.checkRateLimit('reset:' + ip, getAuthRateLimitOptions());
+    if (!rate.ok) {
+        return res.status(429).json({
+            success: false,
+            error: 'Слишком много попыток. Повторите через ' + rate.retryAfterSec + ' с.'
+        });
+    }
+    var body = req.body || {};
+    var token = body.token != null ? String(body.token).trim() : '';
+    var password = body.password != null ? String(body.password) : '';
+    var passwordConfirm = body.passwordConfirm != null ? String(body.passwordConfirm) : '';
+    if (!token) return res.status(400).json({ success: false, error: 'Недействительная ссылка восстановления' });
+    if (!password || password.length < 6) {
+        return res.status(400).json({ success: false, error: 'Пароль не менее 6 символов' });
+    }
+    if (password !== passwordConfirm) {
+        return res.status(400).json({ success: false, error: 'Пароли не совпадают' });
+    }
+    var entry = passwordReset.consumeResetToken(token);
+    if (!entry) {
+        return res.status(400).json({ success: false, error: 'Ссылка восстановления недействительна или истекла. Запросите новую.' });
+    }
+    var users = db.getUsers();
+    var i = users.findIndex(function(u) { return String(u.id) === String(entry.userId); });
+    if (i === -1) return res.status(400).json({ success: false, error: 'Пользователь не найден' });
+    if (!passwordReset.canResetPassword(users[i])) {
+        return res.status(400).json({ success: false, error: 'Восстановление пароля для этой учётной записи недоступно' });
+    }
+    users[i].password = hashPassword(password);
+    db.setUsers(users);
+    db.deleteSessionsForUser(users[i].id);
+    res.json({ success: true, message: 'Пароль изменён. Теперь вы можете войти с новым паролем.' });
+});
 
 app.get('/api/organizations/me/security', (req, res) => {
     const user = getSessionUser(req);

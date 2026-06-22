@@ -353,6 +353,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
     const path = [];
     const visitedFibers = new Set();
     const visitedObjects = new Set();
+    const visitedPatchKeys = new Set();
 
     function findCableById(cableId) {
         return objects.find(obj => 
@@ -733,6 +734,19 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
                     afterSplitterInputBranch = true;
                     continue;
                 }
+                if (objType === 'cross' && typeof applyCrossPortPatchTraceContinuation === 'function') {
+                    var patchCont = applyCrossPortPatchTraceContinuation(path, nextObject, currentCableId, currentFiberNumber, currentCable, visitedPatchKeys);
+                    if (patchCont) {
+                        if (patchCont.break) break;
+                        currentCableId = patchCont.currentCableId;
+                        currentFiberNumber = patchCont.currentFiberNumber;
+                        currentObject = patchCont.currentObject;
+                        previousObject = patchCont.previousObject;
+                        currentCable = findCableById(currentCableId);
+                        afterSplitterInputBranch = true;
+                        continue;
+                    }
+                }
                 break;
             }
 
@@ -1036,6 +1050,7 @@ function traceFiberPath(startCableId, startFiberNumber) {
     const path = [];
     const visitedFibers = new Set();
     const visitedObjects = new Set();
+    const visitedPatchKeys = new Set();
 
     function findFiberConnection(cableId, fiberNumber, sleeveObj) {
         if (typeof getSplicedFiberGroup === 'function') {
@@ -1229,6 +1244,18 @@ function traceFiberPath(startCableId, startFiberNumber) {
                             port: null
                         });
                         break;
+                    }
+                }
+                if (currentObject.properties.get('type') === 'cross' && typeof applyCrossPortPatchTraceContinuation === 'function') {
+                    var patchContLegacy = applyCrossPortPatchTraceContinuation(path, currentObject, currentCableId, currentFiberNumber, currentCable, visitedPatchKeys);
+                    if (patchContLegacy) {
+                        if (patchContLegacy.break) break;
+                        currentCableId = patchContLegacy.currentCableId;
+                        currentFiberNumber = patchContLegacy.currentFiberNumber;
+                        currentCable = findCableById(currentCableId);
+                        previousObject = patchContLegacy.previousObject;
+                        currentObject = patchContLegacy.currentObject;
+                        continue;
                     }
                 }
                 break;

@@ -81,6 +81,12 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
                 var matchLoc = (atCrossId && uid === atCrossId) || (atSleeveId && uid === atSleeveId);
                 if (!matchLoc) continue;
             }
+            if (t === 'cross' && typeof isFiberCrossPatchLocked === 'function' &&
+                isFiberCrossPatchLocked(obj, cableId, fiberNumber)) {
+                if (exclude && exclude.type === 'fiberConnection' && exclude.crossId === uid) continue;
+                if (exclude && exclude.type === 'crossPortPatch' && exclude.crossId === uid) continue;
+                return { used: true, where: 'жила на кроссированном порту' };
+            }
             const fiberConnections = obj.properties.get('fiberConnections') || [];
             const isConnected = fiberConnections.some(conn =>
                 (conn.from.cableId === cableId && conn.from.fiberNumber === fiberNumber) ||

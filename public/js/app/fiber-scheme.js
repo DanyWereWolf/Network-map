@@ -219,6 +219,7 @@ function clearAllSchemeSplitterPicks() {
     schemeSplitterWirePick = null;
     schemeSplitterOutputPick = null;
     schemeCrossPortPick = null;
+    if (typeof setSchemeCrossPortLinkMode === 'function') setSchemeCrossPortLinkMode(false);
     updateSchemeSplitterPickUI();
     updateSchemeCrossPortPickUI();
     if (hadFiberPick && selectedFiberForConnection) {
@@ -258,6 +259,10 @@ function tryAssignFiberToCrossPort(crossObj, cableId, fiberNumber, portNumber) {
     var crossPorts = Math.max(1, parseInt(crossObj.properties.get('crossPorts'), 10) || 24);
     portNumber = parseInt(portNumber, 10);
     if (isNaN(portNumber) || portNumber < 1 || portNumber > crossPorts) return false;
+    if (typeof isCrossPortPatched === 'function' && isCrossPortPatched(crossObj, portNumber)) {
+        if (typeof showWarning === 'function') showWarning('Порт занят кроссировкой с другим кроссом.', 'Порт недоступен');
+        return false;
+    }
     var fiberPorts = crossObj.properties.get('fiberPorts') || {};
     var fiberKey = cableId + '-' + fiberNumber;
     var occupiedKey = findFiberKeyByCrossPort(fiberPorts, portNumber);
@@ -304,6 +309,24 @@ function handleSchemeCrossPortClick(crossObj, portNumber) {
     if (!crossObj || !isEditMode || portNumber == null) return;
     portNumber = parseInt(portNumber, 10);
     if (isNaN(portNumber)) return;
+    if (typeof isCrossPortPatched === 'function' && isCrossPortPatched(crossObj, portNumber)) {
+        var fiberPortsPatch = crossObj.properties.get('fiberPorts') || {};
+        if (findFiberKeysByCrossPort(fiberPortsPatch, portNumber).length) {
+            tryDisconnectCrossPort(crossObj, portNumber);
+            if (typeof setSchemeCrossPortLinkMode === 'function') setSchemeCrossPortLinkMode(false);
+            return;
+        }
+        if (typeof disconnectCrossPort === 'function' && disconnectCrossPort(crossObj, portNumber)) {
+            if (typeof showSuccess === 'function') showSuccess('Кроссировка порта ' + portNumber + ' отключена.', 'Кроссировка');
+            if (typeof refreshFiberHostModal === 'function') refreshFiberHostModal(crossObj);
+        }
+        if (typeof setSchemeCrossPortLinkMode === 'function') setSchemeCrossPortLinkMode(false);
+        return;
+    }
+    if (typeof schemeCrossPortLinkMode !== 'undefined' && schemeCrossPortLinkMode) {
+        if (typeof startCrossPortPatchFromScheme === 'function') startCrossPortPatchFromScheme(crossObj, portNumber);
+        return;
+    }
     if (selectedFiberForConnection) {
         if (tryAssignFiberToCrossPort(crossObj, selectedFiberForConnection.cableId, selectedFiberForConnection.fiberNumber, portNumber)) {
             resetFiberSelection();

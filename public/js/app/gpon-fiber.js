@@ -1487,6 +1487,7 @@ function formatOltSpliceFiberLabel(cableId, fiberNumber) {
 
 function isCrossPortAvailableForOltConnect(crossObj, crossPortNum, oltObj, oltPortNum) {
     if (!isCrossConnectHost(crossObj) || crossPortNum == null) return false;
+    if (typeof isCrossPortPatched === 'function' && isCrossPortPatched(crossObj, crossPortNum)) return false;
     var oltUid = oltObj ? getObjectUniqueId(oltObj) : null;
     return !isCrossPortLinkedToOlt(crossObj, crossPortNum, oltUid, oltPortNum);
 }

@@ -169,6 +169,8 @@ function deleteObject(obj, opts) {
             var changed = false;
             Object.keys(onuConn).forEach(function(key) {
                 if (onuConn[key] && onuConn[key].onuId === objUniqueId) {
+                    var parsedOnu = parseFiberConnectionKey(key);
+                    if (parsedOnu) removeOnuConnectionLine(slot, parsedOnu.cableId, parsedOnu.fiberNumber);
                     delete onuConn[key];
                     changed = true;
                 }
@@ -297,7 +299,19 @@ function deleteObject(obj, opts) {
         if (hadLabel) try { myMap.geoObjects.remove(hadLabel); } catch (e) {}
     }
     mapPerfUnregister(obj);
+    if (objType === 'cross' && objUniqueId && typeof removeCrossPortPatchesReferencingCross === 'function') {
+        removeCrossPortPatchesReferencingCross(objUniqueId);
+    }
     objects = objects.filter(o => o !== obj);
+
+    if (objUniqueId) {
+        if (typeof isFiberHostType === 'function' && isFiberHostType(objType)) {
+            removeHostConnectionLines(objUniqueId);
+            removeNodeLinesForCross(objUniqueId);
+        } else if (objType === 'splitter') {
+            removeSplitterOutputLinesForSplitter(objUniqueId);
+        }
+    }
 
     var gponRefreshOpts = { deferLineRefresh: true };
     if ((objType === 'sleeve' || objType === 'cross') && gponImpact && gponImpact.hasGpon) {
@@ -323,11 +337,17 @@ function deleteObject(obj, opts) {
         if (cablesToRemove.length > 0 || cableRoutesUpdated) refreshPlan.cableVisualization = true;
         if (objType === 'node' && objGroupKey) refreshPlan.nodeGroupKey = objGroupKey;
         else if (objType === 'cross' && objGroupKey) refreshPlan.crossGroupKey = objGroupKey;
-        if (gponPurged) refreshPlan.connectionLines = 'full';
-        else if (objUniqueId && (objType === 'olt' || objType === 'onu' || objType === 'splitter' || objType === 'mediaConverter')) {
+        if (gponPurged) {
+            refreshPlan.connectionLines = 'full';
+        } else if (objUniqueId && (
+            (typeof isFiberHostType === 'function' && isFiberHostType(objType)) ||
+            objType === 'olt' || objType === 'onu' || objType === 'splitter' ||
+            objType === 'mediaConverter' || objType === 'node' ||
+            objType === 'support' || objType === 'attachment'
+        )) {
             refreshPlan.connectionLines = objUniqueId;
-        } else if (objUniqueId && objType === 'node' && nodeConnectionsCleared) {
-            refreshPlan.connectionLines = objUniqueId;
+        } else if (cablesToRemove.length > 0 || cableRoutesUpdated) {
+            refreshPlan.connectionLines = 'full';
         }
         scheduleObjectDeleteVisualRefresh(refreshPlan);
     }
