@@ -54,6 +54,7 @@ function switchToViewMode(silent) {
     cableSource = null;
     cableSourceCopperSwitchId = null;
     cableWaypoints = [];
+    if (typeof clearCabinetCableSourceHighlight === 'function') clearCabinetCableSourceHighlight();
     cancelUndergroundSpanEdit();
     resetCableUndergroundLayingState(false);
     resetCableUndergroundPendingSpans();
@@ -232,7 +233,7 @@ function applyMapPlacemarkIcon(target, type, variant, source) {
 function refreshMapPlacemarkIcons() {
     if (!window.MapIcons || typeof objects === 'undefined') return;
 
-    var hoverIconTypes = ['support', 'sleeve', 'cross', 'crossGroup', 'nodeGroup', 'olt', 'splitter', 'onu', 'switch', 'camera', 'mediaConverter', 'attachment', 'manhole', 'signalPost'];
+    var hoverIconTypes = ['support', 'sleeve', 'cross', 'crossGroup', 'nodeGroup', 'olt', 'splitter', 'onu', 'switch', 'camera', 'mediaConverter', 'attachment', 'manhole', 'signalPost', 'cabinet'];
 
     objects.forEach(function(obj) {
         if (!obj || !obj.properties || !obj.options) return;

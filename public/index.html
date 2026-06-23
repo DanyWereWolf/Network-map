@@ -357,6 +357,11 @@
                                             <span class="map-filter-chip-dot" aria-hidden="true"></span>
                                             <span class="map-filter-chip-text">Столбы</span>
                                         </label>
+                                        <label class="map-filter-chip map-filter-chip--slate">
+                                            <input type="checkbox" id="mapFilterCabinet" checked>
+                                            <span class="map-filter-chip-dot" aria-hidden="true"></span>
+                                            <span class="map-filter-chip-text">Ящики</span>
+                                        </label>
                                     </div>
                                 </div>
 
@@ -446,6 +451,7 @@
                                         <button type="button" class="object-type-chip object-type-chip--slate" data-type="attachment">Крепления</button>
                                         <button type="button" class="object-type-chip object-type-chip--teal" data-type="manhole">Колодцы</button>
                                         <button type="button" class="object-type-chip object-type-chip--amber" data-type="signalPost">Столбы</button>
+                                        <button type="button" class="object-type-chip object-type-chip--slate" data-type="cabinet">Ящики</button>
                                     </div>
                                 </div>
                                 <div class="object-type-group">
@@ -476,6 +482,7 @@
                                 <option value="attachment">Крепление узлов</option>
                                 <option value="manhole">Колодец</option>
                                 <option value="signalPost">Сигнальный столб</option>
+                                <option value="cabinet">Ящик</option>
                             </select>
                         </div>
 
@@ -483,6 +490,59 @@
                         <div class="form-group object-settings-card" id="objectNameGroup" style="display: none;">
                             <label for="objectName">Имя</label>
                             <input type="text" id="objectName" class="form-input" placeholder="Введите имя">
+                        </div>
+                        <div class="form-group object-settings-card" id="cabinetSettingsGroup" style="display: none;">
+                            <p class="form-hint object-settings-card-lead">Характеристики для документации и учёта (марка и модель из справочника «Ящики»).</p>
+                            <label for="cabinetManufacturerTrigger">Производитель</label>
+                            <div class="device-combobox" data-catalog="cabinet" data-type="manufacturer" data-value-id="cabinetManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="cabinetManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button>
+                                <input type="hidden" id="cabinetManufacturer" name="cabinetManufacturer" value="">
+                                <div class="device-combobox-panel" role="listbox" id="cabinetManufacturerPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
+                            </div>
+                            <label for="cabinetModelTrigger" class="form-group-sub">Модель</label>
+                            <div class="device-combobox" data-catalog="cabinet" data-type="model" data-value-id="cabinetModel" data-manufacturer-id="cabinetManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="cabinetModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
+                                <input type="hidden" id="cabinetModel" name="cabinetModel" value="">
+                                <div class="device-combobox-panel" role="listbox" id="cabinetModelPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
+                            </div>
+                            <div class="cabinet-dims-row form-group-sub">
+                                <div class="cabinet-dims-field">
+                                    <label for="cabinetHeight">Высота, мм</label>
+                                    <input type="number" id="cabinetHeight" class="form-input" min="0" step="1" inputmode="numeric" placeholder="—" autocomplete="off">
+                                </div>
+                                <div class="cabinet-dims-field">
+                                    <label for="cabinetWidth">Ширина, мм</label>
+                                    <input type="number" id="cabinetWidth" class="form-input" min="0" step="1" inputmode="numeric" placeholder="—" autocomplete="off">
+                                </div>
+                                <div class="cabinet-dims-field">
+                                    <label for="cabinetUnits">U</label>
+                                    <input type="number" id="cabinetUnits" class="form-input" min="0" step="1" inputmode="numeric" placeholder="—" autocomplete="off">
+                                </div>
+                            </div>
+                            <label for="cabinetMount" class="form-group-sub">Монтаж</label>
+                            <select id="cabinetMount" class="form-select">
+                                <option value="">— не указано —</option>
+                                <option value="pole">На опоре</option>
+                                <option value="wall">На стене</option>
+                                <option value="ground">На земле / фундамент</option>
+                                <option value="indoor">В помещении</option>
+                                <option value="manhole">В колодце</option>
+                                <option value="rack">В стойке</option>
+                            </select>
+                            <label for="cabinetAddress" class="form-group-sub">Адрес установки</label>
+                            <input type="text" id="cabinetAddress" class="form-input" placeholder="Улица, дом, ориентир" autocomplete="off">
+                            <label for="cabinetInventoryNumber" class="form-group-sub">Инвентарный номер</label>
+                            <input type="text" id="cabinetInventoryNumber" class="form-input" placeholder="Необязательно" autocomplete="off">
+                            <label for="cabinetSerialNumber" class="form-group-sub">Серийный номер</label>
+                            <input type="text" id="cabinetSerialNumber" class="form-input" placeholder="Необязательно" autocomplete="off">
+                            <label for="cabinetComment" class="form-group-sub">Комментарий</label>
+                            <textarea id="cabinetComment" class="form-input" rows="2" placeholder="Ключ, доступ, примечания"></textarea>
                         </div>
                         <div class="form-group object-settings-card" id="oltSettingsGroup" style="display: none;">
                             <label for="oltPonPorts">Количество PON-портов</label>
@@ -963,6 +1023,13 @@
                             <div class="stat-info">
                                 <div class="stat-value" id="signalPostCount">0</div>
                                 <div class="stat-label" title="Сигнальные столбы">Сигн. столбы</div>
+                            </div>
+                        </div>
+                        <div class="stat-item stat-item--tone-slate" data-stat-key="cabinet">
+                            <div class="stat-icon" aria-hidden="true"></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="cabinetCount">0</div>
+                                <div class="stat-label">Ящики</div>
                             </div>
                         </div>
                         <div class="stat-item stat-item--tone-rose" data-stat-key="sleeve">
@@ -1905,6 +1972,10 @@
                             <span class="device-catalog-tab-label">Кроссы</span>
                             <span class="device-catalog-tab-badge" data-stat-tab="cross"></span>
                         </button>
+                        <button type="button" class="device-catalog-tab device-catalog-tab--slate" data-tab="cabinet" role="tab" aria-selected="false">
+                            <span class="device-catalog-tab-label">Ящики</span>
+                            <span class="device-catalog-tab-badge" data-stat-tab="cabinet"></span>
+                        </button>
                         <button type="button" class="device-catalog-tab device-catalog-tab--amber" data-tab="cable" role="tab" aria-selected="false">
                             <span class="device-catalog-tab-label">Кабели</span>
                             <span class="device-catalog-tab-badge" data-stat-tab="cable"></span>
@@ -2245,6 +2316,7 @@
     <script src="js/app/cable-fiber-utils.js"></script>
     <script src="js/app/cross-port-patch.js"></script>
     <script src="js/app/cross-node-display.js"></script>
+    <script src="js/app/cabinet-display.js"></script>
     <script src="js/app/regions-ui.js"></script>
     <script src="js/app/map-filter.js"></script>
     <script src="js/app/fiber-workspace.js"></script>

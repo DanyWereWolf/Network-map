@@ -1266,6 +1266,7 @@ function finishCopperCableToolSession() {
     cableSourceCopperSwitchId = null;
     cableWaypoints = [];
     pendingCopperPortPreset = null;
+    if (typeof clearCabinetCableSourceHighlight === 'function') clearCabinetCableSourceHighlight();
     if (typeof removeCablePreview === 'function') removeCablePreview();
     if (typeof clearSelection === 'function') clearSelection();
     if (myMap && myMap.container) {
@@ -1918,6 +1919,7 @@ var INFO_MODAL_DEVICE_SUBTITLES = {
     onu: 'Подключение по оптике',
     mediaConverter: 'Оптика и медь к коммутатору',
     signalPost: 'Метка на карте · комментарий',
+    cabinet: 'Контейнер оборудования · документация и состав',
     support: 'Промежуточная точка маршрута ВОЛС',
     attachment: 'Крепление кабеля на маршруте'
 };
@@ -2645,6 +2647,7 @@ function updateStats() {
     var attachmentCount = 0;
     var manholeCount = 0;
     var signalPostCount = 0;
+    var cabinetCount = 0;
     var sleeveCount = 0;
     var crossCount = 0;
     var oltCount = 0;
@@ -2666,6 +2669,7 @@ function updateStats() {
         else if (type === 'attachment') attachmentCount++;
         else if (type === 'manhole') manholeCount++;
         else if (type === 'signalPost') signalPostCount++;
+        else if (type === 'cabinet') cabinetCount++;
         else if (type === 'sleeve') {
             sleeveCount++;
             if (window.EmbeddedSplitters) splitterCount += EmbeddedSplitters.getList(obj).length;
@@ -2694,6 +2698,7 @@ function updateStats() {
     setStatCount(document.getElementById('attachmentCount'), attachmentCount);
     setStatCount(document.getElementById('manholeCount'), manholeCount);
     setStatCount(document.getElementById('signalPostCount'), signalPostCount);
+    setStatCount(document.getElementById('cabinetCount'), cabinetCount);
     setStatCount(document.getElementById('sleeveCount'), sleeveCount);
     setStatCount(document.getElementById('crossCount'), crossCount);
     setStatCount(document.getElementById('oltCount'), oltCount);
@@ -2705,7 +2710,7 @@ function updateStats() {
     setStatCount(document.getElementById('cableCopperCount'), cableCopperCount);
 
     var sumNodes = networkNodeCount + aggregationNodeCount + switchCount;
-    var sumInfra = supportCount + attachmentCount + manholeCount + signalPostCount + sleeveCount + crossCount;
+    var sumInfra = supportCount + attachmentCount + manholeCount + signalPostCount + cabinetCount + sleeveCount + crossCount;
     var sumGpon = oltCount + splitterCount + onuCount;
     var sumEquip = cameraCount + mediaConverterCount;
     var sumCables = cableOpticalCount + cableCopperCount;
@@ -3538,6 +3543,7 @@ function refreshObjectModal(obj) {
     var t = obj.properties.get('type');
     if (t === 'support' || t === 'attachment' || t === 'manhole') showSupportInfo(obj);
     else if (t === 'signalPost') showSignalPostInfo(obj);
+    else if (t === 'cabinet') showCabinetInfo(obj);
     else if (t === 'region') showRegionEditModal(obj);
     else showObjectInfo(obj);
 }
@@ -3957,6 +3963,9 @@ function duplicateObject(obj) {
     if (type === 'signalPost') {
         if (name) newName = name + ' (копия)';
     }
+    if (type === 'cabinet') {
+        if (name) newName = name + ' (копия)';
+    }
     
     var opts = {};
     if (type === 'node') {
@@ -3965,6 +3974,18 @@ function duplicateObject(obj) {
     }
     if (type === 'signalPost') {
         opts.comment = obj.properties.get('comment') || '';
+    }
+    if (type === 'cabinet') {
+        opts.comment = obj.properties.get('comment') || '';
+        opts.manufacturer = obj.properties.get('manufacturer') || '';
+        opts.model = obj.properties.get('model') || '';
+        opts.cabinetMount = obj.properties.get('cabinetMount') || '';
+        opts.cabinetHeight = obj.properties.get('cabinetHeight') || '';
+        opts.cabinetWidth = obj.properties.get('cabinetWidth') || '';
+        opts.cabinetUnits = obj.properties.get('cabinetUnits') || '';
+        opts.address = obj.properties.get('address') || '';
+        opts.inventoryNumber = obj.properties.get('inventoryNumber') || '';
+        opts.serialNumber = obj.properties.get('serialNumber') || '';
     }
     if (type === 'camera' || type === 'mediaConverter') {
         opts.manufacturer = obj.properties.get('manufacturer') || '';
@@ -4241,6 +4262,7 @@ function flushModalNamesFromEditor() {
         var spCommentEl = document.getElementById('editSignalPostComment');
         if (spCommentEl) currentModalObject.properties.set('comment', spCommentEl.value || '');
     }
+    else if (t === 'cabinet' && typeof flushCabinetFieldsIfChanged === 'function') flushCabinetFieldsIfChanged();
 }
 
 function getObjectDefaultName(type) {
@@ -4252,6 +4274,7 @@ function getObjectDefaultName(type) {
         case 'attachment': return 'Крепление';
         case 'manhole': return 'Колодец';
         case 'signalPost': return 'Столб';
+        case 'cabinet': return 'Ящик';
         case 'olt': return 'OLT';
         case 'splitter': return 'Сплиттер';
         case 'onu': return 'ONU';

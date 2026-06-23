@@ -104,6 +104,35 @@ function updateSplitterFiberPreviewWithCursor(cursorCoords) {
     myMap.geoObjects.add(splitterFiberPreviewLine);
 }
 
+function areFiberRoutingHostsCoLocated(hostA, hostB) {
+    if (!hostA || !hostB) return false;
+    if (typeof getObjectCabinetId === 'function') {
+        var cabA = getObjectCabinetId(hostA);
+        var cabB = getObjectCabinetId(hostB);
+        if (cabA && cabB && cabA === cabB) return true;
+    }
+    if (!hostA.geometry || !hostB.geometry) return false;
+    var coordsA = hostA.geometry.getCoordinates();
+    var coordsB = hostB.geometry.getCoordinates();
+    if (!coordsA || !coordsB || coordsA.length < 2 || coordsB.length < 2) return false;
+    return Math.abs(coordsA[0] - coordsB[0]) <= 1e-10 && Math.abs(coordsA[1] - coordsB[1]) <= 1e-10;
+}
+
+function tryCompleteFiberRoutingForCabinetClick(clickedObject) {
+    if (!fiberRoutingMode || !fiberRoutingData || !clickedObject || !clickedObject.properties) return false;
+    var target = fiberRoutingData.targetObj;
+    if (!target || typeof getObjectCabinetId !== 'function') return false;
+    var targetCabId = getObjectCabinetId(target);
+    if (!targetCabId) return false;
+    var clickedType = clickedObject.properties.get('type');
+    var clickedCabId = clickedType === 'cabinet'
+        ? getObjectUniqueId(clickedObject)
+        : getObjectCabinetId(clickedObject);
+    if (clickedCabId !== targetCabId) return false;
+    completeFiberRouting();
+    return true;
+}
+
 function startFiberRouting(sleeveObj, cableId, fiberNumber, targetType, targetObj) {
     fiberRoutingMode = true;
     var targetId = getObjectUniqueId(targetObj);
@@ -125,6 +154,9 @@ function startFiberRouting(sleeveObj, cableId, fiberNumber, targetType, targetOb
     showInfo('Режим прокладки жилы: ' + sleeveName + ' → ' + targetName + '. Кликайте по опорам и креплениям для маршрута, затем кликните по целевому объекту для завершения. Нажмите Escape для отмены.', 'Прокладка жилы');
     selectObject(sleeveObj);
     syncMapPanLockForEditTools();
+    if (areFiberRoutingHostsCoLocated(sleeveObj, targetObj)) {
+        completeFiberRouting();
+    }
 }
 
 function cancelFiberRouting() {
@@ -199,6 +231,10 @@ function handleFiberRoutingClick(coords) {
     var clickedObject = findObjectAtCoords(coords);
     
     if (clickedObject && clickedObject.geometry) {
+        if (typeof tryCompleteFiberRoutingForCabinetClick === 'function' &&
+            tryCompleteFiberRoutingForCabinetClick(clickedObject)) {
+            return;
+        }
         var objType = clickedObject.properties ? clickedObject.properties.get('type') : null;
         var objId = getObjectUniqueId(clickedObject);
         

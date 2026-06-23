@@ -97,6 +97,18 @@ var CABLE_CATALOG_DEFAULT = {
     'General Cable': ['Lo-Soft', 'Standard']
 };
 
+/** Справочник ящиков / шкафов / боксов на карте. */
+var CABINET_CATALOG_DEFAULT = {
+    'SNR': ['ШУН-4', 'ШУН-8', 'ШУН-12', 'БУОС-5', 'БУОК-2', 'ШУО-145', 'ШТК-19-9U'],
+    'Eltex': ['УББ-4', 'УББ-8', 'УО-1', 'ШТК-19'],
+    'НЗОТ': ['ШТК-19-9U', 'ШТО-145', 'ШТО-60'],
+    'ZPAS': ['ШТК-19', 'ШНО', 'ШТО'],
+    'Huawei': ['ODN-Splitter Box', 'FAU'],
+    'Dahua': ['PFA120', 'PFA130', 'PFA140'],
+    'Hikvision': ['DS-7104NI', 'DS-7608NI'],
+    'Generic': ['Настенный бокс', 'Уличный шкаф', 'Бокс на опоре', 'Колодец связи']
+};
+
 /** Справочник только для коммутаторов в узле (отдельно от узла/OLT/ONU). */
 var SWITCH_CATALOG_DEFAULT = {
     'MikroTik': ['CRS326-24G-2S+', 'CSS326-24G-2S+', 'CRS312-4C+8XG', 'CRS354-48G-4S+2Q+'],
@@ -498,6 +510,7 @@ var nodeDeviceCatalog = {};
 var oltDeviceCatalog = {};
 var onuDeviceCatalog = {};
 var cameraDeviceCatalog = {};
+var cabinetDeviceCatalog = {};
 var switchDeviceCatalog = {};
 var cableDeviceCatalog = {};
 /** switchModelDefaultPorts[manufacturer][model] = число портов по умолчанию при добавлении коммутатора. */
@@ -621,6 +634,10 @@ var DEVICE_CATALOG_TAB_META = {
         label: 'Кроссы',
         desc: 'Типы оптических кроссов для списка при добавлении и редактировании. Для каждого типа задаётся число портов по умолчанию.'
     },
+    cabinet: {
+        label: 'Ящики',
+        desc: 'Шкафы, боксы и контейнеры на карте: производитель и модель при создании и в карточке ящика (для документации и учёта).'
+    },
     cable: {
         label: 'Кабели',
         desc: 'Марки и модели оптического кабеля. Для каждой модели можно задать число жил и цвета — они подставятся при прокладке и в карточке кабеля.'
@@ -635,6 +652,7 @@ var DEVICE_CATALOG_TAB_TONE = {
     node: '#14b8a6',
     sleeve: '#22c55e',
     cross: '#a855f7',
+    cabinet: '#64748b',
     cable: '#f59e0b'
 };
 
@@ -652,7 +670,7 @@ function syncDeviceCatalogTabButtons() {
     }
 }
 
-var DEVICE_CATALOG_ALLOWED_TABS = { node: 1, olt: 1, onu: 1, camera: 1, switch: 1, sleeve: 1, cross: 1, cable: 1 };
+var DEVICE_CATALOG_ALLOWED_TABS = { node: 1, olt: 1, onu: 1, camera: 1, switch: 1, sleeve: 1, cross: 1, cabinet: 1, cable: 1 };
 
 function getDeviceCatalogStats(kind) {
     if (kind === 'sleeve' || kind === 'cross') {
@@ -814,6 +832,7 @@ function getCatalogObjectRef(kind) {
     if (kind === 'olt') return oltDeviceCatalog;
     if (kind === 'onu') return onuDeviceCatalog;
     if (kind === 'camera') return cameraDeviceCatalog;
+    if (kind === 'cabinet') return cabinetDeviceCatalog;
     if (kind === 'switch') return switchDeviceCatalog;
     if (kind === 'cable') return cableDeviceCatalog;
     if (kind === 'general') return nodeDeviceCatalog;
@@ -825,6 +844,7 @@ function getCatalogDefault(kind) {
     if (kind === 'olt') return OLT_CATALOG_DEFAULT;
     if (kind === 'onu') return ONU_CATALOG_DEFAULT;
     if (kind === 'camera') return CAMERA_CATALOG_DEFAULT;
+    if (kind === 'cabinet') return CABINET_CATALOG_DEFAULT;
     if (kind === 'switch') return SWITCH_CATALOG_DEFAULT;
     if (kind === 'cable') return CABLE_CATALOG_DEFAULT;
     return NODE_CATALOG_DEFAULT;
@@ -837,6 +857,7 @@ function resetDeviceCatalogTabToDefault(kind) {
     else if (kind === 'olt') oltDeviceCatalog = cloneDeepCatalog(def);
     else if (kind === 'onu') onuDeviceCatalog = cloneDeepCatalog(def);
     else if (kind === 'camera') cameraDeviceCatalog = cloneDeepCatalog(def);
+    else if (kind === 'cabinet') cabinetDeviceCatalog = cloneDeepCatalog(def);
     else if (kind === 'switch') {
         switchDeviceCatalog = cloneDeepCatalog(def);
         switchModelDefaultPorts = {};
@@ -1707,6 +1728,7 @@ function saveDeviceCatalog() {
         oltDeviceCatalog: cloneDeepCatalog(oltDeviceCatalog),
         onuDeviceCatalog: cloneDeepCatalog(onuDeviceCatalog),
         cameraDeviceCatalog: cloneDeepCatalog(cameraDeviceCatalog),
+        cabinetDeviceCatalog: cloneDeepCatalog(cabinetDeviceCatalog),
         switchDeviceCatalog: cloneDeepCatalog(switchDeviceCatalog),
         switchModelDefaultPorts: JSON.parse(JSON.stringify(switchModelDefaultPorts || {})),
         switchModelPortTypes: JSON.parse(JSON.stringify(switchModelPortTypes || {})),
@@ -1755,6 +1777,11 @@ function loadDeviceCatalog(opts) {
             cameraDeviceCatalog = cloneDeepCatalog(opts.cameraDeviceCatalog);
         } else {
             cameraDeviceCatalog = cloneDeepCatalog(CAMERA_CATALOG_DEFAULT);
+        }
+        if ('cabinetDeviceCatalog' in opts && opts.cabinetDeviceCatalog && typeof opts.cabinetDeviceCatalog === 'object') {
+            cabinetDeviceCatalog = cloneDeepCatalog(opts.cabinetDeviceCatalog);
+        } else {
+            cabinetDeviceCatalog = cloneDeepCatalog(CABINET_CATALOG_DEFAULT);
         }
         if ('switchDeviceCatalog' in opts && opts.switchDeviceCatalog && typeof opts.switchDeviceCatalog === 'object') {
             switchDeviceCatalog = cloneDeepCatalog(opts.switchDeviceCatalog);
@@ -1833,6 +1860,12 @@ function loadDeviceCatalog(opts) {
         cameraDeviceCatalog = cloneDeepCatalog(opts.cameraDeviceCatalog);
     } else if (!('cameraDeviceCatalog' in opts)) {
         cameraDeviceCatalog = cloneDeepCatalog(CAMERA_CATALOG_DEFAULT);
+    }
+
+    if ('cabinetDeviceCatalog' in opts && opts.cabinetDeviceCatalog && typeof opts.cabinetDeviceCatalog === 'object') {
+        cabinetDeviceCatalog = cloneDeepCatalog(opts.cabinetDeviceCatalog);
+    } else if (!('cabinetDeviceCatalog' in opts)) {
+        cabinetDeviceCatalog = cloneDeepCatalog(CABINET_CATALOG_DEFAULT);
     }
 
     if ('switchDeviceCatalog' in opts && opts.switchDeviceCatalog && typeof opts.switchDeviceCatalog === 'object') {
@@ -1961,6 +1994,7 @@ function ensureDeviceCatalogsNonEmpty() {
     if (Object.keys(oltDeviceCatalog || {}).length === 0) oltDeviceCatalog = cloneDeepCatalog(OLT_CATALOG_DEFAULT);
     if (Object.keys(onuDeviceCatalog || {}).length === 0) onuDeviceCatalog = cloneDeepCatalog(ONU_CATALOG_DEFAULT);
     if (Object.keys(cameraDeviceCatalog || {}).length === 0) cameraDeviceCatalog = cloneDeepCatalog(CAMERA_CATALOG_DEFAULT);
+    if (Object.keys(cabinetDeviceCatalog || {}).length === 0) cabinetDeviceCatalog = cloneDeepCatalog(CABINET_CATALOG_DEFAULT);
     if (Object.keys(switchDeviceCatalog || {}).length === 0) switchDeviceCatalog = cloneDeepCatalog(SWITCH_CATALOG_DEFAULT);
     if (Object.keys(cableDeviceCatalog || {}).length === 0) cableDeviceCatalog = cloneDeepCatalog(CABLE_CATALOG_DEFAULT);
     if (mergeNodeCatalogIntoSwitch()) saveDeviceCatalog();

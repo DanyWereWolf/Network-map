@@ -28,6 +28,7 @@ function getObjectTypeName(type) {
         case 'attachment': return 'Крепление узлов';
         case 'manhole': return 'Колодец';
         case 'signalPost': return 'Сигнальный столб';
+        case 'cabinet': return 'Ящик';
         case 'region': return 'Регион';
         default: return 'Объект';
     }

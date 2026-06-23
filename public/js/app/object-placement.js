@@ -217,7 +217,9 @@ function getObjectPlacementGroupType(type) {
 function coordsMatchForPlacement(coords, objCoords, placementType) {
     if (!coords || !objCoords || coords.length < 2 || objCoords.length < 2) return false;
     if (getObjectPlacementGroupType(placementType)) {
-        return groupKey(coords) === groupKey(objCoords);
+        return typeof coordsInSameObjectGroup === 'function'
+            ? coordsInSameObjectGroup(coords, objCoords)
+            : groupKey(coords) === groupKey(objCoords);
     }
     return Math.abs(objCoords[0] - coords[0]) < PLACEMENT_COORD_EPS &&
         Math.abs(objCoords[1] - coords[1]) < PLACEMENT_COORD_EPS;
@@ -241,6 +243,17 @@ function getPlacemarksAtCoords(coords, placementType) {
 }
 
 function canPlaceObjectAtCoords(coords, type) {
+    if (canBeCabinetMember(type)) {
+        var memberOk = typeof canPlaceMemberAtCoords === 'function'
+            ? canPlaceMemberAtCoords(coords, type, getPlacemarksAtCoords(coords, type))
+            : null;
+        if (memberOk === true) return true;
+        if (memberOk === false) return false;
+    }
+    if (type === 'cabinet') {
+        var atCabinetPoint = getPlacemarksAtCoords(coords, type);
+        return !atCabinetPoint.length;
+    }
     var atPoint = getPlacemarksAtCoords(coords, type);
     if (!atPoint.length) return true;
     var groupType = getObjectPlacementGroupType(type);
@@ -251,6 +264,9 @@ function canPlaceObjectAtCoords(coords, type) {
 }
 
 function resolvePlacementCoordsForGrouping(coords, type) {
+    if (typeof resolvePlacementCoordsForCabinet === 'function') {
+        coords = resolvePlacementCoordsForCabinet(coords, type);
+    }
     var groupType = getObjectPlacementGroupType(type);
     if (!groupType || !coords) return coords;
     var atPoint = getPlacemarksAtCoords(coords, type);
@@ -268,11 +284,15 @@ function placeObjectAtCoords(coords) {
     const type = currentPlacementType || (document.getElementById('objectType') && document.getElementById('objectType').value);
 
     if (!canPlaceObjectAtCoords(coords, type)) {
-        var groupType = getObjectPlacementGroupType(type);
-        if (groupType) {
-            showWarning('В этой точке уже есть объект другого типа. Узлы и кроссы можно ставить только в группу с объектами того же типа.', 'Размещение');
+        if (canBeCabinetMember(type) && findCabinetAtCoords && findCabinetAtCoords(coords)) {
+            showWarning('Не удалось добавить объект в ящик в этой точке', 'Размещение');
         } else {
-            showWarning('В этой точке уже есть объект', 'Размещение');
+            var groupType = getObjectPlacementGroupType(type);
+            if (groupType) {
+                showWarning('В этой точке уже есть объект другого типа. Узлы и кроссы можно ставить только в группу с объектами того же типа. Для ящика — совместите координаты с иконкой ящика.', 'Размещение');
+            } else {
+                showWarning('В этой точке уже есть объект', 'Размещение');
+            }
         }
         return false;
     }
@@ -318,6 +338,10 @@ function placeObjectAtCoords(coords) {
     } else if (type === 'signalPost') {
         const name = document.getElementById('objectName').value.trim();
         if (!createObject(type, name || '', coords)) return false;
+    } else if (type === 'cabinet') {
+        const name = document.getElementById('objectName').value.trim();
+        var cabOpts = typeof getCabinetPlacementOptionsFromForm === 'function' ? getCabinetPlacementOptionsFromForm() : {};
+        if (!createObject(type, name || '', coords, cabOpts)) return false;
     } else if (type === 'olt') {
         const name = getPlacementObjectName();
         const oltPortsEl = document.getElementById('oltPonPorts');
@@ -517,6 +541,7 @@ var OBJECT_TYPE_LABELS = {
     attachment: 'Крепления',
     manhole: 'Колодцы',
     signalPost: 'Столбы',
+    cabinet: 'Ящики',
     olt: 'OLT',
     splitter: 'Сплиттер',
     onu: 'ONU',
@@ -532,6 +557,7 @@ var OBJECT_TYPE_CHIP_ICONS = {
     attachment: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l2.92-2.92a5 5 0 0 0-7.07-7.07l-1.6 1.6"/><path d="M14 11a5 5 0 0 0-7.54-.54l-2.92 2.92a5 5 0 0 0 7.07 7.07l1.6-1.6"/></svg>',
     manhole: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>',
     signalPost: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="4" x2="12" y2="20"/><rect x="7" y="6" width="10" height="5" rx="1"/></svg>',
+    cabinet: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="6" width="16" height="14" rx="2"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="16" x2="20" y2="16"/></svg>',
     olt: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="6" rx="1"/><rect x="4" y="14" width="16" height="6" rx="1"/><line x1="8" y1="7" x2="8.01" y2="7" stroke-width="3" stroke-linecap="round"/><line x1="8" y1="17" x2="8.01" y2="17" stroke-width="3" stroke-linecap="round"/></svg>',
     onu: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="7" width="14" height="11" rx="2"/><line x1="8" y1="11" x2="8.01" y2="11" stroke-width="3" stroke-linecap="round"/><line x1="12" y1="11" x2="12.01" y2="11" stroke-width="3" stroke-linecap="round"/><line x1="16" y1="11" x2="16.01" y2="11" stroke-width="3" stroke-linecap="round"/></svg>',
     node: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="6" rx="1"/><rect x="4" y="14" width="16" height="6" rx="1"/><line x1="8" y1="7" x2="8.01" y2="7" stroke-width="3" stroke-linecap="round"/><line x1="8" y1="17" x2="8.01" y2="17" stroke-width="3" stroke-linecap="round"/></svg>',

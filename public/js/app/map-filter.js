@@ -3,10 +3,10 @@
  */
 var MAP_FILTER_INPUT_IDS = [
     'mapFilterNode', 'mapFilterNodeAggregationOnly', 'mapFilterCross', 'mapFilterSleeve',
-    'mapFilterSupport', 'mapFilterAttachment', 'mapFilterManhole', 'mapFilterSignalPost', 'mapFilterOlt', 'mapFilterSplitter',
+    'mapFilterSupport', 'mapFilterAttachment', 'mapFilterManhole', 'mapFilterSignalPost', 'mapFilterCabinet', 'mapFilterOlt', 'mapFilterSplitter',
     'mapFilterOnu', 'mapFilterCamera', 'mapFilterMediaConverter'
 ];
-var MAP_FILTER_MAIN_KEYS = ['node', 'cross', 'sleeve', 'support', 'attachment', 'manhole', 'signalPost', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter'];
+var MAP_FILTER_MAIN_KEYS = ['node', 'cross', 'sleeve', 'support', 'attachment', 'manhole', 'signalPost', 'cabinet', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter'];
 var MAP_FILTER_STORAGE_KEY = 'networkMap_mapFilter';
 
 function syncMapFilterChipVisual(el) {
@@ -57,6 +57,7 @@ var MAP_FILTER_KEY_TO_ID = {
     attachment: 'mapFilterAttachment',
     manhole: 'mapFilterManhole',
     signalPost: 'mapFilterSignalPost',
+    cabinet: 'mapFilterCabinet',
     olt: 'mapFilterOlt',
     splitter: 'mapFilterSplitter',
     onu: 'mapFilterOnu',
@@ -96,6 +97,7 @@ function setMapFilterAll(enabled) {
     saveMapFilterToStorage();
     if (typeof applyMapFilter === 'function') applyMapFilter();
     if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
+    if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
 }
 
 function onMapFilterChange(changedEl) {
@@ -108,6 +110,7 @@ function onMapFilterChange(changedEl) {
     saveMapFilterToStorage();
     if (typeof applyMapFilter === 'function') applyMapFilter();
     if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
+    if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
 }
 
 function setupMapFilterControls() {
@@ -140,6 +143,7 @@ function getMapFilterState() {
     var attachmentEl = document.getElementById('mapFilterAttachment');
     var manholeEl = document.getElementById('mapFilterManhole');
     var signalPostEl = document.getElementById('mapFilterSignalPost');
+    var cabinetEl = document.getElementById('mapFilterCabinet');
     var oltEl = document.getElementById('mapFilterOlt');
     var splitterEl = document.getElementById('mapFilterSplitter');
     var onuEl = document.getElementById('mapFilterOnu');
@@ -154,6 +158,7 @@ function getMapFilterState() {
         attachment: attachmentEl ? attachmentEl.checked : true,
         manhole: manholeEl ? manholeEl.checked : true,
         signalPost: signalPostEl ? signalPostEl.checked : true,
+        cabinet: cabinetEl ? cabinetEl.checked : true,
         olt: oltEl ? oltEl.checked : true,
         splitter: splitterEl ? splitterEl.checked : true,
         onu: onuEl ? onuEl.checked : true,
@@ -351,6 +356,7 @@ function applyMapFilter() {
             }
         } else {
             visible = isObjVisible(obj);
+            if (typeof getObjectCabinetId === 'function' && getObjectCabinetId(obj)) visible = false;
         }
         try {
             if (obj.options) obj.options.set('visible', visible);

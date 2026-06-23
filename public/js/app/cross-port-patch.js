@@ -318,13 +318,28 @@ function startCrossPortPatchFromScheme(crossObj, portNumber) {
     showCrossPortPatchDialog(crossObj, portNumber);
 }
 
+function getCrossPortPatchTargetCrosses(sourceCross) {
+    if (!sourceCross || !sourceCross.geometry) return [];
+    var sourceCoords = sourceCross.geometry.getCoordinates && sourceCross.geometry.getCoordinates();
+    if (!sourceCoords || sourceCoords.length < 2) return [];
+    if (typeof groupKey !== 'function') return [];
+    var sourceUid = getObjectUniqueId(sourceCross);
+    var mapCrosses = typeof getMapCrossObjects === 'function' ? getMapCrossObjects() : [];
+    return mapCrosses.filter(function(c) {
+        if (getObjectUniqueId(c) === sourceUid) return false;
+        var coords = c.geometry && c.geometry.getCoordinates ? c.geometry.getCoordinates() : null;
+        if (!coords || coords.length < 2) return false;
+        return typeof coordsInSameObjectGroup === 'function'
+            ? coordsInSameObjectGroup(coords, sourceCoords)
+            : groupKey(coords) === groupKey(sourceCoords);
+    });
+}
+
 function showCrossPortPatchDialog(sourceCross, sourcePort) {
     if (!sourceCross || sourcePort == null) return;
-    var mapCrosses = typeof getMapCrossObjects === 'function' ? getMapCrossObjects() : [];
-    var sourceUid = getObjectUniqueId(sourceCross);
-    var targets = mapCrosses.filter(function(c) { return getObjectUniqueId(c) !== sourceUid; });
+    var targets = getCrossPortPatchTargetCrosses(sourceCross);
     if (!targets.length) {
-        if (typeof showWarning === 'function') showWarning('На карте нет других кроссов для кроссировки.', 'Нет кроссов');
+        if (typeof showWarning === 'function') showWarning('В этой группе нет других кроссов для кроссировки.', 'Нет кроссов');
         return;
     }
     nodeSelectionModalData = {

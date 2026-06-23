@@ -27,6 +27,7 @@ function createObject(type, name, coords, options = {}) {
         case 'attachment': balloonContent = name ? 'Крепление узлов: ' + name : 'Крепление узлов'; break;
         case 'manhole': balloonContent = name ? 'Колодец: ' + name : 'Колодец'; break;
         case 'signalPost': balloonContent = name ? 'Сигнальный столб: ' + name : 'Сигнальный столб'; break;
+        case 'cabinet': balloonContent = name ? 'Ящик: ' + name : 'Ящик'; break;
         case 'olt': balloonContent = name ? 'OLT: ' + name : 'OLT (GPON)'; break;
         case 'splitter': balloonContent = name ? 'Сплиттер: ' + name : 'Сплиттер'; break;
         case 'onu': balloonContent = name ? 'ONU: ' + name : 'ONU'; break;
@@ -129,6 +130,25 @@ function createObject(type, name, coords, options = {}) {
     if (type === 'signalPost') {
         placemarkProperties.comment = options.comment || '';
     }
+    if (type === 'cabinet') {
+        var cabOpts = options || {};
+        if (!options.manufacturer && !options.model && typeof getCabinetPlacementOptionsFromForm === 'function') {
+            cabOpts = getCabinetPlacementOptionsFromForm();
+        }
+        placemarkProperties.comment = cabOpts.comment || options.comment || '';
+        if (cabOpts.manufacturer) placemarkProperties.manufacturer = cabOpts.manufacturer;
+        if (cabOpts.model) placemarkProperties.model = cabOpts.model;
+        if (cabOpts.cabinetMount) placemarkProperties.cabinetMount = cabOpts.cabinetMount;
+        if (cabOpts.cabinetHeight) placemarkProperties.cabinetHeight = cabOpts.cabinetHeight;
+        if (cabOpts.cabinetWidth) placemarkProperties.cabinetWidth = cabOpts.cabinetWidth;
+        if (cabOpts.cabinetUnits) placemarkProperties.cabinetUnits = cabOpts.cabinetUnits;
+        if (cabOpts.address) placemarkProperties.address = cabOpts.address;
+        if (cabOpts.inventoryNumber) placemarkProperties.inventoryNumber = cabOpts.inventoryNumber;
+        if (cabOpts.serialNumber) placemarkProperties.serialNumber = cabOpts.serialNumber;
+    }
+    if (options.cabinetId && typeof canBeCabinetMember === 'function' && canBeCabinetMember(type)) {
+        placemarkProperties.cabinetId = String(options.cabinetId);
+    }
     if (!placemarkProperties.uniqueId) {
         placemarkProperties.uniqueId = 'obj-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
     }
@@ -137,7 +157,7 @@ function createObject(type, name, coords, options = {}) {
     updateObjectLabel(placemark, name);
     if (type === 'camera') refreshCameraMapPresentation(placemark);
     var objLabel = placemark.properties.get('label');
-    if (objLabel) {
+    if (objLabel && !placemarkProperties.cabinetId) {
         myMap.geoObjects.add(objLabel);
     }
     placemark.events.add('dragend', function() {
@@ -151,6 +171,10 @@ function createObject(type, name, coords, options = {}) {
         e.stopPropagation(); 
 
         if (objectPlacementMode) {
+            if (type === 'cabinet' && typeof canBeCabinetMember === 'function' && canBeCabinetMember(currentPlacementType || '')) {
+                var cabCoords = placemark.geometry && placemark.geometry.getCoordinates();
+                if (cabCoords) placeObjectAtCoords(cabCoords);
+            }
             return;
         }
 
@@ -184,6 +208,10 @@ function createObject(type, name, coords, options = {}) {
 
         if (fiberRoutingMode && fiberRoutingData) {
             if (Date.now() < placementPanBlockClickUntil) return;
+            if (typeof tryCompleteFiberRoutingForCabinetClick === 'function' &&
+                tryCompleteFiberRoutingForCabinetClick(placemark)) {
+                return;
+            }
             var objId = getObjectUniqueId(placemark);
             var objType = type;
             
@@ -212,6 +240,19 @@ function createObject(type, name, coords, options = {}) {
         if (currentCableTool && isEditMode) {
             if (Date.now() < placementPanBlockClickUntil) {
                 return;
+            }
+            if (type === 'cabinet' && typeof tryProcessCabinetCableClick === 'function') {
+                tryProcessCabinetCableClick(placemark, processFiberCableEndpointClick);
+                syncMapPanLockForEditTools();
+                return;
+            }
+            if (typeof isCabinetCableEndpointType === 'function' && isCabinetCableEndpointType(type) &&
+                typeof getObjectCabinetId === 'function' && getObjectCabinetId(placemark) &&
+                typeof processCabinetMemberCableAction === 'function') {
+                if (processCabinetMemberCableAction(placemark)) {
+                    syncMapPanLockForEditTools();
+                    return;
+                }
             }
             var cableTypeVal = getEffectiveCableLayingType();
             if (handleCopperCablePlacemarkStep(placemark, type, cableTypeVal)) return;
@@ -314,6 +355,15 @@ function createObject(type, name, coords, options = {}) {
             return;
         }
 
+        if (type === 'cabinet') {
+            if (isEditMode) {
+                clearSelection();
+                selectObject(placemark);
+            }
+            showCabinetInfo(placemark);
+            return;
+        }
+
         if (!isEditMode) {
             return;
         }
@@ -334,6 +384,14 @@ function createObject(type, name, coords, options = {}) {
             if (typeof showWarning === 'function') showWarning('Объект редактирует другой пользователь', 'Перемещение недоступно');
             return;
         }
+        if ((type === 'cross' || type === 'node') && typeof snapCoordsToObjectGroup === 'function') {
+            if (!(typeof onMemberObjectDragEnd === 'function' && onMemberObjectDragEnd(placemark))) {
+                var snappedCoords = snapCoordsToObjectGroup(placemark.geometry.getCoordinates(), type, placemark);
+                placemark.geometry.setCoordinates(snappedCoords);
+            }
+        } else if (typeof onMemberObjectDragEnd === 'function') {
+            onMemberObjectDragEnd(placemark);
+        }
         updateConnectedCables(placemark);
         const label = placemark.properties.get('label');
         if (label) label.geometry.setCoordinates(placemark.geometry.getCoordinates());
@@ -341,6 +399,7 @@ function createObject(type, name, coords, options = {}) {
         updateSelectionPulsePosition(placemark);
         if (type === 'cross') updateCrossDisplay(); 
         if (type === 'node') updateNodeDisplay();
+        if (type === 'cabinet' && typeof onCabinetDragEnd === 'function') onCabinetDragEnd(placemark);
         if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(placemark);
         else saveData({ object: placemark, syncImmediate: true });
         if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
@@ -372,6 +431,12 @@ function createObject(type, name, coords, options = {}) {
         updateCrossDisplay();
     } else if (type === 'node') {
         updateNodeDisplay();
+    } else if (type === 'cabinet') {
+        myMap.geoObjects.add(placemark);
+        if (typeof applyMapFilter === 'function') applyMapFilter();
+        if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
+    } else if (placemarkProperties.cabinetId) {
+        if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
     } else {
         myMap.geoObjects.add(placemark);
         if (typeof applyMapFilter === 'function') applyMapFilter();
@@ -383,6 +448,9 @@ function createObject(type, name, coords, options = {}) {
     }
     saveData({ skipSync: true });
     updateStats();
+    if (objectPlacementMode && typeof canBeCabinetMember === 'function' && canBeCabinetMember(type) && typeof finishMemberCabinetPlacement === 'function' && !placemarkProperties.cabinetId) {
+        finishMemberCabinetPlacement(placemark);
+    }
     logAction(ActionTypes.CREATE_OBJECT, {
         objectType: type,
         name: name || ''

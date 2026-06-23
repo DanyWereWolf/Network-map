@@ -1,8 +1,72 @@
 /**
  * Группы кроссов и узлов.
  */
+/** ~6.6 м — радиус объединения в группу (меньше смещения «Вынести» 0.00008 ≈ 8.8 м). */
+var GROUP_MERGE_EPS = 0.00006;
+
 function groupKey(coords) {
     return coords[0].toFixed(5) + ',' + coords[1].toFixed(5);
+}
+
+function coordsWithinGroupMergeDistance(coordsA, coordsB) {
+    if (!coordsA || !coordsB || coordsA.length < 2 || coordsB.length < 2) return false;
+    return Math.abs(coordsA[0] - coordsB[0]) <= GROUP_MERGE_EPS &&
+        Math.abs(coordsA[1] - coordsB[1]) <= GROUP_MERGE_EPS;
+}
+
+function coordsInSameObjectGroup(coordsA, coordsB) {
+    if (!coordsA || !coordsB) return false;
+    if (groupKey(coordsA) === groupKey(coordsB)) return true;
+    return coordsWithinGroupMergeDistance(coordsA, coordsB);
+}
+
+function clusterPlacemarksByProximity(placemarks, itemsKey) {
+    itemsKey = itemsKey || 'items';
+    var groups = [];
+    placemarks.forEach(function(obj) {
+        var coords = obj.geometry.getCoordinates();
+        var found = null;
+        for (var i = 0; i < groups.length; i++) {
+            if (coordsWithinGroupMergeDistance(coords, groups[i].coords)) {
+                found = groups[i];
+                break;
+            }
+        }
+        if (found) {
+            found[itemsKey].push(obj);
+        } else {
+            var g = { coords: coords.slice() };
+            g[itemsKey] = [obj];
+            groups.push(g);
+        }
+    });
+    return groups;
+}
+
+function findNearestGroupMemberCoords(coords, objectType, excludeObj) {
+    if (!coords || !objectType) return null;
+    var best = null;
+    var bestDist = Infinity;
+    objects.forEach(function(obj) {
+        if (!obj || !obj.geometry || !obj.properties) return;
+        if (excludeObj && obj === excludeObj) return;
+        if (obj.properties.get('type') !== objectType) return;
+        var objCoords = obj.geometry.getCoordinates();
+        if (!coordsWithinGroupMergeDistance(coords, objCoords)) return;
+        var dx = coords[0] - objCoords[0];
+        var dy = coords[1] - objCoords[1];
+        var dist = dx * dx + dy * dy;
+        if (dist < bestDist) {
+            bestDist = dist;
+            best = objCoords;
+        }
+    });
+    return best ? best.slice() : null;
+}
+
+function snapCoordsToObjectGroup(coords, objectType, excludeObj) {
+    var anchor = findNearestGroupMemberCoords(coords, objectType, excludeObj);
+    return anchor || coords;
 }
 function getCrossGroupName(coords) {
     return crossGroupNames.get(groupKey(coords)) || '';

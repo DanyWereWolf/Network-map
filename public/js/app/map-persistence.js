@@ -179,6 +179,22 @@ function serializeMapItemFromObject(obj) {
         if (props.type === 'signalPost') {
             if (props.comment != null) result.comment = props.comment;
         }
+        if (props.type === 'cabinet') {
+            if (props.comment != null) result.comment = props.comment;
+            if (props.manufacturer) result.manufacturer = props.manufacturer;
+            if (props.model) result.model = props.model;
+            if (props.cabinetMount) result.cabinetMount = props.cabinetMount;
+            if (props.cabinetHeight) result.cabinetHeight = props.cabinetHeight;
+            if (props.cabinetWidth) result.cabinetWidth = props.cabinetWidth;
+            if (props.cabinetUnits) result.cabinetUnits = props.cabinetUnits;
+            if (props.address) result.address = props.address;
+            if (props.inventoryNumber) result.inventoryNumber = props.inventoryNumber;
+            if (props.serialNumber) result.serialNumber = props.serialNumber;
+        }
+        if (props.cabinetId) result.cabinetId = props.cabinetId;
+        else if (typeof canBeCabinetMember === 'function' && canBeCabinetMember(props.type)) {
+            result.cabinetId = null;
+        }
         if (props.type === 'node') {
             if (props.nodeKind) result.nodeKind = props.nodeKind;
             if (props.comment) result.comment = props.comment;
@@ -476,6 +492,7 @@ function loadData() {
     if (typeof ensureDeviceCatalogsNonEmpty === 'function') ensureDeviceCatalogsNonEmpty();
     if (typeof updateCrossDisplay === 'function') updateCrossDisplay();
     if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
+    if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
     if (!getApiBase()) {
         showNoApiMessage();
         markMapDataReady();
@@ -843,11 +860,15 @@ function applyRemoteStateMerged(data) {
         }
     });
 
+    if (typeof syncAllCabinetMembersToCabinets === 'function') {
+        syncAllCabinetMembersToCabinets({ skipDisplay: true });
+    }
     repairCablesAfterImport();
     refreshAllCableUndergroundOverlays();
     updateCableVisualization();
     updateCrossDisplay();
     updateNodeDisplay();
+    if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
     ensureNodeLabelsVisible();
     scheduleConnectionLinesUpdate();
     if (currentModalObject && refs.indexOf(currentModalObject) !== -1 &&
@@ -908,6 +929,8 @@ function refreshRemoteObjectVisuals(obj) {
         updateCrossDisplay(groupKey(obj.geometry.getCoordinates()));
     } else if (type === 'node') {
         updateNodeDisplay(groupKey(obj.geometry.getCoordinates()));
+    } else if (typeof canBeCabinetMember === 'function' && canBeCabinetMember(type) && typeof updateCabinetDisplay === 'function') {
+        updateCabinetDisplay();
     } else if (typeof applyMapFilter === 'function') {
         applyMapFilter();
     }
@@ -1260,6 +1283,9 @@ function importDataPostProcess(opts, onDone) {
         if (typeof onDone === 'function') onDone();
     };
     var work = function() {
+        if (typeof syncAllCabinetMembersToCabinets === 'function') {
+            syncAllCabinetMembersToCabinets({ skipDisplay: true });
+        }
         repairCablesAfterImport();
         validateAndFixCableGeometryOnLoad();
         refreshAllCableUndergroundOverlays();
@@ -1268,6 +1294,7 @@ function importDataPostProcess(opts, onDone) {
         updateCableVisualization();
         updateCrossDisplay();
         updateNodeDisplay();
+        if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
         scheduleConnectionLinesUpdate('full');
         migrateStandaloneSwitchesIntoNodes();
         if (window.EmbeddedSplitters && typeof EmbeddedSplitters.migrateAllFromMap === 'function') {
@@ -1514,6 +1541,28 @@ function populatePlacemarkFromSerializedData(placemark, data) {
     if (type === 'signalPost') {
         if (data.comment != null) placemark.properties.set('comment', data.comment || '');
     }
+    if (type === 'cabinet') {
+        if (data.comment != null) placemark.properties.set('comment', data.comment || '');
+        if (data.manufacturer) placemark.properties.set('manufacturer', data.manufacturer);
+        if (data.model) placemark.properties.set('model', data.model);
+        if (data.cabinetMount) placemark.properties.set('cabinetMount', data.cabinetMount);
+        if (data.cabinetHeight) placemark.properties.set('cabinetHeight', data.cabinetHeight);
+        if (data.cabinetWidth) placemark.properties.set('cabinetWidth', data.cabinetWidth);
+        if (data.cabinetUnits) placemark.properties.set('cabinetUnits', data.cabinetUnits);
+        if (data.address) placemark.properties.set('address', data.address);
+        if (data.inventoryNumber) placemark.properties.set('inventoryNumber', data.inventoryNumber);
+        if (data.serialNumber) placemark.properties.set('serialNumber', data.serialNumber);
+    }
+    if (typeof canBeCabinetMember === 'function' && canBeCabinetMember(type)) {
+        if ('cabinetId' in data) {
+            if (data.cabinetId) placemark.properties.set('cabinetId', String(data.cabinetId));
+            else if (typeof clearObjectCabinetId === 'function') clearObjectCabinetId(placemark);
+            else if (typeof placemark.properties.unset === 'function') placemark.properties.unset('cabinetId');
+            else placemark.properties.set('cabinetId', '');
+        }
+    } else if (data.cabinetId) {
+        placemark.properties.set('cabinetId', data.cabinetId);
+    }
     if (type === 'switch') {
         placemark.properties.set('parentNodeId', data.parentNodeId || '');
         placemark.properties.set('switchPortTypes', Array.isArray(data.switchPortTypes) && data.switchPortTypes.length
@@ -1582,7 +1631,7 @@ function applySerializedCableToMap(cable, data, opts) {
 
 function createObjectFromData(data, opts, createOpts) {
     createOpts = createOpts || opts || {};
-    const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, fiberPorts, sleeveType, maxFibers, crossType, crossPorts, crossCopperPorts, copperPortUsage, nodeConnections, oltConnections, onuConnections, mediaConverterConnections, uniqueId, nodeKind, manufacturer, model, comment, ponPorts, splitRatio, splitterConnections, incomingFiber, portAssignments, portLabels, inputFiber, outputConnections, parentNodeId, switchPortTypes, attachedSwitches, streamType, streamUrl, streamUser, streamPass, streamAutoplay, streamMuted, snapshotPhoto } = data;
+    const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, fiberPorts, sleeveType, maxFibers, crossType, crossPorts, crossCopperPorts, copperPortUsage, nodeConnections, oltConnections, onuConnections, mediaConverterConnections, uniqueId, nodeKind, manufacturer, model, comment, ponPorts, splitRatio, splitterConnections, incomingFiber, portAssignments, portLabels, inputFiber, outputConnections, parentNodeId, switchPortTypes, attachedSwitches, streamType, streamUrl, streamUser, streamPass, streamAutoplay, streamMuted, snapshotPhoto, cabinetId } = data;
     
     var balloonContent;
     switch (type) {
@@ -1593,6 +1642,7 @@ function createObjectFromData(data, opts, createOpts) {
         case 'attachment': balloonContent = name ? 'Крепление узлов: ' + name : 'Крепление узлов'; break;
         case 'manhole': balloonContent = name ? 'Колодец: ' + name : 'Колодец'; break;
         case 'signalPost': balloonContent = name ? 'Сигнальный столб: ' + name : 'Сигнальный столб'; break;
+        case 'cabinet': balloonContent = name ? 'Ящик: ' + name : 'Ящик'; break;
         case 'olt': balloonContent = name ? 'OLT: ' + name : 'OLT (GPON)'; break;
         case 'splitter': balloonContent = name ? 'Сплиттер: ' + name : 'Сплиттер'; break;
         case 'onu': balloonContent = name ? 'ONU: ' + name : 'ONU'; break;
@@ -1644,6 +1694,10 @@ function createObjectFromData(data, opts, createOpts) {
         e.stopPropagation(); 
 
         if (objectPlacementMode) {
+            if (type === 'cabinet' && typeof canBeCabinetMember === 'function' && canBeCabinetMember(currentPlacementType || '')) {
+                var cabCoordsPm = placemark.geometry && placemark.geometry.getCoordinates();
+                if (cabCoordsPm) placeObjectAtCoords(cabCoordsPm);
+            }
             return;
         }
 
@@ -1677,6 +1731,10 @@ function createObjectFromData(data, opts, createOpts) {
 
         if (fiberRoutingMode && fiberRoutingData) {
             if (Date.now() < placementPanBlockClickUntil) return;
+            if (typeof tryCompleteFiberRoutingForCabinetClick === 'function' &&
+                tryCompleteFiberRoutingForCabinetClick(placemark)) {
+                return;
+            }
             var objId = getObjectUniqueId(placemark);
             var objType = type;
             
@@ -1705,6 +1763,19 @@ function createObjectFromData(data, opts, createOpts) {
         if (currentCableTool && isEditMode) {
             if (Date.now() < placementPanBlockClickUntil) {
                 return;
+            }
+            if (type === 'cabinet' && typeof tryProcessCabinetCableClick === 'function') {
+                tryProcessCabinetCableClick(placemark, processFiberCableEndpointClick);
+                syncMapPanLockForEditTools();
+                return;
+            }
+            if (typeof isCabinetCableEndpointType === 'function' && isCabinetCableEndpointType(type) &&
+                typeof getObjectCabinetId === 'function' && getObjectCabinetId(placemark) &&
+                typeof processCabinetMemberCableAction === 'function') {
+                if (processCabinetMemberCableAction(placemark)) {
+                    syncMapPanLockForEditTools();
+                    return;
+                }
             }
             var cableTypeVal = getEffectiveCableLayingType();
             if (handleCopperCablePlacemarkStep(placemark, type, cableTypeVal)) return;
@@ -1807,6 +1878,15 @@ function createObjectFromData(data, opts, createOpts) {
             return;
         }
 
+        if (type === 'cabinet') {
+            if (isEditMode) {
+                clearSelection();
+                selectObject(placemark);
+            }
+            showCabinetInfo(placemark);
+            return;
+        }
+
         if (!isEditMode) {
             return;
         }
@@ -1831,6 +1911,17 @@ function createObjectFromData(data, opts, createOpts) {
             }
             scheduleConnectionLinesUpdate();
             updateSelectionPulsePosition(placemark);
+            if ((type === 'cross' || type === 'node') && typeof snapCoordsToObjectGroup === 'function') {
+                if (!(typeof onMemberObjectDragEnd === 'function' && onMemberObjectDragEnd(placemark))) {
+                    var snappedCoordsPm = snapCoordsToObjectGroup(placemark.geometry.getCoordinates(), type, placemark);
+                    placemark.geometry.setCoordinates(snappedCoordsPm);
+                }
+            } else if (typeof onMemberObjectDragEnd === 'function') {
+                onMemberObjectDragEnd(placemark);
+            }
+            if (type === 'cross' && typeof updateCrossDisplay === 'function') updateCrossDisplay();
+            if (type === 'node' && typeof updateNodeDisplay === 'function') updateNodeDisplay();
+            if (type === 'cabinet' && typeof onCabinetDragEnd === 'function') onCabinetDragEnd(placemark);
             if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(placemark);
             else saveData({ object: placemark, syncImmediate: true });
             releaseDragObjectLock(uid);
@@ -1854,10 +1945,11 @@ function createObjectFromData(data, opts, createOpts) {
         objects.push(placemark);
         mapPerfRegister(placemark);
         if (type !== 'cross' && type !== 'node') {
-            myMap.geoObjects.add(placemark);
+            var skipMapAdd = typeof getObjectCabinetId === 'function' && getObjectCabinetId(placemark);
+            if (!skipMapAdd) myMap.geoObjects.add(placemark);
         }
         var objLabel = placemark.properties.get('label');
-        if (objLabel) {
+        if (objLabel && !(typeof getObjectCabinetId === 'function' && getObjectCabinetId(placemark))) {
             try { myMap.geoObjects.add(objLabel); } catch(e) {}
         }
         if (!isMapBulkImportActive() && !(createOpts && createOpts.bulkImport)) updateStats();

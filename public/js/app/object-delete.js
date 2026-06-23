@@ -46,6 +46,16 @@ function getDeleteObjectConfirmDetails(obj) {
         } else {
             message = 'Удалить этот ' + (objType === 'cross' ? 'кросс' : 'муфту') + '?';
         }
+    } else if (objType === 'cabinet') {
+        var memberN = typeof getCabinetMembers === 'function' ? getCabinetMembers(objUniqueId).length : 0;
+        title = 'Удаление ящика';
+        if (memberN > 0) {
+            message = 'В ящике ' + memberN + ' объект(ов). При удалении ящика оборудование останется на карте в этой точке.\n\nУдалить ящик?';
+        } else if (objName) {
+            message = 'Удалить ящик «' + objName + '»?';
+        } else {
+            message = 'Удалить этот ящик?';
+        }
     } else if (objType === 'olt') {
         oltGponImpact = collectGponImpactFromOlt(obj);
         title = 'Удаление OLT';
@@ -97,6 +107,10 @@ function deleteObject(obj, opts) {
     if (!(opts && opts.skipSync) && objUniqueId && isObjectLockedByOther(objUniqueId)) {
         if (typeof showWarning === 'function') showWarning('Объект редактирует другой пользователь', 'Удаление недоступно');
         return;
+    }
+
+    if (objType === 'cabinet' && objUniqueId && typeof releaseAllCabinetMembers === 'function') {
+        releaseAllCabinetMembers(objUniqueId);
     }
 
     if (window.ObjectGallery && ObjectGallery.canHaveGallery(obj)) {
@@ -337,6 +351,7 @@ function deleteObject(obj, opts) {
         if (cablesToRemove.length > 0 || cableRoutesUpdated) refreshPlan.cableVisualization = true;
         if (objType === 'node' && objGroupKey) refreshPlan.nodeGroupKey = objGroupKey;
         else if (objType === 'cross' && objGroupKey) refreshPlan.crossGroupKey = objGroupKey;
+        else if (objType === 'cabinet' && typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
         if (gponPurged) {
             refreshPlan.connectionLines = 'full';
         } else if (objUniqueId && (

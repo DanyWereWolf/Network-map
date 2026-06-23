@@ -41,19 +41,13 @@ function getCableGroups() {
     return groups;
 }
 
-const CROSS_SAME_PLACE_EPS = 0.00002;
-
 function getCrossGroups() {
-    const crosses = objects.filter(obj => obj.properties && obj.properties.get('type') === 'cross');
-    if (crosses.length === 0) return [];
-    const groups = new Map();
-    crosses.forEach(cross => {
-        const coords = cross.geometry.getCoordinates();
-        const key = groupKey(coords);
-        if (!groups.has(key)) groups.set(key, { coords: coords, crosses: [] });
-        groups.get(key).crosses.push(cross);
+    const crosses = objects.filter(function(obj) {
+        if (!obj.properties || obj.properties.get('type') !== 'cross') return false;
+        return !(typeof getObjectCabinetId === 'function' && getObjectCabinetId(obj));
     });
-    return Array.from(groups.values());
+    if (crosses.length === 0) return [];
+    return clusterPlacemarksByProximity(crosses, 'crosses');
 }
 
 function parseGroupDisplayScope(scope) {
@@ -356,16 +350,12 @@ function updateCrossDisplay(scope) {
 }
 
 function getNodeGroups() {
-    const nodes = objects.filter(obj => obj.properties && obj.properties.get('type') === 'node');
-    if (nodes.length === 0) return [];
-    const groups = new Map();
-    nodes.forEach(node => {
-        const coords = node.geometry.getCoordinates();
-        const key = groupKey(coords);
-        if (!groups.has(key)) groups.set(key, { coords: coords, nodes: [] });
-        groups.get(key).nodes.push(node);
+    const nodes = objects.filter(function(obj) {
+        if (!obj.properties || obj.properties.get('type') !== 'node') return false;
+        return !(typeof getObjectCabinetId === 'function' && getObjectCabinetId(obj));
     });
-    return Array.from(groups.values());
+    if (nodes.length === 0) return [];
+    return clusterPlacemarksByProximity(nodes, 'nodes');
 }
 
 function updateNodeDisplay(scope) {

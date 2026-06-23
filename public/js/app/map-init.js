@@ -141,6 +141,7 @@ function setupEventListeners() {
             cableWaypoints = [];
             pendingCopperPortPreset = null;
             pendingCopperRouteFinish = null;
+            if (typeof clearCabinetCableSourceHighlight === 'function') clearCabinetCableSourceHighlight();
             const mapEl = myMap.container.getElement();
             mapEl.style.cursor = 'crosshair';
             mapEl.classList.add('map-crosshair-active');
@@ -158,6 +159,7 @@ function setupEventListeners() {
             pendingCopperPortPreset = null;
             pendingCopperRouteFinish = null;
             if (typeof finishOltPortCableLayingSession === 'function') finishOltPortCableLayingSession();
+            if (typeof clearCabinetCableSourceHighlight === 'function') clearCabinetCableSourceHighlight();
             const mapEl = myMap.container.getElement();
             mapEl.style.cursor = '';
             mapEl.classList.remove('map-crosshair-active');
@@ -295,7 +297,7 @@ function setupEventListeners() {
             const splitterSettingsGroup = document.getElementById('splitterSettingsGroup');
             const type = this.value;
 
-            const showName = ['node', 'cross', 'sleeve', 'support', 'attachment', 'manhole', 'signalPost', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter'].indexOf(type) !== -1;
+            const showName = ['node', 'cross', 'sleeve', 'support', 'attachment', 'manhole', 'signalPost', 'cabinet', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter'].indexOf(type) !== -1;
             if (nameInputGroup) nameInputGroup.style.display = showName ? 'block' : 'none';
             if (sleeveSettingsGroup) sleeveSettingsGroup.style.display = type === 'sleeve' ? 'block' : 'none';
             if (crossSettingsGroup) crossSettingsGroup.style.display = type === 'cross' ? 'block' : 'none';
@@ -308,11 +310,12 @@ function setupEventListeners() {
             if (cameraSettingsGroup) cameraSettingsGroup.style.display = type === 'camera' ? 'block' : 'none';
             const mediaConverterSettingsGroup = document.getElementById('mediaConverterSettingsGroup');
             if (mediaConverterSettingsGroup) mediaConverterSettingsGroup.style.display = type === 'mediaConverter' ? 'block' : 'none';
-
+            const cabinetSettingsGroup = document.getElementById('cabinetSettingsGroup');
+            if (cabinetSettingsGroup) cabinetSettingsGroup.style.display = type === 'cabinet' ? 'block' : 'none';
             if (nameInputGroup) {
                 const nameLabel = nameInputGroup.querySelector('label');
                 if (nameLabel) {
-                    const labels = { cross: 'Имя кросса', sleeve: 'Название муфты', support: 'Подпись опоры', attachment: 'Название', manhole: 'Название колодца', signalPost: 'Подпись столба', node: 'Имя узла', olt: 'Имя OLT', splitter: 'Имя сплиттера', onu: 'Имя ONU', camera: 'Имя камеры', mediaConverter: 'Название медиаконвертера' };
+                    const labels = { cross: 'Имя кросса', sleeve: 'Название муфты', support: 'Подпись опоры', attachment: 'Название', manhole: 'Название колодца', signalPost: 'Подпись столба', cabinet: 'Название ящика', node: 'Имя узла', olt: 'Имя OLT', splitter: 'Имя сплиттера', onu: 'Имя ONU', camera: 'Имя камеры', mediaConverter: 'Название медиаконвертера' };
                     nameLabel.textContent = labels[type] || 'Имя';
                 }
             }
@@ -332,13 +335,14 @@ function setupEventListeners() {
                 const nodeKindSelect = document.getElementById('nodeKind');
                 currentPlacementNodeKind = nodeKindSelect ? nodeKindSelect.value : 'network';
             }
-            if (['olt', 'onu', 'camera', 'mediaConverter'].indexOf(newType) !== -1) {
+            if (['olt', 'onu', 'camera', 'mediaConverter', 'cabinet'].indexOf(newType) !== -1) {
                 populateDeviceDatalists();
-                var mInp = newType === 'olt' ? document.getElementById('oltManufacturer') : (newType === 'onu' ? document.getElementById('onuManufacturer') : (newType === 'camera' ? document.getElementById('cameraManufacturer') : document.getElementById('mediaConverterManufacturer')));
+                var mInp = newType === 'olt' ? document.getElementById('oltManufacturer') : (newType === 'onu' ? document.getElementById('onuManufacturer') : (newType === 'camera' ? document.getElementById('cameraManufacturer') : (newType === 'cabinet' ? document.getElementById('cabinetManufacturer') : document.getElementById('mediaConverterManufacturer'))));
                 var cat = 'node';
                 if (newType === 'camera') cat = 'camera';
                 else if (newType === 'olt') cat = 'olt';
                 else if (newType === 'onu') cat = 'onu';
+                else if (newType === 'cabinet') cat = 'cabinet';
                 populateModelDatalistForManufacturer(mInp ? mInp.value.trim() : '', 'deviceModelsList', cat);
             }
         }
@@ -379,6 +383,7 @@ function setupEventListeners() {
     setupDeviceManufacturerChangeHandlers('onuManufacturer', 'onu');
     setupDeviceManufacturerChangeHandlers('cameraManufacturer', 'camera');
     setupDeviceManufacturerChangeHandlers('mediaConverterManufacturer', 'node');
+    setupDeviceManufacturerChangeHandlers('cabinetManufacturer', 'cabinet');
 
     function preventPasswordSuggestions(inputEl) {
         if (!inputEl || inputEl.tagName !== 'INPUT') return;

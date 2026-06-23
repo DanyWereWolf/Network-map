@@ -2001,17 +2001,6 @@ function syncOltLogicalState(oltObj, opts) {
     return changed;
 }
 
-function isOltFiberAssignedOnDevice(oltObj, cableId, fiberNumber) {
-    if (!oltObj || !cableId || fiberNumber == null) return false;
-    var incoming = oltObj.properties.get('incomingFiber');
-    if (incoming && incoming.cableId === cableId && incoming.fiberNumber === fiberNumber) return true;
-    var portAssignments = oltObj.properties.get('portAssignments') || {};
-    return Object.keys(portAssignments).some(function(portKey) {
-        var a = portAssignments[portKey];
-        return a && a.cableId === cableId && a.fiberNumber === fiberNumber;
-    });
-}
-
 function isOltCableLinkedToHost(oltObj, hostObj, cableId) {
     if (!oltObj || !hostObj || !cableId) return false;
     var cable = objects.find(function(c) {
@@ -2137,45 +2126,12 @@ function getOltConnectivityIssues(oltObj) {
         }
     }
 
-    cables.forEach(function(cable) {
-        var cid = cable.properties.get('uniqueId');
-        if (!cid) return;
-        var host = getOltHostForCableEnd(oltObj, cable);
-        if (!host) return;
-        var cableName = cable.properties.get('cableName') || getCableDescription(cable.properties.get('cableType'));
-        var hostName = host.properties.get('name') || (isCrossLikeHostType(host.properties.get('type')) ? 'Кросс' : 'Муфта');
-        var fiberCount = getFiberCount(cable);
-        for (var f = 1; f <= fiberCount; f++) {
-            if (isOltFiberAssignedOnDevice(oltObj, cid, f)) continue;
-            issues.push({
-                level: 'warn',
-                message: 'Кабель «' + cableName + '», жила ' + f + ' → ' + hostName +
-                    ': физически подключён, но не назначен на приход или PON-порт OLT.'
-            });
-        }
-    });
-
     return issues;
 }
 
 function notifyOltCableConnectivityIfNeeded(points, cable) {
-    if (!points || !cable || !cable.properties || pendingOltPortPreset) return;
-    var oltObj = null;
-    for (var i = 0; i < points.length; i++) {
-        var pt = points[i];
-        if (pt && pt.properties && pt.properties.get('type') === 'olt') {
-            oltObj = pt;
-            break;
-        }
-    }
-    if (!oltObj) return;
-    var issues = getOltConnectivityIssues(oltObj).filter(function(issue) {
-        return issue.level === 'warn' && issue.message.indexOf('физически подключён') !== -1;
-    });
-    if (!issues.length) return;
-    if (typeof showWarning === 'function') {
-        showWarning(issues[0].message + ' Назначьте приход или PON-порт в карточке OLT.', 'OLT не настроен');
-    }
+    // Логические подключения GPON идут через кросс/муфту; предупреждения о «неназначенных жилах»
+    // на физическом кабеле до OLT не показываем.
 }
 
 function resolveOltPortCableEnds(points, preset) {

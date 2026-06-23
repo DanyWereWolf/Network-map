@@ -68,6 +68,9 @@ function updateCursorIndicator(e, objectType, objectCoord) {
             case 'signalPost':
                 text = 'Сигнальный столб';
                 break;
+            case 'cabinet':
+                text = 'Ящик';
+                break;
             case 'olt':
                 text = 'OLT (GPON)';
                 break;
@@ -294,7 +297,7 @@ function highlightObjectOnHover(obj, e) {
         return;
     }
 
-    var hoverIconTypes = ['support', 'sleeve', 'cross', 'crossGroup', 'nodeGroup', 'olt', 'splitter', 'onu', 'switch', 'camera', 'mediaConverter', 'attachment', 'manhole', 'signalPost'];
+    var hoverIconTypes = ['support', 'sleeve', 'cross', 'crossGroup', 'nodeGroup', 'olt', 'splitter', 'onu', 'switch', 'camera', 'mediaConverter', 'attachment', 'manhole', 'signalPost', 'cabinet'];
     if (hoverIconTypes.indexOf(type) < 0) return;
 
     var hoverIcon = buildMapPlacemarkIcon(type, 'hover', obj);

@@ -1,6 +1,147 @@
 /**
  * Клики и движение мыши по карте в режиме редактирования.
  */
+function processFiberCableEndpointClick(clickedObject) {
+    if (!clickedObject || !clickedObject.geometry) return;
+    var objType = clickedObject.properties ? clickedObject.properties.get('type') : null;
+    var cableType = getEffectiveCableLayingType();
+    var hadCableSource = !!cableSource;
+
+    function afterCableSourceSet() {
+        if (typeof syncCabinetCableSourceHighlight === 'function') syncCabinetCableSourceHighlight();
+        if (!hadCableSource && cableSource && getObjectCabinetId && getObjectCabinetId(cableSource) &&
+            typeof notifyCableLayingSourceInCabinet === 'function') {
+            notifyCableLayingSourceInCabinet();
+        }
+    }
+
+    if (objType === 'splitter' || objType === 'onu' || objType === 'camera' || objType === 'mediaConverter') {
+        showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU, камеры или медиаконвертера. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
+        return;
+    }
+
+    var cableEndpoints = ['cross', 'sleeve', 'support', 'attachment', 'manhole', 'olt'];
+    if (cableEndpoints.indexOf(objType) !== -1) {
+        if (!cableSource) {
+            if (isCableIntermediateWaypoint(objType)) {
+                showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры, крепления и колодцы — только промежуточные точки.', 'Недопустимое действие');
+                return;
+            }
+            cableSource = clickedObject;
+            cableWaypoints = [];
+            resetCableUndergroundPendingSpans();
+            clearSelection();
+            selectObject(cableSource);
+            afterCableSourceSet();
+            return;
+        }
+        if (clickedObject === cableSource) {
+            cableWaypoints = [];
+            resetCableUndergroundLayingState(false);
+            clearSelection();
+            selectObject(cableSource);
+            return;
+        }
+        if (objType === 'manhole') {
+            handleManholeCableLayClick(clickedObject);
+            return;
+        }
+        if (objType === 'support' || objType === 'attachment') {
+            addCableWaypoint(clickedObject);
+            clearSelection();
+            selectObject(cableSource);
+            return;
+        }
+        if (cableUndergroundActive) {
+            showError('Завершите подземный участок: кликайте по карте и выберите второй колодец, или Escape для отмены.', 'Колодец');
+            return;
+        }
+        if (!validatePendingOltPortCableEndpoint(clickedObject)) return;
+        var pointsEnd = [cableSource].concat(cableWaypoints).concat([clickedObject]);
+        var successEnd = createCableFromPoints(pointsEnd, cableType);
+        if (successEnd) {
+            if (oltPortCableJustFinished) {
+                oltPortCableJustFinished = false;
+                clearSelection();
+                removeCablePreview();
+                return;
+            }
+            hadCableSource = true;
+            cableSource = clickedObject;
+            cableWaypoints = [];
+            clearSelection();
+            selectObject(cableSource);
+            removeCablePreview();
+            afterCableSourceSet();
+        }
+        return;
+    }
+    if (objType === 'node') {
+        showError('Нельзя прокладывать кабель к узлу сети. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
+        return;
+    }
+
+    if (!cableSource) {
+        var startEndpoints = ['sleeve', 'cross', 'olt'];
+        if (startEndpoints.indexOf(objType) === -1) {
+            showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры, крепления и колодцы — только промежуточные точки.', 'Недопустимое действие');
+            return;
+        }
+        cableSource = clickedObject;
+        cableWaypoints = [];
+        resetCableUndergroundPendingSpans();
+        clearSelection();
+        selectObject(cableSource);
+        afterCableSourceSet();
+        return;
+    }
+
+    if (clickedObject === cableSource) {
+        cableWaypoints = [];
+        resetCableUndergroundLayingState(false);
+        clearSelection();
+        selectObject(cableSource);
+        return;
+    }
+    if (objType === 'manhole') {
+        handleManholeCableLayClick(clickedObject);
+        return;
+    }
+    if (objType === 'support' || objType === 'attachment') {
+        addCableWaypoint(clickedObject);
+        clearSelection();
+        selectObject(cableSource);
+        return;
+    }
+    var finishEndpoints = ['sleeve', 'cross', 'olt'];
+    if (finishEndpoints.indexOf(objType) !== -1) {
+        if (cableUndergroundActive) {
+            showError('Завершите подземный участок: кликайте по карте и выберите второй колодец, или Escape для отмены.', 'Колодец');
+            return;
+        }
+        if (!validatePendingOltPortCableEndpoint(clickedObject)) return;
+        var pointsFin = [cableSource].concat(cableWaypoints).concat([clickedObject]);
+        var successFin = createCableFromPoints(pointsFin, cableType);
+        if (successFin) {
+            if (oltPortCableJustFinished) {
+                oltPortCableJustFinished = false;
+                clearSelection();
+                removeCablePreview();
+                return;
+            }
+            hadCableSource = true;
+            cableSource = clickedObject;
+            cableWaypoints = [];
+            clearSelection();
+            selectObject(cableSource);
+            removeCablePreview();
+            afterCableSourceSet();
+        }
+        return;
+    }
+    showError('Кабель прокладывается между муфтой, кроссом или OLT. Промежуточные точки: опора, крепление; под землёй — между двумя колодцами.', 'Недопустимое действие');
+}
+
 function handleMapClick(e) {
     try {
     clearShowOnMapHighlight();
@@ -52,7 +193,9 @@ function handleMapClick(e) {
     if (cableUndergroundEditMode && cableUndergroundEditCable) {
         var editCoords = e.get('coords');
         var zoomEdit = myMap ? myMap.getZoom() : 15;
-        var clickedObjEdit = findObjectAtCoords(editCoords, getCableSnapTolerance(zoomEdit));
+        var clickedObjEdit = findObjectAtCoords(editCoords, null, {
+            pixelRadius: getCableSnapPixelRadius(zoomEdit, 'click')
+        });
         if (clickedObjEdit && clickedObjEdit.geometry && clickedObjEdit.properties) {
             var ugEditType = clickedObjEdit.properties.get('type');
             if (ugEditType === 'manhole') {
@@ -114,7 +257,11 @@ function handleMapClick(e) {
             return;
         }
 
-        const clickedObject = findObjectAtCoords(coords, getCableSnapTolerance(zoom));
+        const clickedObject = findObjectAtCoords(coords, null, {
+            pixelRadius: getCableSnapPixelRadius(zoom, 'click'),
+            priorityTypes: ['cabinet', 'cross', 'sleeve', 'olt'],
+            excludeCabinetMembers: true
+        });
         const cableType = getEffectiveCableLayingType();
         if (isCopperCableType(cableType)) {
             if (clickedObject && clickedObject.geometry) {
@@ -164,7 +311,7 @@ function handleMapClick(e) {
             }
             return;
         }
-        var cableEndpoints = ['cross', 'cabinet', 'sleeve', 'support', 'attachment', 'manhole', 'olt'];
+        var cableEndpoints = ['cross', 'sleeve', 'support', 'attachment', 'manhole', 'olt'];
 
         if (cableUndergroundActive && clickedObject && clickedObject.geometry) {
             var ugType = clickedObject.properties.get('type');
@@ -181,126 +328,13 @@ function handleMapClick(e) {
         }
 
         if (clickedObject && clickedObject.geometry) {
-            var objType = clickedObject.properties ? clickedObject.properties.get('type') : null;
-
-            if (objType === 'splitter' || objType === 'onu' || objType === 'camera' || objType === 'mediaConverter') {
-                showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU, камеры или медиаконвертера. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
+            if (typeof tryProcessCabinetCableClick === 'function' &&
+                tryProcessCabinetCableClick(clickedObject, processFiberCableEndpointClick)) {
                 return;
             }
 
-            if (cableEndpoints.indexOf(objType) !== -1) {
-                if (!cableSource) {
-                    if (isCableIntermediateWaypoint(objType)) {
-                        showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры, крепления и колодцы — только промежуточные точки.', 'Недопустимое действие');
-                        return;
-                    }
-                    cableSource = clickedObject;
-                    cableWaypoints = [];
-                    resetCableUndergroundPendingSpans();
-                    clearSelection();
-                    selectObject(cableSource);
-                    return;
-                }
-                if (clickedObject === cableSource) {
-                    cableWaypoints = [];
-                    resetCableUndergroundLayingState(false);
-                    clearSelection();
-                    selectObject(cableSource);
-                    return;
-                }
-                if (objType === 'manhole') {
-                    handleManholeCableLayClick(clickedObject);
-                    return;
-                }
-                if (objType === 'support' || objType === 'attachment') {
-                    addCableWaypoint(clickedObject);
-                    clearSelection();
-                    selectObject(cableSource);
-                    return;
-                }
-                if (cableUndergroundActive) {
-                    showError('Завершите подземный участок: кликайте по карте и выберите второй колодец, или Escape для отмены.', 'Колодец');
-                    return;
-                }
-                if (!validatePendingOltPortCableEndpoint(clickedObject)) return;
-                var pointsEnd = [cableSource].concat(cableWaypoints).concat([clickedObject]);
-                var successEnd = createCableFromPoints(pointsEnd, cableType);
-                if (successEnd) {
-                    if (oltPortCableJustFinished) {
-                        oltPortCableJustFinished = false;
-                        clearSelection();
-                        removeCablePreview();
-                        return;
-                    }
-                    cableSource = clickedObject;
-                    cableWaypoints = [];
-                    clearSelection();
-                    selectObject(cableSource);
-                    removeCablePreview();
-                }
-                return;
-            }
-            if (objType === 'node') {
-                showError('Нельзя прокладывать кабель к узлу сети. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
-                return;
-            }
-
-            if (!cableSource) {
-                var startEndpoints = ['sleeve', 'cross', 'olt'];
-                if (startEndpoints.indexOf(objType) === -1) {
-                    showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры, крепления и колодцы — только промежуточные точки.', 'Недопустимое действие');
-                    return;
-                }
-                cableSource = clickedObject;
-                cableWaypoints = [];
-                resetCableUndergroundPendingSpans();
-                clearSelection();
-                selectObject(cableSource);
-                return;
-            }
-
-            if (clickedObject === cableSource) {
-                cableWaypoints = [];
-                resetCableUndergroundLayingState(false);
-                clearSelection();
-                selectObject(cableSource);
-                return;
-            }
-            if (objType === 'manhole') {
-                handleManholeCableLayClick(clickedObject);
-                return;
-            }
-            if (objType === 'support' || objType === 'attachment') {
-                addCableWaypoint(clickedObject);
-                clearSelection();
-                selectObject(cableSource);
-                return;
-            }
-            var finishEndpoints = ['sleeve', 'cross', 'olt'];
-            if (finishEndpoints.indexOf(objType) !== -1) {
-                if (cableUndergroundActive) {
-                    showError('Завершите подземный участок: кликайте по карте и выберите второй колодец, или Escape для отмены.', 'Колодец');
-                    return;
-                }
-                if (!validatePendingOltPortCableEndpoint(clickedObject)) return;
-                const pointsFin = [cableSource].concat(cableWaypoints).concat([clickedObject]);
-                const successFin = createCableFromPoints(pointsFin, cableType);
-                if (successFin) {
-                    if (oltPortCableJustFinished) {
-                        oltPortCableJustFinished = false;
-                        clearSelection();
-                        removeCablePreview();
-                        return;
-                    }
-                    cableSource = clickedObject;
-                    cableWaypoints = [];
-                    clearSelection();
-                    selectObject(cableSource);
-                    removeCablePreview();
-                }
-                return;
-            }
-            showError('Кабель прокладывается между муфтой, кроссом или OLT. Промежуточные точки: опора, крепление; под землёй — между двумя колодцами.', 'Недопустимое действие');
+            processFiberCableEndpointClick(clickedObject);
+            return;
         } else {
 
             if (cableUndergroundActive && cableSource) {
@@ -319,27 +353,48 @@ function handleMapClick(e) {
 
             if (cableSource) {
                 const currentCableType = getEffectiveCableLayingType();
-                const autoSelectTolerance = getCableAutoSelectTolerance(zoom);
-                let nearestObject = null;
-                let minDist = Infinity;
-                var validCableEndpoints = ['cross', 'cabinet', 'sleeve', 'support', 'attachment', 'manhole', 'olt'];
-                objects.forEach(obj => {
-                    if (obj && obj.geometry && obj.properties) {
-                        const t = obj.properties.get('type');
-                        if (validCableEndpoints.indexOf(t) === -1) return;
-                        if (obj === cableSource) return;
-                        try {
-                            const objCoords = obj.geometry.getCoordinates();
-                            const latDiff = Math.abs(objCoords[0] - coords[0]);
-                            const lonDiff = Math.abs(objCoords[1] - coords[1]);
-                            const distance = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff);
-                            if (distance < autoSelectTolerance && distance < minDist) {
-                                minDist = distance;
-                                nearestObject = obj;
-                            }
-                        } catch (error) {}
-                    }
+                var nearestObject = findObjectAtCoords(coords, null, {
+                    pixelRadius: getCableSnapPixelRadius(zoom, 'auto'),
+                    priorityTypes: ['cross', 'sleeve', 'olt', 'support', 'attachment', 'manhole'],
+                    excludeCabinetMembers: true,
+                    excludeTypes: ['cabinet'],
+                    excludeObject: cableSource
                 });
+                if (!nearestObject) {
+                    var cabNear = findObjectAtCoords(coords, null, {
+                        pixelRadius: getCableSnapPixelRadius(zoom, 'auto'),
+                        includeTypes: ['cabinet'],
+                        excludeObject: cableSource
+                    });
+                    if (cabNear && cabNear !== cableSource && typeof resolveCabinetCableTarget === 'function') {
+                        resolveCabinetCableTarget(cabNear, function(target) {
+                            if (!target) return;
+                            if (!validatePendingOltPortCableEndpoint(target)) return;
+                            var pointsCab = [cableSource].concat(cableWaypoints).concat([target]);
+                            var okCab = createCableFromPoints(pointsCab, getEffectiveCableLayingType());
+                            if (okCab) {
+                                if (oltPortCableJustFinished) {
+                                    oltPortCableJustFinished = false;
+                                    clearSelection();
+                                    removeCablePreview();
+                                    return;
+                                }
+                                cableSource = target;
+                                cableWaypoints = [];
+                                clearSelection();
+                                selectObject(cableSource);
+                                removeCablePreview();
+                                if (typeof syncCabinetCableSourceHighlight === 'function') syncCabinetCableSourceHighlight();
+                            }
+                        });
+                        return;
+                    }
+                }
+                if (nearestObject) {
+                    nearestObject = typeof resolveCableSnapEndpoint === 'function'
+                        ? resolveCableSnapEndpoint(nearestObject)
+                        : nearestObject;
+                }
                 if (nearestObject) {
                     const t = nearestObject.properties.get('type');
                     if (t === 'manhole') {
@@ -422,7 +477,14 @@ function handleMapMouseMove(e) {
         var ev = e;
         mapMouseMoveRafId = requestAnimationFrame(function() {
             mapMouseMoveRafId = null;
-            var snapObj = findObjectAtCoords(coords, getCableSnapTolerance());
+            var previewZoom = myMap.getZoom();
+            var snapObj = findObjectAtCoords(coords, null, {
+                pixelRadius: getCableSnapPixelRadius(previewZoom, 'preview'),
+                priorityTypes: ['cross', 'crossGroup', 'sleeve', 'olt', 'support', 'attachment', 'manhole'],
+                excludeCabinetMembers: true,
+                excludeTypes: ['cabinet'],
+                excludeObject: cableSource
+            });
             var previewCoords = coords;
             if (snapObj && snapObj !== cableSource) {
                 var t = snapObj.properties.get('type');

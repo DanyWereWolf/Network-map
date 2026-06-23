@@ -363,64 +363,121 @@ function buildCableRoutePointsFromData(refs, item, fromObj, toObj, coords) {
 
 function getCableSnapTolerance(zoom) {
     if (zoom == null) zoom = myMap.getZoom();
-    return zoom < 12 ? 0.00025 : (zoom < 15 ? 0.000125 : 0.0000625);
+    return zoom < 12 ? 0.00022 : (zoom < 15 ? 0.00014 : 0.00008);
 }
 
 function getCableAutoSelectTolerance(zoom) {
     if (zoom == null) zoom = myMap.getZoom();
-    return zoom < 12 ? 0.000375 : (zoom < 15 ? 0.00025 : 0.000125);
+    return zoom < 12 ? 0.00028 : (zoom < 15 ? 0.00018 : 0.0001);
 }
 
-function findObjectAtCoords(coords, tolerance = null) {
-    
-    if (tolerance === null) {
-        
+/** Радиус привязки кабеля в пикселях экрана (стабильнее, чем градусы широты/долготы). */
+function getCableSnapPixelRadius(zoom, mode) {
+    if (zoom == null && myMap) zoom = myMap.getZoom();
+    if (mode === 'auto' || mode === 'click') {
+        if (zoom < 12) return 56;
+        if (zoom < 15) return 46;
+        return 40;
+    }
+    if (zoom < 12) return 52;
+    if (zoom < 15) return 42;
+    return 36;
+}
+
+function appendMapGroupPlacemarkMatches(cursorPx, pixelRadius, opts, matches) {
+    if (!cursorPx || !pixelRadius || opts.includeMapGroups === false) return;
+    var groupArrays = [];
+    if (typeof crossGroupPlacemarks !== 'undefined' && Array.isArray(crossGroupPlacemarks)) {
+        groupArrays.push(crossGroupPlacemarks);
+    }
+    groupArrays.forEach(function(groupList) {
+        groupList.forEach(function(pm) {
+            if (!pm || !pm.geometry || !pm.properties) return;
+            if (opts.excludeObject && pm === opts.excludeObject) return;
+            var objType = pm.properties.get('type');
+            if (objType !== 'crossGroup') return;
+            try {
+                var objCoords = pm.geometry.getCoordinates();
+                var objPx = geoToClient(objCoords);
+                if (!objPx) return;
+                var dx = objPx[0] - cursorPx[0];
+                var dy = objPx[1] - cursorPx[1];
+                var distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance > pixelRadius) return;
+                matches.push({ obj: pm, distance: distance });
+            } catch (e) {}
+        });
+    });
+}
+
+function resolveCableSnapEndpoint(placemark) {
+    if (!placemark || !placemark.properties) return placemark;
+    var type = placemark.properties.get('type');
+    if (type === 'crossGroup') {
+        var crosses = placemark.properties.get('crossGroup');
+        if (crosses && crosses.length === 1) return crosses[0];
+        return null;
+    }
+    return placemark;
+}
+
+function findObjectAtCoords(coords, tolerance, opts) {
+    opts = opts || {};
+    var pixelRadius = opts.pixelRadius;
+    var cursorPx = (pixelRadius != null && typeof geoToClient === 'function') ? geoToClient(coords) : null;
+    var usePixelSnap = cursorPx != null && pixelRadius > 0;
+
+    if (!usePixelSnap && (tolerance === null || tolerance === undefined)) {
         const zoom = myMap.getZoom();
-        
         tolerance = zoom < 12 ? 0.001 : (zoom < 15 ? 0.0005 : 0.00025);
     }
 
-    let foundObject = objects.find(obj => {
-        if (obj && obj.geometry && obj.properties) {
-            const objType = obj.properties.get('type');
-            if (objType !== 'cable' && objType !== 'cableLabel') {
-                try {
-                    const objCoords = obj.geometry.getCoordinates();
-                    const latDiff = Math.abs(objCoords[0] - coords[0]);
-                    const lonDiff = Math.abs(objCoords[1] - coords[1]);
-                    return latDiff < tolerance && lonDiff < tolerance;
-                } catch (error) {
-                    return false;
-                }
+    var matches = [];
+    objects.forEach(function(obj) {
+        if (!obj || !obj.geometry || !obj.properties) return;
+        var objType = obj.properties.get('type');
+        if (objType === 'cable' || objType === 'cableLabel') return;
+        if (opts.excludeCabinetMembers && typeof getObjectCabinetId === 'function' && getObjectCabinetId(obj)) return;
+        var excludeTypes = opts.excludeTypes;
+        if (excludeTypes && excludeTypes.length && excludeTypes.indexOf(objType) !== -1) return;
+        if (opts.includeTypes && opts.includeTypes.length && opts.includeTypes.indexOf(objType) === -1) return;
+        if (opts.excludeObject && obj === opts.excludeObject) return;
+        try {
+            var objCoords = obj.geometry.getCoordinates();
+            var distance;
+            if (usePixelSnap) {
+                var objPx = geoToClient(objCoords);
+                if (!objPx) return;
+                var dx = objPx[0] - cursorPx[0];
+                var dy = objPx[1] - cursorPx[1];
+                distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance > pixelRadius) return;
+            } else {
+                var latDiff = Math.abs(objCoords[0] - coords[0]);
+                var lonDiff = Math.abs(objCoords[1] - coords[1]);
+                distance = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff);
+                if (distance > tolerance) return;
+            }
+            matches.push({ obj: obj, distance: distance });
+        } catch (error) {}
+    });
+    if (usePixelSnap) appendMapGroupPlacemarkMatches(cursorPx, pixelRadius, opts, matches);
+    if (!matches.length) return null;
+    matches.sort(function(a, b) { return a.distance - b.distance; });
+
+    var priorityTypes = opts.priorityTypes;
+    if (priorityTypes && priorityTypes.length) {
+        for (var pi = 0; pi < priorityTypes.length; pi++) {
+            var pt = priorityTypes[pi];
+            for (var mi = 0; mi < matches.length; mi++) {
+                if (matches[mi].obj.properties.get('type') === pt) return matches[mi].obj;
             }
         }
-        return false;
-    });
-
-    if (!foundObject) {
-        let minDistance = Infinity;
-        objects.forEach(obj => {
-            if (obj && obj.geometry && obj.properties) {
-                const objType = obj.properties.get('type');
-                if (objType !== 'cable' && objType !== 'cableLabel') {
-                    try {
-                        const objCoords = obj.geometry.getCoordinates();
-                        const latDiff = Math.abs(objCoords[0] - coords[0]);
-                        const lonDiff = Math.abs(objCoords[1] - coords[1]);
-                        const distance = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff);
-
-                        if (distance < tolerance * 2 && distance < minDistance) {
-                            minDistance = distance;
-                            foundObject = obj;
-                        }
-                    } catch (error) {
-                        
-                    }
-                }
-            }
-        });
     }
-    
-    return foundObject || null;
+
+    for (var i = 0; i < matches.length; i++) {
+        if (matches[i].obj.properties.get('type') !== 'cabinet') return matches[i].obj;
+    }
+    return matches[0].obj;
 }
 
