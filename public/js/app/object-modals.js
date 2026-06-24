@@ -3016,6 +3016,13 @@ function showObjectInfoBody(obj) {
                     var canOfferChildSplitter = !out || (!out.splitterId && !(out.hostId && out.cableId && out.fiberNumber != null) && out.crossPort == null && !hasCompleteConnection);
                     html += '<div class="splitter-output-row" style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap;">';
                     html += '<span style="min-width: 72px; font-size: 0.8125rem; color: var(--text-primary);">Выход ' + (oi + 1) + '</span>';
+                    var outLabelVal = typeof getSplitterOutputLabel === 'function'
+                        ? getSplitterOutputLabel(getObjectUniqueId(obj), oi, null) : '';
+                    if (modalIsEditMode()) {
+                        html += '<input type="text" class="map-splitter-output-label-input form-input" data-output-index="' + oi + '" value="' + escapeHtml(outLabelVal) + '" placeholder="Подпись выхода…" title="Подпись выхода сплиттера" style="flex: 1; min-width: 120px;">';
+                    } else if (outLabelVal) {
+                        html += '<span style="font-size: 0.8rem; color: var(--text-secondary);">📝 ' + escapeHtml(outLabelVal) + '</span>';
+                    }
                     if (hasCompleteConnection) {
                         html += '<span style="font-size: 0.8rem; color: var(--text-secondary); padding: 4px 8px; background: var(--bg-tertiary); border-radius: 4px;">' + destLabel + '</span>';
                         html += '<button type="button" class="btn-splitter-output-delete" data-output-index="' + oi + '" title="Удалить соединение" style="padding: 4px 8px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">✕</button>';
@@ -4085,6 +4092,7 @@ function duplicateObject(obj) {
         newObj.properties.set('splitRatio', obj.properties.get('splitRatio') || 8);
         newObj.properties.set('inputFiber', null);
         newObj.properties.set('outputConnections', []);
+        newObj.properties.set('outputLabels', []);
     }
     if (type === 'onu') {
         newObj.properties.set('incomingFiber', null);
@@ -4680,6 +4688,17 @@ function setupModalEventListeners() {
                 var outIdx = parseInt(this.getAttribute('data-output-index'), 10);
                 deleteSplitterOutput(currentModalObject, outIdx);
             });
+        });
+
+        modalInfo.querySelectorAll('.map-splitter-output-label-input').forEach(function(inp) {
+            function saveMapSplitterOutLabel() {
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'splitter') return;
+                var outIdx = parseInt(inp.getAttribute('data-output-index'), 10);
+                if (isNaN(outIdx) || typeof setSplitterOutputLabel !== 'function') return;
+                setSplitterOutputLabel(null, getObjectUniqueId(currentModalObject), outIdx, inp.value.trim());
+            }
+            inp.addEventListener('change', saveMapSplitterOutLabel);
+            inp.addEventListener('blur', saveMapSplitterOutLabel);
         });
     }
 }

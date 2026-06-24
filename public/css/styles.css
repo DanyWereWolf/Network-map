@@ -7153,6 +7153,30 @@ button {
     opacity: 1;
 }
 
+.fiber-scheme-splitter-cross-link-label {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+}
+
+.fiber-scheme-splitter-cross-link-label.is-visible {
+    opacity: 1;
+}
+
+#fiber-connections-svg .fiber-scheme-splitter-cross-link-selected .fiber-scheme-splitter-cross-link {
+    stroke-width: 3.5;
+    filter: brightness(1.12);
+}
+
+#fiber-connections-svg.fiber-scheme-hover-active .fiber-scheme-splitter-cross-link.fiber-scheme-splitter-cross-link-dimmed {
+    opacity: 0.28;
+}
+
+#fiber-connections-svg .fiber-scheme-splitter-cross-link.fiber-scheme-splitter-cross-link-hovered {
+    stroke-width: 3.5;
+    filter: brightness(1.12);
+}
+
 #fiber-connections-svg .fiber-scheme-link:hover {
     stroke-width: 4.5;
     filter: brightness(1.08);
@@ -9250,7 +9274,8 @@ button {
     padding-left: 2px;
 }
 
-.fiber-item .fiber-label-input {
+.fiber-item .fiber-label-input,
+.fiber-item .splitter-output-label-input {
     width: 100%;
     padding: 5px 8px;
     font-size: 0.6875rem;

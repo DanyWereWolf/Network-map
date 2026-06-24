@@ -481,6 +481,8 @@ function deleteCrossPortLink(hostObj, linkMeta) {
 
 function parseSplitterLinkMeta(linkEl) {
     if (!linkEl) return null;
+    var crossKind = linkEl.getAttribute('data-link-kind');
+    if (crossKind === 'output-cross') return parseSplitterCrossLinkMeta(linkEl);
     var kind = linkEl.getAttribute('data-link-kind');
     var splitterId = linkEl.getAttribute('data-splitter-id');
     if (!kind || !splitterId) return null;
@@ -501,6 +503,38 @@ function parseSplitterLinkMeta(linkEl) {
     return meta;
 }
 
+function parseSplitterCrossLinkMeta(linkEl) {
+    if (!linkEl) return null;
+    var splitterId = linkEl.getAttribute('data-splitter-id');
+    var outputIndex = parseInt(linkEl.getAttribute('data-output-index'), 10);
+    var crossPort = parseInt(linkEl.getAttribute('data-cross-port'), 10);
+    if (!splitterId || isNaN(outputIndex)) return null;
+    return {
+        kind: 'output-cross',
+        splitterId: splitterId,
+        outputIndex: outputIndex,
+        crossPort: isNaN(crossPort) ? null : crossPort,
+        linkKey: linkEl.getAttribute('data-link-key') || ('out-cross:' + splitterId + ':' + outputIndex)
+    };
+}
+
+function previewSplitterLinkLabel(linkMeta, label) {
+    if (!linkMeta) return;
+    var trimmed = label != null ? String(label).trim() : '';
+    if (linkMeta.kind === 'output-cross') {
+        if (typeof refreshSplitterCrossPortLinkLabelDom === 'function') {
+            refreshSplitterCrossPortLinkLabelDom(linkMeta.splitterId, linkMeta.outputIndex, trimmed);
+        }
+    } else if (linkMeta.linkKey && typeof refreshSplitterLinkLabelDom === 'function') {
+        refreshSplitterLinkLabelDom(linkMeta.linkKey, trimmed);
+    }
+    if (linkMeta.splitterId != null && linkMeta.outputIndex != null) {
+        document.querySelectorAll('.splitter-output-label-input[data-splitter-id="' + linkMeta.splitterId + '"][data-output-index="' + linkMeta.outputIndex + '"]').forEach(function(inp) {
+            if (document.activeElement !== inp) inp.value = trimmed;
+        });
+    }
+}
+
 function getSplitterLinkLabel(hostObj, linkMeta) {
     if (!hostObj || !linkMeta) return '';
     if (linkMeta.kind === 'input' && linkMeta.cableId && linkMeta.fiberNumber != null) {
@@ -508,9 +542,13 @@ function getSplitterLinkLabel(hostObj, linkMeta) {
         var key = fiberConnKey(linkMeta.cableId, linkMeta.fiberNumber);
         return (sc[key] && sc[key].label) ? String(sc[key].label) : '';
     }
-    if (linkMeta.kind === 'output' && window.EmbeddedSplitters) {
+    if ((linkMeta.kind === 'output' || linkMeta.kind === 'output-cross') && window.EmbeddedSplitters) {
         var rec = EmbeddedSplitters.findInHost(hostObj, linkMeta.splitterId);
-        var outs = rec ? (rec.outputConnections || []) : [];
+        if (!rec) return '';
+        if (typeof getSplitterOutputLabelFromRec === 'function') {
+            return getSplitterOutputLabelFromRec(rec, linkMeta.outputIndex);
+        }
+        var outs = rec.outputConnections || [];
         var out = outs[linkMeta.outputIndex];
         return (out && out.label) ? String(out.label) : '';
     }
@@ -527,17 +565,27 @@ function updateSplitterLinkLabel(hostObj, linkMeta, label) {
         if (trimmed) sc[key].label = trimmed;
         else delete sc[key].label;
         hostObj.properties.set('splitterConnections', sc);
-    } else if (linkMeta.kind === 'output' && window.EmbeddedSplitters) {
+    } else if ((linkMeta.kind === 'output' || linkMeta.kind === 'output-cross') && window.EmbeddedSplitters) {
         var rec = EmbeddedSplitters.findInHost(hostObj, linkMeta.splitterId);
         if (!rec) return;
+        if (typeof setSplitterOutputLabel === 'function') {
+            setSplitterOutputLabel(hostObj, linkMeta.splitterId, linkMeta.outputIndex, trimmed);
+            return;
+        }
+        if (typeof ensureSplitterOutputLabels === 'function') ensureSplitterOutputLabels(rec);
+        rec.outputLabels[linkMeta.outputIndex] = trimmed;
         var outs = rec.outputConnections || [];
         var out = outs[linkMeta.outputIndex];
-        if (!out) return;
-        if (trimmed) out.label = trimmed;
-        else delete out.label;
+        if (out) {
+            if (trimmed) out.label = trimmed;
+            else delete out.label;
+        }
     } else return;
     saveData();
     refreshSplitterLinkLabelDom(linkMeta.linkKey, trimmed);
+    if (typeof refreshSplitterCrossPortLinkLabelDom === 'function') {
+        refreshSplitterCrossPortLinkLabelDom(linkMeta.splitterId, linkMeta.outputIndex, trimmed);
+    }
 }
 
 function formatSplitterLinkDesc(hostObj, linkMeta, cableNameById) {
@@ -547,6 +595,9 @@ function formatSplitterLinkDesc(hostObj, linkMeta, cableNameById) {
     var fiberNum = linkMeta.fiberNumber != null ? linkMeta.fiberNumber : '?';
     if (linkMeta.kind === 'input') {
         return cableName + ', ж.' + fiberNum + ' → ' + spName + ' (вход)';
+    }
+    if (linkMeta.kind === 'output-cross') {
+        return spName + ' вых.' + ((linkMeta.outputIndex || 0) + 1) + ' → порт ' + (linkMeta.crossPort != null ? linkMeta.crossPort : '?');
     }
     if (linkMeta.targetSplitterId) {
         var tgtName = window.EmbeddedSplitters ? (EmbeddedSplitters.resolveName(linkMeta.targetSplitterId) || 'Сплиттер') : 'Сплиттер';
@@ -641,7 +692,7 @@ function selectSplitterLinkForLabel(hostObj, linkMeta, opts) {
         bar.hidden = false;
         bar.setAttribute('aria-hidden', 'false');
     }
-    if (titleEl) titleEl.textContent = 'Подпись соединения сплиттера';
+    if (titleEl) titleEl.textContent = linkMeta.kind === 'output-cross' ? 'Подпись выхода сплиттера' : 'Подпись соединения сплиттера';
     if (descEl) descEl.textContent = desc;
     if (gotoBtn) gotoBtn.style.display = 'none';
     if (deleteBtn) deleteBtn.textContent = 'Удалить соединение';
@@ -660,7 +711,11 @@ function selectSplitterLinkForLabel(hostObj, linkMeta, opts) {
     document.querySelectorAll('#fiber-connections-svg .fiber-scheme-splitter-link, #fiber-connections-svg .fiber-scheme-splitter-link-hit').forEach(function(el) {
         el.classList.toggle('fiber-scheme-splitter-link-selected', el.getAttribute('data-link-key') === linkMeta.linkKey);
     });
-    document.querySelectorAll('.fiber-scheme-splitter-conn-label').forEach(function(el) {
+    document.querySelectorAll('.fiber-scheme-splitter-cross-link-group').forEach(function(el) {
+        var selected = el.getAttribute('data-link-key') === linkMeta.linkKey;
+        el.classList.toggle('fiber-scheme-splitter-cross-link-selected', selected);
+    });
+    document.querySelectorAll('.fiber-scheme-splitter-conn-label, .fiber-scheme-splitter-cross-link-label').forEach(function(el) {
         el.classList.toggle('is-visible', el.getAttribute('data-link-key') === linkMeta.linkKey);
     });
 }
@@ -672,7 +727,7 @@ function deleteSplitterLink(hostObj, linkMeta) {
         disconnectFiberFromSplitter(hostObj, linkMeta.cableId, linkMeta.fiberNumber);
         return;
     }
-    if (linkMeta.kind === 'output' && linkMeta.splitterId != null && linkMeta.outputIndex != null) {
+    if (linkMeta.kind === 'output' || linkMeta.kind === 'output-cross') {
         var facade = resolveSplitterObject(linkMeta.splitterId);
         if (facade) deleteSplitterOutput(facade, linkMeta.outputIndex);
     }
@@ -737,8 +792,11 @@ function clearFiberConnectionLabelSelection() {
     document.querySelectorAll('#fiber-connections-svg .fiber-scheme-splitter-link-selected').forEach(function(el) {
         el.classList.remove('fiber-scheme-splitter-link-selected');
     });
-    document.querySelectorAll('.fiber-scheme-conn-label.is-visible, .fiber-scheme-fiber-label.is-visible, .fiber-scheme-splitter-conn-label.is-visible, .fiber-scheme-cross-link-label.is-visible').forEach(function(el) {
+    document.querySelectorAll('.fiber-scheme-conn-label.is-visible, .fiber-scheme-fiber-label.is-visible, .fiber-scheme-splitter-conn-label.is-visible, .fiber-scheme-splitter-cross-link-label.is-visible, .fiber-scheme-cross-link-label.is-visible').forEach(function(el) {
         el.classList.remove('is-visible');
+    });
+    document.querySelectorAll('.fiber-scheme-splitter-cross-link-group.fiber-scheme-splitter-cross-link-selected').forEach(function(el) {
+        el.classList.remove('fiber-scheme-splitter-cross-link-selected');
     });
     document.querySelectorAll('#fiber-connections-svg .fiber-scheme-cross-link-selected').forEach(function(el) {
         el.classList.remove('fiber-scheme-cross-link-selected');

@@ -150,6 +150,7 @@ function serializeMapItemFromObject(obj) {
             if (props.splitRatio !== undefined) result.splitRatio = props.splitRatio;
             if (props.inputFiber) result.inputFiber = props.inputFiber;
             if (props.outputConnections) result.outputConnections = props.outputConnections;
+            if (props.outputLabels) result.outputLabels = props.outputLabels;
         }
         if (props.type === 'onu') {
             if (props.incomingFiber) result.incomingFiber = props.incomingFiber;
@@ -1501,6 +1502,7 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         placemark.properties.set('splitRatio', data.splitRatio || 8);
         placemark.properties.set('inputFiber', data.inputFiber || null);
         placemark.properties.set('outputConnections', data.outputConnections || []);
+        placemark.properties.set('outputLabels', Array.isArray(data.outputLabels) ? data.outputLabels : []);
     }
     if (type === 'onu') {
         placemark.properties.set('incomingFiber', data.incomingFiber || null);

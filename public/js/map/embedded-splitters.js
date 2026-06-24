@@ -383,6 +383,9 @@
             rec.inputFiberNumber = rec.inputFiber.fiberNumber;
         }
         if (rec.schemeMirrored == null) rec.schemeMirrored = false;
+        if (typeof global.ensureSplitterOutputLabels === 'function') {
+            global.ensureSplitterOutputLabels(rec, rec.splitRatio);
+        }
         if (rec.schemeVertical != null) delete rec.schemeVertical;
         if (rec.schemeHorizontal != null) delete rec.schemeHorizontal;
         return rec;
@@ -849,13 +852,16 @@
                 if (opts.isEditMode && opts.outputPickSplitterId === rec.id && opts.outputPickIndex === pi) portClass += ' fiber-scheme-splitter-port--pick';
                 var portCursor = opts.isEditMode && !outConn ? ' style="cursor:pointer"' : '';
                 var portPe = opts.isEditMode && !outConn ? '' : ' pointer-events="none"';
+                var portCustomLabel = typeof global.getSplitterOutputLabelFromRec === 'function'
+                    ? global.getSplitterOutputLabelFromRec(rec, pi) : '';
+                var portTitle = 'Выход ' + (pi + 1) + (portCustomLabel ? ': ' + portCustomLabel : '');
                 var py = outputPortLocalY(pi, ratio, layout);
                 if (!isMirrored) {
                     cardsHtml += '<line x1="' + w + '" y1="' + py + '" x2="' + (w + 8) + '" y2="' + py + '" stroke="' + portStroke + '" stroke-width="2" pointer-events="none"/>';
-                    cardsHtml += '<circle class="' + portClass + '" data-splitter-id="' + esc(rec.id) + '" data-output-index="' + pi + '" cx="' + (w + 8) + '" cy="' + py + '" r="' + box.portR + '" fill="' + portFill + '" stroke="' + portStroke + '" stroke-width="1.5"' + portCursor + portPe + '/>';
+                    cardsHtml += '<circle class="' + portClass + '" data-splitter-id="' + esc(rec.id) + '" data-output-index="' + pi + '" cx="' + (w + 8) + '" cy="' + py + '" r="' + box.portR + '" fill="' + portFill + '" stroke="' + portStroke + '" stroke-width="1.5"' + portCursor + portPe + '><title>' + esc(portTitle) + '</title></circle>';
                 } else {
                     cardsHtml += '<line x1="-8" y1="' + py + '" x2="0" y2="' + py + '" stroke="' + portStroke + '" stroke-width="2" pointer-events="none"/>';
-                    cardsHtml += '<circle class="' + portClass + '" data-splitter-id="' + esc(rec.id) + '" data-output-index="' + pi + '" cx="-8" cy="' + py + '" r="' + box.portR + '" fill="' + portFill + '" stroke="' + portStroke + '" stroke-width="1.5"' + portCursor + portPe + '/>';
+                    cardsHtml += '<circle class="' + portClass + '" data-splitter-id="' + esc(rec.id) + '" data-output-index="' + pi + '" cx="-8" cy="' + py + '" r="' + box.portR + '" fill="' + portFill + '" stroke="' + portStroke + '" stroke-width="1.5"' + portCursor + portPe + '><title>' + esc(portTitle) + '</title></circle>';
                 }
             }
             cardsHtml += '</g>';
@@ -891,7 +897,9 @@
                     var oy = outPt.y;
                     var ofex = fiberSchemeExitX(opos, badgeW);
                     var outPathD = buildSplitterConnectionPath(ox, oy, ofex, opos.y, opos.isLeft, pathOpts);
-                    var outLabel = (outLocal && outLocal.label) ? outLocal.label : '';
+                    var outLabel = typeof global.getSplitterOutputLabelFromRec === 'function'
+                        ? global.getSplitterOutputLabelFromRec(rec, oi)
+                        : ((outLocal && outLocal.label) ? outLocal.label : '');
                     linksHtml = appendSplitterLinkHtml(linksHtml, outPathD, rec, 'output', {
                         id: esc(rec.id),
                         outputIndex: oi,
@@ -913,7 +921,9 @@
                     var srcPt = schemeSplitterPortPos(x, y, box, 'output', si, ratio, isMirrored);
                     var tgtPt = schemeSplitterPortPos(tx, ty, tgtBox, 'input', 0, tgtRatio, isSchemeMirrored(tgtRec));
                     var spPathD = buildSplitterConnectionPath(srcPt.x, srcPt.y, tgtPt.x, tgtPt.y, tgtPt.x < srcPt.x, pathOpts);
-                    var spLabel = (spOut && spOut.label) ? spOut.label : '';
+                    var spLabel = typeof global.getSplitterOutputLabelFromRec === 'function'
+                        ? global.getSplitterOutputLabelFromRec(rec, si)
+                        : ((spOut && spOut.label) ? spOut.label : '');
                     linksHtml = appendSplitterLinkHtml(linksHtml, spPathD, rec, 'output', {
                         id: esc(rec.id),
                         outputIndex: si,

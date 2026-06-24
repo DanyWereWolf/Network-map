@@ -292,8 +292,15 @@ function updateSchemeCrossPortLinkUI() {
             el.classList.add('fiber-scheme-cross-port--link-source');
         });
     } else if (schemeCrossPortLinkMode) {
+        var linkHost = typeof currentModalObject !== 'undefined' && currentModalObject &&
+            currentModalObject.properties && isCrossLikeHostType(currentModalObject.properties.get('type'))
+            ? currentModalObject : null;
         document.querySelectorAll('#fiber-connections-svg .fiber-scheme-cross-port').forEach(function(el) {
-            el.classList.add('fiber-scheme-cross-port--link-target');
+            var portNum = parseInt(el.getAttribute('data-cross-port'), 10);
+            var hasSplitter = linkHost && !isNaN(portNum) &&
+                typeof findSplitterOutputOnCrossPort === 'function' &&
+                findSplitterOutputOnCrossPort(linkHost, portNum);
+            el.classList.toggle('fiber-scheme-cross-port--link-target', !hasSplitter);
         });
     }
     var bar = document.getElementById('fiber-scheme-wire-bar');
@@ -318,8 +325,15 @@ function updateSchemeCrossPortLinkUI() {
     }
 }
 
-function startCrossPortPatchFromScheme(crossObj, portNumber) {
+function startCrossPortPatchFromScheme(crossObj, portNumber, opts) {
+    opts = opts || {};
     if (!crossObj || portNumber == null || !isEditMode) return;
+    if (!opts.fromTable && typeof findSplitterOutputOnCrossPort === 'function' && findSplitterOutputOnCrossPort(crossObj, portNumber)) {
+        if (typeof showWarning === 'function') {
+            showWarning('Порт ' + portNumber + ' подключён через сплиттер. Кроссировку настройте кнопкой «⇄ Кросс» в таблице.', 'Порт сплиттера');
+        }
+        return;
+    }
     if (!isCrossPortAvailableForPatch(crossObj, portNumber)) {
         if (typeof showError === 'function') showError('Порт ' + portNumber + ' занят (кроссировка, PON или жила).', 'Порт недоступен');
         return;
@@ -531,7 +545,7 @@ function setupCrossPortPatchHandlers(hostObj) {
             var portNum = parseInt(this.getAttribute('data-cross-port'), 10);
             if (isNaN(portNum)) return;
             if (typeof startCrossPortPatchFromScheme === 'function') {
-                startCrossPortPatchFromScheme(hostObj, portNum);
+                startCrossPortPatchFromScheme(hostObj, portNum, { fromTable: true });
             } else if (typeof showCrossPortPatchDialog === 'function') {
                 showCrossPortPatchDialog(hostObj, portNum);
             }

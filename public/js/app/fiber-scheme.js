@@ -464,6 +464,12 @@ function handleSchemeCrossPortClick(crossObj, portNumber) {
         return;
     }
     if (typeof schemeCrossPortLinkMode !== 'undefined' && schemeCrossPortLinkMode) {
+        if (findSplitterOutputOnCrossPort(crossObj, portNumber)) {
+            if (typeof showWarning === 'function') {
+                showWarning('Порт ' + portNumber + ' подключён через сплиттер. Кроссировку настройте кнопкой «⇄ Кросс» в таблице.', 'Порт сплиттера');
+            }
+            return;
+        }
         if (typeof startCrossPortPatchFromScheme === 'function') startCrossPortPatchFromScheme(crossObj, portNumber);
         return;
     }
@@ -482,19 +488,8 @@ function handleSchemeCrossPortClick(crossObj, portNumber) {
     if (!findFiberKeysByCrossPort(fiberPorts, portNumber).length) {
         var spOnPort = findSplitterOutputOnCrossPort(crossObj, portNumber);
         if (spOnPort) {
-            if (typeof isCrossPortPatched === 'function' && isCrossPortPatched(crossObj, portNumber)) {
-                clearSchemeCrossPortPick();
-                return;
-            }
-            if (typeof startCrossPortPatchFromScheme === 'function' &&
-                typeof isCrossPortAvailableForPatch === 'function' &&
-                isCrossPortAvailableForPatch(crossObj, portNumber)) {
-                startCrossPortPatchFromScheme(crossObj, portNumber);
-                clearSchemeCrossPortPick();
-                return;
-            }
             if (typeof showWarning === 'function') {
-                showWarning('Порт ' + portNumber + ' — выход сплиттера. Используйте «⇄ Кросс» в строке выхода для кроссировки. Отключение — кнопка ✕ у выхода.', 'Порт сплиттера');
+                showWarning('Порт ' + portNumber + ' — выход сплиттера. Кроссировку настройте кнопкой «⇄ Кросс» в таблице. Отключение — ✕ у выхода.', 'Порт сплиттера');
             }
             clearSchemeCrossPortPick();
             return;
@@ -731,6 +726,7 @@ function connectSplitterOutputToCrossPort(hostObj, splitterId, outputIndex, port
     while (outputs.length < ratio) outputs.push(null);
     if (outputs.length > ratio) outputs = outputs.slice(0, ratio);
     outputs[outputIndex] = mergeSplitterOutputConnection(outputs[outputIndex], { hostId: hostUid, crossPort: portNumber, routeIds: [] });
+    applySplitterOutputLabelToConnection(facade, outputIndex);
     facade.properties.set('outputConnections', outputs);
     if (facade._embedded && facade._host) {
         persistEmbeddedSplittersOnHost(facade._host, { skipSync: true });
@@ -827,6 +823,7 @@ function connectSplitterOutputToSplitter(hostObj, sourceSplitterId, outputIndex,
     }
     var rootInput = getSplitterRootInputFiber(source);
     outputs[outputIndex] = { splitterId: targetSplitterId, routeIds: [] };
+    applySplitterOutputLabelToConnection(source, outputIndex);
     withSuppressedMapSave(function() {
         if (source._embedded && source._record) {
             source._record.outputConnections = outputs;
@@ -875,6 +872,7 @@ function connectSplitterOutputToLocalFiber(hostObj, splitterId, outputIndex, cab
     while (outputs.length < ratio) outputs.push(null);
     if (outputs.length > ratio) outputs = outputs.slice(0, ratio);
     outputs[outputIndex] = mergeSplitterOutputConnection(outputs[outputIndex], { hostId: hostUid, cableId: cableId, fiberNumber: fiberNumber, routeIds: [] });
+    applySplitterOutputLabelToConnection(facade, outputIndex);
     facade.properties.set('outputConnections', outputs);
     if (facade._embedded && facade._host) {
         persistEmbeddedSplittersOnHost(facade._host, { skipSync: true });
@@ -1467,6 +1465,7 @@ function connectSplitterOutputToOnuDirect(hostObj, splitterId, outputIndex, onuO
         return false;
     }
     outputs[outputIndex] = mergeSplitterOutputConnection(outputs[outputIndex], { onuId: onuId, routeIds: [] });
+    applySplitterOutputLabelToConnection(facade, outputIndex);
     facade.properties.set('outputConnections', outputs);
     onuObj.properties.set('incomingFiber', { cableId: rootInput.cableId, fiberNumber: rootInput.fiberNumber });
     saveData();
@@ -1532,6 +1531,7 @@ function connectSplitterOutputToNode(hostObj, splitterId, outputIndex, nodeObj, 
         switchPort: portNum,
         routeIds: []
     });
+    applySplitterOutputLabelToConnection(facade, outputIndex);
     facade.properties.set('outputConnections', outputs);
     markNodeSwitchFiberPortOccupied(nodeObj, switchId, portNum, usageKey);
     if (facade._embedded && facade._host) {
@@ -1622,6 +1622,7 @@ function connectSplitterOutputToMediaConverterDirect(hostObj, splitterId, output
         return false;
     }
     outputs[outputIndex] = mergeSplitterOutputConnection(outputs[outputIndex], { mediaConverterId: mcId, routeIds: [] });
+    applySplitterOutputLabelToConnection(facade, outputIndex);
     facade.properties.set('outputConnections', outputs);
     mcObj.properties.set('incomingFiber', { cableId: rootInput.cableId, fiberNumber: rootInput.fiberNumber });
     saveData();
@@ -1666,11 +1667,207 @@ function buildSplitterFiberChip(className, splitterId, outputIndex, title, label
     return '<button type="button" class="fiber-chip ' + className + '" data-splitter-id="' + escapeHtml(splitterId) + '" data-output-index="' + outputIndex + '" title="' + escapeHtml(title) + '">' + label + '</button>';
 }
 
+function ensureSplitterOutputLabels(rec, ratio) {
+    if (!rec) return;
+    ratio = ratio || parseInt(rec.splitRatio, 10) || 8;
+    if (!Array.isArray(rec.outputLabels)) rec.outputLabels = [];
+    while (rec.outputLabels.length < ratio) rec.outputLabels.push('');
+    if (rec.outputLabels.length > ratio) rec.outputLabels = rec.outputLabels.slice(0, ratio);
+    var outs = rec.outputConnections || [];
+    for (var i = 0; i < ratio; i++) {
+        if (!rec.outputLabels[i] && outs[i] && outs[i].label && String(outs[i].label).trim()) {
+            rec.outputLabels[i] = String(outs[i].label).trim();
+        }
+    }
+}
+
+function getSplitterOutputLabelFromRec(rec, outputIndex) {
+    if (!rec || outputIndex == null || isNaN(parseInt(outputIndex, 10))) return '';
+    ensureSplitterOutputLabels(rec);
+    var fromArr = rec.outputLabels[parseInt(outputIndex, 10)];
+    return fromArr && String(fromArr).trim() ? String(fromArr).trim() : '';
+}
+
+function getMapSplitterOutputLabels(splitterObj) {
+    if (!splitterObj || !splitterObj.properties) return [];
+    var ratio = parseInt(splitterObj.properties.get('splitRatio'), 10) || 8;
+    var labels = (splitterObj.properties.get('outputLabels') || []).slice();
+    while (labels.length < ratio) labels.push('');
+    if (labels.length > ratio) labels = labels.slice(0, ratio);
+    var outs = splitterObj.properties.get('outputConnections') || [];
+    for (var i = 0; i < ratio; i++) {
+        if (!labels[i] && outs[i] && outs[i].label && String(outs[i].label).trim()) {
+            labels[i] = String(outs[i].label).trim();
+        }
+    }
+    return labels;
+}
+
+function getSplitterOutputLabel(splitterId, outputIndex, hostObj) {
+    outputIndex = parseInt(outputIndex, 10);
+    if (isNaN(outputIndex)) return '';
+    if (window.EmbeddedSplitters && hostObj) {
+        var rec = EmbeddedSplitters.findInHost(hostObj, splitterId);
+        if (rec) return getSplitterOutputLabelFromRec(rec, outputIndex);
+    }
+    var facade = resolveSplitterObject(splitterId);
+    if (!facade) return '';
+    if (facade._record) return getSplitterOutputLabelFromRec(facade._record, outputIndex);
+    var labels = getMapSplitterOutputLabels(facade);
+    return labels[outputIndex] ? String(labels[outputIndex]).trim() : '';
+}
+
+function syncSplitterOutputConnLabel(rec, outputIndex) {
+    if (!rec || outputIndex == null) return;
+    outputIndex = parseInt(outputIndex, 10);
+    var outs = rec.outputConnections || [];
+    var out = outs[outputIndex];
+    if (!out) return;
+    var label = getSplitterOutputLabelFromRec(rec, outputIndex);
+    if (label) out.label = label;
+    else delete out.label;
+}
+
+function applySplitterOutputLabelToConnection(facade, outputIndex) {
+    if (!facade) return;
+    if (facade._record) {
+        syncSplitterOutputConnLabel(facade._record, outputIndex);
+        return;
+    }
+    var labels = getMapSplitterOutputLabels(facade);
+    var label = labels[outputIndex] ? String(labels[outputIndex]).trim() : '';
+    var outs = (facade.properties.get('outputConnections') || []).slice();
+    if (!outs[outputIndex]) return;
+    if (label) outs[outputIndex] = Object.assign({}, outs[outputIndex], { label: label });
+    else if (outs[outputIndex].label) {
+        var copy = Object.assign({}, outs[outputIndex]);
+        delete copy.label;
+        outs[outputIndex] = copy;
+    }
+    facade.properties.set('outputConnections', outs);
+}
+
+function refreshSplitterCrossPortLinkLabelDom(splitterId, outputIndex, label) {
+    var svg = document.getElementById('fiber-connections-svg');
+    if (!svg || !splitterId || outputIndex == null) return;
+    var trimmed = label ? String(label).trim() : '';
+    var group = svg.querySelector('.fiber-scheme-splitter-cross-link-group[data-splitter-id="' + splitterId + '"][data-output-index="' + outputIndex + '"]');
+    if (!group) return;
+    var labelG = group.querySelector('.fiber-scheme-splitter-cross-link-label');
+    if (!trimmed) {
+        if (labelG) labelG.remove();
+        return;
+    }
+    var path = group.querySelector('.fiber-scheme-splitter-cross-link');
+    if (!path) return;
+    var pathD = path.getAttribute('d');
+    if (!pathD || typeof fiberSchemePathMidpoint !== 'function') return;
+    var mid = fiberSchemePathMidpoint(pathD);
+    var colors = typeof getFiberSchemeLabelColors === 'function' ? getFiberSchemeLabelColors() : { bg: '#fff', border: '#cbd5e1', fill: '#0f172a' };
+    var tw = Math.min(148, Math.max(40, trimmed.length * 6.5 + 16));
+    var tx = mid.x - tw / 2;
+    if (!labelG) {
+        labelG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        labelG.setAttribute('class', 'fiber-scheme-splitter-cross-link-label');
+        labelG.setAttribute('data-link-key', 'out-cross:' + splitterId + ':' + outputIndex);
+        var rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('class', 'fiber-scheme-splitter-cross-link-label-bg');
+        var text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('class', 'fiber-scheme-splitter-cross-link-label-text');
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('style', 'font-size: 10px; font-weight: 600; fill: ' + colors.fill + '; pointer-events: none;');
+        labelG.appendChild(rect);
+        labelG.appendChild(text);
+        group.appendChild(labelG);
+    }
+    var rect = labelG.querySelector('.fiber-scheme-splitter-cross-link-label-bg');
+    var text = labelG.querySelector('.fiber-scheme-splitter-cross-link-label-text');
+    if (rect) {
+        rect.setAttribute('x', String(tx));
+        rect.setAttribute('y', String(mid.y - 11));
+        rect.setAttribute('width', String(tw));
+        rect.setAttribute('height', '21');
+        rect.setAttribute('rx', '5');
+        rect.setAttribute('fill', colors.bg);
+        rect.setAttribute('stroke', colors.border);
+        rect.setAttribute('stroke-width', '0.75');
+    }
+    if (text) {
+        text.setAttribute('x', String(mid.x));
+        text.setAttribute('y', String(mid.y + 5));
+        text.textContent = trimmed;
+    }
+    if (typeof selectedSplitterLink !== 'undefined' && selectedSplitterLink &&
+        selectedSplitterLink.kind === 'output-cross' &&
+        selectedSplitterLink.splitterId === splitterId &&
+        selectedSplitterLink.outputIndex === outputIndex) {
+        labelG.classList.add('is-visible');
+    }
+}
+
+function refreshSplitterOutputLabelDom(hostObj, splitterId, outputIndex, label) {
+    if (!splitterId || outputIndex == null) return;
+    outputIndex = parseInt(outputIndex, 10);
+    var trimmed = label ? String(label).trim() : '';
+    var selector = '.fiber-item--splitter[data-splitter-id="' + splitterId + '"][data-splitter-fiber-kind="output"][data-output-index="' + outputIndex + '"]';
+    document.querySelectorAll(selector).forEach(function(cell) {
+        var inp = cell.querySelector('.splitter-output-label-input');
+        if (inp && document.activeElement !== inp) inp.value = trimmed;
+    });
+    document.querySelectorAll('.map-splitter-output-label-input[data-output-index="' + outputIndex + '"]').forEach(function(inp) {
+        if (document.activeElement !== inp) inp.value = trimmed;
+    });
+    var linkKey = 'out:' + splitterId + ':' + outputIndex;
+    if (typeof refreshSplitterLinkLabelDom === 'function') refreshSplitterLinkLabelDom(linkKey, trimmed);
+    refreshSplitterCrossPortLinkLabelDom(splitterId, outputIndex, trimmed);
+}
+
+function setSplitterOutputLabel(hostObj, splitterId, outputIndex, label) {
+    if (!splitterId || outputIndex == null || isNaN(parseInt(outputIndex, 10))) return;
+    outputIndex = parseInt(outputIndex, 10);
+    var trimmed = label ? String(label).trim() : '';
+    var facade = resolveSplitterObject(splitterId);
+    if (!facade) return;
+    var saveHost = hostObj || facade._host || null;
+    if (facade._record && facade._host) {
+        ensureSplitterOutputLabels(facade._record);
+        facade._record.outputLabels[outputIndex] = trimmed;
+        syncSplitterOutputConnLabel(facade._record, outputIndex);
+        persistEmbeddedSplittersOnHost(facade._host, { skipSync: true });
+        saveHost = facade._host;
+    } else {
+        var ratio = parseInt(facade.properties.get('splitRatio'), 10) || 8;
+        var labels = getMapSplitterOutputLabels(facade);
+        labels[outputIndex] = trimmed;
+        facade.properties.set('outputLabels', labels);
+        applySplitterOutputLabelToConnection(facade, outputIndex);
+    }
+    if (typeof saveData === 'function') {
+        saveData(saveHost ? { fiberSchemeViewOnly: true, object: saveHost, syncImmediate: true } : {});
+    }
+    refreshSplitterOutputLabelDom(saveHost, splitterId, outputIndex, trimmed);
+}
+
+function buildSplitterOutputLabelBlock(splitterId, outputIndex, label, isEditMode) {
+    if (isEditMode) {
+        return '<input type="text" class="splitter-output-label-input form-input" data-splitter-id="' + escapeHtml(splitterId) + '" data-output-index="' + outputIndex + '" value="' + escapeHtml(label || '') + '" placeholder="Подпись выхода…" title="Подпись выхода сплиттера">';
+    }
+    if (label) {
+        return '<div class="fiber-item__label fiber-item__label--splitter-out">📝 ' + escapeHtml(label) + '</div>';
+    }
+    return '';
+}
+
+window.getSplitterOutputLabelFromRec = getSplitterOutputLabelFromRec;
+window.ensureSplitterOutputLabels = ensureSplitterOutputLabels;
+
 /** Объединяет назначение выхода сплиттера: маршрут (порт/жила) и конечные устройства (ONU/МК/узел) сохраняются вместе. */
 function mergeSplitterOutputConnection(existing, patch, opts) {
     opts = opts || {};
     if (patch && patch.splitterId != null) {
-        return { splitterId: patch.splitterId, routeIds: patch.routeIds || [] };
+        var childOut = { splitterId: patch.splitterId, routeIds: patch.routeIds || [] };
+        if (existing && existing.label) childOut.label = existing.label;
+        return childOut;
     }
     var out = existing ? Object.assign({}, existing) : {};
     if (!patch) return out;
@@ -1692,6 +1889,12 @@ function mergeSplitterOutputConnection(existing, patch, opts) {
         out.nodeId = patch.nodeId;
         out.switchId = patch.switchId;
         out.switchPort = patch.switchPort;
+    }
+    if (patch.label != null) {
+        if (patch.label) out.label = patch.label;
+        else delete out.label;
+    } else if (existing && existing.label) {
+        out.label = existing.label;
     }
     return out;
 }
@@ -1867,11 +2070,14 @@ function buildSplitterFiberCell(splitterData, vf, hostObj, isEditMode, cablesDat
             if (proxyCd && proxyFiber) {
                 var proxyHtml = cellCtx.renderCableCell(proxyCd, proxyFiber);
                 var outCable = resolveCableDisplayName(cablesData, outConn.cableId);
+                var outLabelProxy = getSplitterOutputLabelFromRec(rec, vf.outputIndex);
                 var hint = '<div class="fiber-item__splitter-proxy-hint">→ ' + escapeHtml(outCable) + ' · ж.' + outConn.fiberNumber + '</div>';
+                var labelBlockProxy = buildSplitterOutputLabelBlock(splitterData.splitterId, vf.outputIndex, outLabelProxy, isEditMode);
                 return proxyHtml
                     .replace('class="fiber-item ', 'class="fiber-item fiber-item--splitter fiber-item--splitter-output-proxy ')
                     .replace('<div class="fiber-item', '<div data-splitter-id="' + escapeHtml(splitterData.splitterId) + '" data-output-index="' + vf.outputIndex + '" data-splitter-fiber-kind="output" class="fiber-item fiber-item--splitter fiber-item--splitter-output-proxy')
-                    .replace('<div class="fiber-item__head">', hint + '<div class="fiber-item__head">');
+                    .replace('<div class="fiber-item__head">', hint + '<div class="fiber-item__head">')
+                    + (labelBlockProxy ? labelBlockProxy : '');
             }
         }
 
@@ -1908,6 +2114,10 @@ function buildSplitterFiberCell(splitterData, vf, hostObj, isEditMode, cablesDat
 
     var fiberTextColor = '#fff';
     var numLabel = vf.kind === 'input' ? 'вх' : String(vf.number);
+    var displayName = vf.name;
+    var labelBlock = vf.kind === 'output'
+        ? buildSplitterOutputLabelBlock(splitterData.splitterId, vf.outputIndex, getSplitterOutputLabelFromRec(rec, vf.outputIndex), isEditMode)
+        : '';
     var itemClasses = 'fiber-item fiber-item--splitter fiber-item--splitter-' + vf.kind + ' fiber-item--' + statusKind + (isOccupied ? ' fiber-occupied' : '');
     var actionsBlock = actionChips ? '<div class="fiber-item__actions">' + actionChips + '</div>' : '';
     return '<div class="' + itemClasses + '" data-splitter-id="' + escapeHtml(splitterData.splitterId) + '" data-splitter-fiber-kind="' + vf.kind + '"' +
@@ -1916,9 +2126,10 @@ function buildSplitterFiberCell(splitterData, vf, hostObj, isEditMode, cablesDat
         (cellTitle ? ' title="' + cellTitle.replace(/"/g, '&quot;') + '"' : '') + '>' +
         '<div class="fiber-item__head">' +
         '<div class="fiber-color fiber-color--splitter" style="background-color:' + vf.color + ';--fiber-num-color:' + fiberTextColor + ';border-color:rgba(234,88,12,0.55)"><span class="fiber-num">' + numLabel + '</span></div>' +
-        '<span class="fiber-item__name">' + escapeHtml(vf.name) + '</span>' +
+        '<span class="fiber-item__name">' + escapeHtml(displayName) + '</span>' +
         '<span class="fiber-item__status">' + statusText + '</span>' +
         '</div>' +
+        labelBlock +
         (assignRows ? '<div class="fiber-item__assigns">' + assignRows + '</div>' : '') +
         actionsBlock +
         '</div>';

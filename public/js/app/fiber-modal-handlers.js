@@ -500,7 +500,12 @@ function setupFiberConnectionHandlers() {
                 if (crossMetaPreview) previewCrossPortLinkLabel(crossMetaPreview, barInput.value);
                 return;
             }
-            if (mode === 'splitter') return;
+            if (mode === 'splitter') {
+                if (selectedSplitterLink && typeof previewSplitterLinkLabel === 'function') {
+                    previewSplitterLinkLabel(selectedSplitterLink, barInput.value);
+                }
+                return;
+            }
             const connIndex = parseInt(barInput.getAttribute('data-connection-index'), 10);
             if (isNaN(connIndex)) return;
             document.querySelectorAll('.fiber-connection-label-input[data-connection-index="' + connIndex + '"]').forEach(function(inp) {
@@ -599,6 +604,18 @@ function setupFiberConnectionHandlers() {
         input.addEventListener('click', function(e) { e.stopPropagation(); });
         input.addEventListener('change', function(e) { e.stopPropagation(); saveLabel(); });
         input.addEventListener('blur', function(e) { e.stopPropagation(); saveLabel(); });
+    });
+
+    document.querySelectorAll('.splitter-output-label-input').forEach(function(input) {
+        function saveSplitterOutLabel() {
+            var splitterId = input.getAttribute('data-splitter-id');
+            var outputIndex = parseInt(input.getAttribute('data-output-index'), 10);
+            if (!splitterId || isNaN(outputIndex) || typeof setSplitterOutputLabel !== 'function') return;
+            setSplitterOutputLabel(sleeveObj, splitterId, outputIndex, input.value.trim());
+        }
+        input.addEventListener('click', function(e) { e.stopPropagation(); });
+        input.addEventListener('change', function(e) { e.stopPropagation(); saveSplitterOutLabel(); });
+        input.addEventListener('blur', function(e) { e.stopPropagation(); saveSplitterOutLabel(); });
     });
 
     document.querySelectorAll('.fiber-connection-label-input, .fiber-scheme-connection-label-input').forEach(function(input) {
@@ -1011,6 +1028,16 @@ function setupFiberSchemeSplitterHandlers(hostObj) {
         });
     });
 
+    svg.querySelectorAll('.fiber-scheme-splitter-cross-link-hit, .fiber-scheme-splitter-cross-link-label').forEach(function(hit) {
+        hit.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (!isEditMode) return;
+            var linkEl = e.target.closest('.fiber-scheme-splitter-cross-link-hit, .fiber-scheme-splitter-cross-link, .fiber-scheme-splitter-cross-link-group');
+            var meta = parseSplitterCrossLinkMeta(linkEl || hit);
+            if (meta) selectSplitterLinkForLabel(hostObj, meta, { focusInput: true });
+        });
+    });
+
     svg.querySelectorAll('.fiber-scheme-splitter-rotate-hit').forEach(function(hit) {
         hit.addEventListener('mousedown', function(e) { e.stopPropagation(); });
         hit.addEventListener('click', function(e) {
@@ -1382,7 +1409,7 @@ function setupFiberSchemeHoverHandlers() {
     }
 
     function setSplitterLinkLabelVisible(linkKey, visible) {
-        svg.querySelectorAll('.fiber-scheme-splitter-conn-label').forEach(function(el) {
+        svg.querySelectorAll('.fiber-scheme-splitter-conn-label, .fiber-scheme-splitter-cross-link-label').forEach(function(el) {
             el.classList.toggle('is-visible', visible && linkKey != null && el.getAttribute('data-link-key') === linkKey);
         });
     }
@@ -1412,12 +1439,34 @@ function setupFiberSchemeHoverHandlers() {
 
     function showSplitterLinkHover(linkKey) {
         if (!linkKey) return;
+        if (String(linkKey).indexOf('out-cross:') === 0) {
+            svg.querySelectorAll('.fiber-scheme-splitter-cross-link, .fiber-scheme-splitter-cross-link-hit').forEach(function(el) {
+                var hit = el.getAttribute('data-link-key') === linkKey;
+                el.classList.toggle('fiber-scheme-splitter-cross-link-hovered', hit);
+                el.classList.toggle('fiber-scheme-splitter-cross-link-dimmed', !hit);
+            });
+            setSplitterLinkLabelVisible(linkKey, true);
+            return;
+        }
         svg.querySelectorAll('.fiber-scheme-splitter-link, .fiber-scheme-splitter-link-hit').forEach(function(el) {
             var hit = el.getAttribute('data-link-key') === linkKey;
             el.classList.toggle('fiber-scheme-splitter-link-hovered', hit);
             el.classList.toggle('fiber-scheme-splitter-link-dimmed', !hit);
         });
         setSplitterLinkLabelVisible(linkKey, true);
+    }
+
+    function applySplitterCrossLinkHover(linkKey) {
+        if (!linkKey) return;
+        activeSplitterLinkKey = linkKey;
+        activeConnIndex = null;
+        activeFiberKey = null;
+        activeCrossPortLinkKey = null;
+        svg.classList.add('fiber-scheme-hover-active');
+        setFiberLabelVisible(null, false);
+        setCrossPortLinkLabelVisible(null, false);
+        setConnLabelVisible(null, false);
+        showSplitterLinkHover(linkKey);
     }
 
     function clearHover() {
@@ -1427,8 +1476,11 @@ function setupFiberSchemeHoverHandlers() {
         activeSplitterLinkKey = null;
         activeCrossPortLinkKey = null;
         svg.classList.remove('fiber-scheme-hover-active');
-        svg.querySelectorAll('.fiber-scheme-hovered, .fiber-scheme-dimmed, .fiber-scheme-link-hovered, .fiber-scheme-link-dimmed, .fiber-scheme-splitter-link-hovered, .fiber-scheme-splitter-link-dimmed, .fiber-cable-block-hovered, .fiber-scheme-cross-link-hovered, .fiber-scheme-cross-link-dimmed, .fiber-scheme-cross-port-hovered').forEach(function(el) {
-            el.classList.remove('fiber-scheme-hovered', 'fiber-scheme-dimmed', 'fiber-scheme-link-hovered', 'fiber-scheme-link-dimmed', 'fiber-scheme-splitter-link-hovered', 'fiber-scheme-splitter-link-dimmed', 'fiber-cable-block-hovered', 'fiber-scheme-cross-link-hovered', 'fiber-scheme-cross-link-dimmed', 'fiber-scheme-cross-port-hovered');
+        svg.querySelectorAll('.fiber-scheme-hovered, .fiber-scheme-dimmed, .fiber-scheme-link-hovered, .fiber-scheme-link-dimmed, .fiber-scheme-splitter-link-hovered, .fiber-scheme-splitter-link-dimmed, .fiber-scheme-splitter-cross-link-hovered, .fiber-scheme-splitter-cross-link-dimmed, .fiber-cable-block-hovered, .fiber-scheme-cross-link-hovered, .fiber-scheme-cross-link-dimmed, .fiber-scheme-cross-port-hovered').forEach(function(el) {
+            el.classList.remove('fiber-scheme-hovered', 'fiber-scheme-dimmed', 'fiber-scheme-link-hovered', 'fiber-scheme-link-dimmed', 'fiber-scheme-splitter-link-hovered', 'fiber-scheme-splitter-link-dimmed', 'fiber-scheme-splitter-cross-link-hovered', 'fiber-scheme-splitter-cross-link-dimmed', 'fiber-cable-block-hovered', 'fiber-scheme-cross-link-hovered', 'fiber-scheme-cross-link-dimmed', 'fiber-scheme-cross-port-hovered');
+        });
+        svg.querySelectorAll('.fiber-scheme-splitter-cross-link-group').forEach(function(el) {
+            el.classList.remove('fiber-scheme-splitter-cross-link-selected');
         });
         svg.querySelectorAll('.fiber-scheme-link-group').forEach(function(el) {
             el.classList.remove('fiber-scheme-link-hovered', 'fiber-scheme-link-dimmed');
@@ -1575,6 +1627,13 @@ function setupFiberSchemeHoverHandlers() {
             var lk = splitterLinkHit.getAttribute('data-link-key') ||
                 (splitterLinkHit.closest('.fiber-scheme-splitter-conn-label') && splitterLinkHit.closest('.fiber-scheme-splitter-conn-label').getAttribute('data-link-key'));
             if (lk) applySplitterLinkHover(lk);
+            return;
+        }
+        const splitterCrossLinkHit = e.target.closest('.fiber-scheme-splitter-cross-link-hit, .fiber-scheme-splitter-cross-link, .fiber-scheme-splitter-cross-link-label');
+        if (splitterCrossLinkHit) {
+            var sclk = splitterCrossLinkHit.getAttribute('data-link-key') ||
+                (splitterCrossLinkHit.closest('.fiber-scheme-splitter-cross-link-group') && splitterCrossLinkHit.closest('.fiber-scheme-splitter-cross-link-group').getAttribute('data-link-key'));
+            if (sclk) applySplitterCrossLinkHover(sclk);
             return;
         }
         const crossLinkHit = e.target.closest('.fiber-scheme-cross-link-hit, .fiber-scheme-cross-link, .fiber-scheme-cross-link-label');

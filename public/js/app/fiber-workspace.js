@@ -1657,11 +1657,25 @@ function buildSplitterCrossPortLinksHtml(hostObj, crossLayout, isDark, isEditMod
                 isLeft: srcPt.x < crossCenterX
             });
             var spTitle = 'Сплиттер «' + (rec.name || 'Сплиттер') + '» вых.' + (cpi + 1) + ' → порт ' + crossPortNum;
-            buf += '<g class="fiber-scheme-splitter-cross-link-group" data-splitter-id="' + escapeHtml(rec.id) + '" data-output-index="' + cpi + '" data-cross-port="' + crossPortNum + '">';
+            var outLabel = typeof getSplitterOutputLabelFromRec === 'function'
+                ? getSplitterOutputLabelFromRec(rec, cpi) : '';
+            if (outLabel) spTitle += ' · ' + outLabel;
+            var crossLinkKey = 'out-cross:' + rec.id + ':' + cpi;
+            buf += '<g class="fiber-scheme-splitter-cross-link-group" data-splitter-id="' + escapeHtml(rec.id) + '" data-output-index="' + cpi + '" data-cross-port="' + crossPortNum + '" data-link-key="' + escapeHtml(crossLinkKey) + '">';
             buf += '<title>' + escapeHtml(spTitle) + '</title>';
-            buf += '<path class="fiber-scheme-splitter-cross-link" data-splitter-id="' + escapeHtml(rec.id) + '" data-output-index="' + cpi + '" data-cross-port="' + crossPortNum + '" d="' + pathD + '" stroke="' + strokeColor + '" stroke-width="2.5" stroke-linecap="round" opacity="0.9" pointer-events="none"/>';
+            buf += '<path class="fiber-scheme-splitter-cross-link" data-link-key="' + escapeHtml(crossLinkKey) + '" data-link-kind="output-cross" data-splitter-id="' + escapeHtml(rec.id) + '" data-output-index="' + cpi + '" data-cross-port="' + crossPortNum + '" data-conn-label="' + escapeHtml(outLabel) + '" d="' + pathD + '" stroke="' + strokeColor + '" stroke-width="2.5" stroke-linecap="round" opacity="0.9" pointer-events="none"/>';
             if (isEditMode) {
-                buf += '<path class="fiber-scheme-splitter-cross-link-hit" data-splitter-id="' + escapeHtml(rec.id) + '" data-output-index="' + cpi + '" data-cross-port="' + crossPortNum + '" d="' + pathD + '" fill="none" stroke="transparent" stroke-width="14" stroke-linecap="round" pointer-events="none"/>';
+                buf += '<path class="fiber-scheme-splitter-cross-link-hit" data-link-key="' + escapeHtml(crossLinkKey) + '" data-link-kind="output-cross" data-splitter-id="' + escapeHtml(rec.id) + '" data-output-index="' + cpi + '" data-cross-port="' + crossPortNum + '" d="' + pathD + '" fill="none" stroke="transparent" stroke-width="14" stroke-linecap="round" style="cursor:pointer"/>';
+            }
+            if (outLabel && typeof fiberSchemePathMidpoint === 'function' && typeof escapeHtml === 'function') {
+                var crossMid = fiberSchemePathMidpoint(pathD);
+                var crossLabelColors = typeof getFiberSchemeLabelColors === 'function' ? getFiberSchemeLabelColors() : { bg: '#fff', border: '#cbd5e1', fill: '#0f172a' };
+                var crossTw = Math.min(148, Math.max(40, outLabel.length * 6.5 + 16));
+                var crossTx = crossMid.x - crossTw / 2;
+                buf += '<g class="fiber-scheme-splitter-cross-link-label" data-link-key="' + escapeHtml(crossLinkKey) + '">';
+                buf += '<rect class="fiber-scheme-splitter-cross-link-label-bg" x="' + crossTx + '" y="' + (crossMid.y - 11) + '" width="' + crossTw + '" height="21" rx="5" fill="' + crossLabelColors.bg + '" stroke="' + crossLabelColors.border + '" stroke-width="0.75"/>';
+                buf += '<text class="fiber-scheme-splitter-cross-link-label-text" x="' + crossMid.x + '" y="' + (crossMid.y + 5) + '" text-anchor="middle" style="font-size:10px;font-weight:600;fill:' + crossLabelColors.fill + ';pointer-events:none;">' + escapeHtml(outLabel) + '</text>';
+                buf += '</g>';
             }
             buf += '</g>';
         }
@@ -1691,9 +1705,15 @@ function updateSchemeSplitterCrossPortLinks(svg, splitterId, cx, cy, splitRatio,
             isLeft: srcPt.x < crossCenterX
         });
         pathEl.setAttribute('d', d);
+        pathEl.setAttribute('data-conn-label', typeof getSplitterOutputLabelFromRec === 'function'
+            ? getSplitterOutputLabelFromRec(rec, oi) : '');
         var hit = pathEl.nextElementSibling;
         if (hit && hit.classList.contains('fiber-scheme-splitter-cross-link-hit')) {
             hit.setAttribute('d', d);
+        }
+        if (typeof refreshSplitterCrossPortLinkLabelDom === 'function') {
+            refreshSplitterCrossPortLinkLabelDom(splitterId, oi, typeof getSplitterOutputLabelFromRec === 'function'
+                ? getSplitterOutputLabelFromRec(rec, oi) : '');
         }
     });
 }
@@ -1798,7 +1818,7 @@ function buildCrossSchemePanelSvg(crossLayout, fiberPorts, fiberPositions, schem
         if (hasSplitterOut) {
             tooltip += ' · выход «' + spOnPort.splitterName + '» вых.' + (spOnPort.outputIndex + 1);
             if (isEditMode) {
-                tooltip += isPatched ? '' : ' · клик — кроссировка';
+                tooltip += ' · кроссировка — в таблице';
             }
         } else if (isPatched && patchInfo) {
             var mateCross = typeof resolveCrossPortPatchHost === 'function' ? resolveCrossPortPatchHost(patchInfo.crossId) : null;
