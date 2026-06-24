@@ -237,13 +237,91 @@ function traceFromOLTPort(oltObj, portNumber) {
     const portAssignments = oltObj.properties.get('portAssignments') || {};
     const ass = portAssignments[String(portNumber)];
     if (!ass) {
-        showWarning('На этот порт не назначена жила. Информация обновлена.', 'Данные устарели');
+        showWarning('На этот порт нет назначения. Информация обновлена.', 'Данные устарели');
         if (currentModalObject && currentModalObject.properties && currentModalObject.properties.get('type') === 'olt') {
             showObjectInfo(currentModalObject);
         }
         return;
     }
     const oltName = oltObj.properties.get('name') || 'OLT';
+    if (ass.onuId) {
+        var onu = getMapObjectByUid(ass.onuId, 'onu');
+        var onuName = onu ? (onu.properties.get('name') || 'ONU') : 'ONU';
+        var incomingOnu = typeof getDisplayOltIncomingFiber === 'function'
+            ? getDisplayOltIncomingFiber(oltObj)
+            : (oltObj.properties.get('incomingFiber') || null);
+        var traceCableId = incomingOnu && incomingOnu.cableId ? incomingOnu.cableId : null;
+        var traceFiber = incomingOnu && incomingOnu.fiberNumber != null ? incomingOnu.fiberNumber : null;
+        if (!traceCableId && onu) {
+            var onuInc = onu.properties.get('incomingFiber');
+            if (onuInc && onuInc.cableId) {
+                traceCableId = onuInc.cableId;
+                traceFiber = onuInc.fiberNumber;
+            }
+        }
+        if (traceCableId && traceFiber != null) {
+            var startHost = null;
+            for (var hi = 0; hi < objects.length; hi++) {
+                var slot = objects[hi];
+                if (!slot.properties || !isFiberHostType(slot.properties.get('type'))) continue;
+                if (getHostAssignment(slot, 'oltConnections', traceCableId, traceFiber) ||
+                    getHostAssignment(slot, 'onuConnections', traceCableId, traceFiber) ||
+                    getHostAssignment(slot, 'splitterConnections', traceCableId, traceFiber)) {
+                    startHost = slot;
+                    break;
+                }
+            }
+            showFiberTraceFromOLTPort(oltObj, oltName, portNumber, startHost || oltObj, traceCableId, traceFiber);
+            return;
+        }
+        var portLabelOnu = getOltPortLabel(oltObj, portNumber);
+        openFiberTraceModal({
+            title: 'Трассировка от OLT',
+            subtitle: formatOltPortDisplay(portNumber, portLabelOnu, true) + ' · ' + oltName,
+            bodyHtml: '<p class="trace-intro">OLT «' + escapeHtml(oltName) + '», ' +
+                escapeHtml(formatOltPortDisplay(portNumber, portLabelOnu)) + ' → ONU «' + escapeHtml(onuName) + '»</p>'
+        });
+        return;
+    }
+    if (ass.mediaConverterId) {
+        var mc = getMapObjectByUid(ass.mediaConverterId, 'mediaConverter');
+        var mcName = mc ? (mc.properties.get('name') || 'Медиаконвертер') : 'Медиаконвертер';
+        var incomingMc = typeof getDisplayOltIncomingFiber === 'function'
+            ? getDisplayOltIncomingFiber(oltObj)
+            : (oltObj.properties.get('incomingFiber') || null);
+        var traceCableIdMc = incomingMc && incomingMc.cableId ? incomingMc.cableId : null;
+        var traceFiberMc = incomingMc && incomingMc.fiberNumber != null ? incomingMc.fiberNumber : null;
+        if (!traceCableIdMc && mc) {
+            var mcInc = mc.properties.get('incomingFiber');
+            if (mcInc && mcInc.cableId) {
+                traceCableIdMc = mcInc.cableId;
+                traceFiberMc = mcInc.fiberNumber;
+            }
+        }
+        if (traceCableIdMc && traceFiberMc != null) {
+            var startHostMc = null;
+            for (var hiMc = 0; hiMc < objects.length; hiMc++) {
+                var slotMc = objects[hiMc];
+                if (!slotMc.properties || !isFiberHostType(slotMc.properties.get('type'))) continue;
+                if (getHostAssignment(slotMc, 'oltConnections', traceCableIdMc, traceFiberMc) ||
+                    getHostAssignment(slotMc, 'mediaConverterConnections', traceCableIdMc, traceFiberMc) ||
+                    getHostAssignment(slotMc, 'splitterConnections', traceCableIdMc, traceFiberMc)) {
+                    startHostMc = slotMc;
+                    break;
+                }
+            }
+            showFiberTraceFromOLTPort(oltObj, oltName, portNumber, startHostMc || oltObj, traceCableIdMc, traceFiberMc);
+            return;
+        }
+        var portLabelMc = getOltPortLabel(oltObj, portNumber);
+        openFiberTraceModal({
+            title: 'Трассировка от OLT',
+            subtitle: formatOltPortDisplay(portNumber, portLabelMc, true) + ' · ' + oltName,
+            bodyHtml: '<p class="trace-intro">OLT «' + escapeHtml(oltName) + '», ' +
+                escapeHtml(formatOltPortDisplay(portNumber, portLabelMc)) + ' → МК «' + escapeHtml(mcName) + '»</p>'
+        });
+        return;
+    }
     if (ass.crossId != null && ass.crossPort != null) {
         const cross = objects.find(function(o) {
             return o.properties && isCrossLikeHostType(o.properties.get('type')) &&
@@ -511,6 +589,11 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
             var toSpShowBtn = toSpObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(toSpObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
             var toName = item.toSplitter && item.toSplitter.properties ? item.toSplitter.properties.get('name') || 'Сплиттер' : 'Сплиттер';
             html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-splitter">🔀</span><div class="trace-path-block trace-path-splitter"><span>🔀 Выход сплиттера → ' + escapeHtml(toName) + '</span>' + toSpShowBtn + '</div></div>';
+            stepNumber++;
+        } else if (item.type === 'splitterOutputToCrossPort') {
+            var crossOutId = item.cross ? getObjectUniqueId(item.cross) : null;
+            var crossOutBtn = crossOutId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(crossOutId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-splitter">🔀</span><div class="trace-path-block trace-path-splitter"><span>🔀 Выход сплиттера → порт ' + item.crossPort + ' («' + escapeHtml(item.crossName || 'Кросс') + '»)</span>' + crossOutBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'oltPortConnection') {
             var oltObjId = item.olt ? getObjectUniqueId(item.olt) : null;

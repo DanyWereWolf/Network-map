@@ -109,9 +109,14 @@ function getCrossPortForFiber(crossObj, cableId, fiberNumber) {
     if (!crossObj || !cableId || fiberNumber == null) return null;
     const fiberPorts = crossObj.properties.get('fiberPorts') || {};
     const port = fiberPorts[cableId + '-' + fiberNumber];
-    if (port == null || String(port).trim() === '') return null;
-    const portNum = parseInt(port, 10);
-    return isNaN(portNum) ? null : portNum;
+    if (port != null && String(port).trim() !== '') {
+        const portNum = parseInt(port, 10);
+        if (!isNaN(portNum)) return portNum;
+    }
+    if (typeof findCrossPortForLogicalFiber === 'function') {
+        return findCrossPortForLogicalFiber(crossObj, cableId, fiberNumber);
+    }
+    return null;
 }
 
 function findFiberKeysByCrossPort(fiberPorts, portNumber) {
@@ -191,6 +196,12 @@ function getTotalUsedPortsInCross(crossObj) {
         var port = parseInt(portKey, 10);
         if (!isNaN(port) && port > 0) usedPortNums.add(port);
     });
+    if (typeof findSplitterOutputOnCrossPort === 'function' && window.EmbeddedSplitters) {
+        var crossPorts = Math.max(1, parseInt(crossObj.properties.get('crossPorts'), 10) || 24);
+        for (var p = 1; p <= crossPorts; p++) {
+            if (findSplitterOutputOnCrossPort(crossObj, p)) usedPortNums.add(p);
+        }
+    }
     return usedPortNums.size;
 }
 

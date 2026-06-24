@@ -8,6 +8,20 @@ function showSplitterOutputSplitterDialog(splitterObj, outIdx) {
         showWarning('Сначала подключите входную жилу к сплиттеру с муфты или кросса.', 'Нет входа');
         return;
     }
+    var outsSp = splitterObj.properties.get('outputConnections') || [];
+    var outSp = outsSp[outIdx];
+    if (outSp && outSp.splitterId) {
+        showWarning('На выходе уже подключён сплиттер.', 'Выход занят');
+        return;
+    }
+    if (outSp && typeof splitterOutputHasEndpoint === 'function' && splitterOutputHasEndpoint(outSp)) {
+        showWarning('Этот выход уже подключён.', 'Выход занят');
+        return;
+    }
+    if (outSp && outSp.hostId && outSp.cableId && outSp.fiberNumber != null) {
+        showWarning('Выход уже направлен в муфту/кросс. Сначала отключите трассу.', 'Выход занят');
+        return;
+    }
     var splitters = getAvailableSplittersForSplitterOutput(getObjectUniqueId(splitterObj));
     if (splitters.length === 0) {
         showWarning('Нет свободных сплиттеров. Все сплиттеры уже имеют вход или подключены к выходам.', 'Нет сплиттеров');
@@ -122,6 +136,24 @@ function showSplitterOutputHostDialog(splitterObj, outIdx) {
     var effectiveInput = getSplitterRootInputFiber(splitterObj);
     if (!effectiveInput) {
         showWarning('Сначала подключите входную жилу к сплиттеру с муфты или кросса.', 'Нет входа');
+        return;
+    }
+    var outsHost = splitterObj.properties.get('outputConnections') || [];
+    var outHost = outsHost[outIdx];
+    if (outHost && outHost.splitterId) {
+        showWarning('На выходе уже подключён сплиттер.', 'Выход занят');
+        return;
+    }
+    if (outHost && typeof splitterOutputHasEndpoint === 'function' && splitterOutputHasEndpoint(outHost)) {
+        showWarning('Этот выход уже подключён.', 'Выход занят');
+        return;
+    }
+    if (outHost && outHost.hostId && outHost.cableId && outHost.fiberNumber != null) {
+        showWarning('Выход уже направлен в муфту/кросс.', 'Выход занят');
+        return;
+    }
+    if (outHost && outHost.crossPort != null) {
+        showWarning('Выход уже выведен на порт кросса.', 'Выход занят');
         return;
     }
     var hosts = getAvailableHostsForSplitterOutput();
@@ -244,6 +276,17 @@ function getAvailableOlts() {
     );
 }
 
+function getAvailableOltsForIncoming() {
+    return getAvailableOlts().filter(function(oltObj) {
+        if (typeof getDisplayOltIncomingFiber === 'function') {
+            var incoming = getDisplayOltIncomingFiber(oltObj);
+            return !(incoming && incoming.cableId);
+        }
+        var direct = oltObj.properties.get('incomingFiber');
+        return !(direct && direct.cableId);
+    });
+}
+
 function showOltSelectionDialog(sleeveObj, cableId, fiberNumber) {
     const t = sleeveObj.properties.get('type');
     const placeId = sleeveObj.properties.get('uniqueId');
@@ -255,9 +298,22 @@ function showOltSelectionDialog(sleeveObj, cableId, fiberNumber) {
         showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
         return;
     }
-    const olts = getAvailableOlts();
+    if (typeof getFiberOltRealAssignment === 'function') {
+        var existingOltDlg = getFiberOltRealAssignment(sleeveObj, cableId, fiberNumber);
+        if (existingOltDlg && existingOltDlg.oltId) {
+            showWarning('Жила уже связана с OLT.', 'Жила занята');
+            return;
+        }
+    }
+    const olts = getAvailableOltsForIncoming();
     if (olts.length === 0) {
-        showWarning('Нет доступных OLT. Сначала создайте OLT на карте.', 'Нет OLT');
+        var hasAnyOlt = getAvailableOlts().length > 0;
+        showWarning(
+            hasAnyOlt
+                ? 'Нет свободных OLT. У всех OLT на карте уже задан приход — сначала отключите текущий приход.'
+                : 'Нет доступных OLT. Сначала создайте OLT на карте.',
+            'Нет OLT'
+        );
         return;
     }
     oltSelectionModalData = { sleeveObj: sleeveObj, cableId: cableId, fiberNumber: fiberNumber, olts: olts };
@@ -609,6 +665,102 @@ function backOltCrossSelectionToList() {
     if (searchGroup) searchGroup.style.display = crosses.length > 1 ? '' : 'none';
     setOltCrossSelectionModalChrome('Подключение PON-порта к кроссу', 'Выберите кросс', 'Введите имя кросса...');
     renderOltCrossListForModal(crosses, searchInput ? searchInput.value : '');
+}
+
+function showOltPortOnuConnectDialog(oltObj, portNumber) {
+    if (!oltObj || portNumber == null) return;
+    if (typeof isOltPortInUse === 'function' && isOltPortInUse(oltObj, portNumber)) {
+        showWarning('PON-порт уже занят.', 'Порт занят');
+        return;
+    }
+    var onus = typeof getAvailableOnusForOltPort === 'function'
+        ? getAvailableOnusForOltPort(oltObj, portNumber)
+        : (typeof getAvailableOnus === 'function' ? getAvailableOnus() : []);
+    if (!onus.length) {
+        var hasAnyOnu = objects.some(function(o) { return o.properties && o.properties.get('type') === 'onu'; });
+        var hasFreeOnu = typeof getAvailableOnus === 'function' && getAvailableOnus().length > 0;
+        showWarning(
+            hasAnyOnu
+                ? (hasFreeOnu
+                    ? 'Нет ONU с координатами для прокладки (на карте или в ящике с OLT).'
+                    : 'Нет свободных ONU. Все ONU уже подключены к сети.')
+                : 'Нет ONU на карте. Сначала создайте ONU.',
+            'Нет ONU'
+        );
+        return;
+    }
+    splitterOutputOnuModalData = { mode: 'oltPort', oltObj: oltObj, portNumber: portNumber, onus: onus };
+    var modal = document.getElementById('splitterOutputOnuModal');
+    var listEl = document.getElementById('splitterOutputOnuList');
+    var titleEl = modal && modal.querySelector('.group-balloon-title');
+    var infoEl = modal && modal.querySelector('.node-selection-info');
+    var portLbl = typeof formatOltPortDisplay === 'function'
+        ? formatOltPortDisplay(portNumber, typeof getOltPortLabel === 'function' ? getOltPortLabel(oltObj, portNumber) : '', true)
+        : ('порт ' + portNumber);
+    if (titleEl) titleEl.textContent = 'Подключение ONU к PON-порту';
+    if (infoEl) infoEl.textContent = 'PON ' + portLbl + ': выберите свободную ONU';
+    if (listEl) {
+        listEl.innerHTML = '';
+        onus.forEach(function(onu, idx) {
+            var name = onu.properties.get('name') || ('ONU ' + (idx + 1));
+            var div = document.createElement('div');
+            div.className = 'node-list-item';
+            div.style.cssText = 'padding: 10px 12px; margin-bottom: 6px; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; background: var(--bg-tertiary);';
+            div.dataset.index = String(idx);
+            div.innerHTML = '<div class="node-list-item-info"><div class="node-list-item-name">' + escapeHtml(name) + '</div></div>';
+            div.addEventListener('click', function() { selectSplitterOutputOnu(parseInt(this.dataset.index, 10)); });
+            listEl.appendChild(div);
+        });
+    }
+    if (modal) modal.style.display = 'block';
+}
+
+function showOltPortMcConnectDialog(oltObj, portNumber) {
+    if (!oltObj || portNumber == null) return;
+    if (typeof isOltPortInUse === 'function' && isOltPortInUse(oltObj, portNumber)) {
+        showWarning('PON-порт уже занят.', 'Порт занят');
+        return;
+    }
+    var mcs = typeof getAvailableMediaConvertersForOltPort === 'function'
+        ? getAvailableMediaConvertersForOltPort(oltObj, portNumber)
+        : (typeof getAvailableMediaConverters === 'function' ? getAvailableMediaConverters() : []);
+    if (!mcs.length) {
+        var hasAnyMc = objects.some(function(o) { return o.properties && o.properties.get('type') === 'mediaConverter'; });
+        var hasFreeMc = typeof getAvailableMediaConverters === 'function' && getAvailableMediaConverters().length > 0;
+        showWarning(
+            hasAnyMc
+                ? (hasFreeMc
+                    ? 'Нет медиаконвертеров с координатами для прокладки (на карте или в ящике с OLT).'
+                    : 'Нет свободных медиаконвертеров. Все МК уже подключены к сети.')
+                : 'Нет медиаконвертеров на карте. Сначала создайте медиаконвертер.',
+            'Нет МК'
+        );
+        return;
+    }
+    splitterOutputOnuModalData = { mode: 'oltPortMc', oltObj: oltObj, portNumber: portNumber, mcs: mcs };
+    var modal = document.getElementById('splitterOutputOnuModal');
+    var listEl = document.getElementById('splitterOutputOnuList');
+    var titleEl = modal && modal.querySelector('.group-balloon-title');
+    var infoEl = modal && modal.querySelector('.node-selection-info');
+    var portLbl = typeof formatOltPortDisplay === 'function'
+        ? formatOltPortDisplay(portNumber, typeof getOltPortLabel === 'function' ? getOltPortLabel(oltObj, portNumber) : '', true)
+        : ('порт ' + portNumber);
+    if (titleEl) titleEl.textContent = 'Подключение медиаконвертера к PON-порту';
+    if (infoEl) infoEl.textContent = 'PON ' + portLbl + ': выберите свободный медиаконвертер';
+    if (listEl) {
+        listEl.innerHTML = '';
+        mcs.forEach(function(mc, idx) {
+            var name = mc.properties.get('name') || ('МК ' + (idx + 1));
+            var div = document.createElement('div');
+            div.className = 'node-list-item';
+            div.style.cssText = 'padding: 10px 12px; margin-bottom: 6px; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; background: var(--bg-tertiary);';
+            div.dataset.index = String(idx);
+            div.innerHTML = '<div class="node-list-item-info"><div class="node-list-item-name">' + escapeHtml(name) + '</div></div>';
+            div.addEventListener('click', function() { selectSplitterOutputMc(parseInt(this.dataset.index, 10)); });
+            listEl.appendChild(div);
+        });
+    }
+    if (modal) modal.style.display = 'block';
 }
 
 function confirmOltCrossPortConnect() {

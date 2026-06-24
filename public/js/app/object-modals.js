@@ -783,7 +783,16 @@ function buildOltIncomingFiberLabel(incomingFiber, cables) {
 }
 
 function buildOltPortFiberLabel(ass, cables) {
-    if (!ass || ass.cableId == null) return '—';
+    if (!ass) return '—';
+    if (ass.onuId) {
+        var onu = getMapObjectByUid(ass.onuId, 'onu');
+        return 'ONU «' + (onu ? (onu.properties.get('name') || 'ONU') : 'ONU') + '»';
+    }
+    if (ass.mediaConverterId) {
+        var mc = getMapObjectByUid(ass.mediaConverterId, 'mediaConverter');
+        return 'МК «' + (mc ? (mc.properties.get('name') || 'МК') : 'МК') + '»';
+    }
+    if (ass.cableId == null) return '—';
     if (!isFiberExistingOnCable(ass.cableId, ass.fiberNumber)) return '—';
     if (ass.crossPort != null && ass.crossId) {
         var cross = objects.find(function(o) {
@@ -841,9 +850,9 @@ function buildOltCardContent(obj, isEditMode, name) {
     var deviceLine = [manufacturer, model].filter(Boolean).join(' · ');
     var cables = getConnectedCables(obj);
     var assignedCount = Object.keys(portAssignments).filter(function(k) {
-        var a = portAssignments[k];
-        return a && a.cableId != null && a.fiberNumber != null && a.crossPort != null && a.crossId != null &&
-            (!isFiberExistingOnCable || isFiberExistingOnCable(a.cableId, a.fiberNumber));
+        return typeof isOltPortInUse === 'function'
+            ? isOltPortInUse(obj, parseInt(k, 10))
+            : false;
     }).length;
     var incomingLabel = buildOltIncomingFiberLabel(incomingFiber, cables);
     var hasIncoming = !!(incomingFiber && incomingFiber.cableId &&
@@ -873,7 +882,7 @@ function buildOltCardContent(obj, isEditMode, name) {
     } else {
         html += '<div class="olt-card-view-name">' + escapeHtml(name || 'Новый OLT') + '</div>';
         html += '<div class="olt-card-view-meta"><span class="olt-kind-pill">GPON</span></div>';
-        html += '<p class="object-card-hint olt-card-hero-hint"><strong>Приход</strong> — жила от кросса/муфты к OLT. <strong>PON-порты</strong> — логическая связь с портом кросса без кабеля OLT ↔ кросс.</p>';
+        html += '<p class="object-card-hint olt-card-hero-hint"><strong>Приход</strong> — жила от кросса/муфты к OLT. <strong>PON-порты</strong> — подключение к ONU и медиаконвертерам.</p>';
     }
     html += '</div></div>';
     html += '<dl class="olt-card-stats">';
@@ -905,7 +914,7 @@ function buildOltCardContent(obj, isEditMode, name) {
     html += '<span class="object-card-badge object-card-badge--gpon" title="Назначено PON-портов">' + assignedCount + ' / ' + ponPorts + '</span>';
     html += '</div>';
     if (isEditMode) {
-        html += '<p class="object-card-hint olt-card-gpon-hint">Два независимых назначения: <strong>приход</strong> (от кросса/муфты к OLT) и <strong>PON-порты</strong> (логическая связь с жилой на порту кросса).</p>';
+        html += '<p class="object-card-hint olt-card-gpon-hint">Два независимых назначения: <strong>приход</strong> (от кросса/муфты к OLT) и <strong>PON-порты</strong> (подключение к ONU и медиаконвертерам).</p>';
     }
     if (oltConnectivityIssues.length) {
         oltConnectivityIssues.forEach(function(issue) {
@@ -929,12 +938,11 @@ function buildOltCardContent(obj, isEditMode, name) {
     html += '</tr></thead><tbody>';
     for (var p = 1; p <= ponPorts; p++) {
         var ass = portAssignments[String(p)] || null;
-        var crossConnected = ass && ass.crossPort != null && ass.crossId != null &&
-            isFiberExistingOnCable(ass.cableId, ass.fiberNumber);
-        var assLabel = crossConnected ? buildOltPortFiberLabel(ass, cables) : '—';
+        var portInUse = typeof isOltPortInUse === 'function' ? isOltPortInUse(obj, p) : false;
+        var assLabel = portInUse ? buildOltPortFiberLabel(ass, cables) : '—';
         var portLabel = (portLabels[String(p)] || '').trim();
         var portType = ponPortTypes[p - 1] || (typeof getPonPortDefaultKind === 'function' ? getPonPortDefaultKind() : 'GPON');
-        var rowBusy = !!crossConnected;
+        var rowBusy = !!portInUse;
         html += '<tr class="olt-port-row ' + (rowBusy ? 'olt-port-row--busy' : 'olt-port-row--free') + '" data-port="' + p + '">';
         html += '<td class="olt-ports-table-port">' + p + '</td>';
         html += '<td class="olt-ports-table-type">';
@@ -957,13 +965,14 @@ function buildOltCardContent(obj, isEditMode, name) {
             html += '<td class="node-port-assign node-port-assign--free olt-port-assign">—</td>';
         }
         html += '<td class="node-ports-table-actions"><div class="olt-port-actions">';
-        if (crossConnected) {
+        if (portInUse) {
             html += '<button type="button" class="btn-trace-olt-port btn-olt-trace" data-port="' + p + '">Трассировка</button>';
             if (isEditMode) {
                 html += '<button type="button" class="btn-disconnect-olt-port btn-compact btn-olt-disconnect" data-port="' + p + '" title="Отключить PON-порт">Отключить</button>';
             }
         } else if (isEditMode) {
-            html += '<button type="button" class="btn-olt-port-connect-cross btn-compact btn-olt-connect" data-port="' + p + '" title="Подключить к порту кросса">Подключить</button>';
+            html += '<button type="button" class="btn-olt-port-connect-onu btn-compact btn-olt-connect" data-port="' + p + '" title="Подключить ONU">Подключить ONU</button>';
+            html += '<button type="button" class="btn-olt-port-connect-mc btn-compact btn-olt-connect" data-port="' + p + '" title="Подключить медиаконвертер">Подключить МК</button>';
         } else {
             html += '<span class="node-port-status node-port-status--muted">Свободен</span>';
         }
@@ -2773,9 +2782,7 @@ function showObjectInfo(obj) {
     }
     if (splitterFiberRoutingMode && splitterFiberRoutingData) {
         var objId = getObjectUniqueId(obj);
-        var isSourceOrTarget = (objId === getObjectUniqueId(splitterFiberRoutingData.splitterObj)) ||
-                               (objId === splitterFiberRoutingData.targetId);
-        if (!isSourceOrTarget) {
+        if (!isGponFiberRoutingParticipant(splitterFiberRoutingData, objId)) {
             cancelSplitterFiberRouting();
         }
     }
@@ -2966,7 +2973,8 @@ function showObjectInfoBody(obj) {
                 for (var oi = 0; oi < splitRatio; oi++) {
                     var out = outputsPadded[oi] || null;
                     var destLabel = '';
-                    var hasConnection = false;
+                    var hasCompleteConnection = false;
+                    var hasPartialRouting = false;
                     if (out) {
                         var routeInfo = '';
                         var routeLen = (out.routeIds && out.routeIds.length) || (out.route && out.route.length) || 0;
@@ -2976,29 +2984,58 @@ function showObjectInfoBody(obj) {
                         if (out.onuId) {
                             var onuObj = objects.find(function(o) { return o.properties && o.properties.get('type') === 'onu' && getObjectUniqueId(o) === out.onuId; });
                             destLabel = onuObj ? '→ ONU ' + escapeHtml(onuObj.properties.get('name') || 'ONU') + routeInfo : '';
-                            hasConnection = !!onuObj;
+                            hasCompleteConnection = true;
+                        } else if (out.mediaConverterId) {
+                            var mcObjMap = objects.find(function(o) { return o.properties && o.properties.get('type') === 'mediaConverter' && getObjectUniqueId(o) === out.mediaConverterId; });
+                            destLabel = mcObjMap ? '→ МК ' + escapeHtml(mcObjMap.properties.get('name') || 'МК') + routeInfo : '';
+                            hasCompleteConnection = true;
+                        } else if (out.nodeId) {
+                            var nodeObjMap = objects.find(function(o) { return o.properties && o.properties.get('type') === 'node' && getObjectUniqueId(o) === out.nodeId; });
+                            var nodeLblMap = nodeObjMap ? (nodeObjMap.properties.get('name') || 'Узел') : 'Узел';
+                            destLabel = '→ ' + escapeHtml(nodeLblMap) + (out.switchPort != null ? ' · SFP ' + out.switchPort : '') + routeInfo;
+                            hasCompleteConnection = true;
                         } else if (out.splitterId) {
                             var spObj = resolveSplitterObject(out.splitterId);
                             destLabel = spObj ? '→ Сплиттер ' + escapeHtml(spObj.properties.get('name') || '') + routeInfo : '';
-                            hasConnection = !!spObj;
+                            hasCompleteConnection = true;
+                        } else if (out.crossPort != null) {
+                            destLabel = '→ порт кросса ' + parseInt(out.crossPort, 10) + routeInfo;
+                            hasPartialRouting = true;
                         } else if (out.hostId && out.cableId && out.fiberNumber != null) {
                             var hostOut = getMapObjectByUid(out.hostId, 'sleeve') || getMapObjectByUid(out.hostId, 'cross') || getMapObjectByUid(out.hostId, 'cabinet');
                             var hostOutName = hostOut ? (hostOut.properties.get('name') || (isCrossLikeHostType(hostOut.properties.get('type')) ? 'Кросс' : 'Муфта')) : 'Муфта/кросс';
                             destLabel = '→ ' + escapeHtml(hostOutName) + ', ж.' + out.fiberNumber + routeInfo;
-                            hasConnection = !!hostOut;
+                            hasPartialRouting = true;
+                        }
+                        if (!hasCompleteConnection && typeof splitterOutputHasEndpoint === 'function' && splitterOutputHasEndpoint(out)) {
+                            hasCompleteConnection = true;
+                            if (!destLabel) destLabel = '→ подключено' + routeInfo;
                         }
                     }
+                    var canOfferHost = !out || (!out.splitterId && !out.hostId && out.crossPort == null && !hasCompleteConnection);
+                    var canOfferOnu = mapSplitterCanOlt && (!out || (!out.onuId && !out.mediaConverterId && !hasCompleteConnection));
+                    var canOfferChildSplitter = !out || (!out.splitterId && !(out.hostId && out.cableId && out.fiberNumber != null) && out.crossPort == null && !hasCompleteConnection);
                     html += '<div class="splitter-output-row" style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap;">';
                     html += '<span style="min-width: 72px; font-size: 0.8125rem; color: var(--text-primary);">Выход ' + (oi + 1) + '</span>';
-                    if (!hasConnection) {
-                        html += '<button type="button" class="btn-splitter-output-to-host" data-output-index="' + oi + '" title="Пустить в муфту или кросс" style="padding: 4px 8px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">🔴 Муфта</button>';
-                        if (mapSplitterCanOlt) {
-                            html += '<button type="button" class="btn-splitter-output-to-onu" data-output-index="' + oi + '" title="GPON на ONU" style="padding: 4px 8px; background: #a855f7; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">📡 ONU</button>';
-                        }
-                        html += '<button type="button" class="btn-splitter-output-to-splitter" data-output-index="' + oi + '" title="Пустить на сплиттер" style="padding: 4px 8px; background: #f97316; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">🔀 Сплиттер</button>';
-                    } else {
+                    if (hasCompleteConnection) {
                         html += '<span style="font-size: 0.8rem; color: var(--text-secondary); padding: 4px 8px; background: var(--bg-tertiary); border-radius: 4px;">' + destLabel + '</span>';
                         html += '<button type="button" class="btn-splitter-output-delete" data-output-index="' + oi + '" title="Удалить соединение" style="padding: 4px 8px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">✕</button>';
+                    } else {
+                        if (hasPartialRouting && destLabel) {
+                            html += '<span style="font-size: 0.8rem; color: var(--text-secondary); padding: 4px 8px; background: var(--bg-tertiary); border-radius: 4px;">' + destLabel + '</span>';
+                        }
+                        if (canOfferHost) {
+                            html += '<button type="button" class="btn-splitter-output-to-host" data-output-index="' + oi + '" title="Пустить в муфту или кросс" style="padding: 4px 8px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">🔴 Муфта</button>';
+                        }
+                        if (canOfferOnu) {
+                            html += '<button type="button" class="btn-splitter-output-to-onu" data-output-index="' + oi + '" title="GPON на ONU" style="padding: 4px 8px; background: #a855f7; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">📡 ONU</button>';
+                        }
+                        if (canOfferChildSplitter) {
+                            html += '<button type="button" class="btn-splitter-output-to-splitter" data-output-index="' + oi + '" title="Пустить на сплиттер" style="padding: 4px 8px; background: #f97316; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">🔀 Сплиттер</button>';
+                        }
+                        if (hasPartialRouting) {
+                            html += '<button type="button" class="btn-splitter-output-delete" data-output-index="' + oi + '" title="Удалить соединение" style="padding: 4px 8px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">✕</button>';
+                        }
                     }
                     html += '</div>';
                 }
@@ -4588,13 +4625,23 @@ function setupModalEventListeners() {
                 saveData();
             });
         });
-        modalInfo.querySelectorAll('.btn-olt-port-connect-cross').forEach(function(btn) {
+        modalInfo.querySelectorAll('.btn-olt-port-connect-onu').forEach(function(btn) {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
                 var port = parseInt(this.getAttribute('data-port'), 10);
-                if (typeof showOltCrossPortConnectDialog === 'function') {
-                    showOltCrossPortConnectDialog(currentModalObject, port);
+                if (typeof showOltPortOnuConnectDialog === 'function') {
+                    showOltPortOnuConnectDialog(currentModalObject, port);
+                }
+            });
+        });
+        modalInfo.querySelectorAll('.btn-olt-port-connect-mc').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
+                var port = parseInt(this.getAttribute('data-port'), 10);
+                if (typeof showOltPortMcConnectDialog === 'function') {
+                    showOltPortMcConnectDialog(currentModalObject, port);
                 }
             });
         });

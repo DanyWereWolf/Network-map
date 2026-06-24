@@ -89,6 +89,19 @@
         );
     }
 
+    function setSplitterLinkPathD(pathEl, d) {
+        if (!pathEl || !d) return;
+        pathEl.setAttribute('d', d);
+        var prev = pathEl.previousElementSibling;
+        if (prev && prev.classList && prev.classList.contains('fiber-scheme-splitter-link-shadow')) {
+            prev.setAttribute('d', d);
+        }
+        var next = pathEl.nextElementSibling;
+        if (next && next.classList && next.classList.contains('fiber-scheme-splitter-link-hit')) {
+            next.setAttribute('d', d);
+        }
+    }
+
     function getSchemeSplitterObstacles(hostObj, svgWidth, svgHeight) {
         if (!isHost(hostObj)) return [];
         var list = getList(hostObj);
@@ -180,11 +193,7 @@
                 portY = outPort.y;
                 d = buildSplitterConnectionPath(portX, portY, fx, fy, isLeft, pathOpts);
             } else return;
-            pathEl.setAttribute('d', d);
-            var prev = pathEl.previousElementSibling;
-            if (prev && prev.classList && prev.classList.contains('fiber-scheme-splitter-link-shadow')) {
-                prev.setAttribute('d', d);
-            }
+            setSplitterLinkPathD(pathEl, d);
         });
         var hostObj = pathOpts.hostObj;
         var svgW = pathOpts.svgWidth || 800;
@@ -211,15 +220,7 @@
             if (!srcPort || !tgtPort) return;
             var isLeft = tgtPort.x < srcPort.x;
             var d = buildSplitterConnectionPath(srcPort.x, srcPort.y, tgtPort.x, tgtPort.y, isLeft, pathOpts);
-            pathEl.setAttribute('d', d);
-            var prev = pathEl.previousElementSibling;
-            if (prev && prev.classList && prev.classList.contains('fiber-scheme-splitter-link-shadow')) {
-                prev.setAttribute('d', d);
-            }
-            var hit = pathEl.nextElementSibling;
-            if (hit && hit.classList && hit.classList.contains('fiber-scheme-splitter-link-hit')) {
-                hit.setAttribute('d', d);
-            }
+            setSplitterLinkPathD(pathEl, d);
         });
     }
 

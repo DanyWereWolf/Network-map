@@ -24,6 +24,45 @@ function getObjectCabinetId(obj) {
     return id != null && id !== '' ? String(id) : '';
 }
 
+function getObjectCabinetUid(obj) {
+    if (!obj || !obj.properties) return null;
+    if (obj.properties.get('type') === 'cabinet') return getObjectUniqueId(obj);
+    var cabId = getObjectCabinetId(obj);
+    return cabId || null;
+}
+
+function getObjectRoutingCoords(obj) {
+    if (!obj) return null;
+    if (obj.geometry && typeof obj.geometry.getCoordinates === 'function') {
+        try {
+            var coords = obj.geometry.getCoordinates();
+            if (coords && coords.length >= 2 && !Array.isArray(coords[0])) {
+                return coords;
+            }
+        } catch (e) {}
+    }
+    var cabId = getObjectCabinetId(obj);
+    if (!cabId) return null;
+    var cabinet = getCabinetByUid(cabId);
+    if (!cabinet || !cabinet.geometry || typeof cabinet.geometry.getCoordinates !== 'function') return null;
+    try {
+        var cabCoords = cabinet.geometry.getCoordinates();
+        if (cabCoords && cabCoords.length >= 2 && !Array.isArray(cabCoords[0])) {
+            return cabCoords;
+        }
+    } catch (eCab) {}
+    return null;
+}
+
+function hasObjectRoutingCoords(obj) {
+    return !!getObjectRoutingCoords(obj);
+}
+
+function isSameCabinetAsObject(obj, cabinetUid) {
+    if (!obj || !cabinetUid) return false;
+    return getObjectCabinetUid(obj) === String(cabinetUid);
+}
+
 function getAllCabinets() {
     if (!Array.isArray(objects)) return [];
     return objects.filter(function(o) {

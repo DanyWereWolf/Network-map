@@ -353,7 +353,7 @@ function buildFiberWorkspaceHelpHtml() {
     h += '<p>3. <strong>Размер схемы</strong> — ширина/высота рабочей области (S/M/L/XL или своё). Ниже жил — место для сплиттеров.</p>';
     h += '<p>4. <strong>Стороны кабелей</strong>: кнопка ⇄ у кабеля на схеме или в панели «Схема» — перенести кабель на другую сторону.</p>';
     h += '<p>5. <strong>Сплиттер</strong>: 🔀 на схеме → число выходов. <strong>Вход</strong>: клик по жиле → клик по сплиттеру (карточка или «вх»), либо наоборот — «вх» → жила.</p>';
-    h += '<p>6. <strong>Выход</strong>: клик по точке выхода → жила на схеме/в таблице, <strong>порт кросса</strong> на схеме (или жила + порт в таблице), либо вход другого сплиттера.</p>';
+    h += '<p>6. <strong>Выход</strong>: клик по точке выхода → жила на схеме/в таблице (сращивание), <strong>свободный порт кросса</strong> на схеме (без жилы) или вход другого сплиттера.</p>';
     h += '<p>7. <strong>Зеркало</strong>: кнопка ⇄ на карточке — отразить сплиттер (вход справа, выходы слева). Также в окне ✎.</p>';
     h += '<p>8. Сплиттеры только в <strong>центральной зоне</strong> схемы. Список слева → клик для прокрутки. «↺ Сбросить позиции» — вернуть в зону.</p>';
     h += '<p>9. <strong>Оранжевая линия</strong> сплиттера: клик → подпись или удаление (как у сращиваний). Также ✕ в колонке «Сплиттер».</p>';
@@ -564,9 +564,6 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     html += '</div>';
     if (isEditMode) {
         html += '<button type="button" class="fiber-scheme-toolbar-btn" id="fiber-scheme-add-splitter" title="Добавить сплиттер в центральную зону">🔀 Сплиттер</button>';
-        if (isCross) {
-            html += '<button type="button" class="fiber-scheme-toolbar-btn fiber-scheme-toolbar-btn--secondary" id="fiber-scheme-cross-port-link" title="Соединить порт этого кросса с портом другого кросса">⇄ Кроссировка</button>';
-        }
     }
     if (window.EmbeddedSplitters && EmbeddedSplitters.getList(sleeveObj).length) {
         html += '<button type="button" class="fiber-scheme-toolbar-btn fiber-scheme-toolbar-btn--secondary" id="fiber-scheme-fit-splitters" title="Прокрутить схему к сплиттерам">◎ Найти</button>';
@@ -782,7 +779,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     if (window.EmbeddedSplitters) {
         var wirePickSplitterId = (schemeSplitterWirePick && schemeSplitterWirePick.hostObj === sleeveObj &&
             schemeSplitterWirePick.splitterId) ? schemeSplitterWirePick.splitterId : null;
-        var outputPick = (schemeSplitterOutputPick && schemeSplitterOutputPick.hostObj === sleeveObj) ? schemeSplitterOutputPick : null;
+        var outputPick = (schemeSplitterOutputPick && schemePickMatchesHost(schemeSplitterOutputPick, sleeveObj)) ? schemeSplitterOutputPick : null;
         html += EmbeddedSplitters.renderSchemeSplitters(sleeveObj, {
             svgWidth: svgWidth,
             svgHeight: svgHeight,
@@ -841,7 +838,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     html += '</g>';
 
     if (crossPanelLayout && fiberPorts) {
-        html += buildCrossSchemePanelSvg(crossPanelLayout, fiberPorts, fiberPositions, schemeBlocks, isDark, badgeH, isEditMode, sleeveObj, nodeR, badgeW, fiberLabels);
+        html += buildCrossSchemePanelSvg(crossPanelLayout, fiberPorts, fiberPositions, schemeBlocks, isDark, badgeH, isEditMode, sleeveObj, nodeR, badgeW, fiberLabels, svgWidth, layoutHeight);
     }
 
     html += '</svg>';
@@ -963,10 +960,12 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             !hasOnuConnection && !hasSplitterConnection && !hasSplitterOutputAtHost && !oltBlocksSplice && !isCrossPatchLocked;
         const isSpliceSelectable = !isUsed && !isConnected && !hasNodeConnection && !hasMcConnection && !oltBlocksSplice && !hasOnuConnection && !hasSplitterConnection && !isCrossPatchLocked;
         const hasOltRelation = hasDirectOltConnection || isOltCableEnd || canConnectToOlt;
-        const canShowOltIncoming = isEditMode && !isUsed && !isConnected && !hasOltRelation && !oltBlocksSplice &&
-            !hasNodeConnection && !hasMcConnection && !hasSplitterOutputAtHost && !isCrossPatchLocked;
-        const showGponBranchButtons = canAssignBase && (hasDirectOltConnection || (canConnectToOlt && !isOltCableEnd));
         const canConnectGponBranch = isEditMode && !isConnected && !isUsed && canConnectToOlt && !isCrossPatchLocked;
+        const canShowOltIncoming = isEditMode && !isUsed && !isConnected && !hasOltRelation && !oltBlocksSplice &&
+            !hasDirectOltConnection && !hasNodeConnection && !hasMcConnection && !hasOnuConnection &&
+            !hasSplitterConnection && !hasSplitterOutputAtHost && !isCrossPatchLocked;
+        const canOfferOnuChip = canConnectGponBranch && !hasOnuConnection && !hasMcConnection;
+        const showGponBranchButtons = canAssignBase && (hasDirectOltConnection || (canConnectToOlt && !isOltCableEnd));
         const oltBlocksNode = isFiberLocalOltNodeBlocked(sleeveObj, cableData.cableUniqueId, fiber.number);
         const canConnectNodeOnHost = isEditMode && !isConnected && !isUsed && !hasNodeConnection &&
             !hasMcConnection && !hasOnuConnection && !hasSplitterConnection && !hasSplitterOutputAtHost && !oltBlocksNode && !isCrossPatchLocked;
@@ -1095,18 +1094,16 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             if (canShowOltIncoming) {
                 actionChips += buildFiberChip('btn-connect-olt fiber-chip--olt', cableData.cableUniqueId, fiber.number, 'Приход OLT', 'OLT');
             }
-            if (showFullConnectButtons && isCross) {
-                if (canConnectGponBranch) actionChips += buildFiberChip('btn-connect-onu fiber-chip--onu', cableData.cableUniqueId, fiber.number, 'Подключить к ONU', 'ONU');
+            if (showFullConnectButtons) {
+                if (canOfferOnuChip) {
+                    actionChips += buildFiberChip('btn-connect-onu fiber-chip--onu', cableData.cableUniqueId, fiber.number, 'Подключить к ONU', 'ONU');
+                }
                 actionChips += buildFiberChip('btn-connect-mc fiber-chip--mc', cableData.cableUniqueId, fiber.number, 'Медиаконвертер', 'МК');
             }
-            if (showFullConnectButtons && !isCross) {
-                if (canConnectGponBranch) actionChips += buildFiberChip('btn-connect-onu fiber-chip--onu', cableData.cableUniqueId, fiber.number, 'Подключить к ONU', 'ONU');
-                actionChips += buildFiberChip('btn-connect-mc fiber-chip--mc', cableData.cableUniqueId, fiber.number, 'Медиаконвертер', 'МК');
-            }
-            if (showGponBranchButtons && canConnectGponBranch) {
+            if (showGponBranchButtons && canOfferOnuChip) {
                 actionChips += buildFiberChip('btn-connect-onu fiber-chip--onu', cableData.cableUniqueId, fiber.number, 'GPON на ONU', 'ONU');
             }
-            if (isCross && crossPatchPort != null && !crossPatchInfo && isEditMode &&
+            if (isCross && crossPatchPort != null && !crossPatchInfo && isEditMode && !hasAnyOutConnection &&
                 typeof isCrossPortAvailableForPatch === 'function' && isCrossPortAvailableForPatch(sleeveObj, crossPatchPort)) {
                 actionChips += '<button type="button" class="fiber-chip btn-cross-port-patch fiber-chip--cross-patch" data-cross-port="' + crossPatchPort + '" title="Соединить порт ' + crossPatchPort + ' с другим кроссом">⇄ Кросс</button>';
             }
@@ -1615,7 +1612,93 @@ function buildCrossFiberPortLinkPath(fx, fy, px, py, opts) {
     return 'M ' + fx + ' ' + fy + ' C ' + c1x + ' ' + c1y + ', ' + c2x + ' ' + c2y + ', ' + px + ' ' + py;
 }
 
-function buildCrossSchemePanelSvg(crossLayout, fiberPorts, fiberPositions, schemeBlocks, isDark, badgeH, isEditMode, hostObj, nodeR, badgeW, fiberLabels) {
+function getCrossPortAnchorFromSvg(svg, portNum) {
+    if (!svg || portNum == null) return null;
+    var g = svg.querySelector('.fiber-scheme-cross-port[data-cross-port="' + portNum + '"]');
+    if (!g) return null;
+    var node = g.querySelector('.fiber-scheme-cross-port-node');
+    if (!node) return null;
+    var px = parseFloat(node.getAttribute('cx'));
+    var py = parseFloat(node.getAttribute('cy'));
+    var r = parseFloat(node.getAttribute('r')) || 7;
+    if (isNaN(px) || isNaN(py)) return null;
+    return { x: px, y: py - r };
+}
+
+function buildSplitterCrossPortLinksHtml(hostObj, crossLayout, isDark, isEditMode, svgWidth, svgHeight) {
+    if (!hostObj || !crossLayout || !crossLayout.portPositions || !window.EmbeddedSplitters) return '';
+    EmbeddedSplitters.syncAllInputs(hostObj);
+    var list = EmbeddedSplitters.getList(hostObj);
+    if (!list.length) return '';
+    var hostUid = typeof getObjectUniqueId === 'function' ? getObjectUniqueId(hostObj) : null;
+    var strokeColor = isDark ? 'rgba(251, 146, 60, 0.9)' : 'rgba(234, 88, 12, 0.9)';
+    var svgW = svgWidth || 800;
+    var svgH = svgHeight || 400;
+    var crossCenterX = crossLayout.panelX + crossLayout.panelW / 2;
+    var buf = '';
+    list.forEach(function(rec) {
+        if (!rec) return;
+        var ratio = parseInt(rec.splitRatio, 10) || 8;
+        var outs = rec.outputConnections || [];
+        var x = rec.schemeX != null ? rec.schemeX : svgW / 2;
+        var y = rec.schemeY != null ? rec.schemeY : svgH * 0.42;
+        var isMirrored = EmbeddedSplitters.isSchemeMirrored(rec);
+        var box = EmbeddedSplitters.computeSchemeSplitterBox(ratio);
+        for (var cpi = 0; cpi < ratio; cpi++) {
+            var crossOut = outs[cpi];
+            if (!crossOut || crossOut.crossPort == null) continue;
+            if (crossOut.hostId && hostUid && crossOut.hostId !== hostUid) continue;
+            var crossPortNum = parseInt(crossOut.crossPort, 10);
+            var portPos = crossLayout.portPositions.get(crossPortNum);
+            if (!portPos) continue;
+            var srcPt = EmbeddedSplitters.schemeSplitterPortPos(x, y, box, 'output', cpi, ratio, isMirrored);
+            var portY = portPos.y - portPos.portR;
+            var pathD = buildCrossFiberPortLinkPath(srcPt.x, srcPt.y, portPos.x, portY, {
+                isLeft: srcPt.x < crossCenterX
+            });
+            var spTitle = 'Сплиттер «' + (rec.name || 'Сплиттер') + '» вых.' + (cpi + 1) + ' → порт ' + crossPortNum;
+            buf += '<g class="fiber-scheme-splitter-cross-link-group" data-splitter-id="' + escapeHtml(rec.id) + '" data-output-index="' + cpi + '" data-cross-port="' + crossPortNum + '">';
+            buf += '<title>' + escapeHtml(spTitle) + '</title>';
+            buf += '<path class="fiber-scheme-splitter-cross-link" data-splitter-id="' + escapeHtml(rec.id) + '" data-output-index="' + cpi + '" data-cross-port="' + crossPortNum + '" d="' + pathD + '" stroke="' + strokeColor + '" stroke-width="2.5" stroke-linecap="round" opacity="0.9" pointer-events="none"/>';
+            if (isEditMode) {
+                buf += '<path class="fiber-scheme-splitter-cross-link-hit" data-splitter-id="' + escapeHtml(rec.id) + '" data-output-index="' + cpi + '" data-cross-port="' + crossPortNum + '" d="' + pathD + '" fill="none" stroke="transparent" stroke-width="14" stroke-linecap="round" pointer-events="none"/>';
+            }
+            buf += '</g>';
+        }
+    });
+    return buf;
+}
+
+function updateSchemeSplitterCrossPortLinks(svg, splitterId, cx, cy, splitRatio, hostObj) {
+    if (!svg || !splitterId || !hostObj || !window.EmbeddedSplitters) return;
+    var rec = EmbeddedSplitters.findInHost(hostObj, splitterId);
+    if (!rec) return;
+    var ratio = parseInt(splitRatio, 10) || parseInt(rec.splitRatio, 10) || 8;
+    var mirrored = EmbeddedSplitters.isSchemeMirrored(rec);
+    var box = EmbeddedSplitters.computeSchemeSplitterBox(ratio);
+    var crossBody = svg.querySelector('.fiber-scheme-cross-body');
+    var crossCenterX = crossBody
+        ? parseFloat(crossBody.getAttribute('x')) + parseFloat(crossBody.getAttribute('width')) / 2
+        : cx;
+    svg.querySelectorAll('.fiber-scheme-splitter-cross-link[data-splitter-id="' + splitterId + '"]').forEach(function(pathEl) {
+        var oi = parseInt(pathEl.getAttribute('data-output-index'), 10);
+        var portNum = parseInt(pathEl.getAttribute('data-cross-port'), 10);
+        if (isNaN(oi) || isNaN(portNum)) return;
+        var anchor = getCrossPortAnchorFromSvg(svg, portNum);
+        if (!anchor) return;
+        var srcPt = EmbeddedSplitters.schemeSplitterPortPos(cx, cy, box, 'output', oi, ratio, mirrored);
+        var d = buildCrossFiberPortLinkPath(srcPt.x, srcPt.y, anchor.x, anchor.y, {
+            isLeft: srcPt.x < crossCenterX
+        });
+        pathEl.setAttribute('d', d);
+        var hit = pathEl.nextElementSibling;
+        if (hit && hit.classList.contains('fiber-scheme-splitter-cross-link-hit')) {
+            hit.setAttribute('d', d);
+        }
+    });
+}
+
+function buildCrossSchemePanelSvg(crossLayout, fiberPorts, fiberPositions, schemeBlocks, isDark, badgeH, isEditMode, hostObj, nodeR, badgeW, fiberLabels, svgWidth, svgHeight) {
     if (!crossLayout || !crossLayout.portPositions) return '';
     fiberLabels = fiberLabels || {};
     const crossPorts = crossLayout.portPositions.size;
@@ -1625,6 +1708,8 @@ function buildCrossSchemePanelSvg(crossLayout, fiberPorts, fiberPositions, schem
     const portIdle = isDark ? '#4c1d95' : '#ddd6fe';
     const portIdleStroke = isDark ? '#6d28d9' : '#a78bfa';
     const portActiveStroke = isDark ? '#a78bfa' : '#6d28d9';
+    const portSplitterFill = isDark ? '#9a3412' : '#fed7aa';
+    const portSplitterStroke = isDark ? '#fb923c' : '#ea580c';
     const portTextIdle = isDark ? '#c4b5fd' : '#7c3aed';
     const linkStroke = isDark ? 'rgba(167, 139, 250, 0.55)' : 'rgba(109, 40, 217, 0.4)';
     const connLabelBg = isDark ? 'rgba(30, 27, 75, 0.92)' : 'rgba(255, 255, 255, 0.94)';
@@ -1666,6 +1751,10 @@ function buildCrossSchemePanelSvg(crossLayout, fiberPorts, fiberPositions, schem
         });
     });
     html += '</g>';
+    const splitterCrossLinks = buildSplitterCrossPortLinksHtml(hostObj, crossLayout, isDark, isEditMode, svgWidth, svgHeight);
+    if (splitterCrossLinks) {
+        html += '<g class="fiber-scheme-cross-splitter-links" fill="none">' + splitterCrossLinks + '</g>';
+    }
     html += '<g class="fiber-scheme-cross-link-labels">';
     Object.keys(assignments).forEach(function(portKey) {
         const portNum = parseInt(portKey, 10);
@@ -1695,15 +1784,23 @@ function buildCrossSchemePanelSvg(crossLayout, fiberPorts, fiberPositions, schem
     crossLayout.portPositions.forEach(function(portPos, portNum) {
         const assignList = assignments[portNum] || [];
         const isAssigned = assignList.length > 0;
+        const spOnPort = !isAssigned && typeof findSplitterOutputOnCrossPort === 'function' && hostObj
+            ? findSplitterOutputOnCrossPort(hostObj, portNum) : null;
+        const hasSplitterOut = !!spOnPort;
         const isPatched = typeof isCrossPortPatched === 'function' && hostObj && isCrossPortPatched(hostObj, portNum);
         const patchInfo = isPatched && typeof getCrossPortPatch === 'function' ? getCrossPortPatch(hostObj, portNum) : null;
         const primaryAssign = assignList[0] || null;
         const fiber = primaryAssign ? lookupSchemeFiber(schemeBlocks, primaryAssign.cableId, primaryAssign.fiberNumber) : null;
-        const fill = isAssigned && fiber && fiber.color ? fiber.color : (isPatched ? (isDark ? '#7c2d12' : '#fed7aa') : portIdle);
-        const stroke = isAssigned ? portActiveStroke : (isPatched ? (isDark ? '#fb923c' : '#ea580c') : portIdleStroke);
-        const textFill = isAssigned ? ((fiber && (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00' || fiber.color === '#FFC0CB')) ? '#000' : '#fff') : (isPatched ? (isDark ? '#fff7ed' : '#9a3412') : portTextIdle);
+        const fill = isAssigned && fiber && fiber.color ? fiber.color : (hasSplitterOut ? portSplitterFill : (isPatched ? (isDark ? '#7c2d12' : '#fed7aa') : portIdle));
+        const stroke = isAssigned ? portActiveStroke : (hasSplitterOut ? portSplitterStroke : (isPatched ? (isDark ? '#fb923c' : '#ea580c') : portIdleStroke));
+        const textFill = isAssigned ? ((fiber && (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00' || fiber.color === '#FFC0CB')) ? '#000' : '#fff') : (hasSplitterOut ? (isDark ? '#fff7ed' : '#9a3412') : (isPatched ? (isDark ? '#fff7ed' : '#9a3412') : portTextIdle));
         let tooltip = 'Порт ' + portNum;
-        if (isPatched && patchInfo) {
+        if (hasSplitterOut) {
+            tooltip += ' · выход «' + spOnPort.splitterName + '» вых.' + (spOnPort.outputIndex + 1);
+            if (isEditMode) {
+                tooltip += isPatched ? '' : ' · клик — кроссировка';
+            }
+        } else if (isPatched && patchInfo) {
             var mateCross = typeof resolveCrossPortPatchHost === 'function' ? resolveCrossPortPatchHost(patchInfo.crossId) : null;
             var mateName = mateCross ? (mateCross.properties.get('name') || 'Кросс') : 'кросс';
             tooltip += ' · кроссировка → «' + mateName + '» п.' + patchInfo.port;
@@ -1720,12 +1817,12 @@ function buildCrossSchemePanelSvg(crossLayout, fiberPorts, fiberPositions, schem
         } else {
             tooltip += ' · свободен';
         }
-        html += '<g class="fiber-scheme-cross-port' + (isAssigned ? ' fiber-scheme-cross-port--assigned' : '') + (isPatched ? ' fiber-scheme-cross-port--patched' : '') + '" data-cross-port="' + portNum + '">';
+        html += '<g class="fiber-scheme-cross-port' + (isAssigned ? ' fiber-scheme-cross-port--assigned' : '') + (hasSplitterOut ? ' fiber-scheme-cross-port--splitter-out' : '') + (isPatched ? ' fiber-scheme-cross-port--patched' : '') + '" data-cross-port="' + portNum + '">';
         html += '<title>' + escapeHtml(tooltip) + '</title>';
         html += '<circle class="fiber-scheme-cross-port-node" cx="' + portPos.x + '" cy="' + portPos.y + '" r="' + portPos.portR + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + (isAssigned ? 2 : 1.5) + '"' + (isEditMode ? '' : ' pointer-events="none"') + '/>';
         html += '<text class="fiber-scheme-cross-port-num" x="' + portPos.x + '" y="' + (portPos.y + 3.5) + '" text-anchor="middle" style="font-size:7px;font-weight:700;fill:' + textFill + ';pointer-events:none;">' + portNum + '</text>';
         if (isEditMode) {
-            html += '<circle class="fiber-scheme-cross-port-hit" data-cross-port="' + portNum + '" cx="' + portPos.x + '" cy="' + portPos.y + '" r="12" fill="transparent" style="cursor:pointer"/>';
+            html += '<circle class="fiber-scheme-cross-port-hit" data-cross-port="' + portNum + '" cx="' + portPos.x + '" cy="' + portPos.y + '" r="16" fill="transparent" style="cursor:pointer;pointer-events:all"/>';
         }
         html += '</g>';
     });

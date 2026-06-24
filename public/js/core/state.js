@@ -82,3 +82,6 @@ var redoStack = [];
 var lastSavedState = null;
 var inUndoRedo = false;
 var showOnMapHighlightState = null;
+var gponRoutingHighlightMarkers = [];
+var gponRoutingHighlightIconState = [];
+var gponRoutingHighlightAnimState = null;

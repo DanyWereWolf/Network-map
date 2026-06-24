@@ -507,7 +507,11 @@ function handleMapMouseMove(e) {
             var previewCoords = coords;
             if (snapObj) {
                 var t = snapObj.properties.get('type');
-                if (t === 'support' || t === 'attachment' || getObjectUniqueId(snapObj) === splitterFiberRoutingData.targetId) {
+                if (t === 'support' || t === 'attachment' || getObjectUniqueId(snapObj) === splitterFiberRoutingData.targetId ||
+                    (typeof isGponFiberRoutingTargetReachableClick === 'function' &&
+                        isGponFiberRoutingTargetReachableClick(splitterFiberRoutingData, snapObj)) ||
+                    (typeof isGponFiberRoutingSourceUid === 'function' &&
+                        isGponFiberRoutingSourceUid(splitterFiberRoutingData, getObjectUniqueId(snapObj)))) {
                     previewCoords = snapObj.geometry.getCoordinates();
                 }
             }

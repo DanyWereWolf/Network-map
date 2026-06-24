@@ -477,6 +477,9 @@
             var hostN = item.host && item.host.properties ? (item.host.properties.get('name') || 'Муфта/кросс') : 'Муфта/кросс';
             return '  🔀 → «' + hostN + '», жила ' + (item.fiberNumber != null ? item.fiberNumber : '?');
         }
+        if (item.type === 'splitterOutputToCrossPort') {
+            return '  🔀 → порт ' + item.crossPort + ' («' + (item.crossName || 'Кросс') + '»)';
+        }
         if (item.type === 'oltPortConnection') {
             var portLabel = item.incoming ? 'приход' : (typeof formatOltPortDisplay === 'function'
                 ? formatOltPortDisplay(item.portNumber, item.portLabel || (item.olt && typeof getOltPortLabel === 'function' ? getOltPortLabel(item.olt, item.portNumber) : ''))

@@ -510,6 +510,27 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
                         currentFiberNumber = directOut.childInput.fiberNumber;
                         currentCable = findCableById(directOut.childInput.cableId);
                         afterSplitterInputBranch = true;
+                    } else if (directOut && directOut.crossHost) {
+                        currentObject = directOut.crossHost;
+                        currentCableId = directOut.cableId;
+                        currentFiberNumber = directOut.fiberNumber;
+                        currentCable = findCableById(directOut.cableId);
+                        afterSplitterInputBranch = true;
+                        allowHostRevisitFromSplitter = true;
+                        if (typeof applyCrossPortPatchTraceContinuation === 'function') {
+                            var patchContSp = applyCrossPortPatchTraceContinuation(path, directOut.crossHost, directOut.cableId, directOut.fiberNumber, currentCable, visitedPatchKeys, directOut.crossPort);
+                            if (patchContSp) {
+                                if (patchContSp.break) {
+                                    currentObject = null;
+                                    break;
+                                }
+                                currentCableId = patchContSp.currentCableId;
+                                currentFiberNumber = patchContSp.currentFiberNumber;
+                                currentObject = patchContSp.currentObject;
+                                previousObject = patchContSp.previousObject;
+                                currentCable = findCableById(currentCableId);
+                            }
+                        }
                     } else {
                         var inCable = findCableById(inputFiber.cableId);
                         var inputOtherEnd = inCable ? getOtherEndForSplitterCable(inCable, nextObject, inputFiber.cableId, inputFiber.fiberNumber) : null;
@@ -722,6 +743,9 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
                     }
                 }
                 var spOutRev = findSplitterOutputAtHost(nextObject, currentCableId, currentFiberNumber);
+                if (!spOutRev && objType === 'cross' && typeof findSplitterOutputAtHostByLogicalFiber === 'function') {
+                    spOutRev = findSplitterOutputAtHostByLogicalFiber(nextObject, currentCableId, currentFiberNumber);
+                }
                 if (spOutRev && spOutRev.splitterObj) {
                     var spOutObj = spOutRev.splitterObj;
                     syncSplitterInputFromHost(spOutObj);
@@ -735,7 +759,13 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
                     continue;
                 }
                 if (objType === 'cross' && typeof applyCrossPortPatchTraceContinuation === 'function') {
-                    var patchCont = applyCrossPortPatchTraceContinuation(path, nextObject, currentCableId, currentFiberNumber, currentCable, visitedPatchKeys);
+                    var crossPortHint = null;
+                    if (spOutRev && spOutRev.viaCrossPort && spOutRev.crossPort != null) {
+                        crossPortHint = spOutRev.crossPort;
+                    } else if (typeof getCrossPortForFiber === 'function') {
+                        crossPortHint = getCrossPortForFiber(nextObject, currentCableId, currentFiberNumber);
+                    }
+                    var patchCont = applyCrossPortPatchTraceContinuation(path, nextObject, currentCableId, currentFiberNumber, currentCable, visitedPatchKeys, crossPortHint);
                     if (patchCont) {
                         if (patchCont.break) break;
                         currentCableId = patchCont.currentCableId;
@@ -962,6 +992,39 @@ function traceAllFiberPathsFromObject(startObject, startCableId, startFiberNumbe
                     if (mcSuffix) {
                         paths.push(prefix.concat(mcSuffix));
                         anyExpanded = true;
+                    }
+                } else if (out2.crossPort != null) {
+                    var crossHostOut = splitterObj._host;
+                    if (!crossHostOut && out2.hostId) {
+                        crossHostOut = objects.find(function(o) {
+                            return o.properties && getObjectUniqueId(o) === out2.hostId && isCrossLikeHostType(o.properties.get('type'));
+                        }) || null;
+                    }
+                    if (crossHostOut && typeof resolveSplitterCrossPortLogicalFiber === 'function') {
+                        var logOut = resolveSplitterCrossPortLogicalFiber(crossHostOut, out2.crossPort);
+                        if (logOut) {
+                            var crossNameOut = crossHostOut.properties.get('name') || 'Кросс';
+                            var crossSuffix = [
+                                { type: 'splitterOutputToCrossPort', splitter: splitterObj, cross: crossHostOut, crossName: crossNameOut, crossPort: parseInt(out2.crossPort, 10), outputIndex: oi2, cableId: logOut.cableId, fiberNumber: logOut.fiberNumber },
+                                { type: 'object', objectType: 'cross', objectName: crossNameOut, object: crossHostOut, port: parseInt(out2.crossPort, 10) }
+                            ];
+                            var branchPath = prefix.concat(crossSuffix);
+                            var patchVisited = new Set();
+                            var patchContOut = typeof applyCrossPortPatchTraceContinuation === 'function'
+                                ? applyCrossPortPatchTraceContinuation(branchPath, crossHostOut, logOut.cableId, logOut.fiberNumber, findCableById(logOut.cableId), patchVisited, parseInt(out2.crossPort, 10))
+                                : null;
+                            if (patchContOut && !patchContOut.break) {
+                                var subCross = traceFiberPathFromObject(patchContOut.currentObject, patchContOut.currentCableId, patchContOut.currentFiberNumber);
+                                if (!subCross.error && subCross.path.length > 1) {
+                                    paths.push(branchPath.concat(subCross.path.slice(1)));
+                                } else {
+                                    paths.push(branchPath);
+                                }
+                            } else {
+                                paths.push(branchPath);
+                            }
+                            anyExpanded = true;
+                        }
                     }
                 } else if (out2.splitterId) {
                     var targetSplitter = resolveSplitterObject(out2.splitterId);
@@ -1615,6 +1678,13 @@ function getAvailableNodes() {
 }
 
 function showNodeSelectionDialog(crossObj, cableId, fiberNumber) {
+    if (crossObj && cableId != null && fiberNumber != null) {
+        var existingNode = getHostAssignment(crossObj, 'nodeConnections', cableId, fiberNumber);
+        if (existingNode && existingNode.nodeId) {
+            showWarning('Жила уже подключена к узлу.', 'Жила занята');
+            return;
+        }
+    }
     const nodes = getAvailableNodes();
     
     if (nodes.length === 0) {
@@ -1811,15 +1881,31 @@ function closeNodeSelectionModal() {
 function getAvailableOnus() {
     return objects.filter(function(obj) {
         if (!obj.properties || obj.properties.get('type') !== 'onu') return false;
-        var uid = getObjectUniqueId(obj);
+        var uid = obj.properties.get('uniqueId') || getObjectUniqueId(obj);
         return !isOnuUsedInNetwork(uid);
     });
 }
 
+function getAvailableOnusForOltPort(oltObj, portNumber) {
+    return getAvailableOnus().filter(function(onu) {
+        return typeof hasObjectRoutingCoords === 'function' ? hasObjectRoutingCoords(onu) : !!(onu && onu.geometry);
+    });
+}
+
 function getAvailableMediaConverters() {
-    return objects.filter(obj =>
-        obj.properties && obj.properties.get('type') === 'mediaConverter'
-    );
+    return objects.filter(function(obj) {
+        if (!obj.properties || obj.properties.get('type') !== 'mediaConverter') return false;
+        var uid = obj.properties.get('uniqueId') || getObjectUniqueId(obj);
+        return typeof isMediaConverterUsedInNetwork === 'function'
+            ? !isMediaConverterUsedInNetwork(uid)
+            : true;
+    });
+}
+
+function getAvailableMediaConvertersForOltPort(oltObj, portNumber) {
+    return getAvailableMediaConverters().filter(function(mc) {
+        return typeof hasObjectRoutingCoords === 'function' ? hasObjectRoutingCoords(mc) : !!(mc && mc.geometry);
+    });
 }
 
 function setFiberTargetSelectionModalMode(mode) {
@@ -1837,6 +1923,16 @@ function setFiberTargetSelectionModalMode(mode) {
 function showOnuSelectionDialog(sleeveObj, cableId, fiberNumber) {
     if (!isFiberReachableToOlt(sleeveObj, cableId, fiberNumber)) {
         showWarning('ONU можно подключить только к ветке, связанной с OLT.', 'Нет OLT');
+        return;
+    }
+    var existingOnu = getHostAssignment(sleeveObj, 'onuConnections', cableId, fiberNumber);
+    if (existingOnu && existingOnu.onuId) {
+        showWarning('Жила уже подключена к ONU.', 'Жила занята');
+        return;
+    }
+    var existingMc = getHostAssignment(sleeveObj, 'mediaConverterConnections', cableId, fiberNumber);
+    if (existingMc && existingMc.mediaConverterId) {
+        showWarning('Жила уже подключена к медиаконвертеру.', 'Жила занята');
         return;
     }
     const onus = getAvailableOnus();
@@ -1867,6 +1963,16 @@ function showMediaConverterSelectionDialog(sleeveObj, cableId, fiberNumber) {
     const usage = getFiberUsage(cableId, fiberNumber, usageOptsMcDlg);
     if (usage.used) {
         showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
+        return;
+    }
+    var existingMcDlg = getHostAssignment(sleeveObj, 'mediaConverterConnections', cableId, fiberNumber);
+    if (existingMcDlg && existingMcDlg.mediaConverterId) {
+        showWarning('Жила уже подключена к медиаконвертеру.', 'Жила занята');
+        return;
+    }
+    var existingOnuDlg = getHostAssignment(sleeveObj, 'onuConnections', cableId, fiberNumber);
+    if (existingOnuDlg && existingOnuDlg.onuId) {
+        showWarning('Жила уже подключена к ONU.', 'Жила занята');
         return;
     }
     const mcs = getAvailableMediaConverters();

@@ -1706,7 +1706,9 @@ function createObjectFromData(data, opts, createOpts) {
             var objId = getObjectUniqueId(placemark);
             var objType = type;
             
-            if (objId === splitterFiberRoutingData.targetId) {
+            if (objId === splitterFiberRoutingData.targetId ||
+                (typeof isGponFiberRoutingTargetReachableClick === 'function' &&
+                    isGponFiberRoutingTargetReachableClick(splitterFiberRoutingData, placemark))) {
                 completeSplitterFiberRouting();
                 return;
             }
@@ -1717,8 +1719,8 @@ function createObjectFromData(data, opts, createOpts) {
                 return;
             }
             
-            var spRouteAnchor = splitterFiberRoutingData.routingAnchor || splitterFiberRoutingData.splitterObj;
-            if (objId === getObjectUniqueId(spRouteAnchor) || objId === getObjectUniqueId(splitterFiberRoutingData.splitterObj)) {
+            var spRouteAnchor = getGponFiberRoutingSourceAnchor(splitterFiberRoutingData);
+            if (isGponFiberRoutingSourceUid(splitterFiberRoutingData, objId)) {
                 splitterFiberWaypoints = [];
                 updateSplitterFiberPreview();
                 return;

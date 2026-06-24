@@ -21,24 +21,25 @@ function setupFiberConnectionHandlers() {
         el.addEventListener('click', function(e) {
             e.stopPropagation();
             if (!isEditMode) return;
-            if (this.getAttribute('data-fiber-selectable') === 'false') return;
             const cableId = this.getAttribute('data-cable-id');
             const fiberNumber = parseInt(this.getAttribute('data-fiber-number'), 10);
 
             if (schemeSplitterWirePick && schemeSplitterWirePick.hostObj === sleeveObj && schemeSplitterWirePick.splitterId) {
                 if (tryConnectSchemeFiberToSplitter(sleeveObj, cableId, fiberNumber, schemeSplitterWirePick.splitterId)) return;
             }
-            if (schemeSplitterOutputPick && schemeSplitterOutputPick.hostObj === sleeveObj) {
+            if (schemeSplitterOutputPick && schemePickMatchesHost(schemeSplitterOutputPick, sleeveObj)) {
                 tryConnectSchemeSplitterOutputToFiber(sleeveObj, cableId, fiberNumber);
                 return;
             }
-            if (schemeCrossPortPick && schemeCrossPortPick.hostObj === sleeveObj) {
+            if (schemeCrossPortPick && schemePickMatchesHost(schemeCrossPortPick, sleeveObj)) {
                 if (tryAssignFiberToCrossPort(sleeveObj, cableId, fiberNumber, schemeCrossPortPick.portNumber)) {
                     clearSchemeCrossPortPick();
                     resetFiberSelection();
                 }
                 return;
             }
+
+            if (this.getAttribute('data-fiber-selectable') === 'false') return;
 
             if (!selectedFiberForConnection) {
                 
@@ -377,7 +378,7 @@ function setupFiberConnectionHandlers() {
             var fiberNumber = parseInt(tableItem.getAttribute('data-fiber-number'), 10);
             if (splitterId && tableItem.classList.contains('fiber-item--splitter-output-proxy') && cableId) {
                 if (isNaN(fiberNumber)) return;
-                if (schemeSplitterOutputPick && schemeSplitterOutputPick.hostObj === sleeveObj) {
+                if (schemeSplitterOutputPick && schemePickMatchesHost(schemeSplitterOutputPick, sleeveObj)) {
                     tryConnectSchemeSplitterOutputToFiber(sleeveObj, cableId, fiberNumber);
                     return;
                 }
@@ -399,20 +400,21 @@ function setupFiberConnectionHandlers() {
                     tryConnectSchemeFiberToSplitter(sleeveObj, schemeSplitterWirePick.cableId, schemeSplitterWirePick.fiberNumber, splitterId);
                     return;
                 }
-                if (tableItem.getAttribute('data-fiber-selectable') !== 'true') return;
                 if (kind === 'input') {
+                    if (tableItem.getAttribute('data-fiber-selectable') !== 'true') return;
                     startSchemeSplitterWirePick(sleeveObj, { splitterId: splitterId });
                 } else if (kind === 'output' && !isNaN(outputIndex)) {
+                    if (tableItem.getAttribute('data-fiber-occupied') === 'true') return;
                     startSchemeSplitterOutputPick(sleeveObj, splitterId, outputIndex);
                 }
                 return;
             }
             if (!cableId || isNaN(fiberNumber)) return;
-            if (schemeSplitterOutputPick && schemeSplitterOutputPick.hostObj === sleeveObj) {
+            if (schemeSplitterOutputPick && schemePickMatchesHost(schemeSplitterOutputPick, sleeveObj)) {
                 tryConnectSchemeSplitterOutputToFiber(sleeveObj, cableId, fiberNumber);
                 return;
             }
-            if (schemeCrossPortPick && schemeCrossPortPick.hostObj === sleeveObj) {
+            if (schemeCrossPortPick && schemePickMatchesHost(schemeCrossPortPick, sleeveObj)) {
                 if (tryAssignFiberToCrossPort(sleeveObj, cableId, fiberNumber, schemeCrossPortPick.portNumber)) {
                     clearSchemeCrossPortPick();
                     resetFiberSelection();
@@ -658,6 +660,21 @@ function setupFiberConnectionHandlers() {
             if (facade) showSplitterOutputOnuDialog(facade, oi);
         });
     });
+    document.querySelectorAll('.btn-connect-splitter-olt').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var sid = btn.getAttribute('data-splitter-id');
+            var facade = resolveSplitterObject(sid);
+            if (!facade || typeof showOltSelectionDialog !== 'function') return;
+            syncSplitterInputFromHost(facade);
+            var root = typeof getSplitterRootInputFiber === 'function' ? getSplitterRootInputFiber(facade) : null;
+            if (!root || !root.cableId || root.fiberNumber == null) {
+                if (typeof showWarning === 'function') showWarning('Сначала подключите входную жилу к сплиттеру.', 'Нет входа');
+                return;
+            }
+            showOltSelectionDialog(sleeveObj, root.cableId, root.fiberNumber);
+        });
+    });
     document.querySelectorAll('.btn-connect-splitter-mc').forEach(function(btn) {
         btn.addEventListener('click', function(e) {
             e.stopPropagation();
@@ -672,6 +689,17 @@ function setupFiberConnectionHandlers() {
             var sid = btn.getAttribute('data-splitter-id');
             var oi = parseInt(btn.getAttribute('data-output-index'), 10);
             showSplitterOutputNodeDialog(sleeveObj, sid, oi);
+        });
+    });
+
+    document.querySelectorAll('.btn-splitter-output-cross-port').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var sid = btn.getAttribute('data-splitter-id');
+            var oi = parseInt(btn.getAttribute('data-output-index'), 10);
+            if (!sid || isNaN(oi)) return;
+            startSchemeSplitterOutputPick(sleeveObj, sid, oi);
+            if (typeof switchFiberWorkspaceToSchemeTab === 'function') switchFiberWorkspaceToSchemeTab();
         });
     });
 
@@ -750,15 +778,6 @@ function setupFiberConnectionHandlers() {
             const fiberNumber = parseInt(this.getAttribute('data-fiber-number'), 10);
             if (!cableId || isNaN(fiberNumber)) return;
             const portValue = this.value;
-            if (schemeSplitterOutputPick && schemeSplitterOutputPick.hostObj === sleeveObj && portValue) {
-                if (tryConnectSchemeSplitterOutputToFiberAndPort(sleeveObj, cableId, fiberNumber, parseInt(portValue, 10))) {
-                    this.value = portValue;
-                } else {
-                    const fiberPorts = sleeveObj.properties.get('fiberPorts') || {};
-                    this.value = fiberPorts[cableId + '-' + fiberNumber] || '';
-                }
-                return;
-            }
             if (typeof isFiberSplicedAtHost === 'function' && isFiberSplicedAtHost(sleeveObj, cableId, fiberNumber)) {
                 if (typeof showWarning === 'function') showWarning('Сращённые жилы не занимают порты кросса.', 'Порт недоступен');
                 this.value = '';
@@ -835,13 +854,29 @@ function setupFiberSchemeCrossPortHandlers(crossObj) {
     if (!crossObj || !isCrossLikeHostType(crossObj.properties.get('type')) || !isEditMode) return;
     var svg = document.getElementById('fiber-connections-svg');
     if (!svg) return;
+    function onCrossPortActivate(e, portNum) {
+        e.stopPropagation();
+        e.preventDefault();
+        if (!isNaN(portNum)) handleSchemeCrossPortClick(crossObj, portNum);
+    }
+    svg.querySelectorAll('.fiber-scheme-cross-port').forEach(function(portG) {
+        if (portG.dataset.crossPortBound) return;
+        portG.dataset.crossPortBound = '1';
+        portG.style.cursor = 'pointer';
+        portG.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+        portG.addEventListener('click', function(e) {
+            if (e.target.closest('.fiber-scheme-cross-link-hit, .fiber-scheme-cross-link-label')) return;
+            var portNum = parseInt(portG.getAttribute('data-cross-port'), 10);
+            onCrossPortActivate(e, portNum);
+        });
+    });
     svg.querySelectorAll('.fiber-scheme-cross-port-hit').forEach(function(hit) {
+        if (hit.dataset.crossPortHitBound) return;
+        hit.dataset.crossPortHitBound = '1';
         hit.addEventListener('mousedown', function(e) { e.stopPropagation(); });
         hit.addEventListener('click', function(e) {
-            e.stopPropagation();
-            e.preventDefault();
             var portNum = parseInt(hit.getAttribute('data-cross-port'), 10);
-            if (!isNaN(portNum)) handleSchemeCrossPortClick(crossObj, portNum);
+            onCrossPortActivate(e, portNum);
         });
     });
     svg.querySelectorAll('.fiber-scheme-cross-link-hit').forEach(function(hit) {
@@ -1029,7 +1064,7 @@ function setupFiberSchemeSplitterHandlers(hostObj) {
 
     function onSchemeSplitterWireTargetClick(splitterId) {
         if (!splitterId || !isEditMode) return;
-        if (schemeSplitterOutputPick && schemeSplitterOutputPick.hostObj === hostObj) {
+        if (schemeSplitterOutputPick && schemePickMatchesHost(schemeSplitterOutputPick, hostObj)) {
             tryConnectSchemeSplitterOutputToSplitter(hostObj, splitterId);
             return;
         }
@@ -1070,6 +1105,9 @@ function setupFiberSchemeSplitterHandlers(hostObj) {
                 hostObj: hostObj
             });
         }
+        if (typeof updateSchemeSplitterCrossPortLinks === 'function') {
+            updateSchemeSplitterCrossPortLinks(svg, dragState.id, clamped.x, clamped.y, ratio, hostObj);
+        }
         updateFiberSchemeSplicePaths(svg, hostObj, svgW, svgH, 6);
     }
 
@@ -1094,7 +1132,7 @@ function setupFiberSchemeSplitterHandlers(hostObj) {
             var sid = port.getAttribute('data-splitter-id') || (port.closest('.fiber-scheme-splitter') && port.closest('.fiber-scheme-splitter').getAttribute('data-splitter-id'));
             var oi = parseInt(port.getAttribute('data-output-index'), 10);
             if (!sid || isNaN(oi)) return;
-            if (schemeSplitterOutputPick && schemeSplitterOutputPick.hostObj === hostObj) {
+            if (schemeSplitterOutputPick && schemePickMatchesHost(schemeSplitterOutputPick, hostObj)) {
                 clearSchemeSplitterOutputPick();
                 return;
             }

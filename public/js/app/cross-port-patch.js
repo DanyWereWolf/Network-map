@@ -68,13 +68,25 @@ function getCrossPortVisualMeta(crossObj, portNum, opts) {
         };
     }
     var fiberKeys = typeof getCrossPortFiberKeys === 'function' ? getCrossPortFiberKeys(crossObj, portNum) : [];
+    var spOnPort = typeof findSplitterOutputOnCrossPort === 'function' ? findSplitterOutputOnCrossPort(crossObj, portNum) : null;
     if (fiberKeys.length) {
+        var fiberLabel = fiberKeys.length > 1 ? ('жил: ' + fiberKeys.length) : 'жила на порту';
+        if (spOnPort) fiberLabel = 'сплиттер → ' + fiberLabel;
         return {
             state: 'fiber',
-            stateLabel: fiberKeys.length > 1 ? ('жил: ' + fiberKeys.length) : 'жила на порту',
-            shortLabel: 'жила',
+            stateLabel: fiberLabel,
+            shortLabel: spOnPort ? 'сплиттер' : 'жила',
             optionSuffix: '',
             selectDisabled: isCrossPortOptionDisabledForFiber(crossObj, portNum, opts.cableId, opts.fiberNumber)
+        };
+    }
+    if (spOnPort) {
+        return {
+            state: 'splitter',
+            stateLabel: '«' + (spOnPort.splitterName || 'Сплиттер') + '» вых.' + (spOnPort.outputIndex + 1),
+            shortLabel: 'сплиттер',
+            optionSuffix: '',
+            selectDisabled: false
         };
     }
     return {
@@ -163,6 +175,7 @@ function isCrossPortAvailableForPatch(crossObj, portNum) {
     if (port > maxPorts) return false;
     if (isCrossPortPatched(crossObj, port)) return false;
     if (typeof isCrossPortLinkedToOlt === 'function' && isCrossPortLinkedToOlt(crossObj, port)) return false;
+    if (typeof isCrossPortOltIncomingOccupied === 'function' && isCrossPortOltIncomingOccupied(crossObj, port)) return false;
     return true;
 }
 
@@ -509,15 +522,6 @@ function confirmCrossPortPatchConnect() {
 
 function setupCrossPortPatchHandlers(hostObj) {
     if (!hostObj || !isEditMode || !isCrossLikeHostType(hostObj.properties.get('type'))) return;
-    var crossLinkBtn = document.getElementById('fiber-scheme-cross-port-link');
-    if (crossLinkBtn && !crossLinkBtn.dataset.crossPatchBound) {
-        crossLinkBtn.dataset.crossPatchBound = '1';
-        crossLinkBtn.addEventListener('click', function() {
-            if (typeof setSchemeCrossPortLinkMode === 'function') {
-                setSchemeCrossPortLinkMode(!schemeCrossPortLinkMode);
-            }
-        });
-    }
     document.querySelectorAll('.btn-cross-port-patch').forEach(function(btn) {
         if (btn.dataset.crossPatchBound) return;
         btn.dataset.crossPatchBound = '1';
@@ -526,7 +530,9 @@ function setupCrossPortPatchHandlers(hostObj) {
             e.preventDefault();
             var portNum = parseInt(this.getAttribute('data-cross-port'), 10);
             if (isNaN(portNum)) return;
-            if (typeof showCrossPortPatchDialog === 'function') {
+            if (typeof startCrossPortPatchFromScheme === 'function') {
+                startCrossPortPatchFromScheme(hostObj, portNum);
+            } else if (typeof showCrossPortPatchDialog === 'function') {
                 showCrossPortPatchDialog(hostObj, portNum);
             }
         });
@@ -560,6 +566,12 @@ function buildCrossPortPatchRowHtml(hostObj, portNum, isEditMode) {
         }).filter(Boolean);
         if (parts.length) fiberHint = parts.join(', ');
     }
+    var spOnPort = typeof findSplitterOutputOnCrossPort === 'function' ? findSplitterOutputOnCrossPort(hostObj, portNum) : null;
+    if (spOnPort && !fiberKeys.length) {
+        fiberHint = 'спл. «' + (spOnPort.splitterName || 'Сплиттер') + '» вых.' + (spOnPort.outputIndex + 1);
+    } else if (spOnPort && fiberHint !== '—') {
+        fiberHint += ' · спл. вых.' + (spOnPort.outputIndex + 1);
+    }
     var patchText = '—';
     var statusText = 'свободен';
     var statusClass = 'cross-port-patch-status--free';
@@ -573,7 +585,10 @@ function buildCrossPortPatchRowHtml(hostObj, portNum, isEditMode) {
         statusText = 'PON OLT';
         statusClass = 'cross-port-patch-status--busy';
     } else if (fiberKeys.length) {
-        statusText = 'жила на порту';
+        statusText = spOnPort ? 'сплиттер → порт' : 'жила на порту';
+        statusClass = 'cross-port-patch-status--fiber';
+    } else if (spOnPort) {
+        statusText = 'сплиттер → порт';
         statusClass = 'cross-port-patch-status--fiber';
     }
     var actionHtml = '';
@@ -620,11 +635,14 @@ function buildCrossPortPatchTableHtml(hostObj, crossPorts, isEditMode) {
  * Продолжение трассировки через кроссировку портов.
  * Возвращает { outFiber, targetCross } или { ended: true } или null.
  */
-function tryTraverseCrossPortPatch(path, crossObj, cableId, fiberNumber, visitedPatchKeys) {
+function tryTraverseCrossPortPatch(path, crossObj, cableId, fiberNumber, visitedPatchKeys, portNumOverride) {
     if (!crossObj || !path || !visitedPatchKeys) return null;
     if (crossObj.properties.get('type') !== 'cross') return null;
-    if (typeof getCrossPortForFiber !== 'function') return null;
-    var portNum = getCrossPortForFiber(crossObj, cableId, fiberNumber);
+    var portNum = portNumOverride != null ? parseInt(portNumOverride, 10) : null;
+    if (portNum == null || isNaN(portNum)) {
+        if (typeof getCrossPortForFiber !== 'function') return null;
+        portNum = getCrossPortForFiber(crossObj, cableId, fiberNumber);
+    }
     if (portNum == null) return null;
     var patch = getCrossPortPatch(crossObj, portNum);
     if (!patch) return null;
@@ -672,8 +690,8 @@ function tryTraverseCrossPortPatch(path, crossObj, cableId, fiberNumber, visited
     return { outFiber: outFiber, targetCross: targetCross, fromCross: crossObj };
 }
 
-function applyCrossPortPatchTraceContinuation(path, crossObj, cableId, fiberNumber, currentCable, visitedPatchKeys) {
-    var hop = tryTraverseCrossPortPatch(path, crossObj, cableId, fiberNumber, visitedPatchKeys);
+function applyCrossPortPatchTraceContinuation(path, crossObj, cableId, fiberNumber, currentCable, visitedPatchKeys, portNumOverride) {
+    var hop = tryTraverseCrossPortPatch(path, crossObj, cableId, fiberNumber, visitedPatchKeys, portNumOverride);
     if (!hop) return null;
     if (hop.ended) return { break: true };
     if (!hop.outFiber || !hop.targetCross) return { break: true };

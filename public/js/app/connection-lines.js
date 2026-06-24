@@ -704,8 +704,100 @@ function syncSplitterOutputDeviceFibers() {
     });
 }
 
+function syncOltPortEndpointIncomingFibers() {
+    objects.forEach(function(obj) {
+        if (!obj.properties || obj.properties.get('type') !== 'olt') return;
+        var incoming = typeof getDisplayOltIncomingFiber === 'function'
+            ? getDisplayOltIncomingFiber(obj)
+            : (obj.properties.get('incomingFiber') || null);
+        if (!incoming || !incoming.cableId || incoming.fiberNumber == null) return;
+        var pa = obj.properties.get('portAssignments') || {};
+        Object.keys(pa).forEach(function(pk) {
+            var a = pa[pk];
+            if (!a) return;
+            var endpoint = null;
+            if (a.onuId) endpoint = getMapObjectByUid(a.onuId, 'onu');
+            else if (a.mediaConverterId) endpoint = getMapObjectByUid(a.mediaConverterId, 'mediaConverter');
+            if (!endpoint) return;
+            var inc = endpoint.properties.get('incomingFiber');
+            if (!inc || !inc.cableId) {
+                endpoint.properties.set('incomingFiber', { cableId: incoming.cableId, fiberNumber: incoming.fiberNumber });
+            }
+        });
+    });
+}
+
+function syncOltPortOnuIncomingFibers() {
+    syncOltPortEndpointIncomingFibers();
+}
+
+function createOltPortOnuConnectionLine(oltObj, onuObj, portNumber, routeIds) {
+    if (!oltObj || !onuObj) return;
+    var oltCoords = typeof getObjectRoutingCoords === 'function' ? getObjectRoutingCoords(oltObj) : null;
+    var onuCoords = typeof getObjectRoutingCoords === 'function' ? getObjectRoutingCoords(onuObj) : null;
+    if (!oltCoords && oltObj.geometry) {
+        try { oltCoords = oltObj.geometry.getCoordinates(); } catch (eO) {}
+    }
+    if (!onuCoords && onuObj.geometry) {
+        try { onuCoords = onuObj.geometry.getCoordinates(); } catch (eN) {}
+    }
+    if (!oltCoords || !onuCoords) return;
+    var oltId = getObjectUniqueId(oltObj);
+    var onuId = getObjectUniqueId(onuObj);
+    var key = oltId + '-pon-' + portNumber + '-onu-' + onuId;
+    var idx = splitterOutputConnectionLines.findIndex(function(l) { return l.properties.get('connectionKey') === key; });
+    if (idx !== -1) {
+        myMap.geoObjects.remove(splitterOutputConnectionLines[idx]);
+        splitterOutputConnectionLines.splice(idx, 1);
+    }
+    routeIds = resolveGponRouteIds(routeIds || []);
+    var lineCoords = [oltCoords].concat(gponRouteWaypointCoords(routeIds)).concat([onuCoords]);
+    var line = new ymaps.Polyline(lineCoords, {}, getConnectionLinePolylineOptions('#a855f7'));
+    line.properties.set('type', 'oltPortOnuConnectionLine');
+    line.properties.set('connectionKey', key);
+    line.properties.set('oltId', oltId);
+    line.properties.set('portNumber', portNumber);
+    line.properties.set('onuId', onuId);
+    line.properties.set('routeIds', routeIds);
+    splitterOutputConnectionLines.push(line);
+    myMap.geoObjects.add(line);
+}
+
+function createOltPortMcConnectionLine(oltObj, mcObj, portNumber, routeIds) {
+    if (!oltObj || !mcObj) return;
+    var oltCoords = typeof getObjectRoutingCoords === 'function' ? getObjectRoutingCoords(oltObj) : null;
+    var mcCoords = typeof getObjectRoutingCoords === 'function' ? getObjectRoutingCoords(mcObj) : null;
+    if (!oltCoords && oltObj.geometry) {
+        try { oltCoords = oltObj.geometry.getCoordinates(); } catch (eO) {}
+    }
+    if (!mcCoords && mcObj.geometry) {
+        try { mcCoords = mcObj.geometry.getCoordinates(); } catch (eN) {}
+    }
+    if (!oltCoords || !mcCoords) return;
+    var oltId = getObjectUniqueId(oltObj);
+    var mcId = getObjectUniqueId(mcObj);
+    var key = oltId + '-pon-' + portNumber + '-mc-' + mcId;
+    var idx = splitterOutputConnectionLines.findIndex(function(l) { return l.properties.get('connectionKey') === key; });
+    if (idx !== -1) {
+        myMap.geoObjects.remove(splitterOutputConnectionLines[idx]);
+        splitterOutputConnectionLines.splice(idx, 1);
+    }
+    routeIds = resolveGponRouteIds(routeIds || []);
+    var lineCoords = [oltCoords].concat(gponRouteWaypointCoords(routeIds)).concat([mcCoords]);
+    var line = new ymaps.Polyline(lineCoords, {}, getConnectionLinePolylineOptions('#14b8a6'));
+    line.properties.set('type', 'oltPortMcConnectionLine');
+    line.properties.set('connectionKey', key);
+    line.properties.set('oltId', oltId);
+    line.properties.set('portNumber', portNumber);
+    line.properties.set('mediaConverterId', mcId);
+    line.properties.set('routeIds', routeIds);
+    splitterOutputConnectionLines.push(line);
+    myMap.geoObjects.add(line);
+}
+
 function updateSplitterOutputConnectionLines() {
     syncSplitterOutputDeviceFibers();
+    if (typeof syncOltPortOnuIncomingFibers === 'function') syncOltPortOnuIncomingFibers();
     splitterOutputConnectionLines.forEach(function(line) { myMap.geoObjects.remove(line); });
     splitterOutputConnectionLines = [];
     objects.forEach(function(obj) {
@@ -746,6 +838,24 @@ function updateSplitterOutputConnectionLines() {
                 if (etarget) {
                     createSplitterOutputConnectionLine(obj, etarget, ei, eout.routeIds || eout.route || [], hostUid + '-esp-' + rec.id + '-out-' + ei);
                 }
+            }
+        });
+    });
+    objects.forEach(function(obj) {
+        if (!obj.properties || obj.properties.get('type') !== 'olt') return;
+        var pa = obj.properties.get('portAssignments') || {};
+        Object.keys(pa).forEach(function(pk) {
+            var a = pa[pk];
+            if (!a) return;
+            var portNum = parseInt(pk, 10);
+            if (a.onuId) {
+                if (typeof isOltPortOnuConnected === 'function' && !isOltPortOnuConnected(obj, portNum)) return;
+                var onu = getMapObjectByUid(a.onuId, 'onu');
+                if (onu) createOltPortOnuConnectionLine(obj, onu, portNum, a.routeIds || []);
+            } else if (a.mediaConverterId) {
+                if (typeof isOltPortMcConnected === 'function' && !isOltPortMcConnected(obj, portNum)) return;
+                var mc = getMapObjectByUid(a.mediaConverterId, 'mediaConverter');
+                if (mc) createOltPortMcConnectionLine(obj, mc, portNum, a.routeIds || []);
             }
         });
     });
