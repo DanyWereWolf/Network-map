@@ -56,13 +56,25 @@ function getCablesThroughSupport(supportObj) {
 
 function getConnectedCables(obj) {
     var objUid = obj && obj.properties ? getObjectUniqueId(obj) : null;
+    var memberCabId = (typeof getObjectCabinetId === 'function' && obj) ? getObjectCabinetId(obj) : '';
+    var routeMatch = typeof traceRouteObjectsMatch === 'function' ? traceRouteObjectsMatch : function(a, b) {
+        return a === b || (a && b && getObjectUniqueId(a) === getObjectUniqueId(b));
+    };
     var direct = objects.filter(function(cable) {
         if (!cable.properties || cable.properties.get('type') !== 'cable') return false;
         var from = cable.properties.get('from');
         var to = cable.properties.get('to');
         if (from === obj || to === obj) return true;
         if (!objUid) return false;
-        return (from && getObjectUniqueId(from) === objUid) || (to && getObjectUniqueId(to) === objUid);
+        if ((from && getObjectUniqueId(from) === objUid) || (to && getObjectUniqueId(to) === objUid)) return true;
+        if (memberCabId) {
+            if (from && from.properties && from.properties.get('type') === 'cabinet' &&
+                getObjectUniqueId(from) === memberCabId) return true;
+            if (to && to.properties && to.properties.get('type') === 'cabinet' &&
+                getObjectUniqueId(to) === memberCabId) return true;
+        }
+        if (routeMatch(from, obj) || routeMatch(to, obj)) return true;
+        return false;
     });
     // Стабильная сортировка по uniqueId кабеля, чтобы порядок не «прыгал» при обновлении (опоры, муфта, кросс)
     direct = direct.slice().sort(function(a, b) {
@@ -84,6 +96,18 @@ function getOtherEndOfCable(cable, oneEnd) {
     const oneId = getObjectUniqueId(oneEnd);
     if (fromObj && getObjectUniqueId(fromObj) === oneId) return toObj;
     if (toObj && getObjectUniqueId(toObj) === oneId) return fromObj;
+    var memberCabId = typeof getObjectCabinetId === 'function' ? getObjectCabinetId(oneEnd) : '';
+    if (memberCabId) {
+        if (fromObj && fromObj.properties && fromObj.properties.get('type') === 'cabinet' &&
+            getObjectUniqueId(fromObj) === memberCabId) return toObj;
+        if (toObj && toObj.properties && toObj.properties.get('type') === 'cabinet' &&
+            getObjectUniqueId(toObj) === memberCabId) return fromObj;
+    }
+    var routeMatch = typeof traceRouteObjectsMatch === 'function' ? traceRouteObjectsMatch : function(a, b) {
+        return a === b || (a && b && getObjectUniqueId(a) === getObjectUniqueId(b));
+    };
+    if (routeMatch(fromObj, oneEnd)) return toObj;
+    if (routeMatch(toObj, oneEnd)) return fromObj;
     return null;
 }
 

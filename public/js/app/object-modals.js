@@ -882,7 +882,7 @@ function buildOltCardContent(obj, isEditMode, name) {
     } else {
         html += '<div class="olt-card-view-name">' + escapeHtml(name || 'Новый OLT') + '</div>';
         html += '<div class="olt-card-view-meta"><span class="olt-kind-pill">GPON</span></div>';
-        html += '<p class="object-card-hint olt-card-hero-hint"><strong>Приход</strong> — жила от кросса/муфты к OLT. <strong>PON-порты</strong> — подключение к ONU и медиаконвертерам.</p>';
+        html += '<p class="object-card-hint olt-card-hero-hint"><strong>Приход</strong> — жила от кросса/муфты к OLT. <strong>PON-порты</strong> — подключение к ONU.</p>';
     }
     html += '</div></div>';
     html += '<dl class="olt-card-stats">';
@@ -914,7 +914,7 @@ function buildOltCardContent(obj, isEditMode, name) {
     html += '<span class="object-card-badge object-card-badge--gpon" title="Назначено PON-портов">' + assignedCount + ' / ' + ponPorts + '</span>';
     html += '</div>';
     if (isEditMode) {
-        html += '<p class="object-card-hint olt-card-gpon-hint">Два независимых назначения: <strong>приход</strong> (от кросса/муфты к OLT) и <strong>PON-порты</strong> (подключение к ONU и медиаконвертерам).</p>';
+        html += '<p class="object-card-hint olt-card-gpon-hint">Два независимых назначения: <strong>приход</strong> (от кросса/муфты к OLT) и <strong>PON-порты</strong> (подключение к ONU).</p>';
     }
     if (oltConnectivityIssues.length) {
         oltConnectivityIssues.forEach(function(issue) {
@@ -972,7 +972,6 @@ function buildOltCardContent(obj, isEditMode, name) {
             }
         } else if (isEditMode) {
             html += '<button type="button" class="btn-olt-port-connect-onu btn-compact btn-olt-connect" data-port="' + p + '" title="Подключить ONU">Подключить ONU</button>';
-            html += '<button type="button" class="btn-olt-port-connect-mc btn-compact btn-olt-connect" data-port="' + p + '" title="Подключить медиаконвертер">Подключить МК</button>';
         } else {
             html += '<span class="node-port-status node-port-status--muted">Свободен</span>';
         }
@@ -4632,16 +4631,6 @@ function setupModalEventListeners() {
                 var port = parseInt(this.getAttribute('data-port'), 10);
                 if (typeof showOltPortOnuConnectDialog === 'function') {
                     showOltPortOnuConnectDialog(currentModalObject, port);
-                }
-            });
-        });
-        modalInfo.querySelectorAll('.btn-olt-port-connect-mc').forEach(function(btn) {
-            btn.addEventListener('click', function(e) {
-                e.stopPropagation();
-                if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
-                var port = parseInt(this.getAttribute('data-port'), 10);
-                if (typeof showOltPortMcConnectDialog === 'function') {
-                    showOltPortMcConnectDialog(currentModalObject, port);
                 }
             });
         });

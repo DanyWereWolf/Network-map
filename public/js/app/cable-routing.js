@@ -35,10 +35,16 @@ function getCableRoutePoints(cable) {
 
 function getPointIndexOnCableRoute(points, obj) {
     if (!Array.isArray(points) || !obj) return -1;
+    if (typeof traceRouteObjectsMatch === 'function') {
+        for (var i = 0; i < points.length; i++) {
+            if (traceRouteObjectsMatch(points[i], obj)) return i;
+        }
+        return -1;
+    }
     var uid = getObjectUniqueId(obj);
-    for (var i = 0; i < points.length; i++) {
-        if (points[i] === obj) return i;
-        if (uid && points[i] && getObjectUniqueId(points[i]) === uid) return i;
+    for (var j = 0; j < points.length; j++) {
+        if (points[j] === obj) return j;
+        if (uid && points[j] && getObjectUniqueId(points[j]) === uid) return j;
     }
     return -1;
 }

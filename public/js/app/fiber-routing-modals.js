@@ -351,7 +351,9 @@ function getSplitterIdsUsedBySplitterOutputs() {
 function getHostForSplitterOutputConn(outConn, splitterObj) {
     if (!outConn) return null;
     if (outConn.hostId) {
-        return getMapObjectByUid(outConn.hostId, 'sleeve') || getMapObjectByUid(outConn.hostId, 'cross');
+        var host = getMapObjectByUid(outConn.hostId, 'sleeve') || getMapObjectByUid(outConn.hostId, 'cross');
+        if (!host) host = getMapObjectByUid(outConn.hostId, 'cabinet');
+        return host;
     }
     if (splitterObj && splitterObj._host) return splitterObj._host;
     return null;
@@ -375,7 +377,7 @@ function resolveSplitterOutputPeer(splitterObj, outConn) {
     if (outConn.crossPort != null) {
         var crossHost = null;
         if (outConn.hostId && typeof getMapObjectByUid === 'function') {
-            crossHost = getMapObjectByUid(outConn.hostId, 'cross') || getMapObjectByUid(outConn.hostId, 'sleeve');
+            crossHost = getMapObjectByUid(outConn.hostId, 'cross') || getMapObjectByUid(outConn.hostId, 'sleeve') || getMapObjectByUid(outConn.hostId, 'cabinet');
         }
         if (!crossHost && splitterObj && splitterObj._host) crossHost = splitterObj._host;
         if (!crossHost && outConn.hostId) {
@@ -428,9 +430,15 @@ function buildSplitterOutputToMediaConverterPathSteps(splitterObj, outConn) {
     ];
 }
 
-function appendSplitterDirectOutputSteps(path, splitterObj, outputConnections) {
+function appendSplitterDirectOutputSteps(path, splitterObj, outputConnections, targetOnuId) {
     var outs = outputConnections || [];
-    var firstOutOnu = outs.find(function(o) { return o && o.onuId; });
+    var firstOutOnu = null;
+    if (targetOnuId) {
+        firstOutOnu = outs.find(function(o) { return o && o.onuId === targetOnuId; });
+    }
+    if (!firstOutOnu) {
+        firstOutOnu = outs.find(function(o) { return o && o.onuId; });
+    }
     if (firstOutOnu) {
         var onuObj = objects.find(function(o) { return o.properties && o.properties.get('type') === 'onu' && getObjectUniqueId(o) === firstOutOnu.onuId; });
         if (onuObj) {

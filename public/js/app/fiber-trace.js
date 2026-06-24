@@ -11,6 +11,49 @@ function getCableRoutePointsForTrace(cable) {
     return pts;
 }
 
+/** Продолжить трассировку по промежуточной точке маршрута кабеля (муфта/кросс на трассе без сварки). */
+function tryAdvanceTraceAlongCableRoute(path, hostOnRoute, previousObject, currentCable, currentCableId, currentFiberNumber) {
+    if (!hostOnRoute || !currentCable) return null;
+    var pts = getCableRoutePointsForTrace(currentCable);
+    if (!pts || !Array.isArray(pts) || pts.length <= 2) return null;
+    var routeMatch = typeof traceRouteObjectsMatch === 'function' ? traceRouteObjectsMatch : function(a, b) {
+        return a === b || (a && b && getObjectUniqueId(a) === getObjectUniqueId(b));
+    };
+    var idx = -1;
+    for (var i = 0; i < pts.length; i++) {
+        if (routeMatch(pts[i], hostOnRoute)) { idx = i; break; }
+    }
+    if (idx === -1) return null;
+    var prevId = previousObject ? getObjectUniqueId(previousObject) : null;
+    var nextIdx = -1;
+    if (prevId) {
+        var pi = idx - 1;
+        var ni = idx + 1;
+        var prevPtId = (pi >= 0 && pts[pi]) ? getObjectUniqueId(pts[pi]) : null;
+        var nextPtId = (ni < pts.length && pts[ni]) ? getObjectUniqueId(pts[ni]) : null;
+        if (prevPtId === prevId && ni < pts.length) nextIdx = ni;
+        else if (nextPtId === prevId && pi >= 0) nextIdx = pi;
+    }
+    if (nextIdx === -1) {
+        if (idx < pts.length - 1) nextIdx = idx + 1;
+        else if (idx > 0) nextIdx = idx - 1;
+    }
+    if (nextIdx < 0 || nextIdx >= pts.length) return null;
+    var nextPt = pts[nextIdx];
+    if (!nextPt || !nextPt.properties) return null;
+    var nextType = nextPt.properties.get('type');
+    path.push({
+        type: 'object',
+        objectType: nextType,
+        objectName: nextPt.properties.get('name') || getObjectTypeName(nextType),
+        object: nextPt,
+        port: (nextType === 'cross')
+            ? ((nextPt.properties.get('fiberPorts') || {})[currentCableId + '-' + currentFiberNumber] || null)
+            : null
+    });
+    return { previousObject: hostOnRoute, currentObject: nextPt };
+}
+
 /** Другие узлы на той же жиле того же кабеля (кросс на противоположном конце магистрали). */
 function findPeerNodeTargetsOnCable(startCross, cableId, fiberNumber, originNodeId) {
     var peers = [];
@@ -104,42 +147,72 @@ function tracePeerNodePathsOnSharedCable(startCross, cableId, fiberNumber, origi
 
 function cableEndpointRole(cable, currentObj) {
     if (!cable || !currentObj) return null;
+    if (typeof resolveTraceRouteObject === 'function' && currentObj.properties && currentObj.properties.get('type') === 'cabinet') {
+        var cabMember = resolveTraceRouteObject(currentObj, cable, {});
+        if (cabMember && cabMember !== currentObj) return cableEndpointRole(cable, cabMember);
+    }
     var currentId = getObjectUniqueId(currentObj);
     var fromObj = cable.properties.get('from');
     var toObj = cable.properties.get('to');
-    if (fromObj && (fromObj === currentObj || getObjectUniqueId(fromObj) === currentId)) return 'from';
-    if (toObj && (toObj === currentObj || getObjectUniqueId(toObj) === currentId)) return 'to';
-    var currentCoords = currentObj.geometry ? currentObj.geometry.getCoordinates() : null;
+    var matchEndpoint = typeof traceRouteObjectsMatch === 'function' ? traceRouteObjectsMatch : function(a, b) {
+        return a === b || (a && b && getObjectUniqueId(a) === getObjectUniqueId(b));
+    };
+    if (fromObj && (matchEndpoint(fromObj, currentObj) || getObjectUniqueId(fromObj) === currentId)) return 'from';
+    if (toObj && (matchEndpoint(toObj, currentObj) || getObjectUniqueId(toObj) === currentId)) return 'to';
+    var memberCabId = typeof getObjectCabinetId === 'function' ? getObjectCabinetId(currentObj) : '';
+    if (memberCabId) {
+        if (fromObj && fromObj.properties && fromObj.properties.get('type') === 'cabinet' &&
+            getObjectUniqueId(fromObj) === memberCabId) return 'from';
+        if (toObj && toObj.properties && toObj.properties.get('type') === 'cabinet' &&
+            getObjectUniqueId(toObj) === memberCabId) return 'to';
+    }
+    var currentCoords = typeof getObjectRoutingCoords === 'function'
+        ? getObjectRoutingCoords(currentObj)
+        : (currentObj.geometry ? currentObj.geometry.getCoordinates() : null);
     if (currentCoords) {
         if (fromObj && fromObj.geometry) {
-            var fc = fromObj.geometry.getCoordinates();
+            var fc = typeof getObjectRoutingCoords === 'function' ? getObjectRoutingCoords(fromObj) : fromObj.geometry.getCoordinates();
             if (fc && Math.abs(fc[0] - currentCoords[0]) < 0.0001 && Math.abs(fc[1] - currentCoords[1]) < 0.0001) return 'from';
         }
         if (toObj && toObj.geometry) {
-            var tc = toObj.geometry.getCoordinates();
+            var tc = typeof getObjectRoutingCoords === 'function' ? getObjectRoutingCoords(toObj) : toObj.geometry.getCoordinates();
             if (tc && Math.abs(tc[0] - currentCoords[0]) < 0.0001 && Math.abs(tc[1] - currentCoords[1]) < 0.0001) return 'to';
         }
     }
     return null;
 }
 
+function resolveTraceOtherEnd(cable, currentObj, previousObj, traceOpts) {
+    var next = getOtherEndOnCableRoute(cable, currentObj, previousObj, traceOpts);
+    if (!next || typeof resolveTraceRouteObject !== 'function') return next;
+    return resolveTraceRouteObject(next, cable, traceOpts || {}) || next;
+}
+
 /**
  * Следующая точка маршрута по кабелю. Кросс/муфта на конце (from/to), но не в points[],
  * связывается с первой/последней промежуточной точкой.
  */
-function getOtherEndOnCableRoute(cable, currentObj, previousObj) {
+function getOtherEndOnCableRoute(cable, currentObj, previousObj, traceOpts) {
     if (!cable || !currentObj) return null;
+    traceOpts = traceOpts || {};
     var pts = getCableRoutePointsForTrace(cable);
     var fromObj = cable.properties.get('from');
     var toObj = cable.properties.get('to');
     var currentId = getObjectUniqueId(currentObj);
     var previousId = previousObj ? getObjectUniqueId(previousObj) : null;
     var endpointRole = cableEndpointRole(cable, currentObj);
+    var routeMatch = typeof traceRouteObjectsMatch === 'function' ? traceRouteObjectsMatch : function(a, b) {
+        return a === b || (a && b && getObjectUniqueId(a) === getObjectUniqueId(b));
+    };
+    var finishRouteHop = function(obj) {
+        if (!obj || typeof resolveTraceRouteObject !== 'function') return obj;
+        return resolveTraceRouteObject(obj, cable, traceOpts) || obj;
+    };
 
     if (pts && pts.length > 2) {
         var idx = -1;
         for (var i = 0; i < pts.length; i++) {
-            if (pts[i] === currentObj || (pts[i] && getObjectUniqueId(pts[i]) === currentId)) { idx = i; break; }
+            if (routeMatch(pts[i], currentObj)) { idx = i; break; }
         }
         if (idx === -1 && endpointRole) {
             var firstPt = pts[0];
@@ -148,25 +221,25 @@ function getOtherEndOnCableRoute(cable, currentObj, previousObj) {
             var lastPtId = lastPt ? getObjectUniqueId(lastPt) : null;
             if (endpointRole === 'from') {
                 if (!previousId) {
-                    if (firstPt && firstPtId !== currentId) return firstPt;
-                    return pts.length > 1 ? pts[1] : (toObj || null);
+                    if (firstPt && firstPtId !== currentId) return finishRouteHop(firstPt);
+                    return finishRouteHop(pts.length > 1 ? pts[1] : (toObj || null));
                 }
-                if (firstPt && (firstPt === previousObj || firstPtId === previousId)) {
-                    return pts.length > 1 ? pts[1] : (toObj || null);
+                if (firstPt && (routeMatch(firstPt, previousObj) || firstPtId === previousId)) {
+                    return finishRouteHop(pts.length > 1 ? pts[1] : (toObj || null));
                 }
-                if (toObj && (toObj === previousObj || getObjectUniqueId(toObj) === previousId)) return firstPt || null;
-                return toObj || null;
+                if (toObj && (routeMatch(toObj, previousObj) || getObjectUniqueId(toObj) === previousId)) return finishRouteHop(firstPt || null);
+                return finishRouteHop(toObj || null);
             }
             if (endpointRole === 'to') {
                 if (!previousId) {
-                    if (lastPt && lastPtId !== currentId) return lastPt;
-                    return pts.length > 1 ? pts[pts.length - 2] : (fromObj || null);
+                    if (lastPt && lastPtId !== currentId) return finishRouteHop(lastPt);
+                    return finishRouteHop(pts.length > 1 ? pts[pts.length - 2] : (fromObj || null));
                 }
-                if (lastPt && (lastPt === previousObj || lastPtId === previousId)) {
-                    return pts.length > 1 ? pts[pts.length - 2] : (fromObj || null);
+                if (lastPt && (routeMatch(lastPt, previousObj) || lastPtId === previousId)) {
+                    return finishRouteHop(pts.length > 1 ? pts[pts.length - 2] : (fromObj || null));
                 }
-                if (fromObj && (fromObj === previousObj || getObjectUniqueId(fromObj) === previousId)) return lastPt || null;
-                return fromObj || null;
+                if (fromObj && (routeMatch(fromObj, previousObj) || getObjectUniqueId(fromObj) === previousId)) return finishRouteHop(lastPt || null);
+                return finishRouteHop(fromObj || null);
             }
             return null;
         }
@@ -176,25 +249,31 @@ function getOtherEndOnCableRoute(cable, currentObj, previousObj) {
         if (previousId) {
             var prevPtId = (prevIdx >= 0 && pts[prevIdx]) ? getObjectUniqueId(pts[prevIdx]) : null;
             var nextPtId = (nextIdx < pts.length && pts[nextIdx]) ? getObjectUniqueId(pts[nextIdx]) : null;
-            if (prevPtId === previousId && nextIdx < pts.length) return pts[nextIdx];
-            if (nextPtId === previousId && prevIdx >= 0) return pts[prevIdx];
+            if (prevPtId === previousId && nextIdx < pts.length) return finishRouteHop(pts[nextIdx]);
+            if (nextPtId === previousId && prevIdx >= 0) return finishRouteHop(pts[prevIdx]);
         }
-        if (nextIdx < pts.length) return pts[nextIdx];
-        if (prevIdx >= 0) return pts[prevIdx];
+        if (nextIdx < pts.length) return finishRouteHop(pts[nextIdx]);
+        if (prevIdx >= 0) return finishRouteHop(pts[prevIdx]);
         return null;
     }
     if (!fromObj || !toObj) return null;
-    if (fromObj === currentObj) return toObj;
-    if (toObj === currentObj) return fromObj;
+    if (routeMatch(fromObj, currentObj)) return finishRouteHop(toObj);
+    if (routeMatch(toObj, currentObj)) return finishRouteHop(fromObj);
     var fromId = getObjectUniqueId(fromObj);
     var toId = getObjectUniqueId(toObj);
-    if (fromId === currentId) return toObj;
-    if (toId === currentId) return fromObj;
-    var currentCoords = currentObj.geometry ? currentObj.geometry.getCoordinates() : null;
-    var fromCoords = fromObj.geometry ? fromObj.geometry.getCoordinates() : null;
-    var toCoords = toObj.geometry ? toObj.geometry.getCoordinates() : null;
-    if (currentCoords && fromCoords && Math.abs(currentCoords[0] - fromCoords[0]) < 0.0001 && Math.abs(currentCoords[1] - fromCoords[1]) < 0.0001) return toObj;
-    if (currentCoords && toCoords && Math.abs(currentCoords[0] - toCoords[0]) < 0.0001 && Math.abs(currentCoords[1] - toCoords[1]) < 0.0001) return fromObj;
+    if (fromId === currentId) return finishRouteHop(toObj);
+    if (toId === currentId) return finishRouteHop(fromObj);
+    var currentCoords = typeof getObjectRoutingCoords === 'function'
+        ? getObjectRoutingCoords(currentObj)
+        : (currentObj.geometry ? currentObj.geometry.getCoordinates() : null);
+    var fromCoords = typeof getObjectRoutingCoords === 'function'
+        ? getObjectRoutingCoords(fromObj)
+        : (fromObj.geometry ? fromObj.geometry.getCoordinates() : null);
+    var toCoords = typeof getObjectRoutingCoords === 'function'
+        ? getObjectRoutingCoords(toObj)
+        : (toObj.geometry ? toObj.geometry.getCoordinates() : null);
+    if (currentCoords && fromCoords && Math.abs(currentCoords[0] - fromCoords[0]) < 0.0001 && Math.abs(currentCoords[1] - fromCoords[1]) < 0.0001) return finishRouteHop(toObj);
+    if (currentCoords && toCoords && Math.abs(currentCoords[0] - toCoords[0]) < 0.0001 && Math.abs(currentCoords[1] - toCoords[1]) < 0.0001) return finishRouteHop(fromObj);
     return null;
 }
 
@@ -203,40 +282,66 @@ function getCableRoutePosition(cable, currentObj) {
     if (!cable || !currentObj) return null;
     var pts = getCableRoutePointsForTrace(cable);
     var currentId = getObjectUniqueId(currentObj);
+    var routeMatch = typeof traceRouteObjectsMatch === 'function' ? traceRouteObjectsMatch : function(a, b) {
+        return a === b || (a && b && getObjectUniqueId(a) === getObjectUniqueId(b));
+    };
     if (!pts || pts.length < 2) {
         var fromObj = cable.properties.get('from');
         var toObj = cable.properties.get('to');
-        if (fromObj && (fromObj === currentObj || getObjectUniqueId(fromObj) === currentId)) {
+        var memberCabId = typeof getObjectCabinetId === 'function' ? getObjectCabinetId(currentObj) : '';
+        if (memberCabId) {
+            if (fromObj && fromObj.properties && fromObj.properties.get('type') === 'cabinet' &&
+                getObjectUniqueId(fromObj) === memberCabId) {
+                return { forward: toObj || null, backward: fromObj };
+            }
+            if (toObj && toObj.properties && toObj.properties.get('type') === 'cabinet' &&
+                getObjectUniqueId(toObj) === memberCabId) {
+                return { forward: fromObj || null, backward: toObj };
+            }
+        }
+        if (fromObj && (routeMatch(fromObj, currentObj) || getObjectUniqueId(fromObj) === currentId)) {
             return { forward: toObj || null, backward: null };
         }
-        if (toObj && (toObj === currentObj || getObjectUniqueId(toObj) === currentId)) {
-            return { forward: null, backward: fromObj || null };
+        if (toObj && (routeMatch(toObj, currentObj) || getObjectUniqueId(toObj) === currentId)) {
+            return { forward: fromObj || null, backward: toObj || null };
         }
         return null;
     }
     var idx = -1;
     for (var i = 0; i < pts.length; i++) {
-        if (pts[i] === currentObj || (pts[i] && getObjectUniqueId(pts[i]) === currentId)) {
+        if (routeMatch(pts[i], currentObj)) {
             idx = i;
             break;
         }
     }
     if (idx === -1) {
         var role = cableEndpointRole(cable, currentObj);
+        var memberCabId = typeof getObjectCabinetId === 'function' ? getObjectCabinetId(currentObj) : '';
+        var fromObj = cable.properties.get('from');
+        var toObj = cable.properties.get('to');
         if (role === 'from') {
+            if (memberCabId && fromObj && fromObj.properties && fromObj.properties.get('type') === 'cabinet' &&
+                getObjectUniqueId(fromObj) === memberCabId) {
+                return { forward: toObj || (pts.length > 1 ? pts[1] : null), backward: fromObj };
+            }
             var fh = pts[0];
             return {
-                forward: (fh && getObjectUniqueId(fh) !== currentId) ? fh : (pts.length > 1 ? pts[1] : (cable.properties.get('to') || null)),
+                forward: (fh && !routeMatch(fh, currentObj)) ? fh : (pts.length > 1 ? pts[1] : (cable.properties.get('to') || null)),
                 backward: null
             };
         }
         if (role === 'to') {
+            if (memberCabId && toObj && toObj.properties && toObj.properties.get('type') === 'cabinet' &&
+                getObjectUniqueId(toObj) === memberCabId) {
+                var backHopCab = pts.length > 1 ? pts[pts.length - 2] : cable.properties.get('from');
+                return { forward: backHopCab || fromObj || null, backward: toObj };
+            }
             var lh = pts[pts.length - 1];
             var backHop = pts.length > 1 ? pts[pts.length - 2] : cable.properties.get('from');
-            if (lh && getObjectUniqueId(lh) !== currentId) {
+            if (lh && !routeMatch(lh, currentObj)) {
                 return { forward: lh, backward: backHop || null };
             }
-            return { forward: null, backward: backHop || null };
+            return { forward: backHop || fromObj || null, backward: toObj || null };
         }
         return null;
     }
@@ -320,7 +425,9 @@ function tryHandleHostNodeConnectionTrace(path, hostObj, currentCableId, current
     });
     if (!connectedNode) return { action: 'break' };
     if (isOriginNodePassthrough(nodeConn, traceOptions)) {
-        var passExit = getOtherEndOnCableRoute(currentCable, hostObj, currentObject);
+        var passExit = typeof resolveTraceOtherEnd === 'function'
+            ? resolveTraceOtherEnd(currentCable, hostObj, currentObject, { fiberKey: nodeConnKey })
+            : getOtherEndOnCableRoute(currentCable, hostObj, currentObject);
         if (passExit) {
             if (path.length && path[path.length - 1].type === 'object' && path[path.length - 1].object === hostObj) {
                 path.pop();
@@ -387,7 +494,9 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
     }
 
     function getOtherEnd(cable, currentObj, previousObj) {
-        return getOtherEndOnCableRoute(cable, currentObj, previousObj);
+        return resolveTraceOtherEnd(cable, currentObj, previousObj, {
+            fiberKey: currentCableId + '-' + currentFiberNumber
+        });
     }
 
     const startCable = findCableById(startCableId);
@@ -427,6 +536,80 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
             afterSplitterInputBranch = false;
             nextObject = currentObject;
         } else {
+            if (traceOptions.traceTowardOnu) {
+                var hostTowardType = currentObject.properties.get('type');
+                if (hostTowardType === 'cross' || hostTowardType === 'sleeve') {
+                    if (traceOptions.targetOnuId) {
+                        if (typeof tryAppendOnuAtHostForTrace === 'function' &&
+                            tryAppendOnuAtHostForTrace(path, currentObject, currentCableId, currentFiberNumber, traceOptions.targetOnuId)) {
+                            break;
+                        }
+                        var onuConnEarly = getHostAssignment(currentObject, 'onuConnections', currentCableId, currentFiberNumber);
+                        if (onuConnEarly && String(onuConnEarly.onuId) === String(traceOptions.targetOnuId)) {
+                            var onuEarly = objects.find(function(o) {
+                                return o.properties && o.properties.get('type') === 'onu' && o.properties.get('uniqueId') === onuConnEarly.onuId;
+                            });
+                            if (onuEarly) {
+                                path.push({ type: 'onuConnection', cableId: currentCableId, fiberNumber: currentFiberNumber, onuName: onuConnEarly.onuName || 'ONU', cross: currentObject, onu: onuEarly });
+                                path.push({ type: 'object', objectType: 'onu', objectName: onuEarly.properties.get('name') || 'ONU', object: onuEarly });
+                                break;
+                            }
+                        }
+                    }
+                    var scEntryEarly = getHostAssignment(currentObject, 'splitterConnections', currentCableId, currentFiberNumber);
+                    var spObjEarly = null;
+                    if (scEntryEarly && scEntryEarly.splitterId) {
+                        spObjEarly = resolveSplitterObject(scEntryEarly.splitterId);
+                    } else if (typeof findSplitterOnHostFiber === 'function') {
+                        var spHostEarly = findSplitterOnHostFiber(
+                            currentObject, currentCableId, currentFiberNumber, traceOptions.targetOnuId
+                        );
+                        if (spHostEarly && spHostEarly.splitter) spObjEarly = spHostEarly.splitter;
+                    }
+                    if (spObjEarly) {
+                        var cableToSpEarly = findCableById(currentCableId);
+                        var splitterEndEarly = cableToSpEarly ? getOtherEnd(cableToSpEarly, currentObject) : null;
+                        var isPhysSpEarly = splitterEndEarly && getObjectUniqueId(splitterEndEarly) === getObjectUniqueId(spObjEarly);
+                        if (cableToSpEarly) {
+                            if (isPhysSpEarly) {
+                                path.push({ type: 'cable', cableId: currentCableId, cableName: cableToSpEarly.properties.get('cableName') || getCableDescription(cableToSpEarly.properties.get('cableType')), fiberNumber: currentFiberNumber, cable: cableToSpEarly });
+                            } else {
+                                path.push({ type: 'splitterConnection', sleeve: currentObject, splitter: spObjEarly, cableId: currentCableId, fiberNumber: currentFiberNumber });
+                            }
+                        } else {
+                            path.push({ type: 'splitterConnection', sleeve: currentObject, splitter: spObjEarly, cableId: currentCableId, fiberNumber: currentFiberNumber });
+                        }
+                        path.push({ type: 'object', objectType: 'splitter', objectName: spObjEarly.properties.get('name') || 'Сплиттер', object: spObjEarly, port: null });
+                        currentObject = spObjEarly;
+                        afterSplitterInputBranch = true;
+                        continue;
+                    }
+                    var spliceEarly = findFiberConnection(currentCableId, currentFiberNumber, currentObject);
+                    if (spliceEarly) {
+                        var nextCableEarly = findCableById(spliceEarly.cableId);
+                        if (nextCableEarly) {
+                            var fiberLabelsEarly = currentObject.properties.get('fiberLabels') || {};
+                            path.push({
+                                type: 'connection',
+                                fromCableId: currentCableId,
+                                fromFiberNumber: currentFiberNumber,
+                                fromLabel: fiberLabelsEarly[currentCableId + '-' + currentFiberNumber] || '',
+                                fromCableType: currentCable ? currentCable.properties.get('cableType') : null,
+                                toCableId: spliceEarly.cableId,
+                                toFiberNumber: spliceEarly.fiberNumber,
+                                toLabel: fiberLabelsEarly[spliceEarly.cableId + '-' + spliceEarly.fiberNumber] || '',
+                                toCableType: nextCableEarly.properties.get('cableType'),
+                                sleeve: currentObject
+                            });
+                            currentCableId = spliceEarly.cableId;
+                            currentFiberNumber = spliceEarly.fiberNumber;
+                            currentCable = nextCableEarly;
+                            previousObject = currentObject;
+                            continue;
+                        }
+                    }
+                }
+            }
             const cableName = currentCable.properties.get('cableName') || getCableDescription(currentCable.properties.get('cableType'));
             path.push({
                 type: 'cable',
@@ -474,8 +657,34 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
             visitedObjects.add(nextObjectId);
         }
         
-        const objType = nextObjTypeEarly;
-        const objName = nextObject.properties.get('name') || getObjectTypeName(objType);
+        var objType = nextObjTypeEarly;
+        var objName = nextObject.properties.get('name') || getObjectTypeName(objType);
+
+        if (objType === 'cabinet' && typeof resolveTraceRouteObject === 'function') {
+            var resolvedCabHost = resolveTraceRouteObject(nextObject, currentCable, {
+                fiberKey: currentCableId + '-' + currentFiberNumber
+            });
+            if (!resolvedCabHost && typeof findCabinetMemberOnCable === 'function') {
+                resolvedCabHost = findCabinetMemberOnCable(nextObject, currentCable, {
+                    fiberKey: currentCableId + '-' + currentFiberNumber
+                });
+            }
+            if (!resolvedCabHost) break;
+            if (path.length && path[path.length - 1].type === 'object' && path[path.length - 1].object === nextObject) {
+                path[path.length - 1] = {
+                    type: 'object',
+                    objectType: resolvedCabHost.properties.get('type'),
+                    objectName: resolvedCabHost.properties.get('name') || getObjectTypeName(resolvedCabHost.properties.get('type')),
+                    object: resolvedCabHost,
+                    port: (resolvedCabHost.properties.get('type') === 'cross')
+                        ? ((resolvedCabHost.properties.get('fiberPorts') || {})[currentCableId + '-' + currentFiberNumber] || null)
+                        : null
+                };
+            }
+            nextObject = resolvedCabHost;
+            objType = resolvedCabHost.properties.get('type');
+            objName = resolvedCabHost.properties.get('name') || getObjectTypeName(objType);
+        }
 
         if (objType === 'splitter') {
             syncSplitterInputFromHost(nextObject);
@@ -484,7 +693,13 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
             const isInputFiber = inputFiber && currentCableId === inputFiber.cableId && currentFiberNumber === inputFiber.fiberNumber;
             const outputIndexByCable = outputConnections.findIndex(function(o) { return o && o.cableId === currentCableId && o.fiberNumber === currentFiberNumber; });
             if (isInputFiber && outputConnections.length > 0) {
-                const firstOutWithCable = outputConnections.find(function(o) { return o && o.cableId; });
+                var preferredOut = null;
+                if (traceOptions.targetOnuId) {
+                    preferredOut = outputConnections.find(function(o) {
+                        return o && o.onuId === traceOptions.targetOnuId;
+                    });
+                }
+                const firstOutWithCable = preferredOut || outputConnections.find(function(o) { return o && o.cableId; });
                 if (firstOutWithCable) {
                     const outPeer = resolveSplitterOutputPeer(nextObject, firstOutWithCable);
                     if (outPeer) {
@@ -500,7 +715,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
                         allowHostRevisitFromSplitter = !!(otherEnd.properties.get('type') === 'sleeve' || otherEnd.properties.get('type') === 'cross');
                     }
                 } else {
-                    var directOut = appendSplitterDirectOutputSteps(path, nextObject, outputConnections);
+                    var directOut = appendSplitterDirectOutputSteps(path, nextObject, outputConnections, traceOptions.targetOnuId);
                     if (directOut === true) {
                         break;
                     }
@@ -678,8 +893,13 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
 
             var nextFiber = findFiberConnection(currentCableId, currentFiberNumber, nextObject);
             if (!nextFiber) {
+                if (traceOptions.traceTowardOnu && traceOptions.targetOnuId &&
+                    typeof tryAppendOnuAtHostForTrace === 'function' &&
+                    tryAppendOnuAtHostForTrace(path, nextObject, currentCableId, currentFiberNumber, traceOptions.targetOnuId)) {
+                    break;
+                }
                 var oltConnAtSlot = getFiberOltAssignment(nextObject, currentCableId, currentFiberNumber);
-                if (oltConnAtSlot && oltConnAtSlot.oltId) {
+                if (oltConnAtSlot && oltConnAtSlot.oltId && !traceOptions.traceTowardOnu) {
                     var oltObjFromConn = objects.find(function(o) {
                         return o.properties && o.properties.get('type') === 'olt' && o.properties.get('uniqueId') === oltConnAtSlot.oltId;
                     });
@@ -718,29 +938,36 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
                     }
                 }
                 var scEntry = getHostAssignment(nextObject, 'splitterConnections', currentCableId, currentFiberNumber);
+                var spObjFromHost = null;
                 if (scEntry && scEntry.splitterId) {
-                    var spObj = resolveSplitterObject(scEntry.splitterId);
-                    if (spObj) {
-                        var cableToSplitter = findCableById(currentCableId);
-                        var splitterEnd = cableToSplitter ? getOtherEnd(cableToSplitter, nextObject) : null;
-                        var isPhysicalLink = splitterEnd && getObjectUniqueId(splitterEnd) === getObjectUniqueId(spObj);
-                        if (cableToSplitter) {
-                            if (isPhysicalLink) {
-                                path.push({ type: 'cable', cableId: currentCableId, cableName: cableToSplitter.properties.get('cableName') || getCableDescription(cableToSplitter.properties.get('cableType')), fiberNumber: currentFiberNumber, cable: cableToSplitter });
-                            } else {
-                                path.push({ type: 'splitterConnection', sleeve: nextObject, splitter: spObj, cableId: currentCableId, fiberNumber: currentFiberNumber });
-                            }
+                    spObjFromHost = resolveSplitterObject(scEntry.splitterId);
+                } else if (traceOptions.traceTowardOnu && typeof findSplitterOnHostFiber === 'function') {
+                    var spAtHost = findSplitterOnHostFiber(
+                        nextObject, currentCableId, currentFiberNumber, traceOptions.targetOnuId
+                    );
+                    if (spAtHost && spAtHost.splitter) spObjFromHost = spAtHost.splitter;
+                }
+                if (spObjFromHost) {
+                    var spObj = spObjFromHost;
+                    var cableToSplitter = findCableById(currentCableId);
+                    var splitterEnd = cableToSplitter ? getOtherEnd(cableToSplitter, nextObject) : null;
+                    var isPhysicalLink = splitterEnd && getObjectUniqueId(splitterEnd) === getObjectUniqueId(spObj);
+                    if (cableToSplitter) {
+                        if (isPhysicalLink) {
+                            path.push({ type: 'cable', cableId: currentCableId, cableName: cableToSplitter.properties.get('cableName') || getCableDescription(cableToSplitter.properties.get('cableType')), fiberNumber: currentFiberNumber, cable: cableToSplitter });
                         } else {
                             path.push({ type: 'splitterConnection', sleeve: nextObject, splitter: spObj, cableId: currentCableId, fiberNumber: currentFiberNumber });
                         }
-                        path.push({ type: 'object', objectType: 'splitter', objectName: spObj.properties.get('name') || 'Сплиттер', object: spObj, port: null });
-                        currentObject = spObj;
-                        currentCableId = currentCableId;
-                        currentFiberNumber = currentFiberNumber;
-                        currentCable = cableToSplitter || currentCable;
-                        afterSplitterInputBranch = true;
-                        continue;
+                    } else {
+                        path.push({ type: 'splitterConnection', sleeve: nextObject, splitter: spObj, cableId: currentCableId, fiberNumber: currentFiberNumber });
                     }
+                    path.push({ type: 'object', objectType: 'splitter', objectName: spObj.properties.get('name') || 'Сплиттер', object: spObj, port: null });
+                    currentObject = spObj;
+                    currentCableId = currentCableId;
+                    currentFiberNumber = currentFiberNumber;
+                    currentCable = cableToSplitter || currentCable;
+                    afterSplitterInputBranch = true;
+                    continue;
                 }
                 var spOutRev = findSplitterOutputAtHost(nextObject, currentCableId, currentFiberNumber);
                 if (!spOutRev && objType === 'cross' && typeof findSplitterOutputAtHostByLogicalFiber === 'function') {
@@ -776,6 +1003,26 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
                         afterSplitterInputBranch = true;
                         continue;
                     }
+                }
+                if (traceOptions.traceTowardOnu && traceOptions.targetOnuId &&
+                    typeof findSplitterOnHostFiber === 'function' && typeof appendSplitterOnuStepsToPath === 'function') {
+                    var spAtEnd = findSplitterOnHostFiber(
+                        nextObject, currentCableId, currentFiberNumber, traceOptions.targetOnuId
+                    );
+                    if (spAtEnd && spAtEnd.splitter) {
+                        var onuSteps = appendSplitterOnuStepsToPath([], spAtEnd.splitter, traceOptions.targetOnuId, nextObject);
+                        onuSteps.forEach(function(step) { path.push(step); });
+                        break;
+                    }
+                }
+                var routeThroughHost = typeof tryAdvanceTraceAlongCableRoute === 'function'
+                    ? tryAdvanceTraceAlongCableRoute(path, nextObject, currentObject, currentCable, currentCableId, currentFiberNumber)
+                    : null;
+                if (routeThroughHost) {
+                    previousObject = routeThroughHost.previousObject;
+                    currentObject = routeThroughHost.currentObject;
+                    afterSplitterInputBranch = true;
+                    continue;
                 }
                 break;
             }
@@ -1147,7 +1394,9 @@ function traceFiberPath(startCableId, startFiberNumber) {
     }
 
     function getOtherEnd(cable, currentObj, previousObj) {
-        return getOtherEndOnCableRoute(cable, currentObj, previousObj);
+        return resolveTraceOtherEnd(cable, currentObj, previousObj, {
+            fiberKey: currentCableId + '-' + currentFiberNumber
+        });
     }
 
     const startCable = findCableById(startCableId);
@@ -1158,8 +1407,15 @@ function traceFiberPath(startCableId, startFiberNumber) {
     let currentCable = startCable;
     let previousObject = null;
 
-    const fromObj = currentCable.properties.get('from');
-    const toObj = currentCable.properties.get('to');
+    var traceStartOpts = { fiberKey: startCableId + '-' + startFiberNumber };
+    const fromObjRaw = currentCable.properties.get('from');
+    const toObjRaw = currentCable.properties.get('to');
+    const fromObj = (typeof resolveTraceRouteObject === 'function'
+        ? (resolveTraceRouteObject(fromObjRaw, currentCable, traceStartOpts) || fromObjRaw)
+        : fromObjRaw);
+    let currentObject = (typeof resolveTraceRouteObject === 'function'
+        ? (resolveTraceRouteObject(toObjRaw, currentCable, traceStartOpts) || toObjRaw)
+        : toObjRaw);
     const cableName = currentCable.properties.get('cableName') || getCableDescription(currentCable.properties.get('cableType'));
     
     const fromObjType = fromObj.properties.get('type');
@@ -1180,7 +1436,6 @@ function traceFiberPath(startCableId, startFiberNumber) {
         cable: currentCable
     });
 
-    let currentObject = toObj;
     const maxIterations = 100;
     let iterations = 0;
     
@@ -1194,7 +1449,21 @@ function traceFiberPath(startCableId, startFiberNumber) {
         if (visitedObjects.has(currentObjectId)) break;
         visitedObjects.add(currentObjectId);
         
-        const objType = currentObject.properties.get('type');
+        const objTypeRaw = currentObject.properties.get('type');
+        var objType = objTypeRaw;
+        if (objType === 'cabinet' && typeof resolveTraceRouteObject === 'function') {
+            var resolvedLegacyHost = resolveTraceRouteObject(currentObject, currentCable, {
+                fiberKey: currentCableId + '-' + currentFiberNumber
+            });
+            if (!resolvedLegacyHost && typeof findCabinetMemberOnCable === 'function') {
+                resolvedLegacyHost = findCabinetMemberOnCable(currentObject, currentCable, {
+                    fiberKey: currentCableId + '-' + currentFiberNumber
+                });
+            }
+            if (!resolvedLegacyHost) break;
+            currentObject = resolvedLegacyHost;
+            objType = resolvedLegacyHost.properties.get('type');
+        }
         const objName = currentObject.properties.get('name') || getObjectTypeName(objType);
         const objPort = (objType === 'cross') ? ((currentObject.properties.get('fiberPorts') || {})[`${currentCableId}-${currentFiberNumber}`] || null) : null;
         

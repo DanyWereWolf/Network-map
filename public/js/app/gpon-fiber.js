@@ -195,13 +195,48 @@ function getOltAtHostCableEnd(hostObj, cableId) {
     });
     if (!cable || !hostObj) return null;
     var otherEnd = getOtherEndOfCable(cable, hostObj);
-    if (!otherEnd || !otherEnd.properties || otherEnd.properties.get('type') !== 'olt') return null;
+    var oltObj = cableEndpointRepresentsOlt(otherEnd);
+    if (!oltObj) return null;
     return {
-        oltId: otherEnd.properties.get('uniqueId'),
-        oltName: otherEnd.properties.get('name') || 'OLT',
+        oltId: getObjectUniqueId(oltObj),
+        oltName: oltObj.properties.get('name') || 'OLT',
         viaPhysicalCable: true,
         physicalCableOnly: true
     };
+}
+
+/** OLT на конце кабеля или внутри ящика на конце. */
+function cableEndpointRepresentsOlt(ep) {
+    if (!ep || !ep.properties) return null;
+    if (ep.properties.get('type') === 'olt') return ep;
+    if (ep.properties.get('type') === 'cabinet' && typeof getCabinetMembers === 'function') {
+        var cabId = getObjectUniqueId(ep);
+        var members = getCabinetMembers(cabId);
+        for (var i = 0; i < members.length; i++) {
+            var m = members[i];
+            if (m && m.properties && m.properties.get('type') === 'olt') return m;
+        }
+    }
+    return null;
+}
+
+/** Добавить муфту/кросс/OLT в очередь обхода; ящик раскрывается в содержимое. */
+function enqueueFiberHostWalkTarget(queue, visited, host, cableId, fiberNumber, skipHost) {
+    if (!host || !host.properties) return;
+    var skipId = skipHost ? getObjectUniqueId(skipHost) : null;
+    function pushHost(h) {
+        if (!h || !h.properties) return;
+        if (skipId && getObjectUniqueId(h) === skipId) return;
+        var t = h.properties.get('type');
+        if (t === 'sleeve' || t === 'cross' || t === 'olt') {
+            enqueueFiberOltWalkState(queue, visited, { host: h, cableId: cableId, fiberNumber: fiberNumber });
+        }
+    }
+    if (host.properties.get('type') === 'cabinet' && typeof getCabinetCableEndpointMembers === 'function') {
+        getCabinetCableEndpointMembers(host, {}).forEach(pushHost);
+        return;
+    }
+    pushHost(host);
 }
 
 /** Обход жилы через сращивания и кабели между кроссами/муфтами — найти назначение OLT на другом участке пути. */
@@ -228,19 +263,21 @@ function findFiberOltRealAssignmentViaNetwork(startHost, startCableId, startFibe
         if (!cable) return;
         var fromObj = cable.properties.get('from');
         var toObj = cable.properties.get('to');
-        if (fromObj && fromObj.properties && fromObj.properties.get('type') === 'olt') {
+        var fromOlt = cableEndpointRepresentsOlt(fromObj);
+        if (fromOlt) {
             return {
-                oltId: getObjectUniqueId(fromObj),
-                oltName: fromObj.properties.get('name') || 'OLT',
+                oltId: getObjectUniqueId(fromOlt),
+                oltName: fromOlt.properties.get('name') || 'OLT',
                 physicalCableOnly: true,
                 viaPhysicalCable: true,
                 inheritedFromNetwork: true
             };
         }
-        if (toObj && toObj.properties && toObj.properties.get('type') === 'olt') {
+        var toOlt = cableEndpointRepresentsOlt(toObj);
+        if (toOlt) {
             return {
-                oltId: getObjectUniqueId(toObj),
-                oltName: toObj.properties.get('name') || 'OLT',
+                oltId: getObjectUniqueId(toOlt),
+                oltName: toOlt.properties.get('name') || 'OLT',
                 physicalCableOnly: true,
                 viaPhysicalCable: true,
                 inheritedFromNetwork: true
@@ -254,16 +291,14 @@ function findFiberOltRealAssignmentViaNetwork(startHost, startCableId, startFibe
             routePts.forEach(function(pt) {
                 if (pt && pt.properties) {
                     var ptType = pt.properties.get('type');
-                    if (ptType === 'sleeve' || ptType === 'cross') endpoints.push(pt);
+                    if (ptType === 'sleeve' || ptType === 'cross' || ptType === 'olt' || ptType === 'cabinet') {
+                        endpoints.push(pt);
+                    }
                 }
             });
         }
         endpoints.forEach(function(ep) {
-            if (!ep || !ep.properties) return;
-            var epType = ep.properties.get('type');
-            if (epType !== 'sleeve' && epType !== 'cross') return;
-            if (state.host && getObjectUniqueId(ep) === getObjectUniqueId(state.host)) return;
-            enqueueNetworkState({ host: ep, cableId: state.cableId, fiberNumber: state.fiberNumber });
+            enqueueFiberHostWalkTarget(queue, visited, ep, state.cableId, state.fiberNumber, state.host);
         });
     }
 
@@ -540,8 +575,7 @@ function isFiberConnectedToOltNetworkWalk(startHost, startCableId, startFiberNum
         if (!cable) continue;
         var fromObj = cable.properties.get('from');
         var toObj = cable.properties.get('to');
-        if (fromObj && fromObj.properties && fromObj.properties.get('type') === 'olt') return true;
-        if (toObj && toObj.properties && toObj.properties.get('type') === 'olt') return true;
+        if (cableEndpointRepresentsOlt(fromObj) || cableEndpointRepresentsOlt(toObj)) return true;
         var endpoints = [];
         if (fromObj) endpoints.push(fromObj);
         if (toObj) endpoints.push(toObj);
@@ -550,18 +584,14 @@ function isFiberConnectedToOltNetworkWalk(startHost, startCableId, startFiberNum
             routePts.forEach(function(pt) {
                 if (pt && pt.properties) {
                     var ptType = pt.properties.get('type');
-                    if (ptType === 'sleeve' || ptType === 'cross' || ptType === 'olt') endpoints.push(pt);
+                    if (ptType === 'sleeve' || ptType === 'cross' || ptType === 'olt' || ptType === 'cabinet') {
+                        endpoints.push(pt);
+                    }
                 }
             });
         }
         endpoints.forEach(function(ep) {
-            if (!ep || !ep.properties) return;
-            var epType = ep.properties.get('type');
-            if (epType === 'olt') return;
-            if (epType === 'sleeve' || epType === 'cross') {
-                if (cur.host && getObjectUniqueId(ep) === getObjectUniqueId(cur.host)) return;
-                queue.push({ host: ep, cableId: cur.cableId, fiberNumber: cur.fiberNumber });
-            }
+            enqueueFiberHostWalkTarget(queue, visited, ep, cur.cableId, cur.fiberNumber, cur.host);
         });
     }
     return false;

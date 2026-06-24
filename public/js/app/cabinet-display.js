@@ -253,6 +253,111 @@ function isCabinetCableEndpointType(type) {
     return type === 'cross' || type === 'sleeve' || type === 'olt';
 }
 
+/** Совпадение объектов на маршруте кабеля (по ссылке, uniqueId или ящик ↔ его содержимое). */
+function traceRouteObjectsMatch(a, b) {
+    if (!a || !b) return false;
+    if (a === b) return true;
+    var aId = getObjectUniqueId(a);
+    var bId = getObjectUniqueId(b);
+    if (aId && bId && aId === bId) return true;
+    if (a.properties && b.properties) {
+        var aType = a.properties.get('type');
+        var bType = b.properties.get('type');
+        if (aType === 'cabinet' && getObjectCabinetId(b) === aId) return true;
+        if (bType === 'cabinet' && getObjectCabinetId(a) === bId) return true;
+    }
+    return false;
+}
+
+function isObjectOnCableRoute(obj, cable) {
+    if (!obj || !cable || !cable.properties) return false;
+    var fromObj = cable.properties.get('from');
+    var toObj = cable.properties.get('to');
+    if (traceRouteObjectsMatch(obj, fromObj) || traceRouteObjectsMatch(obj, toObj)) return true;
+    var points = cable.properties.get('points');
+    if (!Array.isArray(points)) return false;
+    for (var i = 0; i < points.length; i++) {
+        if (traceRouteObjectsMatch(obj, points[i])) return true;
+    }
+    return false;
+}
+
+function findCabinetMembersUsingCableFiber(members, cableId, fiberNum) {
+    if (!members || !members.length || !cableId) return [];
+    return members.filter(function(host) {
+        if (!host || !host.properties) return false;
+        var used = host.properties.get('usedFibers') || {};
+        if (used[cableId]) return true;
+        if (fiberNum == null || isNaN(fiberNum) || typeof getHostAssignment !== 'function') return false;
+        return !!(
+            getHostAssignment(host, 'oltConnections', cableId, fiberNum) ||
+            getHostAssignment(host, 'onuConnections', cableId, fiberNum) ||
+            getHostAssignment(host, 'splitterConnections', cableId, fiberNum) ||
+            getHostAssignment(host, 'mediaConverterConnections', cableId, fiberNum) ||
+            getHostAssignment(host, 'nodeConnections', cableId, fiberNum)
+        );
+    });
+}
+
+/** Кросс/муфта/OLT внутри ящика, к которому относится данный кабель. */
+function findCabinetMemberOnCable(cabinet, cable, opts) {
+    opts = opts || {};
+    if (!cabinet || !cable) return null;
+    var members = getCabinetCableEndpointMembers(cabinet, {});
+    if (!members.length) return null;
+
+    var fiberKey = opts.fiberKey ? String(opts.fiberKey) : '';
+    var fiberNum = null;
+    var cableId = '';
+    if (fiberKey) {
+        var parts = fiberKey.split('-');
+        fiberNum = parseInt(parts[parts.length - 1], 10);
+        cableId = parts.slice(0, -1).join('-');
+    }
+
+    var onRoute = members.filter(function(m) { return isObjectOnCableRoute(m, cable); });
+    if (!onRoute.length && isObjectOnCableRoute(cabinet, cable)) {
+        onRoute = members.slice();
+    }
+    if (onRoute.length > 1 && cableId && !isNaN(fiberNum)) {
+        var byFiber = findCabinetMembersUsingCableFiber(onRoute, cableId, fiberNum);
+        if (byFiber.length === 1) return byFiber[0];
+        if (byFiber.length > 1) onRoute = byFiber;
+    }
+    if (onRoute.length === 1) return onRoute[0];
+    if (onRoute.length > 1 && cableId && !isNaN(fiberNum) && typeof getHostAssignment === 'function') {
+        for (var hi = 0; hi < onRoute.length; hi++) {
+            var host = onRoute[hi];
+            if (getHostAssignment(host, 'nodeConnections', cableId, fiberNum) ||
+                getHostAssignment(host, 'oltConnections', cableId, fiberNum) ||
+                getHostAssignment(host, 'onuConnections', cableId, fiberNum) ||
+                getHostAssignment(host, 'splitterConnections', cableId, fiberNum) ||
+                getHostAssignment(host, 'mediaConverterConnections', cableId, fiberNum)) {
+                return host;
+            }
+        }
+        return onRoute[0];
+    }
+    if (onRoute.length) return onRoute[0];
+    if (cableId && !isNaN(fiberNum)) {
+        var anyByFiber = findCabinetMembersUsingCableFiber(members, cableId, fiberNum);
+        if (anyByFiber.length === 1) return anyByFiber[0];
+        if (anyByFiber.length > 1) return anyByFiber[0];
+    }
+    return members.length === 1 ? members[0] : null;
+}
+
+/** Ящик на маршруте → реальный endpoint (кросс/муфта/OLT); остальные объекты без изменений. */
+function resolveTraceRouteObject(obj, cable, opts) {
+    if (!obj || !obj.properties || !cable) return obj;
+    var type = obj.properties.get('type');
+    if (type === 'cabinet') {
+        return findCabinetMemberOnCable(obj, cable, opts || {});
+    }
+    if (isCabinetCableEndpointType(type)) return obj;
+    return obj;
+}
+
 var cabinetCableSourceHighlight = null;
 
 function syncCabinetCableSourceHighlight() {

@@ -39,12 +39,33 @@
 
     function findPointIndexOnRoute(points, obj) {
         if (!Array.isArray(points) || !obj) return -1;
+        if (typeof global.traceRouteObjectsMatch === 'function') {
+            for (var i = 0; i < points.length; i++) {
+                if (global.traceRouteObjectsMatch(points[i], obj)) return i;
+            }
+            return -1;
+        }
         var uid = getUid(obj);
-        for (var i = 0; i < points.length; i++) {
-            if (points[i] === obj) return i;
-            if (uid && points[i] && getUid(points[i]) === uid) return i;
+        for (var j = 0; j < points.length; j++) {
+            if (points[j] === obj) return j;
+            if (uid && points[j] && getUid(points[j]) === uid) return j;
         }
         return -1;
+    }
+
+    function getTraceObjectCoords(obj) {
+        if (!obj) return null;
+        if (typeof global.getObjectRoutingCoords === 'function') {
+            var routed = global.getObjectRoutingCoords(obj);
+            if (routed && routed.length >= 2) return routed;
+        }
+        if (obj.geometry) {
+            try {
+                var coords = obj.geometry.getCoordinates();
+                if (coords && coords.length >= 2) return coords;
+            } catch (e) {}
+        }
+        return null;
     }
 
     function getCableRoutePoints(cable) {
@@ -92,9 +113,8 @@
         }
         var coords = [];
         sub.forEach(function (p) {
-            if (p && p.geometry) {
-                try { coords.push(p.geometry.getCoordinates()); } catch (e3) {}
-            }
+            var ptCoords = getTraceObjectCoords(p);
+            if (ptCoords) coords.push(ptCoords);
         });
         return coords.length >= 2 ? coords : [];
     }
@@ -155,7 +175,48 @@
         }
         for (var i = path.length - 1; i >= 0; i--) {
             var item = path[i];
+            if (item.type === 'object' && item.objectType === 'onu') {
+                return {
+                    status: 'complete',
+                    endpoint: 'onu',
+                    label: 'Доходит до ONU «' + (item.objectName || 'ONU') + '»',
+                    cssClass: 'trace-path-status--complete'
+                };
+            }
+            if (item.type === 'onuConnection') {
+                return {
+                    status: 'complete',
+                    endpoint: 'onu',
+                    label: 'Доходит до ONU «' + (item.onuName || 'ONU') + '»',
+                    cssClass: 'trace-path-status--complete'
+                };
+            }
+            if (item.type === 'splitterOutputToOnu') {
+                return {
+                    status: 'complete',
+                    endpoint: 'onu',
+                    label: 'Доходит до ONU «' + (item.onuName || 'ONU') + '»',
+                    cssClass: 'trace-path-status--complete'
+                };
+            }
             if (item.type === 'oltPortConnection') {
+                var hasLaterNetwork = false;
+                for (var k = i + 1; k < path.length; k++) {
+                    var after = path[k];
+                    if (after.type === 'cable' || after.type === 'connection' || after.type === 'splitterConnection') {
+                        hasLaterNetwork = true;
+                        break;
+                    }
+                    if (after.type === 'object' && after.objectType && after.objectType !== 'olt') {
+                        hasLaterNetwork = true;
+                        break;
+                    }
+                    if (after.type === 'splitterOutputToOnu' || after.type === 'onuConnection') {
+                        hasLaterNetwork = true;
+                        break;
+                    }
+                }
+                if (hasLaterNetwork) continue;
                 var oltPortLabel = item.incoming ? 'приход' : (typeof formatOltPortDisplay === 'function'
                     ? formatOltPortDisplay(item.portNumber, item.portLabel || (item.olt && typeof getOltPortLabel === 'function' ? getOltPortLabel(item.olt, item.portNumber) : ''))
                     : ('порт ' + item.portNumber));
@@ -167,18 +228,23 @@
                 };
             }
             if (item.type === 'object' && item.objectType === 'olt') {
+                var hasLaterThanOlt = false;
+                for (var ko = i + 1; ko < path.length; ko++) {
+                    var afterOlt = path[ko];
+                    if (afterOlt.type === 'cable' || afterOlt.type === 'connection' || afterOlt.type === 'splitterConnection') {
+                        hasLaterThanOlt = true;
+                        break;
+                    }
+                    if (afterOlt.type === 'object' && afterOlt.objectType && afterOlt.objectType !== 'olt') {
+                        hasLaterThanOlt = true;
+                        break;
+                    }
+                }
+                if (hasLaterThanOlt) continue;
                 return {
                     status: 'complete',
                     endpoint: 'olt',
                     label: 'Доходит до OLT «' + (item.objectName || 'OLT') + '»',
-                    cssClass: 'trace-path-status--complete'
-                };
-            }
-            if (item.type === 'object' && item.objectType === 'onu') {
-                return {
-                    status: 'complete',
-                    endpoint: 'onu',
-                    label: 'Доходит до ONU «' + (item.objectName || 'ONU') + '»',
                     cssClass: 'trace-path-status--complete'
                 };
             }
@@ -260,7 +326,29 @@
         if (!path || !path.length) return '—';
         for (var i = path.length - 1; i >= 0; i--) {
             var item = path[i];
+            if (item.type === 'object' && item.objectType === 'onu') {
+                return item.objectName || 'ONU';
+            }
+            if (item.type === 'onuConnection') {
+                return item.onuName || 'ONU';
+            }
+            if (item.type === 'splitterOutputToOnu') {
+                return item.onuName || 'ONU';
+            }
             if (item.type === 'oltPortConnection') {
+                var hasLaterHop = false;
+                for (var k = i + 1; k < path.length; k++) {
+                    var afterHop = path[k];
+                    if (afterHop.type === 'cable' || afterHop.type === 'connection' || afterHop.type === 'splitterConnection') {
+                        hasLaterHop = true;
+                        break;
+                    }
+                    if (afterHop.type === 'object' && afterHop.objectType && afterHop.objectType !== 'olt') {
+                        hasLaterHop = true;
+                        break;
+                    }
+                }
+                if (hasLaterHop) continue;
                 var oltPortLabel = item.incoming ? 'приход' : (typeof formatOltPortDisplay === 'function'
                     ? formatOltPortDisplay(item.portNumber, item.portLabel || (item.olt && typeof getOltPortLabel === 'function' ? getOltPortLabel(item.olt, item.portNumber) : ''))
                     : ('порт ' + item.portNumber));
@@ -268,9 +356,6 @@
             }
             if (item.type === 'object' && item.objectType === 'olt') {
                 return item.objectName || 'OLT';
-            }
-            if (item.type === 'object' && item.objectType === 'onu') {
-                return item.objectName || 'ONU';
             }
             if (item.type === 'splitterOutputToNode' || (item.type === 'object' && item.objectType === 'node')) {
                 if (item.type === 'splitterOutputToNode') {
@@ -322,6 +407,18 @@
         return total > 0 ? Math.round(total) : null;
     }
 
+    function traceCoordsDiffer(a, b) {
+        if (!a || !b || a.length < 2 || b.length < 2) return false;
+        return Math.abs(a[0] - b[0]) > 1e-6 || Math.abs(a[1] - b[1]) > 1e-6;
+    }
+
+    function pushTraceLinkLine(fromObj, toCoords, lines) {
+        var fromCoords = getTraceObjectCoords(fromObj);
+        if (fromCoords && toCoords && traceCoordsDiffer(fromCoords, toCoords)) {
+            lines.push({ coords: [fromCoords, toCoords], underground: false });
+        }
+    }
+
     function buildHighlightGeometries(path) {
         var lines = [];
         var points = [];
@@ -332,13 +429,12 @@
             if (item.type === 'start' || item.type === 'object') {
                 var traceObj = item.object;
                 if (traceObj && traceObj._embedded && traceObj._host) traceObj = traceObj._host;
-                if (traceObj && traceObj.geometry) {
-                    try {
-                        points.push({
-                            coords: traceObj.geometry.getCoordinates(),
-                            type: item.objectType
-                        });
-                    } catch (e) {}
+                var traceCoords = getTraceObjectCoords(traceObj);
+                if (traceCoords) {
+                    points.push({
+                        coords: traceCoords,
+                        type: item.objectType
+                    });
                 }
                 lastObj = traceObj || item.object || lastObj;
             } else if (item.type === 'cable' && item.cable && lastObj) {
@@ -394,8 +490,13 @@
                 try { points.push({ coords: item.onu.geometry.getCoordinates(), type: 'onu' }); } catch (e4) {}
             } else if (item.type === 'mediaConverterConnection' && item.mediaConverter && item.mediaConverter.geometry) {
                 try { points.push({ coords: item.mediaConverter.geometry.getCoordinates(), type: 'mediaConverter' }); } catch (e5) {}
-            } else if (item.type === 'oltPortConnection' && item.olt && item.olt.geometry) {
-                try { points.push({ coords: item.olt.geometry.getCoordinates(), type: 'olt' }); } catch (e6) {}
+            } else if (item.type === 'oltPortConnection' && item.olt) {
+                var oltCoords = getTraceObjectCoords(item.olt);
+                if (oltCoords) {
+                    pushTraceLinkLine(lastObj, oltCoords, lines);
+                    points.push({ coords: oltCoords, type: 'olt' });
+                    lastObj = item.olt;
+                }
             }
         });
         return { lines: lines, points: points };
