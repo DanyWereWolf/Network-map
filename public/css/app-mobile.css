@@ -46,7 +46,7 @@ html {
     /* ---------- Шапка: сетка «логотип + кнопки / поиск на всю ширину» ---------- */
     .top-header {
         height: auto;
-        min-height: 46px;
+        min-height: 96px;
         flex-shrink: 0;
         overflow-x: clip;
         -webkit-transform: translateZ(0);

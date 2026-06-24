@@ -38,7 +38,7 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional" rel="stylesheet">
     <script>
         (function(){
             var base = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : '';
@@ -232,7 +232,7 @@
             </div>
         </div>
     </header>
-    <div id="mapLimitBanner" class="map-limit-banner" style="display:none;" role="status" aria-live="polite">
+    <div id="mapLimitBanner" class="map-limit-banner map-limit-banner--hidden" role="status" aria-live="polite">
         <p class="map-limit-banner__message"></p>
         <button type="button" class="map-limit-banner__close" aria-label="Закрыть напоминание" title="Закрыть">&times;</button>
     </div>
@@ -511,20 +511,33 @@
                                     <ul class="device-combobox-list"></ul>
                                 </div>
                             </div>
-                            <div class="cabinet-dims-row form-group-sub">
-                                <div class="cabinet-dims-field">
-                                    <label for="cabinetHeight">Высота, мм</label>
-                                    <input type="number" id="cabinetHeight" class="form-input" min="0" step="1" inputmode="numeric" placeholder="—" autocomplete="off">
+                            <fieldset class="cabinet-dims-block form-group-sub">
+                                <legend class="cabinet-dims-legend">Габариты</legend>
+                                <div class="cabinet-dims-grid">
+                                    <label class="cabinet-dims-cell" for="cabinetWidth">
+                                        <span class="cabinet-dims-cell-label">Ширина</span>
+                                        <span class="cabinet-dims-input-wrap">
+                                            <input type="number" id="cabinetWidth" class="form-input cabinet-dims-input" min="0" step="1" inputmode="numeric" placeholder="0" autocomplete="off">
+                                            <span class="cabinet-dims-unit" aria-hidden="true">мм</span>
+                                        </span>
+                                    </label>
+                                    <label class="cabinet-dims-cell" for="cabinetHeight">
+                                        <span class="cabinet-dims-cell-label">Высота</span>
+                                        <span class="cabinet-dims-input-wrap">
+                                            <input type="number" id="cabinetHeight" class="form-input cabinet-dims-input" min="0" step="1" inputmode="numeric" placeholder="0" autocomplete="off">
+                                            <span class="cabinet-dims-unit" aria-hidden="true">мм</span>
+                                        </span>
+                                    </label>
+                                    <label class="cabinet-dims-cell cabinet-dims-cell--units" for="cabinetUnits">
+                                        <span class="cabinet-dims-cell-label">Стойка</span>
+                                        <span class="cabinet-dims-input-wrap">
+                                            <input type="number" id="cabinetUnits" class="form-input cabinet-dims-input" min="0" step="1" inputmode="numeric" placeholder="0" autocomplete="off" title="Высота в юнитах стойки (U)">
+                                            <span class="cabinet-dims-unit" aria-hidden="true">U</span>
+                                        </span>
+                                    </label>
                                 </div>
-                                <div class="cabinet-dims-field">
-                                    <label for="cabinetWidth">Ширина, мм</label>
-                                    <input type="number" id="cabinetWidth" class="form-input" min="0" step="1" inputmode="numeric" placeholder="—" autocomplete="off">
-                                </div>
-                                <div class="cabinet-dims-field">
-                                    <label for="cabinetUnits">U</label>
-                                    <input type="number" id="cabinetUnits" class="form-input" min="0" step="1" inputmode="numeric" placeholder="—" autocomplete="off">
-                                </div>
-                            </div>
+                                <p class="cabinet-dims-hint">Необязательно — для документации</p>
+                            </fieldset>
                             <label for="cabinetMount" class="form-group-sub">Монтаж</label>
                             <select id="cabinetMount" class="form-select">
                                 <option value="">— не указано —</option>
@@ -1241,7 +1254,7 @@
             </div>
             <div class="modal-body welcome-modal-body">
                 <section class="welcome-assistant-greeting" aria-label="Приветствие помощника Volsmap">
-                    <img class="welcome-assistant-avatar" src="icons/assistant/volsmap-girl.png" alt="Вола, ассистент Volsmap">
+                    <img class="welcome-assistant-avatar" src="icons/assistant/volsmap-girl.png" width="112" height="140" alt="Вола, ассистент Volsmap" decoding="async">
                     <div class="welcome-assistant-bubble">
                         <p class="welcome-assistant-name">Вола · Volsmap</p>
                         <p class="welcome-assistant-text">Привет! Пройдите короткое обучение — покажу, где что находится на карте.</p>

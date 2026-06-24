@@ -38,10 +38,13 @@ function setupMapSearch() {
     });
 
     searchInput.addEventListener('focus', function() {
-        if (this.value.trim().length >= 2) {
-            const results = searchObjects(this.value.trim());
-            renderSearchResults(results, this.value.trim());
-        }
+        var query = this.value.trim();
+        if (query.length < 2) return;
+        if (searchTimeout) clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(function() {
+            const results = searchObjects(query);
+            renderSearchResults(results, query);
+        }, 200);
     });
 
     searchInput.addEventListener('keydown', function(e) {

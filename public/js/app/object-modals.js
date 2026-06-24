@@ -2118,9 +2118,12 @@ function showCableInfo(cable) {
     if (fiberRoutingMode) {
         cancelFiberRouting();
     }
-    
+
+    showInfoModalLoadingShell('Кабель');
     applyModalEditModeForObject(cable, function() {
-        showCableInfoBody(cable);
+        deferHeavyModalWork(function() {
+            showCableInfoBody(cable);
+        });
     });
 }
 
@@ -2727,6 +2730,27 @@ function updateStats() {
     }
 }
 
+function showInfoModalLoadingShell(title) {
+    var modal = document.getElementById('infoModal');
+    var modalInfo = document.getElementById('modalInfo');
+    var titleEl = document.getElementById('modalTitle');
+    if (!modal || !modalInfo) return;
+    if (titleEl) titleEl.textContent = title || 'Загрузка…';
+    modalInfo.innerHTML = '<div class="modal-info-loading" aria-busy="true"><span class="modal-info-loading-spinner" aria-hidden="true"></span></div>';
+    modal.style.display = 'flex';
+    modal.classList.add('modal--centered');
+}
+
+function deferHeavyModalWork(fn) {
+    if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(function() {
+            requestAnimationFrame(fn);
+        });
+    } else {
+        setTimeout(fn, 0);
+    }
+}
+
 function showObjectInfo(obj) {
     if (obj && obj._embedded && obj._host && obj.properties && obj.properties.get('type') === 'splitter') {
         showObjectInfo(obj._host);
@@ -2764,9 +2788,12 @@ function showObjectInfo(obj) {
             cancelFiberRouting();
         }
     }
-    
+
+    showInfoModalLoadingShell('Загрузка…');
     applyModalEditModeForObject(obj, function() {
-        showObjectInfoBody(obj);
+        deferHeavyModalWork(function() {
+            showObjectInfoBody(obj);
+        });
     });
 }
 

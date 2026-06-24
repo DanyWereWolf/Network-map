@@ -123,20 +123,27 @@ function formatCabinetDimensionsSummary(cabinet) {
 function buildCabinetDimensionsFieldsHtml(prefix, values) {
     prefix = prefix || 'editCabinet';
     values = values || {};
-    var html = '<div class="cabinet-dims-row">';
-    html += '<div class="cabinet-dims-field">';
-    html += '<label class="object-card-label" for="' + prefix + 'Height">Высота, мм</label>';
-    html += '<input type="number" id="' + prefix + 'Height" class="form-input" min="0" step="1" inputmode="numeric" value="' + escapeHtml(values.height || '') + '" placeholder="—">';
+    var html = '<fieldset class="cabinet-dims-block">';
+    html += '<legend class="cabinet-dims-legend">Габариты</legend>';
+    html += '<div class="cabinet-dims-grid">';
+    html += '<label class="cabinet-dims-cell" for="' + prefix + 'Width">';
+    html += '<span class="cabinet-dims-cell-label">Ширина</span>';
+    html += '<span class="cabinet-dims-input-wrap">';
+    html += '<input type="number" id="' + prefix + 'Width" class="form-input cabinet-dims-input" min="0" step="1" inputmode="numeric" value="' + escapeHtml(values.width || '') + '" placeholder="0">';
+    html += '<span class="cabinet-dims-unit" aria-hidden="true">мм</span></span></label>';
+    html += '<label class="cabinet-dims-cell" for="' + prefix + 'Height">';
+    html += '<span class="cabinet-dims-cell-label">Высота</span>';
+    html += '<span class="cabinet-dims-input-wrap">';
+    html += '<input type="number" id="' + prefix + 'Height" class="form-input cabinet-dims-input" min="0" step="1" inputmode="numeric" value="' + escapeHtml(values.height || '') + '" placeholder="0">';
+    html += '<span class="cabinet-dims-unit" aria-hidden="true">мм</span></span></label>';
+    html += '<label class="cabinet-dims-cell cabinet-dims-cell--units" for="' + prefix + 'Units">';
+    html += '<span class="cabinet-dims-cell-label">Стойка</span>';
+    html += '<span class="cabinet-dims-input-wrap">';
+    html += '<input type="number" id="' + prefix + 'Units" class="form-input cabinet-dims-input" min="0" step="1" inputmode="numeric" value="' + escapeHtml(values.units || '') + '" placeholder="0" title="Высота в юнитах стойки (U)">';
+    html += '<span class="cabinet-dims-unit" aria-hidden="true">U</span></span></label>';
     html += '</div>';
-    html += '<div class="cabinet-dims-field">';
-    html += '<label class="object-card-label" for="' + prefix + 'Width">Ширина, мм</label>';
-    html += '<input type="number" id="' + prefix + 'Width" class="form-input" min="0" step="1" inputmode="numeric" value="' + escapeHtml(values.width || '') + '" placeholder="—">';
-    html += '</div>';
-    html += '<div class="cabinet-dims-field">';
-    html += '<label class="object-card-label" for="' + prefix + 'Units">U</label>';
-    html += '<input type="number" id="' + prefix + 'Units" class="form-input" min="0" step="1" inputmode="numeric" value="' + escapeHtml(values.units || '') + '" placeholder="—">';
-    html += '</div>';
-    html += '</div>';
+    html += '<p class="cabinet-dims-hint">Необязательно — для документации</p>';
+    html += '</fieldset>';
     return html;
 }
 
@@ -425,8 +432,8 @@ function resolveCabinetCableTarget(cabinet, onResolved, opts) {
     if (!members.length) {
         if (typeof showWarning === 'function') {
             var msg = cableSource
-                ? 'В ящике нет другого кросса, муфты или OLT для подключения.'
-                : 'В ящике нет кросса, муфты или OLT для подключения кабеля.';
+                ? 'В ящике нет другого кросса для подключения.'
+                : 'В ящике нет кросса для подключения кабеля.';
             showWarning(msg, 'Кабель');
         }
         onResolved(null);

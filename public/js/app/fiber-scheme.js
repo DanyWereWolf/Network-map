@@ -309,6 +309,10 @@ function handleSchemeCrossPortClick(crossObj, portNumber) {
     if (!crossObj || !isEditMode || portNumber == null) return;
     portNumber = parseInt(portNumber, 10);
     if (isNaN(portNumber)) return;
+    if (schemeSplitterOutputPick && schemeSplitterOutputPick.hostObj === crossObj) {
+        tryConnectSchemeSplitterOutputToCrossPort(crossObj, portNumber);
+        return;
+    }
     if (typeof isCrossPortPatched === 'function' && isCrossPortPatched(crossObj, portNumber)) {
         var fiberPortsPatch = crossObj.properties.get('fiberPorts') || {};
         if (findFiberKeysByCrossPort(fiberPortsPatch, portNumber).length) {
@@ -503,9 +507,127 @@ function isSchemeFiberEligibleForSplitterOutput(hostObj, cableId, fiberNumber, s
     return !usage.used;
 }
 
+function isSchemeCrossPortOpenForSplitterOutput(crossObj, portNumber) {
+    if (!crossObj || !isCrossLikeHostType(crossObj.properties.get('type')) || portNumber == null) return false;
+    portNumber = parseInt(portNumber, 10);
+    if (isNaN(portNumber) || portNumber < 1) return false;
+    var crossPorts = Math.max(1, parseInt(crossObj.properties.get('crossPorts'), 10) || 24);
+    if (portNumber > crossPorts) return false;
+    if (typeof isCrossPortPatched === 'function' && isCrossPortPatched(crossObj, portNumber)) return false;
+    if (typeof isCrossPortLinkedToOlt === 'function' && isCrossPortLinkedToOlt(crossObj, portNumber)) return false;
+    return true;
+}
+
+function isSchemeCrossPortEligibleForSplitterOutput(crossObj, portNumber, splitterId, outputIndex) {
+    if (!isSchemeCrossPortOpenForSplitterOutput(crossObj, portNumber)) return false;
+    var fiberPorts = crossObj.properties.get('fiberPorts') || {};
+    var fiberKey = findFiberKeyByCrossPort(fiberPorts, portNumber);
+    if (!fiberKey) return true;
+    var parsed = parseFiberKey(fiberKey);
+    if (!parsed) return false;
+    if (typeof isFiberSplicedAtHost === 'function' && isFiberSplicedAtHost(crossObj, parsed.cableId, parsed.fiberNumber)) return false;
+    return isSchemeFiberEligibleForSplitterOutput(crossObj, parsed.cableId, parsed.fiberNumber, splitterId, outputIndex);
+}
+
+function tryConnectSchemeSplitterOutputToFiberAndPort(hostObj, cableId, fiberNumber, portNumber) {
+    if (!schemeSplitterOutputPick || schemeSplitterOutputPick.hostObj !== hostObj) return false;
+    var pick = schemeSplitterOutputPick;
+    portNumber = parseInt(portNumber, 10);
+    if (isNaN(portNumber) || portNumber < 1) return false;
+    if (!isCrossLikeHostType(hostObj.properties.get('type'))) return false;
+    if (typeof isFiberSplicedAtHost === 'function' && isFiberSplicedAtHost(hostObj, cableId, fiberNumber)) {
+        if (typeof showWarning === 'function') showWarning('Сращённые жилы не занимают порты кросса.', 'Порт недоступен');
+        return false;
+    }
+    if (!isSchemeCrossPortOpenForSplitterOutput(hostObj, portNumber)) {
+        if (typeof isCrossPortPatched === 'function' && isCrossPortPatched(hostObj, portNumber)) {
+            if (typeof showWarning === 'function') showWarning('Порт занят кроссировкой с другим кроссом.', 'Порт недоступен');
+        } else if (typeof isCrossPortLinkedToOlt === 'function' && isCrossPortLinkedToOlt(hostObj, portNumber)) {
+            if (typeof showWarning === 'function') showWarning('Порт занят PON-портом OLT.', 'Порт недоступен');
+        } else if (typeof showWarning === 'function') {
+            showWarning('Порт недоступен для выхода сплиттера.', 'Порт недоступен');
+        }
+        return false;
+    }
+    if (!connectSplitterOutputToLocalFiber(hostObj, pick.splitterId, pick.outputIndex, cableId, fiberNumber, {
+        keepPick: true, skipSuccess: true, skipRefresh: true
+    })) return false;
+    var fiberPorts = hostObj.properties.get('fiberPorts') || {};
+    var occupiedKey = findFiberKeyByCrossPort(fiberPorts, portNumber);
+    var fiberKey = cableId + '-' + fiberNumber;
+    if (occupiedKey && occupiedKey !== fiberKey) {
+        var prev = parseFiberKey(occupiedKey);
+        if (prev) updateFiberPort(hostObj, prev.cableId, prev.fiberNumber, null);
+    }
+    updateFiberPort(hostObj, cableId, fiberNumber, String(portNumber));
+    saveData();
+    clearSchemeSplitterOutputPick();
+    if (typeof showSuccess === 'function') {
+        showSuccess('Выход ' + (pick.outputIndex + 1) + ' подключён к порту ' + portNumber + ' (жила ' + fiberNumber + ').', 'Сплиттер');
+    }
+    refreshSplitterUiAfterChange(resolveSplitterObject(pick.splitterId));
+    return true;
+}
+
+function tryConnectSchemeSplitterOutputToCrossPort(crossObj, portNumber) {
+    if (!schemeSplitterOutputPick || schemeSplitterOutputPick.hostObj !== crossObj) return false;
+    if (!isCrossLikeHostType(crossObj.properties.get('type'))) return false;
+    var pick = schemeSplitterOutputPick;
+    portNumber = parseInt(portNumber, 10);
+    if (isNaN(portNumber)) return false;
+    if (pick.crossPort === portNumber) {
+        schemeSplitterOutputPick = { hostObj: pick.hostObj, splitterId: pick.splitterId, outputIndex: pick.outputIndex };
+        updateSchemeSplitterPickUI();
+        return true;
+    }
+    if (!isSchemeCrossPortEligibleForSplitterOutput(crossObj, portNumber, pick.splitterId, pick.outputIndex)) {
+        if (typeof isCrossPortPatched === 'function' && isCrossPortPatched(crossObj, portNumber)) {
+            if (typeof showWarning === 'function') showWarning('Порт занят кроссировкой с другим кроссом.', 'Порт недоступен');
+        } else if (typeof isCrossPortLinkedToOlt === 'function' && isCrossPortLinkedToOlt(crossObj, portNumber)) {
+            if (typeof showWarning === 'function') showWarning('Порт занят PON-портом OLT.', 'Порт недоступен');
+        } else {
+            var fiberPortsErr = crossObj.properties.get('fiberPorts') || {};
+            var fiberKeyErr = findFiberKeyByCrossPort(fiberPortsErr, portNumber);
+            if (fiberKeyErr) {
+                var parsedErr = parseFiberKey(fiberKeyErr);
+                if (parsedErr) {
+                    var placeId = crossObj.properties.get('uniqueId');
+                    var optsErr = { type: 'splitterOutput', splitterId: pick.splitterId, outputIndex: pick.outputIndex, atCrossId: placeId };
+                    var usageErr = getFiberUsage(parsedErr.cableId, parsedErr.fiberNumber, optsErr);
+                    if (typeof showError === 'function') showError('Жила на порту занята: ' + (usageErr.where || 'другое назначение') + '.', 'Порт недоступен');
+                }
+            } else if (typeof showWarning === 'function') {
+                showWarning('Порт недоступен для выхода сплиттера.', 'Порт недоступен');
+            }
+        }
+        return false;
+    }
+    var fiberPorts = crossObj.properties.get('fiberPorts') || {};
+    var fiberKey = findFiberKeyByCrossPort(fiberPorts, portNumber);
+    if (!fiberKey) {
+        schemeSplitterOutputPick = {
+            hostObj: pick.hostObj,
+            splitterId: pick.splitterId,
+            outputIndex: pick.outputIndex,
+            crossPort: portNumber
+        };
+        updateSchemeSplitterPickUI();
+        return true;
+    }
+    var parsed = parseFiberKey(fiberKey);
+    if (!parsed) return false;
+    if (!connectSplitterOutputToLocalFiber(crossObj, pick.splitterId, pick.outputIndex, parsed.cableId, parsed.fiberNumber, {
+        successMessage: 'Выход ' + (pick.outputIndex + 1) + ' подключён к порту ' + portNumber + ' (жила ' + parsed.fiberNumber + ').'
+    })) return false;
+    return true;
+}
+
 function tryConnectSchemeSplitterOutputToFiber(hostObj, cableId, fiberNumber) {
     if (!schemeSplitterOutputPick || schemeSplitterOutputPick.hostObj !== hostObj) return false;
     var pick = schemeSplitterOutputPick;
+    if (pick.crossPort != null && isCrossLikeHostType(hostObj.properties.get('type'))) {
+        return tryConnectSchemeSplitterOutputToFiberAndPort(hostObj, cableId, fiberNumber, pick.crossPort);
+    }
     if (!connectSplitterOutputToLocalFiber(hostObj, pick.splitterId, pick.outputIndex, cableId, fiberNumber)) return false;
     return true;
 }
@@ -600,7 +722,8 @@ function connectSplitterOutputToSplitter(hostObj, sourceSplitterId, outputIndex,
     return true;
 }
 
-function connectSplitterOutputToLocalFiber(hostObj, splitterId, outputIndex, cableId, fiberNumber) {
+function connectSplitterOutputToLocalFiber(hostObj, splitterId, outputIndex, cableId, fiberNumber, opts) {
+    opts = opts || {};
     var facade = resolveSplitterObject(splitterId);
     if (!facade || !hostObj) return false;
     syncSplitterInputFromHost(facade);
@@ -611,9 +734,9 @@ function connectSplitterOutputToLocalFiber(hostObj, splitterId, outputIndex, cab
     if (!isSchemeFiberEligibleForSplitterOutput(hostObj, cableId, fiberNumber, splitterId, outputIndex)) {
         var t = hostObj.properties.get('type');
         var placeId = hostObj.properties.get('uniqueId');
-        var opts = { type: 'splitterOutput', splitterId: splitterId, outputIndex: outputIndex };
-        if (isCrossLikeHostType(t)) opts.atCrossId = placeId; else opts.atSleeveId = placeId;
-        var usage = getFiberUsage(cableId, fiberNumber, opts);
+        var usageOpts = { type: 'splitterOutput', splitterId: splitterId, outputIndex: outputIndex };
+        if (isCrossLikeHostType(t)) usageOpts.atCrossId = placeId; else usageOpts.atSleeveId = placeId;
+        var usage = getFiberUsage(cableId, fiberNumber, usageOpts);
         if (typeof showError === 'function') showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '.', 'Жила занята');
         return false;
     }
@@ -624,10 +747,13 @@ function connectSplitterOutputToLocalFiber(hostObj, splitterId, outputIndex, cab
     if (outputs.length > ratio) outputs = outputs.slice(0, ratio);
     outputs[outputIndex] = { hostId: hostUid, cableId: cableId, fiberNumber: fiberNumber, routeIds: [] };
     facade.properties.set('outputConnections', outputs);
-    saveData();
-    clearSchemeSplitterOutputPick();
-    if (typeof showSuccess === 'function') showSuccess('Выход ' + (outputIndex + 1) + ' сплиттера сращен с жилой ' + fiberNumber + '.', 'Сплиттер');
-    refreshSplitterUiAfterChange(facade);
+    if (!opts.skipSave) saveData();
+    if (!opts.keepPick) clearSchemeSplitterOutputPick();
+    if (!opts.skipSuccess && typeof showSuccess === 'function') {
+        var successMsg = opts.successMessage || ('Выход ' + (outputIndex + 1) + ' сплиттера сращен с жилой ' + fiberNumber + '.');
+        showSuccess(successMsg, 'Сплиттер');
+    }
+    if (!opts.skipRefresh) refreshSplitterUiAfterChange(facade);
     return true;
 }
 
@@ -655,6 +781,12 @@ function updateSchemeSplitterPickUI() {
     document.querySelectorAll('.fiber-connections-container .fiber-item.fiber-item--splitter-pick').forEach(function(el) {
         el.classList.remove('fiber-item--splitter-pick');
     });
+    document.querySelectorAll('#fiber-connections-svg .fiber-scheme-cross-port--wire-target').forEach(function(el) {
+        el.classList.remove('fiber-scheme-cross-port--wire-target');
+    });
+    document.querySelectorAll('#fiber-connections-svg .fiber-scheme-cross-port--pick').forEach(function(el) {
+        el.classList.remove('fiber-scheme-cross-port--pick');
+    });
     if (!schemeSplitterWirePick && !schemeSplitterOutputPick && !schemeCrossPortPick) {
         bar.style.display = 'none';
         bar.innerHTML = '';
@@ -667,7 +799,24 @@ function updateSchemeSplitterPickUI() {
         var op = schemeSplitterOutputPick;
         var recOut = window.EmbeddedSplitters ? EmbeddedSplitters.findInHost(op.hostObj, op.splitterId) : null;
         var spNameOut = recOut ? (recOut.name || 'Сплиттер') : 'сплиттер';
-        msg = 'Выход ' + (op.outputIndex + 1) + ' «' + escapeHtml(spNameOut) + '»: кликните по <strong>жиле на схеме или в таблице</strong> или по <strong>входу другого сплиттера</strong>.';
+        if (op.crossPort != null && isCrossLikeHostType(op.hostObj.properties.get('type'))) {
+            msg = 'Выход ' + (op.outputIndex + 1) + ' «' + escapeHtml(spNameOut) + '» → порт <strong>' + op.crossPort + '</strong>: кликните <strong>жилу на схеме или в таблице</strong>.';
+            document.querySelectorAll('#fiber-connections-svg .fiber-scheme-cross-port[data-cross-port="' + op.crossPort + '"]').forEach(function(el) {
+                el.classList.add('fiber-scheme-cross-port--pick');
+            });
+        } else {
+            var crossPortHint = isCrossLikeHostType(op.hostObj.properties.get('type'))
+                ? ' или по <strong>порту кросса</strong> на схеме'
+                : '';
+            msg = 'Выход ' + (op.outputIndex + 1) + ' «' + escapeHtml(spNameOut) + '»: кликните по <strong>жиле на схеме или в таблице</strong>' + crossPortHint + ' или по <strong>входу другого сплиттера</strong>.';
+            if (isCrossLikeHostType(op.hostObj.properties.get('type'))) {
+                document.querySelectorAll('#fiber-connections-svg .fiber-scheme-cross-port').forEach(function(el) {
+                    var portNum = parseInt(el.getAttribute('data-cross-port'), 10);
+                    var portEligible = !isNaN(portNum) && isSchemeCrossPortEligibleForSplitterOutput(op.hostObj, portNum, op.splitterId, op.outputIndex);
+                    el.classList.toggle('fiber-scheme-cross-port--wire-target', portEligible);
+                });
+            }
+        }
         document.querySelectorAll('#fiber-connections-svg .fiber-scheme-splitter-port').forEach(function(el) {
             var sid = el.getAttribute('data-splitter-id');
             var oi = parseInt(el.getAttribute('data-output-index'), 10);
@@ -1426,7 +1575,9 @@ function buildSplitterFiberCell(splitterData, vf, hostObj, isEditMode, cablesDat
             if (!reach.root) {
                 cellTitle = 'Сначала подключите вход сплиттера';
             } else {
-                cellTitle = 'Клик: сращивание с жилой кабеля или подключение к объекту';
+                cellTitle = cellCtx.isCross
+                    ? 'Клик: жила, порт кросса на схеме или подключение к объекту'
+                    : 'Клик: сращивание с жилой кабеля или подключение к объекту';
                 if (reach.canConnectToOlt) {
                     actionChips += buildSplitterFiberChip('btn-connect-splitter-onu fiber-chip--onu', splitterData.splitterId, vf.outputIndex, 'GPON на ONU', '📡 ONU');
                 } else {

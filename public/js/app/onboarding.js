@@ -853,9 +853,16 @@ function initWelcomeModal() {
     try {
         if (localStorage.getItem(getWelcomeDismissedKeyForCurrentUser())) return;
     } catch (e) {}
-    wm.style.display = 'flex';
-    wm.classList.add('modal--centered');
-    wm.setAttribute('aria-hidden', 'false');
+    var showWelcome = function() {
+        wm.style.display = 'flex';
+        wm.classList.add('modal--centered');
+        wm.setAttribute('aria-hidden', 'false');
+    };
+    if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(showWelcome);
+    } else {
+        showWelcome();
+    }
     function onClose() {
         closeWelcomeModal();
     }

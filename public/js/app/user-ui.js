@@ -366,7 +366,7 @@ function updateMapLimitBanner() {
     bindMapLimitBannerClose();
     var msgEl = el.querySelector('.map-limit-banner__message');
     if (!isMapLimitNearlyFull() || isMapLimitBannerDismissed()) {
-        el.style.display = 'none';
+        el.classList.add('map-limit-banner--hidden');
         if (msgEl) msgEl.textContent = '';
         return;
     }
@@ -377,7 +377,7 @@ function updateMapLimitBanner() {
     if (msgEl) {
         msgEl.innerHTML = text + '<a href="' + OWNER_CONTACT_MAILTO + '" style="color:inherit;text-decoration:underline;">Связаться с владельцем</a>';
     }
-    el.style.display = 'flex';
+    el.classList.remove('map-limit-banner--hidden');
 }
 
 function onMapObjectLimitError(message, limits) {

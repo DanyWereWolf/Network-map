@@ -234,7 +234,7 @@ function handleMapClick(e) {
         }
 
         if (placeObjectAtCoords(coords)) {
-            saveData();
+            requestAnimationFrame(function() { saveData(); });
         }
         return;
     }
@@ -449,7 +449,9 @@ function handleMapMouseMove(e) {
     } catch (err) {}
     
     const mapCoords = e.get('coords');
-    if (mapCoords && typeof window.syncSendCursor === 'function') window.syncSendCursor(mapCoords);
+    if (mapCoords && window.syncIsConnected && typeof window.syncSendCursor === 'function') {
+        window.syncSendCursor(mapCoords);
+    }
 
     if (!isEditMode) {
         return;

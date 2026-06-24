@@ -750,6 +750,15 @@ function setupFiberConnectionHandlers() {
             const fiberNumber = parseInt(this.getAttribute('data-fiber-number'), 10);
             if (!cableId || isNaN(fiberNumber)) return;
             const portValue = this.value;
+            if (schemeSplitterOutputPick && schemeSplitterOutputPick.hostObj === sleeveObj && portValue) {
+                if (tryConnectSchemeSplitterOutputToFiberAndPort(sleeveObj, cableId, fiberNumber, parseInt(portValue, 10))) {
+                    this.value = portValue;
+                } else {
+                    const fiberPorts = sleeveObj.properties.get('fiberPorts') || {};
+                    this.value = fiberPorts[cableId + '-' + fiberNumber] || '';
+                }
+                return;
+            }
             if (typeof isFiberSplicedAtHost === 'function' && isFiberSplicedAtHost(sleeveObj, cableId, fiberNumber)) {
                 if (typeof showWarning === 'function') showWarning('Сращённые жилы не занимают порты кросса.', 'Порт недоступен');
                 this.value = '';
