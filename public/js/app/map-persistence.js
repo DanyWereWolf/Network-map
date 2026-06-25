@@ -199,7 +199,12 @@ function serializeMapItemFromObject(obj) {
             if (props.inventoryNumber) result.inventoryNumber = props.inventoryNumber;
             if (props.serialNumber) result.serialNumber = props.serialNumber;
         }
-        if (props.cabinetId) result.cabinetId = props.cabinetId;
+        if (props.cabinetId) {
+            result.cabinetId = props.cabinetId;
+            if (props.cabinetOrder != null && props.cabinetOrder !== '') {
+                result.cabinetOrder = Number(props.cabinetOrder);
+            }
+        }
         else if (typeof canBeCabinetMember === 'function' && canBeCabinetMember(props.type)) {
             result.cabinetId = null;
         }
@@ -1587,6 +1592,11 @@ function populatePlacemarkFromSerializedData(placemark, data) {
             else if (typeof clearObjectCabinetId === 'function') clearObjectCabinetId(placemark);
             else if (typeof placemark.properties.unset === 'function') placemark.properties.unset('cabinetId');
             else placemark.properties.set('cabinetId', '');
+        }
+        if (data.cabinetId && data.cabinetOrder != null && data.cabinetOrder !== '') {
+            placemark.properties.set('cabinetOrder', Number(data.cabinetOrder));
+        } else if (!data.cabinetId && typeof clearCabinetMemberOrder === 'function') {
+            clearCabinetMemberOrder(placemark);
         }
     } else if (data.cabinetId) {
         placemark.properties.set('cabinetId', data.cabinetId);

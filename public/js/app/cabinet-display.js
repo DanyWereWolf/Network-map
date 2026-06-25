@@ -76,18 +76,81 @@ function getCabinetByUid(uid) {
     return getMapObjectByUid(uid, 'cabinet');
 }
 
+function getCabinetMemberOrder(obj) {
+    if (!obj || !obj.properties) return null;
+    var raw = obj.properties.get('cabinetOrder');
+    if (raw == null || raw === '') return null;
+    var n = parseInt(String(raw), 10);
+    return isNaN(n) ? null : n;
+}
+
+function sortCabinetMembers(members) {
+    return members.slice().sort(function(a, b) {
+        var oa = getCabinetMemberOrder(a);
+        var ob = getCabinetMemberOrder(b);
+        var hasA = oa !== null;
+        var hasB = ob !== null;
+        if (hasA && hasB && oa !== ob) return oa - ob;
+        if (hasA && !hasB) return -1;
+        if (!hasA && hasB) return 1;
+        var la = getCabinetMemberTypeLabel(a.properties.get('type')) + ' ' + ((a.properties.get('name') || '').trim() || 'Без имени');
+        var lb = getCabinetMemberTypeLabel(b.properties.get('type')) + ' ' + ((b.properties.get('name') || '').trim() || 'Без имени');
+        return la.localeCompare(lb, 'ru');
+    });
+}
+
 function getCabinetMembers(cabinetUid) {
     if (!cabinetUid || !Array.isArray(objects)) return [];
-    return objects.filter(function(o) {
+    return sortCabinetMembers(objects.filter(function(o) {
         if (!o || !o.properties) return false;
         return getObjectCabinetId(o) === String(cabinetUid);
-    });
+    }));
 }
 
 function getCabinetMembersForDisplay(cabinetUid) {
     return getCabinetMembers(cabinetUid).filter(function(o) {
         return o && o.properties && canBeCabinetMember(o.properties.get('type'));
     });
+}
+
+function getNextCabinetMemberOrder(cabinetUid) {
+    var max = -1;
+    getCabinetMembers(cabinetUid).forEach(function(m) {
+        var o = getCabinetMemberOrder(m);
+        if (o !== null && o > max) max = o;
+    });
+    return max + 1;
+}
+
+function normalizeCabinetMemberOrders(cabinetUid) {
+    var members = getCabinetMembersForDisplay(cabinetUid);
+    members.forEach(function(m, i) {
+        m.properties.set('cabinetOrder', i);
+    });
+    return members;
+}
+
+function clearCabinetMemberOrder(obj) {
+    if (!obj || !obj.properties) return;
+    if (typeof obj.properties.unset === 'function') obj.properties.unset('cabinetOrder');
+    else obj.properties.set('cabinetOrder', '');
+}
+
+function reorderCabinetMembers(cabinetUid, fromIdx, toIdx) {
+    if (fromIdx === toIdx) return false;
+    normalizeCabinetMemberOrders(cabinetUid);
+    var members = getCabinetMembersForDisplay(cabinetUid);
+    if (fromIdx < 0 || fromIdx >= members.length || toIdx < 0 || toIdx >= members.length) return false;
+    var moved = members.splice(fromIdx, 1)[0];
+    members.splice(toIdx, 0, moved);
+    members.forEach(function(m, i) {
+        m.properties.set('cabinetOrder', i);
+    });
+    members.forEach(function(m) {
+        if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(m);
+        else if (typeof saveData === 'function') saveData({ object: m, syncImmediate: true });
+    });
+    return true;
 }
 
 function getCabinetDisplayName(cabinet) {
@@ -824,6 +887,7 @@ function clearObjectCabinetId(obj) {
     if (!obj || !obj.properties) return;
     if (typeof obj.properties.unset === 'function') obj.properties.unset('cabinetId');
     else obj.properties.set('cabinetId', '');
+    clearCabinetMemberOrder(obj);
 }
 
 function hidePlacemarkFromMap(obj) {
@@ -947,6 +1011,7 @@ function assignObjectToCabinet(member, cabinetUid, opts) {
 
     var coords = cabinet.geometry.getCoordinates();
     member.properties.set('cabinetId', getObjectUniqueId(cabinet));
+    member.properties.set('cabinetOrder', getNextCabinetMemberOrder(cabinetUid));
     moveObjectToCoords(member, coords);
     if (typeof updateConnectedCables === 'function') updateConnectedCables(member);
 
@@ -1193,17 +1258,25 @@ function buildCabinetCardContent(cabinet, isEditMode) {
 
     if (isEditMode && currentCableTool) {
         html += '<p class="object-card-hint">Кликните «Кабель» у кросса, муфты или сплайс-кассеты — или выберите ящик на карте.</p>';
+    } else if (isEditMode && members.length > 1) {
+        html += '<p class="object-card-hint">Зажмите ЛКМ и перетащите строку, чтобы изменить порядок оборудования.</p>';
     }
 
     if (!members.length) {
         html += '<p class="object-card-hint">Пока пусто.</p>';
     } else {
-        html += '<div class="cabinet-members-list">';
+        html += '<div class="cabinet-members-list' + (isEditMode && members.length > 1 ? ' cabinet-members-list--reorderable' : '') + '">';
         members.forEach(function(member, idx) {
             var type = member.properties.get('type');
             var cableCount = countCablesForObject(member);
             var tone = getCabinetMemberBadgeTone(type);
-            html += '<div class="cabinet-member-row cabinet-member-item" data-member-index="' + idx + '">';
+            var memberUid = getObjectUniqueId(member);
+            var rowClasses = 'cabinet-member-row cabinet-member-item';
+            if (isEditMode && members.length > 1) rowClasses += ' cabinet-member-row--draggable';
+            html += '<div class="' + rowClasses + '" data-member-index="' + idx + '" data-member-uid="' + escapeHtml(memberUid) + '">';
+            if (isEditMode && members.length > 1) {
+                html += '<span class="cabinet-member-drag-handle" title="Перетащите для изменения порядка" aria-hidden="true"></span>';
+            }
             html += '<div class="cabinet-member-row-main">';
             if (window.MapIcons) {
                 html += '<span class="cabinet-member-icon" aria-hidden="true">' + MapIcons.buildIconSvg(type, { variant: 'normal', nodeKind: member.properties.get('nodeKind') }) + '</span>';
@@ -1213,10 +1286,14 @@ function buildCabinetCardContent(cabinet, isEditMode) {
             html += '<span class="cabinet-member-name">' + escapeHtml((member.properties.get('name') || '').trim() || 'Без имени') + '</span>';
             html += '<span class="cabinet-member-cables">' + cableCount + ' каб.</span>';
             html += '</div></div>';
-            if (isEditMode && currentCableTool && isCabinetCableEndpointType(type)) {
-                html += '<button type="button" class="btn-secondary btn-cabinet-member-cable" data-member-uid="' + escapeHtml(getObjectUniqueId(member)) + '" title="Прокладка кабеля">Кабель</button>';
-            } else if (isEditMode) {
-                html += '<button type="button" class="group-item-move btn-cabinet-member-remove" data-member-uid="' + escapeHtml(getObjectUniqueId(member)) + '" title="Вынести">Вынести</button>';
+            if (isEditMode) {
+                html += '<div class="cabinet-member-actions">';
+                if (currentCableTool && isCabinetCableEndpointType(type)) {
+                    html += '<button type="button" class="btn-secondary btn-cabinet-member-cable" data-member-uid="' + escapeHtml(memberUid) + '" title="Прокладка кабеля">Кабель</button>';
+                } else {
+                    html += '<button type="button" class="group-item-move btn-cabinet-member-remove" data-member-uid="' + escapeHtml(memberUid) + '" title="Вынести">Вынести</button>';
+                }
+                html += '</div>';
             }
             html += '</div>';
         });
@@ -1225,15 +1302,262 @@ function buildCabinetCardContent(cabinet, isEditMode) {
     html += '</section>';
 
     if (isEditMode) {
-        html += '<div class="object-actions-section cabinet-card-actions">';
-        html += '<button type="button" id="saveChangesBtn" class="btn-primary node-card-save-btn">Сохранить</button>';
-        html += '<button type="button" id="duplicateCurrentObject" class="btn-secondary">Дублировать</button>';
-        html += '<button type="button" id="deleteCurrentObject" class="btn-danger">Удалить</button>';
-        html += '</div>';
+        html += typeof buildObjectCardActionsHtml === 'function'
+            ? buildObjectCardActionsHtml('cabinet-card-actions')
+            : '<div class="object-actions-section cabinet-card-actions">' +
+                '<button type="button" id="saveChangesBtn" class="btn-primary node-card-save-btn">Сохранить</button>' +
+                '<button type="button" id="duplicateCurrentObject" class="btn-secondary">Дублировать</button>' +
+                '<button type="button" id="deleteCurrentObject" class="btn-danger">Удалить</button>' +
+                '</div>';
     }
 
     html += '</div>';
     return html;
+}
+
+function handleCabinetMemberRowActivate(row, cabinet) {
+    if (!row || !cabinet) return;
+    var idx = parseInt(row.getAttribute('data-member-index'), 10);
+    var members = getCabinetMembersForDisplay(getObjectUniqueId(cabinet));
+    if (!members[idx]) return;
+    var member = members[idx];
+    if (currentCableTool && isEditMode && isCabinetCableEndpointType(member.properties.get('type'))) {
+        processCabinetMemberCableAction(member);
+        return;
+    }
+    showObjectInfo(member);
+}
+
+function bindCabinetMemberDragReorder(root, cabinet) {
+    if (!root || !cabinet || !isEditMode) return;
+    var list = root.querySelector('.cabinet-members-list--reorderable');
+    if (!list) return;
+    var cabinetUid = getObjectUniqueId(cabinet);
+    var dragState = null;
+    var DRAG_THRESHOLD = 5;
+
+    function getRows() {
+        return Array.prototype.slice.call(list.querySelectorAll('.cabinet-member-item'));
+    }
+
+    function getEffectiveNextSibling(el) {
+        var n = el.nextElementSibling;
+        while (n && dragState && (n === dragState.row || n === dragState.placeholder)) {
+            n = n.nextElementSibling;
+        }
+        return n;
+    }
+
+    function getPlaceholderInsertTarget(clientY) {
+        var children = Array.prototype.slice.call(list.children);
+        for (var i = 0; i < children.length; i++) {
+            var el = children[i];
+            if (el === dragState.placeholder || el === dragState.row) continue;
+            if (!el.classList || !el.classList.contains('cabinet-member-item')) continue;
+            var rect = el.getBoundingClientRect();
+            if (clientY < rect.top + rect.height / 2) return el;
+        }
+        return null;
+    }
+
+    function isSamePlaceholderPosition(insertTarget) {
+        return getEffectiveNextSibling(dragState.placeholder) === insertTarget;
+    }
+
+    function captureMemberListFlip(dragRow) {
+        var items = getRows().filter(function(el) { return el !== dragRow; });
+        var firstRects = items.map(function(el) { return el.getBoundingClientRect(); });
+        return function() {
+            items.forEach(function(el, i) {
+                var first = firstRects[i];
+                var last = el.getBoundingClientRect();
+                var dx = first.left - last.left;
+                var dy = first.top - last.top;
+                if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+                el.classList.add('cabinet-member-row--shift-anim');
+                el.style.transform = 'translate(' + dx + 'px, ' + dy + 'px)';
+                requestAnimationFrame(function() {
+                    requestAnimationFrame(function() {
+                        el.style.transform = '';
+                    });
+                });
+                el.addEventListener('transitionend', function onShiftEnd(ev) {
+                    if (ev.propertyName !== 'transform') return;
+                    el.classList.remove('cabinet-member-row--shift-anim');
+                    el.removeEventListener('transitionend', onShiftEnd);
+                });
+            });
+        };
+    }
+
+    function resetDragVisuals(opts) {
+        opts = opts || {};
+        var row = opts.row || (dragState && dragState.row);
+        var placeholder = opts.placeholder || (dragState && dragState.placeholder);
+        if (row) row.classList.remove('cabinet-member-row--dragging');
+        if (placeholder && placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
+        list.classList.remove('cabinet-members-list--dragging');
+        getRows().forEach(function(el) {
+            el.classList.remove('cabinet-member-row--shift-anim');
+            if (el !== row) el.style.transform = '';
+        });
+    }
+
+    function beginDragVisuals(row) {
+        var rect = row.getBoundingClientRect();
+        var listRect = list.getBoundingClientRect();
+        var placeholder = document.createElement('div');
+        placeholder.className = 'cabinet-member-placeholder cabinet-member-placeholder--enter';
+        placeholder.style.height = rect.height + 'px';
+        list.insertBefore(placeholder, row);
+
+        dragState.placeholder = placeholder;
+        dragState.originTop = rect.top - listRect.top + list.scrollTop;
+        dragState.originLeft = rect.left - listRect.left + list.scrollLeft;
+        dragState.rowWidth = rect.width;
+
+        row.classList.add('cabinet-member-row--dragging');
+        row.style.position = 'absolute';
+        row.style.width = dragState.rowWidth + 'px';
+        row.style.left = dragState.originLeft + 'px';
+        row.style.top = dragState.originTop + 'px';
+        row.style.zIndex = '5';
+        row.style.margin = '0';
+        list.classList.add('cabinet-members-list--dragging');
+    }
+
+    function movePlaceholder(clientY) {
+        if (!dragState || !dragState.placeholder || dragState.finishing) return;
+        var insertTarget = getPlaceholderInsertTarget(clientY);
+        if (isSamePlaceholderPosition(insertTarget)) return;
+        var playFlip = captureMemberListFlip(dragState.row);
+        if (insertTarget) list.insertBefore(dragState.placeholder, insertTarget);
+        else list.appendChild(dragState.placeholder);
+        playFlip();
+    }
+
+    function animateRowSnapToPlaceholder(row, placeholder, onDone) {
+        var phRect = placeholder.getBoundingClientRect();
+        var listRect = list.getBoundingClientRect();
+        row.style.transition = 'top 0.24s cubic-bezier(0.22, 1, 0.36, 1), left 0.24s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.24s ease';
+        row.style.top = (phRect.top - listRect.top + list.scrollTop) + 'px';
+        row.style.left = (phRect.left - listRect.left + list.scrollLeft) + 'px';
+        row.style.boxShadow = '0 4px 16px rgba(15, 23, 42, 0.14)';
+
+        var done = false;
+        var finish = function() {
+            if (done) return;
+            done = true;
+            row.removeEventListener('transitionend', onTransitionEnd);
+            clearTimeout(fallbackTimer);
+            if (onDone) onDone();
+        };
+        var onTransitionEnd = function(ev) {
+            if (ev.propertyName === 'top' || ev.propertyName === 'left') finish();
+        };
+        row.addEventListener('transitionend', onTransitionEnd);
+        var fallbackTimer = setTimeout(finish, 300);
+    }
+
+    function getPlaceholderMemberIndex() {
+        if (!dragState || !dragState.placeholder) return dragState ? dragState.fromIdx : 0;
+        var idx = 0;
+        var children = list.children;
+        for (var i = 0; i < children.length; i++) {
+            var child = children[i];
+            if (child === dragState.row) continue;
+            if (child === dragState.placeholder) return idx;
+            if (child.classList && child.classList.contains('cabinet-member-item')) idx++;
+        }
+        return idx;
+    }
+
+    function finishDrag(e) {
+        if (!dragState || e.pointerId !== dragState.pointerId || dragState.finishing) return;
+        document.removeEventListener('pointermove', onPointerMove);
+        document.removeEventListener('pointerup', onPointerUp);
+        document.removeEventListener('pointercancel', onPointerUp);
+
+        var fromIdx = dragState.fromIdx;
+        var wasActive = dragState.active;
+        var row = dragState.row;
+        var placeholder = dragState.placeholder;
+        var toIdx = wasActive && placeholder ? getPlaceholderMemberIndex() : fromIdx;
+        var moved = wasActive && fromIdx !== toIdx;
+
+        if (wasActive) e.preventDefault();
+
+        if (!wasActive) {
+            dragState = null;
+            handleCabinetMemberRowActivate(row, cabinet);
+            return;
+        }
+
+        function finalizeDrop() {
+            if (placeholder && placeholder.parentNode) list.insertBefore(row, placeholder);
+            row.style.position = '';
+            row.style.width = '';
+            row.style.left = '';
+            row.style.top = '';
+            row.style.margin = '';
+            row.style.zIndex = '';
+            row.style.transition = '';
+            row.style.boxShadow = '';
+            resetDragVisuals({ row: row, placeholder: placeholder });
+            dragState = null;
+            if (moved && reorderCabinetMembers(cabinetUid, fromIdx, toIdx)) {
+                showCabinetInfo(cabinet);
+            }
+        }
+
+        dragState.finishing = true;
+
+        if (placeholder) {
+            animateRowSnapToPlaceholder(row, placeholder, finalizeDrop);
+            return;
+        }
+
+        finalizeDrop();
+    }
+
+    function onPointerMove(e) {
+        if (!dragState || e.pointerId !== dragState.pointerId || dragState.finishing) return;
+        var dx = e.clientX - dragState.startX;
+        var dy = e.clientY - dragState.startY;
+        if (!dragState.active) {
+            if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+            dragState.active = true;
+            beginDragVisuals(dragState.row);
+        }
+        e.preventDefault();
+        dragState.row.style.top = (dragState.originTop + dy) + 'px';
+        movePlaceholder(e.clientY);
+    }
+
+    function onPointerUp(e) {
+        finishDrag(e);
+    }
+
+    getRows().forEach(function(row, idx) {
+        row.addEventListener('pointerdown', function(e) {
+            if (e.button !== 0) return;
+            if (e.target && e.target.closest('.btn-cabinet-member-remove, .btn-cabinet-member-cable, .cabinet-member-actions')) return;
+
+            dragState = {
+                pointerId: e.pointerId,
+                row: row,
+                fromIdx: parseInt(row.getAttribute('data-member-index'), 10) || 0,
+                toIdx: idx,
+                startX: e.clientX,
+                startY: e.clientY,
+                active: false
+            };
+
+            document.addEventListener('pointermove', onPointerMove);
+            document.addEventListener('pointerup', onPointerUp);
+            document.addEventListener('pointercancel', onPointerUp);
+        });
+    });
 }
 
 function bindCabinetCardControls(root, cabinet) {
@@ -1272,19 +1596,12 @@ function bindCabinetCardControls(root, cabinet) {
         });
     });
     root.querySelectorAll('.cabinet-member-item').forEach(function(row) {
+        if (root.querySelector('.cabinet-members-list--reorderable')) return;
         row.style.cursor = 'pointer';
         row.addEventListener('click', function(e) {
             if (e.target && e.target.closest('.btn-cabinet-member-remove')) return;
             if (e.target && e.target.closest('.btn-cabinet-member-cable')) return;
-            var idx = parseInt(row.getAttribute('data-member-index'), 10);
-            var members = getCabinetMembersForDisplay(getObjectUniqueId(cabinet));
-            if (!members[idx]) return;
-            var member = members[idx];
-            if (currentCableTool && isEditMode && isCabinetCableEndpointType(member.properties.get('type'))) {
-                processCabinetMemberCableAction(member);
-                return;
-            }
-            showObjectInfo(member);
+            handleCabinetMemberRowActivate(row, cabinet);
         });
     });
     root.querySelectorAll('.btn-cabinet-member-cable').forEach(function(btn) {
@@ -1301,6 +1618,7 @@ function bindCabinetCardControls(root, cabinet) {
             if (member && removeObjectFromCabinet(member, true)) showCabinetInfo(cabinet);
         });
     });
+    bindCabinetMemberDragReorder(root, cabinet);
 }
 
 function showCabinetInfo(cabinet) {

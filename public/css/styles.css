@@ -14884,10 +14884,45 @@ body.object-gallery-lightbox-open {
 .olt-card-actions .btn-primary,
 .olt-card-actions .btn-secondary,
 .olt-card-actions .btn-danger,
+.cabinet-card-actions .btn-primary,
+.cabinet-card-actions .btn-secondary,
+.cabinet-card-actions .btn-danger,
+.device-card-actions .btn-primary,
+.device-card-actions .btn-secondary,
+.device-card-actions .btn-danger,
 .node-card-save-btn {
     flex: 1;
     min-width: 120px;
-    margin-bottom: 0;
+    margin: 0;
+    padding: 0 16px;
+    height: 44px;
+    min-height: 44px;
+    max-height: 44px;
+    border-width: 1px;
+    border-style: solid;
+    box-sizing: border-box;
+    line-height: 1.2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.node-card-actions .btn-primary,
+.node-card-actions .btn-danger,
+.olt-card-actions .btn-primary,
+.olt-card-actions .btn-danger,
+.cabinet-card-actions .btn-primary,
+.cabinet-card-actions .btn-danger,
+.device-card-actions .btn-primary,
+.device-card-actions .btn-danger {
+    border-color: transparent;
+}
+
+.node-card-actions .btn-secondary,
+.olt-card-actions .btn-secondary,
+.cabinet-card-actions .btn-secondary,
+.device-card-actions .btn-secondary {
+    border-color: var(--border-color);
 }
 
 .node-card-switch-toolbar {
@@ -17006,6 +17041,44 @@ body.underground-draw-active .map-area-wrapper::after {
     gap: 8px;
 }
 
+.cabinet-members-list--reorderable {
+    user-select: none;
+    position: relative;
+}
+
+.cabinet-members-list--dragging {
+    cursor: grabbing;
+}
+
+.cabinet-member-placeholder {
+    border-radius: 8px;
+    border: 2px dashed color-mix(in srgb, var(--accent-primary) 55%, var(--border-color));
+    background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-card));
+    box-sizing: border-box;
+    flex-shrink: 0;
+    transform-origin: center top;
+}
+
+.cabinet-member-placeholder--enter {
+    animation: cabinet-placeholder-in 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes cabinet-placeholder-in {
+    from {
+        opacity: 0;
+        transform: scaleY(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scaleY(1);
+    }
+}
+
+.cabinet-members-list--dragging .cabinet-member-item:not(.cabinet-member-row--dragging).cabinet-member-row--shift-anim {
+    transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+}
+
 .cabinet-member-row {
     display: flex;
     align-items: center;
@@ -17015,7 +17088,42 @@ body.underground-draw-active .map-area-wrapper::after {
     border-radius: 8px;
     border: 1px solid var(--border-color);
     background: var(--bg-card);
-    transition: background 0.15s, border-color 0.15s;
+    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.cabinet-member-row--draggable {
+    cursor: grab;
+    touch-action: none;
+}
+
+.cabinet-member-row--dragging {
+    cursor: grabbing;
+    opacity: 0.96;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.2);
+    background: var(--bg-card);
+    transition: box-shadow 0.2s ease;
+    will-change: top, left;
+}
+
+.cabinet-member-drag-handle {
+    flex-shrink: 0;
+    width: 12px;
+    height: 22px;
+    margin-right: -2px;
+    cursor: grab;
+    background:
+        radial-gradient(circle, var(--text-muted) 1.5px, transparent 1.5px) 0 4px / 6px 6px,
+        radial-gradient(circle, var(--text-muted) 1.5px, transparent 1.5px) 0 10px / 6px 6px,
+        radial-gradient(circle, var(--text-muted) 1.5px, transparent 1.5px) 0 16px / 6px 6px;
+    opacity: 0.55;
+}
+
+.cabinet-member-row--draggable:hover .cabinet-member-drag-handle {
+    opacity: 0.9;
+}
+
+.cabinet-member-row--dragging .cabinet-member-drag-handle {
+    cursor: grabbing;
 }
 
 .cabinet-member-row:hover {
@@ -17081,6 +17189,13 @@ body.underground-draw-active .map-area-wrapper::after {
 .cabinet-member-cables {
     font-size: 0.75rem;
     color: var(--text-muted);
+}
+
+.cabinet-member-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
 }
 
 .cabinet-empty-state {
@@ -17321,13 +17436,24 @@ body.underground-draw-active .map-area-wrapper::after {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+    margin-top: 4px;
+    padding-top: 16px;
+    border-top: 1px solid var(--panel-glass-border);
 }
 
-.cabinet-card-actions .btn-primary,
-.cabinet-card-actions .btn-secondary,
-.cabinet-card-actions .btn-danger {
-    flex: 1;
-    min-width: 120px;
+.device-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 20px;
+    margin-bottom: 0;
+    padding-top: 16px;
+    border-top: 1px solid var(--panel-glass-border);
+}
+
+#infoModal[data-device-card] .object-gallery-section + .device-card-actions,
+#infoModal[data-device-card] .object-card-section--gallery + .device-card-actions {
+    margin-top: 20px;
 }
 
 [data-theme="dark"] .cabinet-member-badge--violet { background: #2e1065; color: #c4b5fd; }

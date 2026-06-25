@@ -3225,17 +3225,13 @@ function showObjectInfoBody(obj) {
     }
 
     if (modalIsEditMode() && !fiberUsesWorkspace && type !== 'node' && type !== 'olt') {
-        html += '<div class="object-actions-section" style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 8px;">';
-        html += '<button id="saveChangesBtn" class="btn-primary" style="flex: 1; min-width: 140px;">';
-        html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>';
-        html += ' Сохранить</button>';
-        html += '<button id="duplicateCurrentObject" class="btn-secondary" style="flex: 1; min-width: 120px;">';
-        html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
-        html += ' Дублировать</button>';
-        html += '<button id="deleteCurrentObject" class="btn-danger" style="flex: 1; min-width: 120px;">';
-        html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
-        html += ' Удалить</button>';
-        html += '</div>';
+        html += typeof buildObjectCardActionsHtml === 'function'
+            ? buildObjectCardActionsHtml('device-card-actions')
+            : '<div class="object-actions-section device-card-actions">' +
+                '<button type="button" id="saveChangesBtn" class="btn-primary node-card-save-btn">Сохранить</button>' +
+                '<button type="button" id="duplicateCurrentObject" class="btn-secondary">Дублировать</button>' +
+                '<button type="button" id="deleteCurrentObject" class="btn-danger">Удалить</button>' +
+                '</div>';
     }
 
     if (type !== 'camera' && type !== 'olt' && type !== 'node' && !(type === 'splitter' && obj._embedded) &&

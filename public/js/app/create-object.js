@@ -156,6 +156,11 @@ function createObject(type, name, coords, options = {}) {
     }
     if (options.cabinetId && typeof canBeCabinetMember === 'function' && canBeCabinetMember(type)) {
         placemarkProperties.cabinetId = String(options.cabinetId);
+        if (options.cabinetOrder != null && options.cabinetOrder !== '') {
+            placemarkProperties.cabinetOrder = Number(options.cabinetOrder);
+        } else if (typeof getNextCabinetMemberOrder === 'function') {
+            placemarkProperties.cabinetOrder = getNextCabinetMemberOrder(options.cabinetId);
+        }
     }
     if (!placemarkProperties.uniqueId) {
         placemarkProperties.uniqueId = 'obj-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
