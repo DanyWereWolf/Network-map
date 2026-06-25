@@ -265,9 +265,11 @@ function buildFiberSchemeCableSidesHtml(sleeveObj, isEditMode, cablesData) {
 
 function buildFiberWorkspaceSidebarHtml(sleeveObj, isCross, cablesData, fiberConnections, isEditMode, schemeSize) {
     const name = sleeveObj.properties.get('name') || '';
-    const typeBadgeClass = isCross ? 'fiber-ws-type-badge--cross' : 'fiber-ws-type-badge--sleeve';
-    const typeLabel = isCross ? 'Оптический кросс' : 'Кабельная муфта';
-    const objType = isCross ? 'cross' : 'sleeve';
+    const hostType = sleeveObj.properties.get('type');
+    const isCassette = hostType === 'spliceCassette';
+    const typeBadgeClass = isCross ? 'fiber-ws-type-badge--cross' : (isCassette ? 'fiber-ws-type-badge--cassette' : 'fiber-ws-type-badge--sleeve');
+    const typeLabel = isCross ? 'Оптический кросс' : (isCassette ? 'Сплайс-кассета' : 'Кабельная муфта');
+    const objType = isCross ? 'cross' : (isCassette ? 'spliceCassette' : 'sleeve');
     let iconBlock = '';
     if (window.MapIcons) {
         const nodeKind = !isCross && sleeveObj.properties ? (sleeveObj.properties.get('nodeKind') || 'network') : 'network';
@@ -279,7 +281,8 @@ function buildFiberWorkspaceSidebarHtml(sleeveObj, isCross, cablesData, fiberCon
     if (iconBlock) mainHtml += iconBlock;
     mainHtml += '<div class="fiber-ws-card-head-text">';
     mainHtml += '<span class="fiber-ws-type-badge ' + typeBadgeClass + '">' + typeLabel + '</span>';
-    mainHtml += '<div class="fiber-ws-side-title">' + escapeHtml(name || (isCross ? 'Кросс' : 'Муфта')) + '</div>';
+    const defaultTitle = isCross ? 'Кросс' : (isCassette ? 'Сплайс-кассета' : 'Муфта');
+    mainHtml += '<div class="fiber-ws-side-title">' + escapeHtml(name || defaultTitle) + '</div>';
     mainHtml += '</div></div>';
     var coordsStatsHtml = buildObjectCoordsInlineHtml(sleeveObj, { compact: true });
     if (coordsStatsHtml) {
@@ -296,6 +299,12 @@ function buildFiberWorkspaceSidebarHtml(sleeveObj, isCross, cablesData, fiberCon
             mainHtml += '<input type="text" id="editCrossName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Название кросса"></div>';
             mainHtml += '<div class="form-group"><label class="fiber-ws-label" for="editCrossType">Тип кросса</label>';
             mainHtml += '<select id="editCrossType" class="form-select">' + getCrossTypeSelectOptionsHtml(storedCrossType ? String(storedCrossType) : '') + '</select></div>';
+        } else if (isCassette) {
+            const storedCassetteType = sleeveObj.properties.get('cassetteType') || sleeveObj.properties.get('sleeveType');
+            mainHtml += '<div class="form-group"><label class="fiber-ws-label" for="editCassetteName">Название</label>';
+            mainHtml += '<input type="text" id="editCassetteName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Название сплайс-кассеты"></div>';
+            mainHtml += '<div class="form-group"><label class="fiber-ws-label" for="editCassetteType">Тип кассеты</label>';
+            mainHtml += '<select id="editCassetteType" class="form-select">' + (typeof getSpliceCassetteTypeSelectOptionsHtml === 'function' ? getSpliceCassetteTypeSelectOptionsHtml(storedCassetteType ? String(storedCassetteType) : '') : '') + '</select></div>';
         } else {
             const storedSleeveType = sleeveObj.properties.get('sleeveType');
             mainHtml += '<div class="form-group"><label class="fiber-ws-label" for="editSleeveName">Название</label>';
@@ -437,9 +446,11 @@ function buildFiberWorkspaceLegendHtml() {
 function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     const objType = sleeveObj.properties.get('type');
     const isCross = isCrossLikeHostType(objType);
+    const isCassette = objType === 'spliceCassette';
+    const wsKind = isCross ? 'cross' : (isCassette ? 'cassette' : 'sleeve');
     const isEditMode = typeof modalIsEditMode === 'function' ? modalIsEditMode() : !!window.isEditMode;
 
-    var containerClass = 'fiber-connections-container fiber-workspace-root fiber-workspace-root--' + (isCross ? 'cross' : 'sleeve') + (isEditMode ? ' fiber-workspace-root--edit' : ' fiber-workspace-root--view');
+    var containerClass = 'fiber-connections-container fiber-workspace-root fiber-workspace-root--' + wsKind + (isEditMode ? ' fiber-workspace-root--edit' : ' fiber-workspace-root--view');
     let html = '<div class="' + containerClass + '">';
 
     let fiberConnections = sleeveObj.properties.get('fiberConnections');
@@ -545,7 +556,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
 
     const canConnectFibers = cablesData.length >= 2;
     var sidebarClass = 'fiber-ws-sidebar' + (isEditMode ? '' : ' fiber-ws-sidebar--view-compact');
-    html += '<div class="fiber-workspace fiber-workspace--' + (isCross ? 'cross' : 'sleeve') + (isEditMode ? ' fiber-workspace--edit' : ' fiber-workspace--view') + '"><aside class="' + sidebarClass + '">' + buildFiberWorkspaceSidebarHtml(sleeveObj, isCross, cablesData, fiberConnections, isEditMode, { svgWidth: svgWidth, svgHeight: svgHeight, layoutHeight: layoutHeight }) + '</aside><main class="fiber-ws-main"><div class="fiber-ws-toolbar"><nav class="fiber-ws-tabs"><button type="button" class="fiber-ws-tab active" data-tab="scheme">Схема</button><button type="button" class="fiber-ws-tab" data-tab="table">Таблица</button>';
+    html += '<div class="fiber-workspace fiber-workspace--' + wsKind + (isEditMode ? ' fiber-workspace--edit' : ' fiber-workspace--view') + '"><aside class="' + sidebarClass + '">' + buildFiberWorkspaceSidebarHtml(sleeveObj, isCross, cablesData, fiberConnections, isEditMode, { svgWidth: svgWidth, svgHeight: svgHeight, layoutHeight: layoutHeight }) + '</aside><main class="fiber-ws-main"><div class="fiber-ws-toolbar"><nav class="fiber-ws-tabs"><button type="button" class="fiber-ws-tab active" data-tab="scheme">Схема</button><button type="button" class="fiber-ws-tab" data-tab="table">Таблица</button>';
     if (cablesData.length >= 2) html += '<button type="button" class="fiber-ws-tab" data-tab="connections">Соединения<span class="fiber-ws-tab-badge">' + fiberConnections.length + '</span></button>';
     if (isEditMode) {
         html += '<div id="fiber-scheme-wire-bar" class="fiber-selection-bar fiber-scheme-wire-bar" style="display: none;"></div>';

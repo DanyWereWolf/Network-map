@@ -24,6 +24,7 @@
         switch (type) {
             case 'cross': return '📦';
             case 'sleeve': return '🔴';
+            case 'spliceCassette': return '🟠';
             case 'node': return '🖥️';
             case 'olt': return '📶';
             case 'onu': return '📟';

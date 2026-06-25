@@ -364,7 +364,7 @@ function connectFiberToOltWithRoute(sleeveObj, cableId, fiberNumber, oltObj, rou
         objects.forEach(function(slot) {
             if (!slot.properties) return;
             var st = slot.properties.get('type');
-            if (st !== 'cross' && st !== 'sleeve') return;
+            if (!isFiberHostType(st)) return;
             var oltConn = slot.properties.get('oltConnections') || {};
             if (oltConn[prevKey] && oltConn[prevKey].incoming && oltConn[prevKey].oltId === oltId) {
                 existingPlace = slot;
@@ -383,7 +383,7 @@ function connectFiberToOltWithRoute(sleeveObj, cableId, fiberNumber, oltObj, rou
             objects.forEach(function(slot) {
                 if (!slot.properties) return;
                 var st = slot.properties.get('type');
-                if (st !== 'cross' && st !== 'sleeve') return;
+                if (!isFiberHostType(st)) return;
                 var oltConn = cloneHostFiberAssignmentMap(slot.properties.get('oltConnections'));
                 if (oltConn[prevKeyClear] && oltConn[prevKeyClear].incoming) {
                     delete oltConn[prevKeyClear];
@@ -791,6 +791,10 @@ function confirmOltCrossPortConnect() {
         return;
     }
     closeNodeSelectionModal();
+    if (typeof startOltPortCrossRouting === 'function') {
+        startOltPortCrossRouting(oltObj, portNumber, crossObj, opt.portNumber);
+        return;
+    }
     if (!connectOltPortToCrossPort(oltObj, portNumber, crossObj, opt.portNumber)) return;
     if (typeof showSuccess === 'function') {
         var crossName = crossObj.properties.get('name') || 'Кросс';

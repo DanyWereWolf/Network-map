@@ -9,14 +9,24 @@ function isCrossLikeHostType(type) {
     return type === 'cross';
 }
 
+function isSleeveLikeHostType(type) {
+    return type === 'sleeve' || type === 'spliceCassette';
+}
+
 function isFiberHostType(type) {
-    return type === 'sleeve' || type === 'cross';
+    return isSleeveLikeHostType(type) || type === 'cross';
+}
+
+/** Конечные точки прокладки кабеля ВОЛС (муфта, сплайс-кассета, кросс, OLT). */
+function isFiberCableEndpointType(type) {
+    return isFiberHostType(type) || type === 'olt';
 }
 
 function getObjectTypeName(type) {
     switch (type) {
         case 'support': return 'Опора связи';
         case 'sleeve': return 'Кабельная муфта';
+        case 'spliceCassette': return 'Сплайс-кассета';
         case 'cross': return 'Оптический кросс';
         case 'olt': return 'OLT (GPON)';
         case 'splitter': return 'Сплиттер';

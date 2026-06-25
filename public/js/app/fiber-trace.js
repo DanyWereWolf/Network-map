@@ -538,7 +538,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
         } else {
             if (traceOptions.traceTowardOnu) {
                 var hostTowardType = currentObject.properties.get('type');
-                if (hostTowardType === 'cross' || hostTowardType === 'sleeve') {
+                if (isFiberHostType(hostTowardType)) {
                     if (traceOptions.targetOnuId) {
                         if (typeof tryAppendOnuAtHostForTrace === 'function' &&
                             tryAppendOnuAtHostForTrace(path, currentObject, currentCableId, currentFiberNumber, traceOptions.targetOnuId)) {
@@ -635,7 +635,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
         const nextObjectId = getObjectUniqueId(nextObject);
         var nextObjTypeEarly = nextObject.properties.get('type');
         if (visitedObjects.has(nextObjectId)) {
-            if (allowHostRevisitFromSplitter && (nextObjTypeEarly === 'sleeve' || nextObjTypeEarly === 'cross')) {
+            if (allowHostRevisitFromSplitter && isFiberHostType(nextObjTypeEarly)) {
                 allowHostRevisitFromSplitter = false;
                 previousObject = currentObject;
                 currentObject = nextObject;
@@ -712,7 +712,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
                         currentCable = outCable;
                         currentObject = otherEnd;
                         afterSplitterInputBranch = true;
-                        allowHostRevisitFromSplitter = !!(otherEnd.properties.get('type') === 'sleeve' || otherEnd.properties.get('type') === 'cross');
+                        allowHostRevisitFromSplitter = !!isFiberHostType(otherEnd.properties.get('type'));
                     }
                 } else {
                     var directOut = appendSplitterDirectOutputSteps(path, nextObject, outputConnections, traceOptions.targetOnuId);
@@ -757,7 +757,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
                             currentCable = inCable;
                             currentObject = inputOtherEnd;
                             afterSplitterInputBranch = true;
-                            allowHostRevisitFromSplitter = !!(inputOtherEnd.properties.get('type') === 'sleeve' || inputOtherEnd.properties.get('type') === 'cross');
+                            allowHostRevisitFromSplitter = !!isFiberHostType(inputOtherEnd.properties.get('type'));
                         } else {
                             currentObject = null;
                             break;
@@ -788,7 +788,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
                         currentCable = inCable;
                         currentObject = inputOtherEnd;
                         afterSplitterInputBranch = true;
-                        allowHostRevisitFromSplitter = !!(inputOtherEnd.properties.get('type') === 'sleeve' || inputOtherEnd.properties.get('type') === 'cross');
+                        allowHostRevisitFromSplitter = !!isFiberHostType(inputOtherEnd.properties.get('type'));
                     }
                 }
             } else {
@@ -829,7 +829,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
         if (objType === 'mediaConverter') {
             break;
         }
-        if (objType === 'sleeve' || objType === 'cross') {
+        if (isFiberHostType(objType)) {
             if (objType === 'cross') {
                 const onuConn = getHostAssignment(nextObject, 'onuConnections', currentCableId, currentFiberNumber);
                 if (onuConn) {
@@ -854,7 +854,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
                     break;
                 }
             }
-            if (objType === 'sleeve') {
+            if (isSleeveLikeHostType(objType)) {
                 const onuConnS = getHostAssignment(nextObject, 'onuConnections', currentCableId, currentFiberNumber);
                 if (onuConnS) {
                     const connectedOnuS = objects.find(obj =>
@@ -1123,7 +1123,7 @@ function traceAllFiberPathsFromObject(startObject, startCableId, startFiberNumbe
     if (first.error) return { paths: [], error: first.error };
     var paths = [ first.path ];
     var startType = startObject.properties ? startObject.properties.get('type') : '';
-    if (startType === 'sleeve' || startType === 'cross') {
+    if (isFiberHostType(startType)) {
         var startCable = objects.find(function(c) {
             return c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === startCableId;
         });
@@ -1475,7 +1475,7 @@ function traceFiberPath(startCableId, startFiberNumber) {
             port: objPort
         });
 
-        if (objType === 'sleeve' || objType === 'cross') {
+        if (isFiberHostType(objType)) {
             const nodeConnKey = `${currentCableId}-${currentFiberNumber}`;
             if (objType === 'cross') {
                 const nodeConnections = currentObject.properties.get('nodeConnections') || {};

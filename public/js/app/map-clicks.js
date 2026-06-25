@@ -20,8 +20,7 @@ function processFiberCableEndpointClick(clickedObject) {
         return;
     }
 
-    var cableEndpoints = ['cross', 'sleeve', 'support', 'attachment', 'manhole', 'olt'];
-    if (cableEndpoints.indexOf(objType) !== -1) {
+    if (isFiberCableEndpointType(objType) || isCableIntermediateWaypoint(objType)) {
         if (!cableSource) {
             if (isCableIntermediateWaypoint(objType)) {
                 showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры, крепления и колодцы — только промежуточные точки.', 'Недопустимое действие');
@@ -82,9 +81,8 @@ function processFiberCableEndpointClick(clickedObject) {
     }
 
     if (!cableSource) {
-        var startEndpoints = ['sleeve', 'cross', 'olt'];
-        if (startEndpoints.indexOf(objType) === -1) {
-            showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры, крепления и колодцы — только промежуточные точки.', 'Недопустимое действие');
+        if (!isFiberCableEndpointType(objType)) {
+            showError('Начало кабеля должно быть муфтой, сплайс-кассетой, кроссом или OLT. Опоры, крепления и колодцы — только промежуточные точки.', 'Недопустимое действие');
             return;
         }
         cableSource = clickedObject;
@@ -113,8 +111,7 @@ function processFiberCableEndpointClick(clickedObject) {
         selectObject(cableSource);
         return;
     }
-    var finishEndpoints = ['sleeve', 'cross', 'olt'];
-    if (finishEndpoints.indexOf(objType) !== -1) {
+    if (isFiberCableEndpointType(objType)) {
         if (cableUndergroundActive) {
             showError('Завершите подземный участок: кликайте по карте и выберите второй колодец, или Escape для отмены.', 'Колодец');
             return;
@@ -139,7 +136,7 @@ function processFiberCableEndpointClick(clickedObject) {
         }
         return;
     }
-    showError('Кабель прокладывается между муфтой, кроссом или OLT. Промежуточные точки: опора, крепление; под землёй — между двумя колодцами.', 'Недопустимое действие');
+    showError('Кабель прокладывается между муфтой, сплайс-кассетой, кроссом или OLT. Промежуточные точки: опора, крепление; под землёй — между двумя колодцами.', 'Недопустимое действие');
 }
 
 function handleMapClick(e) {
@@ -311,7 +308,6 @@ function handleMapClick(e) {
             }
             return;
         }
-        var cableEndpoints = ['cross', 'sleeve', 'support', 'attachment', 'manhole', 'olt'];
 
         if (cableUndergroundActive && clickedObject && clickedObject.geometry) {
             var ugType = clickedObject.properties.get('type');

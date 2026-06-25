@@ -96,7 +96,7 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
                 if (exclude && exclude.type === 'fiberConnection' && (exclude.crossId === uid || exclude.sleeveId === uid)) continue;
                 if (exclude && exclude.type === 'oltPort') continue;
                 if (isGponBranchAssignmentExclude(exclude)) continue;
-                return { used: true, where: 'соединение жил в ' + (t === 'cross' ? 'кроссе' : 'муфте') };
+                return { used: true, where: 'соединение жил в ' + (t === 'cross' ? 'кроссе' : (t === 'spliceCassette' ? 'сплайс-кассете' : 'муфте')) };
             }
             
             var nodeAss = getHostAssignment(obj, 'nodeConnections', cableId, fiberNumber);

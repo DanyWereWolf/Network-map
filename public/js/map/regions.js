@@ -26,8 +26,8 @@
     }
 
     var PLACEMARK_TYPES = [
-        'support', 'sleeve', 'cross', 'node', 'attachment', 'manhole', 'signalPost',
-        'olt', 'splitter', 'onu', 'camera', 'mediaConverter', 'switch'
+        'support', 'sleeve', 'spliceCassette', 'cross', 'node', 'attachment', 'manhole', 'signalPost',
+        'cabinet', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter', 'switch'
     ];
 
     function normalizeRing(ring) {

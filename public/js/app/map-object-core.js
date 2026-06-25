@@ -24,6 +24,13 @@ function getMapObjectByUid(uid, typeFilter) {
     }) || null;
 }
 
+function getFiberHostByUid(uid) {
+    return getMapObjectByUid(uid, 'cross')
+        || getMapObjectByUid(uid, 'spliceCassette')
+        || getMapObjectByUid(uid, 'sleeve')
+        || getMapObjectByUid(uid, 'cabinet');
+}
+
 function mapPerfRegister(obj) {
     if (typeof MapPerf !== 'undefined' && obj) MapPerf.registerMapObject(obj);
 }

@@ -179,6 +179,31 @@ var customCrossTypes = [];
 /** Скрытые встроенные типы кроссов. */
 var hiddenBuiltinCrossTypes = [];
 
+/** Встроенные типы сплайс-кассет: id, подпись, макс. волокон (0 — без лимита). */
+var SPLICE_CASSETTE_TYPES_BUILTIN = [
+    { id: 'SC-12', label: 'Сплайс-кассета 12F', maxFibers: 12 },
+    { id: 'SC-24', label: 'Сплайс-кассета 24F', maxFibers: 24 },
+    { id: 'SC-48', label: 'Сплайс-кассета 48F', maxFibers: 48 },
+    { id: 'SNR-SC-12', label: 'SNR-SC-12 (12 волокон)', maxFibers: 12 },
+    { id: 'SNR-SC-24', label: 'SNR-SC-24 (24 волокна)', maxFibers: 24 },
+    { id: 'SNR-SC-48', label: 'SNR-SC-48 (48 волокон)', maxFibers: 48 },
+    { id: 'SNR-LC-12', label: 'SNR-LC-12 (12 LC-адаптеров)', maxFibers: 12 },
+    { id: 'SNR-LC-24', label: 'SNR-LC-24 (24 LC-адаптера)', maxFibers: 24 },
+    { id: 'SNR-LC-48', label: 'SNR-LC-48 (48 LC-адаптеров)', maxFibers: 48 },
+    { id: 'CFO-12', label: 'CFO-12 (кассета 12F)', maxFibers: 12 },
+    { id: 'CFO-24', label: 'CFO-24 (кассета 24F)', maxFibers: 24 },
+    { id: 'CFO-48', label: 'CFO-48 (кассета 48F)', maxFibers: 48 },
+    { id: 'ODF-SC-12', label: 'ODF-SC-12 (12 SC)', maxFibers: 12 },
+    { id: 'ODF-SC-24', label: 'ODF-SC-24 (24 SC)', maxFibers: 24 },
+    { id: 'ODF-SC-48', label: 'ODF-SC-48 (48 SC)', maxFibers: 48 },
+    { id: 'custom', label: 'Пользовательская (вручную)', maxFibers: 0 }
+];
+
+/** Дополнительные типы сплайс-кассет из справочника. */
+var customSpliceCassetteTypes = [];
+/** Скрытые встроенные типы сплайс-кассет. */
+var hiddenBuiltinSpliceCassetteTypes = [];
+
 function normalizeSleeveTypeId(id) {
     return (id || '').trim();
 }
@@ -506,6 +531,169 @@ function resetCrossCatalogToDefault() {
     saveDeviceCatalog();
 }
 
+function normalizeSpliceCassetteTypeId(id) {
+    return (id || '').trim();
+}
+
+function normalizeSpliceCassetteMaxFibers(n) {
+    var v = parseInt(n, 10);
+    if (isNaN(v) || v < 0) return 0;
+    return Math.min(288, v);
+}
+
+function getBuiltinSpliceCassetteTypes() {
+    return SPLICE_CASSETTE_TYPES_BUILTIN.slice();
+}
+
+function getCustomSpliceCassetteTypes() {
+    return (customSpliceCassetteTypes || []).slice();
+}
+
+function findSpliceCassetteTypeById(id) {
+    var sid = normalizeSpliceCassetteTypeId(id);
+    if (!sid) return null;
+    var i;
+    for (i = 0; i < SPLICE_CASSETTE_TYPES_BUILTIN.length; i++) {
+        if (SPLICE_CASSETTE_TYPES_BUILTIN[i].id === sid) return Object.assign({ builtin: true }, SPLICE_CASSETTE_TYPES_BUILTIN[i]);
+    }
+    for (i = 0; i < (customSpliceCassetteTypes || []).length; i++) {
+        if (customSpliceCassetteTypes[i].id === sid) return Object.assign({ builtin: false }, customSpliceCassetteTypes[i]);
+    }
+    return null;
+}
+
+function getHiddenBuiltinSpliceCassetteTypes() {
+    return (hiddenBuiltinSpliceCassetteTypes || []).slice();
+}
+
+function isBuiltinSpliceCassetteTypeHidden(id) {
+    id = normalizeSpliceCassetteTypeId(id);
+    if (!id) return false;
+    return (hiddenBuiltinSpliceCassetteTypes || []).indexOf(id) !== -1;
+}
+
+function getAllSpliceCassetteTypes() {
+    var out = [];
+    var hidden = hiddenBuiltinSpliceCassetteTypes || [];
+    SPLICE_CASSETTE_TYPES_BUILTIN.forEach(function(t) {
+        if (hidden.indexOf(t.id) === -1) {
+            out.push(Object.assign({ builtin: true }, t));
+        }
+    });
+    (customSpliceCassetteTypes || []).forEach(function(t) {
+        out.push(Object.assign({ builtin: false }, t));
+    });
+    return out;
+}
+
+function getDefaultMaxFibersForCassetteType(cassetteType) {
+    var t = findSpliceCassetteTypeById(cassetteType);
+    return t ? t.maxFibers : 0;
+}
+
+function getSpliceCassetteTypeLabel(id) {
+    var t = findSpliceCassetteTypeById(id);
+    return t ? t.label : ((id && String(id)) || 'Не указан');
+}
+
+function formatSpliceCassetteMaxFibersHint(maxFibers) {
+    var n = parseInt(maxFibers, 10);
+    if (!n || isNaN(n)) return 'без лимита';
+    return 'до ' + n + ' волокон';
+}
+
+function getSpliceCassetteTypeSelectOptionsHtml(selectedValue) {
+    var sel = (selectedValue != null && selectedValue !== '') ? String(selectedValue) : '';
+    var html = '';
+    if (!sel) {
+        html += '<option value="" selected>— Не указано —</option>';
+    }
+    var found = false;
+    getAllSpliceCassetteTypes().forEach(function(t) {
+        if (t.id === sel) found = true;
+        html += '<option value="' + escapeHtml(t.id) + '"' + (t.id === sel ? ' selected' : '') + '>' + escapeHtml(t.label) + '</option>';
+    });
+    if (sel && !found) {
+        html += '<option value="' + escapeHtml(sel) + '" selected>' + escapeHtml(sel) + '</option>';
+    }
+    return html;
+}
+
+function populateSpliceCassetteTypeSelect(selectEl, selectedValue) {
+    if (!selectEl) return;
+    var prev = selectedValue != null ? selectedValue : selectEl.value;
+    selectEl.innerHTML = getSpliceCassetteTypeSelectOptionsHtml(prev);
+}
+
+function refreshAllSpliceCassetteTypeSelects() {
+    populateSpliceCassetteTypeSelect(document.getElementById('cabinetCreateCassetteType'));
+    var editSel = document.getElementById('editCassetteType');
+    if (editSel) populateSpliceCassetteTypeSelect(editSel, editSel.value);
+}
+
+function addCustomSpliceCassetteType(id, label, maxFibers) {
+    id = normalizeSpliceCassetteTypeId(id);
+    if (!id) return false;
+    if (findSpliceCassetteTypeById(id)) return false;
+    label = (label || '').trim() || id;
+    customSpliceCassetteTypes.push({
+        id: id,
+        label: label,
+        maxFibers: normalizeSpliceCassetteMaxFibers(maxFibers)
+    });
+    customSpliceCassetteTypes.sort(function(a, b) {
+        return String(a.label).localeCompare(String(b.label), 'ru');
+    });
+    saveDeviceCatalog();
+    return true;
+}
+
+function removeCustomSpliceCassetteType(id) {
+    id = normalizeSpliceCassetteTypeId(id);
+    var idx = -1;
+    (customSpliceCassetteTypes || []).forEach(function(t, i) {
+        if (t.id === id) idx = i;
+    });
+    if (idx === -1) return false;
+    customSpliceCassetteTypes.splice(idx, 1);
+    saveDeviceCatalog();
+    return true;
+}
+
+function hideBuiltinSpliceCassetteType(id) {
+    id = normalizeSpliceCassetteTypeId(id);
+    if (!id || isBuiltinSpliceCassetteTypeHidden(id)) return false;
+    var found = false;
+    for (var i = 0; i < SPLICE_CASSETTE_TYPES_BUILTIN.length; i++) {
+        if (SPLICE_CASSETTE_TYPES_BUILTIN[i].id === id) {
+            found = true;
+            break;
+        }
+    }
+    if (!found) return false;
+    hiddenBuiltinSpliceCassetteTypes.push(id);
+    hiddenBuiltinSpliceCassetteTypes.sort(function(a, b) {
+        return String(a).localeCompare(String(b), 'ru');
+    });
+    saveDeviceCatalog();
+    return true;
+}
+
+function removeSpliceCassetteType(id) {
+    id = normalizeSpliceCassetteTypeId(id);
+    if (!id) return false;
+    var found = findSpliceCassetteTypeById(id);
+    if (!found) return false;
+    if (found.builtin) return hideBuiltinSpliceCassetteType(id);
+    return removeCustomSpliceCassetteType(id);
+}
+
+function resetSpliceCassetteCatalogToDefault() {
+    customSpliceCassetteTypes = [];
+    hiddenBuiltinSpliceCassetteTypes = [];
+    saveDeviceCatalog();
+}
+
 var nodeDeviceCatalog = {};
 var oltDeviceCatalog = {};
 var onuDeviceCatalog = {};
@@ -634,6 +822,10 @@ var DEVICE_CATALOG_TAB_META = {
         label: 'Кроссы',
         desc: 'Типы оптических кроссов для списка при добавлении и редактировании. Для каждого типа задаётся число портов по умолчанию.'
     },
+    spliceCassette: {
+        label: 'Сплайс-кассеты',
+        desc: 'Типы сплайс-кассет для ящиков и кроссовых стоек: ёмкость по волокнам, подпись в списке при создании в ящике.'
+    },
     cabinet: {
         label: 'Ящики',
         desc: 'Шкафы, боксы и контейнеры на карте: производитель и модель при создании и в карточке ящика (для документации и учёта).'
@@ -652,6 +844,7 @@ var DEVICE_CATALOG_TAB_TONE = {
     node: '#14b8a6',
     sleeve: '#22c55e',
     cross: '#a855f7',
+    spliceCassette: '#f59e0b',
     cabinet: '#64748b',
     cable: '#f59e0b'
 };
@@ -670,11 +863,11 @@ function syncDeviceCatalogTabButtons() {
     }
 }
 
-var DEVICE_CATALOG_ALLOWED_TABS = { node: 1, olt: 1, onu: 1, camera: 1, switch: 1, sleeve: 1, cross: 1, cabinet: 1, cable: 1 };
+var DEVICE_CATALOG_ALLOWED_TABS = { node: 1, olt: 1, onu: 1, camera: 1, switch: 1, sleeve: 1, cross: 1, spliceCassette: 1, cabinet: 1, cable: 1 };
 
 function getDeviceCatalogStats(kind) {
-    if (kind === 'sleeve' || kind === 'cross') {
-        var visible = kind === 'sleeve' ? getAllSleeveTypes() : getAllCrossTypes();
+    if (kind === 'sleeve' || kind === 'cross' || kind === 'spliceCassette') {
+        var visible = kind === 'sleeve' ? getAllSleeveTypes() : (kind === 'cross' ? getAllCrossTypes() : getAllSpliceCassetteTypes());
         var builtinVisible = 0;
         var customVisible = 0;
         visible.forEach(function(t) {
@@ -722,7 +915,7 @@ function updateDeviceCatalogChrome() {
 
     var tabStatsEl = document.getElementById('deviceCatalogTabStats');
     if (tabStatsEl) {
-        if (tab === 'sleeve' || tab === 'cross') {
+        if (tab === 'sleeve' || tab === 'cross' || tab === 'spliceCassette') {
             tabStatsEl.textContent = stats.manufacturers + ' / ' + stats.models;
             tabStatsEl.title = stats.manufacturers + ' встроенных типов, ' + stats.models + ' добавленных вами';
         } else {
@@ -733,8 +926,8 @@ function updateDeviceCatalogChrome() {
 
     var searchInp = document.getElementById('deviceCatalogSearch');
     if (searchInp) {
-        searchInp.placeholder = (tab === 'sleeve' || tab === 'cross')
-            ? (tab === 'cross' ? 'Поиск типа кросса…' : 'Поиск типа муфты…')
+        searchInp.placeholder = (tab === 'sleeve' || tab === 'cross' || tab === 'spliceCassette')
+            ? (tab === 'cross' ? 'Поиск типа кросса…' : (tab === 'spliceCassette' ? 'Поиск типа сплайс-кассеты…' : 'Поиск типа муфты…'))
             : 'Поиск производителя или модели…';
     }
 
@@ -759,7 +952,7 @@ function updateDeviceCatalogChrome() {
         if (!k || !DEVICE_CATALOG_ALLOWED_TABS[k]) return;
         var s = getDeviceCatalogStats(k);
         badge.textContent = s.manufacturers + ' / ' + s.models;
-        badge.title = (k === 'sleeve' || k === 'cross')
+        badge.title = (k === 'sleeve' || k === 'cross' || k === 'spliceCassette')
             ? (s.manufacturers + ' встроенных, ' + s.models + ' своих')
             : (s.manufacturers + ' производителей, ' + s.models + ' моделей');
     });
@@ -769,10 +962,10 @@ function applyDeviceCatalogSearchFilter() {
     var q = getDeviceCatalogSearchQuery();
     var list = document.getElementById('deviceCatalogList');
     if (!list) return;
-    var cards = list.querySelectorAll('.device-catalog-mfr, .device-catalog-sleeve-row, .device-catalog-cross-row');
+    var cards = list.querySelectorAll('.device-catalog-mfr, .device-catalog-sleeve-row, .device-catalog-cross-row, [data-cassette-id]');
     var visible = 0;
     cards.forEach(function(card) {
-        var mfr = card.getAttribute('data-mfr') || card.getAttribute('data-sleeve-id') || '';
+        var mfr = card.getAttribute('data-mfr') || card.getAttribute('data-sleeve-id') || card.getAttribute('data-cross-id') || card.getAttribute('data-cassette-id') || '';
         var models = [];
         card.querySelectorAll('.device-catalog-model-name').forEach(function(el) {
             models.push(el.textContent);
@@ -876,6 +1069,10 @@ function resetDeviceCatalogTabToDefault(kind) {
     } else if (kind === 'cross') {
         resetCrossCatalogToDefault();
         refreshAllCrossTypeSelects();
+        return;
+    } else if (kind === 'spliceCassette') {
+        resetSpliceCassetteCatalogToDefault();
+        refreshAllSpliceCassetteTypeSelects();
         return;
     }
     saveDeviceCatalog();
@@ -1739,7 +1936,9 @@ function saveDeviceCatalog() {
         customSleeveTypes: getCustomSleeveTypes(),
         hiddenBuiltinSleeveTypes: getHiddenBuiltinSleeveTypes(),
         customCrossTypes: getCustomCrossTypes(),
-        hiddenBuiltinCrossTypes: getHiddenBuiltinCrossTypes()
+        hiddenBuiltinCrossTypes: getHiddenBuiltinCrossTypes(),
+        customSpliceCassetteTypes: getCustomSpliceCassetteTypes(),
+        hiddenBuiltinSpliceCassetteTypes: getHiddenBuiltinSpliceCassetteTypes()
     };
     try { localStorage.setItem(CUSTOM_DEVICE_OPTIONS_STORAGE_KEY, JSON.stringify(payload)); } catch (e) {}
     if (getApiBase() && getAuthToken()) {
@@ -1912,10 +2111,12 @@ function loadDeviceCatalog(opts) {
 
     applyCustomSleeveTypesFromOpts(opts);
     applyCustomCrossTypesFromOpts(opts);
+    applyCustomSpliceCassetteTypesFromOpts(opts);
 
     if (mergeNodeCatalogIntoSwitch()) saveDeviceCatalog();
     refreshAllSleeveTypeSelects();
     refreshAllCrossTypeSelects();
+    refreshAllSpliceCassetteTypeSelects();
 }
 
 function applyCustomSleeveTypesFromOpts(opts) {
@@ -1972,6 +2173,33 @@ function applyCustomCrossTypesFromOpts(opts) {
     }
 }
 
+function applyCustomSpliceCassetteTypesFromOpts(opts) {
+    opts = opts || {};
+    if ('customSpliceCassetteTypes' in opts) {
+        if (!Array.isArray(opts.customSpliceCassetteTypes)) {
+            customSpliceCassetteTypes = [];
+        } else {
+            customSpliceCassetteTypes = opts.customSpliceCassetteTypes.map(function(t) {
+                if (!t || !t.id) return null;
+                return {
+                    id: normalizeSpliceCassetteTypeId(t.id),
+                    label: (t.label || t.id || '').trim() || normalizeSpliceCassetteTypeId(t.id),
+                    maxFibers: normalizeSpliceCassetteMaxFibers(t.maxFibers)
+                };
+            }).filter(Boolean);
+        }
+    }
+    if ('hiddenBuiltinSpliceCassetteTypes' in opts) {
+        if (!Array.isArray(opts.hiddenBuiltinSpliceCassetteTypes)) {
+            hiddenBuiltinSpliceCassetteTypes = [];
+        } else {
+            hiddenBuiltinSpliceCassetteTypes = opts.hiddenBuiltinSpliceCassetteTypes.map(function(id) {
+                return normalizeSpliceCassetteTypeId(id);
+            }).filter(Boolean);
+        }
+    }
+}
+
 function loadCustomDeviceOptions(opts) {
     loadDeviceCatalog(opts || {});
 }
@@ -1985,6 +2213,7 @@ function loadCustomDeviceOptionsFromStorage() {
         else {
             refreshAllSleeveTypeSelects();
             refreshAllCrossTypeSelects();
+            refreshAllSpliceCassetteTypeSelects();
         }
     } catch (e) {}
 }
@@ -2469,6 +2698,52 @@ function renderCrossCatalogList(container, searchQ) {
     });
 }
 
+function renderSpliceCassetteCatalogList(container, searchQ) {
+    var types = getAllSpliceCassetteTypes();
+    var html = '';
+    var visibleCount = 0;
+    types.forEach(function(t) {
+        var models = [t.label, formatSpliceCassetteMaxFibersHint(t.maxFibers)];
+        var matches = catalogEntryMatchesSearch(t.id, models, searchQ);
+        if (matches) visibleCount++;
+        html += '<article class="device-catalog-sleeve-row device-catalog-mfr' + (matches ? '' : ' is-hidden-by-search') + '" data-cassette-id="' + escapeHtml(t.id) + '">';
+        html += '<header class="device-catalog-mfr-header">';
+        html += '<div class="device-catalog-mfr-title">';
+        html += '<span class="device-catalog-mfr-name device-catalog-model-name">' + escapeHtml(t.id) + '</span>';
+        html += '<span class="device-catalog-sleeve-label">' + escapeHtml(t.label) + '</span>';
+        html += '<span class="device-catalog-mfr-count">' + escapeHtml(formatSpliceCassetteMaxFibersHint(t.maxFibers)) + '</span>';
+        if (t.builtin) {
+            html += '<span class="device-catalog-sleeve-badge">встроенный</span>';
+        }
+        html += '</div>';
+        html += '<div class="device-catalog-mfr-actions">';
+        html += '<button type="button" class="device-catalog-remove-cassette device-catalog-btn-remove-mfr" data-cassette-id="' + escapeHtml(t.id) + '" data-cassette-builtin="' + (t.builtin ? '1' : '0') + '" title="Удалить тип">Удалить</button>';
+        html += '</div>';
+        html += '</header></article>';
+    });
+    if (searchQ && visibleCount === 0) {
+        html += '<p class="device-catalog-no-results">Ничего не найдено по запросу «' + escapeHtml(searchQ) + '».</p>';
+    }
+    container.innerHTML = html;
+    container.querySelectorAll('.device-catalog-remove-cassette').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var cid = btn.getAttribute('data-cassette-id');
+            var isBuiltin = btn.getAttribute('data-cassette-builtin') === '1';
+            (async function() {
+                var msg = isBuiltin
+                    ? 'Убрать встроенный тип сплайс-кассеты «' + cid + '» из списка? Уже созданные кассеты не изменятся.'
+                    : 'Удалить тип сплайс-кассеты «' + cid + '» из справочника?';
+                if (!(await showConfirm(msg, 'Удалить тип', { confirmText: 'Удалить' }))) return;
+                if (removeSpliceCassetteType(cid)) {
+                    renderDeviceCatalogList();
+                    refreshAllSpliceCassetteTypeSelects();
+                    if (typeof showInfo === 'function') showInfo('Тип сплайс-кассеты удалён', '');
+                }
+            })();
+        });
+    });
+}
+
 function renderDeviceCatalogList() {
     var container = document.getElementById('deviceCatalogList');
     if (!container) return;
@@ -2485,6 +2760,11 @@ function renderDeviceCatalogList() {
 
     if (tab === 'cross') {
         renderCrossCatalogList(container, searchQ);
+        return;
+    }
+
+    if (tab === 'spliceCassette') {
+        renderSpliceCassetteCatalogList(container, searchQ);
         return;
     }
 
@@ -2679,12 +2959,14 @@ function setDeviceCatalogEntryType(entryType) {
     var modelPanel = document.getElementById('deviceCatalogEntryModelPanel');
     var sleevePanel = document.getElementById('deviceCatalogEntrySleevePanel');
     var crossPanel = document.getElementById('deviceCatalogEntryCrossPanel');
+    var cassettePanel = document.getElementById('deviceCatalogEntryCassettePanel');
     var typeTabs = document.querySelector('.device-catalog-entry-type-tabs');
     if (tab === 'sleeve') {
         if (typeTabs) typeTabs.hidden = true;
         if (mfrPanel) mfrPanel.hidden = true;
         if (modelPanel) modelPanel.hidden = true;
         if (crossPanel) crossPanel.hidden = true;
+        if (cassettePanel) cassettePanel.hidden = true;
         if (sleevePanel) sleevePanel.hidden = false;
         syncDeviceCatalogEntryPortsGroupVisibility();
         return;
@@ -2694,13 +2976,25 @@ function setDeviceCatalogEntryType(entryType) {
         if (mfrPanel) mfrPanel.hidden = true;
         if (modelPanel) modelPanel.hidden = true;
         if (sleevePanel) sleevePanel.hidden = true;
+        if (cassettePanel) cassettePanel.hidden = true;
         if (crossPanel) crossPanel.hidden = false;
+        syncDeviceCatalogEntryPortsGroupVisibility();
+        return;
+    }
+    if (tab === 'spliceCassette') {
+        if (typeTabs) typeTabs.hidden = true;
+        if (mfrPanel) mfrPanel.hidden = true;
+        if (modelPanel) modelPanel.hidden = true;
+        if (sleevePanel) sleevePanel.hidden = true;
+        if (crossPanel) crossPanel.hidden = true;
+        if (cassettePanel) cassettePanel.hidden = false;
         syncDeviceCatalogEntryPortsGroupVisibility();
         return;
     }
     if (typeTabs) typeTabs.hidden = false;
     if (sleevePanel) sleevePanel.hidden = true;
     if (crossPanel) crossPanel.hidden = true;
+    if (cassettePanel) cassettePanel.hidden = true;
     var isMfr = entryType === 'manufacturer';
     document.querySelectorAll('.device-catalog-entry-type').forEach(function(btn) {
         var active = btn.getAttribute('data-entry-type') === entryType;
@@ -2756,7 +3050,7 @@ function updateDeviceCatalogEntryModalChrome() {
     if (hint) hint.textContent = 'Раздел: «' + meta.label + '». ' + meta.desc;
     if (cableFibersGroup) cableFibersGroup.hidden = tab !== 'cable';
     syncDeviceCatalogEntryPortsGroupVisibility();
-    setDeviceCatalogEntryType(tab === 'sleeve' ? 'sleeve' : (tab === 'cross' ? 'cross' : ((document.querySelector('.device-catalog-entry-type-active') || {}).getAttribute('data-entry-type') || 'manufacturer')));
+    setDeviceCatalogEntryType(tab === 'sleeve' ? 'sleeve' : (tab === 'cross' ? 'cross' : (tab === 'spliceCassette' ? 'spliceCassette' : ((document.querySelector('.device-catalog-entry-type-active') || {}).getAttribute('data-entry-type') || 'manufacturer'))));
 }
 
 function openDeviceCatalogEntryModal(entryType, presetMfr) {
@@ -2766,7 +3060,7 @@ function openDeviceCatalogEntryModal(entryType, presetMfr) {
     entryType = entryType === 'model' ? 'model' : 'manufacturer';
     updateDeviceCatalogEntryModalChrome();
     refreshDeviceCatalogEntryMfrSelect(presetMfr || '');
-    if (tab !== 'sleeve') setDeviceCatalogEntryType(entryType);
+    if (tab !== 'sleeve' && tab !== 'cross' && tab !== 'spliceCassette') setDeviceCatalogEntryType(entryType);
 
     var mfrNameInp = document.getElementById('deviceCatalogEntryMfrName');
     var modelNameInp = document.getElementById('deviceCatalogEntryModelName');
@@ -2777,6 +3071,9 @@ function openDeviceCatalogEntryModal(entryType, presetMfr) {
     var crossIdInp = document.getElementById('deviceCatalogEntryCrossId');
     var crossLabelInp = document.getElementById('deviceCatalogEntryCrossLabel');
     var crossPortsInp = document.getElementById('deviceCatalogEntryCrossPorts');
+    var cassetteIdInp = document.getElementById('deviceCatalogEntryCassetteId');
+    var cassetteLabelInp = document.getElementById('deviceCatalogEntryCassetteLabel');
+    var cassetteFibersInp = document.getElementById('deviceCatalogEntryCassetteFibers');
     if (mfrNameInp) mfrNameInp.value = '';
     if (modelNameInp) modelNameInp.value = '';
     if (portsInp) portsInp.value = '';
@@ -2791,6 +3088,9 @@ function openDeviceCatalogEntryModal(entryType, presetMfr) {
     if (crossIdInp) crossIdInp.value = '';
     if (crossLabelInp) crossLabelInp.value = '';
     if (crossPortsInp) crossPortsInp.value = '';
+    if (cassetteIdInp) cassetteIdInp.value = '';
+    if (cassetteLabelInp) cassetteLabelInp.value = '';
+    if (cassetteFibersInp) cassetteFibersInp.value = '';
     if (entryType === 'model' && presetMfr) {
         var sel = document.getElementById('deviceCatalogEntryMfrSelect');
         if (sel) sel.value = presetMfr;
@@ -2802,7 +3102,9 @@ function openDeviceCatalogEntryModal(entryType, presetMfr) {
             ? 'Добавить тип муфты'
             : (tab === 'cross'
                 ? 'Добавить тип кросса'
-                : (entryType === 'model' ? 'Добавить модель' : 'Добавить производителя'));
+                : (tab === 'spliceCassette'
+                    ? 'Добавить тип сплайс-кассеты'
+                    : (entryType === 'model' ? 'Добавить модель' : 'Добавить производителя')));
     }
 
     modal.style.display = 'flex';
@@ -2815,9 +3117,11 @@ function openDeviceCatalogEntryModal(entryType, presetMfr) {
         ? document.getElementById('deviceCatalogEntrySleeveId')
         : (tab === 'cross'
             ? document.getElementById('deviceCatalogEntryCrossId')
-            : (entryType === 'model'
-                ? (document.getElementById('deviceCatalogEntryModelName') || document.getElementById('deviceCatalogEntryMfrSelect'))
-                : document.getElementById('deviceCatalogEntryMfrName')));
+            : (tab === 'spliceCassette'
+                ? document.getElementById('deviceCatalogEntryCassetteId')
+                : (entryType === 'model'
+                    ? (document.getElementById('deviceCatalogEntryModelName') || document.getElementById('deviceCatalogEntryMfrSelect'))
+                    : document.getElementById('deviceCatalogEntryMfrName'))));
     if (focusEl) setTimeout(function() { focusEl.focus(); }, 50);
 }
 
@@ -2887,6 +3191,36 @@ function saveDeviceCatalogEntryCross() {
     if (typeof showInfo === 'function') showInfo('Тип кросса добавлен', '');
 }
 
+function saveDeviceCatalogEntryCassette() {
+    var idInp = document.getElementById('deviceCatalogEntryCassetteId');
+    var labelInp = document.getElementById('deviceCatalogEntryCassetteLabel');
+    var fibersInp = document.getElementById('deviceCatalogEntryCassetteFibers');
+    var id = idInp ? idInp.value.trim() : '';
+    if (!id) {
+        if (typeof showError === 'function') showError('Введите код типа сплайс-кассеты', '');
+        return;
+    }
+    if (id === 'custom') {
+        if (typeof showError === 'function') showError('Код «custom» зарезервирован для ручного ввода', '');
+        return;
+    }
+    var label = labelInp ? labelInp.value.trim() : '';
+    var maxFibers = fibersInp ? parseInt(fibersInp.value, 10) : 0;
+    if (isNaN(maxFibers) || maxFibers < 0) maxFibers = 0;
+    if (findSpliceCassetteTypeById(id)) {
+        if (typeof showError === 'function') showError('Такой тип сплайс-кассеты уже есть в справочнике', '');
+        return;
+    }
+    if (!addCustomSpliceCassetteType(id, label, maxFibers)) {
+        if (typeof showError === 'function') showError('Не удалось добавить тип сплайс-кассеты', '');
+        return;
+    }
+    closeDeviceCatalogEntryModal();
+    renderDeviceCatalogList();
+    refreshAllSpliceCassetteTypeSelects();
+    if (typeof showInfo === 'function') showInfo('Тип сплайс-кассеты добавлен', '');
+}
+
 function saveDeviceCatalogEntry() {
     var tab = getActiveDeviceCatalogTab();
     if (tab === 'sleeve') {
@@ -2895,6 +3229,10 @@ function saveDeviceCatalogEntry() {
     }
     if (tab === 'cross') {
         saveDeviceCatalogEntryCross();
+        return;
+    }
+    if (tab === 'spliceCassette') {
+        saveDeviceCatalogEntryCassette();
         return;
     }
     var entryType = document.querySelector('.device-catalog-entry-type-active');
@@ -3096,13 +3434,16 @@ function setupDeviceCatalogHandlers() {
                     ? 'Вернуть полный заводской список типов муфт? Будут восстановлены все встроенные типы и удалены добавленные вами.'
                     : (tab === 'cross'
                         ? 'Вернуть полный заводской список типов кроссов? Будут восстановлены все встроенные типы и удалены добавленные вами.'
-                        : 'Сбросить раздел «' + meta.label + '» к заводским значениям? Ваши правки в этом разделе будут заменены.');
+                        : (tab === 'spliceCassette'
+                            ? 'Вернуть полный заводской список типов сплайс-кассет? Будут восстановлены все встроенные типы и удалены добавленные вами.'
+                            : 'Сбросить раздел «' + meta.label + '» к заводским значениям? Ваши правки в этом разделе будут заменены.'));
                 if (!(await showConfirm(resetMsg, 'Сброс раздела', { confirmText: 'Сбросить' }))) return;
                 resetDeviceCatalogTabToDefault(tab);
                 renderDeviceCatalogList();
                 populateDeviceDatalists();
                 if (tab === 'sleeve') refreshAllSleeveTypeSelects();
                 if (tab === 'cross') refreshAllCrossTypeSelects();
+                if (tab === 'spliceCassette') refreshAllSpliceCassetteTypeSelects();
                 if (typeof showInfo === 'function') showInfo('Раздел «' + meta.label + '» сброшен', '');
             })();
         });

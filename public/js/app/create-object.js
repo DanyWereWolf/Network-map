@@ -22,6 +22,7 @@ function createObject(type, name, coords, options = {}) {
     switch (type) {
         case 'support': balloonContent = name ? 'Опора связи: ' + name : 'Опора связи'; break;
         case 'sleeve': balloonContent = name ? 'Кабельная муфта: ' + name : 'Кабельная муфта'; break;
+        case 'spliceCassette': balloonContent = name ? 'Сплайс-кассета: ' + name : 'Сплайс-кассета'; break;
         case 'cross': balloonContent = 'Оптический кросс: ' + name; break;
         case 'node': balloonContent = 'Узел сети: ' + name; break;
         case 'attachment': balloonContent = name ? 'Крепление узлов: ' + name : 'Крепление узлов'; break;
@@ -67,6 +68,13 @@ function createObject(type, name, coords, options = {}) {
     if (type === 'sleeve' && options.sleeveType) {
         placemarkProperties.sleeveType = options.sleeveType;
         placemarkProperties.maxFibers = options.maxFibers || 0;
+    }
+
+    if (type === 'spliceCassette' && options.cassetteType) {
+        placemarkProperties.cassetteType = options.cassetteType;
+        placemarkProperties.maxFibers = options.maxFibers !== undefined
+            ? options.maxFibers
+            : (typeof getDefaultMaxFibersForCassetteType === 'function' ? getDefaultMaxFibersForCassetteType(options.cassetteType) : 0);
     }
 
     if (type === 'cross') {
@@ -274,7 +282,7 @@ function createObject(type, name, coords, options = {}) {
                 }
                 return;
             }
-            var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment', 'manhole', 'olt'];
+            var cableEndpointsPlacemark = ['cross', 'sleeve', 'spliceCassette', 'support', 'attachment', 'manhole', 'olt'];
             if (cableEndpointsPlacemark.indexOf(type) !== -1) {
                 if (!cableSource) {
                     if (isCableIntermediateWaypoint(type)) {
@@ -333,7 +341,7 @@ function createObject(type, name, coords, options = {}) {
             return;
         }
 
-        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'switch')) {
+        if ((type === 'node' || isSleeveLikeHostType(type) || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'switch')) {
             showObjectInfo(placemark);
             return;
         }

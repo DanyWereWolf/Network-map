@@ -106,6 +106,13 @@ function serializeMapItemFromObject(obj) {
             appendFiberSchemeViewPropsToResult(props, result);
             appendFiberSchemeCableSidesToResult(props, result);
         }
+        if (props.type === 'spliceCassette') {
+            if (props.cassetteType) result.cassetteType = props.cassetteType;
+            if (props.maxFibers !== undefined) result.maxFibers = props.maxFibers;
+            appendFiberSchemeCanvasPropsToResult(props, result);
+            appendFiberSchemeViewPropsToResult(props, result);
+            appendFiberSchemeCableSidesToResult(props, result);
+        }
         if (props.type === 'cross') {
             appendFiberSchemeCanvasPropsToResult(props, result);
             appendFiberSchemeViewPropsToResult(props, result);
@@ -125,7 +132,7 @@ function serializeMapItemFromObject(obj) {
                 result.embeddedSplitters = props.embeddedSplitters;
             }
         }
-        if (props.type === 'sleeve') {
+        if (isSleeveLikeHostType(props.type)) {
             if (props.nodeConnections) result.nodeConnections = props.nodeConnections;
             if (props.oltConnections) result.oltConnections = props.oltConnections;
             if (props.onuConnections) result.onuConnections = props.onuConnections;
@@ -277,7 +284,7 @@ function diffMapSnapshots(fromState, toState) {
             if (!crossKeySet[ck]) { crossKeySet[ck] = true; diff.crossGroupKeys.push(ck); }
         }
         if (item.type === 'olt' || item.type === 'onu' || item.type === 'splitter' ||
-            item.type === 'mediaConverter' || item.type === 'cross' || item.type === 'sleeve' || item.type === 'node') {
+            item.type === 'mediaConverter' || item.type === 'cross' || item.type === 'sleeve' || item.type === 'spliceCassette' || item.type === 'node') {
             diff.needsConnectionLines = true;
         }
     }
@@ -1437,6 +1444,8 @@ function populatePlacemarkFromSerializedData(placemark, data) {
             placemark.properties.set('balloonContent', opName ? 'Оптический кросс: ' + opName : 'Оптический кросс');
         } else if (type === 'sleeve') {
             placemark.properties.set('balloonContent', opName ? 'Кабельная муфта: ' + opName : 'Кабельная муфта');
+        } else if (type === 'spliceCassette') {
+            placemark.properties.set('balloonContent', opName ? 'Сплайс-кассета: ' + opName : 'Сплайс-кассета');
         } else if (type === 'node') {
             placemark.properties.set('balloonContent', opName ? 'Узел сети: ' + opName : 'Узел сети');
         }
@@ -1458,6 +1467,23 @@ function populatePlacemarkFromSerializedData(placemark, data) {
     if (type === 'sleeve') {
         if (data.sleeveType) placemark.properties.set('sleeveType', data.sleeveType);
         if (data.maxFibers !== undefined) placemark.properties.set('maxFibers', data.maxFibers);
+        if (data.nodeConnections) placemark.properties.set('nodeConnections', data.nodeConnections);
+        if (data.oltConnections) placemark.properties.set('oltConnections', data.oltConnections);
+        if (data.onuConnections) placemark.properties.set('onuConnections', data.onuConnections);
+        if (data.mediaConverterConnections) placemark.properties.set('mediaConverterConnections', data.mediaConverterConnections);
+        if (data.splitterConnections) placemark.properties.set('splitterConnections', data.splitterConnections);
+        placemark.properties.set('embeddedSplitters', Array.isArray(data.embeddedSplitters) ? data.embeddedSplitters : []);
+        loadFiberSchemeCanvasPropsFromData(data, placemark);
+        loadFiberSchemeViewPropsFromData(data, placemark);
+        loadFiberSchemeCableSidesFromData(data, placemark);
+    }
+    if (type === 'spliceCassette') {
+        var cassetteType = data.cassetteType || data.sleeveType;
+        if (cassetteType) placemark.properties.set('cassetteType', cassetteType);
+        if (data.maxFibers !== undefined) placemark.properties.set('maxFibers', data.maxFibers);
+        else if (cassetteType && typeof getDefaultMaxFibersForCassetteType === 'function') {
+            placemark.properties.set('maxFibers', getDefaultMaxFibersForCassetteType(cassetteType));
+        }
         if (data.nodeConnections) placemark.properties.set('nodeConnections', data.nodeConnections);
         if (data.oltConnections) placemark.properties.set('oltConnections', data.oltConnections);
         if (data.onuConnections) placemark.properties.set('onuConnections', data.onuConnections);
@@ -1639,6 +1665,7 @@ function createObjectFromData(data, opts, createOpts) {
     switch (type) {
         case 'support': balloonContent = name ? 'Опора связи: ' + name : 'Опора связи'; break;
         case 'sleeve': balloonContent = name ? 'Кабельная муфта: ' + name : 'Кабельная муфта'; break;
+        case 'spliceCassette': balloonContent = name ? 'Сплайс-кассета: ' + name : 'Сплайс-кассета'; break;
         case 'cross': balloonContent = 'Оптический кросс: ' + name; break;
         case 'node': balloonContent = 'Узел сети: ' + name; break;
         case 'attachment': balloonContent = name ? 'Крепление узлов: ' + name : 'Крепление узлов'; break;
@@ -1800,7 +1827,7 @@ function createObjectFromData(data, opts, createOpts) {
                 }
                 return;
             }
-            var cableEndpointsPlacemark = ['cross', 'sleeve', 'support', 'attachment', 'manhole', 'olt'];
+            var cableEndpointsPlacemark = ['cross', 'sleeve', 'spliceCassette', 'support', 'attachment', 'manhole', 'olt'];
             if (cableEndpointsPlacemark.indexOf(type) !== -1) {
                 if (!cableSource) {
                     if (isCableIntermediateWaypoint(type)) {
@@ -1859,7 +1886,7 @@ function createObjectFromData(data, opts, createOpts) {
             return;
         }
 
-        if ((type === 'node' || type === 'sleeve' || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'switch')) {
+        if ((type === 'node' || isSleeveLikeHostType(type) || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'switch')) {
             showObjectInfo(placemark);
             return;
         }

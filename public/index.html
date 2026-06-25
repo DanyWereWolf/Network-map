@@ -1052,6 +1052,13 @@
                                 <div class="stat-label">Муфты</div>
                             </div>
                         </div>
+                        <div class="stat-item stat-item--tone-amber" data-stat-key="spliceCassette">
+                            <div class="stat-icon" aria-hidden="true"></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="spliceCassetteCount">0</div>
+                                <div class="stat-label">Сплайс-кассеты</div>
+                            </div>
+                        </div>
                         <div class="stat-item stat-item--tone-violet" data-stat-key="cross">
                             <div class="stat-icon" aria-hidden="true"></div>
                             <div class="stat-info">
@@ -1985,6 +1992,10 @@
                             <span class="device-catalog-tab-label">Кроссы</span>
                             <span class="device-catalog-tab-badge" data-stat-tab="cross"></span>
                         </button>
+                        <button type="button" class="device-catalog-tab device-catalog-tab--amber" data-tab="spliceCassette" role="tab" aria-selected="false">
+                            <span class="device-catalog-tab-label">Сплайс-кассеты</span>
+                            <span class="device-catalog-tab-badge" data-stat-tab="spliceCassette"></span>
+                        </button>
                         <button type="button" class="device-catalog-tab device-catalog-tab--slate" data-tab="cabinet" role="tab" aria-selected="false">
                             <span class="device-catalog-tab-label">Ящики</span>
                             <span class="device-catalog-tab-badge" data-stat-tab="cabinet"></span>
@@ -2096,6 +2107,22 @@
                         <label for="deviceCatalogEntryCrossPorts">Портов по умолчанию</label>
                         <input type="number" id="deviceCatalogEntryCrossPorts" class="form-input" min="1" max="96" placeholder="24" style="max-width: 120px;">
                         <p class="form-hint">Подставится при добавлении кросса на карту</p>
+                    </div>
+                </div>
+                <div id="deviceCatalogEntryCassettePanel" class="device-catalog-entry-panel" hidden>
+                    <div class="form-group">
+                        <label for="deviceCatalogEntryCassetteId">Код типа</label>
+                        <input type="text" id="deviceCatalogEntryCassetteId" class="form-input" placeholder="Например: SNR-SC-24" autocomplete="off">
+                        <p class="form-hint">Значение в списке «Тип кассеты» при создании в ящике</p>
+                    </div>
+                    <div class="form-group">
+                        <label for="deviceCatalogEntryCassetteLabel">Подпись в списке</label>
+                        <input type="text" id="deviceCatalogEntryCassetteLabel" class="form-input" placeholder="Необязательно — по умолчанию как код" autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label for="deviceCatalogEntryCassetteFibers">Ёмкость (волокон)</label>
+                        <input type="number" id="deviceCatalogEntryCassetteFibers" class="form-input" min="0" max="288" placeholder="24" style="max-width: 120px;">
+                        <p class="form-hint">0 — без лимита; подставится при создании сплайс-кассеты</p>
                     </div>
                 </div>
             </div>

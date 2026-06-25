@@ -5,6 +5,7 @@
     var COLORS = {
         support: '#3b82f6',
         sleeve: '#f43f5e',
+        spliceCassette: '#f59e0b',
         cross: '#8b5cf6',
         node: '#22c55e',
         nodeAggregation: '#ef4444',
@@ -85,6 +86,13 @@
         return '<polygon points="16,3 26,8 26,20 16,25 6,20 6,8" fill="' + fill + '" stroke="' + sw + '" stroke-width="' + w + '" opacity="' + fo + '"/>' +
             '<path d="M8 16 H24" stroke="' + sw + '" stroke-width="1.4" stroke-linecap="round" opacity="' + wo + '"/>' +
             '<circle cx="16" cy="16" r="3.2" fill="' + sw + '" opacity="' + wo + '"/>';
+    }
+
+    function drawSpliceCassette(fill, sw, w, fo, wo) {
+        return '<rect x="5" y="8" width="22" height="16" rx="2.5" fill="' + fill + '" stroke="' + sw + '" stroke-width="' + w + '" opacity="' + fo + '"/>' +
+            '<line x1="8" y1="12" x2="24" y2="12" stroke="' + sw + '" stroke-width="1.2" stroke-linecap="round" opacity="' + wo + '"/>' +
+            '<line x1="8" y1="16" x2="24" y2="16" stroke="' + sw + '" stroke-width="1.2" stroke-linecap="round" opacity="' + wo + '"/>' +
+            '<line x1="8" y1="20" x2="24" y2="20" stroke="' + sw + '" stroke-width="1.2" stroke-linecap="round" opacity="' + wo + '"/>';
     }
 
     function drawCross(fill, sw, w, fo, wo) {
@@ -233,6 +241,7 @@
         switch (type) {
             case 'support': body = drawSupport(fill, sw, w, fo, wo); break;
             case 'sleeve': body = drawSleeve(fill, sw, w, fo, wo); break;
+            case 'spliceCassette': body = drawSpliceCassette(fill, sw, w, fo, wo); break;
             case 'cross': body = drawCross(fill, sw, w, fo, wo); break;
             case 'node': body = drawNode(fill, sw, w, fo, wo, nodeKind); break;
             case 'attachment': body = drawAttachment(fill, sw, w, fo, wo); break;
@@ -256,7 +265,7 @@
     }
 
     function getIconMetrics(type, variant) {
-        var large = { support: 1, sleeve: 1, cross: 1, node: 1, attachment: 1, manhole: 1, signalPost: 1, cabinet: 1, olt: 1, splitter: 1, onu: 1, camera: 1, mediaConverter: 1, switch: 1, crossGroup: 1, nodeGroup: 1 };
+        var large = { support: 1, sleeve: 1, spliceCassette: 1, cross: 1, node: 1, attachment: 1, manhole: 1, signalPost: 1, cabinet: 1, olt: 1, splitter: 1, onu: 1, camera: 1, mediaConverter: 1, switch: 1, crossGroup: 1, nodeGroup: 1 };
         var isLarge = !!large[type];
         if (variant === 'selected') {
             return {

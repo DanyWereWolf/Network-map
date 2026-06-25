@@ -25,9 +25,12 @@ function getDeleteObjectConfirmDetails(obj) {
                 ? 'Через это крепление проходит кабель. Удалить крепление и кабель?'
                 : 'Через это крепление проходит кабелей: ' + cablesOnAttachment.length + '. Удалить крепление и все эти кабели?';
         }
-    } else if (objType === 'sleeve' || objType === 'cross') {
+    } else if (isFiberHostType(objType)) {
         gponImpact = collectGponImpactFromHost(obj);
-        title = 'Удаление ' + (objType === 'cross' ? 'кросса' : 'муфты');
+        var hostDelGen = objType === 'cross' ? 'кросса' : (objType === 'spliceCassette' ? 'сплайс-кассеты' : 'муфты');
+        var hostDelPrep = objType === 'cross' ? 'кроссе' : (objType === 'spliceCassette' ? 'сплайс-кассете' : 'муфте');
+        var hostDelAcc = objType === 'cross' ? 'кросс' : (objType === 'spliceCassette' ? 'сплайс-кассету' : 'муфту');
+        title = 'Удаление ' + hostDelGen;
         if (gponImpact && gponImpact.hasGpon) {
             var splitterConnDel = obj.properties.get('splitterConnections') || {};
             var onuConnDel = obj.properties.get('onuConnections') || {};
@@ -39,12 +42,12 @@ function getDeleteObjectConfirmDetails(obj) {
             if (Object.keys(onuConnDel).length) gponParts.push('ONU');
             if (fiberConnDel.length) gponParts.push('сращивания жил');
             if (!gponParts.length) gponParts.push('кабели GPON');
-            message = 'В ' + (objType === 'cross' ? 'кроссе' : 'муфте') + ' есть GPON-подключения (' + gponParts.join(', ') + ').\n' +
+            message = 'В ' + hostDelPrep + ' есть GPON-подключения (' + gponParts.join(', ') + ').\n' +
                 'Объект будет удалён вместе со всеми связями (сплиттеры, ONU, линии на карте).\n\nУдалить?';
         } else if (objName) {
-            message = 'Удалить ' + (objType === 'cross' ? 'кросс' : 'муфту') + ' «' + objName + '»?';
+            message = 'Удалить ' + hostDelAcc + ' «' + objName + '»?';
         } else {
-            message = 'Удалить этот ' + (objType === 'cross' ? 'кросс' : 'муфту') + '?';
+            message = 'Удалить этот ' + hostDelAcc + '?';
         }
     } else if (objType === 'cabinet') {
         var memberN = typeof getCabinetMembers === 'function' ? getCabinetMembers(objUniqueId).length : 0;
@@ -117,7 +120,7 @@ function deleteObject(obj, opts) {
         ObjectGallery.cleanupObjectPhotos(obj);
     }
 
-    var gponImpact = (objType === 'sleeve' || objType === 'cross') ? collectGponImpactFromHost(obj) : null;
+    var gponImpact = isFiberHostType(objType) ? collectGponImpactFromHost(obj) : null;
     if (!gponImpact && opts && opts.gponImpact) gponImpact = opts.gponImpact;
     var oltGponImpact = (objType === 'olt') ? collectGponImpactFromOlt(obj) : null;
     if (!oltGponImpact && opts && opts.oltGponImpact) oltGponImpact = opts.oltGponImpact;
@@ -130,7 +133,7 @@ function deleteObject(obj, opts) {
     if (objType === 'node' && objUniqueId) {
         objects.forEach(function(crossObj) {
             var hostType = crossObj.properties ? crossObj.properties.get('type') : null;
-            if (!crossObj.properties || (hostType !== 'cross' && hostType !== 'sleeve')) return;
+            if (!crossObj.properties || !isFiberHostType(hostType)) return;
             var nodeConnections = crossObj.properties.get('nodeConnections');
             if (!nodeConnections) return;
             var changed = false;
@@ -158,7 +161,7 @@ function deleteObject(obj, opts) {
         objects.forEach(function(slot) {
             if (!slot.properties) return;
             var t = slot.properties.get('type');
-            if (t !== 'cross' && t !== 'sleeve') return;
+            if (!isFiberHostType(t)) return;
             var oltConn = slot.properties.get('oltConnections');
             if (!oltConn) return;
             var changed = false;
@@ -177,7 +180,7 @@ function deleteObject(obj, opts) {
         objects.forEach(function(slot) {
             if (!slot.properties) return;
             var t = slot.properties.get('type');
-            if (t !== 'cross' && t !== 'sleeve') return;
+            if (!isFiberHostType(t)) return;
             var onuConn = slot.properties.get('onuConnections');
             if (!onuConn) return;
             var changed = false;
@@ -196,7 +199,7 @@ function deleteObject(obj, opts) {
         objects.forEach(function(slot) {
             if (!slot.properties) return;
             var t = slot.properties.get('type');
-            if (t !== 'cross' && t !== 'sleeve') return;
+            if (!isFiberHostType(t)) return;
             var mcConn = slot.properties.get('mediaConverterConnections');
             if (!mcConn) return;
             var changed = false;
@@ -230,7 +233,7 @@ function deleteObject(obj, opts) {
         objects.forEach(function(slot) {
             if (!slot.properties) return;
             var t = slot.properties.get('type');
-            if (t !== 'cross' && t !== 'sleeve') return;
+            if (!isFiberHostType(t)) return;
             var splitterConn = slot.properties.get('splitterConnections');
             if (!splitterConn) return;
             var changed = false;
@@ -255,7 +258,7 @@ function deleteObject(obj, opts) {
         myMap.geoObjects.remove(label);
     }
     
-    if (objType === 'support' || objType === 'attachment' || objType === 'sleeve' || objType === 'cross') {
+    if (objType === 'support' || objType === 'attachment' || isFiberHostType(objType)) {
         var waypointUid = getObjectUniqueId(obj);
         for (var ci = 0; ci < objects.length; ci++) {
             var cable = objects[ci];
@@ -328,7 +331,7 @@ function deleteObject(obj, opts) {
     }
 
     var gponRefreshOpts = { deferLineRefresh: true };
-    if ((objType === 'sleeve' || objType === 'cross') && gponImpact && gponImpact.hasGpon) {
+    if (isFiberHostType(objType) && gponImpact && gponImpact.hasGpon) {
         forcePurgeGponAfterHostRemoval(gponImpact, gponRefreshOpts);
         gponPurged = true;
     } else if (objType === 'olt' && oltGponImpact && oltGponImpact.hasGpon) {

@@ -139,6 +139,7 @@ function renderSearchResults(results, query) {
             case 'node': return '🖥️';
             case 'cross': return '📦';
             case 'sleeve': return '🔴';
+            case 'spliceCassette': return '🟠';
             case 'support': return '📍';
             case 'attachment': return '🔗';
             case 'signalPost': return '🚏';
@@ -207,7 +208,7 @@ function goToSearchResult(result) {
         else if (result.type === 'support' || result.type === 'attachment' || result.type === 'manhole') showSupportInfo(obj);
         else if (result.type === 'signalPost') showSignalPostInfo(obj);
         else if (result.type === 'region') focusRegionOnMap(obj);
-        else if (result.type === 'node' || result.type === 'cross' || result.type === 'sleeve' || result.type === 'olt' || result.type === 'splitter' || result.type === 'onu' || result.type === 'camera') showObjectInfo(obj);
+        else if (result.type === 'node' || result.type === 'cross' || result.type === 'sleeve' || result.type === 'spliceCassette' || result.type === 'olt' || result.type === 'splitter' || result.type === 'onu' || result.type === 'camera') showObjectInfo(obj);
     }, 600);
     searchInput.value = '';
     var clearEl = document.getElementById('clearSearch');

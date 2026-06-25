@@ -236,7 +236,7 @@ function connectFiberToSplitterWithRoute(sleeveObj, cableId, fiberNumber, splitt
             objects.forEach(function(slot) {
                 if (!slot.properties) return;
                 const st = slot.properties.get('type');
-                if (st !== 'cross' && st !== 'sleeve') return;
+                if (!isFiberHostType(st)) return;
                 var sc = cloneHostFiberAssignmentMap(slot.properties.get('splitterConnections'));
                 if (sc[prevKey] && sc[prevKey].splitterId === splitterId) {
                     delete sc[prevKey];
@@ -351,7 +351,7 @@ function getSplitterIdsUsedBySplitterOutputs() {
 function getHostForSplitterOutputConn(outConn, splitterObj) {
     if (!outConn) return null;
     if (outConn.hostId) {
-        var host = getMapObjectByUid(outConn.hostId, 'sleeve') || getMapObjectByUid(outConn.hostId, 'cross');
+        var host = getFiberHostByUid(outConn.hostId);
         if (!host) host = getMapObjectByUid(outConn.hostId, 'cabinet');
         return host;
     }
@@ -377,7 +377,7 @@ function resolveSplitterOutputPeer(splitterObj, outConn) {
     if (outConn.crossPort != null) {
         var crossHost = null;
         if (outConn.hostId && typeof getMapObjectByUid === 'function') {
-            crossHost = getMapObjectByUid(outConn.hostId, 'cross') || getMapObjectByUid(outConn.hostId, 'sleeve') || getMapObjectByUid(outConn.hostId, 'cabinet');
+            crossHost = getFiberHostByUid(outConn.hostId);
         }
         if (!crossHost && splitterObj && splitterObj._host) crossHost = splitterObj._host;
         if (!crossHost && outConn.hostId) {
@@ -632,7 +632,7 @@ function isOnuLinkedOnHost(onuId) {
         var slot = objects[i];
         if (!slot.properties) continue;
         var st = slot.properties.get('type');
-        if (st !== 'cross' && st !== 'sleeve') continue;
+        if (!isFiberHostType(st)) continue;
         var onuConn = slot.properties.get('onuConnections') || {};
         for (var key in onuConn) {
             if (!Object.prototype.hasOwnProperty.call(onuConn, key)) continue;
@@ -650,7 +650,7 @@ function isMcLinkedOnHost(mcId) {
         var slot = objects[i];
         if (!slot.properties) continue;
         var st = slot.properties.get('type');
-        if (st !== 'cross' && st !== 'sleeve') continue;
+        if (!isFiberHostType(st)) continue;
         var mcConn = slot.properties.get('mediaConverterConnections') || {};
         for (var key in mcConn) {
             if (!Object.prototype.hasOwnProperty.call(mcConn, key)) continue;
@@ -726,7 +726,7 @@ function getAvailableHostsForSplitterOutput() {
     return objects.filter(function(o) {
         if (!o.properties) return false;
         var t = o.properties.get('type');
-        return t === 'sleeve' || t === 'cross';
+        return isFiberHostType(t);
     });
 }
 
@@ -794,7 +794,7 @@ function getAvailableFibersAtHostForSplitterOutput(hostObj, sourceSplitterId, ou
                 type: 'splitterOutput',
                 splitterId: sourceSplitterId,
                 outputIndex: outputIndex,
-                atSleeveId: hostObj.properties.get('type') === 'sleeve' ? hostUid : undefined,
+                atSleeveId: isSleeveLikeHostType(hostObj.properties.get('type')) ? hostUid : undefined,
                 atCrossId: isCrossLikeHostType(hostObj.properties.get('type')) ? hostUid : undefined
             });
             if (usage.used) return;

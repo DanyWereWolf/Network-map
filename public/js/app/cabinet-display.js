@@ -1,11 +1,12 @@
 /**
  * Ящики (cabinet): контейнер для кроссов, узлов, OLT и др.
  */
-var CABINET_MEMBER_TYPES = ['cross', 'node', 'olt', 'mediaConverter', 'camera', 'onu'];
+var CABINET_MEMBER_TYPES = ['cross', 'spliceCassette', 'node', 'olt', 'mediaConverter', 'camera', 'onu'];
 var CABINET_EXTRACT_OFFSET = 0.00008;
 
 var CABINET_MEMBER_BADGE = {
     cross: 'violet',
+    spliceCassette: 'amber',
     node: 'green',
     olt: 'sky',
     mediaConverter: 'teal',
@@ -250,7 +251,7 @@ function findCabinetAtCoords(coords, excludeObj) {
 }
 
 function isCabinetCableEndpointType(type) {
-    return type === 'cross' || type === 'sleeve' || type === 'olt';
+    return type === 'cross' || type === 'sleeve' || type === 'spliceCassette' || type === 'olt';
 }
 
 /** Совпадение объектов на маршруте кабеля (по ссылке, uniqueId или ящик ↔ его содержимое). */
@@ -576,8 +577,8 @@ function resolveCabinetCableTarget(cabinet, onResolved, opts) {
     if (!members.length) {
         if (typeof showWarning === 'function') {
             var msg = cableSource
-                ? 'В ящике нет другого кросса для подключения.'
-                : 'В ящике нет кросса для подключения кабеля.';
+                ? 'В ящике нет другого кросса, муфты или сплайс-кассеты для подключения.'
+                : 'В ящике нет кросса, муфты или сплайс-кассеты для подключения кабеля.';
             showWarning(msg, 'Кабель');
         }
         onResolved(null);
@@ -668,6 +669,13 @@ function buildCabinetCreateFieldsHtml(type) {
             ? getCrossTypeSelectOptionsHtml('SNR-ODF-W24')
             : '<option value="SNR-ODF-W24" selected>SNR-ODF-W24</option>';
         html += '</select>';
+    } else if (type === 'spliceCassette') {
+        html += '<label class="object-card-label" for="cabinetCreateCassetteType">Тип сплайс-кассеты</label>';
+        html += '<select id="cabinetCreateCassetteType" class="form-select">';
+        html += typeof getSpliceCassetteTypeSelectOptionsHtml === 'function'
+            ? getSpliceCassetteTypeSelectOptionsHtml('SC-24')
+            : '<option value="SC-24" selected>Сплайс-кассета 24F</option>';
+        html += '</select>';
     } else if (type === 'node') {
         html += '<label class="object-card-label" for="cabinetCreateNodeKind">Тип узла</label>';
         html += '<select id="cabinetCreateNodeKind" class="form-select">';
@@ -696,6 +704,13 @@ function collectCabinetCreateOptions(root, type) {
         opts.crossType = crossType;
         opts.crossPorts = typeof getDefaultPortsForCrossType === 'function' ? getDefaultPortsForCrossType(crossType) : 24;
         opts.crossCopperPorts = 0;
+    } else if (type === 'spliceCassette') {
+        var ct = root.querySelector('#cabinetCreateCassetteType');
+        var cassetteType = ct ? ct.value : 'SC-24';
+        opts.cassetteType = cassetteType;
+        opts.maxFibers = typeof getDefaultMaxFibersForCassetteType === 'function'
+            ? getDefaultMaxFibersForCassetteType(cassetteType)
+            : 0;
     } else if (type === 'node') {
         var nk = root.querySelector('#cabinetCreateNodeKind');
         opts.nodeKind = nk ? nk.value : 'network';
@@ -1177,7 +1192,7 @@ function buildCabinetCardContent(cabinet, isEditMode) {
     html += '</div>';
 
     if (isEditMode && currentCableTool) {
-        html += '<p class="object-card-hint">Кликните «Кабель» у кросса или муфты — или выберите ящик на карте.</p>';
+        html += '<p class="object-card-hint">Кликните «Кабель» у кросса, муфты или сплайс-кассеты — или выберите ящик на карте.</p>';
     }
 
     if (!members.length) {

@@ -230,7 +230,7 @@ function getTotalUsedPortsInCross(crossObj) {
 }
 
 function getTotalUsedFibersInSleeve(sleeveObj) {
-    if (!sleeveObj || !sleeveObj.properties || sleeveObj.properties.get('type') !== 'sleeve') {
+    if (!sleeveObj || !sleeveObj.properties || !isSleeveLikeHostType(sleeveObj.properties.get('type'))) {
         return 0;
     }
 

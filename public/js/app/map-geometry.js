@@ -155,7 +155,7 @@ function setupRectSelection() {
                     var hasGponHosts = toDelete.some(function(obj) {
                         if (!obj.properties) return false;
                         var t = obj.properties.get('type');
-                        if (t !== 'sleeve' && t !== 'cross') return false;
+                        if (!isFiberHostType(t)) return false;
                         var imp = collectGponImpactFromHost(obj);
                         return imp && imp.hasGpon;
                     });

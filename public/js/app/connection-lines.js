@@ -3,7 +3,7 @@
  */
 function getNodeConnFiberUsageExclude(hostObj) {
     var uid = getObjectUniqueId(hostObj);
-    if (hostObj.properties.get('type') === 'sleeve') {
+    if (hostObj.properties.get('type') === 'sleeve' || hostObj.properties.get('type') === 'spliceCassette') {
         return { type: 'nodeConn', sleeveId: uid, atSleeveId: uid };
     }
     return { type: 'nodeConn', crossId: uid, atCrossId: uid };
@@ -472,7 +472,7 @@ function rebuildSplitterOutputLines(splitterObj) {
         else if (out.nodeId) target = getMapObjectByUid(out.nodeId, 'node');
         else if (out.splitterId) target = getMapObjectByUid(out.splitterId, 'splitter');
         else if (out.hostId) {
-            target = getMapObjectByUid(out.hostId, 'sleeve') || getMapObjectByUid(out.hostId, 'cross') || getMapObjectByUid(out.hostId, 'cabinet');
+            target = getFiberHostByUid(out.hostId);
         }
         var sourceObj = getSplitterRoutingAnchor(splitterObj) || splitterObj;
         if (target) createSplitterOutputConnectionLine(sourceObj, target, oi, out.routeIds || out.route || []);
@@ -571,7 +571,7 @@ function syncConnectionLinesForObject(obj) {
         removeHostConnectionLines(uid);
         rebuildHostFiberConnections(obj);
         rebuildNodeLinesForCross(obj);
-    } else if (type === 'sleeve') {
+    } else if (isSleeveLikeHostType(type)) {
         removeHostConnectionLines(uid);
         rebuildHostFiberConnections(obj);
         rebuildNodeLinesForCross(obj);
@@ -813,7 +813,7 @@ function updateSplitterOutputConnectionLines() {
                 else if (out.mediaConverterId) target = getMapObjectByUid(out.mediaConverterId, 'mediaConverter');
                 else if (out.nodeId) target = getMapObjectByUid(out.nodeId, 'node');
                 else if (out.splitterId) target = getMapObjectByUid(out.splitterId, 'splitter');
-                else if (out.hostId) target = getMapObjectByUid(out.hostId, 'sleeve') || getMapObjectByUid(out.hostId, 'cross') || getMapObjectByUid(out.hostId, 'cabinet');
+                else if (out.hostId) target = getFiberHostByUid(out.hostId);
                 if (target) createSplitterOutputConnectionLine(obj, target, oi, out.routeIds || out.route || []);
             }
             return;
@@ -833,7 +833,7 @@ function updateSplitterOutputConnectionLines() {
                 else if (eout.mediaConverterId) etarget = getMapObjectByUid(eout.mediaConverterId, 'mediaConverter');
                 else if (eout.nodeId) etarget = getMapObjectByUid(eout.nodeId, 'node');
                 else if (eout.hostId && eout.hostId !== hostUid) {
-                    etarget = getMapObjectByUid(eout.hostId, 'sleeve') || getMapObjectByUid(eout.hostId, 'cross') || getMapObjectByUid(eout.hostId, 'cabinet');
+                    etarget = getFiberHostByUid(eout.hostId);
                 }
                 if (etarget) {
                     createSplitterOutputConnectionLine(obj, etarget, ei, eout.routeIds || eout.route || [], hostUid + '-esp-' + rec.id + '-out-' + ei);

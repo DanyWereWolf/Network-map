@@ -233,7 +233,7 @@ function applyMapPlacemarkIcon(target, type, variant, source) {
 function refreshMapPlacemarkIcons() {
     if (!window.MapIcons || typeof objects === 'undefined') return;
 
-    var hoverIconTypes = ['support', 'sleeve', 'cross', 'crossGroup', 'nodeGroup', 'olt', 'splitter', 'onu', 'switch', 'camera', 'mediaConverter', 'attachment', 'manhole', 'signalPost', 'cabinet'];
+    var hoverIconTypes = ['support', 'sleeve', 'spliceCassette', 'cross', 'crossGroup', 'nodeGroup', 'olt', 'splitter', 'onu', 'switch', 'camera', 'mediaConverter', 'attachment', 'manhole', 'signalPost', 'cabinet'];
 
     objects.forEach(function(obj) {
         if (!obj || !obj.properties || !obj.options) return;
@@ -286,10 +286,14 @@ function refreshMapPlacemarkIcons() {
     if (currentModalObject && isInfoModalVisible(infoModal) && typeof updateInfoModalChrome === 'function') {
         var modalType = currentModalObject.properties.get('type');
         var modalName = currentModalObject.properties.get('name') || '';
-        updateInfoModalChrome(modalType, modalName);
+        var fiberWs = false;
+        if (isFiberHostType(modalType) && typeof getConnectedCables === 'function') {
+            fiberWs = getConnectedCables(currentModalObject).length >= 1;
+        }
+        updateInfoModalChrome(modalType, modalName, { fiberWorkspace: fiberWs });
         var modalBody = document.getElementById('modalInfo');
         if (modalBody && window.MapIcons) {
-            modalBody.querySelectorAll('.camera-card-hero-icon, .olt-card-hero-icon, .support-card-hero-icon, .node-card-hero-icon, .fiber-ws-head-icon').forEach(function(el) {
+            modalBody.querySelectorAll('.camera-card-hero-icon, .olt-card-hero-icon, .cassette-card-hero-icon, .support-card-hero-icon, .node-card-hero-icon, .fiber-ws-head-icon').forEach(function(el) {
                 var card = el.closest('.camera-card, .olt-card, .support-card, .fiber-workspace-sidebar');
                 if (!card) return;
                 var iconType = modalType;

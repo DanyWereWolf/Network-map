@@ -98,13 +98,12 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
             if (!skipSync) showError('Нельзя прокладывать кабель напрямую к узлу сети. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
             return false;
         }
-        const validEndpoints = ['sleeve', 'cross', 'olt'];
-        if (validEndpoints.indexOf(firstType) === -1) {
-            if (!skipSync) showError('Кабель можно прокладывать от муфты, кросса или OLT. Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
+        if (!isFiberCableEndpointType(firstType)) {
+            if (!skipSync) showError('Кабель можно прокладывать от муфты, сплайс-кассеты, кросса или OLT. Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
             return false;
         }
-        if (validEndpoints.indexOf(lastType) === -1) {
-            if (!skipSync) showError('Кабель можно прокладывать до муфты, кросса или OLT. Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
+        if (!isFiberCableEndpointType(lastType)) {
+            if (!skipSync) showError('Кабель можно прокладывать до муфты, сплайс-кассеты, кросса или OLT. Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
             return false;
         }
 

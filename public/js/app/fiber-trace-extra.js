@@ -179,7 +179,7 @@ function traceFromNode(hostUniqueId, cableId, fiberNumber) {
     
     const hostObj = objects.find(obj =>
         obj.properties &&
-        (obj.properties.get('type') === 'cross' || obj.properties.get('type') === 'sleeve') &&
+        isFiberHostType(obj.properties.get('type')) &&
         obj.properties.get('uniqueId') === hostUniqueId
     );
     
@@ -795,7 +795,7 @@ function tryAppendOnuAtHostForTrace(path, hostObj, cableId, fiberNumber, targetO
         }
     }
 
-    if (hostType === 'cross' || hostType === 'sleeve') {
+    if (isFiberHostType(hostType)) {
         var target = findTargetOnuFiberAtHost(hostObj, cableId, targetOnuId);
         if (target && target.onu) {
             if (Number(target.fiberNumber) !== Number(fiberNumber)) {
@@ -1128,7 +1128,7 @@ function findOltTraceBiasPrevious(startHost, cableId, fiberNumber, oltObj) {
     function isFeederType(obj) {
         if (!obj || !obj.properties) return false;
         var t = obj.properties.get('type');
-        return t === 'sleeve' || t === 'support' || t === 'attachment' || t === 'manhole';
+        return isSleeveLikeHostType(t) || t === 'support' || t === 'attachment' || t === 'manhole';
     }
     if (routePos.forward && routePos.backward) {
         if (isFeederType(routePos.forward)) return routePos.forward;

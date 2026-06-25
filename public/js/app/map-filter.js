@@ -316,6 +316,8 @@ function applyMapFilter() {
             if (filter.nodeAggregationOnly) return obj.properties.get('nodeKind') === 'aggregation';
         } else if (type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter') {
             if (filter[type] === false) return false;
+        } else if (type === 'spliceCassette') {
+            if (filter.sleeve === false) return false;
         } else if (filter[type] !== true) {
             return false;
         }
