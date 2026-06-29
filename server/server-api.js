@@ -394,7 +394,7 @@ app.get('/api/map', (req, res) => {
         var orgId = (user && user.organizationId) ? user.organizationId : null;
         if (!orgId && user) return res.status(403).json({ error: 'Выберите организацию или привяжите учётную запись к организации' });
         var data = orgId ? db.getMapData(orgId) : [];
-        res.json({ data: data });
+        res.json({ data: data, organizationId: orgId || null });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
     }
@@ -2773,9 +2773,9 @@ wss.on('connection', (ws, req) => {
                     var state = getSyncStateForOrg(orgId, { forceFromDb: true });
                     if (state) {
                         var groupNames = syncGroupNamesByOrg[orgId] || syncGroupNames;
-                        var statePayload = { type: 'state', clientId: state.clientId, data: state.data, organizationId: orgId };
-                        if (groupNames && (groupNames.cross || groupNames.node)) statePayload.groupNames = groupNames;
-                        try { ws.send(JSON.stringify(statePayload)); } catch (e) {}
+                        var helloPayload = { type: 'map_refresh', organizationId: orgId };
+                        if (groupNames && (groupNames.cross || groupNames.node)) helloPayload.groupNames = groupNames;
+                        try { ws.send(JSON.stringify(helloPayload)); } catch (e) {}
                     }
                     try {
                         ws.send(JSON.stringify({ type: 'object_locks', locks: collectObjectLocksList(orgId) }));
@@ -2894,7 +2894,7 @@ wss.on('connection', (ws, req) => {
             if (!justConnected && msg.type === 'state' && Array.isArray(msg.data) && isSyncClientAdmin(clientId) && orgId) {
                 var state = getSyncStateForOrg(orgId);
                 if (!state) return;
-                var nextData = msg.data;
+                var nextData = db.stripMapItemsFromOtherOrganizations(orgId, msg.data);
                 var validationFull = validateMapDataObjectLimit(orgId, nextData);
                 if (!validationFull.ok) {
                     try {
@@ -2913,7 +2913,7 @@ wss.on('connection', (ws, req) => {
                     try { db.setSettings({ groupNames: msg.groupNames }, orgId); } catch (e) {}
                 }
                 scheduleMapDbSave(orgId);
-                var statePayload = { type: 'state', clientId: state.clientId, data: state.data, organizationId: orgId };
+                var statePayload = { type: 'map_refresh', organizationId: orgId };
                 var gn = syncGroupNamesByOrg[orgId] || syncGroupNames;
                 if (gn && (gn.cross || gn.node)) statePayload.groupNames = gn;
                 wss.clients.forEach(function(client) {

@@ -569,7 +569,9 @@ function loadData() {
                 if (typeof currentUser !== 'undefined' && currentUser && currentUser.organizationId != null) {
                     window._mapOrgIdLoaded = String(currentUser.organizationId);
                 }
-                if (typeof applyRemoteState === 'function') applyRemoteState(body.data);
+                if (typeof applyRemoteState === 'function') {
+                    applyRemoteState(body.data, { fromApi: true, organizationId: body.organizationId });
+                }
             })
             .catch(function() {});
         fetch(getApiBase() + '/api/history', { headers: { 'Authorization': 'Bearer ' + token } }).then(function(r) { return r.json(); }).then(function(b) {
@@ -708,6 +710,33 @@ function shouldApplyRemoteMapState(organizationId) {
     return String(organizationId) === myOrg;
 }
 
+var _mapApiReloadTimer = null;
+var _mapApplyInProgress = false;
+
+function reloadMapFromApi(meta) {
+    meta = meta || {};
+    if (meta.organizationId != null && !shouldApplyRemoteMapState(meta.organizationId)) return;
+    if (!getApiBase() || !getAuthToken()) return;
+    if (_mapApiReloadTimer) clearTimeout(_mapApiReloadTimer);
+    var delay = meta.immediate ? 0 : 100;
+    _mapApiReloadTimer = setTimeout(function() {
+        _mapApiReloadTimer = null;
+        fetch(getApiBase() + '/api/map', {
+            headers: { 'Authorization': 'Bearer ' + getAuthToken() },
+            cache: 'no-store'
+        }).then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(body) {
+                if (!body || !Array.isArray(body.data)) return;
+                if (typeof currentUser !== 'undefined' && currentUser && currentUser.organizationId != null) {
+                    window._mapOrgIdLoaded = String(currentUser.organizationId);
+                }
+                applyRemoteState(body.data, { fromApi: true, organizationId: body.organizationId || meta.organizationId });
+            })
+            .catch(function() {});
+    }, delay);
+}
+window.reloadMapFromApi = reloadMapFromApi;
+
 function applyRemoteState(data, meta) {
     meta = meta || {};
     if (!Array.isArray(data)) {
@@ -717,8 +746,9 @@ function applyRemoteState(data, meta) {
     if (meta.organizationId != null && !shouldApplyRemoteMapState(meta.organizationId)) {
         return;
     }
+    if (_mapApplyInProgress) return;
     _mapStateReceived = true;
-    if (_mapDataReady && !_mapInitialLoadPending && objects && objects.length > 0) {
+    if (_mapDataReady && !_mapInitialLoadPending && objects && objects.length > 0 && meta.merge === true) {
         try {
             if (data.length === 0) {
                 clearMap({ skipSave: true, skipHistory: true });
@@ -738,6 +768,7 @@ function applyRemoteState(data, meta) {
         setMapLoadingOverlayText('Загрузка объектов…');
     }
     try {
+        _mapApplyInProgress = true;
         collaboratorCursorsPlacemarks.forEach(function(pm) {
             try { if (myMap && myMap.geoObjects) myMap.geoObjects.remove(pm); } catch (e) {}
         });
@@ -749,6 +780,7 @@ function applyRemoteState(data, meta) {
         function finishRemoteApply() {
             if (applyFinished) return;
             applyFinished = true;
+            _mapApplyInProgress = false;
             lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
             updateStats();
             markMapDataReady();
@@ -766,6 +798,7 @@ function applyRemoteState(data, meta) {
         importData(data, opts, bulkLoad ? finishRemoteApply : null);
         if (!bulkLoad) finishRemoteApply();
     } catch (e) {
+        _mapApplyInProgress = false;
         updateStats();
         markMapDataReady();
     }
@@ -1214,7 +1247,7 @@ function importDataAssignUniqueIds(data) {
 }
 
 function importDataCreatePlacemarkRef(item) {
-    if (!item || item.type === 'cable') return null;
+    if (!item || item.type === 'cable' || item.type === 'cableLabel') return null;
     if (item.type === 'region') return createRegionFromData(item);
     return createObjectFromData(item, null, { bulkImport: true });
 }
@@ -1435,14 +1468,14 @@ function importData(data, opts, done) {
         var idx = 0;
         var placemarkLoaded = 0;
         var placemarkTotal = 0;
-        data.forEach(function(it) { if (it && it.type !== 'cable') placemarkTotal++; });
+        data.forEach(function(it) { if (it && it.type !== 'cable' && it.type !== 'cableLabel') placemarkTotal++; });
 
         function importPlacemarkBatch() {
             var end = Math.min(idx + importBatchSize, data.length);
             for (; idx < end; idx++) {
                 var item = data[idx];
                 if (!item) continue;
-                if (item.type === 'cable') {
+                if (item.type === 'cable' || item.type === 'cableLabel') {
                     objectRefs[idx] = null;
                     continue;
                 }
@@ -1473,7 +1506,7 @@ function importData(data, opts, done) {
 
     var objectRefs = [];
     data.forEach(function(item) {
-        if (item.type === 'cable') {
+        if (item.type === 'cable' || item.type === 'cableLabel') {
             objectRefs.push(null);
             return;
         }

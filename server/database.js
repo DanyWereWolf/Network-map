@@ -265,13 +265,61 @@ function initSchema() {
     saveStore();
 }
 
+/** Убирает объекты, чей uniqueId есть в данных другой организации. */
+function stripMapItemsFromOtherOrganizations(orgId, data) {
+    if (!orgId || !Array.isArray(data) || !data.length) return Array.isArray(data) ? data : [];
+    const s = loadStore();
+    const byOrg = s.mapDataByOrg || {};
+
+    function isForeignUid(uid) {
+        if (uid == null || uid === '') return false;
+        var u = String(uid);
+        return Object.keys(byOrg).some(function(k) {
+            if (organizationIdsMatch(k, orgId)) return false;
+            var arr = byOrg[k];
+            return Array.isArray(arr) && arr.some(function(i) {
+                return i && i.uniqueId != null && i.uniqueId !== '' && String(i.uniqueId) === u;
+            });
+        });
+    }
+
+    const filtered = [];
+    data.forEach(function(item) {
+        if (!item) return;
+        if (item.type === 'cable' || item.type === 'cableLabel') return;
+        if (isForeignUid(item.uniqueId)) return;
+        filtered.push(item);
+    });
+    data.forEach(function(item) {
+        if (!item || item.type !== 'cable') return;
+        if (isForeignUid(item.uniqueId)) return;
+        if (isForeignUid(item.fromUniqueId) || isForeignUid(item.toUniqueId)) return;
+        if (Array.isArray(item.routeUniqueIds)) {
+            for (var ri = 0; ri < item.routeUniqueIds.length; ri++) {
+                if (isForeignUid(item.routeUniqueIds[ri])) return;
+            }
+        }
+        filtered.push(item);
+    });
+    data.forEach(function(item) {
+        if (!item || item.type !== 'cableLabel') return;
+        if (isForeignUid(item.uniqueId)) return;
+        filtered.push(item);
+    });
+    return filtered;
+}
+
 function getMapData(orgId) {
     if (!orgId) return [];
     const s = loadStore();
     const byOrg = s.mapDataByOrg || {};
-    if (Array.isArray(byOrg[orgId])) return byOrg[orgId];
-    var k = Object.keys(byOrg).find(function(key) { return organizationIdsMatch(key, orgId); });
-    return k && Array.isArray(byOrg[k]) ? byOrg[k] : [];
+    var raw = null;
+    if (Array.isArray(byOrg[orgId])) raw = byOrg[orgId];
+    else {
+        var k = Object.keys(byOrg).find(function(key) { return organizationIdsMatch(key, orgId); });
+        raw = k && Array.isArray(byOrg[k]) ? byOrg[k] : [];
+    }
+    return stripMapItemsFromOtherOrganizations(orgId, raw);
 }
 
 function setMapData(orgId, data) {
@@ -281,7 +329,7 @@ function setMapData(orgId, data) {
     if (!s.mapDataByOrg) s.mapDataByOrg = {};
     var org = getOrganization(orgId);
     var key = org ? org.id : orgId;
-    s.mapDataByOrg[key] = data;
+    s.mapDataByOrg[key] = stripMapItemsFromOtherOrganizations(orgId, data);
     saveStore();
 }
 
@@ -1545,6 +1593,7 @@ module.exports = {
     getDb,
     getMapData,
     setMapData,
+    stripMapItemsFromOtherOrganizations,
     getMapDataLegacy,
     setMapDataLegacy,
     getUsers,

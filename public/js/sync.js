@@ -344,19 +344,32 @@
                     try { window.orgChatOnUpdated(msg.message); } catch (e) {}
                     return;
                 }
-                if (msg.type === 'state' && Array.isArray(msg.data) && typeof applyRemoteState === 'function') {
-                    var data = msg.data;
-                    if (sendTimer) { clearTimeout(sendTimer); sendTimer = null; }
-                    pendingState = null;
-                    pendingApplyState = { data: data, organizationId: msg.organizationId };
-                    if (applyStateTimer) clearTimeout(applyStateTimer);
-                    applyStateTimer = setTimeout(function() {
-                        applyStateTimer = null;
-                        doApplyPendingState();
-                    }, APPLY_STATE_DEBOUNCE_MS);
+                if (msg.type === 'map_refresh') {
+                    if (msg.organizationId != null && typeof currentUser !== 'undefined' && currentUser &&
+                        currentUser.organizationId != null &&
+                        String(msg.organizationId) !== String(currentUser.organizationId)) {
+                        return;
+                    }
                     if (msg.groupNames && typeof window.applyGroupNames === 'function') {
                         try { window.applyGroupNames(msg.groupNames); } catch (e) {}
                     }
+                    if (typeof window.reloadMapFromApi === 'function') {
+                        window.reloadMapFromApi({ organizationId: msg.organizationId, immediate: true });
+                    }
+                    return;
+                }
+                if (msg.type === 'state' && Array.isArray(msg.data)) {
+                    if (sendTimer) { clearTimeout(sendTimer); sendTimer = null; }
+                    pendingState = null;
+                    pendingApplyState = null;
+                    if (applyStateTimer) { clearTimeout(applyStateTimer); applyStateTimer = null; }
+                    if (msg.groupNames && typeof window.applyGroupNames === 'function') {
+                        try { window.applyGroupNames(msg.groupNames); } catch (e) {}
+                    }
+                    if (typeof window.reloadMapFromApi === 'function') {
+                        window.reloadMapFromApi({ organizationId: msg.organizationId });
+                    }
+                    return;
                 }
             } catch (e) {}
             });
