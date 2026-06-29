@@ -98,7 +98,10 @@
     }
 
     function doApplyPendingState() {
-        if (!pendingApplyState || !Array.isArray(pendingApplyState)) return;
+        if (!pendingApplyState) return;
+        var payload = pendingApplyState;
+        var data = Array.isArray(payload) ? payload : payload.data;
+        if (!Array.isArray(data)) return;
         if (typeof myMap === 'undefined' || !myMap) {
             applyStateTimer = setTimeout(function() {
                 applyStateTimer = null;
@@ -117,8 +120,8 @@
             applyStateTimer = setTimeout(doApplyPendingState, 80);
             return;
         }
-        var data = pendingApplyState;
         pendingApplyState = null;
+        var applyMeta = Array.isArray(payload) ? {} : { organizationId: payload.organizationId };
         var runApply = function() {
             window.syncMapIsApplying = true;
             try {
@@ -127,7 +130,7 @@
                 }
                 var applyFn = typeof applyRemoteState === 'function' ? applyRemoteState
                     : (typeof window.applyRemoteState === 'function' ? window.applyRemoteState : null);
-                if (applyFn) applyFn(data);
+                if (applyFn) applyFn(data, applyMeta);
                 else if (typeof window.markMapDataReady === 'function') window.markMapDataReady();
                 updateSyncUIStatus(true);
                 if (typeof window.hideSyncRequiredOverlay === 'function') window.hideSyncRequiredOverlay();
@@ -214,20 +217,6 @@
                 ws.send(JSON.stringify({ type: 'hello', displayName: displayName, userId: userId, token: token }));
             } catch (e) {}
             if (btn) btn.disabled = false;
-            setTimeout(function() {
-                if (!ws || ws.readyState !== 1) return;
-                if (typeof getSerializedData === 'function') {
-                    try {
-                        var data = getSerializedData();
-                        var initPayload = { type: 'state', clientId: myClientId, data: data };
-                        if (typeof window.getGroupNamesForSync === 'function') {
-                            var gn = window.getGroupNamesForSync();
-                            if (gn && (gn.cross || gn.node)) initPayload.groupNames = gn;
-                        }
-                        ws.send(JSON.stringify(initPayload));
-                    } catch (e) {}
-                }
-            }, 50);
         };
         ws.onclose = function() {
             ws = null;
@@ -359,7 +348,7 @@
                     var data = msg.data;
                     if (sendTimer) { clearTimeout(sendTimer); sendTimer = null; }
                     pendingState = null;
-                    pendingApplyState = data;
+                    pendingApplyState = { data: data, organizationId: msg.organizationId };
                     if (applyStateTimer) clearTimeout(applyStateTimer);
                     applyStateTimer = setTimeout(function() {
                         applyStateTimer = null;

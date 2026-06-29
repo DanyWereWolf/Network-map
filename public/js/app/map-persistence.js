@@ -562,6 +562,16 @@ function loadData() {
     (function() {
         if (typeof AuthSystem !== 'undefined' && AuthSystem.refreshUsersFromApi) AuthSystem.refreshUsersFromApi();
         var token = getAuthToken();
+        fetch(getApiBase() + '/api/map', { headers: { 'Authorization': 'Bearer ' + token } })
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(body) {
+                if (!body || !Array.isArray(body.data)) return;
+                if (typeof currentUser !== 'undefined' && currentUser && currentUser.organizationId != null) {
+                    window._mapOrgIdLoaded = String(currentUser.organizationId);
+                }
+                if (typeof applyRemoteState === 'function') applyRemoteState(body.data);
+            })
+            .catch(function() {});
         fetch(getApiBase() + '/api/history', { headers: { 'Authorization': 'Bearer ' + token } }).then(function(r) { return r.json(); }).then(function(b) {
             if (b && Array.isArray(b.history)) {
                 if (typeof window.setHistoryFromApi === 'function') window.setHistoryFromApi(b.history);
@@ -689,9 +699,22 @@ function postHistoryToApi(history) {
     }).catch(function() {});
 }
 
-function applyRemoteState(data) {
+function shouldApplyRemoteMapState(organizationId) {
+    if (organizationId == null || organizationId === '') return true;
+    var myOrg = (typeof currentUser !== 'undefined' && currentUser && currentUser.organizationId != null)
+        ? String(currentUser.organizationId)
+        : (window._mapOrgIdLoaded != null ? String(window._mapOrgIdLoaded) : null);
+    if (!myOrg) return true;
+    return String(organizationId) === myOrg;
+}
+
+function applyRemoteState(data, meta) {
+    meta = meta || {};
     if (!Array.isArray(data)) {
         markMapDataReady();
+        return;
+    }
+    if (meta.organizationId != null && !shouldApplyRemoteMapState(meta.organizationId)) {
         return;
     }
     _mapStateReceived = true;

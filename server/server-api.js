@@ -2268,15 +2268,34 @@ app.use(express.static(PUBLIC_DIR));
 db.getDb();
 db.initDefaultAdmin();
 
-function getSyncStateForOrg(orgId) {
-    if (!syncCurrentStateByOrg[orgId]) {
-        syncCurrentStateByOrg[orgId] = { clientId: 'server', data: db.getMapData(orgId) || [] };
+function normalizeSyncOrgId(orgId) {
+    if (orgId == null || orgId === '') return null;
+    var org = db.getOrganization(orgId);
+    return org ? org.id : String(orgId);
+}
+
+function syncOrgIdsEqual(a, b) {
+    if (a == null || b == null) return false;
+    return String(a) === String(b);
+}
+
+function getSyncStateForOrg(orgId, options) {
+    options = options || {};
+    var key = normalizeSyncOrgId(orgId);
+    if (!key) return null;
+    if (options.forceFromDb || !syncCurrentStateByOrg[key]) {
+        syncCurrentStateByOrg[key] = {
+            clientId: 'server',
+            data: JSON.parse(JSON.stringify(db.getMapData(key) || []))
+        };
         try {
-            var sett = db.getSettings(orgId);
-            if (sett && sett.groupNames && (sett.groupNames.cross || sett.groupNames.node)) syncGroupNamesByOrg[orgId] = sett.groupNames;
+            var sett = db.getSettings(key);
+            if (sett && sett.groupNames && (sett.groupNames.cross || sett.groupNames.node)) {
+                syncGroupNamesByOrg[key] = sett.groupNames;
+            }
         } catch (e) {}
     }
-    return syncCurrentStateByOrg[orgId];
+    return syncCurrentStateByOrg[key];
 }
 
 if (db.createDailyBackup) {
@@ -2322,10 +2341,6 @@ function flushMapDbSave(orgId) {
     } catch (e) {}
 }
 
-var defaultOrgIdForSync = (function() {
-    var orgs = db.getOrganizations();
-    return orgs.length ? orgs[0].id : null;
-})();
 const wss = new WebSocket.Server({ server, path: '/sync' });
 const syncClientNames = new Map();
 const syncClientUserIds = new Map();
@@ -2369,7 +2384,7 @@ function broadcastObjectLocks(orgId) {
     if (!orgId) return;
     var list = collectObjectLocksList(orgId);
     wss.clients.forEach(function(client) {
-        if (client.readyState !== WebSocket.OPEN || client.orgId !== orgId) return;
+        if (client.readyState !== WebSocket.OPEN || !syncOrgIdsEqual(client.orgId, orgId)) return;
         try {
             client.send(JSON.stringify({ type: 'object_locks', locks: list }));
         } catch (e) {}
@@ -2709,7 +2724,7 @@ function broadcastSyncClients(onlyOrgId) {
         if (onlyOrgId != null && targetOrg !== onlyOrgId) return;
         var list = [];
         wss.clients.forEach(function(c) {
-            if (c.readyState === WebSocket.OPEN && c.clientId && c.orgId === targetOrg) {
+            if (c.readyState === WebSocket.OPEN && c.clientId && syncOrgIdsEqual(c.orgId, targetOrg)) {
                 list.push({
                     id: c.clientId,
                     displayName: syncClientNames.get(c.clientId) || 'Участник',
@@ -2745,18 +2760,23 @@ wss.on('connection', (ws, req) => {
                     var session = getSessionByToken(msg.token);
                     if (session) {
                         ws.userId = session.userId;
-                        orgId = session.organizationId || defaultOrgIdForSync;
-                        ws.orgId = orgId;
+                        orgId = session.organizationId || null;
+                        if (orgId) {
+                            orgId = normalizeSyncOrgId(orgId);
+                            ws.orgId = orgId;
+                        }
                         syncClientUserIds.set(clientId, session.userId);
-                        syncClientOrgIds.set(clientId, orgId);
+                        if (orgId) syncClientOrgIds.set(clientId, orgId);
                     }
                 }
                 if (orgId) {
-                    var state = getSyncStateForOrg(orgId);
-                    var groupNames = syncGroupNamesByOrg[orgId] || syncGroupNames;
-                    var statePayload = { type: 'state', clientId: state.clientId, data: state.data };
-                    if (groupNames && (groupNames.cross || groupNames.node)) statePayload.groupNames = groupNames;
-                    try { ws.send(JSON.stringify(statePayload)); } catch (e) {}
+                    var state = getSyncStateForOrg(orgId, { forceFromDb: true });
+                    if (state) {
+                        var groupNames = syncGroupNamesByOrg[orgId] || syncGroupNames;
+                        var statePayload = { type: 'state', clientId: state.clientId, data: state.data, organizationId: orgId };
+                        if (groupNames && (groupNames.cross || groupNames.node)) statePayload.groupNames = groupNames;
+                        try { ws.send(JSON.stringify(statePayload)); } catch (e) {}
+                    }
                     try {
                         ws.send(JSON.stringify({ type: 'object_locks', locks: collectObjectLocksList(orgId) }));
                     } catch (eLocks) {}
@@ -2797,13 +2817,14 @@ wss.on('connection', (ws, req) => {
                 }
                 return;
             }
-            var orgId = ws.orgId || defaultOrgIdForSync;
+            var orgId = ws.orgId ? normalizeSyncOrgId(ws.orgId) : null;
+            if (!orgId) return;
             if (msg.type === 'groupNames' && msg.groupNames && typeof msg.groupNames === 'object') {
                 if (!isSyncClientAdmin(clientId)) return;
                 if (orgId) syncGroupNamesByOrg[orgId] = msg.groupNames; else syncGroupNames = msg.groupNames;
                 try { db.setSettings({ groupNames: msg.groupNames }, orgId || undefined); } catch (e) {}
                 wss.clients.forEach(function(client) {
-                    if (client.readyState === WebSocket.OPEN && client.orgId === orgId) {
+                    if (client.readyState === WebSocket.OPEN && syncOrgIdsEqual(client.orgId, orgId)) {
                         try { client.send(JSON.stringify({ type: 'groupNames', groupNames: msg.groupNames })); } catch (e) {}
                     }
                 });
@@ -2863,17 +2884,18 @@ wss.on('connection', (ws, req) => {
                 state.clientId = msg.clientId || clientId;
                 scheduleMapDbSave(orgId);
                 wss.clients.forEach(function(client) {
-                    if (client !== ws && client.readyState === WebSocket.OPEN && client.orgId === orgId) {
+                    if (client !== ws && client.readyState === WebSocket.OPEN && syncOrgIdsEqual(client.orgId, orgId)) {
                         try { client.send(JSON.stringify({ type: 'op', op: msg.op })); } catch (e) {}
                     }
                 });
                 return;
             }
             var justConnected = (Date.now() - (ws.connectedAt || 0)) < 4000;
-            if (!justConnected && msg.data && isSyncClientAdmin(clientId) && orgId) {
+            if (!justConnected && msg.type === 'state' && Array.isArray(msg.data) && isSyncClientAdmin(clientId) && orgId) {
                 var state = getSyncStateForOrg(orgId);
-                var merged = mergeMapState(state.data, msg.data);
-                var validationFull = validateMapDataObjectLimit(orgId, merged);
+                if (!state) return;
+                var nextData = msg.data;
+                var validationFull = validateMapDataObjectLimit(orgId, nextData);
                 if (!validationFull.ok) {
                     try {
                         ws.send(JSON.stringify({
@@ -2884,18 +2906,18 @@ wss.on('connection', (ws, req) => {
                     } catch (eLim2) {}
                     return;
                 }
-                state.data = merged;
+                state.data = nextData;
                 state.clientId = msg.clientId || clientId;
                 if (msg.groupNames && typeof msg.groupNames === 'object') {
                     syncGroupNamesByOrg[orgId] = msg.groupNames;
                     try { db.setSettings({ groupNames: msg.groupNames }, orgId); } catch (e) {}
                 }
                 scheduleMapDbSave(orgId);
-                var statePayload = { type: 'state', clientId: state.clientId, data: state.data };
+                var statePayload = { type: 'state', clientId: state.clientId, data: state.data, organizationId: orgId };
                 var gn = syncGroupNamesByOrg[orgId] || syncGroupNames;
                 if (gn && (gn.cross || gn.node)) statePayload.groupNames = gn;
                 wss.clients.forEach(function(client) {
-                    if (client !== ws && client.readyState === WebSocket.OPEN && client.orgId === orgId) {
+                    if (client !== ws && client.readyState === WebSocket.OPEN && syncOrgIdsEqual(client.orgId, orgId)) {
                         try { client.send(JSON.stringify(statePayload)); } catch (e) {}
                     }
                 });
