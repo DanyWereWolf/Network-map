@@ -71,7 +71,7 @@ function setupRectSelection() {
     container.addEventListener('mousedown', function(e) {
         if (e.button !== 2) return;
         e.preventDefault();
-        if (objectPlacementMode || currentCableTool || splitterFiberRoutingMode || fiberRoutingMode || regionDrawMode) return;
+        if (objectPlacementMode || currentCableTool || splitterFiberRoutingMode || radioBridgeRoutingMode || fiberRoutingMode || regionDrawMode) return;
         var geo = clientToGeo(e.clientX, e.clientY);
         if (!geo) return;
         rectSelectStart = { x: e.clientX, y: e.clientY, geo: geo };

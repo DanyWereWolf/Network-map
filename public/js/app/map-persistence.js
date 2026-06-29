@@ -127,6 +127,7 @@ function serializeMapItemFromObject(obj) {
             if (props.oltConnections) result.oltConnections = props.oltConnections;
             if (props.onuConnections) result.onuConnections = props.onuConnections;
             if (props.mediaConverterConnections) result.mediaConverterConnections = props.mediaConverterConnections;
+            if (props.radioBridgeConnections) result.radioBridgeConnections = props.radioBridgeConnections;
             if (props.splitterConnections) result.splitterConnections = props.splitterConnections;
             if (Array.isArray(props.embeddedSplitters)) {
                 result.embeddedSplitters = props.embeddedSplitters;
@@ -137,6 +138,7 @@ function serializeMapItemFromObject(obj) {
             if (props.oltConnections) result.oltConnections = props.oltConnections;
             if (props.onuConnections) result.onuConnections = props.onuConnections;
             if (props.mediaConverterConnections) result.mediaConverterConnections = props.mediaConverterConnections;
+            if (props.radioBridgeConnections) result.radioBridgeConnections = props.radioBridgeConnections;
             if (props.splitterConnections) result.splitterConnections = props.splitterConnections;
             if (Array.isArray(props.embeddedSplitters)) {
                 result.embeddedSplitters = props.embeddedSplitters;
@@ -183,6 +185,39 @@ function serializeMapItemFromObject(obj) {
             if (props.manufacturer) result.manufacturer = props.manufacturer;
             if (props.model) result.model = props.model;
             if (props.comment) result.comment = props.comment;
+        }
+        if (props.type === 'radioBridge') {
+            if (props.bridgeMode) result.bridgeMode = props.bridgeMode;
+            if (props.role) result.role = props.role;
+            if (props.manufacturer) result.manufacturer = props.manufacturer;
+            if (props.model) result.model = props.model;
+            if (props.comment) result.comment = props.comment;
+            result.peerBridgeId = props.peerBridgeId || null;
+            result.peerBridgeName = props.peerBridgeName || null;
+            result.routeIds = Array.isArray(props.routeIds) ? props.routeIds : [];
+            result.stationLinks = Array.isArray(props.stationLinks) ? props.stationLinks : [];
+            result.ptpPeerLinks = Array.isArray(props.ptpPeerLinks) ? props.ptpPeerLinks : [];
+            result.apBridgeId = props.apBridgeId || null;
+            result.apBridgeName = props.apBridgeName || null;
+            result.ptpPeerId = props.ptpPeerId || null;
+            result.ptpPeerName = props.ptpPeerName || null;
+            result.incomingFiber = props.incomingFiber || null;
+            result.showCoverage = !!props.showCoverage;
+            result.coverageShape = props.coverageShape || 'circle';
+            var radiusKmRaw = props.coverageRadiusKm != null && props.coverageRadiusKm !== ''
+                ? parseFloat(props.coverageRadiusKm)
+                : (props.coverageRadiusM != null ? props.coverageRadiusM / 1000 : 3);
+            var radiusKm = radiusKmRaw > 50 ? radiusKmRaw / 1000 : radiusKmRaw;
+            if (isNaN(radiusKm) || radiusKm <= 0) radiusKm = 3;
+            var lengthKmRaw = props.coverageLengthKm != null && props.coverageLengthKm !== ''
+                ? parseFloat(props.coverageLengthKm)
+                : (props.coverageLengthM != null ? props.coverageLengthM / 1000 : radiusKm);
+            var lengthKm = lengthKmRaw > 50 ? lengthKmRaw / 1000 : lengthKmRaw;
+            if (isNaN(lengthKm) || lengthKm <= 0) lengthKm = radiusKm;
+            result.coverageRadiusKm = radiusKm;
+            result.coverageLengthKm = lengthKm;
+            result.coverageAzimuth = props.coverageAzimuth != null ? props.coverageAzimuth : 0;
+            result.coverageAngle = props.coverageAngle != null ? props.coverageAngle : 60;
         }
         if (props.type === 'signalPost') {
             if (props.comment != null) result.comment = props.comment;
@@ -289,7 +324,7 @@ function diffMapSnapshots(fromState, toState) {
             if (!crossKeySet[ck]) { crossKeySet[ck] = true; diff.crossGroupKeys.push(ck); }
         }
         if (item.type === 'olt' || item.type === 'onu' || item.type === 'splitter' ||
-            item.type === 'mediaConverter' || item.type === 'cross' || item.type === 'sleeve' || item.type === 'spliceCassette' || item.type === 'node') {
+            item.type === 'mediaConverter' || item.type === 'radioBridge' || item.type === 'cross' || item.type === 'sleeve' || item.type === 'spliceCassette' || item.type === 'node') {
             diff.needsConnectionLines = true;
         }
     }
@@ -1476,6 +1511,7 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         if (data.oltConnections) placemark.properties.set('oltConnections', data.oltConnections);
         if (data.onuConnections) placemark.properties.set('onuConnections', data.onuConnections);
         if (data.mediaConverterConnections) placemark.properties.set('mediaConverterConnections', data.mediaConverterConnections);
+        if (data.radioBridgeConnections) placemark.properties.set('radioBridgeConnections', data.radioBridgeConnections);
         if (data.splitterConnections) placemark.properties.set('splitterConnections', data.splitterConnections);
         placemark.properties.set('embeddedSplitters', Array.isArray(data.embeddedSplitters) ? data.embeddedSplitters : []);
         loadFiberSchemeCanvasPropsFromData(data, placemark);
@@ -1493,6 +1529,7 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         if (data.oltConnections) placemark.properties.set('oltConnections', data.oltConnections);
         if (data.onuConnections) placemark.properties.set('onuConnections', data.onuConnections);
         if (data.mediaConverterConnections) placemark.properties.set('mediaConverterConnections', data.mediaConverterConnections);
+        if (data.radioBridgeConnections) placemark.properties.set('radioBridgeConnections', data.radioBridgeConnections);
         if (data.splitterConnections) placemark.properties.set('splitterConnections', data.splitterConnections);
         placemark.properties.set('embeddedSplitters', Array.isArray(data.embeddedSplitters) ? data.embeddedSplitters : []);
         loadFiberSchemeCanvasPropsFromData(data, placemark);
@@ -1511,6 +1548,7 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         if (data.oltConnections) placemark.properties.set('oltConnections', data.oltConnections);
         if (data.onuConnections) placemark.properties.set('onuConnections', data.onuConnections);
         if (data.mediaConverterConnections) placemark.properties.set('mediaConverterConnections', data.mediaConverterConnections);
+        if (data.radioBridgeConnections) placemark.properties.set('radioBridgeConnections', data.radioBridgeConnections);
         if (data.splitterConnections) placemark.properties.set('splitterConnections', data.splitterConnections);
         placemark.properties.set('embeddedSplitters', Array.isArray(data.embeddedSplitters) ? data.embeddedSplitters : []);
         loadFiberSchemeCanvasPropsFromData(data, placemark);
@@ -1570,6 +1608,49 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         if (data.manufacturer) placemark.properties.set('manufacturer', data.manufacturer);
         if (data.model) placemark.properties.set('model', data.model);
         if (data.comment != null) placemark.properties.set('comment', data.comment || '');
+    }
+    if (type === 'radioBridge') {
+        placemark.properties.set('bridgeMode', data.bridgeMode || 'ptp');
+        placemark.properties.set('role', data.role || (data.bridgeMode === 'ptmp' ? 'station' : 'ptp'));
+        if (data.manufacturer) placemark.properties.set('manufacturer', data.manufacturer);
+        if (data.model) placemark.properties.set('model', data.model);
+        if (data.comment != null) placemark.properties.set('comment', data.comment || '');
+        placemark.properties.set('peerBridgeId', data.peerBridgeId || null);
+        placemark.properties.set('peerBridgeName', data.peerBridgeName || null);
+        placemark.properties.set('routeIds', Array.isArray(data.routeIds) ? data.routeIds : []);
+        placemark.properties.set('stationLinks', Array.isArray(data.stationLinks) ? data.stationLinks : []);
+        var ptpPeerLinks = Array.isArray(data.ptpPeerLinks) ? data.ptpPeerLinks : [];
+        if (!ptpPeerLinks.length && data.ptpPeerId) {
+            ptpPeerLinks = [{
+                peerId: data.ptpPeerId,
+                peerName: data.ptpPeerName || '',
+                routeIds: []
+            }];
+        }
+        placemark.properties.set('ptpPeerLinks', ptpPeerLinks);
+        placemark.properties.set('apBridgeId', data.apBridgeId || null);
+        placemark.properties.set('apBridgeName', data.apBridgeName || null);
+        placemark.properties.set('ptpPeerId', data.ptpPeerId || null);
+        placemark.properties.set('ptpPeerName', data.ptpPeerName || null);
+        placemark.properties.set('incomingFiber', data.incomingFiber || null);
+        placemark.properties.set('showCoverage', !!data.showCoverage);
+        placemark.properties.set('coverageShape', data.coverageShape || 'circle');
+        var loadRadiusKmRaw = data.coverageRadiusKm != null && data.coverageRadiusKm !== ''
+            ? parseFloat(data.coverageRadiusKm)
+            : (data.coverageRadiusM != null ? data.coverageRadiusM / 1000 : 3);
+        var loadRadiusKm = loadRadiusKmRaw > 50 ? loadRadiusKmRaw / 1000 : loadRadiusKmRaw;
+        if (isNaN(loadRadiusKm) || loadRadiusKm <= 0) loadRadiusKm = 3;
+        var loadLengthKmRaw = data.coverageLengthKm != null && data.coverageLengthKm !== ''
+            ? parseFloat(data.coverageLengthKm)
+            : (data.coverageLengthM != null ? data.coverageLengthM / 1000 : loadRadiusKm);
+        var loadLengthKm = loadLengthKmRaw > 50 ? loadLengthKmRaw / 1000 : loadLengthKmRaw;
+        if (isNaN(loadLengthKm) || loadLengthKm <= 0) loadLengthKm = loadRadiusKm;
+        placemark.properties.set('coverageRadiusKm', loadRadiusKm);
+        placemark.properties.set('coverageLengthKm', loadLengthKm);
+        placemark.properties.set('coverageRadiusM', null);
+        placemark.properties.set('coverageLengthM', null);
+        placemark.properties.set('coverageAzimuth', data.coverageAzimuth != null ? data.coverageAzimuth : 0);
+        placemark.properties.set('coverageAngle', data.coverageAngle != null ? data.coverageAngle : 60);
     }
     if (type === 'signalPost') {
         if (data.comment != null) placemark.properties.set('comment', data.comment || '');
@@ -1687,6 +1768,7 @@ function createObjectFromData(data, opts, createOpts) {
         case 'onu': balloonContent = name ? 'ONU: ' + name : 'ONU'; break;
         case 'camera': balloonContent = name ? 'Камера: ' + name : 'Камера'; break;
         case 'mediaConverter': balloonContent = name ? 'Медиаконвертер: ' + name : 'Медиаконвертер'; break;
+        case 'radioBridge': balloonContent = name ? 'Wi‑Fi радиомост: ' + name : 'Wi‑Fi радиомост'; break;
         case 'switch': balloonContent = name ? 'Коммутатор: ' + name : 'Коммутатор'; break;
         default: balloonContent = 'Объект';
     }
@@ -1737,6 +1819,11 @@ function createObjectFromData(data, opts, createOpts) {
                 var cabCoordsPm = placemark.geometry && placemark.geometry.getCoordinates();
                 if (cabCoordsPm) placeObjectAtCoords(cabCoordsPm);
             }
+            return;
+        }
+
+        if (radioBridgeRoutingMode && typeof handleRadioBridgeRoutingPlacemarkClick === 'function' &&
+            handleRadioBridgeRoutingPlacemarkClick(placemark, type)) {
             return;
         }
 
@@ -1820,8 +1907,8 @@ function createObjectFromData(data, opts, createOpts) {
             }
             var cableTypeVal = getEffectiveCableLayingType();
             if (handleCopperCablePlacemarkStep(placemark, type, cableTypeVal)) return;
-            if (type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter') {
-                showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU, камеры или медиаконвертера. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
+            if (type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'radioBridge') {
+                showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU, камеры, медиаконвертера или радиомоста. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
                 return;
             }
             if (cableUndergroundActive) {
@@ -1896,7 +1983,7 @@ function createObjectFromData(data, opts, createOpts) {
             return;
         }
 
-        if ((type === 'node' || isSleeveLikeHostType(type) || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'switch')) {
+        if ((type === 'node' || isSleeveLikeHostType(type) || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'radioBridge' || type === 'switch')) {
             showObjectInfo(placemark);
             return;
         }

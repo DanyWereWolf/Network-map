@@ -399,6 +399,11 @@
                                             <span class="map-filter-chip-dot" aria-hidden="true"></span>
                                             <span class="map-filter-chip-text">Медиаконв.</span>
                                         </label>
+                                        <label class="map-filter-chip map-filter-chip--cyan">
+                                            <input type="checkbox" id="mapFilterRadioBridge" checked>
+                                            <span class="map-filter-chip-dot" aria-hidden="true"></span>
+                                            <span class="map-filter-chip-text">Радиомосты</span>
+                                        </label>
                                     </div>
                                 </div>
                                 </div>
@@ -467,6 +472,7 @@
                                         <button type="button" class="object-type-chip object-type-chip--green" data-type="node">Узел</button>
                                         <button type="button" class="object-type-chip object-type-chip--slate" data-type="camera">Камера</button>
                                         <button type="button" class="object-type-chip object-type-chip--teal" data-type="mediaConverter">Медиаконв.</button>
+                                        <button type="button" class="object-type-chip object-type-chip--cyan" data-type="radioBridge">Радиомост</button>
                                     </div>
                                 </div>
                             </div>
@@ -478,6 +484,7 @@
                                 <option value="onu">ONU</option>
                                 <option value="camera">Камера</option>
                                 <option value="mediaConverter">Медиаконвертер</option>
+                                <option value="radioBridge">Wi‑Fi радиомост</option>
                                 <option value="node">Узлы сети</option>
                                 <option value="attachment">Крепление узлов</option>
                                 <option value="manhole">Колодец</option>
@@ -670,6 +677,39 @@
                                 <button type="button" class="device-combobox-trigger" id="mediaConverterModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
                                 <input type="hidden" id="mediaConverterModel" name="mediaConverterModel" value="">
                                 <div class="device-combobox-panel" role="listbox" id="mediaConverterModelPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group object-settings-card" id="radioBridgeSettingsGroup" style="display: none;">
+                            <p class="form-hint object-settings-card-lead">Wi‑Fi радиомост: точка-точка (P2P) или точка-многоточка (P2MP) с базовой и абонентскими станциями.</p>
+                            <label for="radioBridgeMode">Режим</label>
+                            <select id="radioBridgeMode" class="form-select">
+                                <option value="ptp">Точка — точка</option>
+                                <option value="ptmp">Точка — многоточка</option>
+                            </select>
+                            <div id="radioBridgeRoleGroup" style="display: none; margin-top: 10px;">
+                                <label for="radioBridgeRole">Роль (P2MP)</label>
+                                <select id="radioBridgeRole" class="form-select">
+                                    <option value="ap">Базовая станция (AP)</option>
+                                    <option value="station">Абонентская станция</option>
+                                </select>
+                            </div>
+                            <label for="radioBridgeManufacturerTrigger" class="form-group-sub">Производитель</label>
+                            <div class="device-combobox" data-catalog="radioBridge" data-type="manufacturer" data-value-id="radioBridgeManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="radioBridgeManufacturerTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите производителя</button>
+                                <input type="hidden" id="radioBridgeManufacturer" name="radioBridgeManufacturer" value="">
+                                <div class="device-combobox-panel" role="listbox" id="radioBridgeManufacturerPanel">
+                                    <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
+                                    <ul class="device-combobox-list"></ul>
+                                </div>
+                            </div>
+                            <label for="radioBridgeModelTrigger" class="form-group-sub">Модель</label>
+                            <div class="device-combobox" data-catalog="radioBridge" data-type="model" data-value-id="radioBridgeModel" data-manufacturer-id="radioBridgeManufacturer">
+                                <button type="button" class="device-combobox-trigger" id="radioBridgeModelTrigger" aria-expanded="false" aria-haspopup="listbox">Выберите модель</button>
+                                <input type="hidden" id="radioBridgeModel" name="radioBridgeModel" value="">
+                                <div class="device-combobox-panel" role="listbox" id="radioBridgeModelPanel">
                                     <input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off">
                                     <ul class="device-combobox-list"></ul>
                                 </div>
@@ -1111,6 +1151,13 @@
                             <div class="stat-info">
                                 <div class="stat-value" id="mediaConverterCount">0</div>
                                 <div class="stat-label">Медиаконв.</div>
+                            </div>
+                        </div>
+                        <div class="stat-item stat-item--tone-cyan" data-stat-key="radioBridge">
+                            <div class="stat-icon" aria-hidden="true"></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="radioBridgeCount">0</div>
+                                <div class="stat-label">Радиомосты</div>
                             </div>
                         </div>
                         </div>
@@ -2350,6 +2397,7 @@
     <script src="js/app/fiber-routing-modals.js"></script>
     <script src="js/app/fiber-routing-map.js"></script>
     <script src="js/app/gpon-connect-modals.js"></script>
+    <script src="js/app/radio-bridge.js"></script>
     <script src="js/app/connection-lines.js"></script>
     <script src="js/app/fiber-trace-extra.js"></script>
     <script src="js/app/fiber-selection-ui.js"></script>

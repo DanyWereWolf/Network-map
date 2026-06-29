@@ -205,6 +205,84 @@ function disconnectFiberFromMediaConverter(sleeveObj, cableId, fiberNumber) {
     showObjectInfo(sleeveObj);
 }
 
+function connectFiberToRadioBridgeWithRoute(sleeveObj, cableId, fiberNumber, rbObj, routeIds) {
+    routeIds = resolveGponRouteIds(routeIds);
+    const placeId = sleeveObj.properties.get('uniqueId');
+    const rbId = getObjectUniqueId(rbObj);
+    const slotTypeRb = sleeveObj.properties.get('type');
+    const usageOptsRb = { type: 'radioBridgeConn', radioBridgeId: rbId };
+    if (isCrossLikeHostType(slotTypeRb)) {
+        usageOptsRb.crossId = placeId;
+        usageOptsRb.atCrossId = placeId;
+    } else {
+        usageOptsRb.sleeveId = placeId;
+        usageOptsRb.atSleeveId = placeId;
+    }
+    const usage = getFiberUsage(cableId, fiberNumber, usageOptsRb);
+    if (usage.used) {
+        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
+        return;
+    }
+    let rbConnections = sleeveObj.properties.get('radioBridgeConnections');
+    if (!rbConnections) rbConnections = {};
+    const key = cableId + '-' + fiberNumber;
+    const rbUniqueId = rbObj.properties.get('uniqueId') || generateUniqueId('radioBridge');
+    const sleeveUniqueId = sleeveObj.properties.get('uniqueId') || generateUniqueId('cross');
+    if (!rbObj.properties.get('uniqueId')) rbObj.properties.set('uniqueId', rbUniqueId);
+    if (!sleeveObj.properties.get('uniqueId')) sleeveObj.properties.set('uniqueId', sleeveUniqueId);
+    rbConnections[key] = {
+        radioBridgeId: rbUniqueId,
+        radioBridgeName: rbObj.properties.get('name') || 'Радиомост',
+        routeIds: routeIds || []
+    };
+    sleeveObj.properties.set('radioBridgeConnections', rbConnections);
+    rbObj.properties.set('incomingFiber', { cableId: cableId, fiberNumber: fiberNumber });
+    createRadioBridgeFiberConnectionLine(sleeveObj, rbObj, cableId, fiberNumber, routeIds);
+    saveData();
+}
+
+function disconnectFiberFromRadioBridge(sleeveObj, cableId, fiberNumber) {
+    let rbConnections = sleeveObj.properties.get('radioBridgeConnections');
+    if (!rbConnections) return;
+    const key = cableId + '-' + fiberNumber;
+    const conn = rbConnections[key];
+    if (conn && conn.radioBridgeId) {
+        var rbObj = getMapObjectByUid(conn.radioBridgeId, 'radioBridge');
+        if (rbObj) {
+            var ifRb = rbObj.properties.get('incomingFiber');
+            if (ifRb && ifRb.cableId === cableId && ifRb.fiberNumber === fiberNumber) {
+                rbObj.properties.set('incomingFiber', null);
+            }
+        }
+    }
+    removeOnuConnectionLine(sleeveObj, cableId, fiberNumber);
+    delete rbConnections[key];
+    sleeveObj.properties.set('radioBridgeConnections', rbConnections);
+    saveData();
+    showObjectInfo(sleeveObj);
+}
+
+function createRadioBridgeFiberConnectionLine(sleeveObj, rbObj, cableId, fiberNumber, routeIds) {
+    const sleeveCoords = sleeveObj.geometry.getCoordinates();
+    const rbCoords = rbObj.geometry.getCoordinates();
+    const sleeveUniqueId = sleeveObj.properties.get('uniqueId');
+    const key = sleeveUniqueId + '-' + cableId + '-' + fiberNumber;
+    removeOnuConnectionLineByKey(key);
+    const rbName = rbObj.properties.get('name') || 'Радиомост';
+    routeIds = resolveGponRouteIds(routeIds);
+    var points = [sleeveCoords].concat(gponRouteWaypointCoords(routeIds)).concat([rbCoords]);
+    const line = new ymaps.Polyline(points, {}, getConnectionLinePolylineOptions('#06b6d4'));
+    line.properties.set('type', 'radioBridgeFiberConnectionLine');
+    line.properties.set('connectionKey', key);
+    line.properties.set('sleeveId', sleeveUniqueId);
+    line.properties.set('cableId', cableId);
+    line.properties.set('fiberNumber', fiberNumber);
+    line.properties.set('radioBridgeName', rbName);
+    line.properties.set('routeIds', routeIds);
+    onuConnectionLines.push(line);
+    myMap.geoObjects.add(line);
+}
+
 function createOnuConnectionLine(sleeveObj, onuObj, cableId, fiberNumber, routeIds) {
     const sleeveCoords = sleeveObj.geometry.getCoordinates();
     const onuCoords = onuObj.geometry.getCoordinates();
@@ -339,6 +417,7 @@ function applyConnectionLinesVisibility() {
             oltConnectionLines: typeof oltConnectionLines !== 'undefined' ? oltConnectionLines : [],
             splitterConnectionLines: typeof splitterConnectionLines !== 'undefined' ? splitterConnectionLines : [],
             splitterOutputConnectionLines: typeof splitterOutputConnectionLines !== 'undefined' ? splitterOutputConnectionLines : [],
+            radioBridgeConnectionLines: typeof radioBridgeConnectionLines !== 'undefined' ? radioBridgeConnectionLines : [],
             nodeConnectionLines: typeof nodeConnectionLines !== 'undefined' ? nodeConnectionLines : []
         });
     }
@@ -411,6 +490,18 @@ function rebuildHostFiberConnections(obj) {
             if (!crossHasFiberForConnection(obj, cableIdParsed, fiberNumberParsed)) return;
             var mcObj = getMapObjectByUid(conn.mediaConverterId, 'mediaConverter');
             if (mcObj) createMediaConverterConnectionLine(obj, mcObj, cableIdParsed, fiberNumberParsed, conn.routeIds || []);
+        });
+    }
+    var rbConnections = obj.properties.get('radioBridgeConnections');
+    if (rbConnections) {
+        Object.keys(rbConnections).forEach(function(key) {
+            var conn = rbConnections[key];
+            var parts = key.split('-');
+            var fiberNumberParsed = parseInt(parts.pop(), 10);
+            var cableIdParsed = parts.join('-');
+            if (!crossHasFiberForConnection(obj, cableIdParsed, fiberNumberParsed)) return;
+            var rbObj = getMapObjectByUid(conn.radioBridgeId, 'radioBridge');
+            if (rbObj) createRadioBridgeFiberConnectionLine(obj, rbObj, cableIdParsed, fiberNumberParsed, conn.routeIds || []);
         });
     }
     var oltConnections = obj.properties.get('oltConnections');
@@ -493,7 +584,7 @@ function rebuildLinesThroughWaypoint(wpUid) {
         if (isFiberHostType(t)) {
             var hostUid = getObjectUniqueId(obj);
             var needsRebuild = false;
-            ['oltConnections', 'onuConnections', 'mediaConverterConnections', 'splitterConnections'].forEach(function(prop) {
+            ['oltConnections', 'onuConnections', 'mediaConverterConnections', 'radioBridgeConnections', 'splitterConnections'].forEach(function(prop) {
                 var conns = obj.properties.get(prop);
                 if (!conns) return;
                 Object.keys(conns).forEach(function(key) {
@@ -521,6 +612,27 @@ function rebuildLinesThroughWaypoint(wpUid) {
                     break;
                 }
             }
+        } else if (t === 'radioBridge') {
+            var rbHit = false;
+            if (typeof isRadioBridgePtp === 'function' && isRadioBridgePtp(obj) &&
+                connectionRouteUsesWaypoint({ routeIds: obj.properties.get('routeIds') }, wpUid)) {
+                rbHit = true;
+            }
+            if (typeof isRadioBridgeStation === 'function' && isRadioBridgeStation(obj) &&
+                connectionRouteUsesWaypoint({ routeIds: obj.properties.get('routeIds') }, wpUid)) {
+                rbHit = true;
+            }
+            if (typeof isRadioBridgeAp === 'function' && isRadioBridgeAp(obj)) {
+                (obj.properties.get('stationLinks') || []).forEach(function(link) {
+                    if (connectionRouteUsesWaypoint(link, wpUid)) rbHit = true;
+                });
+                if (typeof getApPtpPeerLinks === 'function') {
+                    getApPtpPeerLinks(obj).forEach(function(link) {
+                        if (connectionRouteUsesWaypoint(link, wpUid)) rbHit = true;
+                    });
+                }
+            }
+            if (rbHit && typeof updateRadioBridgeConnectionLines === 'function') updateRadioBridgeConnectionLines();
         }
     });
 }
@@ -540,6 +652,9 @@ function rebuildLinesTargetingEndpoint(endpointUid, endpointType) {
         } else if (endpointType === 'mediaConverter') {
             var mcC = obj.properties.get('mediaConverterConnections');
             if (mcC && Object.keys(mcC).some(function(k) { return mcC[k] && mcC[k].mediaConverterId === endpointUid; })) changed = true;
+        } else if (endpointType === 'radioBridge') {
+            var rbC = obj.properties.get('radioBridgeConnections');
+            if (rbC && Object.keys(rbC).some(function(k) { return rbC[k] && rbC[k].radioBridgeId === endpointUid; })) changed = true;
         } else if (endpointType === 'splitter') {
             var spC = obj.properties.get('splitterConnections');
             if (spC && Object.keys(spC).some(function(k) { return spC[k] && spC[k].splitterId === endpointUid; })) changed = true;
@@ -584,6 +699,10 @@ function syncConnectionLinesForObject(obj) {
         rebuildLinesTargetingEndpoint(uid, 'olt');
     } else if (type === 'mediaConverter') {
         rebuildLinesTargetingEndpoint(uid, 'mediaConverter');
+    } else if (type === 'radioBridge') {
+        rebuildLinesTargetingEndpoint(uid, 'radioBridge');
+        updateRadioBridgeConnectionLines();
+        if (typeof updateRadioBridgeCoverage === 'function') updateRadioBridgeCoverage(obj);
     } else if (type === 'node') {
         objects.forEach(function(host) {
             var ht = host.properties ? host.properties.get('type') : null;
@@ -608,7 +727,7 @@ function purgeConnectionLinesForMissingUid(uid) {
         var sid = line.properties.get('sleeveId') || line.properties.get('crossId') || line.properties.get('splitterId');
         return sid === uid;
     }
-    [nodeConnectionLines, onuConnectionLines, oltConnectionLines, splitterConnectionLines, splitterOutputConnectionLines].forEach(function(arr) {
+    [nodeConnectionLines, onuConnectionLines, oltConnectionLines, splitterConnectionLines, splitterOutputConnectionLines, radioBridgeConnectionLines].forEach(function(arr) {
         for (var i = arr.length - 1; i >= 0; i--) {
             if (lineMatches(arr[i])) {
                 myMap.geoObjects.remove(arr[i]);
@@ -647,6 +766,8 @@ function updateAllConnectionLines() {
     updateOltConnectionLines();
     updateSplitterConnectionLines();
     updateSplitterOutputConnectionLines();
+    updateRadioBridgeConnectionLines();
+    if (typeof updateAllRadioBridgeCoverages === 'function') updateAllRadioBridgeCoverages();
     applyConnectionLinesVisibility();
 }
 
@@ -1033,6 +1154,80 @@ function updateAllNodeConnectionLines() {
             const nodeObj = getMapObjectByUid(conn.nodeId, 'node');
             if (nodeObj) createNodeConnectionLine(obj, nodeObj, cableIdParsed, fiberNumberParsed);
         });
+    });
+}
+
+function createRadioBridgeConnectionLine(sourceObj, targetObj, connectionKey, routeIds) {
+    if (!sourceObj || !targetObj || !sourceObj.geometry || !targetObj.geometry) return;
+    var key = connectionKey;
+    var idx = radioBridgeConnectionLines.findIndex(function(l) { return l.properties.get('connectionKey') === key; });
+    if (idx !== -1) {
+        myMap.geoObjects.remove(radioBridgeConnectionLines[idx]);
+        radioBridgeConnectionLines.splice(idx, 1);
+    }
+    routeIds = typeof resolveGponRouteIds === 'function' ? resolveGponRouteIds(routeIds || []) : (routeIds || []);
+    var srcCoords = sourceObj.geometry.getCoordinates();
+    var tgtCoords = targetObj.geometry.getCoordinates();
+    var lineCoords = [srcCoords].concat(typeof gponRouteWaypointCoords === 'function' ? gponRouteWaypointCoords(routeIds) : []).concat([tgtCoords]);
+    var stroke = typeof RADIO_BRIDGE_LINE_COLOR !== 'undefined' ? RADIO_BRIDGE_LINE_COLOR : '#06b6d4';
+    var line = new ymaps.Polyline(lineCoords, {}, getConnectionLinePolylineOptions(stroke));
+    line.properties.set('type', 'radioBridgeConnectionLine');
+    line.properties.set('connectionKey', key);
+    line.properties.set('sourceId', getObjectUniqueId(sourceObj));
+    line.properties.set('targetId', getObjectUniqueId(targetObj));
+    line.properties.set('routeIds', routeIds);
+    radioBridgeConnectionLines.push(line);
+    myMap.geoObjects.add(line);
+}
+
+function removeRadioBridgeConnectionLine(connectionKey) {
+    if (!connectionKey) return;
+    var idx = radioBridgeConnectionLines.findIndex(function(l) { return l.properties.get('connectionKey') === connectionKey; });
+    if (idx !== -1) {
+        myMap.geoObjects.remove(radioBridgeConnectionLines[idx]);
+        radioBridgeConnectionLines.splice(idx, 1);
+    }
+}
+
+function updateRadioBridgeConnectionLines() {
+    radioBridgeConnectionLines.forEach(function(line) { myMap.geoObjects.remove(line); });
+    radioBridgeConnectionLines = [];
+    var drawnPairs = {};
+    objects.forEach(function(obj) {
+        if (!obj.properties || obj.properties.get('type') !== 'radioBridge') return;
+        var uid = getObjectUniqueId(obj);
+        if (isRadioBridgePtp(obj)) {
+            var peerId = obj.properties.get('peerBridgeId');
+            if (!peerId) return;
+            var pairKey = [uid, peerId].sort().join('|');
+            if (drawnPairs[pairKey]) return;
+            drawnPairs[pairKey] = true;
+            var peer = getMapObjectByUid(peerId, 'radioBridge');
+            if (peer) {
+                createRadioBridgeConnectionLine(obj, peer, uid + '-ptp-' + peerId, obj.properties.get('routeIds') || []);
+            }
+        } else if (isRadioBridgeAp(obj)) {
+            var links = obj.properties.get('stationLinks') || [];
+            links.forEach(function(link) {
+                if (!link || !link.stationId) return;
+                var station = getMapObjectByUid(link.stationId, 'radioBridge');
+                if (station) createRadioBridgeConnectionLine(obj, station, uid + '-ptmp-' + link.stationId, link.routeIds || []);
+            });
+            if (typeof getApPtpPeerLinks === 'function') {
+                getApPtpPeerLinks(obj).forEach(function(link) {
+                    if (!link || !link.peerId) return;
+                    var ptpPeer = getMapObjectByUid(link.peerId, 'radioBridge');
+                    if (!ptpPeer) return;
+                    var apPairKey = [uid, link.peerId].sort().join('|');
+                    if (drawnPairs[apPairKey]) return;
+                    drawnPairs[apPairKey] = true;
+                    var routeIds = (link.routeIds && link.routeIds.length)
+                        ? link.routeIds
+                        : (ptpPeer.properties.get('routeIds') || []);
+                    createRadioBridgeConnectionLine(ptpPeer, obj, link.peerId + '-ptp-' + uid, routeIds);
+                });
+            }
+        }
     });
 }
 

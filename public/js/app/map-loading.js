@@ -67,6 +67,7 @@ function resetMapConnectionLineCaches() {
     oltConnectionLines = [];
     splitterConnectionLines = [];
     splitterOutputConnectionLines = [];
+    radioBridgeConnectionLines = [];
 }
 
 function setMapLoadingOverlayText(text) {

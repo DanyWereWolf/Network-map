@@ -146,6 +146,11 @@ function handleMapClick(e) {
     window.lastMapClickCoords = coords;
 
     const target = e.get('target');
+    if (radioBridgeRoutingMode && radioBridgeRoutingData) {
+        if (Date.now() < placementPanBlockClickUntil) return;
+        handleRadioBridgeRoutingClick(coords);
+        return;
+    }
     if (cableSplitMode && cableSplitData) {
         handleCableSplitMapClick(coords, resolveCableFromMapTarget(target));
         return;
@@ -515,6 +520,26 @@ function handleMapMouseMove(e) {
         });
     }
     
+    if (radioBridgeRoutingMode && radioBridgeRoutingData && mapCoords) {
+        if (mapMouseMoveRafId != null) cancelAnimationFrame(mapMouseMoveRafId);
+        var rbCoords = mapCoords;
+        mapMouseMoveRafId = requestAnimationFrame(function() {
+            mapMouseMoveRafId = null;
+            var snapObj = findObjectAtCoords(rbCoords);
+            var previewCoords = rbCoords;
+            if (snapObj) {
+                var t = snapObj.properties.get('type');
+                var sid = getObjectUniqueId(snapObj);
+                if (t === 'support' || t === 'attachment' ||
+                    sid === radioBridgeRoutingData.targetId ||
+                    sid === getObjectUniqueId(radioBridgeRoutingData.sourceBridge)) {
+                    previewCoords = snapObj.geometry.getCoordinates();
+                }
+            }
+            updateRadioBridgePreviewWithCursor(previewCoords);
+        });
+    }
+
     if (fiberRoutingMode && fiberRoutingData && mapCoords) {
         if (mapMouseMoveRafId != null) cancelAnimationFrame(mapMouseMoveRafId);
         var coords = mapCoords;

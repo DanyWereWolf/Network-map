@@ -34,6 +34,7 @@ function createObject(type, name, coords, options = {}) {
         case 'onu': balloonContent = name ? 'ONU: ' + name : 'ONU'; break;
         case 'camera': balloonContent = name ? 'Камера: ' + name : 'Камера'; break;
         case 'mediaConverter': balloonContent = name ? 'Медиаконвертер: ' + name : 'Медиаконвертер'; break;
+        case 'radioBridge': balloonContent = name ? 'Wi‑Fi радиомост: ' + name : 'Wi‑Fi радиомост'; break;
         case 'switch': balloonContent = name ? 'Коммутатор: ' + name : 'Коммутатор'; break;
         default: balloonContent = 'Объект';
     }
@@ -135,6 +136,32 @@ function createObject(type, name, coords, options = {}) {
         placemarkProperties.comment = options.comment || '';
         placemarkProperties.incomingFiber = null;
     }
+    if (type === 'radioBridge') {
+        var rbMode = options.bridgeMode === 'ptmp' ? 'ptmp' : 'ptp';
+        placemarkProperties.bridgeMode = rbMode;
+        placemarkProperties.role = rbMode === 'ptp'
+            ? 'ptp'
+            : ((options.role === 'ap') ? 'ap' : 'station');
+        if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
+        if (options.model) placemarkProperties.model = options.model;
+        placemarkProperties.comment = options.comment || '';
+        placemarkProperties.peerBridgeId = null;
+        placemarkProperties.peerBridgeName = null;
+        placemarkProperties.routeIds = [];
+        placemarkProperties.stationLinks = [];
+        placemarkProperties.ptpPeerLinks = [];
+        placemarkProperties.apBridgeId = null;
+        placemarkProperties.apBridgeName = null;
+        placemarkProperties.ptpPeerId = null;
+        placemarkProperties.ptpPeerName = null;
+        placemarkProperties.incomingFiber = null;
+        placemarkProperties.showCoverage = false;
+        placemarkProperties.coverageShape = 'circle';
+        placemarkProperties.coverageRadiusKm = 3;
+        placemarkProperties.coverageLengthKm = 3;
+        placemarkProperties.coverageAzimuth = 0;
+        placemarkProperties.coverageAngle = 60;
+    }
     if (type === 'signalPost') {
         placemarkProperties.comment = options.comment || '';
     }
@@ -188,6 +215,11 @@ function createObject(type, name, coords, options = {}) {
                 var cabCoords = placemark.geometry && placemark.geometry.getCoordinates();
                 if (cabCoords) placeObjectAtCoords(cabCoords);
             }
+            return;
+        }
+
+        if (radioBridgeRoutingMode && typeof handleRadioBridgeRoutingPlacemarkClick === 'function' &&
+            handleRadioBridgeRoutingPlacemarkClick(placemark, type)) {
             return;
         }
 
@@ -270,8 +302,8 @@ function createObject(type, name, coords, options = {}) {
             }
             var cableTypeVal = getEffectiveCableLayingType();
             if (handleCopperCablePlacemarkStep(placemark, type, cableTypeVal)) return;
-            if (type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter') {
-                showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU, камеры или медиаконвертера. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
+            if (type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'radioBridge') {
+                showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU, камеры, медиаконвертера или радиомоста. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
                 return;
             }
             if (cableUndergroundActive) {
@@ -346,7 +378,7 @@ function createObject(type, name, coords, options = {}) {
             return;
         }
 
-        if ((type === 'node' || isSleeveLikeHostType(type) || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'switch')) {
+        if ((type === 'node' || isSleeveLikeHostType(type) || type === 'cross' || type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'radioBridge' || type === 'switch')) {
             showObjectInfo(placemark);
             return;
         }

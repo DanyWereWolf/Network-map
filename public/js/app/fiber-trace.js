@@ -1930,6 +1930,7 @@ let onuConnectionLines = [];
 let oltConnectionLines = [];
 let splitterConnectionLines = [];
 let splitterOutputConnectionLines = [];
+let radioBridgeConnectionLines = [];
 
 let nodeSelectionModalData = null;
 let onuSelectionModalData = null;
@@ -2183,10 +2184,25 @@ function setFiberTargetSelectionModalMode(mode) {
     var title = modal.querySelector('.group-balloon-title');
     var labels = modal.querySelectorAll('.modal-body .form-group > label');
     var searchInput = document.getElementById('onuSearchInput');
-    if (title) title.textContent = mode === 'mediaConverter' ? 'Подключение жилы к медиаконвертеру' : 'Подключение жилы к ONU';
-    if (labels[0]) labels[0].textContent = mode === 'mediaConverter' ? 'Поиск медиаконвертера' : 'Поиск ONU';
-    if (labels[1]) labels[1].textContent = mode === 'mediaConverter' ? 'Выберите медиаконвертер' : 'Выберите ONU';
-    if (searchInput) searchInput.placeholder = mode === 'mediaConverter' ? 'Введите название медиаконвертера...' : 'Введите имя ONU...';
+    var titleText = 'Подключение жилы к ONU';
+    var searchLabel = 'Поиск ONU';
+    var listLabel = 'Выберите ONU';
+    var placeholder = 'Введите имя ONU...';
+    if (mode === 'mediaConverter') {
+        titleText = 'Подключение жилы к медиаконвертеру';
+        searchLabel = 'Поиск медиаконвертера';
+        listLabel = 'Выберите медиаконвертер';
+        placeholder = 'Введите название медиаконвертера...';
+    } else if (mode === 'radioBridge') {
+        titleText = 'Подключение жилы к радиомосту';
+        searchLabel = 'Поиск радиомоста';
+        listLabel = 'Выберите радиомост';
+        placeholder = 'Введите название радиомоста...';
+    }
+    if (title) title.textContent = titleText;
+    if (labels[0]) labels[0].textContent = searchLabel;
+    if (labels[1]) labels[1].textContent = listLabel;
+    if (searchInput) searchInput.placeholder = placeholder;
 }
 
 function showOnuSelectionDialog(sleeveObj, cableId, fiberNumber) {
@@ -2202,6 +2218,11 @@ function showOnuSelectionDialog(sleeveObj, cableId, fiberNumber) {
     var existingMc = getHostAssignment(sleeveObj, 'mediaConverterConnections', cableId, fiberNumber);
     if (existingMc && existingMc.mediaConverterId) {
         showWarning('Жила уже подключена к медиаконвертеру.', 'Жила занята');
+        return;
+    }
+    var existingRbOnu = getHostAssignment(sleeveObj, 'radioBridgeConnections', cableId, fiberNumber);
+    if (existingRbOnu && existingRbOnu.radioBridgeId) {
+        showWarning('Жила уже подключена к радиомосту.', 'Жила занята');
         return;
     }
     const onus = getAvailableOnus();
@@ -2244,6 +2265,11 @@ function showMediaConverterSelectionDialog(sleeveObj, cableId, fiberNumber) {
         showWarning('Жила уже подключена к ONU.', 'Жила занята');
         return;
     }
+    var existingRbDlg = getHostAssignment(sleeveObj, 'radioBridgeConnections', cableId, fiberNumber);
+    if (existingRbDlg && existingRbDlg.radioBridgeId) {
+        showWarning('Жила уже подключена к радиомосту.', 'Жила занята');
+        return;
+    }
     const mcs = getAvailableMediaConverters();
     if (mcs.length === 0) {
         showWarning('Нет доступных медиаконвертеров. Сначала создайте медиаконвертер на карте.', 'Нет медиаконвертеров');
@@ -2261,6 +2287,47 @@ function showMediaConverterSelectionDialog(sleeveObj, cableId, fiberNumber) {
     setTimeout(function() { if (searchInput) searchInput.focus(); }, 100);
 }
 
+function showRadioBridgeSelectionDialog(sleeveObj, cableId, fiberNumber) {
+    const placeId = sleeveObj.properties.get('uniqueId');
+    const stRbDlg = sleeveObj.properties.get('type');
+    const usageOptsRbDlg = isCrossLikeHostType(stRbDlg) ? { atCrossId: placeId } : { atSleeveId: placeId };
+    const usage = getFiberUsage(cableId, fiberNumber, usageOptsRbDlg);
+    if (usage.used) {
+        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
+        return;
+    }
+    var existingRbDlg = getHostAssignment(sleeveObj, 'radioBridgeConnections', cableId, fiberNumber);
+    if (existingRbDlg && existingRbDlg.radioBridgeId) {
+        showWarning('Жила уже подключена к радиомосту.', 'Жила занята');
+        return;
+    }
+    var existingMcDlg = getHostAssignment(sleeveObj, 'mediaConverterConnections', cableId, fiberNumber);
+    if (existingMcDlg && existingMcDlg.mediaConverterId) {
+        showWarning('Жила уже подключена к медиаконвертеру.', 'Жила занята');
+        return;
+    }
+    var existingOnuDlg = getHostAssignment(sleeveObj, 'onuConnections', cableId, fiberNumber);
+    if (existingOnuDlg && existingOnuDlg.onuId) {
+        showWarning('Жила уже подключена к ONU.', 'Жила занята');
+        return;
+    }
+    const rbs = typeof getAvailableRadioBridges === 'function' ? getAvailableRadioBridges() : [];
+    if (rbs.length === 0) {
+        showWarning('Нет доступных радиомостов. Сначала создайте радиомост на карте.', 'Нет радиомостов');
+        return;
+    }
+    onuSelectionModalData = { mode: 'radioBridge', sleeveObj: sleeveObj, cableId: cableId, fiberNumber: fiberNumber, targets: rbs };
+    const modal = document.getElementById('onuSelectionModal');
+    const fiberInfo = document.getElementById('onuSelectionFiberInfo');
+    const searchInput = document.getElementById('onuSearchInput');
+    setFiberTargetSelectionModalMode('radioBridge');
+    if (fiberInfo) fiberInfo.textContent = 'Подключение жилы #' + fiberNumber + ' к радиомосту';
+    if (searchInput) searchInput.value = '';
+    renderOnuList('');
+    if (modal) modal.style.display = 'block';
+    setTimeout(function() { if (searchInput) searchInput.focus(); }, 100);
+}
+
 function renderOnuList(searchQuery) {
     if (!onuSelectionModalData) return;
     const mode = onuSelectionModalData.mode || 'onu';
@@ -2268,17 +2335,21 @@ function renderOnuList(searchQuery) {
     const container = document.getElementById('onuListContainer');
     if (!container) return;
     if (targets.length === 0) {
-        container.innerHTML = '<div class="node-list-empty"><p>' + (mode === 'mediaConverter' ? 'Нет доступных медиаконвертеров' : 'Нет доступных ONU') + '</p></div>';
+        var emptyMsg = 'Нет доступных ONU';
+        if (mode === 'mediaConverter') emptyMsg = 'Нет доступных медиаконвертеров';
+        if (mode === 'radioBridge') emptyMsg = 'Нет доступных радиомостов';
+        container.innerHTML = '<div class="node-list-empty"><p>' + emptyMsg + '</p></div>';
         return;
     }
     const query = (searchQuery || '').toLowerCase().trim();
-    const defaultName = mode === 'mediaConverter' ? 'Медиаконвертер' : 'ONU';
+    const defaultName = mode === 'mediaConverter' ? 'Медиаконвертер' : (mode === 'radioBridge' ? 'Радиомост' : 'ONU');
     const filtered = query ? targets.filter(function(o) {
         var name = (o.properties.get('name') || defaultName).toLowerCase();
         return name.indexOf(query) !== -1;
     }) : targets;
     if (filtered.length === 0) {
-        container.innerHTML = '<div class="node-list-no-results">' + (mode === 'mediaConverter' ? 'Медиаконвертеры не найдены по запросу' : 'ONU не найдены по запросу') + '</div>';
+        var noResMsg = mode === 'mediaConverter' ? 'Медиаконвертеры не найдены по запросу' : (mode === 'radioBridge' ? 'Радиомосты не найдены по запросу' : 'ONU не найдены по запросу');
+        container.innerHTML = '<div class="node-list-no-results">' + noResMsg + '</div>';
         return;
     }
     var html = '';
@@ -2302,6 +2373,8 @@ function selectOnuFromList(onuIndex) {
     if (infoModal) infoModal.style.display = 'none';
     if (mode === 'mediaConverter') {
         startFiberRouting(data.sleeveObj, data.cableId, data.fiberNumber, 'mediaConverter', targets[onuIndex]);
+    } else if (mode === 'radioBridge') {
+        startFiberRouting(data.sleeveObj, data.cableId, data.fiberNumber, 'radioBridge', targets[onuIndex]);
     } else if (mode === 'splitterOutputMc') {
         var spFacade = resolveSplitterObject(data.splitterId);
         if (spFacade) {

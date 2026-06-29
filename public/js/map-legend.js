@@ -17,6 +17,7 @@
     var FIBER_ROUTE_LEGEND = [
         { color: '#22c55e', label: 'Кросс / муфта → узел или ONU', tag: 'жила' },
         { color: '#0ea5e9', label: 'Кросс / муфта → OLT', tag: 'жила' },
+        { color: '#06b6d4', label: 'Wi‑Fi радиомост (P2P / P2MP)', tag: 'радио' },
         { color: '#14b8a6', label: 'Кросс / муфта → медиаконвертер', tag: 'жила' },
         { color: '#3b82f6', label: 'Кросс / муфта → сплиттер (вход)', tag: 'жила' },
         { color: '#a855f7', label: 'Сплиттер → ONU (выход)', tag: 'выход' },

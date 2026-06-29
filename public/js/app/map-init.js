@@ -115,6 +115,9 @@ function setupEventListeners() {
         if (splitterFiberRoutingMode) {
             cancelSplitterFiberRouting();
         }
+        if (radioBridgeRoutingMode && typeof cancelRadioBridgeRouting === 'function') {
+            cancelRadioBridgeRouting();
+        }
         
         if (fiberRoutingMode) {
             cancelFiberRouting();
@@ -255,6 +258,7 @@ function setupEventListeners() {
                 }
             }
             if (splitterFiberRoutingMode) { cancelSplitterFiberRouting(); showInfo('Прокладка жилы отменена.', 'Отмена'); e.preventDefault(); return; }
+            if (radioBridgeRoutingMode && typeof cancelRadioBridgeRouting === 'function') { cancelRadioBridgeRouting(); showInfo('Прокладка радиолинка отменена.', 'Отмена'); e.preventDefault(); return; }
             if (fiberRoutingMode) { cancelFiberRouting(); showInfo('Прокладка жилы отменена.', 'Отмена'); e.preventDefault(); return; }
             if (cableSplitMode) { cancelCableSplitMode(); showInfo('Установка муфты отменена.', 'Отмена'); e.preventDefault(); return; }
             if (objectPlacementMode) { cancelObjectPlacement(); e.preventDefault(); return; }
@@ -297,7 +301,7 @@ function setupEventListeners() {
             const splitterSettingsGroup = document.getElementById('splitterSettingsGroup');
             const type = this.value;
 
-            const showName = ['node', 'cross', 'sleeve', 'support', 'attachment', 'manhole', 'signalPost', 'cabinet', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter'].indexOf(type) !== -1;
+            const showName = ['node', 'cross', 'sleeve', 'support', 'attachment', 'manhole', 'signalPost', 'cabinet', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter', 'radioBridge'].indexOf(type) !== -1;
             if (nameInputGroup) nameInputGroup.style.display = showName ? 'block' : 'none';
             if (sleeveSettingsGroup) sleeveSettingsGroup.style.display = type === 'sleeve' ? 'block' : 'none';
             if (crossSettingsGroup) crossSettingsGroup.style.display = type === 'cross' ? 'block' : 'none';
@@ -310,12 +314,19 @@ function setupEventListeners() {
             if (cameraSettingsGroup) cameraSettingsGroup.style.display = type === 'camera' ? 'block' : 'none';
             const mediaConverterSettingsGroup = document.getElementById('mediaConverterSettingsGroup');
             if (mediaConverterSettingsGroup) mediaConverterSettingsGroup.style.display = type === 'mediaConverter' ? 'block' : 'none';
+            const radioBridgeSettingsGroup = document.getElementById('radioBridgeSettingsGroup');
+            if (radioBridgeSettingsGroup) radioBridgeSettingsGroup.style.display = type === 'radioBridge' ? 'block' : 'none';
+            const radioBridgeRoleGroup = document.getElementById('radioBridgeRoleGroup');
+            const radioBridgeModeEl = document.getElementById('radioBridgeMode');
+            if (radioBridgeRoleGroup && radioBridgeModeEl) {
+                radioBridgeRoleGroup.style.display = (type === 'radioBridge' && radioBridgeModeEl.value === 'ptmp') ? 'block' : 'none';
+            }
             const cabinetSettingsGroup = document.getElementById('cabinetSettingsGroup');
             if (cabinetSettingsGroup) cabinetSettingsGroup.style.display = type === 'cabinet' ? 'block' : 'none';
             if (nameInputGroup) {
                 const nameLabel = nameInputGroup.querySelector('label');
                 if (nameLabel) {
-                    const labels = { cross: 'Имя кросса', sleeve: 'Название муфты', support: 'Подпись опоры', attachment: 'Название', manhole: 'Название колодца', signalPost: 'Подпись столба', cabinet: 'Название ящика', node: 'Имя узла', olt: 'Имя OLT', splitter: 'Имя сплиттера', onu: 'Имя ONU', camera: 'Имя камеры', mediaConverter: 'Название медиаконвертера' };
+                    const labels = { cross: 'Имя кросса', sleeve: 'Название муфты', support: 'Подпись опоры', attachment: 'Название', manhole: 'Название колодца', signalPost: 'Подпись столба', cabinet: 'Название ящика', node: 'Имя узла', olt: 'Имя OLT', splitter: 'Имя сплиттера', onu: 'Имя ONU', camera: 'Имя камеры', mediaConverter: 'Название медиаконвертера', radioBridge: 'Название радиомоста' };
                     nameLabel.textContent = labels[type] || 'Имя';
                 }
             }
@@ -324,7 +335,7 @@ function setupEventListeners() {
             const newType = this.value;
             currentPlacementType = newType;
             
-            if (['node', 'cross', 'sleeve', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter'].indexOf(newType) !== -1) {
+            if (['node', 'cross', 'sleeve', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter', 'radioBridge'].indexOf(newType) !== -1) {
                 const nameInput = document.getElementById('objectName');
                 currentPlacementName = nameInput ? nameInput.value.trim() : '';
             } else {
@@ -335,14 +346,15 @@ function setupEventListeners() {
                 const nodeKindSelect = document.getElementById('nodeKind');
                 currentPlacementNodeKind = nodeKindSelect ? nodeKindSelect.value : 'network';
             }
-            if (['olt', 'onu', 'camera', 'mediaConverter', 'cabinet'].indexOf(newType) !== -1) {
+            if (['olt', 'onu', 'camera', 'mediaConverter', 'radioBridge', 'cabinet'].indexOf(newType) !== -1) {
                 populateDeviceDatalists();
-                var mInp = newType === 'olt' ? document.getElementById('oltManufacturer') : (newType === 'onu' ? document.getElementById('onuManufacturer') : (newType === 'camera' ? document.getElementById('cameraManufacturer') : (newType === 'cabinet' ? document.getElementById('cabinetManufacturer') : document.getElementById('mediaConverterManufacturer'))));
+                var mInp = newType === 'olt' ? document.getElementById('oltManufacturer') : (newType === 'onu' ? document.getElementById('onuManufacturer') : (newType === 'camera' ? document.getElementById('cameraManufacturer') : (newType === 'cabinet' ? document.getElementById('cabinetManufacturer') : (newType === 'radioBridge' ? document.getElementById('radioBridgeManufacturer') : document.getElementById('mediaConverterManufacturer')))));
                 var cat = 'node';
                 if (newType === 'camera') cat = 'camera';
                 else if (newType === 'olt') cat = 'olt';
                 else if (newType === 'onu') cat = 'onu';
                 else if (newType === 'cabinet') cat = 'cabinet';
+                else if (newType === 'radioBridge') cat = 'radioBridge';
                 populateModelDatalistForManufacturer(mInp ? mInp.value.trim() : '', 'deviceModelsList', cat);
             }
         }
@@ -354,7 +366,7 @@ function setupEventListeners() {
     if (objectNameInput) {
         objectNameInput.addEventListener('input', function() {
             if (!objectPlacementMode || !currentPlacementType) return;
-            var typesWithPlacementName = ['node', 'cross', 'sleeve', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter'];
+            var typesWithPlacementName = ['node', 'cross', 'sleeve', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter', 'radioBridge'];
             if (typesWithPlacementName.indexOf(currentPlacementType) !== -1) {
                 currentPlacementName = this.value.trim();
             }
@@ -383,7 +395,17 @@ function setupEventListeners() {
     setupDeviceManufacturerChangeHandlers('onuManufacturer', 'onu');
     setupDeviceManufacturerChangeHandlers('cameraManufacturer', 'camera');
     setupDeviceManufacturerChangeHandlers('mediaConverterManufacturer', 'node');
+    setupDeviceManufacturerChangeHandlers('radioBridgeManufacturer', 'radioBridge');
     setupDeviceManufacturerChangeHandlers('cabinetManufacturer', 'cabinet');
+
+    var radioBridgeModeSelect = document.getElementById('radioBridgeMode');
+    if (radioBridgeModeSelect && !radioBridgeModeSelect._rbModeBound) {
+        radioBridgeModeSelect._rbModeBound = true;
+        radioBridgeModeSelect.addEventListener('change', function() {
+            var roleGroup = document.getElementById('radioBridgeRoleGroup');
+            if (roleGroup) roleGroup.style.display = this.value === 'ptmp' ? 'block' : 'none';
+        });
+    }
 
     function preventPasswordSuggestions(inputEl) {
         if (!inputEl || inputEl.tagName !== 'INPUT') return;

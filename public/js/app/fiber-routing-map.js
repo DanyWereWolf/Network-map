@@ -396,6 +396,9 @@ function completeFiberRouting() {
     } else if (data.targetType === 'mediaConverter') {
         connectFiberToMediaConverterWithRoute(data.sleeveObj, data.cableId, data.fiberNumber, data.targetObj, routeIds);
         refreshedUi = true;
+    } else if (data.targetType === 'radioBridge') {
+        connectFiberToRadioBridgeWithRoute(data.sleeveObj, data.cableId, data.fiberNumber, data.targetObj, routeIds);
+        refreshedUi = true;
     } else if (data.targetType === 'splitter') {
         if (connectFiberToSplitterWithRoute(data.sleeveObj, data.cableId, data.fiberNumber, data.targetObj, routeIds)) {
             refreshSplitterUiAfterChange(data.targetObj);

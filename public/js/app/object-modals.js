@@ -530,7 +530,7 @@ function removeAttachedSwitchFromNode(node, switchId) {
 }
 
 function isCopperLanEndDeviceType(t) {
-    return t === 'camera' || t === 'mediaConverter';
+    return t === 'camera' || t === 'mediaConverter' || t === 'radioBridge';
 }
 
 function cameraHasCopperCable(camObj) {
@@ -1627,6 +1627,7 @@ function startCopperCableFromMediaConverter(mcObj) {
     if (objectPlacementMode && typeof cancelObjectPlacement === 'function') cancelObjectPlacement();
     if (splitterFiberRoutingMode && typeof cancelSplitterFiberRouting === 'function') cancelSplitterFiberRouting();
     if (fiberRoutingMode && typeof cancelFiberRouting === 'function') cancelFiberRouting();
+    if (radioBridgeRoutingMode && typeof cancelRadioBridgeRouting === 'function') cancelRadioBridgeRouting();
     if (!currentCableTool) {
         var cableBtnMc = document.getElementById('addCable');
         if (cableBtnMc) cableBtnMc.click();
@@ -1646,6 +1647,43 @@ function startCopperCableFromMediaConverter(mcObj) {
     currentModalObject = null;
     if (typeof showInfo === 'function') {
         showInfo('Укажите на карте второй конец: узел сети с коммутатором, отдельный коммутатор или камера. Опоры и крепления — только промежуточные точки.', 'Медный кабель');
+    }
+}
+
+function startCopperCableFromRadioBridge(rbObj) {
+    if (!isEditMode || !rbObj || !rbObj.properties || rbObj.properties.get('type') !== 'radioBridge') return;
+    var inc = rbObj.properties.get('incomingFiber');
+    if (!inc || !inc.cableId) {
+        if (typeof showError === 'function') showError('Сначала подключите оптическую жилу к радиомосту с кросса или муфты.', 'Нет входной жилы');
+        return;
+    }
+    if (cameraHasCopperCable(rbObj)) {
+        if (typeof showError === 'function') showError('К этому радиомосту уже подключён медный кабель.', 'Подключение');
+        return;
+    }
+    if (objectPlacementMode && typeof cancelObjectPlacement === 'function') cancelObjectPlacement();
+    if (splitterFiberRoutingMode && typeof cancelSplitterFiberRouting === 'function') cancelSplitterFiberRouting();
+    if (fiberRoutingMode && typeof cancelFiberRouting === 'function') cancelFiberRouting();
+    if (radioBridgeRoutingMode && typeof cancelRadioBridgeRouting === 'function') cancelRadioBridgeRouting();
+    if (!currentCableTool) {
+        var cableBtnRb = document.getElementById('addCable');
+        if (cableBtnRb) cableBtnRb.click();
+    }
+    copperCableLayingActive = true;
+    if (typeof syncCableTypePickerUI === 'function') syncCableTypePickerUI();
+    pendingCopperPortPreset = null;
+    cableSource = rbObj;
+    cableSourceCopperSwitchId = null;
+    cableWaypoints = [];
+    if (typeof removePhantomPlacemark === 'function') removePhantomPlacemark();
+    if (typeof removeCablePreview === 'function') removeCablePreview();
+    if (typeof clearSelection === 'function') clearSelection();
+    if (typeof selectObject === 'function') selectObject(cableSource);
+    var modalRb = document.getElementById('infoModal');
+    if (modalRb) modalRb.style.display = 'none';
+    currentModalObject = null;
+    if (typeof showInfo === 'function') {
+        showInfo('Укажите на карте второй конец: узел сети с коммутатором или отдельный коммутатор. Опоры и крепления — только промежуточные точки.', 'Медный кабель');
     }
 }
 
@@ -1934,6 +1972,7 @@ var INFO_MODAL_DEVICE_SUBTITLES = {
     olt: 'GPON · приход и порты',
     onu: 'Подключение по оптике',
     mediaConverter: 'Оптика и медь к коммутатору',
+    radioBridge: 'P2P и P2MP · радиолинки на карте',
     signalPost: 'Метка на карте · комментарий',
     cabinet: 'Контейнер оборудования · документация и состав',
     spliceCassette: 'Сращивания волокон · в ящике',
@@ -2113,6 +2152,9 @@ function showCableInfo(cable) {
     if (cableSplitSuppressInfoUntil && Date.now() < cableSplitSuppressInfoUntil) {
         return;
     }
+    if (radioBridgeRoutingMode && radioBridgeRoutingData) {
+        return;
+    }
     if (cableSplitMode && cableSplitData) {
         if (cable && cable.geometry) {
             var splitCoords = null;
@@ -2201,6 +2243,7 @@ function showCableInfoBody(cable) {
         else if (type === 'splitter') { typeName = 'Сплиттер'; icon = '🔀'; }
         else if (type === 'camera') { typeName = 'Камера'; icon = '📷'; }
         else if (type === 'mediaConverter') { typeName = 'Медиаконвертер'; icon = '⇄'; }
+        else if (type === 'radioBridge') { typeName = 'Wi‑Fi радиомост'; icon = '◎'; }
         return { type: typeName, name, icon };
     };
     
@@ -2621,7 +2664,8 @@ var STATS_ICON_CONFIG = {
     splitter: { type: 'splitter' },
     onu: { type: 'onu' },
     camera: { type: 'camera', cameraOnline: true },
-    mediaConverter: { type: 'mediaConverter' }
+    mediaConverter: { type: 'mediaConverter' },
+    radioBridge: { type: 'radioBridge' }
 };
 
 var STATS_CABLE_ICON_SVG = {
@@ -2683,6 +2727,7 @@ function updateStats() {
     var onuCount = 0;
     var cameraCount = 0;
     var mediaConverterCount = 0;
+    var radioBridgeCount = 0;
     var switchCount = 0;
     var cableOpticalCount = 0;
     var cableCopperCount = 0;
@@ -2712,6 +2757,7 @@ function updateStats() {
         else if (type === 'onu') onuCount++;
         else if (type === 'camera') cameraCount++;
         else if (type === 'mediaConverter') mediaConverterCount++;
+        else if (type === 'radioBridge') radioBridgeCount++;
         else if (type === 'switch') switchCount++;
         else if (type === 'cable') {
             if (typeof isCopperCableType === 'function' && isCopperCableType(obj.properties.get('cableType'))) {
@@ -2738,13 +2784,14 @@ function updateStats() {
     setStatCount(document.getElementById('onuCount'), onuCount);
     setStatCount(document.getElementById('cameraCount'), cameraCount);
     setStatCount(document.getElementById('mediaConverterCount'), mediaConverterCount);
+    setStatCount(document.getElementById('radioBridgeCount'), radioBridgeCount);
     setStatCount(document.getElementById('cableOpticalCount'), cableOpticalCount);
     setStatCount(document.getElementById('cableCopperCount'), cableCopperCount);
 
     var sumNodes = networkNodeCount + aggregationNodeCount + switchCount;
     var sumInfra = supportCount + attachmentCount + manholeCount + signalPostCount + cabinetCount + sleeveCount + spliceCassetteCount + crossCount;
     var sumGpon = oltCount + splitterCount + onuCount;
-    var sumEquip = cameraCount + mediaConverterCount;
+    var sumEquip = cameraCount + mediaConverterCount + radioBridgeCount;
     var sumCables = cableOpticalCount + cableCopperCount;
 
     setStatsGroupSum('statsSumNodes', sumNodes);
@@ -2785,8 +2832,15 @@ function showObjectInfo(obj) {
         showObjectInfo(obj._host);
         return;
     }
+    if (radioBridgeRoutingMode && radioBridgeRoutingData && obj) {
+        var rbTypeEarly = obj.properties ? obj.properties.get('type') : null;
+        if (typeof handleRadioBridgeRoutingPlacemarkClick === 'function' &&
+            handleRadioBridgeRoutingPlacemarkClick(obj, rbTypeEarly)) {
+            return;
+        }
+    }
     var objType = obj && obj.properties ? obj.properties.get('type') : '';
-    if (['node', 'olt', 'onu', 'camera', 'mediaConverter'].indexOf(objType) !== -1) {
+    if (['node', 'olt', 'onu', 'camera', 'mediaConverter', 'radioBridge'].indexOf(objType) !== -1) {
         if (typeof populateDeviceDatalists === 'function') populateDeviceDatalists();
         if (objType !== 'node') {
             var mfr = obj.properties.get('manufacturer') || '';
@@ -2794,6 +2848,7 @@ function showObjectInfo(obj) {
                 var cat = 'node';
                 if (objType === 'camera') cat = 'camera';
                 else if (objType === 'mediaConverter') cat = 'node';
+                else if (objType === 'radioBridge') cat = 'radioBridge';
                 else if (objType === 'olt') cat = 'olt';
                 else if (objType === 'onu') cat = 'onu';
                 populateModelDatalistForManufacturer(mfr, 'deviceModelsList', cat);
@@ -2913,6 +2968,8 @@ function showObjectInfoBody(obj) {
         title = name ? `Камера: ${name}` : 'Камера';
     } else if (type === 'mediaConverter') {
         title = name ? `Медиаконвертер: ${name}` : 'Медиаконвертер';
+    } else if (type === 'radioBridge') {
+        title = name ? `Wi‑Fi радиомост: ${name}` : 'Wi‑Fi радиомост';
     } else {
         title = 'Объект';
     }
@@ -3145,6 +3202,10 @@ function showObjectInfoBody(obj) {
         html += '</div>';
     }
 
+    if (type === 'radioBridge' && typeof buildRadioBridgeCardContent === 'function') {
+        html += buildRadioBridgeCardContent(obj, modalIsEditMode(), name);
+    }
+
     if (type === 'sleeve' && !fiberUsesWorkspace) {
         const storedSleeveType = obj.properties.get('sleeveType');
         const sleeveTypeLabel = storedSleeveType ? (typeof getSleeveTypeSelectOptionsHtml === 'function' ? storedSleeveType : String(storedSleeveType)) : 'Не указан';
@@ -3217,7 +3278,7 @@ function showObjectInfoBody(obj) {
     }
 
     if (type !== 'node' && type !== 'olt' && type !== 'camera') {
-        if (['splitter', 'onu', 'mediaConverter', 'switch'].indexOf(type) !== -1) {
+        if (['splitter', 'onu', 'mediaConverter', 'radioBridge', 'switch'].indexOf(type) !== -1) {
             html += buildObjectCoordsSectionHtml(obj);
         }
         var galleryOpts = fiberUsesWorkspace ? { compact: true } : undefined;
@@ -3234,7 +3295,7 @@ function showObjectInfoBody(obj) {
                 '</div>';
     }
 
-    if (type !== 'camera' && type !== 'olt' && type !== 'node' && !(type === 'splitter' && obj._embedded) &&
+    if (type !== 'camera' && type !== 'olt' && type !== 'node' && type !== 'radioBridge' && !(type === 'splitter' && obj._embedded) &&
         !(type === 'spliceCassette' && !fiberUsesWorkspace)) {
     if (connectedCables.length === 0) {
         const noCablesText = 'К этому объекту не подключено кабелей';
@@ -3686,6 +3747,13 @@ function buildSupportCardContent(supportObj, isEditMode) {
 }
 
 function showSupportInfo(supportObj) {
+    if (radioBridgeRoutingMode && radioBridgeRoutingData && supportObj) {
+        var rbType = supportObj.properties ? supportObj.properties.get('type') : null;
+        if (typeof handleRadioBridgeRoutingPlacemarkClick === 'function' &&
+            handleRadioBridgeRoutingPlacemarkClick(supportObj, rbType)) {
+            return;
+        }
+    }
     applyModalEditModeForObject(supportObj, function() {
         showSupportInfoBody(supportObj);
     });
@@ -3913,6 +3981,39 @@ function setupEditAndDeleteListeners() {
     }
     var editMediaConverterComment = document.getElementById('editMediaConverterComment');
     if (editMediaConverterComment) editMediaConverterComment.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'mediaConverter') { currentModalObject.properties.set('comment', this.value || ''); saveData(); } });
+
+    var editRadioBridgeName = document.getElementById('editRadioBridgeName');
+    if (editRadioBridgeName) editRadioBridgeName.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'radioBridge') applyRadioBridgeNameChange(this.value); });
+    var editRadioBridgeMode = document.getElementById('editRadioBridgeMode');
+    if (editRadioBridgeMode) editRadioBridgeMode.addEventListener('change', function() {
+        if (!currentModalObject || currentModalObject.properties.get('type') !== 'radioBridge' || isRadioBridgeLinked(currentModalObject)) return;
+        var mode = this.value === 'ptmp' ? 'ptmp' : 'ptp';
+        currentModalObject.properties.set('bridgeMode', mode);
+        currentModalObject.properties.set('role', mode === 'ptp' ? 'ptp' : (currentModalObject.properties.get('role') === 'ap' ? 'ap' : 'station'));
+        saveData();
+        showObjectInfo(currentModalObject);
+    });
+    var editRadioBridgeRole = document.getElementById('editRadioBridgeRole');
+    if (editRadioBridgeRole) editRadioBridgeRole.addEventListener('change', function() {
+        if (!currentModalObject || currentModalObject.properties.get('type') !== 'radioBridge' || isRadioBridgeLinked(currentModalObject)) return;
+        currentModalObject.properties.set('role', this.value === 'ap' ? 'ap' : 'station');
+        saveData();
+    });
+    var editRadioBridgeManufacturer = document.getElementById('editRadioBridgeManufacturer');
+    if (editRadioBridgeManufacturer) {
+        editRadioBridgeManufacturer.addEventListener('input', function() {
+            if (currentModalObject && currentModalObject.properties.get('type') === 'radioBridge') {
+                currentModalObject.properties.set('manufacturer', this.value || '');
+                saveData();
+            }
+            populateModelDatalistForManufacturer(this.value.trim(), 'deviceModelsList', 'radioBridge');
+        });
+        editRadioBridgeManufacturer.addEventListener('change', function() { populateModelDatalistForManufacturer(this.value.trim(), 'deviceModelsList', 'radioBridge'); });
+    }
+    var editRadioBridgeModel = document.getElementById('editRadioBridgeModel');
+    if (editRadioBridgeModel) editRadioBridgeModel.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'radioBridge') { currentModalObject.properties.set('model', this.value || ''); saveData(); } });
+    var editRadioBridgeComment = document.getElementById('editRadioBridgeComment');
+    if (editRadioBridgeComment) editRadioBridgeComment.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'radioBridge') { currentModalObject.properties.set('comment', this.value || ''); saveData(); } });
 
     var editCrossCopperPortsEl = document.getElementById('editCrossCopperPorts');
     if (editCrossCopperPortsEl) {
@@ -4159,7 +4260,7 @@ function duplicateObject(obj) {
             copyNum++;
         }
     }
-    if (type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter') {
+    if (type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'radioBridge') {
         if (name) newName = name + ' (копия)';
     }
     if (type === 'signalPost') {
@@ -4189,10 +4290,14 @@ function duplicateObject(obj) {
         opts.inventoryNumber = obj.properties.get('inventoryNumber') || '';
         opts.serialNumber = obj.properties.get('serialNumber') || '';
     }
-    if (type === 'camera' || type === 'mediaConverter') {
+    if (type === 'camera' || type === 'mediaConverter' || type === 'radioBridge') {
         opts.manufacturer = obj.properties.get('manufacturer') || '';
         opts.model = obj.properties.get('model') || '';
         opts.comment = obj.properties.get('comment') || '';
+    }
+    if (type === 'radioBridge') {
+        opts.bridgeMode = obj.properties.get('bridgeMode') || 'ptp';
+        opts.role = obj.properties.get('role') || (opts.bridgeMode === 'ptp' ? 'ptp' : 'station');
     }
     if (type === 'camera' && window.CameraPlayer) {
         var sc = CameraPlayer.getCameraStreamConfig(obj);
@@ -4407,6 +4512,18 @@ function applyMediaConverterNameChange(newName) {
     syncObjectNameOp(currentModalObject, trimmed);
 }
 
+function applyRadioBridgeNameChange(newName) {
+    if (!currentModalObject || currentModalObject.properties.get('type') !== 'radioBridge') return;
+    var trimmed = (newName || '').trim();
+    currentModalObject.properties.set('name', trimmed);
+    currentModalObject.properties.set('balloonContent', trimmed ? 'Wi‑Fi радиомост: ' + trimmed : 'Wi‑Fi радиомост');
+    updateObjectLabel(currentModalObject, trimmed);
+    var modalTitle = document.getElementById('modalTitle');
+    if (modalTitle) modalTitle.textContent = trimmed ? 'Wi‑Fi радиомост: ' + trimmed : 'Wi‑Fi радиомост';
+    saveData();
+    syncObjectNameOp(currentModalObject, trimmed);
+}
+
 function applySupportNameChange(newName) {
     if (!currentModalObject) return;
     var wt = currentModalObject.properties.get('type');
@@ -4451,6 +4568,7 @@ function bindModalObjectNameEditors() {
     bindModalNameField('editOnuName', applyOnuNameChange);
     bindModalNameField('editCameraName', applyCameraNameChange);
     bindModalNameField('editMediaConverterName', applyMediaConverterNameChange);
+    bindModalNameField('editRadioBridgeName', applyRadioBridgeNameChange);
     bindModalNameField('editSupportName', applySupportNameChange);
     bindModalNameField('editSignalPostName', applySignalPostNameChange);
 }
@@ -4479,6 +4597,7 @@ function flushModalNamesFromEditor() {
     else if (t === 'onu') flushNameFieldIfChanged('editOnuName', applyOnuNameChange);
     else if (t === 'camera') flushNameFieldIfChanged('editCameraName', applyCameraNameChange);
     else if (t === 'mediaConverter') flushNameFieldIfChanged('editMediaConverterName', applyMediaConverterNameChange);
+    else if (t === 'radioBridge') flushNameFieldIfChanged('editRadioBridgeName', applyRadioBridgeNameChange);
     else if (t === 'support' || t === 'attachment' || t === 'manhole') flushNameFieldIfChanged('editSupportName', applySupportNameChange);
     else if (t === 'signalPost') {
         flushNameFieldIfChanged('editSignalPostName', applySignalPostNameChange);
@@ -4503,6 +4622,7 @@ function getObjectDefaultName(type) {
         case 'onu': return 'ONU';
         case 'camera': return 'Камера';
         case 'mediaConverter': return 'Медиаконвертер';
+        case 'radioBridge': return 'Wi‑Fi радиомост';
         case 'switch': return 'Коммутатор';
         default: return 'Объект';
     }
@@ -4745,6 +4865,7 @@ function setupModalEventListeners() {
     }
 
     setupFiberConnectionHandlers();
+    if (typeof setupRadioBridgeCardHandlers === 'function') setupRadioBridgeCardHandlers();
 
     document.querySelectorAll('.btn-trace-from-node').forEach(btn => {
         btn.addEventListener('click', function(e) {

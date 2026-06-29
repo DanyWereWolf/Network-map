@@ -17,6 +17,7 @@
         onu: '#06b6d4',
         camera: '#475569',
         mediaConverter: '#14b8a6',
+        radioBridge: '#06b6d4',
         switch: '#f97316',
         cabinet: '#78716c',
         default: '#94a3b8'
@@ -204,6 +205,15 @@
             '<path d="M12 16 H20" stroke="' + sw + '" stroke-width="1.2" opacity="' + (wo * 0.7) + '"/>';
     }
 
+    function drawRadioBridge(fill, sw, w, fo, wo) {
+        return '<path d="M16 6 C11 6 8 9 8 13" fill="none" stroke="' + sw + '" stroke-width="1.4" opacity="' + wo + '"/>' +
+            '<path d="M16 6 C21 6 24 9 24 13" fill="none" stroke="' + sw + '" stroke-width="1.4" opacity="' + wo + '"/>' +
+            '<path d="M16 8 C13 8 11 10 11 13" fill="none" stroke="' + sw + '" stroke-width="1.2" opacity="' + (wo * 0.8) + '"/>' +
+            '<path d="M16 8 C19 8 21 10 21 13" fill="none" stroke="' + sw + '" stroke-width="1.2" opacity="' + (wo * 0.8) + '"/>' +
+            '<rect x="10" y="14" width="12" height="8" rx="1.5" fill="' + fill + '" stroke="' + sw + '" stroke-width="' + w + '" opacity="' + fo + '"/>' +
+            '<line x1="13" y1="18" x2="19" y2="18" stroke="' + sw + '" stroke-width="1.2" opacity="' + wo + '"/>';
+    }
+
     function drawSwitch(fill, sw, w, fo, wo) {
         var ports = '';
         var px = [10, 14, 18, 22];
@@ -255,6 +265,7 @@
                 body = drawCamera(fill, sw, w, fo, wo) + cameraOnlineIndicator(options.cameraOnline);
                 break;
             case 'mediaConverter': body = drawMediaConverter(fill, sw, w, fo, wo); break;
+            case 'radioBridge': body = drawRadioBridge(fill, sw, w, fo, wo); break;
             case 'switch': body = drawSwitch(fill, sw, w, fo, wo); break;
             case 'crossGroup': body = drawGroup('crossGroup', COLORS.cross, sw, w, fo, options.groupCount); break;
             case 'nodeGroup': body = drawGroup('nodeGroup', COLORS.node, sw, w, fo, options.groupCount, options.hasAggregation); break;
@@ -265,7 +276,7 @@
     }
 
     function getIconMetrics(type, variant) {
-        var large = { support: 1, sleeve: 1, spliceCassette: 1, cross: 1, node: 1, attachment: 1, manhole: 1, signalPost: 1, cabinet: 1, olt: 1, splitter: 1, onu: 1, camera: 1, mediaConverter: 1, switch: 1, crossGroup: 1, nodeGroup: 1 };
+        var large = { support: 1, sleeve: 1, spliceCassette: 1, cross: 1, node: 1, attachment: 1, manhole: 1, signalPost: 1, cabinet: 1, olt: 1, splitter: 1, onu: 1, camera: 1, mediaConverter: 1, radioBridge: 1, switch: 1, crossGroup: 1, nodeGroup: 1 };
         var isLarge = !!large[type];
         if (variant === 'selected') {
             return {

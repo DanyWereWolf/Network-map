@@ -172,7 +172,7 @@ function migrateCableIdReferences(cable, oldId, idA, idB, splitAfterIndex) {
         }
 
         if (isFiberHostType(t)) {
-            ['oltConnections', 'onuConnections', 'mediaConverterConnections', 'splitterConnections', 'nodeConnections'].forEach(function(prop) {
+            ['oltConnections', 'onuConnections', 'mediaConverterConnections', 'radioBridgeConnections', 'splitterConnections', 'nodeConnections'].forEach(function(prop) {
                 var conn = slot.properties.get(prop);
                 if (!conn) return;
                 var changed = false;
@@ -1058,6 +1058,7 @@ function cancelCableSplitMode() {
 function startCableSplitPickOnCable(cable, sleeveOptions) {
     if (!isEditMode) return;
     if (splitterFiberRoutingMode) cancelSplitterFiberRouting();
+    if (radioBridgeRoutingMode && typeof cancelRadioBridgeRouting === 'function') cancelRadioBridgeRouting();
     if (fiberRoutingMode) cancelFiberRouting();
     if (objectPlacementMode) cancelObjectPlacement();
     if (currentCableTool) {

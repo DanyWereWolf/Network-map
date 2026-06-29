@@ -101,8 +101,13 @@ function deleteObject(obj, opts) {
     const objType = obj.properties.get('type');
     const objName = obj.properties.get('name') || '';
     const objUniqueId = obj.properties.get('uniqueId');
-    var objCoords = obj.geometry ? obj.geometry.getCoordinates() : null;
-    var objGroupKey = objCoords ? groupKey(objCoords) : null;
+    var objGroupKey = null;
+    if (obj.geometry && (objType === 'node' || objType === 'cross')) {
+        var objCoords = obj.geometry.getCoordinates();
+        if (objCoords && objCoords.length >= 2 && typeof objCoords[0] === 'number') {
+            objGroupKey = groupKey(objCoords);
+        }
+    }
     var nodeConnectionsCleared = false;
     var cableRoutesUpdated = false;
     var gponPurged = false;
@@ -216,6 +221,33 @@ function deleteObject(obj, opts) {
                 }
             });
             if (changed) slot.properties.set('mediaConverterConnections', mcConn);
+        });
+    }
+    if (objType === 'radioBridge' && objUniqueId && typeof purgeRadioBridgeReferences === 'function') {
+        purgeRadioBridgeReferences(objUniqueId);
+    }
+    if (objType === 'radioBridge' && objUniqueId) {
+        if (typeof removeRadioBridgeCoverage === 'function') removeRadioBridgeCoverage(obj);
+        objects.forEach(function(slot) {
+            if (!slot.properties) return;
+            var t = slot.properties.get('type');
+            if (!isFiberHostType(t)) return;
+            var rbConn = slot.properties.get('radioBridgeConnections');
+            if (!rbConn) return;
+            var changed = false;
+            Object.keys(rbConn).forEach(function(key) {
+                if (rbConn[key] && rbConn[key].radioBridgeId === objUniqueId) {
+                    var parts = key.split('-');
+                    var fiberNum = parseInt(parts.pop(), 10);
+                    var cableId = parts.join('-');
+                    if (!isNaN(fiberNum) && cableId) {
+                        removeOnuConnectionLine(slot, cableId, fiberNum);
+                    }
+                    delete rbConn[key];
+                    changed = true;
+                }
+            });
+            if (changed) slot.properties.set('radioBridgeConnections', rbConn);
         });
     }
     if (objType === 'splitter' && objUniqueId) {
@@ -360,7 +392,7 @@ function deleteObject(obj, opts) {
         } else if (objUniqueId && (
             (typeof isFiberHostType === 'function' && isFiberHostType(objType)) ||
             objType === 'olt' || objType === 'onu' || objType === 'splitter' ||
-            objType === 'mediaConverter' || objType === 'node' ||
+            objType === 'mediaConverter' || objType === 'radioBridge' || objType === 'node' ||
             objType === 'support' || objType === 'attachment'
         )) {
             refreshPlan.connectionLines = objUniqueId;

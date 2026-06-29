@@ -6,7 +6,7 @@ var MAP_FILTER_INPUT_IDS = [
     'mapFilterSupport', 'mapFilterAttachment', 'mapFilterManhole', 'mapFilterSignalPost', 'mapFilterCabinet', 'mapFilterOlt', 'mapFilterSplitter',
     'mapFilterOnu', 'mapFilterCamera', 'mapFilterMediaConverter'
 ];
-var MAP_FILTER_MAIN_KEYS = ['node', 'cross', 'sleeve', 'support', 'attachment', 'manhole', 'signalPost', 'cabinet', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter'];
+var MAP_FILTER_MAIN_KEYS = ['node', 'cross', 'sleeve', 'support', 'attachment', 'manhole', 'signalPost', 'cabinet', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter', 'radioBridge'];
 var MAP_FILTER_STORAGE_KEY = 'networkMap_mapFilter';
 
 function syncMapFilterChipVisual(el) {
@@ -62,7 +62,8 @@ var MAP_FILTER_KEY_TO_ID = {
     splitter: 'mapFilterSplitter',
     onu: 'mapFilterOnu',
     camera: 'mapFilterCamera',
-    mediaConverter: 'mapFilterMediaConverter'
+    mediaConverter: 'mapFilterMediaConverter',
+    radioBridge: 'mapFilterRadioBridge'
 };
 
 function loadMapFilterFromStorage() {
@@ -149,6 +150,7 @@ function getMapFilterState() {
     var onuEl = document.getElementById('mapFilterOnu');
     var cameraEl = document.getElementById('mapFilterCamera');
     var mediaConverterEl = document.getElementById('mapFilterMediaConverter');
+    var radioBridgeEl = document.getElementById('mapFilterRadioBridge');
     return {
         node: nodeEl ? nodeEl.checked : true,
         nodeAggregationOnly: nodeAggEl ? nodeAggEl.checked : false,
@@ -163,7 +165,8 @@ function getMapFilterState() {
         splitter: splitterEl ? splitterEl.checked : true,
         onu: onuEl ? onuEl.checked : true,
         camera: cameraEl ? cameraEl.checked : true,
-        mediaConverter: mediaConverterEl ? mediaConverterEl.checked : true
+        mediaConverter: mediaConverterEl ? mediaConverterEl.checked : true,
+        radioBridge: radioBridgeEl ? radioBridgeEl.checked : true
     };
 }
 
@@ -193,7 +196,7 @@ function applyRegionZoomVisibility(zoom) {
 }
 
 function forEachConnectionLine(callback) {
-    [nodeConnectionLines, onuConnectionLines, oltConnectionLines, splitterConnectionLines, splitterOutputConnectionLines].forEach(function(arr) {
+    [nodeConnectionLines, onuConnectionLines, oltConnectionLines, splitterConnectionLines, splitterOutputConnectionLines, radioBridgeConnectionLines].forEach(function(arr) {
         if (!Array.isArray(arr)) return;
         arr.forEach(function(line) {
             if (line && line.options) callback(line);
@@ -314,7 +317,7 @@ function applyMapFilter() {
         if (type === 'node') {
             if (!filter.node) return false;
             if (filter.nodeAggregationOnly) return obj.properties.get('nodeKind') === 'aggregation';
-        } else if (type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter') {
+        } else if (type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'radioBridge') {
             if (filter[type] === false) return false;
         } else if (type === 'spliceCassette') {
             if (filter.sleeve === false) return false;

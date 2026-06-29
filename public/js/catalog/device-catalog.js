@@ -86,6 +86,18 @@ var CAMERA_CATALOG_DEFAULT = {
     'Trassir': ['TR-D2141IR3']
 };
 
+/** Справочник Wi‑Fi радиомостов (P2P / P2MP). */
+var RADIO_BRIDGE_CATALOG_DEFAULT = {
+    'Ubiquiti': ['NanoStation M5', 'NanoBeam M5', 'PowerBeam M5', 'LiteBeam M5', 'airFiber 5X HD'],
+    'MikroTik': ['SXTsq 5 ac', 'Disc Lite5 ac', 'LHG 5', 'NetMetal ac²'],
+    'Cambium': ['ePMP Force 300-25', 'ePMP Force 200', 'ePMP 1000L', 'PTP 550'],
+    'LigoWave': ['NFT 2ac', 'PTP RapidFire', 'Infinity NFT'],
+    'Radwin': ['2000-O', '5000-J', '6000'],
+    'Telrad': ['BS 6520', 'CPE 6500'],
+    'BDCOM': ['WBS-2400', 'WBS-5800'],
+    'SNR': ['SNR-WB-5M', 'SNR-WB-5D']
+};
+
 /** Справочник типов оптического кабеля (марка и модель/маркировка). */
 var CABLE_CATALOG_DEFAULT = {
     'SNR': ['ОКЛК-01', 'ОКЛК-02', 'ОКЛК-03', 'ОКГТ-А-4', 'ОКГТ-А-8', 'ОКГТ-А-12', 'ОКГТ-А-24', 'ОКГТ-А-48'],
@@ -698,6 +710,7 @@ var nodeDeviceCatalog = {};
 var oltDeviceCatalog = {};
 var onuDeviceCatalog = {};
 var cameraDeviceCatalog = {};
+var radioBridgeDeviceCatalog = {};
 var cabinetDeviceCatalog = {};
 var switchDeviceCatalog = {};
 var cableDeviceCatalog = {};
@@ -1025,6 +1038,7 @@ function getCatalogObjectRef(kind) {
     if (kind === 'olt') return oltDeviceCatalog;
     if (kind === 'onu') return onuDeviceCatalog;
     if (kind === 'camera') return cameraDeviceCatalog;
+    if (kind === 'radioBridge') return radioBridgeDeviceCatalog;
     if (kind === 'cabinet') return cabinetDeviceCatalog;
     if (kind === 'switch') return switchDeviceCatalog;
     if (kind === 'cable') return cableDeviceCatalog;
@@ -1037,6 +1051,7 @@ function getCatalogDefault(kind) {
     if (kind === 'olt') return OLT_CATALOG_DEFAULT;
     if (kind === 'onu') return ONU_CATALOG_DEFAULT;
     if (kind === 'camera') return CAMERA_CATALOG_DEFAULT;
+    if (kind === 'radioBridge') return RADIO_BRIDGE_CATALOG_DEFAULT;
     if (kind === 'cabinet') return CABINET_CATALOG_DEFAULT;
     if (kind === 'switch') return SWITCH_CATALOG_DEFAULT;
     if (kind === 'cable') return CABLE_CATALOG_DEFAULT;
@@ -1977,6 +1992,11 @@ function loadDeviceCatalog(opts) {
         } else {
             cameraDeviceCatalog = cloneDeepCatalog(CAMERA_CATALOG_DEFAULT);
         }
+        if ('radioBridgeDeviceCatalog' in opts && opts.radioBridgeDeviceCatalog && typeof opts.radioBridgeDeviceCatalog === 'object') {
+            radioBridgeDeviceCatalog = cloneDeepCatalog(opts.radioBridgeDeviceCatalog);
+        } else {
+            radioBridgeDeviceCatalog = cloneDeepCatalog(RADIO_BRIDGE_CATALOG_DEFAULT);
+        }
         if ('cabinetDeviceCatalog' in opts && opts.cabinetDeviceCatalog && typeof opts.cabinetDeviceCatalog === 'object') {
             cabinetDeviceCatalog = cloneDeepCatalog(opts.cabinetDeviceCatalog);
         } else {
@@ -2059,6 +2079,12 @@ function loadDeviceCatalog(opts) {
         cameraDeviceCatalog = cloneDeepCatalog(opts.cameraDeviceCatalog);
     } else if (!('cameraDeviceCatalog' in opts)) {
         cameraDeviceCatalog = cloneDeepCatalog(CAMERA_CATALOG_DEFAULT);
+    }
+
+    if ('radioBridgeDeviceCatalog' in opts && opts.radioBridgeDeviceCatalog && typeof opts.radioBridgeDeviceCatalog === 'object') {
+        radioBridgeDeviceCatalog = cloneDeepCatalog(opts.radioBridgeDeviceCatalog);
+    } else if (!('radioBridgeDeviceCatalog' in opts)) {
+        radioBridgeDeviceCatalog = cloneDeepCatalog(RADIO_BRIDGE_CATALOG_DEFAULT);
     }
 
     if ('cabinetDeviceCatalog' in opts && opts.cabinetDeviceCatalog && typeof opts.cabinetDeviceCatalog === 'object') {
@@ -2223,6 +2249,7 @@ function ensureDeviceCatalogsNonEmpty() {
     if (Object.keys(oltDeviceCatalog || {}).length === 0) oltDeviceCatalog = cloneDeepCatalog(OLT_CATALOG_DEFAULT);
     if (Object.keys(onuDeviceCatalog || {}).length === 0) onuDeviceCatalog = cloneDeepCatalog(ONU_CATALOG_DEFAULT);
     if (Object.keys(cameraDeviceCatalog || {}).length === 0) cameraDeviceCatalog = cloneDeepCatalog(CAMERA_CATALOG_DEFAULT);
+    if (Object.keys(radioBridgeDeviceCatalog || {}).length === 0) radioBridgeDeviceCatalog = cloneDeepCatalog(RADIO_BRIDGE_CATALOG_DEFAULT);
     if (Object.keys(cabinetDeviceCatalog || {}).length === 0) cabinetDeviceCatalog = cloneDeepCatalog(CABINET_CATALOG_DEFAULT);
     if (Object.keys(switchDeviceCatalog || {}).length === 0) switchDeviceCatalog = cloneDeepCatalog(SWITCH_CATALOG_DEFAULT);
     if (Object.keys(cableDeviceCatalog || {}).length === 0) cableDeviceCatalog = cloneDeepCatalog(CABLE_CATALOG_DEFAULT);

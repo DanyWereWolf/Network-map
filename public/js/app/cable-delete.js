@@ -87,6 +87,7 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
             var oltConn = slot.properties.get('oltConnections');
             var onuConn = slot.properties.get('onuConnections');
             var mcConn = slot.properties.get('mediaConverterConnections');
+            var rbConn = slot.properties.get('radioBridgeConnections');
             var splitterConn = slot.properties.get('splitterConnections');
             var nodeConn = slot.properties.get('nodeConnections');
             var fiberConn = slot.properties.get('fiberConnections');
@@ -111,6 +112,14 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
                 Object.keys(mcConn).forEach(function(key) {
                     if (key.indexOf(cableUniqueId + '-') === 0) {
                         delete mcConn[key];
+                        changed = true;
+                    }
+                });
+            }
+            if (rbConn) {
+                Object.keys(rbConn).forEach(function(key) {
+                    if (key.indexOf(cableUniqueId + '-') === 0) {
+                        delete rbConn[key];
                         changed = true;
                     }
                 });
@@ -147,6 +156,7 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
                 if (oltConn) slot.properties.set('oltConnections', oltConn);
                 if (onuConn) slot.properties.set('onuConnections', onuConn);
                 if (mcConn) slot.properties.set('mediaConverterConnections', mcConn);
+                if (rbConn) slot.properties.set('radioBridgeConnections', rbConn);
                 if (splitterConn) slot.properties.set('splitterConnections', splitterConn);
                 if (nodeConn) slot.properties.set('nodeConnections', nodeConn);
             }
@@ -192,6 +202,12 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
         if (t === 'mediaConverter') {
             var mcIncomingDel = slot.properties.get('incomingFiber');
             if (mcIncomingDel && mcIncomingDel.cableId === cableUniqueId) {
+                slot.properties.set('incomingFiber', null);
+            }
+        }
+        if (t === 'radioBridge') {
+            var rbIncomingDel = slot.properties.get('incomingFiber');
+            if (rbIncomingDel && rbIncomingDel.cableId === cableUniqueId) {
                 slot.properties.set('incomingFiber', null);
             }
         }

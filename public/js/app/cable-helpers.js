@@ -24,6 +24,7 @@ function getFiberRoutingTargetLabel(targetType, targetObj) {
     if (n) return n;
     if (targetType === 'onu') return 'ONU';
     if (targetType === 'mediaConverter') return 'Медиаконвертер';
+    if (targetType === 'radioBridge') return 'Радиомост';
     if (targetType === 'olt') return 'OLT';
     if (targetType === 'host') return 'Муфта/кросс';
     return 'Сплиттер';
@@ -32,6 +33,7 @@ function getFiberRoutingTargetLabel(targetType, targetObj) {
 function getFiberRoutingPreviewStroke(targetType) {
     if (targetType === 'onu') return '#22c55e';
     if (targetType === 'mediaConverter') return '#14b8a6';
+    if (targetType === 'radioBridge') return '#06b6d4';
     if (targetType === 'olt') return '#0ea5e9';
     return '#f97316';
 }
@@ -122,6 +124,11 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
             if (mcAss) {
                 if (exclude && exclude.type === 'mediaConverterConn' && ((exclude.sleeveId && exclude.sleeveId === uid) || (exclude.crossId && exclude.crossId === uid))) continue;
                 return { used: true, where: 'подключение к медиаконвертеру' };
+            }
+            var rbAss = getHostAssignment(obj, 'radioBridgeConnections', cableId, fiberNumber);
+            if (rbAss) {
+                if (exclude && exclude.type === 'radioBridgeConn' && ((exclude.sleeveId && exclude.sleeveId === uid) || (exclude.crossId && exclude.crossId === uid))) continue;
+                return { used: true, where: 'подключение к радиомосту' };
             }
             var splitterAss = getHostAssignment(obj, 'splitterConnections', cableId, fiberNumber);
             if (splitterAss) {

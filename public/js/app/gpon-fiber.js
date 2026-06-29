@@ -99,7 +99,7 @@ function parseFiberConnectionKey(key) {
     return { cableId: cableId, fiberNumber: fiberNumber };
 }
 
-var HOST_FIBER_ASSIGNMENT_PROPS = ['oltConnections', 'onuConnections', 'splitterConnections', 'nodeConnections', 'mediaConverterConnections'];
+var HOST_FIBER_ASSIGNMENT_PROPS = ['oltConnections', 'onuConnections', 'splitterConnections', 'nodeConnections', 'mediaConverterConnections', 'radioBridgeConnections'];
 
 function fiberConnKey(cableId, fiberNumber) {
     return cableId + '-' + fiberNumber;
@@ -153,6 +153,7 @@ function hostAssignmentsConflict(a, b, propName) {
     if (propName === 'splitterConnections') return a.splitterId !== b.splitterId;
     if (propName === 'nodeConnections') return a.nodeId !== b.nodeId;
     if (propName === 'mediaConverterConnections') return a.mediaConverterId !== b.mediaConverterId;
+    if (propName === 'radioBridgeConnections') return a.radioBridgeId !== b.radioBridgeId;
     return JSON.stringify(a) !== JSON.stringify(b);
 }
 
@@ -162,6 +163,7 @@ function getHostAssignmentConflictLabel(propName) {
     if (propName === 'splitterConnections') return 'сплиттер';
     if (propName === 'nodeConnections') return 'узел';
     if (propName === 'mediaConverterConnections') return 'медиаконвертер';
+    if (propName === 'radioBridgeConnections') return 'радиомост';
     return 'назначение';
 }
 

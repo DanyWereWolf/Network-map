@@ -180,6 +180,13 @@ function resolveCableFromMapTarget(target) {
 }
 
 function handleCableMapClickEvent(cable, e) {
+    if (radioBridgeRoutingMode && radioBridgeRoutingData) {
+        var rbCoords = e && e.get ? e.get('coords') : null;
+        if (rbCoords && typeof handleRadioBridgeRoutingClick === 'function') {
+            handleRadioBridgeRoutingClick(rbCoords);
+        }
+        return false;
+    }
     try {
         if (e.originalEvent && typeof e.originalEvent.stopPropagation === 'function') {
             e.originalEvent.stopPropagation();

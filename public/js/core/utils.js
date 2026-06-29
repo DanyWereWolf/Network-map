@@ -33,6 +33,7 @@ function getObjectTypeName(type) {
         case 'onu': return 'ONU';
         case 'camera': return 'Камера';
         case 'mediaConverter': return 'Медиаконвертер';
+        case 'radioBridge': return 'Wi‑Fi радиомост';
         case 'node': return 'Узел сети';
         case 'switch': return 'Коммутатор';
         case 'attachment': return 'Крепление узлов';

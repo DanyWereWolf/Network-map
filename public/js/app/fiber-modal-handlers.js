@@ -668,6 +668,16 @@ function setupFiberConnectionHandlers() {
         });
     });
 
+    document.querySelectorAll('.btn-connect-rb').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const cableId = this.getAttribute('data-cable-id');
+            const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
+            if (typeof blockIfFiberCrossPatchLocked === 'function' && blockIfFiberCrossPatchLocked(sleeveObj, cableId, fiberNumber)) return;
+            showRadioBridgeSelectionDialog(sleeveObj, cableId, fiberNumber);
+        });
+    });
+
     document.querySelectorAll('.btn-connect-splitter-onu').forEach(function(btn) {
         btn.addEventListener('click', function(e) {
             e.stopPropagation();
@@ -754,6 +764,15 @@ function setupFiberConnectionHandlers() {
             const cableId = this.getAttribute('data-cable-id');
             const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
             disconnectFiberFromMediaConverter(sleeveObj, cableId, fiberNumber);
+        });
+    });
+
+    document.querySelectorAll('.btn-disconnect-rb').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const cableId = this.getAttribute('data-cable-id');
+            const fiberNumber = parseInt(this.getAttribute('data-fiber-number'));
+            disconnectFiberFromRadioBridge(sleeveObj, cableId, fiberNumber);
         });
     });
     

@@ -372,6 +372,16 @@ function placeObjectAtCoords(coords) {
         const modelMc = (document.getElementById('mediaConverterModel') && document.getElementById('mediaConverterModel').value) ? document.getElementById('mediaConverterModel').value.trim() : '';
         if (!createObject(type, nameMc || '', coords, { manufacturer: manufacturerMc, model: modelMc })) return false;
         currentPlacementName = nameMc || '';
+    } else if (type === 'radioBridge') {
+        const nameRb = getPlacementObjectName();
+        const modeEl = document.getElementById('radioBridgeMode');
+        const roleEl = document.getElementById('radioBridgeRole');
+        const bridgeMode = modeEl && modeEl.value === 'ptmp' ? 'ptmp' : 'ptp';
+        const role = bridgeMode === 'ptp' ? 'ptp' : ((roleEl && roleEl.value === 'ap') ? 'ap' : 'station');
+        const manufacturerRb = (document.getElementById('radioBridgeManufacturer') && document.getElementById('radioBridgeManufacturer').value) ? document.getElementById('radioBridgeManufacturer').value.trim() : '';
+        const modelRb = (document.getElementById('radioBridgeModel') && document.getElementById('radioBridgeModel').value) ? document.getElementById('radioBridgeModel').value.trim() : '';
+        if (!createObject(type, nameRb || '', coords, { bridgeMode: bridgeMode, role: role, manufacturer: manufacturerRb, model: modelRb })) return false;
+        currentPlacementName = nameRb || '';
     } else {
         if (!createObject(type, '', coords)) return false;
     }
@@ -424,6 +434,9 @@ function handleAddObject() {
 
     if (splitterFiberRoutingMode) {
         cancelSplitterFiberRouting();
+    }
+    if (radioBridgeRoutingMode && typeof cancelRadioBridgeRouting === 'function') {
+        cancelRadioBridgeRouting();
     }
     
     if (fiberRoutingMode) {
@@ -547,7 +560,8 @@ var OBJECT_TYPE_LABELS = {
     onu: 'ONU',
     node: 'Узел',
     camera: 'Камера',
-    mediaConverter: 'Медиаконв.'
+    mediaConverter: 'Медиаконв.',
+    radioBridge: 'Радиомост'
 };
 
 var OBJECT_TYPE_CHIP_ICONS = {
@@ -562,7 +576,8 @@ var OBJECT_TYPE_CHIP_ICONS = {
     onu: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="7" width="14" height="11" rx="2"/><line x1="8" y1="11" x2="8.01" y2="11" stroke-width="3" stroke-linecap="round"/><line x1="12" y1="11" x2="12.01" y2="11" stroke-width="3" stroke-linecap="round"/><line x1="16" y1="11" x2="16.01" y2="11" stroke-width="3" stroke-linecap="round"/></svg>',
     node: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="6" rx="1"/><rect x="4" y="14" width="16" height="6" rx="1"/><line x1="8" y1="7" x2="8.01" y2="7" stroke-width="3" stroke-linecap="round"/><line x1="8" y1="17" x2="8.01" y2="17" stroke-width="3" stroke-linecap="round"/></svg>',
     camera: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>',
-    mediaConverter: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>'
+    mediaConverter: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
+    radioBridge: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 0 0-9 9"/><path d="M12 7a5 5 0 0 0-5 5"/><rect x="8" y="14" width="8" height="6" rx="1"/></svg>'
 };
 
 function ensureObjectTypeChipIcons() {
@@ -804,7 +819,7 @@ function isMapPanLockedForCableTool() {
 
 /** На touch при прокладке GPON-жилы (OLT, ONU, сплиттер) pan отключён; на мыши — ЛКМ перетаскивает карту. */
 function isMapPanLockedForFiberRouting() {
-    if (!fiberRoutingMode && !splitterFiberRoutingMode) return false;
+    if (!fiberRoutingMode && !splitterFiberRoutingMode && !radioBridgeRoutingMode) return false;
     try {
         if (window.matchMedia('(pointer: coarse)').matches) return true;
         if (window.matchMedia('(hover: none)').matches) return true;
@@ -813,7 +828,7 @@ function isMapPanLockedForFiberRouting() {
 }
 
 function isMapPanDragTrackingActive() {
-    return objectPlacementMode || isCableLayingWithSource() || fiberRoutingMode || splitterFiberRoutingMode;
+    return objectPlacementMode || isCableLayingWithSource() || fiberRoutingMode || splitterFiberRoutingMode || radioBridgeRoutingMode;
 }
 
 /**
