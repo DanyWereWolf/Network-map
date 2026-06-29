@@ -218,6 +218,18 @@ function serializeMapItemFromObject(obj) {
             result.coverageLengthKm = lengthKm;
             result.coverageAzimuth = props.coverageAzimuth != null ? props.coverageAzimuth : 0;
             result.coverageAngle = props.coverageAngle != null ? props.coverageAngle : 60;
+            if (Array.isArray(props.radioBridgePortTypes) && props.radioBridgePortTypes.length) {
+                result.radioBridgePortTypes = props.radioBridgePortTypes.slice();
+            }
+            if (props.copperPortUsage && Object.keys(props.copperPortUsage).length) {
+                result.copperPortUsage = Object.assign({}, props.copperPortUsage);
+            }
+            if (props.portLabels && Object.keys(props.portLabels).length) {
+                result.portLabels = Object.assign({}, props.portLabels);
+            }
+            if (props.manualPortUsage && Object.keys(props.manualPortUsage).length) {
+                result.manualPortUsage = Object.assign({}, props.manualPortUsage);
+            }
         }
         if (props.type === 'signalPost') {
             if (props.comment != null) result.comment = props.comment;
@@ -912,6 +924,7 @@ function applyRemoteStateMerged(data) {
         syncAllCabinetMembersToCabinets({ skipDisplay: true });
     }
     repairCablesAfterImport();
+    if (typeof repairRadioBridgeFiberLinksAfterLoad === 'function') repairRadioBridgeFiberLinksAfterLoad();
     refreshAllCableUndergroundOverlays();
     updateCableVisualization();
     updateCrossDisplay();
@@ -1354,6 +1367,8 @@ function importDataPostProcess(opts, onDone) {
             });
         }
         if (migrateNodeLevelSwitchMetaToAttached() && !(opts && opts.skipSave)) saveData();
+        if (typeof migrateAllRadioBridgeCopperPorts === 'function') migrateAllRadioBridgeCopperPorts();
+        if (typeof repairRadioBridgeFiberLinksAfterLoad === 'function') repairRadioBridgeFiberLinksAfterLoad();
         rebuildAllCopperPortUsageFromCables();
         if (window.CameraPlayer && CameraPlayer.startStreamMonitor) CameraPlayer.startStreamMonitor();
         if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
@@ -1651,6 +1666,14 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         placemark.properties.set('coverageLengthM', null);
         placemark.properties.set('coverageAzimuth', data.coverageAzimuth != null ? data.coverageAzimuth : 0);
         placemark.properties.set('coverageAngle', data.coverageAngle != null ? data.coverageAngle : 60);
+        if (Array.isArray(data.radioBridgePortTypes) && data.radioBridgePortTypes.length) {
+            placemark.properties.set('radioBridgePortTypes', data.radioBridgePortTypes.slice());
+        }
+        placemark.properties.set('copperPortUsage', data.copperPortUsage && typeof data.copperPortUsage === 'object' ? Object.assign({}, data.copperPortUsage) : {});
+        placemark.properties.set('portLabels', data.portLabels && typeof data.portLabels === 'object' ? Object.assign({}, data.portLabels) : {});
+        placemark.properties.set('manualPortUsage', data.manualPortUsage && typeof data.manualPortUsage === 'object' ? Object.assign({}, data.manualPortUsage) : {});
+        if (typeof ensureRadioBridgePortTypes === 'function') ensureRadioBridgePortTypes(placemark);
+        if (typeof migrateRadioBridgeCopperCablePorts === 'function') migrateRadioBridgeCopperCablePorts(placemark);
     }
     if (type === 'signalPost') {
         if (data.comment != null) placemark.properties.set('comment', data.comment || '');

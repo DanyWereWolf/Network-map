@@ -161,6 +161,15 @@ function createObject(type, name, coords, options = {}) {
         placemarkProperties.coverageLengthKm = 3;
         placemarkProperties.coverageAzimuth = 0;
         placemarkProperties.coverageAngle = 60;
+        var rbMfr = (options.manufacturer || '').trim();
+        var rbMod = (options.model || '').trim();
+        var rbPortTypes = typeof resolveRadioBridgePortTypesForModel === 'function'
+            ? resolveRadioBridgePortTypesForModel(rbMfr, rbMod, 1)
+            : (typeof buildSwitchPortTypesArray === 'function' ? buildSwitchPortTypesArray(1) : ['RJ45 1000Base-T (Gigabit, порт G)']);
+        placemarkProperties.radioBridgePortTypes = rbPortTypes;
+        placemarkProperties.copperPortUsage = {};
+        placemarkProperties.portLabels = {};
+        placemarkProperties.manualPortUsage = {};
     }
     if (type === 'signalPost') {
         placemarkProperties.comment = options.comment || '';

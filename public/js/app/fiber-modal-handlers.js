@@ -775,6 +775,28 @@ function setupFiberConnectionHandlers() {
             disconnectFiberFromRadioBridge(sleeveObj, cableId, fiberNumber);
         });
     });
+
+    document.querySelectorAll('.btn-disconnect-rb-delete-cable').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const cableId = this.getAttribute('data-cable-id');
+            const fiberNumber = parseInt(this.getAttribute('data-fiber-number'), 10);
+            var runDelete = function() {
+                disconnectFiberFromRadioBridge(sleeveObj, cableId, fiberNumber, { deleteCable: true });
+            };
+            if (typeof showConfirm === 'function') {
+                showConfirm(
+                    'Кабель между кроссом/муфтой и радиомостом будет удалён с карты вместе с подключением.',
+                    'Удалить кабель?',
+                    { confirmText: 'Удалить', cancelText: 'Отмена' }
+                ).then(function(ok) {
+                    if (ok) runDelete();
+                });
+            } else {
+                runDelete();
+            }
+        });
+    });
     
     document.querySelectorAll('.btn-disconnect-splitter').forEach(btn => {
         btn.addEventListener('click', function(e) {

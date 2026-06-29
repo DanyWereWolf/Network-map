@@ -987,6 +987,8 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         const canConnectNodeOnHost = isEditMode && !isConnected && !isUsed && !hasNodeConnection &&
             !hasMcConnection && !hasRbConnection && !hasOnuConnection && !hasSplitterConnection && !hasSplitterOutputAtHost && !oltBlocksNode && !isCrossPatchLocked;
         const showFullConnectButtons = canAssignBase && !hasAnyOutConnection && !showGponBranchButtons;
+        const canOfferRbChip = typeof canOfferRadioBridgeFiberConnectFromHost === 'function' &&
+            canOfferRadioBridgeFiberConnectFromHost(sleeveObj);
         const canRestoreTakenFiber = isEditMode && isUsed && !isConnected && !hasAnyOutConnection;
         const isGponFeeder = occ.isGponFeeder;
         const isGponUpstreamOnly = occ.isGponUpstreamOnly;
@@ -1081,7 +1083,14 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             if (hasNodeConnection) assignRows += buildFiberAssignRow('node', '🖥️', '→ ' + escapeHtml(nodeConnection.nodeName) + (nodeConnection.switchPort != null ? ' · SFP ' + nodeConnection.switchPort : ''), disconnect('btn-disconnect-node', 'Отключить от узла'));
             if (hasOnuConnection) assignRows += buildFiberAssignRow('onu', '📡', '→ ' + escapeHtml(onuConnection.onuName || 'ONU'), disconnect('btn-disconnect-onu', 'Отключить от ONU'));
             if (hasMcConnection) assignRows += buildFiberAssignRow('mc', '⇄', '→ ' + escapeHtml(mcConnection.mediaConverterName || 'МК'), disconnect('btn-disconnect-mc', 'Отключить от МК'));
-            if (hasRbConnection) assignRows += buildFiberAssignRow('rb', '◎', '→ ' + escapeHtml(rbConnection.radioBridgeName || 'Радиомост'), disconnect('btn-disconnect-rb', 'Отключить от радиомоста'));
+            if (hasRbConnection) {
+                var rbDisc = disconnect('btn-disconnect-rb', 'Отключить от радиомоста');
+                if (typeof canDeleteRadioBridgeFeederCableOnDisconnect === 'function' &&
+                    canDeleteRadioBridgeFeederCableOnDisconnect(sleeveObj, cableData.cableUniqueId, fiber.number)) {
+                    rbDisc += '<button type="button" class="fiber-assign__disconnect fiber-assign__disconnect--delete-cable btn-disconnect-rb-delete-cable" data-cable-id="' + cableData.cableUniqueId + '" data-fiber-number="' + fiber.number + '" title="Отключить и удалить кабель до радиомоста">🗑</button>';
+                }
+                assignRows += buildFiberAssignRow('rb', '◎', '→ ' + escapeHtml(rbConnection.radioBridgeName || 'Радиомост'), rbDisc);
+            }
             if (hasSplitterConnection) {
                 assignRows += buildFiberAssignRow('splitter', '🔀', '→ ' + escapeHtml(splitterName), disconnect('btn-disconnect-splitter', 'Отключить от сплиттера'));
             }
@@ -1119,7 +1128,9 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
                     actionChips += buildFiberChip('btn-connect-onu fiber-chip--onu', cableData.cableUniqueId, fiber.number, 'Подключить к ONU', 'ONU');
                 }
                 actionChips += buildFiberChip('btn-connect-mc fiber-chip--mc', cableData.cableUniqueId, fiber.number, 'Медиаконвертер', 'МК');
-                actionChips += buildFiberChip('btn-connect-rb fiber-chip--rb', cableData.cableUniqueId, fiber.number, 'Радиомост', 'РМ');
+                if (canOfferRbChip) {
+                    actionChips += buildFiberChip('btn-connect-rb fiber-chip--rb', cableData.cableUniqueId, fiber.number, 'Прокладка кабеля к радиомосту', 'РМ');
+                }
             }
             if (showGponBranchButtons && canOfferOnuChip) {
                 actionChips += buildFiberChip('btn-connect-onu fiber-chip--onu', cableData.cableUniqueId, fiber.number, 'GPON на ONU', 'ONU');

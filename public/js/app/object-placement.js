@@ -424,6 +424,7 @@ function handleAddObject() {
         pendingCopperPortPreset = null;
         pendingCopperRouteFinish = null;
         if (typeof finishOltPortCableLayingSession === 'function') finishOltPortCableLayingSession();
+        if (typeof finishRadioBridgePortCableLayingSession === 'function') finishRadioBridgePortCableLayingSession();
         copperCableLayingActive = false;
         if (myMap && myMap.container) {
             const mapEl = myMap.container.getElement();

@@ -241,23 +241,35 @@ function connectFiberToRadioBridgeWithRoute(sleeveObj, cableId, fiberNumber, rbO
     saveData();
 }
 
-function disconnectFiberFromRadioBridge(sleeveObj, cableId, fiberNumber) {
-    let rbConnections = sleeveObj.properties.get('radioBridgeConnections');
-    if (!rbConnections) return;
-    const key = cableId + '-' + fiberNumber;
-    const conn = rbConnections[key];
-    if (conn && conn.radioBridgeId) {
-        var rbObj = getMapObjectByUid(conn.radioBridgeId, 'radioBridge');
-        if (rbObj) {
-            var ifRb = rbObj.properties.get('incomingFiber');
-            if (ifRb && ifRb.cableId === cableId && ifRb.fiberNumber === fiberNumber) {
-                rbObj.properties.set('incomingFiber', null);
-            }
+function disconnectFiberFromRadioBridge(sleeveObj, cableId, fiberNumber, options) {
+    options = options || {};
+    var ctx = typeof resolveRadioBridgeDisconnectContext === 'function'
+        ? resolveRadioBridgeDisconnectContext(sleeveObj, cableId, fiberNumber) : null;
+    if (!ctx) return;
+
+    var deleteFeeder = ctx.autoDeleteFeeder || (options.deleteCable && ctx.canOfferDeleteCable);
+
+    if (deleteFeeder && ctx.parsedDel && typeof deleteCableByUniqueId === 'function') {
+        deleteCableByUniqueId(ctx.parsedDel.cableId, { skipSync: false, deferMapRefresh: true });
+        if (typeof scheduleConnectionLinesUpdate === 'function') scheduleConnectionLinesUpdate();
+        if (typeof saveData === 'function') saveData();
+        showObjectInfo(sleeveObj);
+        return;
+    }
+
+    var rbConnections = Object.assign({}, sleeveObj.properties.get('radioBridgeConnections') || {});
+    if (ctx.rbObj) {
+        var ifRb = ctx.rbObj.properties.get('incomingFiber');
+        if (ifRb && ctx.parsedDel && ifRb.cableId === ctx.parsedDel.cableId && ifRb.fiberNumber === ctx.parsedDel.fiberNumber) {
+            ctx.rbObj.properties.set('incomingFiber', null);
         }
     }
-    removeOnuConnectionLine(sleeveObj, cableId, fiberNumber);
-    delete rbConnections[key];
+    if (ctx.parsedDel) {
+        removeOnuConnectionLine(sleeveObj, ctx.parsedDel.cableId, ctx.parsedDel.fiberNumber);
+    }
+    delete rbConnections[ctx.keyToDelete];
     sleeveObj.properties.set('radioBridgeConnections', rbConnections);
+    if (typeof scheduleConnectionLinesUpdate === 'function') scheduleConnectionLinesUpdate();
     saveData();
     showObjectInfo(sleeveObj);
 }

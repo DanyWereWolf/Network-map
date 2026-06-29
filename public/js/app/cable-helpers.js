@@ -195,6 +195,13 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
                 return { used: true, where: 'подключение к медиаконвертеру' };
             }
         }
+        if (t === 'radioBridge') {
+            const rbIncoming = obj.properties.get('incomingFiber');
+            if (rbIncoming && rbIncoming.cableId === cableId && rbIncoming.fiberNumber === fiberNumber) {
+                if (exclude && exclude.type === 'radioBridgeConn' && exclude.radioBridgeId === uid) continue;
+                return { used: true, where: 'подключение к радиомосту' };
+            }
+        }
         if (t === 'splitter') {
             const inputFiber = obj.properties.get('inputFiber');
             if (inputFiber && inputFiber.cableId === cableId && inputFiber.fiberNumber === fiberNumber) {

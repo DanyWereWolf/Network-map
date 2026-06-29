@@ -2194,7 +2194,7 @@ function setFiberTargetSelectionModalMode(mode) {
         listLabel = 'Выберите медиаконвертер';
         placeholder = 'Введите название медиаконвертера...';
     } else if (mode === 'radioBridge') {
-        titleText = 'Подключение жилы к радиомосту';
+        titleText = 'Прокладка кабеля к радиомосту';
         searchLabel = 'Поиск радиомоста';
         listLabel = 'Выберите радиомост';
         placeholder = 'Введите название радиомоста...';
@@ -2311,9 +2311,11 @@ function showRadioBridgeSelectionDialog(sleeveObj, cableId, fiberNumber) {
         showWarning('Жила уже подключена к ONU.', 'Жила занята');
         return;
     }
-    const rbs = typeof getAvailableRadioBridges === 'function' ? getAvailableRadioBridges() : [];
+    const rbs = typeof getAvailableRadioBridgesForFiber === 'function'
+        ? getAvailableRadioBridgesForFiber()
+        : (typeof getAvailableRadioBridges === 'function' ? getAvailableRadioBridges() : []);
     if (rbs.length === 0) {
-        showWarning('Нет доступных радиомостов. Сначала создайте радиомост на карте.', 'Нет радиомостов');
+        showWarning('Нет доступных радиомостов с оптическим портом (SFP). Создайте радиомост и выберите тип порта SFP.', 'Нет радиомостов');
         return;
     }
     onuSelectionModalData = { mode: 'radioBridge', sleeveObj: sleeveObj, cableId: cableId, fiberNumber: fiberNumber, targets: rbs };
@@ -2321,7 +2323,7 @@ function showRadioBridgeSelectionDialog(sleeveObj, cableId, fiberNumber) {
     const fiberInfo = document.getElementById('onuSelectionFiberInfo');
     const searchInput = document.getElementById('onuSearchInput');
     setFiberTargetSelectionModalMode('radioBridge');
-    if (fiberInfo) fiberInfo.textContent = 'Подключение жилы #' + fiberNumber + ' к радиомосту';
+    if (fiberInfo) fiberInfo.textContent = 'Прокладка одножильного кабеля от жилы #' + fiberNumber + ' к радиомосту';
     if (searchInput) searchInput.value = '';
     renderOnuList('');
     if (modal) modal.style.display = 'block';
@@ -2374,7 +2376,9 @@ function selectOnuFromList(onuIndex) {
     if (mode === 'mediaConverter') {
         startFiberRouting(data.sleeveObj, data.cableId, data.fiberNumber, 'mediaConverter', targets[onuIndex]);
     } else if (mode === 'radioBridge') {
-        startFiberRouting(data.sleeveObj, data.cableId, data.fiberNumber, 'radioBridge', targets[onuIndex]);
+        if (typeof startHostFiberToRadioBridgeCable === 'function') {
+            startHostFiberToRadioBridgeCable(data.sleeveObj, data.cableId, data.fiberNumber, targets[onuIndex]);
+        }
     } else if (mode === 'splitterOutputMc') {
         var spFacade = resolveSplitterObject(data.splitterId);
         if (spFacade) {

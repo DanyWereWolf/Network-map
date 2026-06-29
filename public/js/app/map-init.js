@@ -162,6 +162,7 @@ function setupEventListeners() {
             pendingCopperPortPreset = null;
             pendingCopperRouteFinish = null;
             if (typeof finishOltPortCableLayingSession === 'function') finishOltPortCableLayingSession();
+            if (typeof finishRadioBridgePortCableLayingSession === 'function') finishRadioBridgePortCableLayingSession();
             if (typeof clearCabinetCableSourceHighlight === 'function') clearCabinetCableSourceHighlight();
             const mapEl = myMap.container.getElement();
             mapEl.style.cursor = '';

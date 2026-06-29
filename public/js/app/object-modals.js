@@ -530,11 +530,20 @@ function removeAttachedSwitchFromNode(node, switchId) {
 }
 
 function isCopperLanEndDeviceType(t) {
-    return t === 'camera' || t === 'mediaConverter' || t === 'radioBridge';
+    return t === 'camera' || t === 'mediaConverter';
+}
+
+function isRadioBridgeCopperEndpointType(t) {
+    return t === 'radioBridge';
 }
 
 function cameraHasCopperCable(camObj) {
-    if (!camObj || !camObj.properties || !isCopperLanEndDeviceType(camObj.properties.get('type'))) return false;
+    if (!camObj || !camObj.properties) return false;
+    var t = camObj.properties.get('type');
+    if (t === 'radioBridge') {
+        return typeof isRadioBridgeAnyCopperPortBusy === 'function' && isRadioBridgeAnyCopperPortBusy(camObj);
+    }
+    if (!isCopperLanEndDeviceType(t)) return false;
     return objects.some(function(c) {
         if (!c || !c.properties || c.properties.get('type') !== 'cable') return false;
         if (!isCopperCableType(c.properties.get('cableType'))) return false;
@@ -1065,6 +1074,7 @@ function validateCopperCableRoute(points, skipSync, copperMeta) {
         if (!obj || !obj.properties) return false;
         var t = obj.properties.get('type');
         if (t === 'switch') return true;
+        if (t === 'radioBridge') return true;
         if (t === 'mediaConverter') {
             var incMc = obj.properties.get('incomingFiber');
             return !!(incMc && incMc.cableId);
@@ -1076,12 +1086,43 @@ function validateCopperCableRoute(points, skipSync, copperMeta) {
         return false;
     }
     if (!endOk(points[0], true)) {
-        if (!skipSync) showError('Медный кабель: начало маршрута — узел сети с коммутатором, отдельный коммутатор на карте или медиаконвертер с подключённой оптической жилой.', 'Недопустимое действие');
+        if (!skipSync) showError('Медный кабель: начало маршрута — узел сети с коммутатором, отдельный коммутатор, радиомост или медиаконвертер с подключённой оптической жилой.', 'Недопустимое действие');
         return false;
     }
     if (!endOk(points[points.length - 1], false)) {
-        if (!skipSync) showError('Медный кабель: конец маршрута — узел сети с коммутатором, отдельный коммутатор на карте или медиаконвертер с подключённой оптической жилой.', 'Недопустимое действие');
+        if (!skipSync) showError('Медный кабель: конец маршрута — узел сети с коммутатором, отдельный коммутатор, радиомост или медиаконвертер с подключённой оптической жилой.', 'Недопустимое действие');
         return false;
+    }
+    var rb0 = t0 === 'radioBridge';
+    var rbL = tL === 'radioBridge';
+    if (rb0 && rbL) {
+        if (!skipSync) showError('Нельзя соединить два радиомоста одним медным кабелем.', 'Недопустимое действие');
+        return false;
+    }
+    if (rb0 || rbL) {
+        var rbPm = rb0 ? p0 : pL;
+        var otherPmRb = rb0 ? pL : p0;
+        var otRb = otherPmRb.properties.get('type');
+        if (otRb !== 'node' && otRb !== 'switch') {
+            if (!skipSync) showError('Радиомост медным кабелем подключается только к коммутатору (узел сети или отдельный коммутатор на карте).', 'Недопустимое действие');
+            return false;
+        }
+        var sidNeedRb = rb0 ? copperMeta.copperSwitchToId : copperMeta.copperSwitchFromId;
+        if (otRb === 'node') {
+            if (!sidNeedRb || !findAttachedSwitchOnNode(otherPmRb, sidNeedRb)) {
+                if (!skipSync) showError('Для линии к радиомосту выберите коммутатор в узле сети.', 'Недопустимое действие');
+                return false;
+            }
+        }
+        var rbPort = rb0 ? copperMeta.copperPortFrom : copperMeta.copperPortTo;
+        if (rbPort != null && rbPort !== '' && typeof isRadioBridgeCopperPortBusy === 'function') {
+            var pnRb = parseInt(rbPort, 10);
+            if (!isNaN(pnRb) && isRadioBridgeCopperPortBusy(rbPm, pnRb)) {
+                if (!skipSync) showError('Порт радиомоста уже занят.', 'Подключение');
+                return false;
+            }
+        }
+        return true;
     }
     if (t0 === 'switch' && tL === 'switch') {
         var n1 = p0.properties.get('parentNodeId') || '';
@@ -1106,7 +1147,7 @@ function clearCopperCableOccupancyForCableId(cableUniqueId) {
     objects.forEach(function(o) {
         if (!o.properties) return;
         var t = o.properties.get('type');
-        if (isCrossLikeHostType(t) || t === 'switch') {
+        if (isCrossLikeHostType(t) || t === 'switch' || t === 'radioBridge') {
             var usage = o.properties.get('copperPortUsage') || {};
             var changed = false;
             Object.keys(usage).forEach(function(k) {
@@ -1159,6 +1200,10 @@ function applyCopperCableOccupancyFromCable(cable) {
             var usageS = obj.properties.get('copperPortUsage') || {};
             usageS[String(pn)] = uid;
             obj.properties.set('copperPortUsage', usageS);
+        } else if (t === 'radioBridge') {
+            var usageRb = obj.properties.get('copperPortUsage') || {};
+            usageRb[String(pn)] = uid;
+            obj.properties.set('copperPortUsage', usageRb);
         } else if (t === 'node' && switchId) {
             var arr = getNodeAttachedSwitches(obj).slice();
             var ix = arr.findIndex(function(s) { return s.uniqueId === switchId; });
@@ -1179,7 +1224,7 @@ function rebuildAllCopperPortUsageFromCables() {
     objects.forEach(function(o) {
         if (!o.properties) return;
         var t = o.properties.get('type');
-        if (isCrossLikeHostType(t) || t === 'switch') o.properties.set('copperPortUsage', {});
+        if (isCrossLikeHostType(t) || t === 'switch' || t === 'radioBridge') o.properties.set('copperPortUsage', {});
         if (t === 'node') {
             var arr = getNodeAttachedSwitches(o).map(function(sw) {
                 return Object.assign({}, sw, { copperPortUsage: {} });
@@ -1215,6 +1260,12 @@ function buildCopperPortOptionsHtml(obj, selected, switchIdForNode, excludeCable
     } else if (t === 'switch') {
         var stSw = obj.properties.get('switchPortTypes') || [];
         max = Array.isArray(stSw) ? stSw.length : 0;
+        usage = obj.properties.get('copperPortUsage') || {};
+        portLabels = obj.properties.get('portLabels') || {};
+        manualUsage = obj.properties.get('manualPortUsage') || {};
+    } else if (t === 'radioBridge') {
+        var stRb = typeof getRadioBridgePortTypes === 'function' ? getRadioBridgePortTypes(obj) : (obj.properties.get('radioBridgePortTypes') || []);
+        max = Array.isArray(stRb) ? stRb.length : 0;
         usage = obj.properties.get('copperPortUsage') || {};
         portLabels = obj.properties.get('portLabels') || {};
         manualUsage = obj.properties.get('manualPortUsage') || {};
@@ -1257,6 +1308,11 @@ function isCopperPortAvailableForNewLay(obj, portNum, switchIdForNode) {
     if (t === 'switch') {
         var us = obj.properties.get('copperPortUsage') || {};
         return !us[String(p)];
+    }
+    if (t === 'radioBridge') {
+        if (typeof isRadioBridgeCopperPortBusy === 'function') return !isRadioBridgeCopperPortBusy(obj, p);
+        var ur = obj.properties.get('copperPortUsage') || {};
+        return !ur[String(p)];
     }
     if (t === 'node') {
         if (!switchIdForNode) return false;
@@ -1322,6 +1378,14 @@ function openCopperEndPortModal(points, cableTypeVal, copperMeta) {
     var startObj = points[0];
     if (!endObj || !endObj.properties || !startObj || !startObj.properties) return;
     var endType = endObj.properties.get('type');
+    var startTypeInit = startObj.properties.get('type');
+
+    if (pendingCopperPortPreset && pendingCopperPortPreset.kind === 'radioBridge' && startTypeInit === 'radioBridge') {
+        var rbUidPreset = getObjectUniqueId(startObj);
+        if (rbUidPreset === pendingCopperPortPreset.rbUid) {
+            copperMeta = Object.assign({}, copperMeta, { copperPortFrom: pendingCopperPortPreset.port });
+        }
+    }
 
     if (isCopperLanEndDeviceType(endType)) {
         if (cameraHasCopperCable(endObj)) {
@@ -1527,26 +1591,39 @@ function openCopperEndPortModal(points, cableTypeVal, copperMeta) {
 /** Обработка клика по объекту в режиме прокладки медного кабеля. Возвращает true, если клик обработан (в т.ч. ошибка). */
 function handleCopperCablePlacemarkStep(placemark, type, cableTypeVal) {
     if (!isCopperCableType(cableTypeVal)) return false;
+    var rbSwitchLay = pendingCopperPortPreset && pendingCopperPortPreset.kind === 'radioBridge';
     if (type === 'splitter' || type === 'onu') {
-        showError('Для медного кабеля используйте узел с коммутатором, камеру, медиаконвертер, опору или крепление узла.', 'Недопустимое действие');
+        showError('Для медного кабеля используйте узел с коммутатором, камеру, медиаконвертер, радиомост, опору или крепление узла.', 'Недопустимое действие');
         return true;
     }
     if (isFiberHostType(type) || type === 'olt') {
         showError('Медный кабель не прокладывается к муфте, кроссу или OLT. Концы маршрута — узел сети с коммутатором, камера или медиаконвертер (с подключённой оптической жилой).', 'Недопустимое действие');
         return true;
     }
+    if (rbSwitchLay && type !== 'switch' && type !== 'node' && type !== 'support' && type !== 'attachment' && type !== 'radioBridge') {
+        showError('От радиомоста медный кабель прокладывается только до коммутатора. Опоры и крепления — промежуточные точки.', 'Недопустимое действие');
+        return true;
+    }
     if (type === 'node' && getNodeAttachedSwitches(placemark).length === 0) {
         showError('У этого узла нет коммутаторов. Добавьте коммутатор в карточке узла.', 'Недопустимое действие');
         return true;
     }
-    var ep = ['switch', 'node', 'support', 'attachment', 'camera', 'mediaConverter'];
+    var ep = rbSwitchLay
+        ? ['radioBridge', 'switch', 'node', 'support', 'attachment']
+        : ['switch', 'node', 'support', 'attachment', 'camera', 'mediaConverter'];
     if (ep.indexOf(type) === -1) {
-        showError('Медный кабель: доступны только узел с коммутатором, камера, медиаконвертер, опора и крепление узла.', 'Недопустимое действие');
+        showError(rbSwitchLay
+            ? 'Медный кабель от радиомоста: только коммутатор, опора и крепление узла.'
+            : 'Медный кабель: доступны только узел с коммутатором, камера, медиаконвертер, опора и крепление узла.', 'Недопустимое действие');
         return true;
     }
     if (!cableSource) {
         if (type === 'support' || type === 'attachment') {
-            showError('Начало медного кабеля должно быть узлом с коммутатором или медиаконвертером (кнопка в карточке при наличии оптической жилы). Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
+            showError('Начало медного кабеля должно быть узлом с коммутатором, радиомостом (кнопка «Подключить» у порта) или медиаконвертером (после подключения оптической жилы). Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
+            return true;
+        }
+        if (type === 'radioBridge') {
+            showError('Для радиомоста укажите начало линии кнопкой «Подключить» у порта в карточке устройства.', 'Недопустимое действие');
             return true;
         }
         if (type === 'mediaConverter') {
@@ -1590,11 +1667,15 @@ function handleCopperCablePlacemarkStep(placemark, type, cableTypeVal) {
         return true;
     }
     if (isCopperLanEndDeviceType(type)) {
-        var srcT = cableSource.properties.get('type');
-        if (isFiberHostType(srcT)) {
+        var srcTEnd = cableSource.properties.get('type');
+        if (isFiberHostType(srcTEnd)) {
             showError('Камеру или медиаконвертер можно подключить только от коммутатора или от медиаконвертера с оптической жилой.', 'Недопустимое действие');
             return true;
         }
+    }
+    if (type === 'cross' && rbSwitchLay) {
+        showError('От радиомоста медный кабель прокладывается к коммутатору, не к кроссу.', 'Недопустимое действие');
+        return true;
     }
     var toSwitchId = null;
     if (type === 'node') {
@@ -1651,40 +1732,7 @@ function startCopperCableFromMediaConverter(mcObj) {
 }
 
 function startCopperCableFromRadioBridge(rbObj) {
-    if (!isEditMode || !rbObj || !rbObj.properties || rbObj.properties.get('type') !== 'radioBridge') return;
-    var inc = rbObj.properties.get('incomingFiber');
-    if (!inc || !inc.cableId) {
-        if (typeof showError === 'function') showError('Сначала подключите оптическую жилу к радиомосту с кросса или муфты.', 'Нет входной жилы');
-        return;
-    }
-    if (cameraHasCopperCable(rbObj)) {
-        if (typeof showError === 'function') showError('К этому радиомосту уже подключён медный кабель.', 'Подключение');
-        return;
-    }
-    if (objectPlacementMode && typeof cancelObjectPlacement === 'function') cancelObjectPlacement();
-    if (splitterFiberRoutingMode && typeof cancelSplitterFiberRouting === 'function') cancelSplitterFiberRouting();
-    if (fiberRoutingMode && typeof cancelFiberRouting === 'function') cancelFiberRouting();
-    if (radioBridgeRoutingMode && typeof cancelRadioBridgeRouting === 'function') cancelRadioBridgeRouting();
-    if (!currentCableTool) {
-        var cableBtnRb = document.getElementById('addCable');
-        if (cableBtnRb) cableBtnRb.click();
-    }
-    copperCableLayingActive = true;
-    if (typeof syncCableTypePickerUI === 'function') syncCableTypePickerUI();
-    pendingCopperPortPreset = null;
-    cableSource = rbObj;
-    cableSourceCopperSwitchId = null;
-    cableWaypoints = [];
-    if (typeof removePhantomPlacemark === 'function') removePhantomPlacemark();
-    if (typeof removeCablePreview === 'function') removeCablePreview();
-    if (typeof clearSelection === 'function') clearSelection();
-    if (typeof selectObject === 'function') selectObject(cableSource);
-    var modalRb = document.getElementById('infoModal');
-    if (modalRb) modalRb.style.display = 'none';
-    currentModalObject = null;
-    if (typeof showInfo === 'function') {
-        showInfo('Укажите на карте второй конец: узел сети с коммутатором или отдельный коммутатор. Опоры и крепления — только промежуточные точки.', 'Медный кабель');
-    }
+    if (typeof startRadioBridgePortCopperToSwitch === 'function') startRadioBridgePortCopperToSwitch(rbObj);
 }
 
 function startCopperCableFromNodeSwitchPort(nodeObj, switchId, portNum) {
@@ -4008,10 +4056,17 @@ function setupEditAndDeleteListeners() {
             }
             populateModelDatalistForManufacturer(this.value.trim(), 'deviceModelsList', 'radioBridge');
         });
-        editRadioBridgeManufacturer.addEventListener('change', function() { populateModelDatalistForManufacturer(this.value.trim(), 'deviceModelsList', 'radioBridge'); });
+        editRadioBridgeManufacturer.addEventListener('change', function() {
+            populateModelDatalistForManufacturer(this.value.trim(), 'deviceModelsList', 'radioBridge');
+        });
     }
     var editRadioBridgeModel = document.getElementById('editRadioBridgeModel');
-    if (editRadioBridgeModel) editRadioBridgeModel.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'radioBridge') { currentModalObject.properties.set('model', this.value || ''); saveData(); } });
+    if (editRadioBridgeModel) editRadioBridgeModel.addEventListener('input', function() {
+        if (currentModalObject && currentModalObject.properties.get('type') === 'radioBridge') {
+            currentModalObject.properties.set('model', this.value || '');
+            saveData();
+        }
+    });
     var editRadioBridgeComment = document.getElementById('editRadioBridgeComment');
     if (editRadioBridgeComment) editRadioBridgeComment.addEventListener('input', function() { if (currentModalObject && currentModalObject.properties.get('type') === 'radioBridge') { currentModalObject.properties.set('comment', this.value || ''); saveData(); } });
 

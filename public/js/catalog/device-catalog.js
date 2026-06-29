@@ -716,6 +716,8 @@ var switchDeviceCatalog = {};
 var cableDeviceCatalog = {};
 /** switchModelDefaultPorts[manufacturer][model] = число портов по умолчанию при добавлении коммутатора. */
 var switchModelDefaultPorts = {};
+/** radioBridgeModelDefaultPorts[manufacturer][model] = число Ethernet-портов по умолчанию при добавлении радиомоста. */
+var radioBridgeModelDefaultPorts = {};
 /** switchModelPortTypes[manufacturer][model] = массив типов портов (по одному на порт). */
 var switchModelPortTypes = {};
 /** oltModelDefaultPorts[manufacturer][model] = число PON-портов по умолчанию. */
@@ -827,6 +829,10 @@ var DEVICE_CATALOG_TAB_META = {
         label: 'Медиаконвертер',
         desc: 'Оптические медиаконвертеры на карте (отдельно от коммутаторов узла сети).'
     },
+    radioBridge: {
+        label: 'Радиомосты',
+        desc: 'Wi‑Fi радиомосты на карте (P2P и P2MP): производитель и модель при добавлении и в карточке объекта.'
+    },
     sleeve: {
         label: 'Муфты',
         desc: 'Типы кабельных муфт для списка при добавлении и редактировании. Лишние типы (включая встроенные) можно убрать кнопкой «Удалить»; свои — добавляются кнопкой «Добавить».'
@@ -855,6 +861,7 @@ var DEVICE_CATALOG_TAB_TONE = {
     onu: '#06b6d4',
     camera: '#64748b',
     node: '#14b8a6',
+    radioBridge: '#06b6d4',
     sleeve: '#22c55e',
     cross: '#a855f7',
     spliceCassette: '#f59e0b',
@@ -876,7 +883,7 @@ function syncDeviceCatalogTabButtons() {
     }
 }
 
-var DEVICE_CATALOG_ALLOWED_TABS = { node: 1, olt: 1, onu: 1, camera: 1, switch: 1, sleeve: 1, cross: 1, spliceCassette: 1, cabinet: 1, cable: 1 };
+var DEVICE_CATALOG_ALLOWED_TABS = { node: 1, olt: 1, onu: 1, camera: 1, radioBridge: 1, switch: 1, sleeve: 1, cross: 1, spliceCassette: 1, cabinet: 1, cable: 1 };
 
 function getDeviceCatalogStats(kind) {
     if (kind === 'sleeve' || kind === 'cross' || kind === 'spliceCassette') {
@@ -1065,6 +1072,10 @@ function resetDeviceCatalogTabToDefault(kind) {
     else if (kind === 'olt') oltDeviceCatalog = cloneDeepCatalog(def);
     else if (kind === 'onu') onuDeviceCatalog = cloneDeepCatalog(def);
     else if (kind === 'camera') cameraDeviceCatalog = cloneDeepCatalog(def);
+    else if (kind === 'radioBridge') {
+        radioBridgeDeviceCatalog = cloneDeepCatalog(def);
+        radioBridgeModelDefaultPorts = {};
+    }
     else if (kind === 'cabinet') cabinetDeviceCatalog = cloneDeepCatalog(def);
     else if (kind === 'switch') {
         switchDeviceCatalog = cloneDeepCatalog(def);
@@ -1109,6 +1120,9 @@ function removeManufacturerForCatalog(kind, name) {
     delete cat[name];
     if (kind === 'switch' && switchModelDefaultPorts[name]) {
         delete switchModelDefaultPorts[name];
+    }
+    if (kind === 'radioBridge' && radioBridgeModelDefaultPorts[name]) {
+        delete radioBridgeModelDefaultPorts[name];
     }
     if (kind === 'switch' && switchModelPortTypes[name]) {
         delete switchModelPortTypes[name];
@@ -1159,6 +1173,14 @@ function removeModelForCatalog(kind, manufacturer, model) {
         }
         if (Object.keys(switchModelPortTypes[manufacturer]).length === 0) {
             delete switchModelPortTypes[manufacturer];
+        }
+    }
+    if (kind === 'radioBridge' && radioBridgeModelDefaultPorts[manufacturer]) {
+        if (radioBridgeModelDefaultPorts[manufacturer][model] !== undefined) {
+            delete radioBridgeModelDefaultPorts[manufacturer][model];
+        }
+        if (Object.keys(radioBridgeModelDefaultPorts[manufacturer]).length === 0) {
+            delete radioBridgeModelDefaultPorts[manufacturer];
         }
     }
     if (kind === 'olt' && oltModelDefaultPorts[manufacturer]) {
@@ -1219,6 +1241,45 @@ function getSwitchModelDefaultPortCount(manufacturer, model) {
     var n = parseInt(byM[mod], 10);
     if (isNaN(n) || n < 1) return null;
     return Math.min(96, n);
+}
+
+function getRadioBridgeModelDefaultPortCount(manufacturer, model) {
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (!mfr || !mod) return null;
+    var byM = radioBridgeModelDefaultPorts[mfr];
+    if (!byM || typeof byM !== 'object') return null;
+    var n = parseInt(byM[mod], 10);
+    if (isNaN(n) || n < 1) return null;
+    return Math.min(8, n);
+}
+
+function setRadioBridgeModelDefaultPortCount(manufacturer, model, portCount) {
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (!mfr || !mod) return false;
+    if (portCount === null || portCount === undefined || portCount === '') {
+        if (radioBridgeModelDefaultPorts[mfr] && radioBridgeModelDefaultPorts[mfr][mod] !== undefined) {
+            delete radioBridgeModelDefaultPorts[mfr][mod];
+            if (Object.keys(radioBridgeModelDefaultPorts[mfr]).length === 0) delete radioBridgeModelDefaultPorts[mfr];
+        }
+        saveDeviceCatalog();
+        return true;
+    }
+    var n = parseInt(portCount, 10);
+    if (isNaN(n) || n < 1) {
+        if (radioBridgeModelDefaultPorts[mfr] && radioBridgeModelDefaultPorts[mfr][mod] !== undefined) {
+            delete radioBridgeModelDefaultPorts[mfr][mod];
+            if (Object.keys(radioBridgeModelDefaultPorts[mfr]).length === 0) delete radioBridgeModelDefaultPorts[mfr];
+        }
+        saveDeviceCatalog();
+        return true;
+    }
+    n = Math.min(8, Math.max(1, n));
+    if (!radioBridgeModelDefaultPorts[mfr]) radioBridgeModelDefaultPorts[mfr] = {};
+    radioBridgeModelDefaultPorts[mfr][mod] = n;
+    saveDeviceCatalog();
+    return true;
 }
 
 function setSwitchModelDefaultPortCount(manufacturer, model, portCount) {
@@ -1940,6 +2001,8 @@ function saveDeviceCatalog() {
         oltDeviceCatalog: cloneDeepCatalog(oltDeviceCatalog),
         onuDeviceCatalog: cloneDeepCatalog(onuDeviceCatalog),
         cameraDeviceCatalog: cloneDeepCatalog(cameraDeviceCatalog),
+        radioBridgeDeviceCatalog: cloneDeepCatalog(radioBridgeDeviceCatalog),
+        radioBridgeModelDefaultPorts: JSON.parse(JSON.stringify(radioBridgeModelDefaultPorts || {})),
         cabinetDeviceCatalog: cloneDeepCatalog(cabinetDeviceCatalog),
         switchDeviceCatalog: cloneDeepCatalog(switchDeviceCatalog),
         switchModelDefaultPorts: JSON.parse(JSON.stringify(switchModelDefaultPorts || {})),
@@ -2021,6 +2084,11 @@ function loadDeviceCatalog(opts) {
             switchModelPortTypes = JSON.parse(JSON.stringify(opts.switchModelPortTypes));
         } else {
             switchModelPortTypes = {};
+        }
+        if (opts.radioBridgeModelDefaultPorts && typeof opts.radioBridgeModelDefaultPorts === 'object') {
+            radioBridgeModelDefaultPorts = JSON.parse(JSON.stringify(opts.radioBridgeModelDefaultPorts));
+        } else {
+            radioBridgeModelDefaultPorts = {};
         }
         if (opts.oltModelDefaultPorts && typeof opts.oltModelDefaultPorts === 'object') {
             oltModelDefaultPorts = JSON.parse(JSON.stringify(opts.oltModelDefaultPorts));
@@ -2115,6 +2183,12 @@ function loadDeviceCatalog(opts) {
         switchModelPortTypes = JSON.parse(JSON.stringify(opts.switchModelPortTypes));
     } else if (!('switchModelPortTypes' in opts)) {
         switchModelPortTypes = {};
+    }
+
+    if (opts.radioBridgeModelDefaultPorts && typeof opts.radioBridgeModelDefaultPorts === 'object') {
+        radioBridgeModelDefaultPorts = JSON.parse(JSON.stringify(opts.radioBridgeModelDefaultPorts));
+    } else if (!('radioBridgeModelDefaultPorts' in opts)) {
+        radioBridgeModelDefaultPorts = {};
     }
 
     if (opts.oltModelDefaultPorts && typeof opts.oltModelDefaultPorts === 'object') {
@@ -2422,7 +2496,7 @@ function initDeviceComboboxes(container) {
         var type = wrapper.dataset.type;
         var catalogKind = (wrapper.dataset.catalog || 'node').trim();
         if (catalogKind === 'general') catalogKind = 'node';
-        var allowedCatalogKinds = { node: 1, olt: 1, onu: 1, camera: 1, switch: 1, cable: 1 };
+        var allowedCatalogKinds = { node: 1, olt: 1, onu: 1, camera: 1, radioBridge: 1, switch: 1, cable: 1, cabinet: 1 };
         if (!allowedCatalogKinds[catalogKind]) catalogKind = 'node';
         var valueId = wrapper.dataset.valueId;
         var manufacturerId = wrapper.dataset.manufacturerId;
@@ -2829,7 +2903,7 @@ function renderDeviceCatalogList() {
             html += '<span class="device-catalog-mfr-count">Нет моделей — нажмите «+ Добавить»</span>';
         }
         models.forEach(function(mod) {
-            html += '<span class="device-catalog-model-tag' + (tab === 'cable' ? ' device-catalog-model-tag--cable' : '') + (tab === 'switch' || tab === 'olt' ? ' device-catalog-model-tag--switch' : '') + '">';
+            html += '<span class="device-catalog-model-tag' + (tab === 'cable' ? ' device-catalog-model-tag--cable' : '') + (tab === 'switch' || tab === 'olt' ? ' device-catalog-model-tag--switch' : '') + (tab === 'radioBridge' ? ' device-catalog-model-tag--switch' : '') + '">';
             html += '<span class="device-catalog-model-name">' + escapeHtml(mod) + '</span>';
             if (tab === 'switch') {
                 var defN = getSwitchModelDefaultPortCount(mfr, mod);

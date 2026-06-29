@@ -1,6 +1,12 @@
 /**
  * Клики и движение мыши по карте в режиме редактирования.
  */
+function validateFiberCableLayEndpoint(endpointObj) {
+    if (typeof validatePendingOltPortCableEndpoint === 'function' && !validatePendingOltPortCableEndpoint(endpointObj)) return false;
+    if (typeof validatePendingRadioBridgePortCableEndpoint === 'function' && !validatePendingRadioBridgePortCableEndpoint(endpointObj)) return false;
+    return true;
+}
+
 function processFiberCableEndpointClick(clickedObject) {
     if (!clickedObject || !clickedObject.geometry) return;
     var objType = clickedObject.properties ? clickedObject.properties.get('type') : null;
@@ -15,8 +21,9 @@ function processFiberCableEndpointClick(clickedObject) {
         }
     }
 
-    if (objType === 'splitter' || objType === 'onu' || objType === 'camera' || objType === 'mediaConverter') {
-        showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU, камеры или медиаконвертера. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
+    if (objType === 'splitter' || objType === 'onu' || objType === 'camera' || objType === 'mediaConverter' ||
+        (objType === 'radioBridge' && !(typeof isRadioBridgeFiberCableLayToEndpointActive === 'function' && isRadioBridgeFiberCableLayToEndpointActive()))) {
+        showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU, камеры или медиаконвертера. Кабель прокладывается между муфтой, кроссом, креплением, OLT или радиомостом (оптический порт).', 'Недопустимое действие');
         return;
     }
 
@@ -55,12 +62,13 @@ function processFiberCableEndpointClick(clickedObject) {
             showError('Завершите подземный участок: кликайте по карте и выберите второй колодец, или Escape для отмены.', 'Колодец');
             return;
         }
-        if (!validatePendingOltPortCableEndpoint(clickedObject)) return;
+        if (!validateFiberCableLayEndpoint(clickedObject)) return;
         var pointsEnd = [cableSource].concat(cableWaypoints).concat([clickedObject]);
         var successEnd = createCableFromPoints(pointsEnd, cableType);
         if (successEnd) {
-            if (oltPortCableJustFinished) {
+            if (oltPortCableJustFinished || radioBridgePortCableJustFinished) {
                 oltPortCableJustFinished = false;
+                radioBridgePortCableJustFinished = false;
                 clearSelection();
                 removeCablePreview();
                 return;
@@ -116,12 +124,13 @@ function processFiberCableEndpointClick(clickedObject) {
             showError('Завершите подземный участок: кликайте по карте и выберите второй колодец, или Escape для отмены.', 'Колодец');
             return;
         }
-        if (!validatePendingOltPortCableEndpoint(clickedObject)) return;
+        if (!validateFiberCableLayEndpoint(clickedObject)) return;
         var pointsFin = [cableSource].concat(cableWaypoints).concat([clickedObject]);
         var successFin = createCableFromPoints(pointsFin, cableType);
         if (successFin) {
-            if (oltPortCableJustFinished) {
+            if (oltPortCableJustFinished || radioBridgePortCableJustFinished) {
                 oltPortCableJustFinished = false;
+                radioBridgePortCableJustFinished = false;
                 clearSelection();
                 removeCablePreview();
                 return;
@@ -354,9 +363,13 @@ function handleMapClick(e) {
 
             if (cableSource) {
                 const currentCableType = getEffectiveCableLayingType();
+                var rbHostToRbLay = typeof isRadioBridgeHostToRbCableLayActive === 'function' &&
+                    isRadioBridgeHostToRbCableLayActive();
                 var nearestObject = findObjectAtCoords(coords, null, {
                     pixelRadius: getCableSnapPixelRadius(zoom, 'auto'),
-                    priorityTypes: ['cross', 'sleeve', 'olt', 'support', 'attachment', 'manhole'],
+                    priorityTypes: rbHostToRbLay
+                        ? ['radioBridge', 'cross', 'sleeve', 'olt', 'support', 'attachment', 'manhole']
+                        : ['cross', 'sleeve', 'olt', 'support', 'attachment', 'manhole'],
                     excludeCabinetMembers: true,
                     excludeTypes: ['cabinet'],
                     excludeObject: cableSource
@@ -370,12 +383,13 @@ function handleMapClick(e) {
                     if (cabNear && cabNear !== cableSource && typeof resolveCabinetCableTarget === 'function') {
                         resolveCabinetCableTarget(cabNear, function(target) {
                             if (!target) return;
-                            if (!validatePendingOltPortCableEndpoint(target)) return;
+                            if (!validateFiberCableLayEndpoint(target)) return;
                             var pointsCab = [cableSource].concat(cableWaypoints).concat([target]);
                             var okCab = createCableFromPoints(pointsCab, getEffectiveCableLayingType());
                             if (okCab) {
-                                if (oltPortCableJustFinished) {
+                                if (oltPortCableJustFinished || radioBridgePortCableJustFinished) {
                                     oltPortCableJustFinished = false;
+                                    radioBridgePortCableJustFinished = false;
                                     clearSelection();
                                     removeCablePreview();
                                     return;
@@ -405,13 +419,14 @@ function handleMapClick(e) {
                         clearSelection();
                         selectObject(cableSource);
                     } else {
-                        if (!validatePendingOltPortCableEndpoint(nearestObject)) return;
+                        if (!validateFiberCableLayEndpoint(nearestObject)) return;
                         const pointsNear = [cableSource].concat(cableWaypoints).concat([nearestObject]);
                         const cableTypeVal = getEffectiveCableLayingType();
                         const successNear = createCableFromPoints(pointsNear, cableTypeVal);
                         if (successNear) {
-                            if (oltPortCableJustFinished) {
+                            if (oltPortCableJustFinished || radioBridgePortCableJustFinished) {
                                 oltPortCableJustFinished = false;
+                                radioBridgePortCableJustFinished = false;
                                 clearSelection();
                                 removeCablePreview();
                                 return;

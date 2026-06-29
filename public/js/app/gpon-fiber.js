@@ -952,7 +952,7 @@ function countConnectionsLostOnCableFiberReduction(cableUniqueId, maxFiber) {
                 });
             }
         }
-        if (t === 'onu' || t === 'mediaConverter') {
+        if (t === 'onu' || t === 'mediaConverter' || t === 'radioBridge') {
             var inc = slot.properties.get('incomingFiber');
             if (inc && inc.cableId === cableUniqueId && inc.fiberNumber > maxFiber) stats.external++;
         }
@@ -1071,6 +1071,30 @@ function pruneConnectionsForRemovedCableFibers(cableUniqueId, maxFiber) {
                 slot.properties.set('mediaConverterConnections', mcConn);
             }
 
+            var rbConn = slot.properties.get('radioBridgeConnections');
+            if (rbConn) {
+                Object.keys(rbConn).slice().forEach(function(key) {
+                    var parsed = parseFiberConnectionKey(key);
+                    if (!parsed || !isCableFiberBeyondMax(parsed.cableId, parsed.fiberNumber, cableUniqueId, maxFiber)) return;
+                    var conn = rbConn[key];
+                    if (conn && conn.radioBridgeId) {
+                        var rbObj = objects.find(function(o) {
+                            return o.properties && o.properties.get('type') === 'radioBridge' &&
+                                getObjectUniqueId(o) === conn.radioBridgeId;
+                        });
+                        if (rbObj) {
+                            var ifRb = rbObj.properties.get('incomingFiber');
+                            if (ifRb && ifRb.cableId === cableUniqueId && ifRb.fiberNumber === parsed.fiberNumber) {
+                                rbObj.properties.set('incomingFiber', null);
+                            }
+                        }
+                    }
+                    removeOnuConnectionLine(slot, parsed.cableId, parsed.fiberNumber);
+                    delete rbConn[key];
+                });
+                slot.properties.set('radioBridgeConnections', rbConn);
+            }
+
             var splitterConn = slot.properties.get('splitterConnections');
             if (splitterConn) {
                 Object.keys(splitterConn).slice().forEach(function(key) {
@@ -1164,7 +1188,7 @@ function pruneConnectionsForRemovedCableFibers(cableUniqueId, maxFiber) {
                 if (outChanged) slot.properties.set('outputConnections', newOutputConn);
             }
         }
-        if (t === 'onu' || t === 'mediaConverter') {
+        if (t === 'onu' || t === 'mediaConverter' || t === 'radioBridge') {
             var incEnd = slot.properties.get('incomingFiber');
             if (incEnd && incEnd.cableId === cableUniqueId && incEnd.fiberNumber > maxFiber) {
                 slot.properties.set('incomingFiber', null);

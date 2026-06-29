@@ -6702,18 +6702,6 @@ button {
     color: var(--text-primary);
 }
 
-.fiber-chip--cross-patch {
-    background: rgba(234, 88, 12, 0.15);
-    border-color: rgba(234, 88, 12, 0.45);
-    color: #c2410c;
-}
-
-.fiber-chip--cross-port {
-    background: rgba(109, 40, 217, 0.12);
-    border-color: rgba(109, 40, 217, 0.45);
-    color: #6d28d9;
-}
-
 .fiber-connections-container .fiber-item.fiber-item--cross-port-target {
     outline: 2px dashed rgba(109, 40, 217, 0.55);
     outline-offset: 2px;
@@ -9220,6 +9208,10 @@ button {
     border-color: #fca5a5;
 }
 
+.fiber-assign__disconnect--delete-cable {
+    margin-left: 2px;
+}
+
 .fiber-item__actions {
     display: flex;
     flex-wrap: wrap;
@@ -9258,8 +9250,14 @@ button {
 .fiber-chip--onu:hover { background: #ede9fe; }
 .fiber-chip--mc { color: #0f766e; border-color: #5eead4; background: #ecfeff; }
 .fiber-chip--mc:hover { background: #cffafe; }
+.fiber-chip--rb { color: #0e7490; border-color: #67e8f9; background: #ecfeff; }
+.fiber-chip--rb:hover { background: #cffafe; }
 .fiber-chip--restore { color: #475569; border-color: #cbd5e1; background: #f8fafc; }
 .fiber-chip--restore:hover { background: #f1f5f9; }
+.fiber-chip--cross-patch { color: #c2410c; border-color: #fdba74; background: #fff7ed; }
+.fiber-chip--cross-patch:hover { background: #ffedd5; }
+.fiber-chip--cross-port { color: #6d28d9; border-color: #c4b5fd; background: #f5f3ff; }
+.fiber-chip--cross-port:hover { background: #ede9fe; }
 
 [data-theme="dark"] .fiber-item__status {
     background: color-mix(in srgb, var(--bg-tertiary) 60%, var(--bg-card));
@@ -9286,8 +9284,17 @@ button {
 [data-theme="dark"] .fiber-chip--onu:hover { background: rgba(76, 29, 149, 0.45); }
 [data-theme="dark"] .fiber-chip--mc { color: #5eead4; border-color: rgba(45, 212, 191, 0.45); background: rgba(15, 118, 110, 0.3); }
 [data-theme="dark"] .fiber-chip--mc:hover { background: rgba(15, 118, 110, 0.45); }
+[data-theme="dark"] .fiber-chip--rb { color: #67e8f9; border-color: rgba(34, 211, 238, 0.5); background: rgba(14, 116, 144, 0.35); }
+[data-theme="dark"] .fiber-chip--rb:hover { background: rgba(14, 116, 144, 0.52); }
+[data-theme="dark"] .fiber-chip--splitter { color: #fdba74; border-color: rgba(251, 146, 60, 0.45); background: rgba(124, 45, 18, 0.35); }
+[data-theme="dark"] .fiber-chip--splitter:hover { background: rgba(124, 45, 18, 0.5); }
+[data-theme="dark"] .fiber-chip--cross-patch { color: #fdba74; border-color: rgba(251, 146, 60, 0.5); background: rgba(154, 52, 18, 0.35); }
+[data-theme="dark"] .fiber-chip--cross-patch:hover { background: rgba(154, 52, 18, 0.52); }
+[data-theme="dark"] .fiber-chip--cross-port { color: #c4b5fd; border-color: rgba(167, 139, 250, 0.45); background: rgba(76, 29, 149, 0.3); }
+[data-theme="dark"] .fiber-chip--cross-port:hover { background: rgba(76, 29, 149, 0.45); }
 [data-theme="dark"] .fiber-chip--restore { color: #cbd5e1; border-color: #475569; background: rgba(30, 41, 59, 0.5); }
 [data-theme="dark"] .fiber-chip--restore:hover { background: rgba(51, 65, 85, 0.6); }
+[data-theme="dark"] .fiber-chip:not([class*="fiber-chip--"]) { color: var(--text-secondary); border-color: var(--border-color); }
 
 [data-theme="dark"] .fiber-port-row {
     background: color-mix(in srgb, var(--bg-tertiary) 35%, transparent);
