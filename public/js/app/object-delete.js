@@ -6,6 +6,7 @@ function getDeleteObjectConfirmDetails(obj) {
     if (!obj || !obj.properties) return fallback;
     var objType = obj.properties.get('type');
     var objName = obj.properties.get('name') || '';
+    var objUniqueId = obj.properties.get('uniqueId');
     var title = 'Удаление объекта';
     var message = 'Вы уверены, что хотите удалить этот объект?';
     var gponImpact = null;
