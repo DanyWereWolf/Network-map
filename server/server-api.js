@@ -16,6 +16,7 @@ const security = require('./lib/security');
 const supportBot = require('./lib/support-bot');
 const mail = require('./lib/mail');
 const passwordReset = require('./lib/password-reset');
+const passwords = require('./lib/password');
 
 function loadServerConfig() {
     let config = {};
@@ -180,15 +181,6 @@ function validateMapDataObjectLimit(orgId, data) {
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
-
-function hashPassword(password) {
-    let hash = 0;
-    for (let i = 0; i < password.length; i++) {
-        hash = ((hash << 5) - hash) + password.charCodeAt(i);
-        hash = hash & hash;
-    }
-    return 'hash_' + Math.abs(hash).toString(16) + '_' + password.length;
-}
 
 function generateToken() {
     return 'tk_' + Date.now() + '_' + require('crypto').randomBytes(16).toString('hex');
@@ -369,20 +361,27 @@ function completeUserLogin(req, res, user, organizationId, organization) {
     });
 }
 
-function validateCredentials(username, password) {
+async function validateCredentials(username, password) {
     if (!username || !password) return { ok: false, error: 'Укажите имя и пароль', status: 400 };
     const users = db.getUsers();
-    const user = users.find(u => u.username.toLowerCase() === String(username).toLowerCase());
-    if (!user) return { ok: false, error: 'Пользователь не найден' };
-    if (user.password !== hashPassword(password)) return { ok: false, error: 'Неверный пароль' };
-    if (user.status === 'pending') return { ok: false, error: 'Заявка ожидает одобрения' };
-    if (user.status === 'rejected') return { ok: false, error: 'Заявка отклонена' };
-    var organizationId = user.organizationId || null;
-    if (user.role !== 'admin' && !organizationId) {
+    const userIndex = users.findIndex(u => u.username.toLowerCase() === String(username).toLowerCase());
+    if (userIndex === -1) return { ok: false, error: 'Пользователь не найден' };
+    const user = users[userIndex];
+    const passwordOk = await passwords.verifyPassword(password, user.password);
+    if (!passwordOk) return { ok: false, error: 'Неверный пароль' };
+    if (passwords.isLegacyPasswordHash(user.password)) {
+        users[userIndex].password = await passwords.hashPassword(password);
+        db.setUsers(users);
+    }
+    const currentUser = users[userIndex];
+    if (currentUser.status === 'pending') return { ok: false, error: 'Заявка ожидает одобрения' };
+    if (currentUser.status === 'rejected') return { ok: false, error: 'Заявка отклонена' };
+    var organizationId = currentUser.organizationId || null;
+    if (currentUser.role !== 'admin' && !organizationId) {
         return { ok: false, error: 'Учётная запись не привязана к организации. Обратитесь к администратору.' };
     }
     var organization = organizationId ? db.getOrganization(organizationId) : null;
-    return { ok: true, user: user, organizationId: organizationId, organization: organization };
+    return { ok: true, user: currentUser, organizationId: organizationId, organization: organization };
 }
 
 app.get('/api/map', (req, res) => {
@@ -424,7 +423,7 @@ app.post('/api/map', (req, res) => {
     }
 });
 
-app.post('/api/auth/login', function(req, res) {
+app.post('/api/auth/login', async function(req, res) {
     var ip = getClientIp(req);
     var rate = security.checkRateLimit('auth:' + ip, getAuthRateLimitOptions());
     if (!rate.ok) {
@@ -434,7 +433,11 @@ app.post('/api/auth/login', function(req, res) {
         });
     }
     var body = req.body || {};
-    var cred = validateCredentials(body.username, body.password);
+    try {
+        var cred = await validateCredentials(body.username, body.password);
+    } catch (e) {
+        return res.status(500).json({ success: false, error: 'Ошибка проверки пароля' });
+    }
     if (!cred.ok) {
         if (cred.status === 400) return res.status(400).json({ success: false, error: cred.error });
         return res.json({ success: false, error: cred.error });
@@ -1107,7 +1110,7 @@ app.patch('/api/organizations/:id', (req, res) => {
     res.json({ ok: true });
 });
 
-app.post('/api/organizations/:orgId/reset-password', (req, res) => {
+app.post('/api/organizations/:orgId/reset-password', async (req, res) => {
     const admin = getSessionUser(req);
     if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Только главный администратор' });
     const orgId = req.params.orgId;
@@ -1134,7 +1137,11 @@ app.post('/api/organizations/:orgId/reset-password', (req, res) => {
     if (target.username === 'admin') return res.status(400).json({ error: 'Нельзя сбросить пароль главного администратора панели здесь' });
     const i = users.findIndex(u => u.id === target.id);
     if (i === -1) return res.status(404).json({ error: 'Пользователь не найден' });
-    users[i].password = hashPassword(String(password));
+    try {
+        users[i].password = await passwords.hashPassword(String(password));
+    } catch (e) {
+        return res.status(500).json({ error: 'Не удалось сохранить пароль' });
+    }
     db.setUsers(users);
     try { db.deleteSessionsForUser(target.id); } catch (e) {}
     res.json({ ok: true, username: users[i].username, userId: users[i].id });
@@ -1190,10 +1197,12 @@ app.post('/api/auth/register', function(req, res) {
         });
     }
     var body = req.body || {};
-    handleAuthRegister(req, res, body);
+    handleAuthRegister(req, res, body).catch(function() {
+        if (!res.headersSent) res.status(500).json({ success: false, error: 'Ошибка регистрации' });
+    });
 });
 
-function handleAuthRegister(req, res, body) {
+async function handleAuthRegister(req, res, body) {
     const { username, password, fullName, organizationName, contactEmail, mapStart } = body || {};
     if (!username || username.length < 3) return res.status(400).json({ success: false, error: 'Имя не менее 3 символов' });
     if (!organizationName || String(organizationName).trim().length < 3) return res.status(400).json({ success: false, error: 'Укажите название организации (не менее 3 символов)' });
@@ -1210,7 +1219,7 @@ function handleAuthRegister(req, res, body) {
     const newUser = {
         id: 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
         username: username,
-        password: hashPassword(password),
+        password: await passwords.hashPassword(password),
         fullName: fullName || username,
         full_name: fullName || username,
         // Администратор карты для своей организации (но не глобальный админ панели)
@@ -1286,7 +1295,7 @@ app.get('/api/auth/reset-token/:token', function(req, res) {
     res.json({ valid: true, username: user.username });
 });
 
-app.post('/api/auth/reset-password', function(req, res) {
+app.post('/api/auth/reset-password', async function(req, res) {
     var ip = getClientIp(req);
     var rate = security.checkRateLimit('reset:' + ip, getAuthRateLimitOptions());
     if (!rate.ok) {
@@ -1316,7 +1325,11 @@ app.post('/api/auth/reset-password', function(req, res) {
     if (!passwordReset.canResetPassword(users[i])) {
         return res.status(400).json({ success: false, error: 'Восстановление пароля для этой учётной записи недоступно' });
     }
-    users[i].password = hashPassword(password);
+    try {
+        users[i].password = await passwords.hashPassword(password);
+    } catch (e) {
+        return res.status(500).json({ success: false, error: 'Не удалось сохранить пароль' });
+    }
     db.setUsers(users);
     db.deleteSessionsForUser(users[i].id);
     res.json({ success: true, message: 'Пароль изменён. Теперь вы можете войти с новым паролем.' });
@@ -1487,7 +1500,7 @@ app.post('/api/users/reject', (req, res) => {
     res.json({ ok: true });
 });
 
-app.put('/api/users/:userId', (req, res) => {
+app.put('/api/users/:userId', async (req, res) => {
     const admin = getSessionUser(req);
     if (!admin || admin.role !== 'admin') return res.status(403).json({ error: 'Только администратор' });
     const userId = req.params.userId;
@@ -1509,7 +1522,13 @@ app.put('/api/users/:userId', (req, res) => {
     if (targetIsMainAdmin && role !== undefined && role !== 'admin') return res.status(400).json({ error: 'Нельзя снять роль администратора с главного администратора' });
     if (fullName !== undefined) { users[i].fullName = fullName; users[i].full_name = fullName; }
     if (role !== undefined) users[i].role = role;
-    if (password && String(password).length >= 6) users[i].password = hashPassword(password);
+    if (password && String(password).length >= 6) {
+        try {
+            users[i].password = await passwords.hashPassword(password);
+        } catch (e) {
+            return res.status(500).json({ error: 'Не удалось сохранить пароль' });
+        }
+    }
     if (organizationId !== undefined) users[i].organizationId = targetIsMainAdmin ? null : (organizationId || null);
     db.setUsers(users);
     res.json({ ok: true });
@@ -1530,7 +1549,7 @@ app.delete('/api/users/:userId', (req, res) => {
     res.json({ ok: true, user: { id: deleted.id, username: deleted.username } });
 });
 
-app.post('/api/users', (req, res) => {
+app.post('/api/users', async (req, res) => {
     const admin = getSessionUser(req);
     if (!admin || admin.role !== 'admin') return res.status(403).json({ error: 'Только администратор' });
     const { username, password, fullName, role, organizationId } = req.body || {};
@@ -1538,10 +1557,16 @@ app.post('/api/users', (req, res) => {
     if (!password || password.length < 6) return res.status(400).json({ error: 'Пароль не менее 6 символов' });
     const users = db.getUsers();
     if (users.find(u => u.username.toLowerCase() === username.toLowerCase())) return res.status(400).json({ error: 'Пользователь уже существует' });
+    let hashedPassword;
+    try {
+        hashedPassword = await passwords.hashPassword(password);
+    } catch (e) {
+        return res.status(500).json({ error: 'Не удалось сохранить пароль' });
+    }
     const newUser = {
         id: 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
         username: username,
-        password: hashPassword(password),
+        password: hashedPassword,
         fullName: fullName || username,
         full_name: fullName || username,
         role: role || 'user',
@@ -2266,7 +2291,6 @@ app.use('/js', express.static(path.join(PUBLIC_DIR, 'js'), {
 app.use(express.static(PUBLIC_DIR));
 
 db.getDb();
-db.initDefaultAdmin();
 
 function normalizeSyncOrgId(orgId) {
     if (orgId == null || orgId === '') return null;
@@ -3010,25 +3034,30 @@ server.on('error', function(err) {
     process.exit(1);
 });
 
-server.listen(PORT, HOST, () => {
-    console.log('Приложение и API:');
-    console.log('  Локально:    http://localhost:' + PORT);
-    const ips = getLocalIPs();
-    if (ips.length) {
-        ips.forEach(ip => console.log('  В сети:      http://' + ip + ':' + PORT));
-        console.log('  На других устройствах откройте адрес «В сети» в браузере.');
-    }
-    console.log('Синхронизация: ws://...:' + PORT + '/sync (в одном процессе с API)');
-    console.log('Данные: ' + path.join(DATA_DIR, 'store.json'));
-    if (db.createDailyBackup) console.log('Резервные копии: ежедневно в data/backups/, хранятся 30 дней.');
-    logServerConfigWarnings();
-    if (mail.isMailConfigured(serverConfig) && mail.verifySmtp) {
-        mail.verifySmtp(serverConfig).then(function(result) {
-            if (result.ok) {
-                console.log('[Mail] SMTP проверка при старте: OK (' + result.user + ')');
-            } else {
-                console.error('[Mail] SMTP проверка при старте: ОШИБКА —', result.error || 'неизвестно');
-            }
-        });
-    }
+db.initDefaultAdmin().then(function() {
+    server.listen(PORT, HOST, () => {
+        console.log('Приложение и API:');
+        console.log('  Локально:    http://localhost:' + PORT);
+        const ips = getLocalIPs();
+        if (ips.length) {
+            ips.forEach(ip => console.log('  В сети:      http://' + ip + ':' + PORT));
+            console.log('  На других устройствах откройте адрес «В сети» в браузере.');
+        }
+        console.log('Синхронизация: ws://...:' + PORT + '/sync (в одном процессе с API)');
+        console.log('Данные: ' + path.join(DATA_DIR, 'store.json'));
+        if (db.createDailyBackup) console.log('Резервные копии: ежедневно в data/backups/, хранятся 30 дней.');
+        logServerConfigWarnings();
+        if (mail.isMailConfigured(serverConfig) && mail.verifySmtp) {
+            mail.verifySmtp(serverConfig).then(function(result) {
+                if (result.ok) {
+                    console.log('[Mail] SMTP проверка при старте: OK (' + result.user + ')');
+                } else {
+                    console.error('[Mail] SMTP проверка при старте: ОШИБКА —', result.error || 'неизвестно');
+                }
+            });
+        }
+    });
+}).catch(function(err) {
+    console.error('[ОШИБКА] Не удалось инициализировать данные:', err && err.message ? err.message : err);
+    process.exit(1);
 });

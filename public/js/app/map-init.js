@@ -240,7 +240,7 @@ function setupEventListeners() {
                 e.stopPropagation();
                 return;
             }
-            var modalIds = ['deviceCatalogEntryModal', 'infoModal', 'nodeSelectionModal', 'onuSelectionModal', 'splitterSelectionModal', 'splitterOutputOnuModal', 'splitterOutputSplitterModal', 'splitterOutputHostModal', 'oltSelectionModal', 'usersModal', 'userEditModal', 'organizationsModal', 'organizationEditModal', 'updatesModal', 'profileModal', 'deviceCatalogModal'];
+            var modalIds = ['deviceCatalogEntryModal', 'infoModal', 'nodeSelectionModal', 'onuSelectionModal', 'splitterSelectionModal', 'splitterOutputOnuModal', 'splitterOutputSplitterModal', 'splitterOutputHostModal', 'oltSelectionModal', 'usersModal', 'userEditModal', 'organizationsModal', 'organizationEditModal', 'profileModal', 'deviceCatalogModal'];
             for (var i = 0; i < modalIds.length; i++) {
                 var m = document.getElementById(modalIds[i]);
                 var modalOpen = m && m.style && m.style.display && m.style.display !== 'none';

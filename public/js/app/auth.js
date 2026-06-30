@@ -1,3 +1,4 @@
+/** Устаревший хеш — только для офлайн-режима без API (localStorage). На сервере — Argon2id. */
 function hashPassword(password) {
     let hash = 0;
     for (let i = 0; i < password.length; i++) {

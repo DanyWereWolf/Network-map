@@ -59,16 +59,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     whenYmapsReady(init);
     refreshMapLimitsFromServer();
-
-    (async function() {
-        await new Promise(function(r) { setTimeout(r, 1500); });
-        const result = await checkForUpdates(true);
-        lastUpdateCheckResult = result;
-        var updatesModal = document.getElementById('updatesModal');
-        if (updatesModal && updatesModal.style.display === 'block') {
-            renderUpdatesModalContent(result);
-        }
-    })();
 });
 
 setTimeout(function() {

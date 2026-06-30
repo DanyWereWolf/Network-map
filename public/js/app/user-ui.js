@@ -280,7 +280,6 @@ function initUserUI() {
     }
 
     setupUndergroundEditBar();
-    setupUpdatesModalHandlers();
     setupBackupsSection();
 
     setupSidebarToggle();

@@ -74,8 +74,7 @@ const clientGlobals = {
     CameraPlayer: 'writable',
     NewsEditor: 'writable',
     deviceCatalogActiveTab: 'writable',
-    APP_VERSION: 'readonly',
-    GITHUB_REPO: 'readonly'
+    APP_VERSION: 'readonly'
 };
 
 module.exports = [

@@ -5,8 +5,7 @@
     var LITE_MODAL_IDS = {
         confirmModal: 1,
         userEditModal: 1,
-        organizationEditModal: 1,
-        updatesModal: 1
+        organizationEditModal: 1
     };
 
     var SHELL_CONTENT_SELECTOR = '.modal-content.node-selection-modal-content';

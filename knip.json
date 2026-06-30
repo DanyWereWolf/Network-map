@@ -9,7 +9,6 @@
     "public/js/core/notifications.js",
     "public/js/core/confirm-dialog.js",
     "public/js/core/network-status.js",
-    "public/js/core/updates.js",
     "public/js/groups.js",
     "public/js/map/theme.js",
     "public/js/map/map-icons.js",

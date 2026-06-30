@@ -3325,8 +3325,8 @@ function showObjectInfoBody(obj) {
         }
     }
 
-    if (type !== 'node' && type !== 'olt' && type !== 'camera') {
-        if (['splitter', 'onu', 'mediaConverter', 'radioBridge', 'switch'].indexOf(type) !== -1) {
+    if (type !== 'node' && type !== 'olt' && type !== 'camera' && type !== 'radioBridge') {
+        if (['splitter', 'onu', 'mediaConverter', 'switch'].indexOf(type) !== -1) {
             html += buildObjectCoordsSectionHtml(obj);
         }
         var galleryOpts = fiberUsesWorkspace ? { compact: true } : undefined;

@@ -1,7 +1,4 @@
 const APP_VERSION = '1.2.0';
-const GITHUB_REPO = { owner: 'DanyWereWolf', repo: 'Network-map' };
-
-var lastUpdateCheckResult = null;
 var API_BASE = '';
 
 function getApiBase() {

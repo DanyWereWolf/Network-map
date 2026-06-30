@@ -754,10 +754,6 @@ function rbDestinationPoint(center, distM, bearingDeg) {
     return [lat2 * 180 / Math.PI, lon2 * 180 / Math.PI];
 }
 
-function rbLerpCoord(a, b, t) {
-    return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-}
-
 function rbCoverageArcSteps(spanDeg, lengthM) {
     return Math.max(72, Math.min(180, Math.ceil(spanDeg * 2.5 + lengthM / 200)));
 }
@@ -773,30 +769,6 @@ function buildRadioBridgeSectorRing(center, lengthM, azimuthDeg, angleDeg) {
     return ring;
 }
 
-/** Направленный луч: длина вдоль азимута, радиус — полуширина на дальней кромке (в метрах для геометрии). */
-function buildRadioBridgeDirectionalBeam(center, lengthM, halfWidthM, azimuthDeg) {
-    if (!lengthM || lengthM <= 0) return [center];
-    var axisEnd = rbDestinationPoint(center, lengthM, azimuthDeg);
-    if (!halfWidthM || halfWidthM <= 0) {
-        return [center, axisEnd, center];
-    }
-    var farLeft = rbDestinationPoint(axisEnd, halfWidthM, azimuthDeg - 90);
-    var farRight = rbDestinationPoint(axisEnd, halfWidthM, azimuthDeg + 90);
-    var ring = [center];
-    var sideSteps = 4;
-    for (var l = 1; l <= sideSteps; l++) {
-        ring.push(rbLerpCoord(center, farLeft, l / sideSteps));
-    }
-    var arcSteps = Math.max(72, Math.ceil(halfWidthM / 20));
-    for (var i = 1; i <= arcSteps; i++) {
-        ring.push(rbDestinationPoint(axisEnd, halfWidthM, azimuthDeg - 90 + 180 * i / arcSteps));
-    }
-    for (var r = sideSteps - 1; r >= 0; r--) {
-        ring.push(rbLerpCoord(farRight, center, r / sideSteps));
-    }
-    return ring;
-}
-
 /** Облегчённая геометрия для анимации пульса (меньше точек). */
 function buildRadioBridgeSectorRingPulse(center, lengthM, azimuthDeg, angleDeg) {
     var start = azimuthDeg - angleDeg / 2;
@@ -806,23 +778,6 @@ function buildRadioBridgeSectorRingPulse(center, lengthM, azimuthDeg, angleDeg) 
     for (var i = 0; i <= steps; i++) {
         ring.push(rbDestinationPoint(center, lengthM, start + (end - start) * i / steps));
     }
-    return ring;
-}
-
-function buildRadioBridgeDirectionalBeamPulse(center, lengthM, halfWidthM, azimuthDeg) {
-    if (!lengthM || lengthM <= 0) return [center];
-    var axisEnd = rbDestinationPoint(center, lengthM, azimuthDeg);
-    if (!halfWidthM || halfWidthM <= 0) {
-        return [center, axisEnd, center];
-    }
-    var farLeft = rbDestinationPoint(axisEnd, halfWidthM, azimuthDeg - 90);
-    var farRight = rbDestinationPoint(axisEnd, halfWidthM, azimuthDeg + 90);
-    var ring = [center, farLeft];
-    var arcSteps = Math.min(28, Math.max(12, Math.ceil(halfWidthM / 40)));
-    for (var i = 1; i < arcSteps; i++) {
-        ring.push(rbDestinationPoint(axisEnd, halfWidthM, azimuthDeg - 90 + 180 * i / arcSteps));
-    }
-    ring.push(farRight, center);
     return ring;
 }
 
@@ -848,13 +803,7 @@ function buildRadioBridgeCoveragePulseGeometry(params, scale) {
         return { kind: 'circle', center: c, radius: params.radiusM * scale };
     }
     var len = params.lengthM * scale;
-    var rad = params.radiusM * scale;
-    var ring;
-    if (params.radiusM > 0) {
-        ring = buildRadioBridgeDirectionalBeamPulse(c, len, rad, params.az);
-    } else {
-        ring = buildRadioBridgeSectorRingPulse(c, len, params.az, params.angle);
-    }
+    var ring = buildRadioBridgeSectorRingPulse(c, len, params.az, params.angle);
     return { kind: 'polygon', ring: ring };
 }
 
@@ -993,15 +942,13 @@ function updateRadioBridgeCoverage(rb) {
         strokeColor: RADIO_BRIDGE_LINE_COLOR,
         strokeWidth: 2,
         strokeOpacity: 0.45,
-        zIndex: 90
+        zIndex: 90,
+        interactive: false
     };
     if (shape === 'sector') {
         var az = parseFloat(rb.properties.get('coverageAzimuth')) || 0;
         var angle = parseFloat(rb.properties.get('coverageAngle')) || 60;
-        var ring = radiusM > 0
-            ? buildRadioBridgeDirectionalBeam(center, lengthM, radiusM, az)
-            : buildRadioBridgeSectorRing(center, lengthM, az, angle);
-        overlay = new ymaps.Polygon([ring], {}, style);
+        overlay = new ymaps.Polygon([buildRadioBridgeSectorRing(center, lengthM, az, angle)], {}, style);
     } else {
         overlay = new ymaps.Circle([center, radiusM], {}, style);
     }
@@ -1703,6 +1650,20 @@ function updateRadioBridgePreviewWithCursor(cursorCoords) {
     myMap.geoObjects.add(radioBridgePreviewLine);
 }
 
+function buildRadioBridgeCoverageSummaryHtml(obj) {
+    if (!obj || !obj.properties || !obj.properties.get('showCoverage')) {
+        return 'Не отображается на карте';
+    }
+    var shape = obj.properties.get('coverageShape') || 'circle';
+    if (shape === 'sector') {
+        var lengthKm = getRadioBridgeCoverageLengthKm(obj);
+        var angle = obj.properties.get('coverageAngle') != null ? obj.properties.get('coverageAngle') : 60;
+        var az = obj.properties.get('coverageAzimuth') != null ? obj.properties.get('coverageAzimuth') : 0;
+        return 'Луч · ' + formatCoverageKmLabel(lengthKm) + ' · угол ' + angle + '° · азимут ' + az + '°';
+    }
+    return 'Круг · ' + formatCoverageKmLabel(getRadioBridgeCoverageRadiusKm(obj));
+}
+
 function buildRadioBridgeCardContent(obj, isEdit, name) {
     var bridgeMode = obj.properties.get('bridgeMode') || 'ptp';
     var role = obj.properties.get('role') || (bridgeMode === 'ptp' ? 'ptp' : 'station');
@@ -1711,20 +1672,66 @@ function buildRadioBridgeCardContent(obj, isEdit, name) {
     var comment = obj.properties.get('comment') || '';
     var linked = isRadioBridgeLinked(obj);
     var uid = getObjectUniqueId(obj);
-    var html = '';
-    html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-    html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Wi‑Fi радиомост</h4>';
-    html += '<p style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 12px;">Беспроводной радиомост на карте. Режим «точка-точка» — связь двух радиомостов; «точка-многоточка» — базовая станция (AP) и абонентские станции.</p>';
+    var deviceLine = [manufacturer, model].filter(Boolean).join(' · ');
+    var showCoverage = !!obj.properties.get('showCoverage');
+    var coverageShape = obj.properties.get('coverageShape') || 'circle';
+    var coverageRadiusKm = getRadioBridgeCoverageRadiusKm(obj);
+    var coverageLengthKm = getRadioBridgeCoverageLengthKm(obj);
+    var coverageAzimuth = obj.properties.get('coverageAzimuth') != null ? obj.properties.get('coverageAzimuth') : 0;
+    var coverageAngle = obj.properties.get('coverageAngle') != null ? obj.properties.get('coverageAngle') : 60;
+    var html = '<div class="radio-bridge-card">';
+
+    html += '<section class="object-card-section radio-bridge-card-hero">';
+    html += '<div class="radio-bridge-card-hero-row">';
+    if (window.MapIcons) {
+        html += '<div class="radio-bridge-card-hero-icon" aria-hidden="true">' +
+            MapIcons.buildIconSvg('radioBridge', { variant: 'normal' }) + '</div>';
+    }
+    html += '<div class="radio-bridge-card-hero-text">';
+    html += '<div class="radio-bridge-card-view-name">' + escapeHtml(name || (isEdit ? 'Новый радиомост' : 'Без названия')) + '</div>';
+    html += '<div class="radio-bridge-card-view-meta">';
+    html += '<span class="radio-bridge-kind-pill">' + escapeHtml(getRadioBridgeModeLabel(bridgeMode)) + '</span>';
+    if (bridgeMode === 'ptmp') {
+        html += '<span class="radio-bridge-role-pill">' + escapeHtml(getRadioBridgeRoleLabel(role, bridgeMode)) + '</span>';
+    }
+    if (linked) {
+        html += '<span class="radio-bridge-link-pill">На линии</span>';
+    }
+    html += '</div>';
+    if (deviceLine) {
+        html += '<div class="radio-bridge-card-device">' + escapeHtml(deviceLine) + '</div>';
+    }
+    if (comment && !isEdit) {
+        html += '<div class="radio-bridge-card-comment">' + escapeHtml(comment) + '</div>';
+    }
+    if (isEdit) {
+        html += '<p class="object-card-hint radio-bridge-card-hero-hint">P2P — связь двух радиомостов по радиолинии. P2MP — базовая станция (AP) и абонентские станции. Порт — медь к коммутатору или оптика до кросса/муфты.</p>';
+    }
+    html += '</div></div>';
+    html += '<dl class="radio-bridge-card-stats">';
+    html += '<div class="radio-bridge-card-stat"><dt>Покрытие</dt><dd>' + escapeHtml(showCoverage ? 'На карте' : 'Скрыто') + '</dd></div>';
+    if (isRadioBridgePtp(obj)) {
+        var peerLabel = obj.properties.get('peerBridgeName') || (obj.properties.get('peerBridgeId') ? 'Подключён' : 'Свободен');
+        html += '<div class="radio-bridge-card-stat"><dt>P2P</dt><dd>' + escapeHtml(peerLabel) + '</dd></div>';
+    } else if (isRadioBridgeAp(obj)) {
+        html += '<div class="radio-bridge-card-stat"><dt>Станций</dt><dd>' + ((obj.properties.get('stationLinks') || []).length) + '</dd></div>';
+        html += '<div class="radio-bridge-card-stat"><dt>P2P</dt><dd>' + (getApPtpPeerLinks(obj).length) + '</dd></div>';
+    } else if (isRadioBridgeStation(obj)) {
+        var apLabel = obj.properties.get('apBridgeName') || (obj.properties.get('apBridgeId') ? 'Подключена' : '—');
+        html += '<div class="radio-bridge-card-stat"><dt>База</dt><dd>' + escapeHtml(apLabel) + '</dd></div>';
+    }
+    html += '</dl></section>';
+
+    html += typeof buildObjectCoordsSectionHtml === 'function' ? buildObjectCoordsSectionHtml(obj) : '';
 
     if (isEdit) {
-        html += '<div class="form-group" style="margin-bottom: 12px;">';
-        html += '<label for="editRadioBridgeName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название</label>';
-        html += '<input type="text" id="editRadioBridgeName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Название радиомоста">';
-        html += '</div>';
-        html += '<div class="form-group" style="margin-bottom: 8px;">';
-        html += '<label style="font-size: 0.8125rem; color: var(--text-secondary);">Режим</label>';
+        html += '<section class="object-card-section">';
+        html += '<h4 class="object-card-section-title">Устройство</h4>';
+        html += '<div class="form-group"><label for="editRadioBridgeName" class="object-card-label">Название</label>';
+        html += '<input type="text" id="editRadioBridgeName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Название радиомоста"></div>';
+        html += '<div class="form-group"><label for="editRadioBridgeMode" class="object-card-label">Режим</label>';
         if (linked) {
-            html += '<div style="font-size: 0.875rem; color: var(--text-secondary);">' + escapeHtml(getRadioBridgeModeLabel(bridgeMode)) + '</div>';
+            html += '<div class="radio-bridge-field-readonly">' + escapeHtml(getRadioBridgeModeLabel(bridgeMode)) + '</div>';
         } else {
             html += '<select id="editRadioBridgeMode" class="form-select">';
             html += '<option value="ptp"' + (bridgeMode === 'ptp' ? ' selected' : '') + '>Точка — точка</option>';
@@ -1733,10 +1740,9 @@ function buildRadioBridgeCardContent(obj, isEdit, name) {
         }
         html += '</div>';
         if (bridgeMode === 'ptmp') {
-            html += '<div class="form-group" style="margin-bottom: 8px;">';
-            html += '<label style="font-size: 0.8125rem; color: var(--text-secondary);">Роль</label>';
+            html += '<div class="form-group"><label for="editRadioBridgeRole" class="object-card-label">Роль</label>';
             if (linked) {
-                html += '<div style="font-size: 0.875rem; color: var(--text-secondary);">' + escapeHtml(getRadioBridgeRoleLabel(role, bridgeMode)) + '</div>';
+                html += '<div class="radio-bridge-field-readonly">' + escapeHtml(getRadioBridgeRoleLabel(role, bridgeMode)) + '</div>';
             } else {
                 html += '<select id="editRadioBridgeRole" class="form-select">';
                 html += '<option value="ap"' + (role === 'ap' ? ' selected' : '') + '>Базовая станция (AP)</option>';
@@ -1745,25 +1751,14 @@ function buildRadioBridgeCardContent(obj, isEdit, name) {
             }
             html += '</div>';
         }
-        html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Производитель</label>';
+        html += '<div class="form-group"><label class="object-card-label">Производитель</label>';
         html += '<div class="device-combobox" data-catalog="radioBridge" data-type="manufacturer" data-value-id="editRadioBridgeManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturer ? escapeHtml(manufacturer) : 'Выберите производителя') + '</button><input type="hidden" id="editRadioBridgeManufacturer" value="' + escapeHtml(manufacturer) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
-        html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Модель</label>';
+        html += '<div class="form-group"><label class="object-card-label">Модель</label>';
         html += '<div class="device-combobox" data-catalog="radioBridge" data-type="model" data-value-id="editRadioBridgeModel" data-manufacturer-id="editRadioBridgeManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editRadioBridgeModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
-        html += '<div class="form-group"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Комментарий</label>';
+        html += '<div class="form-group" style="margin-bottom:0;"><label for="editRadioBridgeComment" class="object-card-label">Комментарий</label>';
         html += '<textarea id="editRadioBridgeComment" class="form-input" rows="2" placeholder="Частота, мощность, примечания">' + escapeHtml(comment) + '</textarea></div>';
-    } else {
-        html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 6px;">Режим: ' + escapeHtml(getRadioBridgeModeLabel(bridgeMode)) + '</div>';
-        if (bridgeMode === 'ptmp') {
-            html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 6px;">Роль: ' + escapeHtml(getRadioBridgeRoleLabel(role, bridgeMode)) + '</div>';
-        }
+        html += '</section>';
     }
-    if (manufacturer || model) {
-        html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 8px;">Устройство: ' + escapeHtml([manufacturer, model].filter(Boolean).join(' ') || '—') + '</div>';
-    }
-    if (comment) {
-        html += '<div style="color: var(--text-secondary); font-size: 0.875rem; white-space: pre-wrap; margin-top: 6px;">' + escapeHtml(comment) + '</div>';
-    }
-    html += '</div>';
 
     var portTypes = ensureRadioBridgePortTypes(obj);
     var portKind = portTypes[0] || getRadioBridgePortKind(obj);
@@ -1782,10 +1777,10 @@ function buildRadioBridgeCardContent(obj, isEdit, name) {
     var portLabelRb = (portLabelsRb['1'] || '').trim();
     var rowBusyRb = portConnected || manualBusyRb;
 
-    html += '<div class="info-section" style="margin-bottom: 16px; padding: 14px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-    html += '<h4 style="margin: 0 0 10px 0; font-size: 0.9rem;">Порт подключения к сети</h4>';
+    html += '<section class="object-card-section object-card-section--port">';
+    html += '<h4 class="object-card-section-title">Порт подключения к сети</h4>';
     if (isEdit) {
-        html += '<p style="font-size: 0.75rem; color: var(--text-muted); margin: 0 0 10px 0;">Медный порт (RJ45) — к коммутатору; оптический (SFP) — прокладка кабеля ВОЛС до кросса, муфты или сплайс-кассеты.</p>';
+        html += '<p class="object-card-hint">Медный порт (RJ45) — к коммутатору; оптический (SFP) — прокладка ВОЛС до кросса, муфты или сплайс-кассеты.</p>';
     }
     html += '<div class="node-ports-table-wrap"><table class="node-ports-table"><thead><tr><th>#</th><th>Тип</th><th>Подпись</th><th>Состояние</th></tr></thead><tbody>';
     html += '<tr class="' + (rowBusyRb ? 'node-port-row--busy' : 'node-port-row--free') + '">';
@@ -1828,136 +1823,126 @@ function buildRadioBridgeCardContent(obj, isEdit, name) {
     } else {
         html += '<span class="node-port-state-free">Свободен</span>';
     }
-    html += '</td></tr></tbody></table></div></div>';
+    html += '</td></tr></tbody></table></div></section>';
 
-    var showCoverage = !!obj.properties.get('showCoverage');
-    var coverageShape = obj.properties.get('coverageShape') || 'circle';
-    var coverageRadiusKm = getRadioBridgeCoverageRadiusKm(obj);
-    var coverageLengthKm = getRadioBridgeCoverageLengthKm(obj);
-    var coverageAzimuth = obj.properties.get('coverageAzimuth') != null ? obj.properties.get('coverageAzimuth') : 0;
-    var coverageAngle = obj.properties.get('coverageAngle') != null ? obj.properties.get('coverageAngle') : 60;
-    html += '<div class="info-section" style="margin-bottom: 16px; padding: 14px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-    html += '<h4 style="margin: 0 0 10px 0; font-size: 0.9rem;">Зона покрытия</h4>';
+    html += '<section class="object-card-section object-card-section--coverage">';
+    html += '<h4 class="object-card-section-title">Зона покрытия</h4>';
     if (isEdit) {
-        html += '<label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:0.875rem;color:var(--text-secondary);"><input type="checkbox" id="editRadioBridgeShowCoverage"' + (showCoverage ? ' checked' : '') + '> Показывать на карте</label>';
-        html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Форма</label>';
+        html += '<label class="radio-bridge-coverage-toggle"><input type="checkbox" id="editRadioBridgeShowCoverage"' + (showCoverage ? ' checked' : '') + '> Показывать на карте</label>';
+        html += '<div id="editRadioBridgeCoverageParams" class="radio-bridge-coverage-params"' + (showCoverage ? '' : ' style="display:none;"') + '>';
+        html += '<div class="form-group"><label for="editRadioBridgeCoverageShape" class="object-card-label">Форма</label>';
         html += '<select id="editRadioBridgeCoverageShape" class="form-select">';
         html += '<option value="circle"' + (coverageShape === 'circle' ? ' selected' : '') + '>Круглая (всенаправленная)</option>';
         html += '<option value="sector"' + (coverageShape === 'sector' ? ' selected' : '') + '>Направленная (луч)</option>';
         html += '</select></div>';
-        html += '<div id="editRadioBridgeCircleFields" style="' + (coverageShape === 'circle' ? '' : 'display:none;') + '">';
-        html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Радиус, км</label>';
+        html += '<div id="editRadioBridgeCircleFields" class="radio-bridge-coverage-fields"' + (coverageShape === 'circle' ? '' : ' style="display:none;"') + '>';
+        html += '<div class="form-group"><label for="editRadioBridgeCoverageRadius" class="object-card-label">Радиус, км</label>';
         html += '<input type="number" id="editRadioBridgeCoverageRadius" class="form-input" min="0.05" max="50" step="0.1" value="' + coverageRadiusKm + '"></div>';
         html += '</div>';
-        html += '<div id="editRadioBridgeSectorFields" style="' + (coverageShape === 'sector' ? '' : 'display:none;') + '">';
-        html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Длина луча, км</label>';
+        html += '<div id="editRadioBridgeSectorFields" class="radio-bridge-coverage-fields"' + (coverageShape === 'sector' ? '' : ' style="display:none;"') + '>';
+        html += '<div class="form-group"><label for="editRadioBridgeCoverageLength" class="object-card-label">Длина луча, км</label>';
         html += '<input type="number" id="editRadioBridgeCoverageLength" class="form-input" min="0.05" max="50" step="0.1" value="' + coverageLengthKm + '"></div>';
-        html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Радиус (ширина на дальнем крае), км</label>';
-        html += '<input type="number" id="editRadioBridgeCoverageRadiusSector" class="form-input" min="0" max="25" step="0.05" value="' + coverageRadiusKm + '"></div>';
-        html += '<p style="font-size:0.75rem;color:var(--text-muted);margin:-4px 0 8px 0;">Луч от радиомоста: длина вдоль направления и ширина на дальней границе. Если радиус = 0 — используется угол сектора.</p>';
-        html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Азимут, ° (0 = север)</label>';
+        html += '<div class="radio-bridge-coverage-grid">';
+        html += '<div class="form-group"><label for="editRadioBridgeCoverageAzimuth" class="object-card-label">Азимут, °</label>';
         html += '<input type="number" id="editRadioBridgeCoverageAzimuth" class="form-input" min="0" max="359" step="1" value="' + coverageAzimuth + '"></div>';
-        html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Угол сектора, ° (если радиус = 0)</label>';
+        html += '<div class="form-group"><label for="editRadioBridgeCoverageAngle" class="object-card-label">Угол сектора, °</label>';
         html += '<input type="number" id="editRadioBridgeCoverageAngle" class="form-input" min="5" max="360" step="5" value="' + coverageAngle + '"></div>';
         html += '</div>';
-    } else {
-        html += '<div style="font-size: 0.875rem; color: var(--text-secondary);">';
-        if (showCoverage) {
-            if (coverageShape === 'sector') {
-                html += 'Показано: луч, длина ' + formatCoverageKmLabel(coverageLengthKm) + ', радиус ' + formatCoverageKmLabel(coverageRadiusKm);
-            } else {
-                html += 'Показано: круг, ' + formatCoverageKmLabel(coverageRadiusKm);
-            }
-        } else {
-            html += 'Не отображается';
-        }
+        html += '<p class="object-card-hint radio-bridge-coverage-hint">0° — север, 90° — восток. Луч рисуется от радиомоста по азимуту на заданную длину.</p>';
         html += '</div>';
+        html += '</div>';
+    } else {
+        html += '<div class="radio-bridge-coverage-summary">' + escapeHtml(buildRadioBridgeCoverageSummaryHtml(obj)) + '</div>';
     }
-    html += '</div>';
+    html += '</section>';
 
     if (isRadioBridgePtp(obj)) {
         var peerId = obj.properties.get('peerBridgeId');
         var peerName = obj.properties.get('peerBridgeName') || '';
-        html += '<div class="info-section" style="margin-bottom: 16px; padding: 14px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-        html += '<h4 style="margin: 0 0 10px 0; font-size: 0.9rem;">Связь точка-точка</h4>';
+        html += '<section class="object-card-section object-card-section--links">';
+        html += '<h4 class="object-card-section-title">Связь точка-точка</h4>';
         if (peerId) {
-            html += '<div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 10px;">Подключён к: <strong>' + escapeHtml(peerName || peerId) + '</strong></div>';
+            html += '<div class="radio-bridge-link-connected">Подключён к: <strong>' + escapeHtml(peerName || peerId) + '</strong></div>';
             if (isEdit) {
-                html += '<button type="button" class="btn-radio-bridge-disconnect-ptp btn-secondary" style="width:100%;">Отключить радиолинк</button>';
+                html += '<button type="button" class="btn-radio-bridge-disconnect-ptp btn-secondary radio-bridge-action-btn">Отключить радиолинк</button>';
             }
         } else if (isEdit) {
             var peers = getAvailablePtpLinkTargets(uid);
             if (peers.length) {
-                html += '<div class="form-group" style="margin-bottom: 10px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Второй радиомост (P2P или P2MP)</label>';
+                html += '<div class="form-group"><label for="radioBridgePtpPeerSelect" class="object-card-label">Второй радиомост</label>';
                 html += '<select id="radioBridgePtpPeerSelect" class="form-select">';
                 peers.forEach(function(p) {
                     var pid = getObjectUniqueId(p);
                     html += '<option value="' + escapeHtml(pid) + '">' + escapeHtml(getPtpLinkTargetLabel(p)) + '</option>';
                 });
                 html += '</select></div>';
-                html += '<button type="button" class="btn-radio-bridge-connect-ptp btn-primary" style="width:100%;">Задать маршрут и подключить</button>';
+                html += '<button type="button" class="btn-radio-bridge-connect-ptp btn-primary radio-bridge-action-btn">Задать маршрут и подключить</button>';
             } else {
-                html += '<div style="font-size: 0.8125rem; color: var(--text-muted);">Нет свободных радиомостов для связи «точка-точка».</div>';
+                html += '<p class="object-card-hint">Нет свободных радиомостов для связи «точка-точка».</p>';
             }
         } else {
-            html += '<div style="font-size: 0.875rem; color: var(--text-muted);">Не подключён</div>';
+            html += '<div class="radio-bridge-link-empty">Не подключён</div>';
         }
-        html += '</div>';
+        html += '</section>';
     }
 
     if (isRadioBridgeAp(obj)) {
         var ptpPeerLinks = getApPtpPeerLinks(obj);
-        html += '<div class="info-section" style="margin-bottom: 16px; padding: 14px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-        html += '<h4 style="margin: 0 0 10px 0; font-size: 0.9rem;">Радиомосты точка-точка (' + ptpPeerLinks.length + ')</h4>';
+        html += '<section class="object-card-section object-card-section--links">';
+        html += '<h4 class="object-card-section-title">Радиомосты точка-точка (' + ptpPeerLinks.length + ')</h4>';
         if (ptpPeerLinks.length) {
+            html += '<div class="radio-bridge-link-list">';
             ptpPeerLinks.forEach(function(link, i) {
                 if (!link) return;
-                html += '<div class="radio-bridge-ptp-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">';
-                html += '<span style="flex:1;font-size:0.875rem;">' + escapeHtml(link.peerName || ('P2P ' + (i + 1))) + '</span>';
+                html += '<div class="radio-bridge-link-row">';
+                html += '<span class="radio-bridge-link-row__label">' + escapeHtml(link.peerName || ('P2P ' + (i + 1))) + '</span>';
                 if (isEdit) {
-                    html += '<button type="button" class="btn-radio-bridge-disconnect-ap-ptp btn-secondary" data-peer-id="' + escapeHtml(link.peerId || '') + '">Отключить</button>';
+                    html += '<button type="button" class="btn-radio-bridge-disconnect-ap-ptp btn-secondary btn-compact" data-peer-id="' + escapeHtml(link.peerId || '') + '">Отключить</button>';
                 }
                 html += '</div>';
             });
+            html += '</div>';
         } else {
-            html += '<div style="font-size: 0.8125rem; color: var(--text-muted); margin-bottom: 10px;">P2P-радиомосты не подключены</div>';
+            html += '<p class="object-card-hint">P2P-радиомосты не подключены</p>';
         }
         if (isEdit) {
             var ptpPeers = getAvailablePtpPeersForAp();
             if (ptpPeers.length) {
-                html += '<div class="form-group" style="margin-bottom: 10px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Радиомост точка-точка</label>';
+                html += '<div class="form-group"><label for="radioBridgeApPtpPeerSelect" class="object-card-label">Радиомост точка-точка</label>';
                 html += '<select id="radioBridgeApPtpPeerSelect" class="form-select">';
                 ptpPeers.forEach(function(p) {
                     var pid = getObjectUniqueId(p);
                     html += '<option value="' + escapeHtml(pid) + '">' + escapeHtml(p.properties.get('name') || 'Радиомост') + '</option>';
                 });
                 html += '</select></div>';
-                html += '<button type="button" class="btn-radio-bridge-add-ptp btn-primary" style="width:100%;">Задать маршрут и подключить P2P</button>';
+                html += '<button type="button" class="btn-radio-bridge-add-ptp btn-primary radio-bridge-action-btn">Задать маршрут и подключить P2P</button>';
             } else {
-                html += '<div style="font-size: 0.8125rem; color: var(--text-muted);">Нет свободных P2P-радиомостов.</div>';
+                html += '<p class="object-card-hint">Нет свободных P2P-радиомостов.</p>';
             }
         }
-        html += '</div>';
+        html += '</section>';
         var stationLinks = obj.properties.get('stationLinks') || [];
-        html += '<div class="info-section" style="margin-bottom: 16px; padding: 14px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-        html += '<h4 style="margin: 0 0 10px 0; font-size: 0.9rem;">Абонентские станции (' + stationLinks.length + ')</h4>';
+        html += '<section class="object-card-section object-card-section--links">';
+        html += '<h4 class="object-card-section-title">Абонентские станции (' + stationLinks.length + ')</h4>';
         if (stationLinks.length) {
+            html += '<div class="radio-bridge-link-list">';
             stationLinks.forEach(function(link, i) {
                 if (!link) return;
-                html += '<div class="radio-bridge-station-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">';
-                html += '<span style="flex:1;font-size:0.875rem;">' + escapeHtml(link.stationName || ('Станция ' + (i + 1))) + '</span>';
+                html += '<div class="radio-bridge-link-row">';
+                html += '<span class="radio-bridge-link-row__label">' + escapeHtml(link.stationName || ('Станция ' + (i + 1))) + '</span>';
                 if (isEdit) {
-                    html += '<button type="button" class="btn-radio-bridge-disconnect-station btn-secondary" data-station-id="' + escapeHtml(link.stationId || '') + '">Отключить</button>';
+                    html += '<button type="button" class="btn-radio-bridge-disconnect-station btn-secondary btn-compact" data-station-id="' + escapeHtml(link.stationId || '') + '">Отключить</button>';
                 }
                 html += '</div>';
             });
+            html += '</div>';
         } else {
-            html += '<div style="font-size: 0.8125rem; color: var(--text-muted); margin-bottom: 10px;">Станции не подключены</div>';
+            html += '<p class="object-card-hint">Станции не подключены</p>';
         }
         if (isEdit) {
             var stations = getAvailablePtmpStations(uid);
             if (stations.length) {
-                html += '<div class="form-group" style="margin-bottom: 10px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Абонентская станция</label>';
+                html += '<div class="form-group"><label for="radioBridgePtmpStationSelect" class="object-card-label">Абонентская станция</label>';
                 html += '<select id="radioBridgePtmpStationSelect" class="form-select">';
                 stations.forEach(function(st) {
                     var sid = getObjectUniqueId(st);
@@ -1965,39 +1950,39 @@ function buildRadioBridgeCardContent(obj, isEdit, name) {
                     html += '<option value="' + escapeHtml(sid) + '">' + escapeHtml(sname) + '</option>';
                 });
                 html += '</select></div>';
-                html += '<button type="button" class="btn-radio-bridge-add-station btn-primary" style="width:100%;">Задать маршрут и подключить станцию</button>';
+                html += '<button type="button" class="btn-radio-bridge-add-station btn-primary radio-bridge-action-btn">Задать маршрут и подключить станцию</button>';
             } else {
-                html += '<div style="font-size: 0.8125rem; color: var(--text-muted);">Нет свободных абонентских станций.</div>';
+                html += '<p class="object-card-hint">Нет свободных абонентских станций.</p>';
             }
         }
-        html += '</div>';
+        html += '</section>';
     }
 
     if (isRadioBridgeStation(obj)) {
         var ptpPeerIdSt = obj.properties.get('ptpPeerId');
         var ptpPeerNameSt = obj.properties.get('ptpPeerName') || '';
         if (ptpPeerIdSt) {
-            html += '<div class="info-section" style="margin-bottom: 16px; padding: 14px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-            html += '<h4 style="margin: 0 0 10px 0; font-size: 0.9rem;">Радиолинк точка-точка</h4>';
-            html += '<div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 10px;">Подключён к: <strong>' + escapeHtml(ptpPeerNameSt || ptpPeerIdSt) + '</strong></div>';
+            html += '<section class="object-card-section object-card-section--links">';
+            html += '<h4 class="object-card-section-title">Радиолинк точка-точка</h4>';
+            html += '<div class="radio-bridge-link-connected">Подключён к: <strong>' + escapeHtml(ptpPeerNameSt || ptpPeerIdSt) + '</strong></div>';
             if (isEdit) {
-                html += '<button type="button" class="btn-radio-bridge-disconnect-ptp-peer btn-secondary" style="width:100%;">Отключить радиолинк</button>';
+                html += '<button type="button" class="btn-radio-bridge-disconnect-ptp-peer btn-secondary radio-bridge-action-btn">Отключить радиолинк</button>';
             }
-            html += '</div>';
+            html += '</section>';
         }
         var apId = obj.properties.get('apBridgeId');
         var apName = obj.properties.get('apBridgeName') || '';
-        html += '<div class="info-section" style="margin-bottom: 16px; padding: 14px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-        html += '<h4 style="margin: 0 0 10px 0; font-size: 0.9rem;">Подключение к базовой станции</h4>';
+        html += '<section class="object-card-section object-card-section--links">';
+        html += '<h4 class="object-card-section-title">Подключение к базовой станции</h4>';
         if (apId) {
-            html += '<div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 10px;">Базовая станция: <strong>' + escapeHtml(apName || apId) + '</strong></div>';
+            html += '<div class="radio-bridge-link-connected">Базовая станция: <strong>' + escapeHtml(apName || apId) + '</strong></div>';
             if (isEdit) {
-                html += '<button type="button" class="btn-radio-bridge-disconnect-ap btn-secondary" style="width:100%;">Отключить от AP</button>';
+                html += '<button type="button" class="btn-radio-bridge-disconnect-ap btn-secondary radio-bridge-action-btn">Отключить от AP</button>';
             }
         } else if (isEdit && !ptpPeerIdSt) {
             var aps = getAvailablePtmpAps(uid);
             if (aps.length) {
-                html += '<div class="form-group" style="margin-bottom: 10px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Базовая станция (AP)</label>';
+                html += '<div class="form-group"><label for="radioBridgePtmpApSelect" class="object-card-label">Базовая станция (AP)</label>';
                 html += '<select id="radioBridgePtmpApSelect" class="form-select">';
                 aps.forEach(function(ap) {
                     var aid = getObjectUniqueId(ap);
@@ -2005,16 +1990,21 @@ function buildRadioBridgeCardContent(obj, isEdit, name) {
                     html += '<option value="' + escapeHtml(aid) + '">' + escapeHtml(aname) + '</option>';
                 });
                 html += '</select></div>';
-                html += '<button type="button" class="btn-radio-bridge-connect-ap btn-primary" style="width:100%;">Задать маршрут и подключить к AP</button>';
+                html += '<button type="button" class="btn-radio-bridge-connect-ap btn-primary radio-bridge-action-btn">Задать маршрут и подключить к AP</button>';
             } else {
-                html += '<div style="font-size: 0.8125rem; color: var(--text-muted);">На карте нет базовых станций (AP).</div>';
+                html += '<p class="object-card-hint">На карте нет базовых станций (AP).</p>';
             }
         } else {
-            html += '<div style="font-size: 0.875rem; color: var(--text-muted);">Не подключена</div>';
+            html += '<div class="radio-bridge-link-empty">Не подключена</div>';
         }
-        html += '</div>';
+        html += '</section>';
     }
 
+    if (typeof buildObjectGallerySectionHtml === 'function') {
+        html += buildObjectGallerySectionHtml(obj, isEdit);
+    }
+
+    html += '</div>';
     return html;
 }
 
@@ -2023,6 +2013,15 @@ function setupRadioBridgeCardHandlers() {
         var shapeSel = document.getElementById('editRadioBridgeCoverageShape');
         var sectorFields = document.getElementById('editRadioBridgeSectorFields');
         var circleFields = document.getElementById('editRadioBridgeCircleFields');
+        var coverageParams = document.getElementById('editRadioBridgeCoverageParams');
+        var showCoverageEl = document.getElementById('editRadioBridgeShowCoverage');
+
+        function syncCoverageParamsVisibility() {
+            if (coverageParams && showCoverageEl) {
+                coverageParams.style.display = showCoverageEl.checked ? '' : 'none';
+            }
+        }
+
         if (shapeSel) {
             shapeSel.addEventListener('change', function() {
                 var isSector = this.value === 'sector';
@@ -2030,8 +2029,13 @@ function setupRadioBridgeCardHandlers() {
                 if (circleFields) circleFields.style.display = isSector ? 'none' : '';
             });
         }
+        if (showCoverageEl && !showCoverageEl._rbCovVisBound) {
+            showCoverageEl._rbCovVisBound = true;
+            showCoverageEl.addEventListener('change', syncCoverageParamsVisibility);
+        }
+        syncCoverageParamsVisibility();
         ['editRadioBridgeShowCoverage', 'editRadioBridgeCoverageShape', 'editRadioBridgeCoverageRadius',
-            'editRadioBridgeCoverageRadiusSector', 'editRadioBridgeCoverageLength',
+            'editRadioBridgeCoverageLength',
             'editRadioBridgeCoverageAzimuth', 'editRadioBridgeCoverageAngle'].forEach(function(id) {
             var el = document.getElementById(id);
             if (!el || el._rbCovBound) return;
@@ -2044,9 +2048,7 @@ function setupRadioBridgeCardHandlers() {
                 currentModalObject.properties.set('coverageShape', shape);
                 if (shape === 'sector') {
                     var lenEl = document.getElementById('editRadioBridgeCoverageLength');
-                    var radSecEl = document.getElementById('editRadioBridgeCoverageRadiusSector');
                     currentModalObject.properties.set('coverageLengthKm', parseCoverageKm(lenEl && lenEl.value));
-                    currentModalObject.properties.set('coverageRadiusKm', parseCoverageKm(radSecEl && radSecEl.value));
                 } else {
                     currentModalObject.properties.set('coverageRadiusKm', parseCoverageKm(document.getElementById('editRadioBridgeCoverageRadius').value));
                 }
