@@ -6,6 +6,7 @@ var RADIO_BRIDGE_COVERAGE_DEFAULT_KM = 3;
 var radioBridgeCoverageOverlays = [];
 var radioBridgeCoveragePulseEntries = [];
 var radioBridgeCoveragePulseAnim = null;
+var radioBridgeCoveragePulsePaused = false;
 
 function parseCoverageKm(val, fallbackKm) {
     if (val === 0 || val === '0') return 0;
@@ -812,6 +813,23 @@ function stopRadioBridgeCoveragePulseAnimation() {
         cancelAnimationFrame(radioBridgeCoveragePulseAnim.rafId);
     }
     radioBridgeCoveragePulseAnim = null;
+    radioBridgeCoveragePulsePaused = false;
+}
+
+/** Пауза на время жеста карты (зум/перетаскивание) — иначе setRadius/setCoordinates бьётся с движком Яндекса. */
+function pauseRadioBridgeCoveragePulseAnimation() {
+    if (!radioBridgeCoveragePulseAnim) return;
+    if (radioBridgeCoveragePulseAnim.rafId) {
+        cancelAnimationFrame(radioBridgeCoveragePulseAnim.rafId);
+        radioBridgeCoveragePulseAnim.rafId = null;
+    }
+    radioBridgeCoveragePulsePaused = true;
+}
+
+function resumeRadioBridgeCoveragePulseAnimation() {
+    if (!radioBridgeCoveragePulsePaused || !radioBridgeCoveragePulseEntries.length) return;
+    radioBridgeCoveragePulsePaused = false;
+    startRadioBridgeCoveragePulseAnimation();
 }
 
 function applyRadioBridgeCoveragePulseFrame(entry, phase) {

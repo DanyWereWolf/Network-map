@@ -36,10 +36,7 @@ function init() {
             }
         );
         myMap.controls.add(mapLayerSelector, { float: 'right' });
-        if (mapLayerSelector.events) {
-            mapLayerSelector.events.add(['click', 'expand'], hidePanoramaLayerMenuItem);
-        }
-        hidePanoramaLayerMenuItem();
+        // panoramas: 'off' above; DOM-патч только при первом рендере (частые правки ломают дерево TypeSelector → isLeaf).
         setTimeout(hidePanoramaLayerMenuItem, 300);
     } catch (e) {}
     try { myMap.behaviors.disable('rightMouseButtonMagnifier'); } catch (e) {}
@@ -440,8 +437,55 @@ function setupEventListeners() {
     myMap.events.add('mousemove', handleMapMouseMove);
 
     // Обновляем видимость по зуму и (при большой карте) по viewport при панорамировании.
+    // Во время жеста (зум + перетаскивание) тяжёлый applyMapFilter не запускаем — иначе карта подвисает.
     let expertLastZoom = (typeof myMap.getZoom === 'function') ? myMap.getZoom() : null;
     let mapBoundsChangeTimer = null;
+    let mapBoundsChangePending = false;
+    window.mapUserGestureActive = false;
+
+    function flushMapBoundsChangeUpdate() {
+        mapBoundsChangePending = false;
+        try {
+            if (typeof applyMapFilter === 'function') applyMapFilter();
+            if (window.MapRegions && MapRegions.syncAllRegionLabels && myMap) {
+                MapRegions.syncAllRegionLabels(myMap, objects);
+            }
+        } catch (eFlush) {}
+    }
+
+    function scheduleMapBoundsChangeUpdate(delayMs) {
+        if (mapBoundsChangeTimer) clearTimeout(mapBoundsChangeTimer);
+        mapBoundsChangeTimer = setTimeout(function() {
+            mapBoundsChangeTimer = null;
+            if (window.mapUserGestureActive) {
+                mapBoundsChangePending = true;
+                return;
+            }
+            flushMapBoundsChangeUpdate();
+        }, delayMs != null ? delayMs : 80);
+    }
+
+    myMap.events.add('actionbegin', function() {
+        window.mapUserGestureActive = true;
+        if (mapBoundsChangeTimer) {
+            clearTimeout(mapBoundsChangeTimer);
+            mapBoundsChangeTimer = null;
+        }
+        if (typeof pauseRadioBridgeCoveragePulseAnimation === 'function') {
+            pauseRadioBridgeCoveragePulseAnimation();
+        }
+    });
+
+    myMap.events.add('actionend', function() {
+        window.mapUserGestureActive = false;
+        if (typeof resumeRadioBridgeCoveragePulseAnimation === 'function') {
+            resumeRadioBridgeCoveragePulseAnimation();
+        }
+        if (mapBoundsChangePending) {
+            scheduleMapBoundsChangeUpdate(40);
+        }
+    });
+
     myMap.events.add('boundschange', function() {
         try {
             if (!myMap || typeof myMap.getZoom !== 'function') return;
@@ -454,14 +498,11 @@ function setupEventListeners() {
             }
             expertLastZoom = z;
 
-            if (mapBoundsChangeTimer) return;
-            mapBoundsChangeTimer = setTimeout(function() {
-                mapBoundsChangeTimer = null;
-                if (typeof applyMapFilter === 'function') applyMapFilter();
-                if (window.MapRegions && MapRegions.syncAllRegionLabels && myMap) {
-                    MapRegions.syncAllRegionLabels(myMap, objects);
-                }
-            }, 80);
+            if (window.mapUserGestureActive) {
+                mapBoundsChangePending = true;
+                return;
+            }
+            scheduleMapBoundsChangeUpdate();
         } catch (e) {}
     });
 

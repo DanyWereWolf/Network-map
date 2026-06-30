@@ -843,8 +843,9 @@ function syncMapPanLockForEditTools() {
     var lockPan = !!(isMapPanLockedForObjectPlacement() || isMapPanLockedForCableTool() ||
         isMapPanLockedForFiberRouting() || cableSplitMode);
     try {
-        if (lockPan) myMap.behaviors.disable('drag');
-        else myMap.behaviors.enable('drag');
+        var dragEnabled = myMap.behaviors.isEnabled('drag');
+        if (lockPan && dragEnabled) myMap.behaviors.disable('drag');
+        else if (!lockPan && !dragEnabled) myMap.behaviors.enable('drag');
     } catch (err) {}
 }
 
