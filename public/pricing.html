@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="description" content="Карта оптической сети — программа для работы с оптической сетью на volsmap.ru: кроссы и муфты со схемой жил, GPON, синхронизация команды.">
-    <meta name="keywords" content="программа для оптической сети, ВОЛС, карта оптической сети, учёт ВОЛС, GPON, кроссы, муфты, volsmap">
+    <meta name="description" content="Карта оптической сети — программа для учёта ВОЛС на volsmap.ru: кроссы и муфты со схемой жил, GPON, Wi‑Fi радиомосты, синхронизация команды.">
+    <meta name="keywords" content="программа для оптической сети, ВОЛС, карта оптической сети, учёт ВОЛС, GPON, кроссы, муфты, Wi‑Fi радиомост, volsmap">
     <meta name="author" content="Карта оптической сети">
     <meta name="robots" content="index, follow">
     <meta name="theme-color" content="#1d4ed8">
@@ -14,12 +14,12 @@
     <meta property="og:locale" content="ru_RU">
     <meta property="og:site_name" content="Карта оптической сети">
     <meta property="og:title" content="Карта оптической сети — программа для работы с оптической сетью">
-    <meta property="og:description" content="Карта оптической сети — программа для работы с оптической сетью на volsmap.ru: кроссы и муфты со схемой жил, GPON, синхронизация команды.">
+    <meta property="og:description" content="Карта оптической сети — учёт ВОЛС на volsmap.ru: кроссы и муфты со схемой жил, GPON, Wi‑Fi радиомосты, синхронизация команды.">
     <meta property="og:image" content="https://volsmap.ru/favicon.svg">
     <meta property="og:url" content="https://volsmap.ru/">
     <meta name="twitter:card" content="summary">
     <meta name="twitter:title" content="Карта оптической сети — программа для работы с оптической сетью">
-    <meta name="twitter:description" content="Карта оптической сети — программа для работы с оптической сетью на volsmap.ru: кроссы и муфты со схемой жил, GPON, синхронизация команды.">
+    <meta name="twitter:description" content="Карта оптической сети — учёт ВОЛС на volsmap.ru: кроссы и муфты со схемой жил, GPON, Wi‑Fi радиомосты, синхронизация команды.">
     <meta name="twitter:image" content="https://volsmap.ru/favicon.svg">
     <script type="application/ld+json">
     {
@@ -29,7 +29,7 @@
         "applicationCategory": "BusinessApplication",
         "operatingSystem": "Web",
         "applicationSubCategory": "Программа для работы с оптической сетью",
-        "description": "Программа для работы с оптической сетью на volsmap.ru: кроссы и муфты со схемой жил, GPON, синхронизация команды.",
+        "description": "Программа для учёта ВОЛС на volsmap.ru: кроссы и муфты со схемой жил, GPON, Wi‑Fi радиомосты, синхронизация команды.",
         "url": "https://volsmap.ru/",
         "inLanguage": "ru",
         "offers": {
@@ -121,18 +121,18 @@
 
             <!-- Главная / hero -->
             <section id="home" class="landing-hero">
-                <div>
-                    <h1 class="landing-hero-title">
-                        <span class="hero-line">Вся ваша сеть на одной карте.</span>
-                        <span class="hero-line hero-highlight">Бесплатно, с лимитом под ваш масштаб.</span>
-                    </h1>
-                    <p class="landing-hero-subtitle">
-                        Веб‑сервис для учёта ВОЛС: карта, схема жил, GPON и трассировка. Без установки — в браузере.
-                        Бесплатно до <strong id="heroFreeLimit">2000</strong> объектов и <strong id="heroMaxConcurrent">4</strong> пользователей одновременно.
-                    </p>
+                <div class="landing-hero-copy">
                     <div class="landing-hero-badges">
                         <span class="badge-pill badge-pill--early">Ранний доступ</span>
+                        <span class="badge-pill">Без установки</span>
                     </div>
+                    <h1 class="landing-hero-title">
+                        <span class="hero-line">Вся ваша сеть на одной карте</span>
+                        <span class="hero-line hero-highlight">Учёт ВОЛС и инфраструктуры в браузере</span>
+                    </h1>
+                    <p class="landing-hero-subtitle">
+                        Яндекс.Карты для вашей организации: жилы в кроссе и муфте, GPON, медные линии, камеры и Wi‑Fi радиомосты. Команда видит изменения сразу — отдельная карта на каждую компанию.
+                    </p>
                     <div class="landing-hero-cta-row">
                         <button class="btn-primary-hero" id="heroRegisterCtaBtn" onclick="window.location.href='auth.html?register=1'">
                             Начать бесплатно
@@ -141,76 +141,83 @@
                             Условия и лимиты
                         </button>
                     </div>
-                    <p class="landing-hero-meta">Провайдеры, интеграторы, эксплуатация · с телефона — просмотр, правки — с ПК</p>
+                    <p class="landing-hero-meta">Для провайдеров, интеграторов и эксплуатации · с телефона — просмотр, правки — с ПК</p>
                 </div>
-                <aside class="landing-hero-visual" aria-label="Статистика сервиса и схема сети">
-                    <div class="hero-showcase">
-                        <div class="hero-showcase-chrome">
-                            <span class="hero-showcase-title">Карта оптической сети</span>
+                <aside class="landing-hero-visual" aria-label="Возможности на карте и статистика сервиса">
+                    <div class="hero-capabilities">
+                        <div class="hero-capabilities-header">
+                            <span class="hero-capabilities-title">Всё на одной карте</span>
                             <span class="hero-showcase-live" aria-hidden="true">
                                 <span class="hero-live-dot"></span>Синхронизация
                             </span>
                         </div>
-                        <div class="hero-showcase-map" aria-hidden="true">
-                            <svg class="hero-map-svg" viewBox="0 0 360 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="">
-                                <defs>
-                                    <pattern id="heroMapGrid" width="20" height="20" patternUnits="userSpaceOnUse">
-                                        <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#94a3b8" stroke-width="0.4" opacity="0.35"/>
-                                    </pattern>
-                                    <linearGradient id="heroFiberGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                                        <stop offset="0%" stop-color="#22c55e"/>
-                                        <stop offset="100%" stop-color="#2563eb"/>
-                                    </linearGradient>
-                                </defs>
-                                <rect width="360" height="200" fill="url(#heroMapGrid)"/>
-                                <path class="hero-map-fiber hero-map-fiber--a" d="M48 165 C90 120, 120 90, 168 72" fill="none" stroke="url(#heroFiberGrad)" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
-                                <path class="hero-map-fiber" d="M168 72 L220 58 L300 48" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" opacity="0.7"/>
-                                <path class="hero-map-fiber" d="M100 140 L168 110 L260 95" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" opacity="0.45"/>
-                                <g class="hero-map-node hero-map-node--olt">
-                                    <circle cx="48" cy="165" r="8" fill="#1d4ed8"/>
-                                    <circle cx="48" cy="165" r="4" fill="#93c5fd"/>
-                                </g>
-                                <g class="hero-map-node hero-map-node--hub">
-                                    <circle cx="168" cy="72" r="7" fill="#059669"/>
-                                    <circle cx="168" cy="72" r="3.5" fill="#6ee7b7"/>
-                                </g>
-                                <g class="hero-map-node">
-                                    <circle cx="300" cy="48" r="5" fill="#2563eb"/>
-                                </g>
-                                <g class="hero-map-node">
-                                    <circle cx="100" cy="140" r="5" fill="#64748b" opacity="0.8"/>
-                                </g>
-                                <g class="hero-map-node">
-                                    <circle cx="260" cy="95" r="5" fill="#64748b" opacity="0.8"/>
-                                </g>
-                            </svg>
-                        </div>
-                        <div class="hero-showcase-stats">
-                            <div class="hero-stat-card">
-                                <span class="hero-stat-icon" aria-hidden="true">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+                        <ul class="hero-capabilities-grid" role="list">
+                            <li class="hero-capability">
+                                <span class="hero-capability-icon hero-capability-icon--fiber" aria-hidden="true">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M9 3v18M15 7v10"></path></svg>
                                 </span>
-                                <div class="hero-stat-text">
-                                    <span class="hero-stat-label">Организаций</span>
-                                    <span class="hero-stat-value" id="heroStatOrgs">—</span>
+                                <span class="hero-capability-text"><strong>ВОЛС</strong>Кроссы, муфты, схема жил</span>
+                            </li>
+                            <li class="hero-capability">
+                                <span class="hero-capability-icon hero-capability-icon--gpon" aria-hidden="true">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+                                </span>
+                                <span class="hero-capability-text"><strong>GPON</strong>OLT, сплиттер, ONU</span>
+                            </li>
+                            <li class="hero-capability">
+                                <span class="hero-capability-icon hero-capability-icon--radio" aria-hidden="true">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="2"></circle><path d="M16.24 7.76a6 6 0 0 1 0 8.49"></path><path d="M7.76 16.24a6 6 0 0 1 0-8.49"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path><path d="M4.93 19.07a10 10 0 0 1 0-14.14"></path></svg>
+                                </span>
+                                <span class="hero-capability-text"><strong>Wi‑Fi радиомосты</strong>P2P и P2MP на карте</span>
+                            </li>
+                            <li class="hero-capability">
+                                <span class="hero-capability-icon hero-capability-icon--copper" aria-hidden="true">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"></path></svg>
+                                </span>
+                                <span class="hero-capability-text"><strong>Медь и камеры</strong>Коммутаторы, медиаконвертеры</span>
+                            </li>
+                            <li class="hero-capability">
+                                <span class="hero-capability-icon hero-capability-icon--trace" aria-hidden="true">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
+                                </span>
+                                <span class="hero-capability-text"><strong>Трассировка</strong>Путь волокна по сети</span>
+                            </li>
+                            <li class="hero-capability">
+                                <span class="hero-capability-icon hero-capability-icon--team" aria-hidden="true">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                                </span>
+                                <span class="hero-capability-text"><strong>Команда</strong>Правки в реальном времени</span>
+                            </li>
+                        </ul>
+                        <div class="hero-capabilities-stats" aria-label="Статистика по всем организациям">
+                            <p class="hero-capabilities-stats-lead">Всего на платформе</p>
+                            <div class="hero-showcase-stats">
+                                <div class="hero-stat-card">
+                                    <span class="hero-stat-icon" aria-hidden="true">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+                                    </span>
+                                    <div class="hero-stat-text">
+                                        <span class="hero-stat-label">Организаций</span>
+                                        <span class="hero-stat-value" id="heroStatOrgs">—</span>
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="hero-stat-card">
-                                <span class="hero-stat-icon" aria-hidden="true">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
-                                </span>
-                                <div class="hero-stat-text">
-                                    <span class="hero-stat-label">Пользователей</span>
-                                    <span class="hero-stat-value" id="heroStatUsers">—</span>
+                                <div class="hero-stat-card">
+                                    <span class="hero-stat-icon" aria-hidden="true">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
+                                    </span>
+                                    <div class="hero-stat-text">
+                                        <span class="hero-stat-label">Пользователей</span>
+                                        <span class="hero-stat-value" id="heroStatUsers">—</span>
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="hero-stat-card">
-                                <span class="hero-stat-icon" aria-hidden="true">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-                                </span>
-                                <div class="hero-stat-text">
-                                    <span class="hero-stat-label" title="Узлы, кроссы, муфты, OLT и др.; без кабелей">Объектов</span>
-                                    <span class="hero-stat-value" id="heroStatNodes">—</span>
+                                <div class="hero-stat-card">
+                                    <span class="hero-stat-icon" aria-hidden="true">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                                    </span>
+                                    <div class="hero-stat-text">
+                                        <span class="hero-stat-label" title="Узлы, кроссы, муфты, OLT, радиомосты и др.; без кабелей">Объектов</span>
+                                        <span class="hero-stat-value" id="heroStatNodes">—</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -272,7 +279,7 @@
                         <span class="landing-step-num" aria-hidden="true">2</span>
                         <div>
                             <h3>Схема на карте</h3>
-                            <p>Узлы, кабели, кроссы, GPON, трассировка и жилы в карточке объекта.</p>
+                            <p>Узлы, кабели, кроссы, GPON, Wi‑Fi радиомосты, трассировка и жилы в карточке объекта.</p>
                         </div>
                     </li>
                     <li class="landing-step">
@@ -287,14 +294,14 @@
 
             <section id="capabilities" class="landing-block" aria-labelledby="capabilities-heading">
                 <h2 id="capabilities-heading" class="capability-section-title">Возможности</h2>
-                <p class="capability-section-lead">Карта, жилы, GPON и командная работа — в одном интерфейсе.</p>
+                <p class="capability-section-lead">Карта, жилы, GPON, беспроводные радиолинки и командная работа — в одном интерфейсе.</p>
                 <div class="capability-grid">
                     <article class="capability-card">
                         <div class="capability-card-icon" aria-hidden="true">
                             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
                         </div>
                         <h3>Карта и топология</h3>
-                        <p>Яндекс.Карты, ВОЛС и медные линии, фильтры по типам объектов, поиск и сохранение вида карты.</p>
+                        <p>Яндекс.Карты, ВОЛС и медные линии, Wi‑Fi радиомосты (P2P/P2MP), фильтры по типам, поиск и сохранение вида карты.</p>
                     </article>
                     <article class="capability-card">
                         <div class="capability-card-icon" aria-hidden="true">
@@ -318,7 +325,7 @@
                         <p>Снимки 30 дней, журнал правок, справочник оборудования.</p>
                     </article>
                 </div>
-                <p class="capability-footnote">Также: камеры, медиаконвертеры, печать схем, 2FA.</p>
+                <p class="capability-footnote">Также: камеры, медиаконвертеры, зоны покрытия радиомостов, печать схем, 2FA.</p>
             </section>
 
             <section id="about" class="landing-block landing-about">
@@ -348,7 +355,7 @@
                     </span>
                     <span>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                        Без онлайн-оплаты на сайте
+                        Без установки — работа в браузере
                     </span>
                     <span>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
@@ -377,7 +384,7 @@
                 </details>
                 <details class="faq-item">
                     <summary>Что считается «объектом» в лимите?</summary>
-                    <p>Узлы, кроссы, муфты, опоры, OLT, сплиттеры, ONU и другие точки на карте, включая коммутаторы внутри узла. Кабели в лимит не входят.</p>
+                    <p>Узлы, кроссы, муфты, опоры, OLT, сплиттеры, ONU, камеры, медиаконвертеры, Wi‑Fi радиомосты и другие точки на карте, включая коммутаторы внутри узла. Кабели в лимит не входят.</p>
                 </details>
                 <details class="faq-item">
                     <summary>Нужен ли отдельный API‑ключ карт?</summary>
@@ -773,14 +780,10 @@
                 var plans = body && Array.isArray(body.plans) ? body.plans : [];
                 var freeLimit = body && body.freeMapObjectLimit != null ? body.freeMapObjectLimit : 2000;
                 var maxConc = body && body.defaultMaxConcurrentUsers != null ? body.defaultMaxConcurrentUsers : 4;
-                var heroLim = document.getElementById('heroFreeLimit');
                 var introLim = document.getElementById('pricingIntroFreeLimit');
                 var introMc = document.getElementById('pricingIntroMaxConcurrent');
-                if (heroLim) heroLim.textContent = String(freeLimit);
                 if (introLim) introLim.textContent = 'До ' + freeLimit + ' объектов';
                 if (introMc) introMc.textContent = String(maxConc);
-                var heroMc = document.getElementById('heroMaxConcurrent');
-                if (heroMc) heroMc.textContent = String(maxConc);
                 renderFreePricingCard(container, freeLimit, maxConc, body && body.freeCard);
                 if (!plans.length) {
                     attachHandlers();

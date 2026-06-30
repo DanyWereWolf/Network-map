@@ -1456,6 +1456,15 @@ function purgeRadioBridgeReferences(deletedUid) {
     if (affected.length) saveRadioBridgeLinkChanges(affected);
 }
 
+function connectRadioBridgeLinkDirect(sourceBridge, targetBridge, linkKind) {
+    if (!sourceBridge || !targetBridge) return false;
+    var kind = linkKind || (isRadioBridgePtp(sourceBridge) ? 'ptp' : 'ptmp');
+    if (kind === 'ptp') {
+        return connectPtpRadioBridges(sourceBridge, targetBridge, []);
+    }
+    return connectPtmpStation(sourceBridge, targetBridge, []);
+}
+
 function startRadioBridgeRouting(sourceBridge, targetBridge, linkKind) {
     if (!sourceBridge || !targetBridge) return;
     radioBridgeRoutingMode = true;
@@ -1869,6 +1878,7 @@ function buildRadioBridgeCardContent(obj, isEdit, name) {
         } else if (isEdit) {
             var peers = getAvailablePtpLinkTargets(uid);
             if (peers.length) {
+                html += '<p class="object-card-hint">Радиолинк — прямая связь между двумя точками на карте.</p>';
                 html += '<div class="form-group"><label for="radioBridgePtpPeerSelect" class="object-card-label">Второй радиомост</label>';
                 html += '<select id="radioBridgePtpPeerSelect" class="form-select">';
                 peers.forEach(function(p) {
@@ -1876,7 +1886,7 @@ function buildRadioBridgeCardContent(obj, isEdit, name) {
                     html += '<option value="' + escapeHtml(pid) + '">' + escapeHtml(getPtpLinkTargetLabel(p)) + '</option>';
                 });
                 html += '</select></div>';
-                html += '<button type="button" class="btn-radio-bridge-connect-ptp btn-primary radio-bridge-action-btn">Задать маршрут и подключить</button>';
+                html += '<button type="button" class="btn-radio-bridge-connect-ptp btn-primary radio-bridge-action-btn">Подключить</button>';
             } else {
                 html += '<p class="object-card-hint">Нет свободных радиомостов для связи «точка-точка».</p>';
             }
@@ -1915,7 +1925,7 @@ function buildRadioBridgeCardContent(obj, isEdit, name) {
                     html += '<option value="' + escapeHtml(pid) + '">' + escapeHtml(p.properties.get('name') || 'Радиомост') + '</option>';
                 });
                 html += '</select></div>';
-                html += '<button type="button" class="btn-radio-bridge-add-ptp btn-primary radio-bridge-action-btn">Задать маршрут и подключить P2P</button>';
+                html += '<button type="button" class="btn-radio-bridge-add-ptp btn-primary radio-bridge-action-btn">Подключить P2P</button>';
             } else {
                 html += '<p class="object-card-hint">Нет свободных P2P-радиомостов.</p>';
             }
@@ -1950,7 +1960,7 @@ function buildRadioBridgeCardContent(obj, isEdit, name) {
                     html += '<option value="' + escapeHtml(sid) + '">' + escapeHtml(sname) + '</option>';
                 });
                 html += '</select></div>';
-                html += '<button type="button" class="btn-radio-bridge-add-station btn-primary radio-bridge-action-btn">Задать маршрут и подключить станцию</button>';
+                html += '<button type="button" class="btn-radio-bridge-add-station btn-primary radio-bridge-action-btn">Подключить станцию</button>';
             } else {
                 html += '<p class="object-card-hint">Нет свободных абонентских станций.</p>';
             }
@@ -1990,7 +2000,7 @@ function buildRadioBridgeCardContent(obj, isEdit, name) {
                     html += '<option value="' + escapeHtml(aid) + '">' + escapeHtml(aname) + '</option>';
                 });
                 html += '</select></div>';
-                html += '<button type="button" class="btn-radio-bridge-connect-ap btn-primary radio-bridge-action-btn">Задать маршрут и подключить к AP</button>';
+                html += '<button type="button" class="btn-radio-bridge-connect-ap btn-primary radio-bridge-action-btn">Подключить к AP</button>';
             } else {
                 html += '<p class="object-card-hint">На карте нет базовых станций (AP).</p>';
             }
@@ -2123,7 +2133,9 @@ function setupRadioBridgeCardHandlers() {
             if (!sel || !sel.value) return;
             var ptp = getMapObjectByUid(sel.value, 'radioBridge');
             if (!ptp) return;
-            startRadioBridgeRouting(ptp, currentModalObject, 'ptp');
+            if (connectRadioBridgeLinkDirect(ptp, currentModalObject, 'ptp') && typeof showObjectInfo === 'function') {
+                showObjectInfo(currentModalObject);
+            }
         });
     });
     document.querySelectorAll('.btn-radio-bridge-disconnect-ptp-peer').forEach(function(btn) {
@@ -2142,7 +2154,9 @@ function setupRadioBridgeCardHandlers() {
             if (!sel || !sel.value) return;
             var peer = getMapObjectByUid(sel.value, 'radioBridge');
             if (!peer) return;
-            startRadioBridgeRouting(currentModalObject, peer, 'ptp');
+            if (connectRadioBridgeLinkDirect(currentModalObject, peer, 'ptp') && typeof showObjectInfo === 'function') {
+                showObjectInfo(currentModalObject);
+            }
         });
     });
     document.querySelectorAll('.btn-radio-bridge-disconnect-ptp').forEach(function(btn) {
@@ -2161,7 +2175,9 @@ function setupRadioBridgeCardHandlers() {
             if (!sel || !sel.value) return;
             var station = getMapObjectByUid(sel.value, 'radioBridge');
             if (!station) return;
-            startRadioBridgeRouting(currentModalObject, station, 'ptmp');
+            if (connectRadioBridgeLinkDirect(currentModalObject, station, 'ptmp') && typeof showObjectInfo === 'function') {
+                showObjectInfo(currentModalObject);
+            }
         });
     });
     document.querySelectorAll('.btn-radio-bridge-disconnect-station').forEach(function(btn) {
@@ -2182,7 +2198,9 @@ function setupRadioBridgeCardHandlers() {
             if (!sel || !sel.value) return;
             var ap = getMapObjectByUid(sel.value, 'radioBridge');
             if (!ap) return;
-            startRadioBridgeRouting(ap, currentModalObject, 'ptmp');
+            if (connectRadioBridgeLinkDirect(ap, currentModalObject, 'ptmp') && typeof showObjectInfo === 'function') {
+                showObjectInfo(currentModalObject);
+            }
         });
     });
     document.querySelectorAll('.btn-radio-bridge-disconnect-ap').forEach(function(btn) {

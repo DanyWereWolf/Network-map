@@ -9,12 +9,13 @@
 1. `js/core/config.js` — версия, `getApiBase()`
 2. `js/app/auth.js` — сессия (до редиректов и API)
 3. `js/core/state.js` — `myMap`, `objects`, режимы
-4. `js/core/utils.js`, `script-loader.js`, `notifications.js`, `confirm-dialog.js`, `network-status.js`, `updates.js`
+4. `js/core/utils.js`, `script-loader.js`, `notifications.js`, `confirm-dialog.js`, `network-status.js`
 5. `js/groups.js` — группы кроссов/узлов
 6. `js/map/theme.js`, `map-icons.js`, `cable-underground.js`, `regions.js`, `map-perf.js`, `search.js`
 7. `js/fiber-cable-config.js`, `map-legend.js`
 8. `js/app/main.js` — основная логика карты
-9. `js/sync.js` — WebSocket (после инициализации карты)
+9. `js/app/radio-bridge.js` — Wi‑Fi радиомосты, радиолинки, зоны покрытия
+10. `js/sync.js` — WebSocket (после инициализации карты)
 
 Отложенная загрузка (через `script-loader.js`): `js/catalog/device-catalog.js`, `js/history.js`, `js/ui/help.js`, `js/ui/camera-player.js` и др. — см. `MAP_CORE_DEFERRED_SCRIPTS` / `MAP_UI_DEFERRED_SCRIPTS` в `script-loader.js`.
 
@@ -69,7 +70,7 @@ flowchart LR
 | Механизм | Назначение |
 |----------|------------|
 | `objectsById` | Поиск объекта по `uniqueId` за O(1) |
-| `scheduleConnectionLinesUpdate` | Debounce пересборки линий ONU/OLT/сплиттер/узел |
+| `scheduleConnectionLinesUpdate` | Debounce пересборки линий ONU/OLT/сплиттер/узел/радиомост |
 | Инкрементальные группы | `updateCrossDisplay(key)` / `updateNodeDisplay(key)` — только затронутая точка |
 | Viewport cull | При ≥120 объектах скрытие вне видимой области карты |
 | Линии связи | Не рисуются при zoom &lt; 17 |

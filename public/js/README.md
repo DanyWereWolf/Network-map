@@ -7,20 +7,20 @@
 | Файл | Назначение |
 |------|------------|
 | **app/main.js** | Карта: объекты, кабели, кросс/муфта, GPON, регионы, undo, импорт/экспорт, фильтры |
+| **app/radio-bridge.js** | Wi‑Fi радиомосты: P2P/P2MP, радиолинки, порты RJ45/SFP, зоны покрытия, карточка |
 | **app/auth.js** | `AuthSystem`: вход, регистрация, сессия, запросы к `/api/auth/*` |
 
 ## Ядро (`core/`)
 
 | Файл | Назначение |
 |------|------------|
-| **config.js** | `APP_VERSION`, `GITHUB_REPO`, `getApiBase()` |
+| **config.js** | `APP_VERSION`, `getApiBase()` |
 | **state.js** | Глобалы: `myMap`, `objects`, `isEditMode`, режимы кабеля/региона, undo-стеки |
 | **utils.js** | `escapeHtml()`, имена типов объектов |
 | **script-loader.js** | Отложенная подгрузка тяжёлых модулей |
 | **notifications.js** | Тосты: success, error, info, warning |
 | **confirm-dialog.js** | Модальные подтверждения |
 | **network-status.js** | Баннер потери сети |
-| **updates.js** | Проверка обновлений с GitHub |
 | **cookie-consent.js** | Баннер cookies |
 | **maintenance-notice.js** | Техработы (с API) |
 | **page-bg-plexus.js** | Фон на auth/лендинге |
@@ -68,8 +68,8 @@
 ## Порядок в `index.html`
 
 ```
-config → auth → state → utils → script-loader → notifications → confirm → network → updates
-→ groups → map/* → fiber-cable-config → map-legend → main → sync
+config → auth → state → utils → script-loader → notifications → confirm → network
+→ groups → map/* → fiber-cable-config → map-legend → main → radio-bridge → sync
 ```
 
 Подробнее: [docs/FRONTEND.md](../../docs/FRONTEND.md).
