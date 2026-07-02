@@ -277,9 +277,18 @@ function handleMapClick(e) {
         if (isCopperCableType(cableType)) {
             if (clickedObject && clickedObject.geometry) {
                 var otc = clickedObject.properties.get('type');
+                if (typeof tryProcessCabinetCableClick === 'function' &&
+                    tryProcessCabinetCableClick(clickedObject)) return;
                 if (handleCopperCablePlacemarkStep(clickedObject, otc, cableType)) return;
             } else if (cableSource) {
                 const autoSelectTolerance = getCableAutoSelectTolerance(zoom);
+                var cabNearCu = findObjectAtCoords(coords, null, {
+                    pixelRadius: getCableSnapPixelRadius(zoom, 'auto'),
+                    includeTypes: ['cabinet'],
+                    excludeObject: cableSource
+                });
+                if (cabNearCu && typeof tryProcessCabinetCableClick === 'function' &&
+                    tryProcessCabinetCableClick(cabNearCu)) return;
                 var nearestCu = null;
                 var minDCu = Infinity;
                 objects.forEach(function(obj) {

@@ -1972,11 +1972,11 @@ function createObjectFromData(data, opts, createOpts) {
                 return;
             }
             if (type === 'cabinet' && typeof tryProcessCabinetCableClick === 'function') {
-                tryProcessCabinetCableClick(placemark, processFiberCableEndpointClick);
+                tryProcessCabinetCableClick(placemark);
                 syncMapPanLockForEditTools();
                 return;
             }
-            if (typeof isCabinetCableEndpointType === 'function' && isCabinetCableEndpointType(type) &&
+            if (typeof isCabinetMemberCableActionTarget === 'function' && isCabinetMemberCableActionTarget(placemark) &&
                 typeof getObjectCabinetId === 'function' && getObjectCabinetId(placemark) &&
                 typeof processCabinetMemberCableAction === 'function') {
                 if (processCabinetMemberCableAction(placemark)) {

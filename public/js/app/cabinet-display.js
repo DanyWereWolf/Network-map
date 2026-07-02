@@ -317,6 +317,35 @@ function isCabinetCableEndpointType(type) {
     return type === 'cross' || type === 'sleeve' || type === 'spliceCassette' || type === 'olt';
 }
 
+function isCopperCabinetCableLayingActive() {
+    if (!currentCableTool || typeof isCopperCableType !== 'function' || typeof getEffectiveCableLayingType !== 'function') return false;
+    return isCopperCableType(getEffectiveCableLayingType());
+}
+
+function isCabinetCopperCableEndpointMember(member) {
+    if (!member || !member.properties) return false;
+    if (member.properties.get('type') !== 'node') return false;
+    return typeof getNodeAttachedSwitches === 'function' && getNodeAttachedSwitches(member).length > 0;
+}
+
+function isCabinetMemberCableActionTarget(member) {
+    if (!member || !member.properties) return false;
+    var type = member.properties.get('type');
+    if (isCabinetCableEndpointType(type)) return true;
+    return isCopperCabinetCableLayingActive() && isCabinetCopperCableEndpointMember(member);
+}
+
+function getCabinetCableLayOnTarget() {
+    if (isCopperCabinetCableLayingActive() && typeof handleCopperCablePlacemarkStep === 'function') {
+        return function(target) {
+            if (!target || !target.properties) return;
+            var cableTypeVal = getEffectiveCableLayingType();
+            handleCopperCablePlacemarkStep(target, target.properties.get('type'), cableTypeVal);
+        };
+    }
+    return typeof processFiberCableEndpointClick === 'function' ? processFiberCableEndpointClick : function() {};
+}
+
 /** Совпадение объектов на маршруте кабеля (по ссылке, uniqueId или ящик ↔ его содержимое). */
 function traceRouteObjectsMatch(a, b) {
     if (!a || !b) return false;
@@ -458,21 +487,21 @@ function notifyCableLayingSourceInCabinet() {
 }
 
 function processCabinetMemberCableAction(member) {
-    if (!member || !member.properties || !isCabinetCableEndpointType(member.properties.get('type'))) return false;
+    if (!member || !member.properties || !isCabinetMemberCableActionTarget(member)) return false;
     if (!currentCableTool) return false;
     var modal = document.getElementById('infoModal');
     if (modal) modal.style.display = 'none';
-    if (typeof processFiberCableEndpointClick === 'function') {
-        processFiberCableEndpointClick(member);
-    }
+    getCabinetCableLayOnTarget()(member);
     return true;
 }
 
 function getCabinetCableEndpointMembers(cabinet, opts) {
     opts = opts || {};
     if (!cabinet) return [];
+    var copperMode = !!opts.copperMode || isCopperCabinetCableLayingActive();
     var members = getCabinetMembers(getObjectUniqueId(cabinet)).filter(function(m) {
         if (!m || !m.properties) return false;
+        if (copperMode) return isCabinetCopperCableEndpointMember(m);
         return isCabinetCableEndpointType(m.properties.get('type'));
     });
     if (opts.excludeObject) {
@@ -519,7 +548,7 @@ function syncAllCabinetMembersToCabinets(opts) {
 }
 
 function tryProcessCabinetCableClick(clickedObject, onTarget) {
-    if (!clickedObject || typeof resolveCabinetCableTarget !== 'function' || typeof onTarget !== 'function') return false;
+    if (!clickedObject || typeof resolveCabinetCableTarget !== 'function') return false;
     var type = clickedObject.properties && clickedObject.properties.get('type');
     var cabinet = null;
     if (type === 'cabinet') cabinet = clickedObject;
@@ -529,7 +558,10 @@ function tryProcessCabinetCableClick(clickedObject, onTarget) {
     if (cableSource && getObjectCabinetId(cableSource) === getObjectUniqueId(cabinet)) {
         exclude = cableSource;
     }
-    resolveCabinetCableTarget(cabinet, onTarget, { excludeObject: exclude });
+    var handler = typeof onTarget === 'function' ? onTarget : getCabinetCableLayOnTarget();
+    var opts = { excludeObject: exclude };
+    if (isCopperCabinetCableLayingActive()) opts.copperMode = true;
+    resolveCabinetCableTarget(cabinet, handler, opts);
     return true;
 }
 
@@ -636,20 +668,25 @@ function openCabinetCableMemberPicker(cabinet, members, onPick, opts) {
 function resolveCabinetCableTarget(cabinet, onResolved, opts) {
     opts = opts || {};
     if (!cabinet || typeof onResolved !== 'function') return;
+    var copperMode = !!opts.copperMode || isCopperCabinetCableLayingActive();
     var members = getCabinetCableEndpointMembers(cabinet, opts);
     if (!members.length) {
         if (typeof showWarning === 'function') {
-            var msg = cableSource
-                ? 'В ящике нет другого кросса, муфты или сплайс-кассеты для подключения.'
-                : 'В ящике нет кросса, муфты или сплайс-кассеты для подключения кабеля.';
+            var msg = copperMode
+                ? (cableSource
+                    ? 'В ящике нет другого узла сети с коммутатором для подключения медного кабеля.'
+                    : 'В ящике нет узла сети с коммутатором для подключения медного кабеля.')
+                : (cableSource
+                    ? 'В ящике нет другого кросса, муфты или сплайс-кассеты для подключения.'
+                    : 'В ящике нет кросса, муфты или сплайс-кассеты для подключения кабеля.');
             showWarning(msg, 'Кабель');
         }
         onResolved(null);
         return;
     }
     var pickerTitle = !cableSource
-        ? 'Начать кабель от объекта в ящике'
-        : 'Подключить кабель к объекту в ящике';
+        ? (copperMode ? 'Начать медный кабель от узла в ящике' : 'Начать кабель от объекта в ящике')
+        : (copperMode ? 'Подключить медный кабель к узлу в ящике' : 'Подключить кабель к объекту в ящике');
     openCabinetCableMemberPicker(cabinet, members, onResolved, { title: pickerTitle });
 }
 
@@ -1288,7 +1325,7 @@ function buildCabinetCardContent(cabinet, isEditMode) {
             html += '</div></div>';
             if (isEditMode) {
                 html += '<div class="cabinet-member-actions">';
-                if (currentCableTool && isCabinetCableEndpointType(type)) {
+                if (currentCableTool && isCabinetMemberCableActionTarget(member)) {
                     html += '<button type="button" class="btn-secondary btn-cabinet-member-cable" data-member-uid="' + escapeHtml(memberUid) + '" title="Прокладка кабеля">Кабель</button>';
                 } else {
                     html += '<button type="button" class="group-item-move btn-cabinet-member-remove" data-member-uid="' + escapeHtml(memberUid) + '" title="Вынести">Вынести</button>';
@@ -1321,7 +1358,7 @@ function handleCabinetMemberRowActivate(row, cabinet) {
     var members = getCabinetMembersForDisplay(getObjectUniqueId(cabinet));
     if (!members[idx]) return;
     var member = members[idx];
-    if (currentCableTool && isEditMode && isCabinetCableEndpointType(member.properties.get('type'))) {
+    if (currentCableTool && isEditMode && isCabinetMemberCableActionTarget(member)) {
         processCabinetMemberCableAction(member);
         return;
     }
