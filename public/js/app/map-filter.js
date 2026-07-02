@@ -231,10 +231,6 @@ function applyExpertZoomVisibility() {
 
     const hideLabels = zoom < EXPERT_ZOOM_HIDE_LABELS_BELOW;
     var hideObjects = zoom < EXPERT_ZOOM_HIDE_OBJECTS_BELOW;
-    // На телефоне при стартовом зуме 15–16 иначе «пустая» карта без pinch-zoom.
-    if (hideObjects && typeof isNetworkMapMobileViewOnly === 'function' && isNetworkMapMobileViewOnly()) {
-        hideObjects = false;
-    }
     if (!hideLabels && !hideObjects) return;
 
     // Скрываем "подписи":

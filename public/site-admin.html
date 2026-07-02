@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <script>
+        (function(){try{if((navigator.userAgent||'').indexOf('VolsmapAndroid')>=0)document.documentElement.classList.add('volsmap-android-app');}catch(e){}})();
+    </script>
     <meta name="description" content="Панель администратора программы «Карта оптической сети» для работы с оптической сетью.">
     <meta name="robots" content="noindex, nofollow">
     <title>Панель администратора — Карта оптической сети</title>
@@ -18,6 +21,7 @@
         })();
     </script>
     <link rel="stylesheet" href="css/auth.css">
+    <link rel="stylesheet" href="css/android-app.css">
     <link rel="stylesheet" href="css/site-admin.css">
     <link rel="stylesheet" href="css/cookie-consent.css">
     <link rel="stylesheet" href="css/maintenance-notice.css">
@@ -963,6 +967,7 @@
 </head>
 <body class="page-with-bg">
     <script src="js/core/config.js"></script>
+    <script src="js/core/android-app.js"></script>
     <script src="js/app/auth.js"></script>
     <div class="auth-bg" aria-hidden="true">
         <div class="auth-bg-gradient"></div>

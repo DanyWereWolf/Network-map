@@ -8,9 +8,6 @@ function init() {
         initialCenter = window._pendingMapStart.center;
         initialZoom = window._pendingMapStart.zoom || 16;
     }
-    if (typeof isNetworkMapMobileViewOnly === 'function' && isNetworkMapMobileViewOnly()) {
-        initialZoom = Math.max(initialZoom, 16);
-    }
     myMap = new ymaps.Map('map', {
         center: initialCenter,
         zoom: initialZoom,

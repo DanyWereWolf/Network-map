@@ -78,6 +78,26 @@
     }
 
     function init() {
+        var isAndroidApp = false;
+        try {
+            isAndroidApp = window.__VOLSMAP_ANDROID__ === true
+                || (window.VolsmapAndroid && typeof window.VolsmapAndroid.isApp === 'function' && window.VolsmapAndroid.isApp());
+        } catch (e) {}
+        if (isAndroidApp) {
+            var stored = getStored();
+            if (!stored) saveChoice('necessary');
+            try {
+                document.documentElement.classList.add('volsmap-android-cookies-ok');
+            } catch (e) {}
+            if (stored) {
+                setConsentCookie(stored.choice);
+                try {
+                    window.dispatchEvent(new CustomEvent('cookieConsent', { detail: { choice: stored.choice, restored: true } }));
+                } catch (e) {}
+            }
+            return;
+        }
+
         var stored = getStored();
         if (stored) {
             setConsentCookie(stored.choice);

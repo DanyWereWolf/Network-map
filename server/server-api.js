@@ -1836,6 +1836,49 @@ app.get('/api/chat', (req, res) => {
     }
 });
 
+app.get('/api/chat/updates', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!user.organizationId) return res.status(403).json({ error: 'Чат доступен только участникам организации' });
+    try {
+        var sinceRaw = req.query.since;
+        var sinceMs = sinceRaw ? new Date(String(sinceRaw)).getTime() : (Date.now() - 3600000);
+        if (isNaN(sinceMs)) sinceMs = Date.now() - 3600000;
+        var messages = db.getOrgChatSince(user.organizationId, sinceMs);
+        res.json({ messages: messages, serverTime: new Date().toISOString() });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/devices/register', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    try {
+        var body = req.body || {};
+        var token = body.token != null ? String(body.token).trim() : '';
+        if (!token) return res.status(400).json({ error: 'token обязателен' });
+        db.registerDeviceToken(user.userId, user.organizationId, token, body.platform || 'android');
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/devices/unregister', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    try {
+        var body = req.body || {};
+        var token = body.token != null ? String(body.token).trim() : '';
+        if (!token) return res.status(400).json({ error: 'token обязателен' });
+        db.unregisterDeviceToken(user.userId, token);
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
 app.post('/api/chat', (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ error: 'Требуется авторизация' });

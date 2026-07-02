@@ -58,7 +58,8 @@ function loadStore() {
             chatByOrg: {},
             chatMediaByOrg: {},
             pricingPlans: [],
-            visitLogs: []
+            visitLogs: [],
+            deviceTokens: []
         };
         saveStore();
         return store;
@@ -66,7 +67,7 @@ function loadStore() {
     try {
         store = JSON.parse(fs.readFileSync(STORE_PATH, 'utf8'));
     } catch (e) {
-        store = { mapData: [], users: [], history: [], settings: {}, sessions: [], organizations: [], mapDataByOrg: {}, historyByOrg: {}, settingsByOrg: {}, chatByOrg: {}, chatMediaByOrg: {}, pricingPlans: [], visitLogs: [] };
+        store = { mapData: [], users: [], history: [], settings: {}, sessions: [], organizations: [], mapDataByOrg: {}, historyByOrg: {}, settingsByOrg: {}, chatByOrg: {}, chatMediaByOrg: {}, pricingPlans: [], visitLogs: [], deviceTokens: [] };
         saveStore();
     }
     if (!store.sessions) store.sessions = [];
@@ -78,6 +79,7 @@ function loadStore() {
     if (typeof store.chatByOrg !== 'object') store.chatByOrg = {};
     if (typeof store.chatMediaByOrg !== 'object') store.chatMediaByOrg = {};
     if (!Array.isArray(store.pricingPlans)) store.pricingPlans = [];
+    if (!Array.isArray(store.deviceTokens)) store.deviceTokens = [];
     if (!Array.isArray(store.visitLogs)) store.visitLogs = [];
     if (!Array.isArray(store.supportThreads)) store.supportThreads = [];
     if (!Array.isArray(store.passwordResetTokens)) store.passwordResetTokens = [];
@@ -384,6 +386,57 @@ function getOrgChat(orgId, limit) {
         return list.slice(list.length - limit);
     }
     return list;
+}
+
+function getOrgChatSince(orgId, sinceMs) {
+    if (!orgId) return [];
+    var list = getOrgChat(orgId, null);
+    if (!sinceMs || isNaN(sinceMs)) return list.slice(-30);
+    return list.filter(function(item) {
+        if (!item || !item.createdAt) return false;
+        var t = new Date(item.createdAt).getTime();
+        return !isNaN(t) && t > sinceMs;
+    });
+}
+
+function registerDeviceToken(userId, orgId, token, platform) {
+    if (!userId || !token) return null;
+    const s = loadStore();
+    if (!Array.isArray(s.deviceTokens)) s.deviceTokens = [];
+    var now = new Date().toISOString();
+    var key = String(token).trim();
+    s.deviceTokens = s.deviceTokens.filter(function(item) {
+        return item && String(item.token) !== key;
+    });
+    s.deviceTokens.push({
+        userId: String(userId),
+        organizationId: orgId != null ? String(orgId) : null,
+        token: key,
+        platform: platform ? String(platform).slice(0, 32) : 'android',
+        updatedAt: now
+    });
+    if (s.deviceTokens.length > 5000) {
+        s.deviceTokens = s.deviceTokens.slice(s.deviceTokens.length - 5000);
+    }
+    saveStore();
+    return true;
+}
+
+function unregisterDeviceToken(userId, token) {
+    if (!userId || !token) return false;
+    const s = loadStore();
+    if (!Array.isArray(s.deviceTokens)) return false;
+    var key = String(token).trim();
+    var uid = String(userId);
+    var before = s.deviceTokens.length;
+    s.deviceTokens = s.deviceTokens.filter(function(item) {
+        return !(item && String(item.userId) === uid && String(item.token) === key);
+    });
+    if (s.deviceTokens.length !== before) {
+        saveStore();
+        return true;
+    }
+    return false;
 }
 
 function addOrgChatMessage(orgId, message) {
@@ -1593,6 +1646,7 @@ module.exports = {
     getHistory,
     setHistory,
     getOrgChat,
+    getOrgChatSince,
     addOrgChatMessage,
     removeOrgChatMessage,
     updateOrgChatMessageText,
@@ -1600,6 +1654,8 @@ module.exports = {
     getChatMediaItem,
     addChatMedia,
     removeChatMedia,
+    registerDeviceToken,
+    unregisterDeviceToken,
     getSettings,
     setSettings,
     getSetting,

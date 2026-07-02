@@ -533,9 +533,6 @@ function applyMapStartFromSettings(mapStart, force) {
     }
     try {
         var startZoom = mapStart.zoom || 16;
-        if (typeof isNetworkMapMobileViewOnly === 'function' && isNetworkMapMobileViewOnly()) {
-            startZoom = Math.max(startZoom, 16);
-        }
         myMap.setCenter(mapStart.center, startZoom);
         window._mapStartApplied = true;
         window._pendingMapStart = null;
@@ -562,18 +559,35 @@ function loadData() {
     (function() {
         if (typeof AuthSystem !== 'undefined' && AuthSystem.refreshUsersFromApi) AuthSystem.refreshUsersFromApi();
         var token = getAuthToken();
-        fetch(getApiBase() + '/api/map', { headers: { 'Authorization': 'Bearer ' + token } })
-            .then(function(r) { return r.ok ? r.json() : null; })
-            .then(function(body) {
-                if (!body || !Array.isArray(body.data)) return;
-                if (typeof currentUser !== 'undefined' && currentUser && currentUser.organizationId != null) {
-                    window._mapOrgIdLoaded = String(currentUser.organizationId);
+        if (!token) return;
+
+        function fetchMapFromApi() {
+            return fetch(getApiBase() + '/api/map', { headers: { 'Authorization': 'Bearer ' + token } })
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(body) {
+                    if (!body || !Array.isArray(body.data)) return false;
+                    if (typeof currentUser !== 'undefined' && currentUser && currentUser.organizationId != null) {
+                        window._mapOrgIdLoaded = String(currentUser.organizationId);
+                    }
+                    if (typeof applyRemoteState === 'function') {
+                        applyRemoteState(body.data, { fromApi: true, organizationId: body.organizationId });
+                    }
+                    return true;
+                });
+        }
+
+        if (typeof navigator !== 'undefined' && navigator.onLine === false
+            && typeof OfflineMapCache !== 'undefined' && OfflineMapCache.tryRestoreAndApply) {
+            OfflineMapCache.tryRestoreAndApply().then(function(restored) {
+                if (!restored) fetchMapFromApi().catch(function() {});
+            });
+        } else {
+            fetchMapFromApi().catch(function() {
+                if (typeof OfflineMapCache !== 'undefined' && OfflineMapCache.tryRestoreAndApply) {
+                    OfflineMapCache.tryRestoreAndApply();
                 }
-                if (typeof applyRemoteState === 'function') {
-                    applyRemoteState(body.data, { fromApi: true, organizationId: body.organizationId });
-                }
-            })
-            .catch(function() {});
+            });
+        }
         fetch(getApiBase() + '/api/history', { headers: { 'Authorization': 'Bearer ' + token } }).then(function(r) { return r.json(); }).then(function(b) {
             if (b && Array.isArray(b.history)) {
                 if (typeof window.setHistoryFromApi === 'function') window.setHistoryFromApi(b.history);
@@ -784,6 +798,13 @@ function applyRemoteState(data, meta) {
             lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
             updateStats();
             markMapDataReady();
+            if (typeof OfflineMapCache !== 'undefined' && OfflineMapCache.scheduleSave) {
+                OfflineMapCache.scheduleSave();
+            }
+            if (meta && meta.fromApi && typeof OfflineMapCache !== 'undefined' && OfflineMapCache.hideOfflineBanner) {
+                OfflineMapCache.hideOfflineBanner();
+                window._volsmapOfflineMapActive = false;
+            }
         }
         if (data.length === 0) {
             clearMap(opts);

@@ -1831,11 +1831,7 @@ function getConnectionLinePolylineOptions(strokeColor) {
 
 function mapObjectsVisibleAtZoom(zoom) {
     if (typeof zoom !== 'number') return true;
-    var hideObjects = zoom < EXPERT_ZOOM_HIDE_OBJECTS_BELOW;
-    if (hideObjects && typeof isNetworkMapMobileViewOnly === 'function' && isNetworkMapMobileViewOnly()) {
-        hideObjects = false;
-    }
-    return !hideObjects;
+    return zoom >= EXPERT_ZOOM_HIDE_OBJECTS_BELOW;
 }
 
 function getCableClickTolerance(zoom) {

@@ -14,6 +14,26 @@
     var lightboxIndex = 0;
     var lightboxPhotos = [];
 
+    function isVolsmapAndroidApp() {
+        try {
+            if (global.__VOLSMAP_ANDROID__ === true) return true;
+            if (global.VolsmapAndroid && typeof global.VolsmapAndroid.isApp === 'function' && global.VolsmapAndroid.isApp()) {
+                return true;
+            }
+        } catch (e) {}
+        return false;
+    }
+
+    function canUploadGalleryPhotos(isEditMode) {
+        if (isEditMode) return true;
+        if (!isVolsmapAndroidApp()) return false;
+        try {
+            if (typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin') return true;
+            if (typeof isAdmin === 'function' && isAdmin()) return true;
+        } catch (e) {}
+        return false;
+    }
+
     function escapeHtml(s) {
         if (s == null) return '';
         return String(s)
@@ -311,7 +331,8 @@
         opts = opts || {};
         if (!canHaveGallery(obj)) return '';
         var photos = getObjectPhotos(obj);
-        if (!photos.length && !isEditMode) return '';
+        var allowUpload = canUploadGalleryPhotos(isEditMode);
+        if (!photos.length && !isEditMode && !allowUpload) return '';
         var quotaFull = isObjectQuotaFull(photos);
         var detailsOpen = opts.open === true ? ' open' : '';
         var sectionClass = 'object-card-section object-card-section--gallery object-gallery-section';
@@ -323,11 +344,11 @@
         if (photos.length) {
             html += '<span class="object-card-badge object-gallery-summary-badge" title="Число фото">' + photos.length + '</span>';
         }
-        html += '<span class="object-gallery-summary-meta" data-gallery-summary-meta>' + escapeHtml(buildGallerySummaryMeta(photos, isEditMode)) + '</span>';
+        html += '<span class="object-gallery-summary-meta" data-gallery-summary-meta>' + escapeHtml(buildGallerySummaryMeta(photos, isEditMode || allowUpload)) + '</span>';
         html += '</summary>';
         html += '<div class="object-gallery-body">';
 
-        if (!photos.length && isEditMode) {
+        if (!photos.length && (isEditMode || allowUpload)) {
             html += '<p class="object-card-hint object-gallery-empty">Прикрепите фото объекта — опора, шкаф, фасад, маркировка.</p>';
         }
         if (photos.length) {
@@ -345,11 +366,18 @@
             html += '</div>';
         }
 
-        if (isEditMode) {
+        if (allowUpload) {
             html += '<div class="object-gallery-toolbar">';
             html += '<input type="file" class="object-gallery-input" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden>';
-            html += '<button type="button" class="btn-secondary object-gallery-upload-btn"' + (quotaFull ? ' disabled' : '') + '>';
-            html += '<span class="object-gallery-upload-icon" aria-hidden="true">📷</span> Добавить фото</button>';
+            if (isVolsmapAndroidApp()) {
+                html += '<button type="button" class="btn-secondary object-gallery-camera-btn"' + (quotaFull ? ' disabled' : '') + '>';
+                html += '<span class="object-gallery-upload-icon" aria-hidden="true">📷</span> Снять фото</button>';
+                html += '<button type="button" class="btn-secondary object-gallery-upload-btn"' + (quotaFull ? ' disabled' : '') + '>';
+                html += '<span class="object-gallery-upload-icon" aria-hidden="true">🖼</span> Из галереи</button>';
+            } else {
+                html += '<button type="button" class="btn-secondary object-gallery-upload-btn"' + (quotaFull ? ' disabled' : '') + '>';
+                html += '<span class="object-gallery-upload-icon" aria-hidden="true">📷</span> Добавить фото</button>';
+            }
             html += '<span class="object-gallery-hint" data-gallery-usage>' + escapeHtml(buildUsageHint(photos)) + ' · JPEG ' + MAX_DIM + 'px</span>';
             html += '</div>';
         }
@@ -389,6 +417,7 @@
         if (!root || !obj || !canHaveGallery(obj)) return;
         options = options || {};
         var isEditMode = options.isEditMode !== false;
+        var allowUpload = canUploadGalleryPhotos(isEditMode);
         var getObj = options.getObj || function() { return obj; };
         var onChanged = options.onChanged || function() {};
 
@@ -400,7 +429,7 @@
             var summaryMeta = section.querySelector('[data-gallery-summary-meta]');
             var summaryBadge = section.querySelector('.object-gallery-summary-badge');
             if (hint) hint.textContent = buildUsageHint(list) + ' · JPEG ' + MAX_DIM + 'px';
-            if (summaryMeta) summaryMeta.textContent = buildGallerySummaryMeta(list, isEditMode);
+            if (summaryMeta) summaryMeta.textContent = buildGallerySummaryMeta(list, isEditMode || allowUpload);
             if (summaryBadge) {
                 if (list.length) summaryBadge.textContent = String(list.length);
                 else summaryBadge.remove();
@@ -416,7 +445,18 @@
             }
             if (btn) {
                 btn.disabled = isObjectQuotaFull(list);
-                if (btn.textContent.indexOf('Загрузка') >= 0) btn.innerHTML = '<span class="object-gallery-upload-icon" aria-hidden="true">📷</span> Добавить фото';
+                if (btn.textContent.indexOf('Загрузка') >= 0) {
+                    btn.innerHTML = isVolsmapAndroidApp()
+                        ? '<span class="object-gallery-upload-icon" aria-hidden="true">🖼</span> Из галереи'
+                        : '<span class="object-gallery-upload-icon" aria-hidden="true">📷</span> Добавить фото';
+                }
+            }
+            var cameraBtn = section.querySelector('.object-gallery-camera-btn');
+            if (cameraBtn) {
+                cameraBtn.disabled = isObjectQuotaFull(list);
+                if (cameraBtn.textContent.indexOf('Загрузка') >= 0) {
+                    cameraBtn.innerHTML = '<span class="object-gallery-upload-icon" aria-hidden="true">📷</span> Снять фото';
+                }
             }
         }
 
@@ -440,86 +480,117 @@
                 });
             });
 
-            if (!isEditMode) return;
-
             var uploadBtn = section.querySelector('.object-gallery-upload-btn');
+            var cameraBtn = section.querySelector('.object-gallery-camera-btn');
             var fileInput = section.querySelector('.object-gallery-input');
 
-            if (uploadBtn && fileInput) {
-                uploadBtn.addEventListener('click', function() {
-                    if (uploadBtn.disabled) return;
-                    fileInput.click();
-                });
-                fileInput.addEventListener('change', function() {
-                    var files = fileInput.files;
-                    if (!files || !files.length) return;
-                    var o = getObj();
-                    var hadUid = !!resolveObjectUniqueId(o);
-                    var objectUniqueId = ensureObjectUniqueId(o);
-                    if (!objectUniqueId) {
-                        if (typeof showWarning === 'function') showWarning('Нет ID объекта', 'Сохраните карту и повторите загрузку');
-                        fileInput.value = '';
-                        return;
-                    }
-                    if (!hadUid) onChanged(o);
-                    var current = getObjectPhotos(o);
-                    if (isObjectQuotaFull(current)) {
-                        if (typeof showWarning === 'function') showWarning('Лимит объекта', 'На объект можно загрузить не более ' + formatBytes(OBJECT_MAX_BYTES));
-                        fileInput.value = '';
-                        return;
-                    }
-                    uploadBtn.disabled = true;
-                    uploadBtn.textContent = 'Загрузка…';
-                    var queue = Array.prototype.slice.call(files, 0, MAX_PHOTOS);
-                    var chain = Promise.resolve();
-                    var added = [];
-                    var usedBytes = getPhotosBytes(current);
-                    queue.forEach(function(file) {
-                        chain = chain.then(function() {
-                            if (current.length + added.length >= MAX_PHOTOS) return;
-                            if (usedBytes >= OBJECT_MAX_BYTES) return;
-                            return processImageFile(file).then(function(dataUrl) {
-                                var est = estimateDataUrlBytes(dataUrl);
-                                if (est > MAX_FILE_BYTES) {
-                                    throw new Error('Файл после обработки больше ' + formatBytes(MAX_FILE_BYTES));
-                                }
-                                if (usedBytes + est > OBJECT_MAX_BYTES) {
-                                    throw new Error('Превышен лимит ' + formatBytes(OBJECT_MAX_BYTES) + ' на объект');
-                                }
-                                return uploadPhoto(dataUrl, file.name, objectUniqueId).then(function(media) {
-                                    var photoSize = media.size != null ? Number(media.size) : est;
-                                    usedBytes += photoSize;
-                                    added.push({
-                                        id: media.id,
-                                        ext: media.ext || '.jpg',
-                                        name: media.name || file.name || '',
-                                        size: photoSize,
-                                        createdAt: media.createdAt || new Date().toISOString()
-                                    });
+            function resetFileInputMode() {
+                if (!fileInput) return;
+                fileInput.removeAttribute('capture');
+                if (!isVolsmapAndroidApp()) {
+                    fileInput.setAttribute('multiple', '');
+                }
+            }
+
+            function runUploadFromFiles(files, activeBtn) {
+                if (!files || !files.length) return;
+                var o = getObj();
+                var hadUid = !!resolveObjectUniqueId(o);
+                var objectUniqueId = ensureObjectUniqueId(o);
+                if (!objectUniqueId) {
+                    if (typeof showWarning === 'function') showWarning('Нет ID объекта', 'Сохраните карту и повторите загрузку');
+                    fileInput.value = '';
+                    return;
+                }
+                if (!hadUid) onChanged(o);
+                var current = getObjectPhotos(o);
+                if (isObjectQuotaFull(current)) {
+                    if (typeof showWarning === 'function') showWarning('Лимит объекта', 'На объект можно загрузить не более ' + formatBytes(OBJECT_MAX_BYTES));
+                    fileInput.value = '';
+                    return;
+                }
+                if (uploadBtn) uploadBtn.disabled = true;
+                if (cameraBtn) cameraBtn.disabled = true;
+                if (activeBtn) activeBtn.textContent = 'Загрузка…';
+                var queue = Array.prototype.slice.call(files, 0, MAX_PHOTOS);
+                var chain = Promise.resolve();
+                var added = [];
+                var usedBytes = getPhotosBytes(current);
+                queue.forEach(function(file) {
+                    chain = chain.then(function() {
+                        if (current.length + added.length >= MAX_PHOTOS) return;
+                        if (usedBytes >= OBJECT_MAX_BYTES) return;
+                        return processImageFile(file).then(function(dataUrl) {
+                            var est = estimateDataUrlBytes(dataUrl);
+                            if (est > MAX_FILE_BYTES) {
+                                throw new Error('Файл после обработки больше ' + formatBytes(MAX_FILE_BYTES));
+                            }
+                            if (usedBytes + est > OBJECT_MAX_BYTES) {
+                                throw new Error('Превышен лимит ' + formatBytes(OBJECT_MAX_BYTES) + ' на объект');
+                            }
+                            return uploadPhoto(dataUrl, file.name, objectUniqueId).then(function(media) {
+                                var photoSize = media.size != null ? Number(media.size) : est;
+                                usedBytes += photoSize;
+                                added.push({
+                                    id: media.id,
+                                    ext: media.ext || '.jpg',
+                                    name: media.name || file.name || '',
+                                    size: photoSize,
+                                    createdAt: media.createdAt || new Date().toISOString()
                                 });
                             });
                         });
                     });
-                    chain.then(function() {
-                        if (!added.length) return;
-                        var objRef = getObj();
-                        var next = getObjectPhotos(objRef).concat(added);
-                        setObjectPhotos(objRef, next);
-                        onChanged(objRef);
-                        var newSection = refreshGalleryGrid(root, objRef, isEditMode, { open: true });
-                        bindSection(newSection);
-                    }).catch(function(err) {
-                        if (typeof showWarning === 'function') showWarning('Не удалось загрузить', err.message || 'Ошибка');
-                    }).finally(function() {
-                        fileInput.value = '';
-                        var objRef = getObj();
-                        var sec = root.querySelector('[data-object-gallery]');
-                        updateUploadControls(sec, objRef);
-                    });
+                });
+                chain.then(function() {
+                    if (!added.length) return;
+                    var objRef = getObj();
+                    var next = getObjectPhotos(objRef).concat(added);
+                    setObjectPhotos(objRef, next);
+                    onChanged(objRef);
+                    var newSection = refreshGalleryGrid(root, objRef, isEditMode, { open: true });
+                    bindSection(newSection);
+                }).catch(function(err) {
+                    if (typeof showWarning === 'function') showWarning('Не удалось загрузить', err.message || 'Ошибка');
+                }).finally(function() {
+                    fileInput.value = '';
+                    resetFileInputMode();
+                    var objRef = getObj();
+                    var sec = root.querySelector('[data-object-gallery]');
+                    updateUploadControls(sec, objRef);
                 });
             }
 
-            section.querySelectorAll('.object-gallery-delete').forEach(function(btn) {
+            if (allowUpload && fileInput) {
+                fileInput.addEventListener('change', function() {
+                    var files = fileInput.files;
+                    var activeBtn = cameraBtn && cameraBtn.textContent.indexOf('Загрузка') >= 0 ? cameraBtn : uploadBtn;
+                    runUploadFromFiles(files, activeBtn);
+                });
+
+                if (cameraBtn) {
+                    cameraBtn.addEventListener('click', function() {
+                        if (cameraBtn.disabled) return;
+                        fileInput.removeAttribute('multiple');
+                        fileInput.setAttribute('capture', 'environment');
+                        fileInput.click();
+                    });
+                }
+
+                if (uploadBtn) {
+                    uploadBtn.addEventListener('click', function() {
+                        if (uploadBtn.disabled) return;
+                        resetFileInputMode();
+                        if (isVolsmapAndroidApp()) {
+                            fileInput.setAttribute('multiple', '');
+                        }
+                        fileInput.click();
+                    });
+                }
+            }
+
+            if (isEditMode) {
+                section.querySelectorAll('.object-gallery-delete').forEach(function(btn) {
                 btn.addEventListener('click', function(e) {
                     e.stopPropagation();
                     var mediaId = btn.getAttribute('data-photo-id');
@@ -535,6 +606,7 @@
                     updateUploadControls(newSection, o);
                 });
             });
+            }
         }
 
         var section = root.querySelector('[data-object-gallery]');

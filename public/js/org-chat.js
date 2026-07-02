@@ -1571,6 +1571,7 @@
     }
 
     window.orgChatOnMessage = onIncomingMessage;
+    window.orgChatOpenPanel = openPanel;
     window.orgChatOnDeleted = removeMessageFromUi;
     window.orgChatOnUpdated = updateMessageInUi;
     window.orgChatOnHistory = function(messages) {

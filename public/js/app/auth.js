@@ -518,9 +518,51 @@ function isAdmin() {
     return session && session.role === 'admin';
 }
 
+function syncNativeAndroidSession() {
+    try {
+        if (!window.VolsmapNative || typeof window.VolsmapNative.saveSession !== 'function') return;
+        var session = getCurrentSession();
+        var token = getAuthToken();
+        if (!session || !token) return;
+        window.VolsmapNative.saveSession(JSON.stringify({
+            token: token,
+            userId: session.userId,
+            userName: session.fullName || session.username || '',
+            orgId: session.organizationId,
+            apiBase: typeof getApiBase === 'function' ? getApiBase() : ''
+        }));
+        if (typeof window.VolsmapNative.scheduleBackgroundSync === 'function') {
+            window.VolsmapNative.scheduleBackgroundSync();
+        }
+        if (typeof window.VolsmapNative.getDeviceId === 'function' && typeof getApiBase === 'function') {
+            var deviceId = window.VolsmapNative.getDeviceId();
+            var api = getApiBase();
+            if (api && deviceId) {
+                fetch(api + '/api/devices/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({ token: deviceId, platform: 'android' })
+                }).catch(function() {});
+            }
+        }
+    } catch (e) {}
+}
+
+function clearNativeAndroidSession() {
+    try {
+        if (window.VolsmapNative && typeof window.VolsmapNative.clearSession === 'function') {
+            window.VolsmapNative.clearSession();
+        }
+    } catch (e) {}
+}
+
 function logout() {
     stopInactivityLogoutWatcher();
     function clearClientAndRedirect() {
+        clearNativeAndroidSession();
         try {
             sessionStorage.removeItem('networkMap_session');
             sessionStorage.removeItem('networkMap_token');
@@ -728,6 +770,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             Promise.resolve(verifyLoginTotp(pendingLoginId, code, pendingLoginRememberMe)).then(function(result) {
                 if (result.success) {
+                    syncNativeAndroidSession();
                     showMessage('Вход выполнен успешно! Перенаправление...', 'success');
                     setTimeout(function() {
                         var u = result.user || {};
@@ -753,6 +796,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var rememberMe = document.getElementById('loginRememberMe') ? document.getElementById('loginRememberMe').checked : false;
             Promise.resolve(loginUser(username, password, rememberMe)).then(function(result) {
                 if (result.success) {
+                    syncNativeAndroidSession();
                     showMessage('Вход выполнен успешно! Перенаправление...', 'success');
                     setTimeout(function() {
                         var u = result.user || {};

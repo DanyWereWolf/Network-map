@@ -118,7 +118,17 @@ function switchToEditMode() {
     }
 
     if (isNetworkMapMobileViewOnly()) {
-        showInfo('На этом экране доступен только просмотр. Редактирование карты — с компьютера или планшета (ширина окна больше 768px).', 'Режим');
+        var inApp = false;
+        try {
+            inApp = window.__VOLSMAP_ANDROID__ === true
+                || (window.VolsmapAndroid && typeof window.VolsmapAndroid.isApp === 'function' && window.VolsmapAndroid.isApp());
+        } catch (e) {}
+        showInfo(
+            inApp
+                ? 'В мобильном приложении доступен просмотр. Редактирование карты — с компьютера.'
+                : 'На этом экране доступен только просмотр. Редактирование карты — с компьютера или планшета (ширина окна больше 768px).',
+            'Режим'
+        );
         return;
     }
     
