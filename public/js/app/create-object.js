@@ -216,9 +216,6 @@ function createObject(type, name, coords, options = {}) {
     });
 
     placemark.events.add('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation(); 
-
         if (objectPlacementMode) {
             if (type === 'cabinet' && typeof canBeCabinetMember === 'function' && canBeCabinetMember(currentPlacementType || '')) {
                 var cabCoords = placemark.geometry && placemark.geometry.getCoordinates();
@@ -226,6 +223,9 @@ function createObject(type, name, coords, options = {}) {
             }
             return;
         }
+
+        e.preventDefault();
+        e.stopPropagation();
 
         if (radioBridgeRoutingMode && typeof handleRadioBridgeRoutingPlacemarkClick === 'function' &&
             handleRadioBridgeRoutingPlacemarkClick(placemark, type)) {
@@ -432,14 +432,16 @@ function createObject(type, name, coords, options = {}) {
 
     placemark.events.add('dragend', function() {
         window.syncDragInProgress = false;
-        if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
         ensurePlacemarkUniqueIdForSync(placemark);
         var uid = placemark.properties.get('uniqueId');
         if (uid && isObjectLockedByOther(uid)) {
             if (typeof showWarning === 'function') showWarning('Объект редактирует другой пользователь', 'Перемещение недоступно');
+            if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
+            if (typeof resumeMapPanAfterPlacementObjectDrag === 'function') resumeMapPanAfterPlacementObjectDrag();
             return;
         }
-        if ((type === 'cross' || type === 'node') && typeof snapCoordsToObjectGroup === 'function') {
+        var skipGroupSnap = typeof shouldSkipGroupSnapAfterPlacement === 'function' && shouldSkipGroupSnapAfterPlacement(placemark);
+        if ((type === 'cross' || type === 'node') && !skipGroupSnap && typeof snapCoordsToObjectGroup === 'function') {
             if (!(typeof onMemberObjectDragEnd === 'function' && onMemberObjectDragEnd(placemark))) {
                 var snappedCoords = snapCoordsToObjectGroup(placemark.geometry.getCoordinates(), type, placemark);
                 placemark.geometry.setCoordinates(snappedCoords);
@@ -452,17 +454,22 @@ function createObject(type, name, coords, options = {}) {
         if (label) label.geometry.setCoordinates(placemark.geometry.getCoordinates());
         scheduleConnectionLinesUpdate();
         updateSelectionPulsePosition(placemark);
-        if (type === 'cross') updateCrossDisplay(); 
-        if (type === 'node') updateNodeDisplay();
-        if (type === 'cabinet' && typeof onCabinetDragEnd === 'function') onCabinetDragEnd(placemark);
         if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(placemark);
         else saveData({ object: placemark, syncImmediate: true });
+        if (type === 'cross') updateCrossDisplay();
+        if (type === 'node') updateNodeDisplay();
+        if (type === 'cabinet' && typeof onCabinetDragEnd === 'function') onCabinetDragEnd(placemark);
         if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
         if (typeof applyMapFilter === 'function') applyMapFilter();
         releaseDragObjectLock(uid);
+        if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
+        if (typeof resumeMapPanAfterPlacementObjectDrag === 'function') resumeMapPanAfterPlacementObjectDrag();
     });
     
     placemark.events.add('drag', function() {
+        if (objectPlacementMode && typeof suspendMapPanForPlacementObjectDrag === 'function') {
+            suspendMapPanForPlacementObjectDrag();
+        }
         if (!window.syncDragInProgress) {
             window.syncDragInProgress = true;
             acquireDragObjectLock(placemark);
@@ -473,6 +480,8 @@ function createObject(type, name, coords, options = {}) {
     });
 
     attachHoverEventsToObject(placemark);
+    if (typeof bindPlacemarkPlacementDragSupport === 'function') bindPlacemarkPlacementDragSupport(placemark);
+    if (typeof markPlacemarkJustPlaced === 'function') markPlacemarkJustPlaced(placemark);
     objects.push(placemark);
     mapPerfRegister(placemark);
     if (!options.skipAddToObjects) {
@@ -499,7 +508,10 @@ function createObject(type, name, coords, options = {}) {
     }
     if (typeof window.syncSendOp === 'function') {
         var data = serializeOneObject(placemark);
-        if (data) window.syncSendOp({ type: 'add_object', data: data });
+        if (data) {
+            window.syncSendOp({ type: 'add_object', data: data });
+            if (typeof bumpMapRevisionAfterSyncAdd === 'function') bumpMapRevisionAfterSyncAdd(placemark);
+        }
     }
     saveData({ skipSync: true });
     updateStats();

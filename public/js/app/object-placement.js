@@ -395,6 +395,56 @@ const placementPanPointer = { down: false, startX: 0, startY: 0, moved: false };
 const PLACEMENT_PAN_DRAG_THRESHOLD_PX = 5;
 /** Короткое окно после pan — только чтобы не поставить объект «хвостом» жеста перетаскивания. */
 const PLACEMENT_PAN_CLICK_BLOCK_MS = 40;
+let placementObjectDragPanSuspended = false;
+
+function suspendMapPanForPlacementObjectDrag() {
+    if (!objectPlacementMode || !myMap || !myMap.behaviors || placementObjectDragPanSuspended) return;
+    try {
+        if (myMap.behaviors.isEnabled('drag')) {
+            myMap.behaviors.disable('drag');
+            placementObjectDragPanSuspended = true;
+        }
+    } catch (e) {}
+}
+
+function resumeMapPanAfterPlacementObjectDrag() {
+    if (!placementObjectDragPanSuspended) return;
+    placementObjectDragPanSuspended = false;
+    if (typeof syncMapPanLockForEditTools === 'function') syncMapPanLockForEditTools();
+    else if (myMap && myMap.behaviors) {
+        try { myMap.behaviors.enable('drag'); } catch (e) {}
+    }
+}
+
+function markPlacemarkJustPlaced(placemark) {
+    if (placemark && placemark.properties && objectPlacementMode) {
+        placemark.properties.set('justPlacedAt', Date.now());
+    }
+}
+
+function shouldSkipGroupSnapAfterPlacement(placemark) {
+    if (!placemark || !placemark.properties) return false;
+    var ts = placemark.properties.get('justPlacedAt');
+    if (!ts) return false;
+    placemark.properties.set('justPlacedAt', null);
+    return true;
+}
+
+function bindPlacemarkPlacementDragSupport(placemark) {
+    if (!placemark || !placemark.events || placemark.properties.get('placementDragBound')) return;
+    placemark.properties.set('placementDragBound', true);
+    placemark.events.add('mousedown', function(e) {
+        if (!objectPlacementMode || !isEditMode) return;
+        var domEvent = e.get && e.get('domEvent');
+        if (domEvent && domEvent.button !== 0) return;
+        suspendMapPanForPlacementObjectDrag();
+    });
+    placemark.events.add('dragend', function() {
+        resumeMapPanAfterPlacementObjectDrag();
+    });
+}
+window.bindPlacemarkPlacementDragSupport = bindPlacemarkPlacementDragSupport;
+window.shouldSkipGroupSnapAfterPlacement = shouldSkipGroupSnapAfterPlacement;
 
 function handleAddObject() {
     try {
@@ -876,10 +926,14 @@ function setupObjectPlacementPanDrag() {
     });
 
     document.addEventListener('mouseup', function() {
-        if (!placementPanPointer.down) return;
+        if (!placementPanPointer.down) {
+            resumeMapPanAfterPlacementObjectDrag();
+            return;
+        }
         placementPanPointer.down = false;
         if (placementPanPointer.moved && isMapPanDragTrackingActive()) {
             placementPanBlockClickUntil = Date.now() + PLACEMENT_PAN_CLICK_BLOCK_MS;
         }
+        resumeMapPanAfterPlacementObjectDrag();
     });
 }

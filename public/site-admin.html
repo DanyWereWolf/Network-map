@@ -109,6 +109,30 @@
         .btn-sm-primary:hover {
             filter: brightness(1.03);
         }
+        .btn-sm-danger {
+            border-radius: 999px;
+            padding: 5px 12px;
+            border: 1px solid rgba(239, 68, 68, 0.35);
+            background: rgba(254, 242, 242, 0.96);
+            color: #b91c1c;
+            font-size: 0.78rem;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        .btn-sm-danger:hover {
+            background: #fee2e2;
+            border-color: rgba(220, 38, 38, 0.45);
+            color: #991b1b;
+        }
+        [data-theme="dark"] .btn-sm-danger {
+            background: rgba(127, 29, 29, 0.35);
+            border-color: rgba(248, 113, 113, 0.35);
+            color: #fecaca;
+        }
+        [data-theme="dark"] .btn-sm-danger:hover {
+            background: rgba(153, 27, 27, 0.5);
+            color: #fff;
+        }
         .theme-toggle-btn {
             min-width: 104px;
             display: inline-flex;
@@ -2436,7 +2460,7 @@
                 var statusLabel = status === 'pending' ? 'Ожидает' : (status === 'rejected' ? 'Отклонён' : 'Активен');
                 var canDelete = u.username !== 'admin' && String(u.id) !== String(adminUserId || '');
                 var deleteCell = canDelete
-                    ? '<button type="button" class="btn-sm-secondary" data-user-id="' + escapeHtml(u.id) + '" data-action="deleteUser" style="color:#b91c1c;border-color:#fecaca;">Удалить</button>'
+                    ? '<button type="button" class="btn-sm-danger" data-user-id="' + escapeHtml(u.id) + '" data-action="deleteUser">Удалить</button>'
                     : '<span class="text-muted">—</span>';
                 var tr = document.createElement('tr');
                 tr.innerHTML =

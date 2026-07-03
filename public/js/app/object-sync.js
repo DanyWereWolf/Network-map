@@ -144,6 +144,12 @@ function setMapRevision(obj, revision) {
     obj.properties.set('mapRevision', revision != null && !isNaN(Number(revision)) ? Number(revision) : 0);
 }
 
+/** После add_object сервер ставит revision=1; без этого первый update_object откатывает координаты. */
+function bumpMapRevisionAfterSyncAdd(obj) {
+    if (!obj || !obj.properties) return;
+    setMapRevision(obj, Math.max(getMapRevision(obj), 1));
+}
+
 function shouldUseIncrementalSync(opts) {
     if (opts && (opts.syncFull || opts.skipSync)) return false;
     return !!(window.syncIsConnected && typeof window.syncSendOp === 'function');
@@ -346,9 +352,13 @@ window.onSyncOpConflict = function(payload) {
             return o.properties && o.properties.get('uniqueId') === payload.uniqueId;
         });
         if (conflictObj) {
-            var t = conflictObj.properties.get('type');
-            if (t === 'cable') applySerializedCableToMap(conflictObj, payload.data);
-            else populatePlacemarkFromSerializedData(conflictObj, payload.data);
+            if (!isOtherEditor) {
+                if (payload.revision != null) setMapRevision(conflictObj, payload.revision);
+            } else {
+                var t = conflictObj.properties.get('type');
+                if (t === 'cable') applySerializedCableToMap(conflictObj, payload.data);
+                else populatePlacemarkFromSerializedData(conflictObj, payload.data);
+            }
         }
     }
     if (!isOtherEditor) return;

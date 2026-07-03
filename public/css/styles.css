@@ -1002,15 +1002,15 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
 .user-item-btn {
     width: 32px;
     height: 32px;
-    border: none;
+    border: 1px solid transparent;
     background: transparent;
-    border-radius: 6px;
+    border-radius: 8px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--text-muted);
-    transition: all 0.2s;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
 }
 
 .user-item-btn:hover {
@@ -1018,9 +1018,19 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     color: var(--text-primary);
 }
 
+.user-item-btn.delete {
+    color: #ef4444;
+}
+
 .user-item-btn.delete:hover {
-    background: #fee2e2;
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.22);
     color: #dc2626;
+}
+
+[data-theme="dark"] .user-item-btn.delete:hover {
+    background: rgba(239, 68, 68, 0.16);
+    border-color: rgba(239, 68, 68, 0.28);
 }
 
 .user-item-date {
@@ -7983,6 +7993,37 @@ button {
 .user-edit-modal-content.panel-glass {
     max-width: 450px;
     width: min(450px, 100%);
+}
+
+.user-edit-modal-actions {
+    display: flex;
+    gap: 10px;
+    align-items: stretch;
+    margin-top: 4px;
+}
+
+.user-edit-modal-actions .btn-primary,
+.user-edit-modal-actions .btn-secondary,
+.user-edit-modal-actions .btn-danger {
+    width: auto;
+    flex: 1 1 0;
+    min-width: 0;
+    margin: 0;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    padding: 10px 14px;
+}
+
+.user-edit-modal-actions .btn-danger {
+    flex: 0 1 auto;
+    min-width: 108px;
+}
+
+.user-edit-modal-actions .btn-danger svg {
+    width: 16px;
+    height: 16px;
 }
 
 .confirm-modal-content.panel-glass {

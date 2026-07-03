@@ -295,7 +295,10 @@ function createRegion(name, ringCoords, options) {
     if (typeof applyMapFilter === 'function') applyMapFilter();
     if (!(options && options.skipSync) && typeof window.syncSendOp === 'function') {
         var dataSer = serializeOneObject(polygon);
-        if (dataSer) window.syncSendOp({ type: 'add_object', data: dataSer });
+        if (dataSer) {
+            window.syncSendOp({ type: 'add_object', data: dataSer });
+            if (typeof bumpMapRevisionAfterSyncAdd === 'function') bumpMapRevisionAfterSyncAdd(polygon);
+        }
     }
     if (!(options && options.skipSave)) saveData({ skipSync: true });
     renderRegionsSidebarList();

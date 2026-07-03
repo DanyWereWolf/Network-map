@@ -1137,9 +1137,6 @@ function applyOperationToMap(op) {
                 return t && t !== 'cable' && t !== 'cableLabel' && o.properties.get('uniqueId') === addUid;
             });
             if (existingAdd) {
-                populatePlacemarkFromSerializedData(existingAdd, op.data);
-                updateConnectedCables(existingAdd);
-                refreshRemoteObjectVisuals(existingAdd);
                 return;
             }
         }
@@ -1607,7 +1604,13 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         populateRegionFromSerializedData(placemark, data);
         return;
     }
-    if (data.geometry && placemark.geometry) placemark.geometry.setCoordinates(data.geometry);
+    if (data.geometry && placemark.geometry) {
+        var incomingRev = data.revision != null && !isNaN(Number(data.revision)) ? Number(data.revision) : null;
+        var localRev = typeof getMapRevision === 'function' ? getMapRevision(placemark) : 0;
+        if (incomingRev == null || incomingRev >= localRev) {
+            placemark.geometry.setCoordinates(data.geometry);
+        }
+    }
     if (type) placemark.properties.set('type', type);
     if (data.name != null) {
         placemark.properties.set('name', data.name);
@@ -1623,7 +1626,12 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         }
         if (typeof updateObjectLabel === 'function') updateObjectLabel(placemark, opName);
     }
-    if (data.revision != null) setMapRevision(placemark, data.revision);
+    if (data.revision != null) {
+        var revIncoming = Number(data.revision);
+        if (!isNaN(revIncoming) && revIncoming >= (typeof getMapRevision === 'function' ? getMapRevision(placemark) : 0)) {
+            setMapRevision(placemark, revIncoming);
+        }
+    }
     if (data.usedFibers) placemark.properties.set('usedFibers', data.usedFibers);
     if (data.fiberConnections) placemark.properties.set('fiberConnections', data.fiberConnections);
     if (data.fiberLabels) placemark.properties.set('fiberLabels', data.fiberLabels);
@@ -1951,9 +1959,6 @@ function createObjectFromData(data, opts, createOpts) {
     populatePlacemarkFromSerializedData(placemark, data);
 
     placemark.events.add('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation(); 
-
         if (objectPlacementMode) {
             if (type === 'cabinet' && typeof canBeCabinetMember === 'function' && canBeCabinetMember(currentPlacementType || '')) {
                 var cabCoordsPm = placemark.geometry && placemark.geometry.getCoordinates();
@@ -1961,6 +1966,9 @@ function createObjectFromData(data, opts, createOpts) {
             }
             return;
         }
+
+        e.preventDefault();
+        e.stopPropagation();
 
         if (radioBridgeRoutingMode && typeof handleRadioBridgeRoutingPlacemarkClick === 'function' &&
             handleRadioBridgeRoutingPlacemarkClick(placemark, type)) {
@@ -2168,9 +2176,9 @@ function createObjectFromData(data, opts, createOpts) {
 
     placemark.events.add('dragend', function() {
             window.syncDragInProgress = false;
-            if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
             ensurePlacemarkUniqueIdForSync(placemark);
             var uid = placemark.properties.get('uniqueId');
+            var skipGroupSnapPm = typeof shouldSkipGroupSnapAfterPlacement === 'function' && shouldSkipGroupSnapAfterPlacement(placemark);
             updateConnectedCables(placemark);
             const label = placemark.properties.get('label');
             if (label) {
@@ -2179,7 +2187,7 @@ function createObjectFromData(data, opts, createOpts) {
             }
             scheduleConnectionLinesUpdate();
             updateSelectionPulsePosition(placemark);
-            if ((type === 'cross' || type === 'node') && typeof snapCoordsToObjectGroup === 'function') {
+            if ((type === 'cross' || type === 'node') && !skipGroupSnapPm && typeof snapCoordsToObjectGroup === 'function') {
                 if (!(typeof onMemberObjectDragEnd === 'function' && onMemberObjectDragEnd(placemark))) {
                     var snappedCoordsPm = snapCoordsToObjectGroup(placemark.geometry.getCoordinates(), type, placemark);
                     placemark.geometry.setCoordinates(snappedCoordsPm);
@@ -2187,15 +2195,20 @@ function createObjectFromData(data, opts, createOpts) {
             } else if (typeof onMemberObjectDragEnd === 'function') {
                 onMemberObjectDragEnd(placemark);
             }
+            if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(placemark);
+            else saveData({ object: placemark, syncImmediate: true });
             if (type === 'cross' && typeof updateCrossDisplay === 'function') updateCrossDisplay();
             if (type === 'node' && typeof updateNodeDisplay === 'function') updateNodeDisplay();
             if (type === 'cabinet' && typeof onCabinetDragEnd === 'function') onCabinetDragEnd(placemark);
-            if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(placemark);
-            else saveData({ object: placemark, syncImmediate: true });
             releaseDragObjectLock(uid);
+            if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
+            if (typeof resumeMapPanAfterPlacementObjectDrag === 'function') resumeMapPanAfterPlacementObjectDrag();
         });
 
     placemark.events.add('drag', function() {
+        if (objectPlacementMode && typeof suspendMapPanForPlacementObjectDrag === 'function') {
+            suspendMapPanForPlacementObjectDrag();
+        }
         if (!window.syncDragInProgress) {
             window.syncDragInProgress = true;
             acquireDragObjectLock(placemark);
@@ -2209,6 +2222,7 @@ function createObjectFromData(data, opts, createOpts) {
     if (type === 'camera') refreshCameraMapPresentation(placemark);
 
     attachHoverEventsToObject(placemark);
+    if (typeof bindPlacemarkPlacementDragSupport === 'function') bindPlacemarkPlacementDragSupport(placemark);
     if (!(createOpts && createOpts.skipAddToObjects)) {
         objects.push(placemark);
         mapPerfRegister(placemark);

@@ -245,7 +245,7 @@ function handleMapClick(e) {
         }
 
         if (placeObjectAtCoords(coords)) {
-            requestAnimationFrame(function() { saveData(); });
+            /* saveData и syncSendOp выполняются в createObject */
         }
         return;
     }

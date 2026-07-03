@@ -2711,7 +2711,8 @@ function applyOperationToState(state, op) {
             baseRev = op.baseRevision;
             if (baseRev != null && Number(baseRev) !== getItemRevision(cur)) {
                 var sameEditor = cur._syncEditor && cur._syncEditor === op._clientId;
-                if (!sameEditor && Number(baseRev) < getItemRevision(cur)) {
+                var oneBehindAfterCreate = Number(baseRev) + 1 === getItemRevision(cur);
+                if (!sameEditor && !oneBehindAfterCreate && Number(baseRev) < getItemRevision(cur)) {
                     return {
                         state: state,
                         conflict: {
