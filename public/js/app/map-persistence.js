@@ -641,8 +641,16 @@ window.showSyncRequiredOverlay = showSyncRequiredOverlay;
 window.hideSyncRequiredOverlay = hideSyncRequiredOverlay;
 
 var COLLABORATOR_CURSOR_COLORS = ['#3b82f6', '#22c55e', '#eab308', '#ef4444', '#8b5cf6', '#ec4899'];
+var _pendingCollaboratorCursors = null;
+var _collaboratorCursorsRaf = null;
+var _collaboratorCursorsRafPayload = null;
 
-function updateCollaboratorCursors(cursors) {
+function cursorPositionsEqual(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length < 2 || b.length < 2) return false;
+    return a[0] === b[0] && a[1] === b[1];
+}
+
+function applyCollaboratorCursorsNow(cursors) {
     if (!myMap || !myMap.geoObjects) return;
     if (!cursors || cursors.length === 0) {
         collaboratorCursorsPlacemarks.forEach(function(pm) {
@@ -658,7 +666,12 @@ function updateCollaboratorCursors(cursors) {
             var pos = c.position;
             if (!Array.isArray(pos) || pos.length < 2) return;
             var pm = collaboratorCursorsPlacemarks[idx];
-            if (pm && pm.geometry) try { pm.geometry.setCoordinates(pos); } catch (e) {}
+            if (!pm || !pm.geometry) return;
+            if (cursorPositionsEqual(pm._lastCursorPos, pos)) return;
+            try {
+                pm.geometry.setCoordinates(pos);
+                pm._lastCursorPos = [pos[0], pos[1]];
+            } catch (e) {}
         });
         return;
     }
@@ -688,10 +701,35 @@ function updateCollaboratorCursors(cursors) {
             iconImageOffset: [-14, -14],
             zIndex: 9998,
             cursor: 'default',
-            interactive: true
+            interactive: false,
+            interactivityModel: 'default#transparent'
         });
+        pm._lastCursorPos = [pos[0], pos[1]];
         myMap.geoObjects.add(pm);
         collaboratorCursorsPlacemarks.push(pm);
+    });
+}
+
+function flushPendingCollaboratorCursors() {
+    if (_pendingCollaboratorCursors == null) return;
+    var pending = _pendingCollaboratorCursors;
+    _pendingCollaboratorCursors = null;
+    updateCollaboratorCursors(pending);
+}
+
+function updateCollaboratorCursors(cursors) {
+    if (_mapApplyInProgress) {
+        _pendingCollaboratorCursors = cursors;
+        return;
+    }
+    _collaboratorCursorsRafPayload = cursors;
+    if (_collaboratorCursorsRaf) return;
+    var raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function(f) { setTimeout(f, 16); };
+    _collaboratorCursorsRaf = raf(function() {
+        _collaboratorCursorsRaf = null;
+        var payload = _collaboratorCursorsRafPayload;
+        _collaboratorCursorsRafPayload = null;
+        applyCollaboratorCursorsNow(payload);
     });
 }
 window.updateCollaboratorCursors = updateCollaboratorCursors;
@@ -805,6 +843,7 @@ function applyRemoteState(data, meta) {
                 OfflineMapCache.hideOfflineBanner();
                 window._volsmapOfflineMapActive = false;
             }
+            flushPendingCollaboratorCursors();
         }
         if (data.length === 0) {
             clearMap(opts);
@@ -822,6 +861,7 @@ function applyRemoteState(data, meta) {
         _mapApplyInProgress = false;
         updateStats();
         markMapDataReady();
+        flushPendingCollaboratorCursors();
     }
 }
 

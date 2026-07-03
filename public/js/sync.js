@@ -16,7 +16,7 @@
     var cursorFlushIntervalId = null;
     var lastCursorsUiUpdate = 0;
     var pendingCursorsUi = null;
-    var CURSORS_UI_THROTTLE_MS = 100;
+    var CURSORS_UI_THROTTLE_MS = 200;
     var applyStateTimer = null;
     var pendingApplyState = null;
     var APPLY_STATE_DEBOUNCE_MS = 120;
