@@ -383,7 +383,7 @@ function onMapObjectLimitError(message, limits) {
     if (limits) applyMapLimitsCache(limits);
     var text = message || 'Достигнут лимит объектов на карте. Чтобы снять ограничение, напишите владельцу программы.';
     if (typeof showWarning === 'function') {
-        showWarning(text + ' <a href="' + OWNER_CONTACT_MAILTO + '" style="color:inherit;">Написать владельцу</a>', 'Лимит объектов');
+        showWarning(text + ' <a href="' + OWNER_CONTACT_MAILTO + '" style="color:inherit;text-decoration:underline;">Написать владельцу</a>', 'Лимит объектов', true);
     } else {
         alert(text);
     }
@@ -982,6 +982,30 @@ function rejectUserRequest(userId) {
     })();
 }
 
+function isGlobalMapAdmin() {
+    return !!(currentUser && currentUser.role === 'admin' && currentUser.organizationId == null);
+}
+
+function populateUserOrganizationSelect(orgSelect, options) {
+    options = options || {};
+    if (!orgSelect) return;
+    var orgs = (typeof AuthSystem !== 'undefined' && AuthSystem.getOrganizations) ? AuthSystem.getOrganizations() : [];
+    orgSelect.innerHTML = '';
+    if (options.includePlaceholder !== false) {
+        var placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = options.placeholderText || 'Выберите организацию…';
+        orgSelect.appendChild(placeholder);
+    }
+    orgs.forEach(function(o) {
+        var opt = document.createElement('option');
+        opt.value = o.id;
+        opt.textContent = o.name || o.id;
+        orgSelect.appendChild(opt);
+    });
+    if (options.selectedId) orgSelect.value = options.selectedId;
+}
+
 function openUserEditModal(userId = null) {
     const modal = document.getElementById('userEditModal');
     const title = document.getElementById('userEditTitle');
@@ -991,24 +1015,23 @@ function openUserEditModal(userId = null) {
     const passwordInput = document.getElementById('editPassword');
     const roleSelect = document.getElementById('editRole');
     const orgSelect = document.getElementById('editOrganizationId');
-    var orgs = (typeof AuthSystem !== 'undefined' && AuthSystem.getOrganizations) ? AuthSystem.getOrganizations() : [];
-    if (orgSelect) {
-        orgSelect.innerHTML = '<option value="">— Без организации —</option>';
-        orgs.forEach(function(o) {
-            var opt = document.createElement('option');
-            opt.value = o.id;
-            opt.textContent = o.name || o.id;
-            orgSelect.appendChild(opt);
-        });
-    }
+    const deleteUserBtn = document.getElementById('deleteUserBtn');
     if (userId) {
-        if (orgSelect) {
-            var orgGroup = orgSelect.closest('.form-group');
-            if (orgGroup) orgGroup.style.display = '';
-        }
         const users = AuthSystem.getUsers();
         const user = users.find(u => u.id === userId);
         if (!user) return;
+        var isMainAdminUser = user.username === 'admin';
+        var showOrgField = isGlobalMapAdmin() && !isMainAdminUser;
+        if (orgSelect) {
+            var orgGroup = orgSelect.closest('.form-group');
+            if (orgGroup) orgGroup.style.display = showOrgField ? '' : 'none';
+            if (showOrgField) {
+                populateUserOrganizationSelect(orgSelect, {
+                    selectedId: user.organizationId || '',
+                    placeholderText: 'Выберите организацию…'
+                });
+            }
+        }
         title.textContent = 'Редактировать пользователя';
         userIdInput.value = user.id;
         usernameInput.value = user.username;
@@ -1016,8 +1039,13 @@ function openUserEditModal(userId = null) {
         fullNameInput.value = user.fullName || '';
         passwordInput.value = '';
         roleSelect.value = user.role;
-        if (orgSelect && user.organizationId) orgSelect.value = user.organizationId || '';
+        if (deleteUserBtn) {
+            var canDelete = user.id !== currentUser.userId && !isMainAdminUser;
+            deleteUserBtn.style.display = canDelete ? '' : 'none';
+            deleteUserBtn.onclick = canDelete ? function() { deleteUser(user.id); } : null;
+        }
     } else {
+        if (deleteUserBtn) deleteUserBtn.style.display = 'none';
         title.textContent = 'Добавить пользователя';
         userIdInput.value = '';
         usernameInput.value = '';
@@ -1025,16 +1053,16 @@ function openUserEditModal(userId = null) {
         fullNameInput.value = '';
         passwordInput.value = '';
         roleSelect.value = 'user';
-        // При добавлении пользователь "наследует" организацию текущего админа.
-        // Поэтому выпадающий список организации не нужен (скрываем), кроме случая глобального админа.
         if (orgSelect) {
-            var orgGroup = orgSelect.closest('.form-group');
+            var orgGroupAdd = orgSelect.closest('.form-group');
             if (currentUser && currentUser.organizationId != null) {
-                if (orgGroup) orgGroup.style.display = 'none';
+                if (orgGroupAdd) orgGroupAdd.style.display = 'none';
                 orgSelect.value = currentUser.organizationId;
+            } else if (isGlobalMapAdmin()) {
+                if (orgGroupAdd) orgGroupAdd.style.display = '';
+                populateUserOrganizationSelect(orgSelect, { placeholderText: 'Выберите организацию…' });
             } else {
-                if (orgGroup) orgGroup.style.display = '';
-                orgSelect.value = '';
+                if (orgGroupAdd) orgGroupAdd.style.display = 'none';
             }
         }
     }
@@ -1073,7 +1101,20 @@ function saveUser() {
             return;
         }
         var orgSelect = document.getElementById('editOrganizationId');
-        var organizationId = (orgSelect && orgSelect.value) ? orgSelect.value : null;
+        var organizationId = null;
+        if (users[userIndex].username === 'admin') {
+            organizationId = null;
+        } else if (currentUser && currentUser.organizationId != null) {
+            organizationId = currentUser.organizationId;
+        } else if (isGlobalMapAdmin()) {
+            organizationId = (orgSelect && orgSelect.value) ? orgSelect.value : null;
+            if (!organizationId) {
+                showError('Выберите организацию');
+                return;
+            }
+        } else {
+            organizationId = users[userIndex].organizationId || null;
+        }
         var payload = { fullName: fullName || users[userIndex].username, role: role, organizationId: organizationId };
         if (password && password.length >= 6) payload.password = password;
         if (getApiBase()) {
@@ -1105,11 +1146,13 @@ function saveUser() {
         if (password.length < 6) { showError('Пароль должен быть не менее 6 символов'); return; }
         if (AuthSystem.findUserByUsername(username)) { showError('Пользователь с таким именем уже существует'); return; }
         var orgSelect = document.getElementById('editOrganizationId');
-        // В режиме добавления организация наследуется текущим админом.
-        // Для глобального админа (organizationId === null) оставляем поведение с select.
         var organizationId = (currentUser && currentUser.organizationId != null)
             ? currentUser.organizationId
             : ((orgSelect && orgSelect.value) ? orgSelect.value : null);
+        if (!organizationId) {
+            showError('Выберите организацию');
+            return;
+        }
         if (getApiBase()) {
             fetch(getApiBase() + '/api/users', {
                 method: 'POST',
@@ -1181,6 +1224,7 @@ function deleteUser(userId) {
             return (typeof AuthSystem !== 'undefined' && AuthSystem.refreshUsersFromApi) ? AuthSystem.refreshUsersFromApi() : Promise.resolve();
         }).then(function() {
             showSuccess('Пользователь удалён');
+            closeUserEditModal();
             renderUsersList();
             logAction(ActionTypes.USER_DELETED, { username: username });
         }).catch(function(e) {
@@ -1192,10 +1236,15 @@ function deleteUser(userId) {
     users.splice(userIndex, 1);
     AuthSystem.saveUsers(users);
     showSuccess('Пользователь удалён');
+    closeUserEditModal();
     renderUsersList();
     logAction(ActionTypes.USER_DELETED, { username: username });
     })();
 }
+
+window.deleteUser = deleteUser;
+window.editUser = editUser;
+window.openUsersModal = openUsersModal;
 
 function setupUsersModalHandlers() {
     

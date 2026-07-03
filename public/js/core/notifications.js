@@ -15,7 +15,7 @@ function trimToastStack(container) {
     }
 }
 
-function showToast(message, type, title, duration) {
+function showToast(message, type, title, duration, allowHtml) {
     type = type || 'info';
     duration = duration !== undefined ? duration : TOAST_DEFAULT_MS;
     const container = document.getElementById('toastContainer');
@@ -34,7 +34,9 @@ function showToast(message, type, title, duration) {
         '</div>' +
         '<button class="toast-close" type="button" aria-label="Закрыть">✕</button>';
     toast.querySelector('.toast-title').textContent = titleText;
-    toast.querySelector('.toast-message').textContent = msg;
+    var msgEl = toast.querySelector('.toast-message');
+    if (allowHtml) msgEl.innerHTML = msg;
+    else msgEl.textContent = msg;
     container.appendChild(toast);
     trimToastStack(container);
 
@@ -55,5 +57,7 @@ function showToast(message, type, title, duration) {
 
 function showSuccess(message, title) { showToast(message, 'success', title || null); }
 function showError(message, title) { showToast(message, 'error', title || null, 2400); }
-function showWarning(message, title) { showToast(message, 'warning', title || null, 2000); }
+function showWarning(message, title, allowHtml) {
+    showToast(message, 'warning', title || null, allowHtml ? 12000 : 2000, !!allowHtml);
+}
 function showInfo(message, title) { showToast(message, 'info', title || null); }

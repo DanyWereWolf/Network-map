@@ -236,8 +236,17 @@ function canViewUserAvatar(viewer, targetUserId) {
     const users = db.getUsers();
     const target = users.find(function(u) { return String(u.id) === String(targetUserId); });
     if (!target) return false;
-    if (isGlobalAdmin(viewer)) return true;
-    return !!(target.organizationId && viewer.organizationId && target.organizationId === viewer.organizationId);
+    return canAdminManageUser(viewer, target);
+}
+
+function canAdminManageUser(admin, target) {
+    if (!admin || admin.role !== 'admin' || !target) return false;
+    if (target.username === 'admin') {
+        return isGlobalAdmin(admin) && String(admin.userId) === String(target.id);
+    }
+    if (isGlobalAdmin(admin)) return true;
+    return !!(target.organizationId && admin.organizationId &&
+        String(target.organizationId) === String(admin.organizationId));
 }
 
 function userToClientFields(u) {
@@ -1508,6 +1517,9 @@ app.put('/api/users/:userId', async (req, res) => {
     const users = db.getUsers();
     const i = users.findIndex(u => u.id === userId);
     if (i === -1) return res.status(404).json({ error: 'Пользователь не найден' });
+    if (!canAdminManageUser(admin, users[i])) {
+        return res.status(403).json({ error: 'Нет прав на изменение этого пользователя' });
+    }
 
     const targetIsMainAdmin = users[i].username === 'admin';
     if (targetIsMainAdmin) {
@@ -1529,7 +1541,18 @@ app.put('/api/users/:userId', async (req, res) => {
             return res.status(500).json({ error: 'Не удалось сохранить пароль' });
         }
     }
-    if (organizationId !== undefined) users[i].organizationId = targetIsMainAdmin ? null : (organizationId || null);
+    if (organizationId !== undefined) {
+        if (targetIsMainAdmin) {
+            users[i].organizationId = null;
+        } else if (!isGlobalAdmin(admin)) {
+            if (organizationId && String(organizationId) !== String(users[i].organizationId)) {
+                return res.status(403).json({ error: 'Нельзя менять организацию пользователя' });
+            }
+        } else {
+            if (!organizationId) return res.status(400).json({ error: 'Укажите организацию' });
+            users[i].organizationId = organizationId;
+        }
+    }
     db.setUsers(users);
     res.json({ ok: true });
 });
@@ -1541,11 +1564,15 @@ app.delete('/api/users/:userId', (req, res) => {
     const users = db.getUsers();
     const i = users.findIndex(u => u.id === userId);
     if (i === -1) return res.status(404).json({ error: 'Пользователь не найден' });
+    if (!canAdminManageUser(admin, users[i])) {
+        return res.status(403).json({ error: 'Нет прав на удаление этого пользователя' });
+    }
     if (userId === admin.userId) return res.status(400).json({ error: 'Нельзя удалить свой аккаунт' });
     if (users[i].username === 'admin') return res.status(400).json({ error: 'Нельзя удалить главного администратора' });
     const deleted = users[i];
     users.splice(i, 1);
     db.setUsers(users);
+    try { db.deleteSessionsForUser(deleted.id); } catch (e) {}
     res.json({ ok: true, user: { id: deleted.id, username: deleted.username } });
 });
 
@@ -1555,6 +1582,13 @@ app.post('/api/users', async (req, res) => {
     const { username, password, fullName, role, organizationId } = req.body || {};
     if (!username || username.length < 3) return res.status(400).json({ error: 'Имя не менее 3 символов' });
     if (!password || password.length < 6) return res.status(400).json({ error: 'Пароль не менее 6 символов' });
+    var resolvedOrgId = organizationId || null;
+    if (!isGlobalAdmin(admin)) {
+        if (!admin.organizationId) return res.status(403).json({ error: 'Нет организации для создания пользователя' });
+        resolvedOrgId = admin.organizationId;
+    } else if (!resolvedOrgId) {
+        return res.status(400).json({ error: 'Укажите организацию' });
+    }
     const users = db.getUsers();
     if (users.find(u => u.username.toLowerCase() === username.toLowerCase())) return res.status(400).json({ error: 'Пользователь уже существует' });
     let hashedPassword;
@@ -1571,7 +1605,7 @@ app.post('/api/users', async (req, res) => {
         full_name: fullName || username,
         role: role || 'user',
         status: 'approved',
-        organizationId: organizationId || null,
+        organizationId: resolvedOrgId,
         createdAt: new Date().toISOString()
     };
     users.push(newUser);
