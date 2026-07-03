@@ -2,6 +2,10 @@
  * Режим просмотра/редактирования, иконки объектов, импорт файла.
  */
 function handleFileImport(e) {
+    if (typeof requireAdmin === 'function' && !requireAdmin()) {
+        if (e.target) e.target.value = '';
+        return;
+    }
     const file = e.target.files[0];
     if (!file) return;
     const fileInput = e.target;

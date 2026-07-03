@@ -168,11 +168,15 @@ function setupEventListeners() {
     });
 
     document.getElementById('importBtn').addEventListener('click', function() {
+        if (typeof requireAdmin === 'function' && !requireAdmin()) return;
         document.getElementById('importFile').click();
     });
 
     document.getElementById('importFile').addEventListener('change', handleFileImport);
-    document.getElementById('exportData').addEventListener('click', exportData);
+    document.getElementById('exportData').addEventListener('click', function() {
+        if (typeof requireAdmin === 'function' && !requireAdmin()) return;
+        exportData();
+    });
 
     var undoBtn = document.getElementById('undoBtn');
     var redoBtn = document.getElementById('redoBtn');

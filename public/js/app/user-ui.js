@@ -214,6 +214,10 @@ function initUserUI() {
     if (backupsSection) {
         backupsSection.style.display = currentUser.role === 'admin' ? 'block' : 'none';
     }
+    const filesSection = document.getElementById('filesAccordionSection');
+    if (filesSection) {
+        filesSection.style.display = currentUser.role === 'admin' ? 'block' : 'none';
+    }
     const deviceCatalogBtn = document.getElementById('deviceCatalogBtn');
     if (deviceCatalogBtn) {
         deviceCatalogBtn.style.display = currentUser.role === 'admin' ? 'flex' : 'none';

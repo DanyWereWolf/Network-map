@@ -2240,6 +2240,7 @@ function createObjectFromData(data, opts, createOpts) {
 }
 
 function exportData() {
+    if (typeof requireAdmin === 'function' && !requireAdmin()) return;
     var data = getSerializedData();
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
