@@ -815,6 +815,21 @@ function deleteSessionsForUser(userId) {
     saveStore();
 }
 
+function getSettingsOrgRecord(orgId) {
+    if (!orgId) return null;
+    const s = loadStore();
+    const map = s.settingsByOrg || {};
+    if (map[orgId] && typeof map[orgId] === 'object') return map[orgId];
+    const key = Object.keys(map).find(function(k) { return organizationIdsMatch(k, orgId); });
+    return key && map[key] && typeof map[key] === 'object' ? map[key] : null;
+}
+
+function resolveSettingsOrgStorageKey(orgId) {
+    if (!orgId) return orgId;
+    const org = getOrganization(orgId);
+    return org ? org.id : orgId;
+}
+
 function getSettings(orgId) {
     let theme = getSetting('theme');
     let groupNames = getSetting('groupNames');
@@ -822,8 +837,7 @@ function getSettings(orgId) {
     let collaboratorCursorStyle = 'pointer';
     let byOrg = null;
     if (orgId) {
-        const s = loadStore();
-        byOrg = (s.settingsByOrg || {})[orgId];
+        byOrg = getSettingsOrgRecord(orgId);
         if (byOrg && typeof byOrg === 'object') {
             if (byOrg.theme !== undefined) theme = byOrg.theme;
             if (byOrg.groupNames !== undefined) groupNames = byOrg.groupNames;
@@ -859,8 +873,9 @@ function setSettings(obj, orgId) {
     if (orgId) {
         const s = loadStore();
         if (!s.settingsByOrg) s.settingsByOrg = {};
-        if (!s.settingsByOrg[orgId]) s.settingsByOrg[orgId] = {};
-        const o = s.settingsByOrg[orgId];
+        const key = resolveSettingsOrgStorageKey(orgId);
+        if (!s.settingsByOrg[key]) s.settingsByOrg[key] = {};
+        const o = s.settingsByOrg[key];
         if (obj.theme !== undefined) o.theme = obj.theme;
         if (obj.groupNames !== undefined) o.groupNames = typeof obj.groupNames === 'string' ? obj.groupNames : JSON.stringify(obj.groupNames);
         if (obj.customDeviceOptions !== undefined) o.customDeviceOptions = typeof obj.customDeviceOptions === 'string' ? obj.customDeviceOptions : JSON.stringify(obj.customDeviceOptions);

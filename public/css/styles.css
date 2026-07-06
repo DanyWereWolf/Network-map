@@ -1040,18 +1040,137 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
 }
 
 .org-security-section {
-    margin-bottom: 20px;
-    padding: 14px 16px;
-    border-radius: 10px;
-    border: 1px solid var(--border-color);
-    background: var(--bg-tertiary);
+    margin-bottom: 0;
 }
 
+.org-admin-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+}
+
+.org-settings-card {
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
+    background: color-mix(in srgb, var(--bg-tertiary) 88%, var(--bg-card) 12%);
+    box-shadow: var(--shadow-sm);
+}
+
+.org-settings-card .section-title {
+    margin-bottom: 6px;
+}
+
+.org-settings-hint,
 .org-security-hint {
     font-size: 0.8125rem;
     color: var(--text-secondary);
-    margin: 8px 0 12px;
-    line-height: 1.45;
+    margin: 0 0 14px;
+    line-height: 1.5;
+}
+
+.org-cursor-style-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.org-cursor-style-option {
+    display: block;
+    margin: 0;
+    cursor: pointer;
+}
+
+.org-cursor-style-input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.org-cursor-style-card {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    height: 100%;
+    padding: 10px;
+    border-radius: 10px;
+    border: 2px solid color-mix(in srgb, var(--border-color) 90%, transparent);
+    background: var(--bg-card);
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast), transform var(--transition-fast);
+}
+
+.org-cursor-style-option:hover .org-cursor-style-card {
+    border-color: color-mix(in srgb, var(--accent-primary) 35%, var(--border-color));
+    background: color-mix(in srgb, var(--bg-hover) 70%, var(--bg-card) 30%);
+}
+
+.org-cursor-style-input:focus-visible + .org-cursor-style-card {
+    outline: 2px solid color-mix(in srgb, var(--accent-primary) 55%, transparent);
+    outline-offset: 2px;
+}
+
+.org-cursor-style-input:checked + .org-cursor-style-card {
+    border-color: var(--accent-primary);
+    background: color-mix(in srgb, var(--accent-primary-soft) 75%, var(--bg-card) 25%);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 14%, transparent);
+}
+
+.org-cursor-style-preview {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 78px;
+    border-radius: 8px;
+    background:
+        linear-gradient(color-mix(in srgb, var(--border-color) 28%, transparent) 1px, transparent 1px),
+        linear-gradient(90deg, color-mix(in srgb, var(--border-color) 28%, transparent) 1px, transparent 1px),
+        color-mix(in srgb, var(--bg-tertiary) 82%, var(--accent-primary) 18%);
+    background-size: 14px 14px, 14px 14px, auto;
+    overflow: hidden;
+}
+
+.org-cursor-preview-svg {
+    display: block;
+    width: min(100%, 108px);
+    height: auto;
+}
+
+.org-cursor-style-text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    text-align: center;
+}
+
+.org-cursor-style-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+}
+
+.org-cursor-style-desc {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.35;
+}
+
+.org-display-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed color-mix(in srgb, var(--border-color) 85%, transparent);
+}
+
+@media (max-width: 560px) {
+    .org-cursor-style-options {
+        grid-template-columns: 1fr;
+    }
 }
 
 .org-security-status {
@@ -7976,6 +8095,24 @@ button {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    padding-top: 18px;
+}
+
+.users-list-section-title {
+    margin-top: 4px;
+}
+
+.org-admin-settings + .pending-users-section,
+.org-admin-settings + .users-list-section-title {
+    margin-top: 0;
+}
+
+[data-theme="dark"] .org-cursor-style-preview {
+    background:
+        linear-gradient(color-mix(in srgb, var(--border-color) 35%, transparent) 1px, transparent 1px),
+        linear-gradient(90deg, color-mix(in srgb, var(--border-color) 35%, transparent) 1px, transparent 1px),
+        color-mix(in srgb, var(--bg-secondary) 70%, var(--accent-primary) 30%);
+    background-size: 14px 14px, 14px 14px, auto;
 }
 
 .organizations-modal-content.panel-glass {

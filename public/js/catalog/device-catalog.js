@@ -2010,8 +2010,18 @@ function openCableCatalogPaletteEditor(manufacturer, model, fiberCountOverride) 
 }
 
 var CUSTOM_DEVICE_OPTIONS_STORAGE_KEY = 'networkmap_customDeviceOptions';
-function saveDeviceCatalog() {
-    var payload = {
+/** Блокирует запись в localStorage и на сервер во время загрузки (иначе дефолты затирают данные организации). */
+var _deviceCatalogHydrationDepth = 0;
+
+function getDeviceCatalogStorageKey() {
+    var orgId = (typeof currentUser !== 'undefined' && currentUser && currentUser.organizationId != null)
+        ? String(currentUser.organizationId)
+        : '';
+    return orgId ? (CUSTOM_DEVICE_OPTIONS_STORAGE_KEY + '_' + orgId) : CUSTOM_DEVICE_OPTIONS_STORAGE_KEY;
+}
+
+function buildDeviceCatalogPayload() {
+    return {
         nodeDeviceCatalog: cloneDeepCatalog(nodeDeviceCatalog),
         oltDeviceCatalog: cloneDeepCatalog(oltDeviceCatalog),
         onuDeviceCatalog: cloneDeepCatalog(onuDeviceCatalog),
@@ -2033,7 +2043,21 @@ function saveDeviceCatalog() {
         customSpliceCassetteTypes: getCustomSpliceCassetteTypes(),
         hiddenBuiltinSpliceCassetteTypes: getHiddenBuiltinSpliceCassetteTypes()
     };
-    try { localStorage.setItem(CUSTOM_DEVICE_OPTIONS_STORAGE_KEY, JSON.stringify(payload)); } catch (e) {}
+}
+
+function syncDeviceCatalogLocalStorage() {
+    try { localStorage.setItem(getDeviceCatalogStorageKey(), JSON.stringify(buildDeviceCatalogPayload())); } catch (e) {}
+}
+
+function withDeviceCatalogHydration(fn) {
+    _deviceCatalogHydrationDepth++;
+    try { return fn(); } finally { _deviceCatalogHydrationDepth--; }
+}
+
+function saveDeviceCatalog() {
+    if (_deviceCatalogHydrationDepth > 0) return;
+    var payload = buildDeviceCatalogPayload();
+    try { localStorage.setItem(getDeviceCatalogStorageKey(), JSON.stringify(payload)); } catch (e) {}
     if (getApiBase() && getAuthToken()) {
         try {
             fetch(getApiBase() + '/api/settings', {
@@ -2316,15 +2340,18 @@ function applyCustomSpliceCassetteTypesFromOpts(opts) {
 }
 
 function loadCustomDeviceOptions(opts) {
-    loadDeviceCatalog(opts || {});
+    withDeviceCatalogHydration(function() { loadDeviceCatalog(opts || {}); });
 }
 
 function loadCustomDeviceOptionsFromStorage() {
     try {
-        var raw = localStorage.getItem(CUSTOM_DEVICE_OPTIONS_STORAGE_KEY);
+        var raw = localStorage.getItem(getDeviceCatalogStorageKey());
+        if (!raw && getDeviceCatalogStorageKey() !== CUSTOM_DEVICE_OPTIONS_STORAGE_KEY) {
+            raw = localStorage.getItem(CUSTOM_DEVICE_OPTIONS_STORAGE_KEY);
+        }
         if (!raw) return;
         var parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object') loadDeviceCatalog(parsed);
+        if (parsed && typeof parsed === 'object') loadCustomDeviceOptions(parsed);
         else {
             refreshAllSleeveTypeSelects();
             refreshAllCrossTypeSelects();

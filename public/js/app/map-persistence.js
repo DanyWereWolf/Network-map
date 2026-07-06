@@ -552,8 +552,22 @@ window.applyMapStartFromSettings = applyMapStartFromSettings;
 
 function loadData() {
     loadGroupNamesFromStorage();
-    loadCustomDeviceOptionsFromStorage();
-    if (typeof ensureDeviceCatalogsNonEmpty === 'function') ensureDeviceCatalogsNonEmpty();
+    var token = getAuthToken();
+    if (!token) {
+        if (typeof withDeviceCatalogHydration === 'function') {
+            withDeviceCatalogHydration(function() {
+                if (typeof loadCustomDeviceOptionsFromStorage === 'function') loadCustomDeviceOptionsFromStorage();
+                if (typeof ensureDeviceCatalogsNonEmpty === 'function') ensureDeviceCatalogsNonEmpty();
+            });
+        } else {
+            if (typeof loadCustomDeviceOptionsFromStorage === 'function') loadCustomDeviceOptionsFromStorage();
+            if (typeof ensureDeviceCatalogsNonEmpty === 'function') ensureDeviceCatalogsNonEmpty();
+        }
+    } else if (typeof ensureDeviceCatalogsNonEmpty === 'function' && typeof withDeviceCatalogHydration === 'function') {
+        withDeviceCatalogHydration(function() { ensureDeviceCatalogsNonEmpty(); });
+    } else if (typeof ensureDeviceCatalogsNonEmpty === 'function') {
+        ensureDeviceCatalogsNonEmpty();
+    }
     if (typeof updateCrossDisplay === 'function') updateCrossDisplay();
     if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
     if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
@@ -565,7 +579,6 @@ function loadData() {
     
     (function() {
         if (typeof AuthSystem !== 'undefined' && AuthSystem.refreshUsersFromApi) AuthSystem.refreshUsersFromApi();
-        var token = getAuthToken();
         if (!token) return;
 
         function fetchMapFromApi() {
@@ -614,8 +627,18 @@ function loadData() {
                     if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
                 } catch (e) {}
             }
-            if (s.customDeviceOptions && typeof loadCustomDeviceOptions === 'function') loadCustomDeviceOptions(s.customDeviceOptions);
-            if (typeof ensureDeviceCatalogsNonEmpty === 'function') ensureDeviceCatalogsNonEmpty();
+            if (typeof withDeviceCatalogHydration === 'function') {
+                withDeviceCatalogHydration(function() {
+                    if (s.customDeviceOptions && typeof loadCustomDeviceOptions === 'function') {
+                        loadDeviceCatalog(s.customDeviceOptions);
+                    }
+                    if (typeof ensureDeviceCatalogsNonEmpty === 'function') ensureDeviceCatalogsNonEmpty();
+                });
+            } else {
+                if (s.customDeviceOptions && typeof loadCustomDeviceOptions === 'function') loadCustomDeviceOptions(s.customDeviceOptions);
+                if (typeof ensureDeviceCatalogsNonEmpty === 'function') ensureDeviceCatalogsNonEmpty();
+            }
+            if (typeof syncDeviceCatalogLocalStorage === 'function') syncDeviceCatalogLocalStorage();
             if (s.mapStart) {
                 window._savedMapStart = s.mapStart;
                 applyMapStartFromSettings(s.mapStart, true);
@@ -623,7 +646,17 @@ function loadData() {
             if (s.collaboratorCursorStyle && typeof applyCollaboratorCursorStyle === 'function') {
                 applyCollaboratorCursorStyle(s.collaboratorCursorStyle);
             }
-        }).catch(function() {});
+        }).catch(function() {
+            if (typeof withDeviceCatalogHydration === 'function') {
+                withDeviceCatalogHydration(function() {
+                    if (typeof loadCustomDeviceOptionsFromStorage === 'function') loadCustomDeviceOptionsFromStorage();
+                    if (typeof ensureDeviceCatalogsNonEmpty === 'function') ensureDeviceCatalogsNonEmpty();
+                });
+            } else {
+                if (typeof loadCustomDeviceOptionsFromStorage === 'function') loadCustomDeviceOptionsFromStorage();
+                if (typeof ensureDeviceCatalogsNonEmpty === 'function') ensureDeviceCatalogsNonEmpty();
+            }
+        });
     })();
     setTimeout(function() {
         if (!_mapDataReady && !_mapStateReceived) markMapDataReady();
@@ -743,13 +776,61 @@ function loadCollaboratorAvatarDataUrl(avatarPath) {
 
 function buildCollaboratorNameLabelSvg(color, label, y) {
     var labelW = Math.min(120, Math.max(40, Math.round(label.length * 6.8 + 12)));
+    var theme = getCollaboratorLabelTheme();
     return {
         labelW: labelW,
-        svg: '<rect x="0" y="' + y + '" width="' + labelW + '" height="18" rx="4" fill="rgba(15,23,42,0.88)"/>' +
+        svg: '<rect x="0" y="' + y + '" width="' + labelW + '" height="18" rx="4" fill="' + escapeSvgAttr(theme.bg) + '"/>' +
             '<rect x="0" y="' + y + '" width="' + labelW + '" height="18" rx="4" fill="none" stroke="' + color + '" stroke-width="1.5"/>' +
-            '<text x="' + (labelW / 2) + '" y="' + (y + 12.5) + '" text-anchor="middle" dominant-baseline="middle" fill="#ffffff" font-size="11" font-weight="600" font-family="DM Sans, system-ui, sans-serif">' + escapeSvgText(label) + '</text>'
+            '<text x="' + (labelW / 2) + '" y="' + (y + 12.5) + '" text-anchor="middle" dominant-baseline="middle" fill="' + escapeSvgAttr(theme.text) + '" font-size="11" font-weight="600" font-family="DM Sans, system-ui, sans-serif">' + escapeSvgText(label) + '</text>'
     };
 }
+
+function readCssThemeColor(varName, fallback) {
+    try {
+        var value = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+        return value || fallback;
+    } catch (e) {
+        return fallback;
+    }
+}
+
+function cssColorWithAlpha(color, alpha) {
+    if (!color) return '';
+    var value = String(color).trim();
+    var match = value.match(/^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+    if (match) return 'rgba(' + match[1] + ', ' + match[2] + ', ' + match[3] + ', ' + alpha + ')';
+    if (/^#[0-9a-f]{3}$/i.test(value)) {
+        value = '#' + value[1] + value[1] + value[2] + value[2] + value[3] + value[3];
+    }
+    if (/^#[0-9a-f]{6}$/i.test(value)) {
+        return 'rgba(' +
+            parseInt(value.slice(1, 3), 16) + ', ' +
+            parseInt(value.slice(3, 5), 16) + ', ' +
+            parseInt(value.slice(5, 7), 16) + ', ' + alpha + ')';
+    }
+    return value;
+}
+
+function getCollaboratorLabelTheme() {
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var bgCard = readCssThemeColor('--bg-card', isDark ? '#1e293b' : '#ffffff');
+    var text = readCssThemeColor('--text-primary', isDark ? '#f1f5f9' : '#0f172a');
+    return {
+        bg: cssColorWithAlpha(bgCard, isDark ? 0.94 : 0.96),
+        text: text
+    };
+}
+
+function getCollaboratorCursorThemeKey() {
+    return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+}
+
+function refreshCollaboratorCursorsForTheme() {
+    if (!collaboratorCursorsPlacemarks.length && !_lastCollaboratorCursorsPayload) return;
+    if (collaboratorCursorsPlacemarks.length) collaboratorCursorsPlacemarks._ids = '';
+    if (_lastCollaboratorCursorsPayload) applyCollaboratorCursorsNow(_lastCollaboratorCursorsPayload);
+}
+window.refreshCollaboratorCursorsForTheme = refreshCollaboratorCursorsForTheme;
 
 function buildCollaboratorPointerIcon(color, name) {
     var label = truncateCollaboratorName(name);
@@ -842,19 +923,22 @@ function applyCollaboratorCursorsNow(cursors) {
     if (!myMap || !myMap.geoObjects) return;
     _lastCollaboratorCursorsPayload = cursors;
     var style = getCollaboratorCursorStyle();
+    var themeKey = getCollaboratorCursorThemeKey();
     if (!cursors || cursors.length === 0) {
         collaboratorCursorsPlacemarks.forEach(function(pm) {
             try { myMap.geoObjects.remove(pm); } catch (e) {}
         });
         collaboratorCursorsPlacemarks = [];
         collaboratorCursorsPlacemarks._style = style;
+        collaboratorCursorsPlacemarks._theme = themeKey;
         return;
     }
     var ids = cursors.map(function(c) {
         return c.id + ':' + (c.avatarUrl || getCollaboratorAvatarPath(c) || '');
     }).join(',');
     var prevIds = collaboratorCursorsPlacemarks.length ? (collaboratorCursorsPlacemarks._ids || '') : '';
-    if (ids === prevIds && collaboratorCursorsPlacemarks.length === cursors.length && collaboratorCursorsPlacemarks._style === style) {
+    if (ids === prevIds && collaboratorCursorsPlacemarks.length === cursors.length &&
+        collaboratorCursorsPlacemarks._style === style && collaboratorCursorsPlacemarks._theme === themeKey) {
         cursors.forEach(function(c, idx) {
             var pos = c.position;
             if (!Array.isArray(pos) || pos.length < 2) return;
@@ -874,6 +958,7 @@ function applyCollaboratorCursorsNow(cursors) {
     collaboratorCursorsPlacemarks = [];
     collaboratorCursorsPlacemarks._ids = ids;
     collaboratorCursorsPlacemarks._style = style;
+    collaboratorCursorsPlacemarks._theme = themeKey;
     var applyGen = ++_collaboratorCursorsApplyGen;
     Promise.all(cursors.map(function(c, idx) {
         return prepareCollaboratorCursorIcon(c, idx, style).then(function(icon) {
@@ -888,6 +973,7 @@ function applyCollaboratorCursorsNow(cursors) {
         collaboratorCursorsPlacemarks = [];
         collaboratorCursorsPlacemarks._ids = ids;
         collaboratorCursorsPlacemarks._style = style;
+        collaboratorCursorsPlacemarks._theme = themeKey;
         items.forEach(function(item) {
             if (!item || !item.icon || !item.cursor) return;
             var pos = item.cursor.position;

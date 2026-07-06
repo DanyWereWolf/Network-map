@@ -599,33 +599,55 @@ function isOrgMapAdmin() {
     return !!(currentUser && currentUser.role === 'admin' && currentUser.organizationId);
 }
 
+function updateOrgAdminSettingsVisibility() {
+    var wrap = document.getElementById('orgAdminSettings');
+    var display = document.getElementById('orgDisplaySection');
+    var security = document.getElementById('orgSecuritySection');
+    if (!wrap) return;
+    var anyVisible = (display && display.style.display !== 'none') || (security && security.style.display !== 'none');
+    wrap.style.display = anyVisible ? 'flex' : 'none';
+}
+
+function getOrgCollaboratorCursorStyleValue() {
+    var checked = document.querySelector('input[name="orgCollaboratorCursorStyle"]:checked');
+    return checked && checked.value === 'circle' ? 'circle' : 'pointer';
+}
+
+function setOrgCollaboratorCursorStyleValue(style) {
+    var value = style === 'circle' ? 'circle' : 'pointer';
+    var inputs = document.querySelectorAll('input[name="orgCollaboratorCursorStyle"]');
+    inputs.forEach(function(input) {
+        input.checked = input.value === value;
+    });
+}
+
 function loadOrgDisplayPanel() {
     var section = document.getElementById('orgDisplaySection');
-    var select = document.getElementById('orgCollaboratorCursorStyle');
-    if (!section || !select) return;
+    if (!section) return;
     if (!isOrgMapAdmin() || !getApiBase()) {
         section.style.display = 'none';
+        updateOrgAdminSettingsVisibility();
         return;
     }
     section.style.display = 'block';
-    select.value = typeof window.getCollaboratorCursorStyle === 'function'
+    setOrgCollaboratorCursorStyleValue(typeof window.getCollaboratorCursorStyle === 'function'
         ? window.getCollaboratorCursorStyle()
-        : 'pointer';
+        : 'pointer');
     fetch(getApiBase() + '/api/settings', {
         headers: { 'Authorization': 'Bearer ' + getAuthToken() }
     }).then(function(r) { return r.json(); })
     .then(function(body) {
         if (body.error) throw new Error(body.error);
         var style = body.collaboratorCursorStyle === 'circle' ? 'circle' : 'pointer';
-        select.value = style;
+        setOrgCollaboratorCursorStyleValue(style);
         if (typeof window.applyCollaboratorCursorStyle === 'function') window.applyCollaboratorCursorStyle(style);
-    }).catch(function() {});
+    }).catch(function() {})
+    .finally(function() { updateOrgAdminSettingsVisibility(); });
 }
 
 function saveOrgCollaboratorCursorStyle() {
-    var select = document.getElementById('orgCollaboratorCursorStyle');
-    if (!select || !getApiBase()) return;
-    var style = select.value === 'circle' ? 'circle' : 'pointer';
+    if (!getApiBase()) return;
+    var style = getOrgCollaboratorCursorStyleValue();
     fetch(getApiBase() + '/api/settings', {
         method: 'POST',
         headers: {
@@ -647,9 +669,11 @@ function loadOrgSecurityPanel() {
     if (!section) return;
     if (!isOrgMapAdmin() || !getApiBase()) {
         section.style.display = 'none';
+        updateOrgAdminSettingsVisibility();
         return;
     }
     section.style.display = 'block';
+    updateOrgAdminSettingsVisibility();
     var statusEl = document.getElementById('orgSecurityStatus');
     if (statusEl) statusEl.textContent = 'Загрузка…';
     fetch(getApiBase() + '/api/organizations/me/security', {

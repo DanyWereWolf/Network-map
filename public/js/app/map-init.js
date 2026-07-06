@@ -414,7 +414,6 @@ function setupEventListeners() {
 
     setupAccordions();
 
-    if (typeof loadCustomDeviceOptionsFromStorage === 'function') loadCustomDeviceOptionsFromStorage();
     if (typeof refreshAllSleeveTypeSelects === 'function') refreshAllSleeveTypeSelects();
     if (typeof refreshAllCrossTypeSelects === 'function') refreshAllCrossTypeSelects();
 

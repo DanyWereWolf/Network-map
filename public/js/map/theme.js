@@ -94,6 +94,9 @@ function applyThemeToDocument(theme) {
     if (typeof refreshMapPlacemarkIcons === 'function') {
         refreshMapPlacemarkIcons();
     }
+    if (typeof window.refreshCollaboratorCursorsForTheme === 'function') {
+        window.refreshCollaboratorCursorsForTheme();
+    }
 }
 
 function setTheme(theme, options) {
