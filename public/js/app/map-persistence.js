@@ -648,13 +648,37 @@ window.showSyncRequiredOverlay = showSyncRequiredOverlay;
 window.hideSyncRequiredOverlay = hideSyncRequiredOverlay;
 
 var COLLABORATOR_CURSOR_COLORS = ['#3b82f6', '#22c55e', '#eab308', '#ef4444', '#8b5cf6', '#ec4899'];
-var COLLABORATOR_CURSOR_SIZE = [24, 28];
 var COLLABORATOR_CURSOR_HOTSPOT = [2, 2];
 
-function buildCollaboratorCursorSvg(color) {
-    return '<svg xmlns="http://www.w3.org/2000/svg" width="' + COLLABORATOR_CURSOR_SIZE[0] + '" height="' + COLLABORATOR_CURSOR_SIZE[1] + '" viewBox="0 0 24 28">' +
+function truncateCollaboratorName(name) {
+    var s = (name || 'Участник').toString().trim();
+    if (!s) s = 'Участник';
+    return s.length > 18 ? s.slice(0, 16) + '\u2026' : s;
+}
+
+function escapeSvgText(text) {
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function buildCollaboratorCursorIcon(color, name) {
+    var label = truncateCollaboratorName(name);
+    var labelW = Math.min(120, Math.max(40, Math.round(label.length * 6.8 + 12)));
+    var width = Math.max(24, labelW);
+    var height = 48;
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '">' +
         '<path d="M2 2v19l5.2-4.1 3.3 6.3 2.8-1.6-3.1-5.7h6.8z" fill="' + color + '" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round"/>' +
+        '<rect x="0" y="30" width="' + labelW + '" height="18" rx="4" fill="rgba(15,23,42,0.88)"/>' +
+        '<rect x="0" y="30" width="' + labelW + '" height="18" rx="4" fill="none" stroke="' + color + '" stroke-width="1.5"/>' +
+        '<text x="' + (labelW / 2) + '" y="42.5" text-anchor="middle" dominant-baseline="middle" fill="#ffffff" font-size="11" font-weight="600" font-family="DM Sans, system-ui, sans-serif">' + escapeSvgText(label) + '</text>' +
         '</svg>';
+    return {
+        svg: svg,
+        size: [width, height]
+    };
 }
 
 var _pendingCollaboratorCursors = null;
@@ -701,15 +725,14 @@ function applyCollaboratorCursorsNow(cursors) {
         if (!Array.isArray(pos) || pos.length < 2) return;
         var color = COLLABORATOR_CURSOR_COLORS[idx % COLLABORATOR_CURSOR_COLORS.length];
         var name = (c.displayName || 'Участник').toString().trim();
-        var svg = buildCollaboratorCursorSvg(color);
-        var dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+        var icon = buildCollaboratorCursorIcon(color, name);
+        var dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(icon.svg)));
         var pm = new ymaps.Placemark(pos, {
-            balloonContent: name,
             hintContent: name
         }, {
             iconLayout: 'default#image',
             iconImageHref: dataUrl,
-            iconImageSize: COLLABORATOR_CURSOR_SIZE,
+            iconImageSize: icon.size,
             iconImageOffset: [-COLLABORATOR_CURSOR_HOTSPOT[0], -COLLABORATOR_CURSOR_HOTSPOT[1]],
             zIndex: 9998,
             cursor: 'default',
