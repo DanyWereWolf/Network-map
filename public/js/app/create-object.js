@@ -105,6 +105,7 @@ function createObject(type, name, coords, options = {}) {
         if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
         if (options.model) placemarkProperties.model = options.model;
         placemarkProperties.comment = options.comment || '';
+        if (options.ipAddress) placemarkProperties.ipAddress = options.ipAddress;
     }
     if (type === 'splitter') {
         placemarkProperties.splitRatio = options.splitRatio || 8;
@@ -116,11 +117,13 @@ function createObject(type, name, coords, options = {}) {
         if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
         if (options.model) placemarkProperties.model = options.model;
         placemarkProperties.comment = options.comment || '';
+        if (options.ipAddress) placemarkProperties.ipAddress = options.ipAddress;
     }
     if (type === 'camera') {
         if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
         if (options.model) placemarkProperties.model = options.model;
         placemarkProperties.comment = options.comment || '';
+        if (options.ipAddress) placemarkProperties.ipAddress = options.ipAddress;
         placemarkProperties.streamType = (options.streamType && window.CameraPlayer)
             ? CameraPlayer.normalizeStreamType(options.streamType) : (options.streamType || 'none');
         placemarkProperties.streamUrl = options.streamUrl || '';
@@ -134,6 +137,7 @@ function createObject(type, name, coords, options = {}) {
         if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
         if (options.model) placemarkProperties.model = options.model;
         placemarkProperties.comment = options.comment || '';
+        if (options.ipAddress) placemarkProperties.ipAddress = options.ipAddress;
         placemarkProperties.incomingFiber = null;
     }
     if (type === 'radioBridge') {
@@ -145,6 +149,7 @@ function createObject(type, name, coords, options = {}) {
         if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;
         if (options.model) placemarkProperties.model = options.model;
         placemarkProperties.comment = options.comment || '';
+        if (options.ipAddress) placemarkProperties.ipAddress = options.ipAddress;
         placemarkProperties.peerBridgeId = null;
         placemarkProperties.peerBridgeName = null;
         placemarkProperties.routeIds = [];
@@ -189,6 +194,7 @@ function createObject(type, name, coords, options = {}) {
         if (cabOpts.address) placemarkProperties.address = cabOpts.address;
         if (cabOpts.inventoryNumber) placemarkProperties.inventoryNumber = cabOpts.inventoryNumber;
         if (cabOpts.serialNumber) placemarkProperties.serialNumber = cabOpts.serialNumber;
+        if (cabOpts.ipAddress) placemarkProperties.ipAddress = cabOpts.ipAddress;
     }
     if (options.cabinetId && typeof canBeCabinetMember === 'function' && canBeCabinetMember(type)) {
         placemarkProperties.cabinetId = String(options.cabinetId);

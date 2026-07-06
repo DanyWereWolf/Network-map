@@ -201,6 +201,7 @@ function getCabinetPlacementOptionsFromForm() {
         address: (document.getElementById('cabinetAddress') && document.getElementById('cabinetAddress').value) ? document.getElementById('cabinetAddress').value.trim() : '',
         inventoryNumber: (document.getElementById('cabinetInventoryNumber') && document.getElementById('cabinetInventoryNumber').value) ? document.getElementById('cabinetInventoryNumber').value.trim() : '',
         serialNumber: (document.getElementById('cabinetSerialNumber') && document.getElementById('cabinetSerialNumber').value) ? document.getElementById('cabinetSerialNumber').value.trim() : '',
+        ipAddress: (document.getElementById('cabinetIpAddress') && document.getElementById('cabinetIpAddress').value) ? document.getElementById('cabinetIpAddress').value.trim() : '',
         comment: (document.getElementById('cabinetComment') && document.getElementById('cabinetComment').value) ? document.getElementById('cabinetComment').value.trim() : ''
     };
 }
@@ -1177,6 +1178,7 @@ function buildCabinetCardContent(cabinet, isEditMode) {
     var address = (cabinet.properties.get('address') || '').trim();
     var inventoryNumber = (cabinet.properties.get('inventoryNumber') || '').trim();
     var serialNumber = (cabinet.properties.get('serialNumber') || '').trim();
+    var ipAddress = (cabinet.properties.get('ipAddress') || '').trim();
     var uid = getObjectUniqueId(cabinet);
     var members = getCabinetMembersForDisplay(uid);
     var coords = typeof getObjectMapCoordinates === 'function' ? getObjectMapCoordinates(cabinet) : null;
@@ -1248,6 +1250,10 @@ function buildCabinetCardContent(cabinet, isEditMode) {
         html += '<label class="object-card-label" for="editCabinetSerialNumber">Серийный номер</label>';
         html += '<input type="text" id="editCabinetSerialNumber" class="form-input" value="' + escapeHtml(serialNumber) + '" placeholder="Необязательно">';
         html += '</div>';
+        html += '<div class="form-group" style="margin-bottom: 12px;">';
+        html += '<label class="object-card-label" for="editCabinetIpAddress">IP-адрес</label>';
+        html += '<input type="text" id="editCabinetIpAddress" class="form-input equipment-ip-input" value="' + escapeHtml(ipAddress) + '" placeholder="Например: 192.168.1.10" inputmode="decimal" autocomplete="off">';
+        html += '</div>';
         html += '<div class="form-group">';
         html += '<label class="object-card-label" for="editCabinetComment">Комментарий</label>';
         html += '<textarea id="editCabinetComment" class="form-input" rows="3" placeholder="Ключ, доступ, примечания">' + escapeHtml(comment) + '</textarea>';
@@ -1271,8 +1277,9 @@ function buildCabinetCardContent(cabinet, isEditMode) {
         if (address) html += '<div class="cabinet-meta-row"><dt>Адрес</dt><dd>' + escapeHtml(address) + '</dd></div>';
         if (inventoryNumber) html += '<div class="cabinet-meta-row"><dt>Инв. №</dt><dd>' + escapeHtml(inventoryNumber) + '</dd></div>';
         if (serialNumber) html += '<div class="cabinet-meta-row"><dt>Серийный №</dt><dd>' + escapeHtml(serialNumber) + '</dd></div>';
+        if (ipAddress) html += '<div class="cabinet-meta-row"><dt>IP</dt><dd>' + escapeHtml(ipAddress) + '</dd></div>';
         if (comment) html += '<div class="cabinet-meta-row"><dt>Комментарий</dt><dd>' + escapeHtml(comment) + '</dd></div>';
-        if (!manufacturer && !model && !cabinetMount && !cabinetHeight && !cabinetWidth && !cabinetUnits && !address && !inventoryNumber && !serialNumber && !comment) {
+        if (!manufacturer && !model && !cabinetMount && !cabinetHeight && !cabinetWidth && !cabinetUnits && !address && !inventoryNumber && !serialNumber && !ipAddress && !comment) {
             html += '<p class="object-card-hint">Характеристики не заполнены — укажите в режиме редактирования.</p>';
         }
         html += '</dl>';
@@ -1704,6 +1711,7 @@ function flushCabinetFieldsIfChanged() {
     var addressEl = document.getElementById('editCabinetAddress');
     var invEl = document.getElementById('editCabinetInventoryNumber');
     var serialEl = document.getElementById('editCabinetSerialNumber');
+    var ipEl = document.getElementById('editCabinetIpAddress');
     if (nameEl) {
         var n = nameEl.value.trim();
         currentModalObject.properties.set('name', n);
@@ -1719,5 +1727,6 @@ function flushCabinetFieldsIfChanged() {
     if (addressEl) currentModalObject.properties.set('address', addressEl.value.trim());
     if (invEl) currentModalObject.properties.set('inventoryNumber', invEl.value.trim());
     if (serialEl) currentModalObject.properties.set('serialNumber', serialEl.value.trim());
+    if (ipEl) currentModalObject.properties.set('ipAddress', ipEl.value.trim());
     if (commentEl) currentModalObject.properties.set('comment', commentEl.value.trim());
 }

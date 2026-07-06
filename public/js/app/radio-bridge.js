@@ -1697,6 +1697,7 @@ function buildRadioBridgeCardContent(obj, isEdit, name) {
     var manufacturer = obj.properties.get('manufacturer') || '';
     var model = obj.properties.get('model') || '';
     var comment = obj.properties.get('comment') || '';
+    var ipAddress = (obj.properties.get('ipAddress') || '').trim();
     var linked = isRadioBridgeLinked(obj);
     var uid = getObjectUniqueId(obj);
     var deviceLine = [manufacturer, model].filter(Boolean).join(' · ');
@@ -1730,6 +1731,9 @@ function buildRadioBridgeCardContent(obj, isEdit, name) {
     }
     if (comment && !isEdit) {
         html += '<div class="radio-bridge-card-comment">' + escapeHtml(comment) + '</div>';
+    }
+    if (!isEdit && ipAddress) {
+        html += '<div class="radio-bridge-card-comment">IP: ' + escapeHtml(ipAddress) + '</div>';
     }
     if (isEdit) {
         html += '<p class="object-card-hint radio-bridge-card-hero-hint">P2P — связь двух радиомостов по радиолинии. P2MP — базовая станция (AP) и абонентские станции. Порт — медь к коммутатору или оптика до кросса/муфты.</p>';
@@ -1782,6 +1786,9 @@ function buildRadioBridgeCardContent(obj, isEdit, name) {
         html += '<div class="device-combobox" data-catalog="radioBridge" data-type="manufacturer" data-value-id="editRadioBridgeManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturer ? escapeHtml(manufacturer) : 'Выберите производителя') + '</button><input type="hidden" id="editRadioBridgeManufacturer" value="' + escapeHtml(manufacturer) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
         html += '<div class="form-group"><label class="object-card-label">Модель</label>';
         html += '<div class="device-combobox" data-catalog="radioBridge" data-type="model" data-value-id="editRadioBridgeModel" data-manufacturer-id="editRadioBridgeManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editRadioBridgeModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+        if (typeof buildEquipmentIpAddressEditFieldHtml === 'function') {
+            html += buildEquipmentIpAddressEditFieldHtml('editRadioBridgeIpAddress', ipAddress);
+        }
         html += '<div class="form-group" style="margin-bottom:0;"><label for="editRadioBridgeComment" class="object-card-label">Комментарий</label>';
         html += '<textarea id="editRadioBridgeComment" class="form-input" rows="2" placeholder="Частота, мощность, примечания">' + escapeHtml(comment) + '</textarea></div>';
         html += '</section>';

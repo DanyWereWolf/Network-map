@@ -28,6 +28,18 @@ function buildNodeSwitchPortKindOptionsHtml(currentKind, kindOpts) {
     return html;
 }
 
+function buildEquipmentIpAddressEditFieldHtml(id, value, labelClass) {
+    var lc = labelClass || 'object-card-label';
+    return '<div class="form-group"><label class="' + lc + '" for="' + escapeHtml(id) + '">IP-адрес</label>' +
+        '<input type="text" id="' + escapeHtml(id) + '" class="form-input equipment-ip-input" value="' + escapeHtml(value || '') + '" placeholder="Например: 192.168.1.10" inputmode="decimal" autocomplete="off"></div>';
+}
+
+function buildEquipmentIpAddressViewLineHtml(ip, className) {
+    var v = (ip || '').trim();
+    if (!v) return '';
+    return '<div class="' + (className || 'object-card-meta-line') + '">IP: ' + escapeHtml(v) + '</div>';
+}
+
 function buildNodeCardContent(obj, isEditMode, name) {
     var html = '';
     var nodeKind = obj.properties.get('nodeKind') || 'network';
@@ -172,6 +184,7 @@ function buildNodeCardContent(obj, isEditMode, name) {
         var swMfr = (swRow.manufacturer || '').trim();
         var swMod = (swRow.model || '').trim();
         var swComment = (swRow.comment || '').trim();
+        var swIp = (swRow.ipAddress || '').trim();
         var uidEsc = escapeHtml(swRow.uniqueId);
         var portStats = getAttachedSwitchPortStats(swRow);
         var swTitle = swRow.name || ('Коммутатор ' + (six + 1));
@@ -201,10 +214,15 @@ function buildNodeCardContent(obj, isEditMode, name) {
             html += '<div class="form-group"><label class="object-card-label">Модель</label>';
             html += '<div class="device-combobox" data-catalog="switch" data-type="model" data-value-id="editNodeSwMod_' + uidEsc + '" data-manufacturer-id="editNodeSwMfr_' + uidEsc + '"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (swMod ? escapeHtml(swMod) : 'Выберите') + '</button><input type="hidden" id="editNodeSwMod_' + uidEsc + '" value="' + escapeHtml(swMod) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
             html += '</div>';
+            html += '<div class="form-group" style="margin-top:10px;margin-bottom:0;"><label class="object-card-label">IP-адрес</label>';
+            html += '<input type="text" class="form-input edit-node-switch-ip" data-switch-id="' + uidEsc + '" value="' + escapeHtml(swIp) + '" placeholder="Необязательно" inputmode="decimal" autocomplete="off"></div>';
             html += '<div class="form-group" style="margin-top:10px;margin-bottom:0;"><label class="object-card-label">Комментарий</label>';
             html += '<textarea class="form-input edit-node-switch-comment" data-switch-id="' + uidEsc + '" rows="2" placeholder="Необязательно">' + escapeHtml(swComment) + '</textarea></div>';
         } else if (deviceLine) {
             html += '<div class="node-card-switch-device-view">' + escapeHtml(deviceLine) + '</div>';
+        }
+        if (!isEditMode && swIp) {
+            html += '<div class="node-card-switch-ip-view">IP: ' + escapeHtml(swIp) + '</div>';
         }
         if (!isEditMode && swComment) {
             html += '<div class="node-card-switch-comment">' + escapeHtml(swComment) + '</div>';
@@ -721,6 +739,7 @@ function buildCameraCardContent(obj, isEditMode, name) {
     var manufacturer = obj.properties.get('manufacturer') || '';
     var model = obj.properties.get('model') || '';
     var comment = obj.properties.get('comment') || '';
+    var ipAddress = (obj.properties.get('ipAddress') || '').trim();
     var deviceLine = [manufacturer, model].filter(Boolean).join(' · ');
     var streamCfg = window.CameraPlayer ? CameraPlayer.getCameraStreamConfig(obj) : { streamType: 'none', streamUrl: '' };
     var cameraOnline = window.CameraPlayer ? CameraPlayer.isCameraOnline(obj) : false;
@@ -742,6 +761,7 @@ function buildCameraCardContent(obj, isEditMode, name) {
         if (comment) {
             html += '<div class="camera-card-comment">' + escapeHtml(comment) + '</div>';
         }
+        html += buildEquipmentIpAddressViewLineHtml(ipAddress, 'camera-card-comment');
     } else {
         html += '<div class="camera-card-view-name-row">';
         html += '<div class="camera-card-view-name">' + escapeHtml(name || 'Новая камера') + '</div>';
@@ -763,6 +783,7 @@ function buildCameraCardContent(obj, isEditMode, name) {
         html += '<div class="device-combobox" data-catalog="camera" data-type="manufacturer" data-value-id="editCameraManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturer ? escapeHtml(manufacturer) : 'Выберите производителя') + '</button><input type="hidden" id="editCameraManufacturer" value="' + escapeHtml(manufacturer) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
         html += '<div class="form-group"><label class="object-card-label">Модель</label>';
         html += '<div class="device-combobox" data-catalog="camera" data-type="model" data-value-id="editCameraModel" data-manufacturer-id="editCameraManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editCameraModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+        html += buildEquipmentIpAddressEditFieldHtml('editCameraIpAddress', ipAddress);
         html += '<div class="form-group" style="margin-bottom:0;"><label for="editCameraComment" class="object-card-label">Комментарий</label>';
         html += '<textarea id="editCameraComment" class="form-input" rows="2" placeholder="Необязательно">' + escapeHtml(comment) + '</textarea></div>';
         html += '</section>';
@@ -875,6 +896,7 @@ function buildOltCardContent(obj, isEditMode, name) {
     var manufacturer = obj.properties.get('manufacturer') || '';
     var model = obj.properties.get('model') || '';
     var comment = obj.properties.get('comment') || '';
+    var ipAddress = (obj.properties.get('ipAddress') || '').trim();
     var deviceLine = [manufacturer, model].filter(Boolean).join(' · ');
     var cables = getConnectedCables(obj);
     var assignedCount = Object.keys(portAssignments).filter(function(k) {
@@ -907,6 +929,7 @@ function buildOltCardContent(obj, isEditMode, name) {
         if (comment) {
             html += '<div class="olt-card-comment">' + escapeHtml(comment) + '</div>';
         }
+        html += buildEquipmentIpAddressViewLineHtml(ipAddress, 'olt-card-comment');
     } else {
         html += '<div class="olt-card-view-name">' + escapeHtml(name || 'Новый OLT') + '</div>';
         html += '<div class="olt-card-view-meta"><span class="olt-kind-pill">GPON</span></div>';
@@ -931,6 +954,7 @@ function buildOltCardContent(obj, isEditMode, name) {
         html += '<div class="device-combobox" data-catalog="olt" data-type="manufacturer" data-value-id="editOltManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturer ? escapeHtml(manufacturer) : 'Выберите производителя') + '</button><input type="hidden" id="editOltManufacturer" value="' + escapeHtml(manufacturer) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
         html += '<div class="form-group"><label class="object-card-label">Модель</label>';
         html += '<div class="device-combobox" data-catalog="olt" data-type="model" data-value-id="editOltModel" data-manufacturer-id="editOltManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editOltModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+        html += buildEquipmentIpAddressEditFieldHtml('editOltIpAddress', ipAddress);
         html += '<div class="form-group" style="margin-bottom:0;"><label for="editOltComment" class="object-card-label">Комментарий</label>';
         html += '<textarea id="editOltComment" class="form-input" rows="2" placeholder="Дополнительные сведения">' + escapeHtml(comment) + '</textarea></div>';
         html += '</section>';
@@ -3207,6 +3231,7 @@ function showObjectInfoBody(obj) {
         const manufacturer = obj.properties.get('manufacturer') || '';
         const model = obj.properties.get('model') || '';
         const comment = obj.properties.get('comment') || '';
+        const ipAddress = (obj.properties.get('ipAddress') || '').trim();
         html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
         html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">ONU</h4>';
         if (modalIsEditMode()) {
@@ -3216,12 +3241,14 @@ function showObjectInfoBody(obj) {
             html += '</div>';
             html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Производитель</label><div class="device-combobox" data-catalog="onu" data-type="manufacturer" data-value-id="editOnuManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturer ? escapeHtml(manufacturer) : 'Выберите производителя') + '</button><input type="hidden" id="editOnuManufacturer" value="' + escapeHtml(manufacturer) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
             html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Модель</label><div class="device-combobox" data-catalog="onu" data-type="model" data-value-id="editOnuModel" data-manufacturer-id="editOnuManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editOnuModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+            html += buildEquipmentIpAddressEditFieldHtml('editOnuIpAddress', ipAddress, 'object-card-label');
             html += '<div class="form-group"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Комментарий</label>';
             html += '<textarea id="editOnuComment" class="form-input" rows="2" placeholder="Дополнительные сведения">' + escapeHtml(comment) + '</textarea></div>';
         } else if (name) {
             html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;">Название: ' + escapeHtml(name) + '</div>';
         }
         if (manufacturer || model) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 6px;">Устройство: ' + escapeHtml([manufacturer, model].filter(Boolean).join(' ') || '—') + '</div>';
+        if (ipAddress) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 6px;">IP: ' + escapeHtml(ipAddress) + '</div>';
         if (comment) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; white-space: pre-wrap; margin-top: 6px;">' + escapeHtml(comment) + '</div>';
         if (onuIncoming) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 6px;">Подключена жила: кабель ' + escapeHtml(String(onuIncoming.cableId).substring(0, 12)) + '…, жила ' + onuIncoming.fiberNumber + '</div>';
         html += '</div>';
@@ -3235,6 +3262,7 @@ function showObjectInfoBody(obj) {
         const manufacturerMc = obj.properties.get('manufacturer') || '';
         const modelMc = obj.properties.get('model') || '';
         const commentMc = obj.properties.get('comment') || '';
+        const ipAddressMc = (obj.properties.get('ipAddress') || '').trim();
         const mcIncoming = obj.properties.get('incomingFiber') || null;
         html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
         html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Медиаконвертер</h4>';
@@ -3246,12 +3274,14 @@ function showObjectInfoBody(obj) {
             html += '</div>';
             html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Производитель</label><div class="device-combobox" data-catalog="node" data-type="manufacturer" data-value-id="editMediaConverterManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturerMc ? escapeHtml(manufacturerMc) : 'Выберите производителя') + '</button><input type="hidden" id="editMediaConverterManufacturer" value="' + escapeHtml(manufacturerMc) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
             html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Модель</label><div class="device-combobox" data-catalog="node" data-type="model" data-value-id="editMediaConverterModel" data-manufacturer-id="editMediaConverterManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (modelMc ? escapeHtml(modelMc) : 'Выберите модель') + '</button><input type="hidden" id="editMediaConverterModel" value="' + escapeHtml(modelMc) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
+            html += buildEquipmentIpAddressEditFieldHtml('editMediaConverterIpAddress', ipAddressMc, 'object-card-label');
             html += '<div class="form-group"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Комментарий</label>';
             html += '<textarea id="editMediaConverterComment" class="form-input" rows="2" placeholder="Дополнительные сведения">' + escapeHtml(commentMc) + '</textarea></div>';
         } else if (name) {
             html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;">Название: ' + escapeHtml(name) + '</div>';
         }
         if (manufacturerMc || modelMc) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 6px;">Устройство: ' + escapeHtml([manufacturerMc, modelMc].filter(Boolean).join(' ') || '—') + '</div>';
+        if (ipAddressMc) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 6px;">IP: ' + escapeHtml(ipAddressMc) + '</div>';
         if (commentMc) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; white-space: pre-wrap; margin-top: 6px;">' + escapeHtml(commentMc) + '</div>';
         if (mcIncoming) {
             const cMc = objects.find(function(c) {
@@ -3895,6 +3925,23 @@ function setupEditAndDeleteListeners() {
                     }
                     return;
                 }
+                if (t.classList && t.classList.contains('edit-node-switch-ip')) {
+                    var swIdIp = t.getAttribute('data-switch-id');
+                    if (swIdIp) {
+                        updateAttachedSwitchMeta(co, swIdIp, 'ipAddress', t.value.trim());
+                        saveData();
+                    }
+                    return;
+                }
+                if (t.classList && t.classList.contains('equipment-ip-input')) {
+                    if (!co) return;
+                    var objType = co.properties.get('type');
+                    if (objType === 'olt' || objType === 'onu' || objType === 'camera' || objType === 'mediaConverter' || objType === 'radioBridge' || objType === 'cabinet') {
+                        co.properties.set('ipAddress', t.value.trim());
+                        saveData();
+                    }
+                    return;
+                }
                 if (t.classList && t.classList.contains('edit-node-switch-port-label')) {
                     var swIdLbl = t.getAttribute('data-switch-id');
                     var portLbl = parseInt(t.getAttribute('data-port'), 10);
@@ -4372,11 +4419,13 @@ function duplicateObject(obj) {
         opts.address = obj.properties.get('address') || '';
         opts.inventoryNumber = obj.properties.get('inventoryNumber') || '';
         opts.serialNumber = obj.properties.get('serialNumber') || '';
+        opts.ipAddress = obj.properties.get('ipAddress') || '';
     }
     if (type === 'camera' || type === 'mediaConverter' || type === 'radioBridge') {
         opts.manufacturer = obj.properties.get('manufacturer') || '';
         opts.model = obj.properties.get('model') || '';
         opts.comment = obj.properties.get('comment') || '';
+        opts.ipAddress = obj.properties.get('ipAddress') || '';
     }
     if (type === 'radioBridge') {
         opts.bridgeMode = obj.properties.get('bridgeMode') || 'ptp';
@@ -4407,6 +4456,10 @@ function duplicateObject(obj) {
         newObj.properties.set('ponPortTypes', Array.isArray(obj.properties.get('ponPortTypes'))
             ? obj.properties.get('ponPortTypes').slice()
             : []);
+        if (obj.properties.get('manufacturer')) newObj.properties.set('manufacturer', obj.properties.get('manufacturer'));
+        if (obj.properties.get('model')) newObj.properties.set('model', obj.properties.get('model'));
+        if (obj.properties.get('comment')) newObj.properties.set('comment', obj.properties.get('comment'));
+        if (obj.properties.get('ipAddress')) newObj.properties.set('ipAddress', obj.properties.get('ipAddress'));
     }
     if (type === 'splitter') {
         newObj.properties.set('splitRatio', obj.properties.get('splitRatio') || 8);
@@ -4416,6 +4469,10 @@ function duplicateObject(obj) {
     }
     if (type === 'onu') {
         newObj.properties.set('incomingFiber', null);
+        if (obj.properties.get('manufacturer')) newObj.properties.set('manufacturer', obj.properties.get('manufacturer'));
+        if (obj.properties.get('model')) newObj.properties.set('model', obj.properties.get('model'));
+        if (obj.properties.get('comment')) newObj.properties.set('comment', obj.properties.get('comment'));
+        if (obj.properties.get('ipAddress')) newObj.properties.set('ipAddress', obj.properties.get('ipAddress'));
     }
     if (type === 'mediaConverter') {
         newObj.properties.set('incomingFiber', null);
@@ -4436,6 +4493,7 @@ function duplicateObject(obj) {
                 if (sw && sw.manufacturer) o.manufacturer = String(sw.manufacturer);
                 if (sw && sw.model) o.model = String(sw.model);
                 if (sw && sw.comment) o.comment = String(sw.comment);
+                if (sw && sw.ipAddress) o.ipAddress = String(sw.ipAddress);
                 return o;
             }));
         }

@@ -154,6 +154,7 @@ function serializeMapItemFromObject(obj) {
             if (props.manufacturer) result.manufacturer = props.manufacturer;
             if (props.model) result.model = props.model;
             if (props.comment) result.comment = props.comment;
+            if (props.ipAddress) result.ipAddress = props.ipAddress;
         }
         if (props.type === 'splitter') {
             if (props.splitRatio !== undefined) result.splitRatio = props.splitRatio;
@@ -166,11 +167,13 @@ function serializeMapItemFromObject(obj) {
             if (props.manufacturer) result.manufacturer = props.manufacturer;
             if (props.model) result.model = props.model;
             if (props.comment) result.comment = props.comment;
+            if (props.ipAddress) result.ipAddress = props.ipAddress;
         }
         if (props.type === 'camera') {
             if (props.manufacturer) result.manufacturer = props.manufacturer;
             if (props.model) result.model = props.model;
             if (props.comment) result.comment = props.comment;
+            if (props.ipAddress) result.ipAddress = props.ipAddress;
             if (props.streamType && props.streamType !== 'none') result.streamType = props.streamType;
             else if (props.streamUrl) result.streamType = props.streamType || 'none';
             if (props.streamUrl) result.streamUrl = props.streamUrl;
@@ -185,6 +188,7 @@ function serializeMapItemFromObject(obj) {
             if (props.manufacturer) result.manufacturer = props.manufacturer;
             if (props.model) result.model = props.model;
             if (props.comment) result.comment = props.comment;
+            if (props.ipAddress) result.ipAddress = props.ipAddress;
         }
         if (props.type === 'radioBridge') {
             if (props.bridgeMode) result.bridgeMode = props.bridgeMode;
@@ -192,6 +196,7 @@ function serializeMapItemFromObject(obj) {
             if (props.manufacturer) result.manufacturer = props.manufacturer;
             if (props.model) result.model = props.model;
             if (props.comment) result.comment = props.comment;
+            if (props.ipAddress) result.ipAddress = props.ipAddress;
             result.peerBridgeId = props.peerBridgeId || null;
             result.peerBridgeName = props.peerBridgeName || null;
             result.routeIds = Array.isArray(props.routeIds) ? props.routeIds : [];
@@ -245,6 +250,7 @@ function serializeMapItemFromObject(obj) {
             if (props.address) result.address = props.address;
             if (props.inventoryNumber) result.inventoryNumber = props.inventoryNumber;
             if (props.serialNumber) result.serialNumber = props.serialNumber;
+            if (props.ipAddress) result.ipAddress = props.ipAddress;
         }
         if (props.cabinetId) {
             result.cabinetId = props.cabinetId;
@@ -1707,6 +1713,7 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         if (data.manufacturer) placemark.properties.set('manufacturer', data.manufacturer);
         if (data.model) placemark.properties.set('model', data.model);
         if (data.comment != null) placemark.properties.set('comment', data.comment || '');
+        if (data.ipAddress) placemark.properties.set('ipAddress', data.ipAddress);
     }
     if (type === 'splitter') {
         placemark.properties.set('splitRatio', data.splitRatio || 8);
@@ -1719,11 +1726,13 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         if (data.manufacturer) placemark.properties.set('manufacturer', data.manufacturer);
         if (data.model) placemark.properties.set('model', data.model);
         if (data.comment != null) placemark.properties.set('comment', data.comment || '');
+        if (data.ipAddress) placemark.properties.set('ipAddress', data.ipAddress);
     }
     if (type === 'camera') {
         if (data.manufacturer) placemark.properties.set('manufacturer', data.manufacturer);
         if (data.model) placemark.properties.set('model', data.model);
         if (data.comment != null) placemark.properties.set('comment', data.comment || '');
+        if (data.ipAddress) placemark.properties.set('ipAddress', data.ipAddress);
         if (window.CameraPlayer) {
             CameraPlayer.applyCameraStreamConfig(placemark, {
                 streamType: data.streamType || 'none',
@@ -1749,6 +1758,7 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         if (data.manufacturer) placemark.properties.set('manufacturer', data.manufacturer);
         if (data.model) placemark.properties.set('model', data.model);
         if (data.comment != null) placemark.properties.set('comment', data.comment || '');
+        if (data.ipAddress) placemark.properties.set('ipAddress', data.ipAddress);
     }
     if (type === 'radioBridge') {
         placemark.properties.set('bridgeMode', data.bridgeMode || 'ptp');
@@ -1756,6 +1766,7 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         if (data.manufacturer) placemark.properties.set('manufacturer', data.manufacturer);
         if (data.model) placemark.properties.set('model', data.model);
         if (data.comment != null) placemark.properties.set('comment', data.comment || '');
+        if (data.ipAddress) placemark.properties.set('ipAddress', data.ipAddress);
         placemark.properties.set('peerBridgeId', data.peerBridgeId || null);
         placemark.properties.set('peerBridgeName', data.peerBridgeName || null);
         placemark.properties.set('routeIds', Array.isArray(data.routeIds) ? data.routeIds : []);
@@ -1815,6 +1826,7 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         if (data.address) placemark.properties.set('address', data.address);
         if (data.inventoryNumber) placemark.properties.set('inventoryNumber', data.inventoryNumber);
         if (data.serialNumber) placemark.properties.set('serialNumber', data.serialNumber);
+        if (data.ipAddress) placemark.properties.set('ipAddress', data.ipAddress);
     }
     if (typeof canBeCabinetMember === 'function' && canBeCabinetMember(type)) {
         if ('cabinetId' in data) {
