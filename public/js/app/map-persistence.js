@@ -267,6 +267,7 @@ function serializeMapItemFromObject(obj) {
             if (props.copperPortUsage) result.copperPortUsage = props.copperPortUsage;
             if (props.manufacturer) result.manufacturer = props.manufacturer;
             if (props.model) result.model = props.model;
+            if (props.comment != null) result.comment = props.comment;
         }
         if (Array.isArray(props.photos) && props.photos.length) result.photos = props.photos;
         return result;
@@ -1838,6 +1839,7 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         placemark.properties.set('copperPortUsage', data.copperPortUsage && typeof data.copperPortUsage === 'object' ? data.copperPortUsage : {});
         if (data.manufacturer) placemark.properties.set('manufacturer', data.manufacturer);
         if (data.model) placemark.properties.set('model', data.model);
+        if (data.comment != null) placemark.properties.set('comment', data.comment || '');
     }
     if (window.ObjectGallery) ObjectGallery.applyPhotosFromData(placemark, data);
     else if (Array.isArray(data.photos)) placemark.properties.set('photos', data.photos);

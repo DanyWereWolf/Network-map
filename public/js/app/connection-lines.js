@@ -40,6 +40,11 @@ function connectFiberToNode(crossObj, cableId, fiberNumber, nodeObj, switchId, s
         showError('Выбранный SFP-порт уже занят другой жилой. Выберите другой порт.', 'Порт занят');
         return;
     }
+    var cupAtt = swAtt.copperPortUsage || {};
+    if (cupAtt[String(portNum)]) {
+        showError('На этом порту уже подключён медный кабель. Для оптики выберите другой порт или отключите медь.', 'Порт занят');
+        return;
+    }
     let nodeConnections = crossObj.properties.get('nodeConnections');
     if (!nodeConnections) {
         nodeConnections = {};

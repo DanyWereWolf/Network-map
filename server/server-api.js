@@ -310,17 +310,7 @@ function buildLoginUserPayload(user, organizationId, organization) {
 function completeUserLogin(req, res, user, organizationId, organization) {
     var isMainAdminAccount = isGlobalAdmin({ role: user.role, organizationId: user.organizationId });
 
-    if (isMainAdminAccount) {
-        db.deleteSessionsForUser(user.id);
-    } else {
-        if (db.countActiveSessionsForUser(user.id) > 0) {
-            return res.json({
-                success: false,
-                error: 'Сессия занята: эта учётная запись уже используется. Завершите работу в другом окне или нажмите «Выйти» там.'
-            });
-        }
-        db.deleteExpiredSessionsForUser(user.id);
-    }
+    db.deleteSessionsForUser(user.id);
 
     if (organization && organization.status !== 'active') {
         return res.json({ success: false, error: 'Организация приостановлена. Обратитесь к администратору сервиса.' });
@@ -343,14 +333,6 @@ function completeUserLogin(req, res, user, organizationId, organization) {
     var stmt = db.getDb().prepare('INSERT INTO sessions (token, user_id, expires_at, organization_id) VALUES (?, ?, ?, ?)');
     stmt.run(token, user.id, expires, organizationId);
 
-    if (!isMainAdminAccount && db.countActiveSessionsForUser(user.id) > 1) {
-        db.getDb().prepare('DELETE FROM sessions WHERE token = ?').run(token);
-        return res.json({
-            success: false,
-            error: 'Сессия занята: эта учётная запись уже используется. Завершите работу в другом окне или нажмите «Выйти» там.'
-        });
-    }
-
     try {
         db.addVisitLog({
             at: new Date().toISOString(),
@@ -362,6 +344,8 @@ function completeUserLogin(req, res, user, organizationId, organization) {
             userAgent: String(req.headers['user-agent'] || '')
         });
     } catch (e) {}
+
+    notifySessionRevokedForUser(user.id, token);
 
     res.json({
         success: true,
@@ -2446,6 +2430,36 @@ const wss = new WebSocket.Server({ server, path: '/sync' });
 const syncClientNames = new Map();
 const syncClientUserIds = new Map();
 const syncClientOrgIds = new Map();
+
+function notifySessionRevokedForUser(userId, exceptToken) {
+    if (userId == null || !wss) return;
+    var uid = String(userId);
+    wss.clients.forEach(function(client) {
+        if (client.readyState !== WebSocket.OPEN) return;
+        if (String(client.userId || '') !== uid) return;
+        if (exceptToken && client.authToken === exceptToken) return;
+        try {
+            client.send(JSON.stringify({
+                type: 'session_revoked',
+                reason: 'Выполнен вход с другого устройства.'
+            }));
+            client.close(4002, 'session_revoked');
+        } catch (e) {}
+    });
+}
+
+function closeWsIfTokenRevoked(ws) {
+    if (!ws || !ws.authToken) return false;
+    if (getSessionByToken(ws.authToken)) return false;
+    try {
+        ws.send(JSON.stringify({
+            type: 'session_revoked',
+            reason: 'Выполнен вход с другого устройства.'
+        }));
+        ws.close(4002, 'session_revoked');
+    } catch (e) {}
+    return true;
+}
 const objectLocksByOrg = {};
 const OBJECT_LOCK_TTL_MS = 3 * 60 * 1000;
 
@@ -2853,23 +2867,33 @@ wss.on('connection', (ws, req) => {
         setImmediate(function() {
         try {
             const msg = JSON.parse(str);
+            if (closeWsIfTokenRevoked(ws)) return;
             if (msg.type === 'hello') {
                 const name = (msg.displayName && String(msg.displayName).trim()) || 'Участник';
                 syncClientNames.set(clientId, name.slice(0, 100));
                 if (msg.userId !== undefined && msg.userId !== null) syncClientUserIds.set(clientId, msg.userId);
                 var orgId = null;
                 if (msg.token) {
+                    ws.authToken = String(msg.token);
                     var session = getSessionByToken(msg.token);
-                    if (session) {
-                        ws.userId = session.userId;
-                        orgId = session.organizationId || null;
-                        if (orgId) {
-                            orgId = normalizeSyncOrgId(orgId);
-                            ws.orgId = orgId;
-                        }
-                        syncClientUserIds.set(clientId, session.userId);
-                        if (orgId) syncClientOrgIds.set(clientId, orgId);
+                    if (!session) {
+                        try {
+                            ws.send(JSON.stringify({
+                                type: 'session_revoked',
+                                reason: 'Выполнен вход с другого устройства.'
+                            }));
+                            ws.close(4002, 'session_revoked');
+                        } catch (e) {}
+                        return;
                     }
+                    ws.userId = session.userId;
+                    orgId = session.organizationId || null;
+                    if (orgId) {
+                        orgId = normalizeSyncOrgId(orgId);
+                        ws.orgId = orgId;
+                    }
+                    syncClientUserIds.set(clientId, session.userId);
+                    if (orgId) syncClientOrgIds.set(clientId, orgId);
                 }
                 if (orgId) {
                     var state = getSyncStateForOrg(orgId, { forceFromDb: true });

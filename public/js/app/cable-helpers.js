@@ -428,6 +428,16 @@ function isSwitchPortSfpFiberType(portTypeLabel) {
     return false;
 }
 
+/** Медный кабель: RJ45 и комбо RJ45/SFP. */
+function isSwitchPortCopperCapable(portTypeLabel) {
+    if (!portTypeLabel || typeof portTypeLabel !== 'string') return false;
+    var L = portTypeLabel.trim();
+    if (!L || L === 'Консоль' || L === 'Uplink/stack') return false;
+    if (L.indexOf('Комбо') === 0) return true;
+    if (L.indexOf('RJ45') === 0) return true;
+    return false;
+}
+
 function getNodeAttachedSwitches(node) {
     if (!node || !node.properties || node.properties.get('type') !== 'node') return [];
     var a = node.properties.get('attachedSwitches');

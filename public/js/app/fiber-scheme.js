@@ -1507,6 +1507,11 @@ function connectSplitterOutputToNode(hostObj, splitterId, outputIndex, nodeObj, 
         if (typeof showError === 'function') showError('Выбранный SFP-порт уже занят. Выберите другой порт.', 'Порт занят');
         return false;
     }
+    var cupAtt = swAtt.copperPortUsage || {};
+    if (cupAtt[String(portNum)]) {
+        if (typeof showError === 'function') showError('На этом порту уже подключён медный кабель. Для оптики выберите другой порт или отключите медь.', 'Порт занят');
+        return false;
+    }
     var ratio = parseInt(facade.properties.get('splitRatio'), 10) || 8;
     var outputs = (facade.properties.get('outputConnections') || []).slice();
     while (outputs.length < ratio) outputs.push(null);

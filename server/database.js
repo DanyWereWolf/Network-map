@@ -780,7 +780,7 @@ function countActiveSessionsForUser(userId) {
     }).length;
 }
 
-/** Удаляет только просроченные сессии пользователя (не трогает активные — важно для «сессия занята»). */
+/** Удаляет только просроченные сессии пользователя (активные не трогает). */
 function deleteExpiredSessionsForUser(userId) {
     if (userId == null) return;
     const s = loadStore();

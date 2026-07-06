@@ -260,6 +260,12 @@
             tick(function() {
             try {
                 var msg = JSON.parse(raw);
+                if (msg.type === 'session_revoked') {
+                    if (typeof AuthSystem !== 'undefined' && AuthSystem.handleSessionExpired) {
+                        AuthSystem.handleSessionExpired(msg.reason || 'Сессия завершена: выполнен вход с другого устройства.');
+                    }
+                    return;
+                }
                 if (msg.type === 'yourId' && msg.clientId) {
                     myClientId = msg.clientId;
                     window.syncMyClientId = myClientId;
@@ -398,6 +404,15 @@
             ws = null;
         }
         updateSyncUIStatus(false);
+    }
+
+    function stopReconnect() {
+        userRequestedDisconnect = true;
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+        reconnectAttempts = maxReconnectAttempts;
     }
 
     function sendState(data) {
@@ -568,5 +583,6 @@
     window.syncRemoteObjectLocks = remoteObjectLocks;
     window.syncMyClientId = myClientId;
     window.syncConnect = connect;
+    window.syncStopReconnect = stopReconnect;
     window.syncApplyPendingState = applyPendingStateAfterDrag;
 })();

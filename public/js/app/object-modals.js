@@ -171,6 +171,7 @@ function buildNodeCardContent(obj, isEditMode, name) {
         var pts = swRow.switchPortTypes || [];
         var swMfr = (swRow.manufacturer || '').trim();
         var swMod = (swRow.model || '').trim();
+        var swComment = (swRow.comment || '').trim();
         var uidEsc = escapeHtml(swRow.uniqueId);
         var portStats = getAttachedSwitchPortStats(swRow);
         var swTitle = swRow.name || ('Коммутатор ' + (six + 1));
@@ -200,8 +201,13 @@ function buildNodeCardContent(obj, isEditMode, name) {
             html += '<div class="form-group"><label class="object-card-label">Модель</label>';
             html += '<div class="device-combobox" data-catalog="switch" data-type="model" data-value-id="editNodeSwMod_' + uidEsc + '" data-manufacturer-id="editNodeSwMfr_' + uidEsc + '"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (swMod ? escapeHtml(swMod) : 'Выберите') + '</button><input type="hidden" id="editNodeSwMod_' + uidEsc + '" value="' + escapeHtml(swMod) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
             html += '</div>';
+            html += '<div class="form-group" style="margin-top:10px;margin-bottom:0;"><label class="object-card-label">Комментарий</label>';
+            html += '<textarea class="form-input edit-node-switch-comment" data-switch-id="' + uidEsc + '" rows="2" placeholder="Необязательно">' + escapeHtml(swComment) + '</textarea></div>';
         } else if (deviceLine) {
             html += '<div class="node-card-switch-device-view">' + escapeHtml(deviceLine) + '</div>';
+        }
+        if (!isEditMode && swComment) {
+            html += '<div class="node-card-switch-comment">' + escapeHtml(swComment) + '</div>';
         }
         html += '<div class="node-ports-table-wrap"><table class="node-ports-table"><thead><tr><th>#</th><th>Тип</th><th>Подпись</th><th>Состояние</th>';
         html += '</tr></thead><tbody>';
@@ -213,7 +219,9 @@ function buildNodeCardContent(obj, isEditMode, name) {
             var fiberKeySw = fiberUsageN[String(pnumSw)];
             var cblSw = cableUidSw ? objects.find(function(c) { return c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === cableUidSw; }) : null;
             var cnameSw = cblSw ? (cblSw.properties.get('cableName') || getCableDescription(cblSw.properties.get('cableType'))) : '';
-            var isSfpPortRow = isSwitchPortSfpFiberType(pts[swi] || '');
+            var isCopperPortRow = typeof isSwitchPortCopperCapable === 'function'
+                ? isSwitchPortCopperCapable(pts[swi] || '')
+                : !(isSwitchPortSfpFiberType(pts[swi] || ''));
             var manualBusy = typeof isAttachedSwitchPortManuallyBusy === 'function' && isAttachedSwitchPortManuallyBusy(swRow, pnumSw);
             var rowBusy = !!(cableUidSw || fiberKeySw || manualBusy);
             var portLabelSw = (portLabelsSw[String(pnumSw)] || '').trim();
@@ -242,7 +250,7 @@ function buildNodeCardContent(obj, isEditMode, name) {
                 html += '<label class="node-port-busy-toggle" title="Порт используется без кабеля на карте">';
                 html += '<input type="checkbox" class="edit-node-switch-port-busy" data-switch-id="' + uidEsc + '" data-port="' + pnumSw + '"' + (manualBusy ? ' checked' : '') + '>';
                 html += '<span>Занят</span></label>';
-                if (!isSfpPortRow && !manualBusy) {
+                if (isCopperPortRow && !manualBusy) {
                     html += '<button type="button" class="btn-secondary btn-copper-connect-from-node-port btn-compact" data-switch-id="' + escapeHtml(swRow.uniqueId) + '" data-copper-port="' + pnumSw + '">Подключить</button>';
                 }
                 html += '</div>';
@@ -305,6 +313,8 @@ function collectFreeSfpPortOptionsOnNode(nodeObj) {
             var portNum = pi + 1;
             if (!isSwitchPortSfpFiberType(types[pi])) continue;
             if (fus[String(portNum)]) continue;
+            var cu = sw.copperPortUsage || {};
+            if (cu[String(portNum)]) continue;
             if (typeof isAttachedSwitchPortManuallyBusy === 'function' && isAttachedSwitchPortManuallyBusy(sw, portNum)) continue;
             out.push({
                 switchId: sw.uniqueId,
@@ -409,6 +419,8 @@ function migrateStandaloneSwitchesIntoNodes() {
         var moMig = (sw.properties.get('model') || '').trim();
         if (mMig) swEntry.manufacturer = mMig;
         if (moMig) swEntry.model = moMig;
+        var cMig = (sw.properties.get('comment') || '').trim();
+        if (cMig) swEntry.comment = cMig;
         arr.push(swEntry);
         node.properties.set('attachedSwitches', arr);
         objects.forEach(function(c) {
@@ -1254,18 +1266,20 @@ function buildCopperPortOptionsHtml(obj, selected, switchIdForNode, excludeCable
     var usage = {};
     var portLabels = {};
     var manualUsage = {};
+    var portTypes = [];
     if (t === 'cross') {
         max = Math.max(0, parseInt(obj.properties.get('crossCopperPorts'), 10) || 0);
         usage = obj.properties.get('copperPortUsage') || {};
     } else if (t === 'switch') {
-        var stSw = obj.properties.get('switchPortTypes') || [];
-        max = Array.isArray(stSw) ? stSw.length : 0;
+        portTypes = obj.properties.get('switchPortTypes') || [];
+        max = Array.isArray(portTypes) ? portTypes.length : 0;
         usage = obj.properties.get('copperPortUsage') || {};
         portLabels = obj.properties.get('portLabels') || {};
         manualUsage = obj.properties.get('manualPortUsage') || {};
     } else if (t === 'radioBridge') {
         var stRb = typeof getRadioBridgePortTypes === 'function' ? getRadioBridgePortTypes(obj) : (obj.properties.get('radioBridgePortTypes') || []);
-        max = Array.isArray(stRb) ? stRb.length : 0;
+        portTypes = Array.isArray(stRb) ? stRb : [];
+        max = portTypes.length;
         usage = obj.properties.get('copperPortUsage') || {};
         portLabels = obj.properties.get('portLabels') || {};
         manualUsage = obj.properties.get('manualPortUsage') || {};
@@ -1273,8 +1287,8 @@ function buildCopperPortOptionsHtml(obj, selected, switchIdForNode, excludeCable
         if (!switchIdForNode) return '<option value="">Нет привязки к коммутатору</option>';
         var swN = findAttachedSwitchOnNode(obj, switchIdForNode);
         if (!swN) return '<option value="">Коммутатор не найден</option>';
-        var stn = swN.switchPortTypes || [];
-        max = Array.isArray(stn) ? stn.length : 0;
+        portTypes = swN.switchPortTypes || [];
+        max = Array.isArray(portTypes) ? portTypes.length : 0;
         usage = swN.copperPortUsage || {};
         portLabels = typeof getAttachedSwitchPortLabels === 'function' ? getAttachedSwitchPortLabels(swN) : (swN.portLabels || {});
         manualUsage = swN.manualPortUsage || {};
@@ -1288,10 +1302,14 @@ function buildCopperPortOptionsHtml(obj, selected, switchIdForNode, excludeCable
     }
     for (var pi = 1; pi <= max; pi++) {
         var occup = usage[String(pi)];
-        var dis = !!(occup && (!excludeCableUniqueId || occup !== excludeCableUniqueId)) || !!manualUsage[String(pi)];
+        var portKind = portTypes[pi - 1] || '';
+        var copperOnly = (t === 'switch' || t === 'node') && typeof isSwitchPortCopperCapable === 'function';
+        var typeBlocked = copperOnly && !isSwitchPortCopperCapable(portKind);
+        var dis = typeBlocked || !!(occup && (!excludeCableUniqueId || occup !== excludeCableUniqueId)) || !!manualUsage[String(pi)];
         var sel = selected != null && selected !== '' && parseInt(selected, 10) === pi;
         var lblPart = portLabels[String(pi)] ? (' — ' + portLabels[String(pi)]) : '';
-        html += '<option value="' + pi + '"' + (sel ? ' selected' : '') + (dis ? ' disabled' : '') + '>Порт ' + pi + lblPart + (dis ? ' (занят)' : '') + '</option>';
+        var disNote = typeBlocked ? ' (оптика)' : (dis && !typeBlocked ? ' (занят)' : '');
+        html += '<option value="' + pi + '"' + (sel ? ' selected' : '') + (dis ? ' disabled' : '') + '>Порт ' + pi + lblPart + disNote + '</option>';
     }
     return html;
 }
@@ -1306,6 +1324,10 @@ function isCopperPortAvailableForNewLay(obj, portNum, switchIdForNode) {
         return !u[String(p)];
     }
     if (t === 'switch') {
+        var st = obj.properties.get('switchPortTypes') || [];
+        if (typeof isSwitchPortCopperCapable === 'function' && !isSwitchPortCopperCapable(st[p - 1] || '')) return false;
+        var fusSw = obj.properties.get('fiberPortUsage') || {};
+        if (fusSw[String(p)]) return false;
         var us = obj.properties.get('copperPortUsage') || {};
         return !us[String(p)];
     }
@@ -1318,6 +1340,7 @@ function isCopperPortAvailableForNewLay(obj, portNum, switchIdForNode) {
         if (!switchIdForNode) return false;
         var sw = findAttachedSwitchOnNode(obj, switchIdForNode);
         if (!sw) return false;
+        if (typeof isSwitchPortCopperCapable === 'function' && !isSwitchPortCopperCapable((sw.switchPortTypes || [])[p - 1] || '')) return false;
         if (typeof isAttachedSwitchPortOccupied === 'function') return !isAttachedSwitchPortOccupied(sw, p);
         var un = sw.copperPortUsage || {};
         return !un[String(p)];
@@ -1753,8 +1776,8 @@ function startCopperCableFromNodeSwitchPort(nodeObj, switchId, portNum) {
         if (typeof showError === 'function') showError('Номер порта больше числа портов коммутатора.', 'Порт');
         return;
     }
-    if (isSwitchPortSfpFiberType(pts[p - 1] || '')) {
-        if (typeof showError === 'function') showError('Медный кабель не подключается к оптическому порту (SFP, SFP+, QSFP, Комбо) — для оптики используйте жилу с кросса.', 'Недопустимое действие');
+    if (typeof isSwitchPortCopperCapable === 'function' ? !isSwitchPortCopperCapable(pts[p - 1] || '') : isSwitchPortSfpFiberType(pts[p - 1] || '')) {
+        if (typeof showError === 'function') showError('Медный кабель не подключается к оптическому порту (SFP, SFP+, QSFP) — для оптики используйте жилу с кросса.', 'Недопустимое действие');
         return;
     }
     var fusStart = sw.fiberPortUsage || {};
@@ -3853,13 +3876,21 @@ function setupEditAndDeleteListeners() {
             window._modalSwitchCatalogDelegates = true;
             modalRoot.addEventListener('input', function(e) {
                 var t = e.target;
-                if (!t || !t.id) return;
+                if (!t) return;
                 var co = currentModalObject;
                 if (!co || !co.properties || co.properties.get('type') !== 'node') return;
                 if (t.classList && t.classList.contains('edit-node-switch-name')) {
                     var swIdNm = t.getAttribute('data-switch-id');
                     if (swIdNm) {
                         updateAttachedSwitchMeta(co, swIdNm, 'name', t.value.trim());
+                        saveData();
+                    }
+                    return;
+                }
+                if (t.classList && t.classList.contains('edit-node-switch-comment')) {
+                    var swIdCmt = t.getAttribute('data-switch-id');
+                    if (swIdCmt) {
+                        updateAttachedSwitchMeta(co, swIdCmt, 'comment', t.value.trim());
                         saveData();
                     }
                     return;
@@ -3873,6 +3904,7 @@ function setupEditAndDeleteListeners() {
                     }
                     return;
                 }
+                if (!t.id) return;
                 var mfrM = /^editNodeSwMfr_(.+)$/.exec(t.id);
                 if (mfrM) {
                     updateAttachedSwitchMeta(co, mfrM[1], 'manufacturer', t.value || '');
@@ -4403,6 +4435,7 @@ function duplicateObject(obj) {
                 };
                 if (sw && sw.manufacturer) o.manufacturer = String(sw.manufacturer);
                 if (sw && sw.model) o.model = String(sw.model);
+                if (sw && sw.comment) o.comment = String(sw.comment);
                 return o;
             }));
         }
@@ -4636,13 +4669,37 @@ function flushCassetteNameFromEditor() {
     flushNameFieldIfChanged('editCassetteName', applyCassetteNameChange);
 }
 
+function flushNodeAttachedSwitchesFromEditor() {
+    if (!currentModalObject || currentModalObject.properties.get('type') !== 'node') return;
+    var root = document.getElementById('modalInfo');
+    if (!root) return;
+    root.querySelectorAll('.edit-node-switch-name').forEach(function(inp) {
+        var swId = inp.getAttribute('data-switch-id');
+        if (swId) updateAttachedSwitchMeta(currentModalObject, swId, 'name', (inp.value || '').trim());
+    });
+    root.querySelectorAll('.edit-node-switch-comment').forEach(function(inp) {
+        var swId = inp.getAttribute('data-switch-id');
+        if (swId) updateAttachedSwitchMeta(currentModalObject, swId, 'comment', (inp.value || '').trim());
+    });
+    root.querySelectorAll('.edit-node-switch-port-label').forEach(function(inp) {
+        var swId = inp.getAttribute('data-switch-id');
+        var portNum = parseInt(inp.getAttribute('data-port'), 10);
+        if (swId && !isNaN(portNum) && portNum >= 1) {
+            setAttachedSwitchPortLabel(currentModalObject, swId, portNum, inp.value);
+        }
+    });
+}
+
 function flushModalNamesFromEditor() {
     if (!currentModalObject || !currentModalObject.properties) return;
     var t = currentModalObject.properties.get('type');
     if (t === 'cross') flushCrossNameFromEditor();
     else if (t === 'sleeve') flushSleeveNameFromEditor();
     else if (t === 'spliceCassette') flushCassetteNameFromEditor();
-    else if (t === 'node') flushNameFieldIfChanged('editNodeName', applyNodeNameChange);
+    else if (t === 'node') {
+        flushNameFieldIfChanged('editNodeName', applyNodeNameChange);
+        flushNodeAttachedSwitchesFromEditor();
+    }
     else if (t === 'olt') flushNameFieldIfChanged('editOltName', applyOltNameChange);
     else if (t === 'splitter') flushNameFieldIfChanged('editSplitterName', applySplitterNameChange);
     else if (t === 'onu') flushNameFieldIfChanged('editOnuName', applyOnuNameChange);

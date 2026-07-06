@@ -136,7 +136,7 @@ function setupRectSelection() {
         });
         counts.cable = selected.cables.length;
 
-        var typeNames = { cross: 'Кроссов', node: 'Узлов', sleeve: 'Муфт', support: 'Опар', attachment: 'Креплений', olt: 'OLT', splitter: 'Сплиттеров', onu: 'ONU', camera: 'Камер', mediaConverter: 'Медиаконв.', cable: 'Кабелей' };
+        var typeNames = { cross: 'Кроссов', node: 'Узлов', sleeve: 'Муфт', support: 'Опор', attachment: 'Креплений', olt: 'OLT', splitter: 'Сплиттеров', onu: 'ONU', camera: 'Камер', mediaConverter: 'Медиаконв.', cable: 'Кабелей' };
         var parts = [];
         Object.keys(counts).sort().forEach(function(k) {
             if (counts[k] > 0) parts.push(counts[k] + ' ' + (typeNames[k] || k));

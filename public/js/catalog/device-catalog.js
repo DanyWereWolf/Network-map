@@ -1331,6 +1331,21 @@ function canonicalizeSwitchPortKindLabel(label) {
     return L;
 }
 
+function isSwitchPortComboType(portTypeLabel) {
+    if (!portTypeLabel || typeof portTypeLabel !== 'string') return false;
+    return portTypeLabel.trim().indexOf('Комбо') === 0;
+}
+
+/** Медный кабель: RJ45 и комбо RJ45/SFP (в один момент — либо медь, либо оптика). */
+function isSwitchPortCopperCapable(portTypeLabel) {
+    if (!portTypeLabel || typeof portTypeLabel !== 'string') return false;
+    var L = portTypeLabel.trim();
+    if (!L || L === 'Консоль' || L === 'Uplink/stack') return false;
+    if (L.indexOf('Комбо') === 0) return true;
+    if (L.indexOf('RJ45') === 0) return true;
+    return false;
+}
+
 function isSwitchPortOpticalFiberType(portTypeLabel) {
     if (!portTypeLabel || typeof portTypeLabel !== 'string') return false;
     var L = portTypeLabel.trim();

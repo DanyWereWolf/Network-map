@@ -70,10 +70,6 @@ function init() {
         });
     })();
 
-    if (getApiBase() && typeof AuthSystem !== 'undefined' && AuthSystem.refreshSessionFromApi) {
-        setInterval(AuthSystem.refreshSessionFromApi, 60000);
-    }
-
     setupMapTilesReady();
 }
 

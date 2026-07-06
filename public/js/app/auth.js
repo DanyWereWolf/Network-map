@@ -474,6 +474,53 @@ function getPendingUsers() {
     return users.filter(u => u.status === 'pending');
 }
 
+var sessionWatcherTimerId = null;
+var sessionExpiredHandling = false;
+var authFetchGuardInstalled = false;
+var SESSION_WATCH_INTERVAL_MS = 15000;
+
+function handleSessionExpired(message) {
+    if (sessionExpiredHandling) return;
+    if (document.getElementById('loginForm')) return;
+    sessionExpiredHandling = true;
+    try {
+        sessionStorage.setItem('authRedirectMessage', message || 'Сессия завершена: выполнен вход с другого устройства.');
+        sessionStorage.removeItem('networkMap_session');
+        sessionStorage.removeItem('networkMap_token');
+        localStorage.removeItem('networkMap_token');
+        localStorage.removeItem('networkMap_session');
+        localStorage.removeItem('networkMap_tokenExpiry');
+    } catch (e) {}
+    if (typeof window.syncStopReconnect === 'function') window.syncStopReconnect();
+    stopInactivityLogoutWatcher();
+    window.location.href = 'auth.html';
+}
+
+function installAuthFetchGuard() {
+    if (authFetchGuardInstalled || typeof window.fetch !== 'function') return;
+    authFetchGuardInstalled = true;
+    var originalFetch = window.fetch;
+    window.fetch = function(input, init) {
+        return originalFetch.apply(this, arguments).then(function(response) {
+            if (!response || response.status !== 401 || sessionExpiredHandling) return response;
+            var url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+            if (!url || url.indexOf('/api/auth/login') >= 0 || url.indexOf('/api/auth/session') >= 0 || url.indexOf('/api/public-config') >= 0) {
+                return response;
+            }
+            handleSessionExpired('Сессия завершена: выполнен вход с другого устройства.');
+            return response;
+        });
+    };
+}
+
+function initSessionWatcher() {
+    if (!getApiBase() || !getAuthToken()) return;
+    installAuthFetchGuard();
+    refreshSessionFromApi();
+    if (sessionWatcherTimerId) clearInterval(sessionWatcherTimerId);
+    sessionWatcherTimerId = setInterval(refreshSessionFromApi, SESSION_WATCH_INTERVAL_MS);
+}
+
 function refreshSessionFromApi() {
     if (!getApiBase()) return Promise.resolve();
     var token = getAuthToken();
@@ -481,14 +528,7 @@ function refreshSessionFromApi() {
     return fetch(getApiBase() + '/api/auth/session', { headers: { 'Authorization': 'Bearer ' + token } })
         .then(function(r) {
             if (r.status === 401) {
-                // Clear invalid token so we don't keep spamming /api/auth/session in background.
-                try {
-                    sessionStorage.removeItem('networkMap_session');
-                    sessionStorage.removeItem('networkMap_token');
-                    localStorage.removeItem('networkMap_token');
-                    localStorage.removeItem('networkMap_session');
-                    localStorage.removeItem('networkMap_tokenExpiry');
-                } catch (e) {}
+                handleSessionExpired('Сессия завершена: выполнен вход с другого устройства.');
                 return null;
             }
             return r.ok ? r.json() : null;
@@ -689,6 +729,20 @@ document.addEventListener('DOMContentLoaded', function() {
     const isAuthPage = document.getElementById('loginForm') !== null;
     initInactivityLogoutWatcher();
 
+    if (!isAuthPage && isAuthenticated()) {
+        initSessionWatcher();
+    }
+
+    if (isAuthPage) {
+        try {
+            var redirectMsg = sessionStorage.getItem('authRedirectMessage');
+            if (redirectMsg) {
+                sessionStorage.removeItem('authRedirectMessage');
+                showMessage(redirectMsg, 'error');
+            }
+        } catch (e) {}
+    }
+
     if (isAuthPage && !getApiBase()) {
         var msg = document.getElementById('authMessage');
         if (msg) {
@@ -888,6 +942,8 @@ window.AuthSystem = {
     isAuthenticated,
     isAdmin,
     logout,
+    handleSessionExpired,
+    initSessionWatcher,
     approveUser,
     rejectUser,
     getPendingUsers,
