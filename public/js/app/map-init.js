@@ -437,19 +437,23 @@ function setupEventListeners() {
     let expertLastZoom = (typeof myMap.getZoom === 'function') ? myMap.getZoom() : null;
     let mapBoundsChangeTimer = null;
     let mapBoundsChangePending = false;
+    let mapBoundsChangeZoomPending = false;
     window.mapUserGestureActive = false;
 
     function flushMapBoundsChangeUpdate() {
         mapBoundsChangePending = false;
+        var zoomPending = mapBoundsChangeZoomPending;
+        mapBoundsChangeZoomPending = false;
         try {
             if (typeof applyMapFilter === 'function') applyMapFilter();
-            if (window.MapRegions && MapRegions.syncAllRegionLabels && myMap) {
-                MapRegions.syncAllRegionLabels(myMap, objects);
+            if (zoomPending && window.MapRegions && MapRegions.rebuildAllRegionLabels && myMap) {
+                MapRegions.rebuildAllRegionLabels(myMap, objects);
             }
         } catch (eFlush) {}
     }
 
-    function scheduleMapBoundsChangeUpdate(delayMs) {
+    function scheduleMapBoundsChangeUpdate(delayMs, zoomChanged) {
+        if (zoomChanged) mapBoundsChangeZoomPending = true;
         if (mapBoundsChangeTimer) clearTimeout(mapBoundsChangeTimer);
         mapBoundsChangeTimer = setTimeout(function() {
             mapBoundsChangeTimer = null;
@@ -478,27 +482,30 @@ function setupEventListeners() {
             resumeRadioBridgeCoveragePulseAnimation();
         }
         if (mapBoundsChangePending) {
-            scheduleMapBoundsChangeUpdate(40);
+            scheduleMapBoundsChangeUpdate(40, mapBoundsChangeZoomPending);
         }
     });
 
-    myMap.events.add('boundschange', function() {
+    myMap.events.add('boundschange', function(e) {
         try {
             if (!myMap || typeof myMap.getZoom !== 'function') return;
             const z = myMap.getZoom();
             if (typeof z !== 'number') return;
 
+            var newZoom = e && typeof e.get === 'function' ? e.get('newZoom') : z;
+            var oldZoom = e && typeof e.get === 'function' ? e.get('oldZoom') : expertLastZoom;
+            var zoomChanged = typeof newZoom === 'number' && typeof oldZoom === 'number' && newZoom !== oldZoom;
             var viewportCull = typeof MapPerf !== 'undefined' && MapPerf.shouldUseViewportCull();
-            if (!viewportCull) {
-                if (expertLastZoom != null && Math.abs(z - expertLastZoom) < 0.01) return;
-            }
+            if (!viewportCull && !zoomChanged) return;
+
             expertLastZoom = z;
 
             if (window.mapUserGestureActive) {
                 mapBoundsChangePending = true;
+                if (zoomChanged) mapBoundsChangeZoomPending = true;
                 return;
             }
-            scheduleMapBoundsChangeUpdate();
+            scheduleMapBoundsChangeUpdate(null, zoomChanged);
         } catch (e) {}
     });
 

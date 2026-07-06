@@ -17207,47 +17207,6 @@ body.underground-draw-active .map-area-wrapper::after {
     margin-bottom: 16px;
 }
 
-/* Подпись региона по центру полигона */
-.region-map-label,
-#map .region-map-label,
-[class*="ymaps"] .region-map-label {
-    display: block;
-    box-sizing: border-box;
-    padding: 4px 10px;
-    font-weight: 700;
-    line-height: 1.25;
-    text-align: center;
-    color: var(--text-primary);
-    background: color-mix(in srgb, var(--region-label-bg, #3b82f6) 20%, rgba(255, 255, 255, 0.93));
-    border: 2px solid color-mix(in srgb, var(--region-label-border, #2563eb) 50%, var(--border-color, #cbd5e1));
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
-    transform: translate(-50%, -50%);
-    writing-mode: horizontal-tb;
-    pointer-events: none;
-    backdrop-filter: blur(4px);
-    letter-spacing: 0.01em;
-    overflow: hidden;
-}
-
-.region-map-label__text,
-#map .region-map-label__text,
-[class*="ymaps"] .region-map-label__text {
-    display: block;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    writing-mode: horizontal-tb;
-    text-orientation: mixed;
-}
-
-[data-theme="dark"] .region-map-label,
-[data-theme="dark"] #map .region-map-label,
-[data-theme="dark"] [class*="ymaps"] .region-map-label {
-    background: color-mix(in srgb, var(--region-label-bg, #3b82f6) 28%, rgba(15, 23, 42, 0.88));
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
-}
-
 /* ——— Ящик (cabinet) ——— */
 .cabinet-card {
     display: flex;

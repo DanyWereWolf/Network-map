@@ -4839,11 +4839,15 @@ function refreshCameraMapPresentation(cameraObj) {
 }
 window.refreshCameraMapPresentation = refreshCameraMapPresentation;
 
+function isPlacemarkLabelTargetType(type) {
+    return !!(type && type !== 'cable' && type !== 'cableLabel' && type !== 'region' && type !== 'regionLabel');
+}
+
 function updateObjectLabel(placemark, name) {
     if (!placemark || !placemark.properties) return;
     
     const type = placemark.properties.get('type');
-    if (type === 'cable' || type === 'cableLabel') return;
+    if (!isPlacemarkLabelTargetType(type)) return;
     
     let label = placemark.properties.get('label');
     const displayName = name ? escapeHtml(name) : getObjectDefaultName(type);
@@ -4856,7 +4860,6 @@ function updateObjectLabel(placemark, name) {
             iconImageHref: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==',
             iconImageSize: [1, 1],
             iconImageOffset: [0, 0],
-            iconContent: labelHtml,
             iconContentOffset: type === 'support' ? [0, 14] : [0, 18],
             zIndex: 1000,
             zIndexHover: 1000,
@@ -4864,10 +4867,19 @@ function updateObjectLabel(placemark, name) {
             hasBalloon: false,
             hasHint: false
         });
+        try {
+            if (label.options && typeof label.options.unset === 'function') {
+                label.options.unset('iconContent');
+            }
+        } catch (eUnset) {}
         placemark.properties.set('label', label);
     } else {
+        try {
+            if (label.options && typeof label.options.unset === 'function') {
+                label.options.unset('iconContent');
+            }
+        } catch (eClr) {}
         label.properties.set({ iconContent: labelHtml });
-        try { label.options.set('iconContent', labelHtml); } catch (eLbl) {}
         label.geometry.setCoordinates(coords);
     }
 }

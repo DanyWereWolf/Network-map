@@ -389,6 +389,9 @@ function applyMapFilter() {
 
     // Доп. скрытие по зуму (поверх фильтра).
     try { applyExpertZoomVisibility(); } catch (e) {}
+    if (window.MapRegions && MapRegions.purgeOrphanRegionLabelDom) {
+        MapRegions.purgeOrphanRegionLabelDom();
+    }
 }
 
 function applyViewportCullToMap() {

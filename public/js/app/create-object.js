@@ -514,6 +514,7 @@ function createObject(type, name, coords, options = {}) {
         myMap.geoObjects.add(placemark);
         if (typeof applyMapFilter === 'function') applyMapFilter();
         if (window.MapRegions && MapRegions.sendAllRegionsToMapBack) MapRegions.sendAllRegionsToMapBack(myMap, objects);
+        if (window.MapRegions && MapRegions.removeErrantRegionObjectLabels) MapRegions.removeErrantRegionObjectLabels(myMap, objects);
     }
     if (typeof window.syncSendOp === 'function') {
         var data = serializeOneObject(placemark);

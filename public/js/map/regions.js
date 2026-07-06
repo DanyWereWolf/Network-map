@@ -8,6 +8,148 @@
     var REGION_Z_INDEX = 1;
     var REGION_LABEL_Z_INDEX = 3;
 
+    function svgEscapeText(text) {
+        return String(text == null ? '' : text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function svgEscapeAttr(text) {
+        return String(text == null ? '' : text)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function readCssVar(name, fallback) {
+        try {
+            var value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+            return value || fallback;
+        } catch (e) {
+            return fallback;
+        }
+    }
+
+    function hexToRgb(hex) {
+        if (!hex) return null;
+        var value = String(hex).trim().replace('#', '');
+        if (value.length === 3) {
+            value = value[0] + value[0] + value[1] + value[1] + value[2] + value[2];
+        }
+        if (!/^[0-9a-f]{6}$/i.test(value)) return null;
+        return {
+            r: parseInt(value.slice(0, 2), 16),
+            g: parseInt(value.slice(2, 4), 16),
+            b: parseInt(value.slice(4, 6), 16)
+        };
+    }
+
+    function regionLabelBackground(fillColor) {
+        var rgb = hexToRgb(fillColor || DEFAULT_FILL);
+        if (!rgb) return 'rgba(59, 130, 246, 0.92)';
+        var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        var mix = isDark ? 0.28 : 0.2;
+        var base = isDark ? 15 : 255;
+        var r = Math.round(rgb.r * mix + base * (1 - mix));
+        var g = Math.round(rgb.g * mix + (isDark ? 23 : 255) * (1 - mix));
+        var b = Math.round(rgb.b * mix + (isDark ? 42 : 255) * (1 - mix));
+        return 'rgba(' + r + ',' + g + ',' + b + ',' + (isDark ? 0.88 : 0.93) + ')';
+    }
+
+    /** SVG-иконка подписи — тот же подход, что у курсоров коллег (default#image, без HTML). */
+    function buildRegionNameIcon(name, fillColor, strokeColor, layout) {
+        layout = layout || {};
+        var text = layout.text != null ? layout.text : ((name && String(name).trim()) ? String(name).trim() : 'Регион');
+        var fs = layout.fontSizePx || 13;
+        var maxW = layout.maxWidthPx || 200;
+        var padX = 10;
+        var padY = 4;
+        var charFactor = /[а-яёА-ЯЁ]/.test(text) ? 0.58 : 0.52;
+        var innerW = Math.min(maxW - padX * 2, Math.ceil(text.length * fs * charFactor));
+        var width = Math.min(maxW, innerW + padX * 2);
+        var height = Math.ceil(fs * 1.25) + padY * 2;
+        var bg = regionLabelBackground(fillColor);
+        var border = strokeColor || DEFAULT_STROKE;
+        var textColor = readCssVar('--text-primary', '#0f172a');
+        var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '">' +
+            '<rect x="1" y="1" width="' + (width - 2) + '" height="' + (height - 2) + '" rx="8" fill="' + svgEscapeAttr(bg) + '" stroke="' + svgEscapeAttr(border) + '" stroke-width="2" stroke-opacity="0.5"/>' +
+            '<text x="' + (width / 2) + '" y="' + (height / 2 + fs * 0.35) + '" text-anchor="middle" fill="' + svgEscapeAttr(textColor) + '" font-size="' + fs + '" font-weight="700" font-family="DM Sans, system-ui, sans-serif">' + svgEscapeText(text) + '</text>' +
+            '</svg>';
+        return {
+            svg: svg,
+            size: [width, height],
+            hotspot: [width / 2, height / 2]
+        };
+    }
+
+    function regionNameIconDataUrl(icon) {
+        return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(icon.svg)));
+    }
+
+    function isStrayRegionNamePlacemark(obj) {
+        if (!obj || !obj.properties) return false;
+        if (obj.properties.get('type') === 'regionLabel') return true;
+        if (obj.properties.get('parentRegionId')) return true;
+        try {
+            var layout = obj.options && obj.options.get('iconLayout');
+            if (layout === 'default#imageWithContent') {
+                var optIc = obj.options.get('iconContent');
+                if (typeof optIc === 'string' && optIc.indexOf('region-map-label') !== -1) return true;
+            }
+            var propIc = obj.properties.get('iconContent');
+            if (typeof propIc === 'string' && propIc.indexOf('region-map-label') !== -1) return true;
+        } catch (eIc) {}
+        return false;
+    }
+
+    function stripPlacemarkHtmlContent(pm) {
+        if (!pm) return;
+        try {
+            if (pm.options && typeof pm.options.unset === 'function') {
+                pm.options.unset('iconContent');
+            }
+        } catch (e1) {}
+        try {
+            if (pm.properties && typeof pm.properties.unset === 'function') {
+                pm.properties.unset('iconContent');
+            }
+        } catch (e2) {}
+    }
+
+    function purgeLegacyRegionNameDom() {
+        var mapEl = document.getElementById('map');
+        if (!mapEl) return;
+        mapEl.querySelectorAll('.region-map-label').forEach(function (el) {
+            try { el.parentNode.removeChild(el); } catch (e) {}
+        });
+    }
+
+    function forEachMapGeoObject(map, callback) {
+        if (!map || !map.geoObjects || typeof callback !== 'function') return;
+        function walk(collection) {
+            if (!collection) return;
+            try {
+                if (typeof collection.each === 'function') {
+                    collection.each(function (obj) {
+                        callback(obj);
+                        if (obj && obj.geoObjects) walk(obj.geoObjects);
+                    });
+                    return;
+                }
+            } catch (eEach) {}
+            try {
+                var len = typeof collection.getLength === 'function' ? collection.getLength() : 0;
+                for (var i = 0; i < len; i++) {
+                    var obj = collection.get(i);
+                    callback(obj, i);
+                    if (obj && obj.geoObjects) walk(obj.geoObjects);
+                }
+            } catch (eLen) {}
+        }
+        walk(map.geoObjects);
+    }
+
     function sendRegionToMapBack(regionObj, map) {
         if (!regionObj || !map) return;
         if (regionObj.properties && regionObj.properties.get('_detachedForGeometryEdit')) return;
@@ -307,88 +449,141 @@
         };
     }
 
-    function buildRegionLabelHtml(name, fillColor, strokeColor, layout) {
-        var esc = typeof global.escapeHtml === 'function' ? global.escapeHtml : function (s) {
-            return String(s == null ? '' : s);
-        };
-        layout = layout || {};
-        var text = esc(layout.text != null ? layout.text : ((name && String(name).trim()) ? name : 'Регион'));
-        var bg = fillColor || DEFAULT_FILL;
-        var border = strokeColor || DEFAULT_STROKE;
-        var maxW = layout.maxWidthPx != null ? layout.maxWidthPx : 200;
-        var fs = layout.fontSizePx != null ? layout.fontSizePx : 13;
-        var style = '--region-label-bg:' + bg + ';--region-label-border:' + border +
-            ';max-width:' + maxW + 'px;font-size:' + fs + 'px;width:' + maxW + 'px;';
-        return '<div class="region-map-label" style="' + style + '"><span class="region-map-label__text">' + text + '</span></div>';
+    function createRegionNamePlacemark(center, icon, regionId) {
+        var dataUrl = regionNameIconDataUrl(icon);
+        var pm = new ymaps.Placemark(center, {}, {
+            iconLayout: 'default#image',
+            iconImageHref: dataUrl,
+            iconImageSize: icon.size,
+            iconImageOffset: [-icon.hotspot[0], -icon.hotspot[1]],
+            zIndex: REGION_LABEL_Z_INDEX,
+            visible: true,
+            interactive: false,
+            interactivityModel: 'default#transparent',
+            cursor: 'default',
+            hasBalloon: false,
+            hasHint: false
+        });
+        pm.properties.set('type', 'regionLabel');
+        pm.properties.set('parentRegionId', regionId);
+        return pm;
+    }
+
+    function detachRegionLabelFromMap(label, regionObj, map) {
+        if (!label) return;
+        stripPlacemarkHtmlContent(label);
+        map = map || global.myMap;
+        if (regionObj && regionObj.geoObjects) {
+            try { regionObj.geoObjects.remove(label); } catch (e0) {}
+        }
+        if (map) {
+            try { map.geoObjects.remove(label); } catch (e) {}
+        }
     }
 
     function removeRegionLabel(regionObj, map) {
         if (!regionObj || !regionObj.properties) return;
-        var label = regionObj.properties.get('regionLabel');
-        if (!label) return;
         map = map || global.myMap;
-        if (map) {
-            try { map.geoObjects.remove(label); } catch (e) {}
+        var label = regionObj.properties.get('regionLabel');
+        if (label) {
+            detachRegionLabelFromMap(label, regionObj, map);
+            regionObj.properties.unset('regionLabel');
         }
-        regionObj.properties.unset('regionLabel');
+        if (regionObj.geoObjects) {
+            var attached = [];
+            try {
+                if (typeof regionObj.geoObjects.each === 'function') {
+                    regionObj.geoObjects.each(function (child) {
+                        if (isStrayRegionNamePlacemark(child)) attached.push(child);
+                    });
+                }
+            } catch (eEach) {}
+            attached.forEach(function (child) {
+                detachRegionLabelFromMap(child, regionObj, map);
+            });
+        }
+        purgeLegacyRegionNameDom();
+    }
+
+    function removeAllRegionLabelPlacemarks(map, objectList) {
+        if (!map) return;
+        if (Array.isArray(objectList)) {
+            getAllRegions(objectList).forEach(function (regionObj) {
+                removeRegionLabel(regionObj, map);
+            });
+        }
+        var stray = [];
+        forEachMapGeoObject(map, function (obj) {
+            if (isStrayRegionNamePlacemark(obj)) stray.push(obj);
+        });
+        stray.forEach(function (obj) {
+            detachRegionLabelFromMap(obj, null, map);
+        });
+        purgeLegacyRegionNameDom();
+    }
+
+    function removeErrantRegionObjectLabels(map, objectList) {
+        if (!Array.isArray(objectList)) return;
+        map = map || global.myMap;
+        getAllRegions(objectList).forEach(function (regionObj) {
+            var bogus = regionObj.properties.get('label');
+            if (!bogus) return;
+            detachRegionLabelFromMap(bogus, regionObj, map);
+            regionObj.properties.unset('label');
+        });
+        purgeLegacyRegionNameDom();
+    }
+
+    function dedupeRegionLabels(map, objectList) {
+        if (!map || !Array.isArray(objectList)) return;
+        removeErrantRegionObjectLabels(map, objectList);
+        removeAllRegionLabelPlacemarks(map, objectList);
+        getAllRegions(objectList).forEach(function (regionObj) {
+            updateRegionLabel(regionObj, map);
+        });
     }
 
     function updateRegionLabel(regionObj, map) {
         map = map || global.myMap;
         if (!regionObj || !regionObj.properties || !map || typeof ymaps === 'undefined') return;
-        if (regionObj.properties.get('_detachedForGeometryEdit')) {
-            removeRegionLabel(regionObj, map);
-            return;
-        }
+
+        removeRegionLabel(regionObj, map);
+
+        if (regionObj.properties.get('_detachedForGeometryEdit')) return;
+
         var ring = getRegionRing(regionObj);
         var center = getRegionLabelCenter(ring);
-        if (!center) {
-            removeRegionLabel(regionObj, map);
-            return;
-        }
+        if (!center || !isFinite(center[0]) || !isFinite(center[1])) return;
+
         var name = regionObj.properties.get('name') || '';
         var fill = regionObj.properties.get('fillColor') || DEFAULT_FILL;
         var stroke = regionObj.properties.get('strokeColor') || DEFAULT_STROKE;
         var layout = getRegionLabelLayout(map, ring, name);
-        var html = buildRegionLabelHtml(name, fill, stroke, layout);
-        var label = regionObj.properties.get('regionLabel');
         var regionVisible = regionObj.options ? regionObj.options.get('visible') !== false : true;
         var labelVisible = regionVisible && !layout.hide;
+        if (!labelVisible) return;
 
-        if (!label) {
-            label = new ymaps.Placemark(center, {}, {
-                iconLayout: 'default#imageWithContent',
-                iconImageHref: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==',
-                iconImageSize: [1, 1],
-                iconImageOffset: [0, 0],
-                iconContent: html,
-                iconContentOffset: [0, 0],
-                zIndex: REGION_LABEL_Z_INDEX,
-                visible: labelVisible,
-                interactive: false,
-                cursor: 'default',
-                hasBalloon: false,
-                hasHint: false
-            });
-            label.properties.set('type', 'regionLabel');
-            label.properties.set('parentRegionId', regionObj.properties.get('uniqueId'));
-            map.geoObjects.add(label);
-            regionObj.properties.set('regionLabel', label);
-        } else {
-            label.properties.set({ iconContent: html });
-            try { label.geometry.setCoordinates(center); } catch (eC) {}
-            try {
-                label.options.set('zIndex', REGION_LABEL_Z_INDEX);
-                label.options.set('visible', labelVisible);
-            } catch (eO) {}
-        }
+        var icon = buildRegionNameIcon(name, fill, stroke, layout);
+        var regionId = regionObj.properties.get('uniqueId');
+        var label = createRegionNamePlacemark(center, icon, regionId);
+        map.geoObjects.add(label);
+        regionObj.properties.set('regionLabel', label);
+    }
+
+    function rebuildAllRegionLabels(map, objectList) {
+        dedupeRegionLabels(map, objectList);
     }
 
     function syncAllRegionLabels(map, objectList) {
-        if (!map || !Array.isArray(objectList)) return;
-        getAllRegions(objectList).forEach(function (regionObj) {
-            updateRegionLabel(regionObj, map);
-        });
+        rebuildAllRegionLabels(map, objectList);
+    }
+
+    function purgeOrphanRegionLabelDom() {
+        purgeLegacyRegionNameDom();
+    }
+
+    function migrateLegacyRegionLabels(map, objectList) {
+        rebuildAllRegionLabels(map, objectList);
     }
 
     function isMapObjectShown(obj) {
@@ -491,6 +686,12 @@
         applyRegionStyle: applyRegionStyle,
         updateRegionLabel: updateRegionLabel,
         removeRegionLabel: removeRegionLabel,
+        removeAllRegionLabelPlacemarks: removeAllRegionLabelPlacemarks,
+        purgeOrphanRegionLabelDom: purgeOrphanRegionLabelDom,
+        migrateLegacyRegionLabels: migrateLegacyRegionLabels,
+        removeErrantRegionObjectLabels: removeErrantRegionObjectLabels,
+        dedupeRegionLabels: dedupeRegionLabels,
+        rebuildAllRegionLabels: rebuildAllRegionLabels,
         syncAllRegionLabels: syncAllRegionLabels,
         sendRegionToMapBack: sendRegionToMapBack,
         sendAllRegionsToMapBack: sendAllRegionsToMapBack,

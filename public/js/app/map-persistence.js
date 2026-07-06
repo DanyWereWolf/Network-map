@@ -394,8 +394,8 @@ function finishIncrementalUndoRedoRefresh(diff, done) {
         if (diff.needsCopperRebuild) rebuildAllCopperPortUsageFromCables();
         if (diff.hasRegion) {
             if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
-            if (window.MapRegions && MapRegions.syncAllRegionLabels && myMap) {
-                MapRegions.syncAllRegionLabels(myMap, objects);
+            if (window.MapRegions && MapRegions.rebuildAllRegionLabels && myMap) {
+                MapRegions.rebuildAllRegionLabels(myMap, objects);
             }
         }
         if (diff.added.length || diff.removed.length || diff.updated.length || cablesChanged) {
@@ -1205,6 +1205,9 @@ function applyRemoteStateMerged(data) {
     toRemoveObjs.forEach(function(obj) {
         label = obj.properties.get('label');
         if (label) { try { myMap.geoObjects.remove(label); } catch (e) {} }
+        if (obj.properties.get('type') === 'region' && window.MapRegions && MapRegions.removeRegionLabel) {
+            MapRegions.removeRegionLabel(obj, myMap);
+        }
         var cablesToRemove = objects.filter(function(c) {
             return c.properties && c.properties.get('type') === 'cable' &&
                 (c.properties.get('from') === obj || c.properties.get('to') === obj);
@@ -1338,6 +1341,9 @@ function applyRemoteStateMerged(data) {
     if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
     if (window.MapRegions && MapRegions.sendAllRegionsToMapBack && myMap) {
         MapRegions.sendAllRegionsToMapBack(myMap, objects);
+    }
+    if (window.MapRegions && MapRegions.purgeOrphanRegionLabelDom) {
+        MapRegions.purgeOrphanRegionLabelDom();
     }
 
     setTimeout(function() {
@@ -1563,16 +1569,18 @@ function ensureNodeLabelsVisible() {
     objects.forEach(obj => {
         if (obj.properties) {
             const type = obj.properties.get('type');
-            if (type && type !== 'cable' && type !== 'cableLabel') {
-                const name = obj.properties.get('name') || '';
-                updateObjectLabel(obj, name);
-                var label = obj.properties.get('label');
-                if (label && !myMap.geoObjects.indexOf || myMap.geoObjects.indexOf(label) === -1) {
-                    try { myMap.geoObjects.add(label); } catch(e) {}
-                }
+            if (!type || type === 'cable' || type === 'cableLabel' || type === 'region' || type === 'regionLabel') return;
+            const name = obj.properties.get('name') || '';
+            updateObjectLabel(obj, name);
+            var label = obj.properties.get('label');
+            if (label && (!myMap.geoObjects.indexOf || myMap.geoObjects.indexOf(label) === -1)) {
+                try { myMap.geoObjects.add(label); } catch(e) {}
             }
         }
     });
+    if (window.MapRegions && MapRegions.removeErrantRegionObjectLabels) {
+        MapRegions.removeErrantRegionObjectLabels(myMap, objects);
+    }
 }
 
 function importDataAssignUniqueIds(data) {
@@ -1769,7 +1777,9 @@ function importDataPostProcess(opts, onDone) {
         if (window.MapRegions && MapRegions.sendAllRegionsToMapBack && myMap) {
             MapRegions.sendAllRegionsToMapBack(myMap, objects);
         }
-        if (window.MapRegions && MapRegions.syncAllRegionLabels && myMap) {
+        if (window.MapRegions && MapRegions.rebuildAllRegionLabels && myMap) {
+            MapRegions.rebuildAllRegionLabels(myMap, objects);
+        } else if (window.MapRegions && MapRegions.syncAllRegionLabels && myMap) {
             MapRegions.syncAllRegionLabels(myMap, objects);
         }
         objects.forEach(function(obj) {
