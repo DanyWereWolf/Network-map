@@ -911,14 +911,7 @@ function canPlaceMemberAtCoords(coords, type, atPoint) {
     });
     if (onlyCabinetMembers) return true;
 
-    var groupType = typeof getObjectPlacementGroupType === 'function' ? getObjectPlacementGroupType(type) : null;
-    if (groupType) {
-        return atPoint.every(function(obj) {
-            var ot = obj.properties.get('type');
-            return ot === groupType || ot === 'cabinet' || !!getObjectCabinetId(obj);
-        });
-    }
-    return false;
+    return true;
 }
 
 function clearObjectCabinetId(obj) {

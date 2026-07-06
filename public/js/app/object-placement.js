@@ -252,15 +252,11 @@ function canPlaceObjectAtCoords(coords, type) {
     }
     if (type === 'cabinet') {
         var atCabinetPoint = getPlacemarksAtCoords(coords, type);
-        return !atCabinetPoint.length;
+        return !atCabinetPoint.some(function(obj) {
+            return obj.properties.get('type') === 'cabinet';
+        });
     }
-    var atPoint = getPlacemarksAtCoords(coords, type);
-    if (!atPoint.length) return true;
-    var groupType = getObjectPlacementGroupType(type);
-    if (!groupType) return false;
-    return atPoint.every(function(obj) {
-        return obj.properties.get('type') === groupType;
-    });
+    return true;
 }
 
 function resolvePlacementCoordsForGrouping(coords, type) {
@@ -286,13 +282,10 @@ function placeObjectAtCoords(coords) {
     if (!canPlaceObjectAtCoords(coords, type)) {
         if (canBeCabinetMember(type) && findCabinetAtCoords && findCabinetAtCoords(coords)) {
             showWarning('Не удалось добавить объект в ящик в этой точке', 'Размещение');
+        } else if (type === 'cabinet') {
+            showWarning('В этой точке уже есть ящик', 'Размещение');
         } else {
-            var groupType = getObjectPlacementGroupType(type);
-            if (groupType) {
-                showWarning('В этой точке уже есть объект другого типа. Узлы и кроссы можно ставить только в группу с объектами того же типа. Для ящика — совместите координаты с иконкой ящика.', 'Размещение');
-            } else {
-                showWarning('В этой точке уже есть объект', 'Размещение');
-            }
+            showWarning('Не удалось разместить объект в этой точке', 'Размещение');
         }
         return false;
     }
