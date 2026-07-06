@@ -714,6 +714,20 @@ var radioBridgeDeviceCatalog = {};
 var cabinetDeviceCatalog = {};
 var switchDeviceCatalog = {};
 var cableDeviceCatalog = {};
+/** Разделы справочника, явно загруженные из сохранения (не подставлять заводские списки повторно). */
+var _deviceCatalogWasPersisted = {};
+
+function resetDeviceCatalogPersistedFlags() {
+    _deviceCatalogWasPersisted = {};
+}
+
+function markDeviceCatalogPersisted(kind) {
+    _deviceCatalogWasPersisted[kind] = true;
+}
+
+function wasDeviceCatalogPersisted(kind) {
+    return !!_deviceCatalogWasPersisted[kind];
+}
 /** switchModelDefaultPorts[manufacturer][model] = число портов по умолчанию при добавлении коммутатора. */
 var switchModelDefaultPorts = {};
 /** radioBridgeModelDefaultPorts[manufacturer][model] = число Ethernet-портов по умолчанию при добавлении радиомоста. */
@@ -2071,6 +2085,7 @@ function saveDeviceCatalog() {
 
 function loadDeviceCatalog(opts) {
     opts = opts || {};
+    resetDeviceCatalogPersistedFlags();
     var hasLegacyData = opts && (
         (opts.manufacturers && opts.manufacturers.length > 0) ||
         (opts.modelsByManufacturer && typeof opts.modelsByManufacturer === 'object' && Object.keys(opts.modelsByManufacturer).length > 0)
@@ -2104,10 +2119,12 @@ function loadDeviceCatalog(opts) {
         } else {
             cabinetDeviceCatalog = cloneDeepCatalog(CABINET_CATALOG_DEFAULT);
         }
-        if ('switchDeviceCatalog' in opts && opts.switchDeviceCatalog && typeof opts.switchDeviceCatalog === 'object') {
+        if ('switchDeviceCatalog' in opts && typeof opts.switchDeviceCatalog === 'object') {
+            markDeviceCatalogPersisted('switch');
             switchDeviceCatalog = cloneDeepCatalog(opts.switchDeviceCatalog);
         } else {
             switchDeviceCatalog = cloneDeepCatalog(SWITCH_CATALOG_DEFAULT);
+            mergeNodeCatalogIntoSwitch();
         }
         if ('cableDeviceCatalog' in opts && opts.cableDeviceCatalog && typeof opts.cableDeviceCatalog === 'object') {
             cableDeviceCatalog = cloneDeepCatalog(opts.cableDeviceCatalog);
@@ -2152,9 +2169,11 @@ function loadDeviceCatalog(opts) {
         return;
     }
 
-    if (opts.nodeDeviceCatalog && typeof opts.nodeDeviceCatalog === 'object') {
+    if ('nodeDeviceCatalog' in opts && typeof opts.nodeDeviceCatalog === 'object') {
+        markDeviceCatalogPersisted('node');
         nodeDeviceCatalog = cloneDeepCatalog(opts.nodeDeviceCatalog);
     } else if (opts.deviceCatalog && typeof opts.deviceCatalog === 'object' && Object.keys(opts.deviceCatalog).length > 0) {
+        markDeviceCatalogPersisted('node');
         nodeDeviceCatalog = cloneDeepCatalog(opts.deviceCatalog);
     } else if (!('nodeDeviceCatalog' in opts) && !('deviceCatalog' in opts)) {
         nodeDeviceCatalog = cloneDeepCatalog(NODE_CATALOG_DEFAULT);
@@ -2162,9 +2181,11 @@ function loadDeviceCatalog(opts) {
         nodeDeviceCatalog = cloneDeepCatalog(NODE_CATALOG_DEFAULT);
     }
 
-    if (opts.oltDeviceCatalog && typeof opts.oltDeviceCatalog === 'object') {
+    if ('oltDeviceCatalog' in opts && typeof opts.oltDeviceCatalog === 'object') {
+        markDeviceCatalogPersisted('olt');
         oltDeviceCatalog = cloneDeepCatalog(opts.oltDeviceCatalog);
     } else if (opts.deviceCatalog && typeof opts.deviceCatalog === 'object' && Object.keys(opts.deviceCatalog).length > 0) {
+        markDeviceCatalogPersisted('olt');
         oltDeviceCatalog = cloneDeepCatalog(opts.deviceCatalog);
     } else if (!('oltDeviceCatalog' in opts) && !('deviceCatalog' in opts)) {
         oltDeviceCatalog = cloneDeepCatalog(OLT_CATALOG_DEFAULT);
@@ -2172,9 +2193,11 @@ function loadDeviceCatalog(opts) {
         oltDeviceCatalog = cloneDeepCatalog(OLT_CATALOG_DEFAULT);
     }
 
-    if (opts.onuDeviceCatalog && typeof opts.onuDeviceCatalog === 'object') {
+    if ('onuDeviceCatalog' in opts && typeof opts.onuDeviceCatalog === 'object') {
+        markDeviceCatalogPersisted('onu');
         onuDeviceCatalog = cloneDeepCatalog(opts.onuDeviceCatalog);
     } else if (opts.deviceCatalog && typeof opts.deviceCatalog === 'object' && Object.keys(opts.deviceCatalog).length > 0) {
+        markDeviceCatalogPersisted('onu');
         onuDeviceCatalog = cloneDeepCatalog(opts.deviceCatalog);
     } else if (!('onuDeviceCatalog' in opts) && !('deviceCatalog' in opts)) {
         onuDeviceCatalog = cloneDeepCatalog(ONU_CATALOG_DEFAULT);
@@ -2182,31 +2205,37 @@ function loadDeviceCatalog(opts) {
         onuDeviceCatalog = cloneDeepCatalog(ONU_CATALOG_DEFAULT);
     }
 
-    if ('cameraDeviceCatalog' in opts && opts.cameraDeviceCatalog && typeof opts.cameraDeviceCatalog === 'object') {
+    if ('cameraDeviceCatalog' in opts && typeof opts.cameraDeviceCatalog === 'object') {
+        markDeviceCatalogPersisted('camera');
         cameraDeviceCatalog = cloneDeepCatalog(opts.cameraDeviceCatalog);
     } else if (!('cameraDeviceCatalog' in opts)) {
         cameraDeviceCatalog = cloneDeepCatalog(CAMERA_CATALOG_DEFAULT);
     }
 
-    if ('radioBridgeDeviceCatalog' in opts && opts.radioBridgeDeviceCatalog && typeof opts.radioBridgeDeviceCatalog === 'object') {
+    if ('radioBridgeDeviceCatalog' in opts && typeof opts.radioBridgeDeviceCatalog === 'object') {
+        markDeviceCatalogPersisted('radioBridge');
         radioBridgeDeviceCatalog = cloneDeepCatalog(opts.radioBridgeDeviceCatalog);
     } else if (!('radioBridgeDeviceCatalog' in opts)) {
         radioBridgeDeviceCatalog = cloneDeepCatalog(RADIO_BRIDGE_CATALOG_DEFAULT);
     }
 
-    if ('cabinetDeviceCatalog' in opts && opts.cabinetDeviceCatalog && typeof opts.cabinetDeviceCatalog === 'object') {
+    if ('cabinetDeviceCatalog' in opts && typeof opts.cabinetDeviceCatalog === 'object') {
+        markDeviceCatalogPersisted('cabinet');
         cabinetDeviceCatalog = cloneDeepCatalog(opts.cabinetDeviceCatalog);
     } else if (!('cabinetDeviceCatalog' in opts)) {
         cabinetDeviceCatalog = cloneDeepCatalog(CABINET_CATALOG_DEFAULT);
     }
 
-    if ('switchDeviceCatalog' in opts && opts.switchDeviceCatalog && typeof opts.switchDeviceCatalog === 'object') {
+    if ('switchDeviceCatalog' in opts && typeof opts.switchDeviceCatalog === 'object') {
+        markDeviceCatalogPersisted('switch');
         switchDeviceCatalog = cloneDeepCatalog(opts.switchDeviceCatalog);
     } else if (!('switchDeviceCatalog' in opts)) {
         switchDeviceCatalog = cloneDeepCatalog(SWITCH_CATALOG_DEFAULT);
+        mergeNodeCatalogIntoSwitch();
     }
 
-    if ('cableDeviceCatalog' in opts && opts.cableDeviceCatalog && typeof opts.cableDeviceCatalog === 'object') {
+    if ('cableDeviceCatalog' in opts && typeof opts.cableDeviceCatalog === 'object') {
+        markDeviceCatalogPersisted('cable');
         cableDeviceCatalog = cloneDeepCatalog(opts.cableDeviceCatalog);
     } else if (!('cableDeviceCatalog' in opts)) {
         cableDeviceCatalog = cloneDeepCatalog(CABLE_CATALOG_DEFAULT);
@@ -2252,7 +2281,6 @@ function loadDeviceCatalog(opts) {
     applyCustomCrossTypesFromOpts(opts);
     applyCustomSpliceCassetteTypesFromOpts(opts);
 
-    if (mergeNodeCatalogIntoSwitch()) saveDeviceCatalog();
     refreshAllSleeveTypeSelects();
     refreshAllCrossTypeSelects();
     refreshAllSpliceCassetteTypeSelects();
@@ -2343,6 +2371,21 @@ function loadCustomDeviceOptions(opts) {
     withDeviceCatalogHydration(function() { loadDeviceCatalog(opts || {}); });
 }
 
+function hasPersistedDeviceCatalogOpts(opts) {
+    if (!opts || typeof opts !== 'object') return false;
+    var catalogKeys = [
+        'nodeDeviceCatalog', 'oltDeviceCatalog', 'onuDeviceCatalog', 'cameraDeviceCatalog',
+        'radioBridgeDeviceCatalog', 'cabinetDeviceCatalog', 'switchDeviceCatalog', 'cableDeviceCatalog'
+    ];
+    for (var i = 0; i < catalogKeys.length; i++) {
+        if (catalogKeys[i] in opts) return true;
+    }
+    if (opts.manufacturers && opts.manufacturers.length > 0) return true;
+    if (opts.modelsByManufacturer && typeof opts.modelsByManufacturer === 'object' && Object.keys(opts.modelsByManufacturer).length > 0) return true;
+    if (opts.deviceCatalog && typeof opts.deviceCatalog === 'object' && Object.keys(opts.deviceCatalog).length > 0) return true;
+    return false;
+}
+
 function loadCustomDeviceOptionsFromStorage() {
     try {
         var raw = localStorage.getItem(getDeviceCatalogStorageKey());
@@ -2361,15 +2404,14 @@ function loadCustomDeviceOptionsFromStorage() {
 }
 
 function ensureDeviceCatalogsNonEmpty() {
-    if (Object.keys(nodeDeviceCatalog || {}).length === 0) nodeDeviceCatalog = cloneDeepCatalog(NODE_CATALOG_DEFAULT);
-    if (Object.keys(oltDeviceCatalog || {}).length === 0) oltDeviceCatalog = cloneDeepCatalog(OLT_CATALOG_DEFAULT);
-    if (Object.keys(onuDeviceCatalog || {}).length === 0) onuDeviceCatalog = cloneDeepCatalog(ONU_CATALOG_DEFAULT);
-    if (Object.keys(cameraDeviceCatalog || {}).length === 0) cameraDeviceCatalog = cloneDeepCatalog(CAMERA_CATALOG_DEFAULT);
-    if (Object.keys(radioBridgeDeviceCatalog || {}).length === 0) radioBridgeDeviceCatalog = cloneDeepCatalog(RADIO_BRIDGE_CATALOG_DEFAULT);
-    if (Object.keys(cabinetDeviceCatalog || {}).length === 0) cabinetDeviceCatalog = cloneDeepCatalog(CABINET_CATALOG_DEFAULT);
-    if (Object.keys(switchDeviceCatalog || {}).length === 0) switchDeviceCatalog = cloneDeepCatalog(SWITCH_CATALOG_DEFAULT);
-    if (Object.keys(cableDeviceCatalog || {}).length === 0) cableDeviceCatalog = cloneDeepCatalog(CABLE_CATALOG_DEFAULT);
-    if (mergeNodeCatalogIntoSwitch()) saveDeviceCatalog();
+    if (!wasDeviceCatalogPersisted('node') && Object.keys(nodeDeviceCatalog || {}).length === 0) nodeDeviceCatalog = cloneDeepCatalog(NODE_CATALOG_DEFAULT);
+    if (!wasDeviceCatalogPersisted('olt') && Object.keys(oltDeviceCatalog || {}).length === 0) oltDeviceCatalog = cloneDeepCatalog(OLT_CATALOG_DEFAULT);
+    if (!wasDeviceCatalogPersisted('onu') && Object.keys(onuDeviceCatalog || {}).length === 0) onuDeviceCatalog = cloneDeepCatalog(ONU_CATALOG_DEFAULT);
+    if (!wasDeviceCatalogPersisted('camera') && Object.keys(cameraDeviceCatalog || {}).length === 0) cameraDeviceCatalog = cloneDeepCatalog(CAMERA_CATALOG_DEFAULT);
+    if (!wasDeviceCatalogPersisted('radioBridge') && Object.keys(radioBridgeDeviceCatalog || {}).length === 0) radioBridgeDeviceCatalog = cloneDeepCatalog(RADIO_BRIDGE_CATALOG_DEFAULT);
+    if (!wasDeviceCatalogPersisted('cabinet') && Object.keys(cabinetDeviceCatalog || {}).length === 0) cabinetDeviceCatalog = cloneDeepCatalog(CABINET_CATALOG_DEFAULT);
+    if (!wasDeviceCatalogPersisted('switch') && Object.keys(switchDeviceCatalog || {}).length === 0) switchDeviceCatalog = cloneDeepCatalog(SWITCH_CATALOG_DEFAULT);
+    if (!wasDeviceCatalogPersisted('cable') && Object.keys(cableDeviceCatalog || {}).length === 0) cableDeviceCatalog = cloneDeepCatalog(CABLE_CATALOG_DEFAULT);
 }
 
 function getCableProductLabel(manufacturer, model) {

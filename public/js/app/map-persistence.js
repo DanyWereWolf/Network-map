@@ -629,13 +629,17 @@ function loadData() {
             }
             if (typeof withDeviceCatalogHydration === 'function') {
                 withDeviceCatalogHydration(function() {
-                    if (s.customDeviceOptions && typeof loadCustomDeviceOptions === 'function') {
+                    if (s.customDeviceOptions && typeof hasPersistedDeviceCatalogOpts === 'function'
+                        && hasPersistedDeviceCatalogOpts(s.customDeviceOptions)
+                        && typeof loadDeviceCatalog === 'function') {
                         loadDeviceCatalog(s.customDeviceOptions);
                     }
                     if (typeof ensureDeviceCatalogsNonEmpty === 'function') ensureDeviceCatalogsNonEmpty();
                 });
             } else {
-                if (s.customDeviceOptions && typeof loadCustomDeviceOptions === 'function') loadCustomDeviceOptions(s.customDeviceOptions);
+                if (s.customDeviceOptions && typeof hasPersistedDeviceCatalogOpts === 'function'
+                    && hasPersistedDeviceCatalogOpts(s.customDeviceOptions)
+                    && typeof loadCustomDeviceOptions === 'function') loadCustomDeviceOptions(s.customDeviceOptions);
                 if (typeof ensureDeviceCatalogsNonEmpty === 'function') ensureDeviceCatalogsNonEmpty();
             }
             if (typeof syncDeviceCatalogLocalStorage === 'function') syncDeviceCatalogLocalStorage();
