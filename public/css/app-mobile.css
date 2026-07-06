@@ -546,8 +546,18 @@ html {
         padding: 8px 10px 10px;
     }
 
+    .accordion-section--mapfilter.active .accordion-content {
+        max-height: min(480px, 52vh);
+    }
+
+    .map-filter-panel {
+        max-height: 100%;
+    }
+
     .map-filter-scroll {
-        max-height: min(240px, 40vh);
+        flex: 1 1 auto;
+        min-height: 64px;
+        max-height: none;
     }
 
     .accordion-section--embedded.active .accordion-content {

@@ -2690,6 +2690,11 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
 #mapfilter-content.accordion-content,
 .accordion-section.active #mapfilter-content.accordion-content {
     padding: 0;
+    min-height: 0;
+}
+
+.accordion-section--mapfilter.active .accordion-content {
+    max-height: min(560px, 58vh);
 }
 
 .map-filter-panel {
@@ -2697,10 +2702,26 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    min-height: 0;
+    max-height: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.map-filter-toolbar {
+    display: flex;
+    gap: 6px;
+    padding: 4px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    flex-shrink: 0;
 }
 
 .map-filter-scroll {
-    max-height: min(300px, 48vh);
+    flex: 1 1 auto;
+    min-height: 72px;
+    max-height: none;
     overflow-y: auto;
     overflow-x: hidden;
     padding-right: 2px;
@@ -2739,15 +2760,6 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     color: var(--accent-danger);
     background: rgba(239, 68, 68, 0.1);
     border-color: rgba(239, 68, 68, 0.3);
-}
-
-.map-filter-toolbar {
-    display: flex;
-    gap: 6px;
-    padding: 4px;
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
 }
 
 .map-filter-toolbar-btn {
@@ -2916,6 +2928,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     display: flex;
     align-items: flex-start;
     gap: 8px;
+    flex-shrink: 0;
     margin: 0;
     padding: 10px 11px;
     font-size: 0.75rem;
@@ -3482,6 +3495,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
 .map-filter-save-start {
     margin: 0;
     padding-top: 2px;
+    flex-shrink: 0;
 }
 
 .map-filter-save-btn {
