@@ -334,6 +334,10 @@
                     try { window.applyGroupNames(msg.groupNames); } catch (e) {}
                     return;
                 }
+                if (msg.type === 'org_settings' && msg.settings && typeof window.applyOrgDisplaySettings === 'function') {
+                    try { window.applyOrgDisplaySettings(msg.settings); } catch (e) {}
+                    return;
+                }
                 if (msg.type === 'chat' && msg.message && typeof window.orgChatOnMessage === 'function') {
                     try { window.orgChatOnMessage(msg.message); } catch (e) {}
                     return;

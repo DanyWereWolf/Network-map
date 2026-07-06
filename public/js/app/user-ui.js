@@ -589,6 +589,7 @@ function openUsersModal() {
     const modal = document.getElementById('usersModal');
     modal.style.display = 'block';
     renderUsersList();
+    loadOrgDisplayPanel();
     loadOrgSecurityPanel();
 }
 
@@ -596,6 +597,49 @@ var orgSecurityPendingSecret = '';
 
 function isOrgMapAdmin() {
     return !!(currentUser && currentUser.role === 'admin' && currentUser.organizationId);
+}
+
+function loadOrgDisplayPanel() {
+    var section = document.getElementById('orgDisplaySection');
+    var select = document.getElementById('orgCollaboratorCursorStyle');
+    if (!section || !select) return;
+    if (!isOrgMapAdmin() || !getApiBase()) {
+        section.style.display = 'none';
+        return;
+    }
+    section.style.display = 'block';
+    select.value = typeof window.getCollaboratorCursorStyle === 'function'
+        ? window.getCollaboratorCursorStyle()
+        : 'pointer';
+    fetch(getApiBase() + '/api/settings', {
+        headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+    }).then(function(r) { return r.json(); })
+    .then(function(body) {
+        if (body.error) throw new Error(body.error);
+        var style = body.collaboratorCursorStyle === 'circle' ? 'circle' : 'pointer';
+        select.value = style;
+        if (typeof window.applyCollaboratorCursorStyle === 'function') window.applyCollaboratorCursorStyle(style);
+    }).catch(function() {});
+}
+
+function saveOrgCollaboratorCursorStyle() {
+    var select = document.getElementById('orgCollaboratorCursorStyle');
+    if (!select || !getApiBase()) return;
+    var style = select.value === 'circle' ? 'circle' : 'pointer';
+    fetch(getApiBase() + '/api/settings', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + getAuthToken()
+        },
+        body: JSON.stringify({ collaboratorCursorStyle: style })
+    }).then(function(r) {
+        if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
+        if (typeof window.applyCollaboratorCursorStyle === 'function') window.applyCollaboratorCursorStyle(style);
+        if (typeof showSuccess === 'function') showSuccess('Настройка отображения сохранена');
+    }).catch(function(e) {
+        if (typeof showError === 'function') showError(e.message || 'Не удалось сохранить настройку');
+    });
 }
 
 function loadOrgSecurityPanel() {
@@ -1295,6 +1339,8 @@ function setupUsersModalHandlers() {
 
     var org2faSetupBtn = document.getElementById('org2faSetupBtn');
     if (org2faSetupBtn) org2faSetupBtn.addEventListener('click', startOrg2faSetup);
+    var orgCollaboratorCursorStyleSaveBtn = document.getElementById('orgCollaboratorCursorStyleSaveBtn');
+    if (orgCollaboratorCursorStyleSaveBtn) orgCollaboratorCursorStyleSaveBtn.addEventListener('click', saveOrgCollaboratorCursorStyle);
     var org2faEnableBtn = document.getElementById('org2faEnableBtn');
     if (org2faEnableBtn) org2faEnableBtn.addEventListener('click', enableOrg2fa);
     var org2faCancelSetupBtn = document.getElementById('org2faCancelSetupBtn');

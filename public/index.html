@@ -1586,6 +1586,25 @@
                 <span class="close-users">&times;</span>
             </div>
             <div class="modal-body">
+                <div id="orgDisplaySection" class="org-display-section" style="display: none;">
+                    <h3 class="section-title">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"></path>
+                            <path d="M13 13l6 6"></path>
+                        </svg>
+                        Отображение на карте
+                    </h3>
+                    <p class="hint org-display-hint">Как показывать курсоры коллег при совместной работе на карте.</p>
+                    <div class="form-group">
+                        <label for="orgCollaboratorCursorStyle">Курсоры участников</label>
+                        <select id="orgCollaboratorCursorStyle" class="form-select">
+                            <option value="pointer">Стрелка с подписью</option>
+                            <option value="circle">Круг с подписью</option>
+                        </select>
+                    </div>
+                    <button type="button" id="orgCollaboratorCursorStyleSaveBtn" class="btn-primary btn-sm">Сохранить</button>
+                </div>
+
                 <div id="orgSecuritySection" class="org-security-section" style="display: none;">
                     <h3 class="section-title">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

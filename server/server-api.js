@@ -232,9 +232,14 @@ function getSessionUser(req) {
 function canViewUserAvatar(viewer, targetUserId) {
     if (!viewer || targetUserId == null) return false;
     if (String(viewer.userId) === String(targetUserId)) return true;
-    if (viewer.role !== 'admin') return false;
     const users = db.getUsers();
+    const viewerUser = users.find(function(u) { return String(u.id) === String(viewer.userId); });
     const target = users.find(function(u) { return String(u.id) === String(targetUserId); });
+    if (viewerUser && target && viewerUser.organizationId && target.organizationId &&
+        String(viewerUser.organizationId) === String(target.organizationId)) {
+        return true;
+    }
+    if (viewer.role !== 'admin') return false;
     if (!target) return false;
     return canAdminManageUser(viewer, target);
 }
@@ -2203,6 +2208,9 @@ app.post('/api/settings', (req, res) => {
             delete toSave.mapStart;
         }
         if (Object.keys(toSave).length > 0) db.setSettings(toSave, orgId || undefined);
+        if (toSave.collaboratorCursorStyle !== undefined && orgId) {
+            broadcastOrgSettings(orgId, { collaboratorCursorStyle: db.getSettings(orgId).collaboratorCursorStyle });
+        }
         res.json({ ok: true });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
@@ -3087,6 +3095,24 @@ function scheduleCursorsBroadcast() {
     }, CURSORS_BROADCAST_THROTTLE_MS - elapsed);
 }
 
+function resolveCursorAvatarUrl(userId) {
+    if (userId == null) return null;
+    var users = db.getUsers();
+    var u = users.find(function(x) { return String(x.id) === String(userId); });
+    if (!u) return null;
+    return avatars.getAvatarApiPath(u.id, u.avatarUpdatedAt);
+}
+
+function broadcastOrgSettings(orgId, settings) {
+    if (!orgId || !settings || typeof settings !== 'object') return;
+    const payload = JSON.stringify({ type: 'org_settings', settings: settings });
+    wss.clients.forEach(client => {
+        if (client.readyState !== WebSocket.OPEN) return;
+        if (!syncOrgIdsEqual(client.orgId, orgId)) return;
+        try { client.send(payload); } catch (e) {}
+    });
+}
+
 function broadcastCursors() {
     // Формируем курсоры отдельно по организациям и отправляем только соответствующим клиентам.
     const byOrg = {};
@@ -3100,6 +3126,7 @@ function broadcastCursors() {
             id: client.clientId,
             displayName: client.cursor.displayName,
             userId: client.cursor.userId,
+            avatarUrl: resolveCursorAvatarUrl(client.cursor.userId),
             position: client.cursor.position
         });
     });

@@ -620,6 +620,9 @@ function loadData() {
                 window._savedMapStart = s.mapStart;
                 applyMapStartFromSettings(s.mapStart, true);
             }
+            if (s.collaboratorCursorStyle && typeof applyCollaboratorCursorStyle === 'function') {
+                applyCollaboratorCursorStyle(s.collaboratorCursorStyle);
+            }
         }).catch(function() {});
     })();
     setTimeout(function() {
@@ -648,7 +651,32 @@ window.showSyncRequiredOverlay = showSyncRequiredOverlay;
 window.hideSyncRequiredOverlay = hideSyncRequiredOverlay;
 
 var COLLABORATOR_CURSOR_COLORS = ['#3b82f6', '#22c55e', '#eab308', '#ef4444', '#8b5cf6', '#ec4899'];
-var COLLABORATOR_CURSOR_HOTSPOT = [2, 2];
+var collaboratorCursorStyle = 'pointer';
+var _lastCollaboratorCursorsPayload = null;
+
+function normalizeCollaboratorCursorStyle(value) {
+    return value === 'circle' ? 'circle' : 'pointer';
+}
+
+function getCollaboratorCursorStyle() {
+    return collaboratorCursorStyle;
+}
+window.getCollaboratorCursorStyle = getCollaboratorCursorStyle;
+
+function applyCollaboratorCursorStyle(style) {
+    var next = normalizeCollaboratorCursorStyle(style);
+    if (next === collaboratorCursorStyle) return;
+    collaboratorCursorStyle = next;
+    if (collaboratorCursorsPlacemarks.length) collaboratorCursorsPlacemarks._ids = '';
+    if (_lastCollaboratorCursorsPayload) applyCollaboratorCursorsNow(_lastCollaboratorCursorsPayload);
+}
+window.applyCollaboratorCursorStyle = applyCollaboratorCursorStyle;
+
+function applyOrgDisplaySettings(settings) {
+    if (!settings || settings.collaboratorCursorStyle === undefined) return;
+    applyCollaboratorCursorStyle(settings.collaboratorCursorStyle);
+}
+window.applyOrgDisplaySettings = applyOrgDisplaySettings;
 
 function truncateCollaboratorName(name) {
     var s = (name || 'Участник').toString().trim();
@@ -664,21 +692,141 @@ function escapeSvgText(text) {
         .replace(/"/g, '&quot;');
 }
 
-function buildCollaboratorCursorIcon(color, name) {
-    var label = truncateCollaboratorName(name);
+function escapeSvgAttr(text) {
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;');
+}
+
+function getCollaboratorAvatarPath(cursor) {
+    if (cursor && cursor.avatarUrl) return cursor.avatarUrl;
+    if (!cursor || cursor.userId == null || typeof AuthSystem === 'undefined' || !AuthSystem.getUsers) return '';
+    var users = AuthSystem.getUsers();
+    var u = users.find(function(x) { return String(x.id) === String(cursor.userId); });
+    return (u && u.avatarUrl) ? u.avatarUrl : '';
+}
+
+function getCollaboratorAvatarImageUrl(avatarPath) {
+    if (!avatarPath) return '';
+    if (typeof getAvatarImageSrc === 'function') return getAvatarImageSrc(avatarPath);
+    var base = (typeof getApiBase === 'function' ? getApiBase() : '') || '';
+    var path = avatarPath.charAt(0) === '/' ? avatarPath : '/' + avatarPath;
+    var url = base ? (base.replace(/\/$/, '') + path) : path;
+    var token = typeof getAuthToken === 'function' ? getAuthToken() : '';
+    if (token) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(token);
+    return url;
+}
+
+var _collaboratorAvatarDataCache = {};
+var _collaboratorCursorsApplyGen = 0;
+
+function loadCollaboratorAvatarDataUrl(avatarPath) {
+    var imageUrl = getCollaboratorAvatarImageUrl(avatarPath);
+    if (!imageUrl) return Promise.resolve('');
+    if (_collaboratorAvatarDataCache[imageUrl]) return _collaboratorAvatarDataCache[imageUrl];
+    _collaboratorAvatarDataCache[imageUrl] = fetch(imageUrl)
+        .then(function(r) { if (!r.ok) throw new Error('avatar'); return r.blob(); })
+        .then(function(blob) {
+            return new Promise(function(resolve, reject) {
+                var reader = new FileReader();
+                reader.onload = function() { resolve(reader.result || ''); };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        })
+        .catch(function() {
+            delete _collaboratorAvatarDataCache[imageUrl];
+            return '';
+        });
+    return _collaboratorAvatarDataCache[imageUrl];
+}
+
+function buildCollaboratorNameLabelSvg(color, label, y) {
     var labelW = Math.min(120, Math.max(40, Math.round(label.length * 6.8 + 12)));
-    var width = Math.max(24, labelW);
+    return {
+        labelW: labelW,
+        svg: '<rect x="0" y="' + y + '" width="' + labelW + '" height="18" rx="4" fill="rgba(15,23,42,0.88)"/>' +
+            '<rect x="0" y="' + y + '" width="' + labelW + '" height="18" rx="4" fill="none" stroke="' + color + '" stroke-width="1.5"/>' +
+            '<text x="' + (labelW / 2) + '" y="' + (y + 12.5) + '" text-anchor="middle" dominant-baseline="middle" fill="#ffffff" font-size="11" font-weight="600" font-family="DM Sans, system-ui, sans-serif">' + escapeSvgText(label) + '</text>'
+    };
+}
+
+function buildCollaboratorPointerIcon(color, name) {
+    var label = truncateCollaboratorName(name);
+    var labelBlock = buildCollaboratorNameLabelSvg(color, label, 30);
+    var width = Math.max(24, labelBlock.labelW);
     var height = 48;
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '">' +
         '<path d="M2 2v19l5.2-4.1 3.3 6.3 2.8-1.6-3.1-5.7h6.8z" fill="' + color + '" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round"/>' +
-        '<rect x="0" y="30" width="' + labelW + '" height="18" rx="4" fill="rgba(15,23,42,0.88)"/>' +
-        '<rect x="0" y="30" width="' + labelW + '" height="18" rx="4" fill="none" stroke="' + color + '" stroke-width="1.5"/>' +
-        '<text x="' + (labelW / 2) + '" y="42.5" text-anchor="middle" dominant-baseline="middle" fill="#ffffff" font-size="11" font-weight="600" font-family="DM Sans, system-ui, sans-serif">' + escapeSvgText(label) + '</text>' +
+        labelBlock.svg +
         '</svg>';
     return {
         svg: svg,
-        size: [width, height]
+        size: [width, height],
+        hotspot: [2, 2]
     };
+}
+
+function buildCollaboratorCircleIcon(color, name, avatarDataUrl) {
+    var label = truncateCollaboratorName(name);
+    var initial = ((name || 'Участник').toString().trim() || 'Участник').charAt(0).toUpperCase();
+    var labelBlock = buildCollaboratorNameLabelSvg(color, label, 30);
+    var width = Math.max(28, labelBlock.labelW);
+    var height = 48;
+    var circleContent;
+    if (avatarDataUrl) {
+        circleContent = '<defs><clipPath id="av"><circle cx="14" cy="14" r="11"/></clipPath></defs>' +
+            '<circle cx="14" cy="14" r="12" fill="' + color + '" stroke="#ffffff" stroke-width="2"/>' +
+            '<image href="' + escapeSvgAttr(avatarDataUrl) + '" x="3" y="3" width="22" height="22" clip-path="url(#av)" preserveAspectRatio="xMidYMid slice"/>';
+    } else {
+        circleContent = '<circle cx="14" cy="14" r="12" fill="' + color + '" stroke="#ffffff" stroke-width="2"/>' +
+            '<text x="14" y="18" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="bold" font-family="DM Sans, system-ui, sans-serif">' + escapeSvgText(initial) + '</text>';
+    }
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '">' +
+        circleContent +
+        labelBlock.svg +
+        '</svg>';
+    return {
+        svg: svg,
+        size: [width, height],
+        hotspot: [14, 14]
+    };
+}
+
+function prepareCollaboratorCursorIcon(cursor, idx, style) {
+    var color = COLLABORATOR_CURSOR_COLORS[idx % COLLABORATOR_CURSOR_COLORS.length];
+    var name = (cursor.displayName || 'Участник').toString().trim();
+    if (normalizeCollaboratorCursorStyle(style) !== 'circle') {
+        return Promise.resolve(buildCollaboratorPointerIcon(color, name));
+    }
+    var avatarPath = getCollaboratorAvatarPath(cursor);
+    if (!avatarPath) return Promise.resolve(buildCollaboratorCircleIcon(color, name, ''));
+    return loadCollaboratorAvatarDataUrl(avatarPath).then(function(dataUrl) {
+        return buildCollaboratorCircleIcon(color, name, dataUrl);
+    });
+}
+
+function buildCollaboratorCursorIcon(color, name, style, avatarDataUrl) {
+    if (normalizeCollaboratorCursorStyle(style) === 'circle') return buildCollaboratorCircleIcon(color, name, avatarDataUrl || '');
+    return buildCollaboratorPointerIcon(color, name);
+}
+
+function createCollaboratorCursorPlacemark(pos, name, icon) {
+    var dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(icon.svg)));
+    var pm = new ymaps.Placemark(pos, {
+        hintContent: name
+    }, {
+        iconLayout: 'default#image',
+        iconImageHref: dataUrl,
+        iconImageSize: icon.size,
+        iconImageOffset: [-icon.hotspot[0], -icon.hotspot[1]],
+        zIndex: 9998,
+        cursor: 'default',
+        interactive: false,
+        interactivityModel: 'default#transparent'
+    });
+    pm._lastCursorPos = [pos[0], pos[1]];
+    return pm;
 }
 
 var _pendingCollaboratorCursors = null;
@@ -692,16 +840,21 @@ function cursorPositionsEqual(a, b) {
 
 function applyCollaboratorCursorsNow(cursors) {
     if (!myMap || !myMap.geoObjects) return;
+    _lastCollaboratorCursorsPayload = cursors;
+    var style = getCollaboratorCursorStyle();
     if (!cursors || cursors.length === 0) {
         collaboratorCursorsPlacemarks.forEach(function(pm) {
             try { myMap.geoObjects.remove(pm); } catch (e) {}
         });
         collaboratorCursorsPlacemarks = [];
+        collaboratorCursorsPlacemarks._style = style;
         return;
     }
-    var ids = cursors.map(function(c) { return c.id; }).join(',');
+    var ids = cursors.map(function(c) {
+        return c.id + ':' + (c.avatarUrl || getCollaboratorAvatarPath(c) || '');
+    }).join(',');
     var prevIds = collaboratorCursorsPlacemarks.length ? (collaboratorCursorsPlacemarks._ids || '') : '';
-    if (ids === prevIds && collaboratorCursorsPlacemarks.length === cursors.length) {
+    if (ids === prevIds && collaboratorCursorsPlacemarks.length === cursors.length && collaboratorCursorsPlacemarks._style === style) {
         cursors.forEach(function(c, idx) {
             var pos = c.position;
             if (!Array.isArray(pos) || pos.length < 2) return;
@@ -720,29 +873,31 @@ function applyCollaboratorCursorsNow(cursors) {
     });
     collaboratorCursorsPlacemarks = [];
     collaboratorCursorsPlacemarks._ids = ids;
-    cursors.forEach(function(c, idx) {
-        var pos = c.position;
-        if (!Array.isArray(pos) || pos.length < 2) return;
-        var color = COLLABORATOR_CURSOR_COLORS[idx % COLLABORATOR_CURSOR_COLORS.length];
-        var name = (c.displayName || 'Участник').toString().trim();
-        var icon = buildCollaboratorCursorIcon(color, name);
-        var dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(icon.svg)));
-        var pm = new ymaps.Placemark(pos, {
-            hintContent: name
-        }, {
-            iconLayout: 'default#image',
-            iconImageHref: dataUrl,
-            iconImageSize: icon.size,
-            iconImageOffset: [-COLLABORATOR_CURSOR_HOTSPOT[0], -COLLABORATOR_CURSOR_HOTSPOT[1]],
-            zIndex: 9998,
-            cursor: 'default',
-            interactive: false,
-            interactivityModel: 'default#transparent'
+    collaboratorCursorsPlacemarks._style = style;
+    var applyGen = ++_collaboratorCursorsApplyGen;
+    Promise.all(cursors.map(function(c, idx) {
+        return prepareCollaboratorCursorIcon(c, idx, style).then(function(icon) {
+            return { cursor: c, icon: icon };
         });
-        pm._lastCursorPos = [pos[0], pos[1]];
-        myMap.geoObjects.add(pm);
-        collaboratorCursorsPlacemarks.push(pm);
-    });
+    })).then(function(items) {
+        if (applyGen !== _collaboratorCursorsApplyGen) return;
+        if (!myMap || !myMap.geoObjects) return;
+        collaboratorCursorsPlacemarks.forEach(function(pm) {
+            try { myMap.geoObjects.remove(pm); } catch (e) {}
+        });
+        collaboratorCursorsPlacemarks = [];
+        collaboratorCursorsPlacemarks._ids = ids;
+        collaboratorCursorsPlacemarks._style = style;
+        items.forEach(function(item) {
+            if (!item || !item.icon || !item.cursor) return;
+            var pos = item.cursor.position;
+            if (!Array.isArray(pos) || pos.length < 2) return;
+            var name = (item.cursor.displayName || 'Участник').toString().trim();
+            var pm = createCollaboratorCursorPlacemark(pos, name, item.icon);
+            myMap.geoObjects.add(pm);
+            collaboratorCursorsPlacemarks.push(pm);
+        });
+    }).catch(function() {});
 }
 
 function flushPendingCollaboratorCursors() {

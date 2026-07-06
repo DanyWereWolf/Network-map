@@ -819,13 +819,16 @@ function getSettings(orgId) {
     let theme = getSetting('theme');
     let groupNames = getSetting('groupNames');
     let customDeviceOptions = getSetting('customDeviceOptions');
+    let collaboratorCursorStyle = 'pointer';
+    let byOrg = null;
     if (orgId) {
         const s = loadStore();
-        const byOrg = (s.settingsByOrg || {})[orgId];
+        byOrg = (s.settingsByOrg || {})[orgId];
         if (byOrg && typeof byOrg === 'object') {
             if (byOrg.theme !== undefined) theme = byOrg.theme;
             if (byOrg.groupNames !== undefined) groupNames = byOrg.groupNames;
             if (byOrg.customDeviceOptions !== undefined) customDeviceOptions = byOrg.customDeviceOptions;
+            if (byOrg.collaboratorCursorStyle !== undefined) collaboratorCursorStyle = byOrg.collaboratorCursorStyle;
         }
     }
     let parsedGroupNames = {};
@@ -843,8 +846,13 @@ function getSettings(orgId) {
     return {
         theme: theme || '',
         groupNames: parsedGroupNames,
-        customDeviceOptions: parsedCustomDevice
+        customDeviceOptions: parsedCustomDevice,
+        collaboratorCursorStyle: normalizeCollaboratorCursorStyle(collaboratorCursorStyle)
     };
+}
+
+function normalizeCollaboratorCursorStyle(value) {
+    return value === 'circle' ? 'circle' : 'pointer';
 }
 
 function setSettings(obj, orgId) {
@@ -856,6 +864,7 @@ function setSettings(obj, orgId) {
         if (obj.theme !== undefined) o.theme = obj.theme;
         if (obj.groupNames !== undefined) o.groupNames = typeof obj.groupNames === 'string' ? obj.groupNames : JSON.stringify(obj.groupNames);
         if (obj.customDeviceOptions !== undefined) o.customDeviceOptions = typeof obj.customDeviceOptions === 'string' ? obj.customDeviceOptions : JSON.stringify(obj.customDeviceOptions);
+        if (obj.collaboratorCursorStyle !== undefined) o.collaboratorCursorStyle = normalizeCollaboratorCursorStyle(obj.collaboratorCursorStyle);
         delete o.netboxConfig;
         saveStore();
         return;
