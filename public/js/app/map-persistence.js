@@ -648,6 +648,15 @@ window.showSyncRequiredOverlay = showSyncRequiredOverlay;
 window.hideSyncRequiredOverlay = hideSyncRequiredOverlay;
 
 var COLLABORATOR_CURSOR_COLORS = ['#3b82f6', '#22c55e', '#eab308', '#ef4444', '#8b5cf6', '#ec4899'];
+var COLLABORATOR_CURSOR_SIZE = [24, 28];
+var COLLABORATOR_CURSOR_HOTSPOT = [2, 2];
+
+function buildCollaboratorCursorSvg(color) {
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="' + COLLABORATOR_CURSOR_SIZE[0] + '" height="' + COLLABORATOR_CURSOR_SIZE[1] + '" viewBox="0 0 24 28">' +
+        '<path d="M2 2v19l5.2-4.1 3.3 6.3 2.8-1.6-3.1-5.7h6.8z" fill="' + color + '" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round"/>' +
+        '</svg>';
+}
+
 var _pendingCollaboratorCursors = null;
 var _collaboratorCursorsRaf = null;
 var _collaboratorCursorsRafPayload = null;
@@ -692,11 +701,7 @@ function applyCollaboratorCursorsNow(cursors) {
         if (!Array.isArray(pos) || pos.length < 2) return;
         var color = COLLABORATOR_CURSOR_COLORS[idx % COLLABORATOR_CURSOR_COLORS.length];
         var name = (c.displayName || 'Участник').toString().trim();
-        var initial = name.charAt(0).toUpperCase();
-        var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">' +
-            '<circle cx="14" cy="14" r="12" fill="' + color + '" stroke="white" stroke-width="2"/>' +
-            '<text x="14" y="18" text-anchor="middle" fill="white" font-size="12" font-weight="bold" font-family="sans-serif">' + initial + '</text>' +
-            '</svg>';
+        var svg = buildCollaboratorCursorSvg(color);
         var dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
         var pm = new ymaps.Placemark(pos, {
             balloonContent: name,
@@ -704,8 +709,8 @@ function applyCollaboratorCursorsNow(cursors) {
         }, {
             iconLayout: 'default#image',
             iconImageHref: dataUrl,
-            iconImageSize: [28, 28],
-            iconImageOffset: [-14, -14],
+            iconImageSize: COLLABORATOR_CURSOR_SIZE,
+            iconImageOffset: [-COLLABORATOR_CURSOR_HOTSPOT[0], -COLLABORATOR_CURSOR_HOTSPOT[1]],
             zIndex: 9998,
             cursor: 'default',
             interactive: false,
