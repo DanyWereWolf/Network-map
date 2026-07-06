@@ -128,6 +128,9 @@ function updateCrossDisplay(scope) {
         if (group.crosses.length === 1) {
             const cross = group.crosses[0];
             crossGroupPlacemarkByKey.delete(gKey);
+            if (typeof updateObjectLabel === 'function') {
+                updateObjectLabel(cross, cross.properties.get('name') || '');
+            }
             myMap.geoObjects.add(cross);
             const label = cross.properties.get('label');
             if (label) myMap.geoObjects.add(label);
@@ -394,6 +397,9 @@ function updateNodeDisplay(scope) {
         if (displayNodes.length === 1) {
             const node = displayNodes[0];
             nodeGroupPlacemarkByKey.delete(nKey);
+            if (typeof updateObjectLabel === 'function') {
+                updateObjectLabel(node, node.properties.get('name') || '');
+            }
             myMap.geoObjects.add(node);
             const label = node.properties.get('label');
             if (label) myMap.geoObjects.add(label);

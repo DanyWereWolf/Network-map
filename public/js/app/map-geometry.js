@@ -136,10 +136,12 @@ function setupRectSelection() {
         });
         counts.cable = selected.cables.length;
 
-        var typeNames = { cross: 'Кроссов', node: 'Узлов', sleeve: 'Муфт', support: 'Опор', attachment: 'Креплений', olt: 'OLT', splitter: 'Сплиттеров', onu: 'ONU', camera: 'Камер', mediaConverter: 'Медиаконв.', cable: 'Кабелей' };
         var parts = [];
         Object.keys(counts).sort().forEach(function(k) {
-            if (counts[k] > 0) parts.push(counts[k] + ' ' + (typeNames[k] || k));
+            if (counts[k] > 0) {
+                var label = typeof getObjectTypePluralLabel === 'function' ? getObjectTypePluralLabel(k) : k;
+                parts.push(counts[k] + ' ' + label);
+            }
         });
         panel.innerHTML = '<div style="font-size:0.875rem;color:var(--text-primary);margin-bottom:8px;">В выделенной области: ' + (parts.length ? parts.join(', ') : '—') + '</div>' +
             (isEditMode ? '<button type="button" class="btn-danger" id="rectSelectDeleteBtn" style="padding:8px 16px;font-size:0.875rem;">Удалить выделенное</button>' : '') +

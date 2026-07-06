@@ -457,7 +457,10 @@ function createObject(type, name, coords, options = {}) {
         }
         updateConnectedCables(placemark);
         const label = placemark.properties.get('label');
-        if (label) label.geometry.setCoordinates(placemark.geometry.getCoordinates());
+        if (label) {
+            label.geometry.setCoordinates(placemark.geometry.getCoordinates());
+            try { myMap.geoObjects.add(label); } catch (e) {}
+        }
         scheduleConnectionLinesUpdate();
         updateSelectionPulsePosition(placemark);
         if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(placemark);

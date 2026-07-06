@@ -44,3 +44,28 @@ function getObjectTypeName(type) {
         default: return 'Объект';
     }
 }
+
+/** Подпись типа для счётчиков («9 Кроссов», «12 Колодцев»). */
+function getObjectTypePluralLabel(type) {
+    switch (type) {
+        case 'support': return 'Опор';
+        case 'sleeve': return 'Муфт';
+        case 'spliceCassette': return 'Сплайс-кассет';
+        case 'cross': return 'Кроссов';
+        case 'node': return 'Узлов';
+        case 'attachment': return 'Креплений';
+        case 'manhole': return 'Колодцев';
+        case 'signalPost': return 'Столбов';
+        case 'cabinet': return 'Ящиков';
+        case 'olt': return 'OLT';
+        case 'splitter': return 'Сплиттеров';
+        case 'onu': return 'ONU';
+        case 'camera': return 'Камер';
+        case 'mediaConverter': return 'Медиаконв.';
+        case 'radioBridge': return 'Радиомостов';
+        case 'switch': return 'Коммутаторов';
+        case 'cable': return 'Кабелей';
+        case 'region': return 'Регионов';
+        default: return getObjectTypeName(type);
+    }
+}

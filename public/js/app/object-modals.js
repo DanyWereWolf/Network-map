@@ -4851,7 +4851,7 @@ function updateObjectLabel(placemark, name) {
     const coords = placemark.geometry.getCoordinates();
     
     if (!label) {
-        label = new ymaps.Placemark(coords, {}, {
+        label = new ymaps.Placemark(coords, { iconContent: labelHtml }, {
             iconLayout: 'default#imageWithContent',
             iconImageHref: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==',
             iconImageSize: [1, 1],
@@ -4866,9 +4866,8 @@ function updateObjectLabel(placemark, name) {
         });
         placemark.properties.set('label', label);
     } else {
-        label.properties.set({
-            iconContent: labelHtml
-        });
+        label.properties.set({ iconContent: labelHtml });
+        try { label.options.set('iconContent', labelHtml); } catch (eLbl) {}
         label.geometry.setCoordinates(coords);
     }
 }
