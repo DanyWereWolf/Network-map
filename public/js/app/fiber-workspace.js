@@ -2478,26 +2478,37 @@ function svgElementToCanvas(svgEl, scale, opts) {
     var bgRect = clone.querySelector('.fiber-scheme-bg');
     if (bgRect) bgRect.setAttribute('fill', bg);
     var svgData = new XMLSerializer().serializeToString(clone);
+    var sources = [
+        'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgData)
+    ];
     var svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-    var url = URL.createObjectURL(svgBlob);
+    var blobUrl = URL.createObjectURL(svgBlob);
+    sources.push(blobUrl);
     return new Promise(function(resolve, reject) {
-        var img = new Image();
-        img.onload = function() {
-            var canvas = document.createElement('canvas');
-            canvas.width = Math.max(1, Math.round(svgW * scale));
-            canvas.height = Math.max(1, Math.round(svgH * scale));
-            var ctx = canvas.getContext('2d');
-            ctx.fillStyle = bg;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            URL.revokeObjectURL(url);
-            resolve(canvas);
-        };
-        img.onerror = function() {
-            URL.revokeObjectURL(url);
-            reject(new Error('svg-render-failed'));
-        };
-        img.src = url;
+        function renderFromSource(index) {
+            if (index >= sources.length) {
+                URL.revokeObjectURL(blobUrl);
+                reject(new Error('svg-render-failed'));
+                return;
+            }
+            var img = new Image();
+            img.onload = function() {
+                var canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.round(svgW * scale));
+                canvas.height = Math.max(1, Math.round(svgH * scale));
+                var ctx = canvas.getContext('2d');
+                ctx.fillStyle = bg;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                URL.revokeObjectURL(blobUrl);
+                resolve(canvas);
+            };
+            img.onerror = function() {
+                renderFromSource(index + 1);
+            };
+            img.src = sources[index];
+        }
+        renderFromSource(0);
     });
 }
 
@@ -2547,7 +2558,8 @@ async function exportFiberSchemeToPdf(hostObj) {
         var margin = 28;
         var schemeMargin = 12;
         var y = margin;
-        var schemeImgData = schemeCanvas.toDataURL('image/png');
+        var schemeImgData = canvasToPngDataUrl(schemeCanvas);
+        if (!schemeImgData) throw new Error('scheme-canvas-export-failed');
         var exportDate = new Date().toLocaleString();
         var statsLine = 'Кабелей: ' + cables.length + ' | Сращений: ' + exportSplices.length +
             ' | Подключений: ' + exportConnections.length +
@@ -2649,6 +2661,7 @@ async function exportFiberSchemeToPdf(hostObj) {
         }
         return true;
     } catch (eExport) {
+        console.error('Fiber scheme PDF export failed:', eExport);
         if (typeof showError === 'function') showError('Не удалось сформировать PDF схемы сварки жил.', 'Экспорт');
         return false;
     } finally {

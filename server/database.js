@@ -250,6 +250,29 @@ function getDb() {
     };
 }
 
+function isValidUserEmail(email) {
+    if (!email || typeof email !== 'string') return false;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+function backfillUserEmails() {
+    const s = loadStore();
+    if (!Array.isArray(s.users) || !Array.isArray(s.organizations)) return;
+    let changed = false;
+    s.users.forEach(function(user) {
+        if (!user) return;
+        if (isValidUserEmail(user.email)) return;
+        if (user.organizationId) {
+            const org = s.organizations.find(function(o) { return organizationIdsMatch(o.id, user.organizationId); });
+            if (org && isValidUserEmail(org.contactEmail)) {
+                user.email = String(org.contactEmail).trim();
+                changed = true;
+            }
+        }
+    });
+    if (changed) saveStore();
+}
+
 function initSchema() {
     const s = loadStore();
     if (!Array.isArray(s.mapData)) s.mapData = [];
@@ -264,6 +287,7 @@ function initSchema() {
     if (!Array.isArray(s.pricingPlans)) s.pricingPlans = [];
     if (!Array.isArray(s.visitLogs)) s.visitLogs = [];
     if (!Array.isArray(s.supportThreads)) s.supportThreads = [];
+    backfillUserEmails();
     saveStore();
 }
 
@@ -665,7 +689,16 @@ function updateOrganization(orgId, updates) {
         }
     }
     if (updates.status !== undefined) s.organizations[idx].status = updates.status;
-    if (updates.contactEmail !== undefined) s.organizations[idx].contactEmail = String(updates.contactEmail).trim();
+    if (updates.contactEmail !== undefined) {
+        s.organizations[idx].contactEmail = String(updates.contactEmail).trim();
+        if (isValidUserEmail(s.organizations[idx].contactEmail)) {
+            (s.users || []).forEach(function(u) {
+                if (u && organizationIdsMatch(u.organizationId, orgId) && !isValidUserEmail(u.email)) {
+                    u.email = s.organizations[idx].contactEmail;
+                }
+            });
+        }
+    }
     if (updates.maxConcurrentUsers !== undefined) {
         if (updates.maxConcurrentUsers === null || updates.maxConcurrentUsers === '') {
             s.organizations[idx].maxConcurrentUsers = null;

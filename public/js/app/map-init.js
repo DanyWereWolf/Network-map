@@ -472,6 +472,7 @@ function setupEventListeners() {
     // Обновляем видимость по зуму и (при большой карте) по viewport при панорамировании.
     // Во время жеста (зум + перетаскивание) тяжёлый applyMapFilter не запускаем — иначе карта подвисает.
     let expertLastZoom = (typeof myMap.getZoom === 'function') ? myMap.getZoom() : null;
+    let expertPrevZoom = expertLastZoom;
     let mapBoundsChangeTimer = null;
     let mapBoundsChangePending = false;
     let mapBoundsChangeZoomPending = false;
@@ -483,14 +484,20 @@ function setupEventListeners() {
         var zoomPending = mapBoundsChangeZoomPending;
         mapBoundsChangeZoomPending = false;
         try {
-            if (zoomPending) {
+            var currentZoom = (typeof myMap.getZoom === 'function') ? myMap.getZoom() : null;
+            var lowZoom = typeof currentZoom === 'number' && currentZoom < 16;
+            if (zoomPending && lowZoom && typeof applyLowZoomMapUpdate === 'function') {
+                applyLowZoomMapUpdate();
+            } else if (zoomPending) {
                 if (typeof applyMapFilter === 'function') applyMapFilter();
             } else if (typeof applyMapViewportUpdate === 'function') {
                 applyMapViewportUpdate();
             } else if (typeof applyMapFilter === 'function') {
                 applyMapFilter();
             }
-            if (zoomPending && window.MapRegions && MapRegions.rebuildAllRegionLabels && myMap) {
+            if (zoomPending && window.MapRegions && MapRegions.rebuildAllRegionLabels && myMap &&
+                typeof regionZoomLabelRebuildNeeded === 'function' &&
+                regionZoomLabelRebuildNeeded(expertPrevZoom, currentZoom)) {
                 MapRegions.rebuildAllRegionLabels(myMap, objects);
             }
         } catch (eFlush) {}
@@ -543,6 +550,7 @@ function setupEventListeners() {
             var virtualization = typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization();
             if (!viewportCull && !virtualization && !zoomChanged) return;
 
+            expertPrevZoom = expertLastZoom;
             expertLastZoom = z;
 
             if (window.mapUserGestureActive) {

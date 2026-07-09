@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const path = require('path');
 const os = require('os');
+const fs = require('fs');
 const cors = require('cors');
 const WebSocket = require('ws');
 const ROOT_DIR = path.join(__dirname, '..');
@@ -1220,6 +1221,7 @@ async function handleAuthRegister(req, res, body) {
         password: await passwords.hashPassword(password),
         fullName: fullName || username,
         full_name: fullName || username,
+        email: String(contactEmail).trim(),
         // Администратор карты для своей организации (но не глобальный админ панели)
         role: 'admin',
         status: organizationId ? 'approved' : 'pending',
@@ -1263,6 +1265,7 @@ app.post('/api/auth/forgot-password', function(req, res) {
     }
     var email = passwordReset.resolveUserEmail(user, serverConfig);
     if (!email) {
+        console.warn('[Auth] forgot-password: у пользователя', user.id, '(' + user.username + ') нет e-mail для отправки');
         return res.json({ success: true, message: PASSWORD_RESET_GENERIC_MSG });
     }
     var token = passwordReset.createResetToken(user.id);
@@ -1276,10 +1279,19 @@ app.post('/api/auth/forgot-password', function(req, res) {
     }).then(function(result) {
         if (!result.ok) {
             console.error('[Auth] forgot-password mail failed for user', user.id, 'to', email, '-', result.error || 'unknown');
-        } else {
-            console.log('[Auth] forgot-password mail sent for user', user.id, 'to', email);
+            return res.status(503).json({
+                success: false,
+                error: result.error || 'Не удалось отправить письмо. Попробуйте позже или обратитесь в поддержку.'
+            });
         }
+        console.log('[Auth] forgot-password mail sent for user', user.id, 'to', email);
         return res.json({ success: true, message: PASSWORD_RESET_GENERIC_MSG });
+    }).catch(function(err) {
+        console.error('[Auth] forgot-password error for user', user.id, '-', err && err.message ? err.message : err);
+        return res.status(503).json({
+            success: false,
+            error: 'Не удалось отправить письмо. Попробуйте позже или обратитесь в поддержку.'
+        });
     });
 });
 
@@ -1502,7 +1514,7 @@ app.put('/api/users/:userId', async (req, res) => {
     const admin = getSessionUser(req);
     if (!admin || admin.role !== 'admin') return res.status(403).json({ error: 'Только администратор' });
     const userId = req.params.userId;
-    const { fullName, role, password, organizationId } = req.body || {};
+    const { fullName, role, password, organizationId, email } = req.body || {};
     const users = db.getUsers();
     const i = users.findIndex(u => u.id === userId);
     if (i === -1) return res.status(404).json({ error: 'Пользователь не найден' });
@@ -1522,6 +1534,13 @@ app.put('/api/users/:userId', async (req, res) => {
 
     if (targetIsMainAdmin && role !== undefined && role !== 'admin') return res.status(400).json({ error: 'Нельзя снять роль администратора с главного администратора' });
     if (fullName !== undefined) { users[i].fullName = fullName; users[i].full_name = fullName; }
+    if (email !== undefined) {
+        var emailTrim = String(email).trim();
+        if (emailTrim && !passwordReset.isValidEmail(emailTrim)) {
+            return res.status(400).json({ error: 'Укажите корректный e-mail' });
+        }
+        users[i].email = emailTrim || null;
+    }
     if (role !== undefined) users[i].role = role;
     if (password && String(password).length >= 6) {
         try {
@@ -1568,7 +1587,7 @@ app.delete('/api/users/:userId', (req, res) => {
 app.post('/api/users', async (req, res) => {
     const admin = getSessionUser(req);
     if (!admin || admin.role !== 'admin') return res.status(403).json({ error: 'Только администратор' });
-    const { username, password, fullName, role, organizationId } = req.body || {};
+    const { username, password, fullName, role, organizationId, email } = req.body || {};
     if (!username || username.length < 3) return res.status(400).json({ error: 'Имя не менее 3 символов' });
     if (!password || password.length < 6) return res.status(400).json({ error: 'Пароль не менее 6 символов' });
     var resolvedOrgId = organizationId || null;
@@ -1586,6 +1605,15 @@ app.post('/api/users', async (req, res) => {
     } catch (e) {
         return res.status(500).json({ error: 'Не удалось сохранить пароль' });
     }
+    var resolvedEmail = '';
+    if (email && passwordReset.isValidEmail(String(email))) {
+        resolvedEmail = String(email).trim();
+    } else if (resolvedOrgId) {
+        var orgForEmail = db.getOrganization(resolvedOrgId);
+        if (orgForEmail && orgForEmail.contactEmail && passwordReset.isValidEmail(orgForEmail.contactEmail)) {
+            resolvedEmail = String(orgForEmail.contactEmail).trim();
+        }
+    }
     const newUser = {
         id: 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
         username: username,
@@ -1597,6 +1625,7 @@ app.post('/api/users', async (req, res) => {
         organizationId: resolvedOrgId,
         createdAt: new Date().toISOString()
     };
+    if (resolvedEmail) newUser.email = resolvedEmail;
     users.push(newUser);
     db.setUsers(users);
     res.json({ ok: true, user: { id: newUser.id, username: newUser.username } });
@@ -2267,6 +2296,50 @@ app.get('/api/health', (req, res) => res.json({ ok: true, db: 'sqlite' }));
 
 const DEFAULT_PUBLIC_SITE_URL = 'https://volsmap.ru';
 
+const PDF_FONT_ROOT_CANDIDATES = [
+    path.join(ROOT_DIR, 'TILDASANS-VF_5.TTF'),
+    path.join(ROOT_DIR, 'TildaSans-VF_5.ttf'),
+    path.join(ROOT_DIR, 'NotoSans-Regular.ttf')
+];
+
+function resolvePdfFontPath() {
+    const publicFontsDir = path.join(PUBLIC_DIR, 'fonts');
+    const publicCandidates = PDF_FONT_ROOT_CANDIDATES.map(function(p) {
+        return path.join(publicFontsDir, path.basename(p));
+    });
+    const candidates = publicCandidates.concat(PDF_FONT_ROOT_CANDIDATES);
+    for (let i = 0; i < candidates.length; i++) {
+        if (fs.existsSync(candidates[i])) return candidates[i];
+    }
+    return null;
+}
+
+function ensurePdfFontDeployed() {
+    let source = null;
+    for (let i = 0; i < PDF_FONT_ROOT_CANDIDATES.length; i++) {
+        if (fs.existsSync(PDF_FONT_ROOT_CANDIDATES[i])) {
+            source = PDF_FONT_ROOT_CANDIDATES[i];
+            break;
+        }
+    }
+    if (!source) return;
+    try {
+        const fontDir = path.join(PUBLIC_DIR, 'fonts');
+        fs.mkdirSync(fontDir, { recursive: true });
+        const baseName = path.basename(source);
+        const dest = path.join(fontDir, baseName);
+        if (!fs.existsSync(dest)) fs.copyFileSync(source, dest);
+        const canonical = path.join(fontDir, 'TILDASANS-VF_5.TTF');
+        if (baseName !== 'TILDASANS-VF_5.TTF' && !fs.existsSync(canonical)) {
+            fs.copyFileSync(source, canonical);
+        }
+    } catch (eFont) {
+        console.warn('[PDF] Не удалось скопировать шрифт в public/fonts:', eFont && eFont.message ? eFont.message : eFont);
+    }
+}
+
+ensurePdfFontDeployed();
+
 function getSiteBaseUrl(req) {
     const configured = serverConfig.publicSiteUrl || process.env.PUBLIC_SITE_URL || '';
     if (configured) return String(configured).trim().replace(/\/$/, '');
@@ -2328,25 +2401,49 @@ app.get('/api/public-stats', (req, res) => {
 });
 
 app.get('/api/pdf-font', (req, res) => {
-    const fs = require('fs');
-    const candidates = [
-        path.join(ROOT_DIR, 'TILDASANS-VF_5.TTF'),
-        path.join(ROOT_DIR, 'TildaSans-VF_5.ttf'),
-        path.join(ROOT_DIR, 'NotoSans-Regular.ttf')
-    ];
-    let fontPath = null;
-    for (let i = 0; i < candidates.length; i++) {
-        if (fs.existsSync(candidates[i])) {
-            fontPath = candidates[i];
-            break;
-        }
-    }
+    const fontPath = resolvePdfFontPath();
     if (!fontPath) {
-        return res.status(404).json({ error: 'PDF font not found in project root' });
+        return res.status(404).json({ error: 'PDF font not found' });
     }
     res.setHeader('Content-Type', 'font/ttf');
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.sendFile(fontPath);
+});
+
+app.get('/api/static-map-image', async (req, res) => {
+    const ll = String(req.query.ll || '').trim();
+    const size = String(req.query.size || '').trim();
+    const lang = String(req.query.lang || 'ru_RU').trim();
+    const zoomRaw = parseInt(String(req.query.z || '12'), 10);
+    const zoom = Number.isFinite(zoomRaw) ? Math.max(1, Math.min(17, zoomRaw)) : 12;
+    if (!/^\d+(\.\d+)?,\d+(\.\d+)?$/.test(ll)) {
+        return res.status(400).json({ error: 'Invalid ll parameter' });
+    }
+    if (!/^\d+,\d+$/.test(size)) {
+        return res.status(400).json({ error: 'Invalid size parameter' });
+    }
+    let url = 'https://static-maps.yandex.ru/1.x/?lang=' + encodeURIComponent(lang)
+        + '&ll=' + encodeURIComponent(ll)
+        + '&z=' + zoom
+        + '&l=map&size=' + encodeURIComponent(size);
+    const apiKey = String(serverConfig.yandexMapsApiKey || process.env.YANDEX_MAPS_API_KEY || '').trim();
+    if (apiKey && apiKey !== 'YOUR_YANDEX_MAPS_API_KEY') {
+        url += '&apikey=' + encodeURIComponent(apiKey);
+    }
+    try {
+        const upstream = await fetch(url, { redirect: 'follow' });
+        if (!upstream.ok) {
+            return res.status(502).json({ error: 'Static map upstream failed', status: upstream.status });
+        }
+        const contentType = upstream.headers.get('content-type') || 'image/png';
+        const buffer = Buffer.from(await upstream.arrayBuffer());
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'private, max-age=300');
+        res.send(buffer);
+    } catch (eMap) {
+        console.error('[PDF] static-map-image proxy failed:', eMap && eMap.message ? eMap.message : eMap);
+        res.status(502).json({ error: 'Static map proxy failed' });
+    }
 });
 
 // Лицевая страница по умолчанию — условия (pricing.html)

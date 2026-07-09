@@ -299,6 +299,7 @@
             zoom: zoom,
             hideLabels: typeof zoom === 'number' && zoom < 16,
             hideObjects: typeof zoom === 'number' && zoom < 16,
+            hideRegions: typeof zoom === 'number' && zoom < 10,
             showConnectionLines: connectionLinesVisibleAtZoom(zoom)
         };
     }
@@ -317,6 +318,7 @@
         if (isCabinetMember(obj)) return false;
         if (obj.properties.get('_mapFilterVisible') === false) return false;
         if (ctx.hideObjects && type !== 'region') return false;
+        if (ctx.hideRegions && type === 'region') return false;
         if (ctx.bounds && !isObjectInViewport(obj, ctx.bounds)) return false;
         return true;
     }
@@ -419,10 +421,31 @@
         if (uid) pinnedUids.delete(uid);
     }
 
+    function unmountNonRegionObjects(ctx) {
+        if (!global.myMap) return;
+        ctx = ctx || mountContext || buildDefaultMountContext();
+        var toUnmount = [];
+        mountedUids.forEach(function(uid) {
+            if (pinnedUids.has(uid)) return;
+            var obj = objectsById.get(uid);
+            if (!obj || isExternallyManagedMapObject(obj)) return;
+            var type = obj.properties && obj.properties.get('type');
+            if (type === 'region' && !ctx.hideRegions) return;
+            toUnmount.push(obj);
+        });
+        for (var i = 0; i < toUnmount.length; i++) unmountObject(toUnmount[i]);
+    }
+
     function syncViewportMounts(ctx) {
         if (!shouldUseVirtualization() || !global.myMap || !Array.isArray(global.objects)) return;
         mountContext = ctx || buildDefaultMountContext();
         ctx = mountContext;
+
+        if (ctx.hideObjects) {
+            unmountNonRegionObjects(ctx);
+            return;
+        }
+
         var bounds = ctx.bounds;
         if (!bounds) return;
 
@@ -570,6 +593,7 @@
         isMounted: isMounted,
         pinObject: pinObject,
         unpinObject: unpinObject,
+        unmountNonRegionObjects: unmountNonRegionObjects,
         syncViewportMounts: syncViewportMounts,
         scheduleSyncViewportMounts: scheduleSyncViewportMounts,
         adoptExistingGeoObjects: adoptExistingGeoObjects,

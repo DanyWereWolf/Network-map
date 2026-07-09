@@ -234,10 +234,9 @@ function applyExpertZoomVisibility() {
     var hideObjects = zoom < EXPERT_ZOOM_HIDE_OBJECTS_BELOW;
     if (!hideLabels && !hideObjects) return;
 
-    // Скрываем "подписи":
-    // - отдельные label-placemark'и, хранящиеся в obj.properties.get('label')
-    // - отдельные cableLabel-объекты (тип 'cableLabel')
-    if (hideLabels) {
+    var useVirtual = typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization && MapPerf.shouldUseVirtualization();
+
+    if (hideLabels && !useVirtual) {
         objects.forEach(function(obj) {
             if (!obj || !obj.properties || !obj.options) return;
             const type = obj.properties.get('type');
@@ -253,19 +252,28 @@ function applyExpertZoomVisibility() {
         });
     }
 
-    // Скрываем "объекты":
-    // - все placemark'и из массива objects (включая кабели)
-    // - group-placemark'и (nodeGroup/crossGroup)
     if (hideObjects) {
-        objects.forEach(function(obj) {
-            if (!obj || !obj.options) return;
-            if (obj.properties && obj.properties.get('type') === 'region') return;
-            try { obj.options.set('visible', false); } catch (e) {}
-            if (obj.properties && obj.properties.get('type') === 'cable' && window.CableUnderground) {
-                try { CableUnderground.setOverlaysVisible(obj, false); } catch (eUg) {}
-            }
-        });
-        setAllConnectionLinesVisible(false);
+        if (useVirtual) {
+            setAllConnectionLinesVisible(false);
+            objects.forEach(function(obj) {
+                if (!obj || !obj.properties || !obj.options) return;
+                var type = obj.properties.get('type');
+                if (type !== 'cross' && type !== 'node') return;
+                try {
+                    if (myMap.geoObjects.indexOf(obj) !== -1) obj.options.set('visible', false);
+                } catch (eCn) {}
+            });
+        } else {
+            objects.forEach(function(obj) {
+                if (!obj || !obj.options) return;
+                if (obj.properties && obj.properties.get('type') === 'region') return;
+                try { obj.options.set('visible', false); } catch (e) {}
+                if (obj.properties && obj.properties.get('type') === 'cable' && window.CableUnderground) {
+                    try { CableUnderground.setOverlaysVisible(obj, false); } catch (eUg) {}
+                }
+            });
+            setAllConnectionLinesVisible(false);
+        }
     }
 
     const crossPlacemarks = (typeof crossGroupPlacemarks !== 'undefined' && Array.isArray(crossGroupPlacemarks))
@@ -379,14 +387,45 @@ function buildMapMountContext() {
         zoom: zoomFlags.zoom,
         hideLabels: zoomFlags.hideLabels,
         hideObjects: zoomFlags.hideObjects,
+        hideRegions: typeof zoomFlags.zoom === 'number' && zoomFlags.zoom < EXPERT_ZOOM_HIDE_REGIONS_BELOW,
         showConnectionLines: typeof MapPerf !== 'undefined' && MapPerf.connectionLinesVisibleAtZoom
             ? MapPerf.connectionLinesVisibleAtZoom(zoomFlags.zoom) : (typeof zoomFlags.zoom !== 'number' || zoomFlags.zoom >= EXPERT_ZOOM_HIDE_OBJECTS_BELOW)
     };
 }
 
+function applyLowZoomMapUpdate() {
+    if (window._mapPdfExportCaptureActive) return;
+    if (!myMap || !objects) return;
+    var filter = typeof mapFilter !== 'undefined' && mapFilter ? mapFilter : getMapFilterState();
+    var zoomFlags = getExpertZoomFlags();
+    var mountCtx = buildMapMountContext();
+    if (typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization()) {
+        MapPerf.unmountNonRegionObjects(mountCtx);
+    }
+    applyConnectionLinesVisibility();
+    applyGroupPlacemarkFilterVisibility(filter, zoomFlags);
+    try { applyExpertZoomVisibility(); } catch (eLow) {}
+    try { applyCrossNodeLabelVisibility(filter, zoomFlags); } catch (eLowLbl) {}
+    try { applyRegionZoomVisibility(zoomFlags.zoom); } catch (eLowReg) {}
+}
+
+function regionZoomLabelRebuildNeeded(oldZoom, newZoom) {
+    if (typeof oldZoom !== 'number' || typeof newZoom !== 'number') return false;
+    return (oldZoom >= EXPERT_ZOOM_HIDE_REGIONS_BELOW && newZoom < EXPERT_ZOOM_HIDE_REGIONS_BELOW) ||
+        (oldZoom < EXPERT_ZOOM_HIDE_REGIONS_BELOW && newZoom >= EXPERT_ZOOM_HIDE_REGIONS_BELOW);
+}
+
 function applyMapViewportUpdate() {
     if (window._mapPdfExportCaptureActive) return;
     if (!myMap || !objects) return;
+    var zoomFlags = getExpertZoomFlags();
+    if (zoomFlags.hideObjects) {
+        applyLowZoomMapUpdate();
+        if (window.MapRegions && MapRegions.purgeOrphanRegionLabelDom) {
+            MapRegions.purgeOrphanRegionLabelDom();
+        }
+        return;
+    }
     applyConnectionLinesVisibility();
     if (typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization()) {
         MapPerf.syncViewportMounts(buildMapMountContext());
@@ -482,10 +521,19 @@ function applyMapFilter() {
 
     if (useVirtual) {
         var mountCtx = buildMapMountContext();
-        MapPerf.syncViewportMounts(mountCtx);
-        applyConnectionLinesVisibility();
-        try { applyExpertZoomVisibility(); } catch (eVirt) {}
-        try { applyCrossNodeLabelVisibility(filter, zoomFlags); } catch (eCnLbl2) {}
+        if (mountCtx.hideObjects) {
+            MapPerf.unmountNonRegionObjects(mountCtx);
+            applyConnectionLinesVisibility();
+            applyGroupPlacemarkFilterVisibility(filter, zoomFlags);
+            try { applyExpertZoomVisibility(); } catch (eVirtLow) {}
+            try { applyCrossNodeLabelVisibility(filter, zoomFlags); } catch (eCnLblLow) {}
+            try { applyRegionZoomVisibility(zoomFlags.zoom); } catch (eRegLow) {}
+        } else {
+            MapPerf.syncViewportMounts(mountCtx);
+            applyConnectionLinesVisibility();
+            try { applyExpertZoomVisibility(); } catch (eVirt) {}
+            try { applyCrossNodeLabelVisibility(filter, zoomFlags); } catch (eCnLbl2) {}
+        }
     } else {
         applyViewportCullToMap();
         applyConnectionLinesVisibility();

@@ -2716,10 +2716,25 @@ function uint8ToBase64(bytes) {
     var chunkSize = 0x8000;
     var binary = '';
     for (var i = 0; i < bytes.length; i += chunkSize) {
-        var chunk = bytes.subarray(i, i + chunkSize);
-        binary += String.fromCharCode.apply(null, chunk);
+        var end = Math.min(i + chunkSize, bytes.length);
+        for (var j = i; j < end; j++) {
+            binary += String.fromCharCode(bytes[j]);
+        }
     }
     return btoa(binary);
+}
+
+function canvasToPngDataUrl(canvas) {
+    if (!canvas) return null;
+    try {
+        return canvas.toDataURL('image/png');
+    } catch (eCanvas) {
+        return null;
+    }
+}
+
+function isCanvasExportable(canvas) {
+    return !!canvasToPngDataUrl(canvas);
 }
 
 async function ensurePdfUnicodeFont(doc) {
@@ -3473,9 +3488,24 @@ async function prepareMapDomForPdfCapture(mapEl) {
 }
 
 async function loadMapPdfImage(url) {
+    if (url && /^https?:\/\//i.test(url)) {
+        try {
+            var response = await fetch(url, { mode: 'cors', credentials: 'omit', cache: 'no-store' });
+            if (response.ok) {
+                var blob = await response.blob();
+                var objectUrl = URL.createObjectURL(blob);
+                try {
+                    return await loadMapPdfImage(objectUrl);
+                } finally {
+                    URL.revokeObjectURL(objectUrl);
+                }
+            }
+        } catch (eFetch) {}
+    }
     return new Promise(function(resolve, reject) {
         var img = new Image();
-        img.crossOrigin = 'anonymous';
+        var isBlob = url && String(url).indexOf('blob:') === 0;
+        if (!isBlob) img.crossOrigin = 'anonymous';
         img.onload = function() { resolve(img); };
         img.onerror = function() { reject(new Error('Image load failed')); };
         img.src = url;
@@ -3502,18 +3532,10 @@ async function captureYandexStaticMapSnapshot(bounds, mapEl) {
     var centerLon = (rect.minLon + rect.maxLon) / 2;
     var centerLat = (rect.minLat + rect.maxLat) / 2;
     var zoom = estimateZoomForMapBounds(rect, width, height);
-    var apiKey = '';
-    try {
-        var resp = await fetch('/api/public-config');
-        var config = await resp.json();
-        apiKey = config && config.yandexMapsApiKey ? String(config.yandexMapsApiKey).trim() : '';
-    } catch (eCfg) {}
-    var url = 'https://static-maps.yandex.ru/1.x/?lang=ru_RU&ll='
-        + centerLon.toFixed(6) + ',' + centerLat.toFixed(6)
-        + '&z=' + zoom + '&l=map&size=' + width + ',' + height;
-    if (apiKey && apiKey !== 'YOUR_YANDEX_MAPS_API_KEY') {
-        url += '&apikey=' + encodeURIComponent(apiKey);
-    }
+    var url = '/api/static-map-image?lang=ru_RU&ll='
+        + encodeURIComponent(centerLon.toFixed(6) + ',' + centerLat.toFixed(6))
+        + '&z=' + zoom
+        + '&size=' + encodeURIComponent(width + ',' + height);
     var img = await loadMapPdfImage(url);
     var canvas = document.createElement('canvas');
     canvas.width = width;
@@ -3858,7 +3880,9 @@ function addMapSnapshotsCompactToPdf(doc, snapshots, pageFormat, meta) {
         doc.setFontSize(8);
         doc.text(snapshot.caption, margin, top + 8);
     }
-    doc.addImage(canvas, 'PNG', imgX, imgY, imgW, imgH);
+    var pngData = canvasToPngDataUrl(canvas);
+    if (!pngData) throw new Error('canvas-export-failed');
+    doc.addImage(pngData, 'PNG', imgX, imgY, imgW, imgH);
 }
 
 function appendMapPdfReportTables(doc, data, helpers, fullData, listScopeLabel, compact) {
@@ -4043,6 +4067,29 @@ async function openPdfExportWindow(data, exportOptions) {
         return false;
     }
 
+    for (var snapIdx = 0; snapIdx < mapSnapshots.length; snapIdx++) {
+        if (!isCanvasExportable(mapSnapshots[snapIdx].canvas)) {
+            var snapBounds = mode === 'viewport' && viewportBounds
+                ? [[viewportBounds.minLat, viewportBounds.minLon], [viewportBounds.maxLat, viewportBounds.maxLon]]
+                : bounds;
+            if (snapBounds) {
+                try {
+                    var repairedCanvas = await captureYandexStaticMapSnapshot(snapBounds, mapEl);
+                    if (repairedCanvas && isCanvasExportable(repairedCanvas)) {
+                        mapSnapshots[snapIdx].canvas = repairedCanvas;
+                        mapSnapshots[snapIdx].caption = (mapSnapshots[snapIdx].caption || 'Карта') + ' (статическая)';
+                        showWarning('Снимок интерактивной карты не удалось встроить в PDF — добавлена статическая карта.', 'Экспорт');
+                        continue;
+                    }
+                } catch (eRepair) {
+                    console.error('PDF canvas repair failed:', eRepair);
+                }
+            }
+            showError('Не удалось встроить снимок карты в PDF (ограничения браузера). Попробуйте режим «Как на экране» или другой браузер.', 'Экспорт');
+            return false;
+        }
+    }
+
     var mapItems = Array.isArray(reportData) ? reportData : [];
     var cables = mapItems.filter(function(item) { return item && item.type === 'cable'; });
     var objectsOnly = mapItems.filter(function(item) {
@@ -4061,17 +4108,23 @@ async function openPdfExportWindow(data, exportOptions) {
         showWarning('Не удалось загрузить шрифт для кириллицы. Проверьте интернет — иначе текст в PDF может быть искажён.', 'Экспорт');
     }
 
-    addMapSnapshotsCompactToPdf(doc, mapSnapshots, pageFormat, {
-        titleLine: unicodeFontReady ? 'Отчёт по карте сети' : 'Network map report',
-        metaLine: metaLine
-    });
+    try {
+        addMapSnapshotsCompactToPdf(doc, mapSnapshots, pageFormat, {
+            titleLine: unicodeFontReady ? 'Отчёт по карте сети' : 'Network map report',
+            metaLine: metaLine
+        });
 
-    doc.addPage('a4', 'p');
-    var helpers = createMapPdfTextHelpers(doc, unicodeFontReady, true);
-    appendMapPdfReportTables(doc, reportData, helpers, data, listScopeLabel, true);
+        doc.addPage('a4', 'p');
+        var helpers = createMapPdfTextHelpers(doc, unicodeFontReady, true);
+        appendMapPdfReportTables(doc, reportData, helpers, data, listScopeLabel, true);
 
-    doc.save('network-map-export.pdf');
-    return true;
+        doc.save('network-map-export.pdf');
+        return true;
+    } catch (ePdf) {
+        console.error('PDF generation failed:', ePdf);
+        showError('Не удалось сформировать PDF. Попробуйте режим «Как на экране» или обновите страницу.', 'Экспорт');
+        return false;
+    }
 }
 
 function exportData(preferredFormat) {
