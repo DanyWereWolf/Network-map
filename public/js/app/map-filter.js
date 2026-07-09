@@ -431,6 +431,8 @@ function applyMapFilter() {
                 if (label && label.options) label.options.set('visible', visible);
                 var regionLabel = obj.properties.get('regionLabel');
                 if (regionLabel && regionLabel.options) regionLabel.options.set('visible', visible);
+            } else if (type === 'cross' || type === 'node') {
+                if (obj.options) obj.options.set('visible', visible);
             }
         } catch (e) {}
     });

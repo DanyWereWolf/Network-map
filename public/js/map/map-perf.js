@@ -303,11 +303,17 @@
         };
     }
 
+    function isExternallyManagedMapObject(obj) {
+        if (!obj || !obj.properties) return false;
+        var type = obj.properties.get('type');
+        return type === 'cross' || type === 'node';
+    }
+
     function shouldMountObject(obj, ctx) {
         if (!obj || !obj.properties) return false;
+        if (isExternallyManagedMapObject(obj)) return false;
         ctx = ctx || mountContext || buildDefaultMountContext();
         var type = obj.properties.get('type');
-        if (type === 'cross' || type === 'node') return false;
         if (isCabinetMember(obj)) return false;
         if (obj.properties.get('_mapFilterVisible') === false) return false;
         if (ctx.hideObjects && type !== 'region') return false;
@@ -351,6 +357,7 @@
 
     function unmountObject(obj) {
         if (!global.myMap || !obj) return;
+        if (isExternallyManagedMapObject(obj)) return;
         var uid = uidFromObj(obj);
         if (!uid || !mountedUids.has(uid)) return;
         if (pinnedUids.has(uid)) return;
@@ -450,7 +457,7 @@
             if (pinnedUids.has(uid)) return;
             if (!candidateSet.has(uid)) {
                 var obj = objectsById.get(uid);
-                if (obj) toUnmount.push(obj);
+                if (obj && !isExternallyManagedMapObject(obj)) toUnmount.push(obj);
             }
         });
         for (var ui = 0; ui < toUnmount.length; ui++) unmountObject(toUnmount[ui]);
@@ -458,7 +465,7 @@
         mountedUids.forEach(function(uid) {
             if (pinnedUids.has(uid)) return;
             var obj = objectsById.get(uid);
-            if (!obj) return;
+            if (!obj || isExternallyManagedMapObject(obj)) return;
             var label = obj.properties && obj.properties.get('label');
             if (!label) return;
             var showLabel = shouldShowLabelForObject(obj, ctx);
@@ -495,7 +502,7 @@
         mountedUids.clear();
         for (var i = 0; i < list.length; i++) {
             var obj = list[i];
-            if (!obj) continue;
+            if (!obj || isExternallyManagedMapObject(obj)) continue;
             try {
                 if (global.myMap.geoObjects.indexOf(obj) !== -1) {
                     var uid = uidFromObj(obj);
