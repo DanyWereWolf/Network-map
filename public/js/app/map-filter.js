@@ -319,7 +319,13 @@ function applyGroupPlacemarkFilterVisibility(filter, zoomFlags) {
         var v = filter.cross && !hideObjects;
         try { if (pm.options) pm.options.set('visible', v); } catch (e) {}
         var lbl = pm.properties && pm.properties.get('crossGroupLabel');
-        try { if (lbl && lbl.options) lbl.options.set('visible', v && !hideLabels); } catch (e) {}
+        if (lbl) {
+            var lblVisible = v && !hideLabels;
+            try {
+                if (lblVisible && myMap && myMap.geoObjects.indexOf(lbl) === -1) myMap.geoObjects.add(lbl);
+                if (lbl.options) lbl.options.set('visible', lblVisible);
+            } catch (eLbl) {}
+        }
     });
     nodeGroupPlacemarks.forEach(function(pm) {
         var visible = filter.node && !hideObjects;
@@ -329,7 +335,39 @@ function applyGroupPlacemarkFilterVisibility(filter, zoomFlags) {
         }
         try { if (pm.options) pm.options.set('visible', visible); } catch (e) {}
         var lbl = pm.properties && pm.properties.get('nodeGroupLabel');
-        try { if (lbl && lbl.options) lbl.options.set('visible', visible && !hideLabels); } catch (e) {}
+        if (lbl) {
+            var nodeLblVisible = visible && !hideLabels;
+            try {
+                if (nodeLblVisible && myMap && myMap.geoObjects.indexOf(lbl) === -1) myMap.geoObjects.add(lbl);
+                if (lbl.options) lbl.options.set('visible', nodeLblVisible);
+            } catch (eLbl) {}
+        }
+    });
+}
+
+function applyCrossNodeLabelVisibility(filter, zoomFlags) {
+    if (!myMap || !Array.isArray(objects)) return;
+    zoomFlags = zoomFlags || getExpertZoomFlags();
+    var hideLabels = zoomFlags.hideLabels;
+    var showCross = !filter || filter.cross !== false;
+    var showNode = !filter || filter.node !== false;
+    objects.forEach(function(obj) {
+        if (!obj || !obj.properties) return;
+        var type = obj.properties.get('type');
+        if (type !== 'cross' && type !== 'node') return;
+        var label = obj.properties.get('label');
+        if (!label) return;
+        var onMap = false;
+        try { onMap = myMap.geoObjects.indexOf(obj) !== -1; } catch (e) { onMap = false; }
+        if (!onMap) return;
+        var filterVisible = obj.properties.get('_mapFilterVisible');
+        var showLabel = filterVisible !== false && !hideLabels;
+        if (type === 'cross') showLabel = showLabel && showCross;
+        if (type === 'node') showLabel = showLabel && showNode;
+        try {
+            if (showLabel && myMap.geoObjects.indexOf(label) === -1) myMap.geoObjects.add(label);
+            if (label.options) label.options.set('visible', showLabel);
+        } catch (e2) {}
     });
 }
 
@@ -353,6 +391,9 @@ function applyMapViewportUpdate() {
     if (typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization()) {
         MapPerf.syncViewportMounts(buildMapMountContext());
         try { applyExpertZoomVisibility(); } catch (eExpVirt) {}
+        try {
+            applyCrossNodeLabelVisibility(typeof mapFilter !== 'undefined' ? mapFilter : getMapFilterState(), getExpertZoomFlags());
+        } catch (eCnLbl) {}
         try { applyRegionZoomVisibility(myMap.getZoom()); } catch (eReg) {}
     } else {
         applyViewportCullToMap();
@@ -444,10 +485,12 @@ function applyMapFilter() {
         MapPerf.syncViewportMounts(mountCtx);
         applyConnectionLinesVisibility();
         try { applyExpertZoomVisibility(); } catch (eVirt) {}
+        try { applyCrossNodeLabelVisibility(filter, zoomFlags); } catch (eCnLbl2) {}
     } else {
         applyViewportCullToMap();
         applyConnectionLinesVisibility();
         try { applyExpertZoomVisibility(); } catch (e) {}
+        try { applyCrossNodeLabelVisibility(filter, zoomFlags); } catch (eCnLbl3) {}
     }
     if (window.MapRegions && MapRegions.purgeOrphanRegionLabelDom) {
         MapRegions.purgeOrphanRegionLabelDom();

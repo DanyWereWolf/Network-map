@@ -1574,7 +1574,15 @@ function ensureNodeLabelsVisible() {
             const name = obj.properties.get('name') || '';
             updateObjectLabel(obj, name);
             var label = obj.properties.get('label');
-            if (label && !hideLabels && (!myMap.geoObjects.indexOf || myMap.geoObjects.indexOf(label) === -1)) {
+            if (label && !hideLabels) {
+                if (type === 'cross' || type === 'node') {
+                    try {
+                        if (myMap.geoObjects.indexOf(obj) !== -1 && myMap.geoObjects.indexOf(label) === -1) {
+                            myMap.geoObjects.add(label);
+                        }
+                    } catch (eCn) {}
+                    return;
+                }
                 if (typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization && MapPerf.shouldUseVirtualization()) {
                     if (typeof MapPerf.shouldMountObject === 'function' && !MapPerf.shouldMountObject(obj)) return;
                 }
