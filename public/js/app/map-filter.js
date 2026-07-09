@@ -223,6 +223,7 @@ function applyConnectionLinesMapStyle() {
 }
 
 function applyExpertZoomVisibility() {
+    if (window._mapPdfExportCaptureActive) return;
     if (!myMap || typeof myMap.getZoom !== 'function') return;
     if (!Array.isArray(objects)) return;
 
@@ -301,10 +302,41 @@ function applyExpertZoomVisibility() {
     applyRegionZoomVisibility(zoom);
 }
 
+function buildMapMountContext() {
+    var zoom = (myMap && typeof myMap.getZoom === 'function') ? myMap.getZoom() : 16;
+    var bounds = (typeof MapPerf !== 'undefined' && MapPerf.getExpandedBounds) ? MapPerf.getExpandedBounds(myMap) : null;
+    return {
+        bounds: bounds,
+        zoom: zoom,
+        hideLabels: typeof zoom === 'number' && zoom < EXPERT_ZOOM_HIDE_LABELS_BELOW,
+        hideObjects: typeof zoom === 'number' && zoom < EXPERT_ZOOM_HIDE_OBJECTS_BELOW,
+        showConnectionLines: typeof MapPerf !== 'undefined' && MapPerf.connectionLinesVisibleAtZoom
+            ? MapPerf.connectionLinesVisibleAtZoom(zoom) : (typeof zoom !== 'number' || zoom >= EXPERT_ZOOM_HIDE_OBJECTS_BELOW)
+    };
+}
+
+function applyMapViewportUpdate() {
+    if (window._mapPdfExportCaptureActive) return;
+    if (!myMap || !objects) return;
+    applyConnectionLinesVisibility();
+    if (typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization()) {
+        MapPerf.syncViewportMounts(buildMapMountContext());
+        try { applyRegionZoomVisibility(myMap.getZoom()); } catch (eReg) {}
+    } else {
+        applyViewportCullToMap();
+        try { applyExpertZoomVisibility(); } catch (eExp) {}
+    }
+    if (window.MapRegions && MapRegions.purgeOrphanRegionLabelDom) {
+        MapRegions.purgeOrphanRegionLabelDom();
+    }
+}
+
 function applyMapFilter() {
+    if (window._mapPdfExportCaptureActive) return;
     if (!myMap || !objects) return;
     var filter = getMapFilterState();
     mapFilter = filter;
+    var useVirtual = typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization();
     if (typeof updateMapFilterBadge === 'function') updateMapFilterBadge();
     function isObjVisible(obj) {
         if (!obj || !obj.properties) return false;
@@ -360,11 +392,14 @@ function applyMapFilter() {
             if (typeof getObjectCabinetId === 'function' && getObjectCabinetId(obj)) visible = false;
         }
         try {
-            if (obj.options) obj.options.set('visible', visible);
-            var label = obj.properties.get('label');
-            if (label && label.options) label.options.set('visible', visible);
-            var regionLabel = obj.properties.get('regionLabel');
-            if (regionLabel && regionLabel.options) regionLabel.options.set('visible', visible);
+            obj.properties.set('_mapFilterVisible', visible);
+            if (!useVirtual) {
+                if (obj.options) obj.options.set('visible', visible);
+                var label = obj.properties.get('label');
+                if (label && label.options) label.options.set('visible', visible);
+                var regionLabel = obj.properties.get('regionLabel');
+                if (regionLabel && regionLabel.options) regionLabel.options.set('visible', visible);
+            }
         } catch (e) {}
     });
     crossGroupPlacemarks.forEach(function(pm) {
@@ -384,11 +419,15 @@ function applyMapFilter() {
         try { if (lbl && lbl.options) lbl.options.set('visible', visible); } catch (e) {}
     });
 
-    applyViewportCullToMap();
-    applyConnectionLinesVisibility();
-
-    // Доп. скрытие по зуму (поверх фильтра).
-    try { applyExpertZoomVisibility(); } catch (e) {}
+    if (useVirtual) {
+        var mountCtx = buildMapMountContext();
+        MapPerf.syncViewportMounts(mountCtx);
+        applyConnectionLinesVisibility();
+    } else {
+        applyViewportCullToMap();
+        applyConnectionLinesVisibility();
+        try { applyExpertZoomVisibility(); } catch (e) {}
+    }
     if (window.MapRegions && MapRegions.purgeOrphanRegionLabelDom) {
         MapRegions.purgeOrphanRegionLabelDom();
     }

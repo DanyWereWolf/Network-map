@@ -2327,6 +2327,28 @@ app.get('/api/public-stats', (req, res) => {
     }
 });
 
+app.get('/api/pdf-font', (req, res) => {
+    const fs = require('fs');
+    const candidates = [
+        path.join(ROOT_DIR, 'TILDASANS-VF_5.TTF'),
+        path.join(ROOT_DIR, 'TildaSans-VF_5.ttf'),
+        path.join(ROOT_DIR, 'NotoSans-Regular.ttf')
+    ];
+    let fontPath = null;
+    for (let i = 0; i < candidates.length; i++) {
+        if (fs.existsSync(candidates[i])) {
+            fontPath = candidates[i];
+            break;
+        }
+    }
+    if (!fontPath) {
+        return res.status(404).json({ error: 'PDF font not found in project root' });
+    }
+    res.setHeader('Content-Type', 'font/ttf');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.sendFile(fontPath);
+});
+
 // Лицевая страница по умолчанию — условия (pricing.html)
 app.get('/', (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');

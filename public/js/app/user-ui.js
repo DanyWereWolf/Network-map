@@ -291,7 +291,7 @@ function initUserUI() {
     setupProfileAvatarHandlers();
 }
 
-var mapLimitsCache = { count: 0, limit: 2000, unlocked: false, remaining: 2000, defaultFreeLimit: 2000 };
+var mapLimitsCache = { count: 0, limit: 20000, unlocked: false, remaining: 20000, defaultFreeLimit: 20000 };
 var MAP_LIMIT_WARN_RATIO = 0.98;
 var MAP_LIMIT_BANNER_DISMISS_KEY = 'mapLimitBannerDismissedCount';
 var mapLimitBannerCloseBound = false;

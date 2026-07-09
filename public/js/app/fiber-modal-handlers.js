@@ -906,6 +906,13 @@ function setupFiberConnectionHandlers() {
     setupFiberSchemeSplitterHandlers(sleeveObj);
     updateSchemeSplitterPickUI();
     updateSchemeCrossPortPickUI();
+
+    var exportPdfBtn = document.getElementById('fiber-scheme-export-pdf');
+    if (exportPdfBtn) {
+        exportPdfBtn.addEventListener('click', function() {
+            exportFiberSchemeToPdf(sleeveObj);
+        });
+    }
 }
 
 function setupFiberSchemeCrossPortHandlers(crossObj) {

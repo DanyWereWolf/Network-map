@@ -1441,7 +1441,7 @@ function setMaintenanceNotice(patch) {
 
 function getPlatformLimitsConfig() {
     const s = loadStore();
-    var limit = 2000;
+    var limit = 20000;
     var concurrent = 4;
     var limitFromStore = false;
     var concurrentFromStore = false;

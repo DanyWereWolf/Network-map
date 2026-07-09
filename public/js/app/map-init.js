@@ -168,11 +168,48 @@ function setupEventListeners() {
         document.getElementById('importFile').click();
     });
 
-    document.getElementById('importFile').addEventListener('change', handleFileImport);
-    document.getElementById('exportData').addEventListener('click', function() {
-        if (typeof requireAdmin === 'function' && !requireAdmin()) return;
-        exportData();
-    });
+    var importFileInput = document.getElementById('importFile');
+    if (importFileInput) importFileInput.value = '';
+    importFileInput.addEventListener('change', handleFileImport);
+    var exportTrigger = document.getElementById('exportData');
+    var exportMenuWrap = document.getElementById('exportMenuWrap');
+    var filesTransferActions = document.getElementById('filesTransferActions');
+    var exportDropdown = document.getElementById('exportMenuDropdown');
+    if (exportTrigger && exportMenuWrap && exportDropdown) {
+        function closeExportMenu() {
+            exportDropdown.classList.remove('open');
+            exportMenuWrap.classList.remove('export-menu-wrap--open');
+            exportTrigger.setAttribute('aria-expanded', 'false');
+            exportDropdown.setAttribute('aria-hidden', 'true');
+        }
+        function openExportMenu() {
+            exportDropdown.classList.add('open');
+            exportMenuWrap.classList.add('export-menu-wrap--open');
+            exportTrigger.setAttribute('aria-expanded', 'true');
+            exportDropdown.setAttribute('aria-hidden', 'false');
+        }
+        exportTrigger.addEventListener('click', function(e) {
+            if (typeof requireAdmin === 'function' && !requireAdmin()) return;
+            e.preventDefault();
+            if (exportDropdown.classList.contains('open')) closeExportMenu();
+            else openExportMenu();
+        });
+        exportDropdown.addEventListener('click', function(e) {
+            var item = e.target && e.target.closest('.export-menu-item');
+            if (!item) return;
+            if (typeof requireAdmin === 'function' && !requireAdmin()) return;
+            var format = item.getAttribute('data-export-format');
+            closeExportMenu();
+            exportData(format || 'json');
+        });
+        document.addEventListener('click', function(e) {
+            var root = filesTransferActions || exportMenuWrap;
+            if (!root.contains(e.target)) closeExportMenu();
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeExportMenu();
+        });
+    }
 
     var undoBtn = document.getElementById('undoBtn');
     var redoBtn = document.getElementById('redoBtn');
@@ -441,11 +478,13 @@ function setupEventListeners() {
     window.mapUserGestureActive = false;
 
     function flushMapBoundsChangeUpdate() {
+        if (window._mapPdfExportCaptureActive) return;
         mapBoundsChangePending = false;
         var zoomPending = mapBoundsChangeZoomPending;
         mapBoundsChangeZoomPending = false;
         try {
-            if (typeof applyMapFilter === 'function') applyMapFilter();
+            if (typeof applyMapViewportUpdate === 'function') applyMapViewportUpdate();
+            else if (typeof applyMapFilter === 'function') applyMapFilter();
             if (zoomPending && window.MapRegions && MapRegions.rebuildAllRegionLabels && myMap) {
                 MapRegions.rebuildAllRegionLabels(myMap, objects);
             }
@@ -496,7 +535,8 @@ function setupEventListeners() {
             var oldZoom = e && typeof e.get === 'function' ? e.get('oldZoom') : expertLastZoom;
             var zoomChanged = typeof newZoom === 'number' && typeof oldZoom === 'number' && newZoom !== oldZoom;
             var viewportCull = typeof MapPerf !== 'undefined' && MapPerf.shouldUseViewportCull();
-            if (!viewportCull && !zoomChanged) return;
+            var virtualization = typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization();
+            if (!viewportCull && !virtualization && !zoomChanged) return;
 
             expertLastZoom = z;
 

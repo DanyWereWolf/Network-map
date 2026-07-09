@@ -1107,7 +1107,6 @@ function applyRemoteState(data, meta) {
         collaboratorCursorsPlacemarks = [];
         var opts = { skipSave: true, skipHistory: true };
         var bulkLoad = _mapInitialLoadPending && data.length >= MAP_BULK_IMPORT_MIN_ITEMS;
-        if (bulkLoad) opts.bulkImport = true;
         var applyFinished = false;
         function finishRemoteApply() {
             if (applyFinished) return;
@@ -1438,7 +1437,7 @@ function applyOperationToMap(op) {
         if (!newObj) return;
         objects.splice(objCount, 0, newObj);
         mapPerfRegister(newObj);
-        if (newObj.properties.get('type') !== 'cross' && newObj.properties.get('type') !== 'node') myMap.geoObjects.add(newObj);
+        if (newObj.properties.get('type') !== 'cross' && newObj.properties.get('type') !== 'node') mapGeoAdd(newObj);
         refreshRemoteObjectVisuals(newObj);
         updateStats();
         return;
@@ -1627,118 +1626,160 @@ function buildImportRefIndex(objectRefs) {
     return { refsOnly: refsOnly, refByUid: refByUid };
 }
 
-function importDataRunCables(data, objectRefs) {
-    var refIndex = buildImportRefIndex(objectRefs);
+function importDataRunOneCable(item, objectRefs, refIndex, cableByUid) {
+    if (!item || item.type !== 'cable') return;
     var refsOnly = refIndex.refsOnly;
     var refByUid = refIndex.refByUid;
+    var coords = normalizeCableGeometry(item.geometry);
+    var fromObj = null;
+    var toObj = null;
+
+    if (item.fromUniqueId) fromObj = refByUid[item.fromUniqueId] || null;
+    if (item.toUniqueId) toObj = refByUid[item.toUniqueId] || null;
+    if (!fromObj || !toObj) {
+        if (item.from !== undefined && item.to !== undefined &&
+            item.from < objectRefs.length && item.to < objectRefs.length) {
+            fromObj = fromObj || objectRefs[item.from];
+            toObj = toObj || objectRefs[item.to];
+        }
+    }
+    if (!fromObj || !toObj) {
+        if (coords && coords.length >= 2) {
+            var preferFiberEpImp = item.cableType !== 'copper';
+            fromObj = fromObj || findRefClosestToCoord(refsOnly, coords[0], undefined, preferFiberEpImp, item.fromUniqueId);
+            toObj = toObj || findRefClosestToCoord(refsOnly, coords[coords.length - 1], undefined, preferFiberEpImp, item.toUniqueId);
+        }
+    }
+    if ((!fromObj || !toObj) && coords && coords.length >= 2) {
+        var geomEp = findObjectsAtGeometry(refsOnly, coords);
+        if (geomEp && geomEp.length >= 2) {
+            fromObj = fromObj || geomEp[0];
+            toObj = toObj || geomEp[geomEp.length - 1];
+        }
+    }
+    if (!fromObj || !toObj) return;
+
+    var itemCuMeta = copperSerializedMetaFromItem(item);
+    var existingCableImport = (item.uniqueId != null && cableByUid[item.uniqueId]) || null;
+    if (!existingCableImport && item.uniqueId != null) {
+        existingCableImport = objects.find(function(o) {
+            return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId;
+        }) || null;
+        if (existingCableImport) cableByUid[item.uniqueId] = existingCableImport;
+    }
+    if (existingCableImport) {
+        var routeExisting = buildCableRoutePointsFromData(refsOnly, item, fromObj, toObj, coords);
+        var ptsArr = routeExisting;
+        if (!ptsArr || ptsArr.length < 2) {
+            ptsArr = (coords && coords.length >= 2) ? findObjectsAtGeometry(refsOnly, item.geometry) : null;
+            if (!ptsArr || ptsArr.length < 2) ptsArr = [fromObj, toObj];
+        }
+        if (ptsArr && ptsArr.length >= 2) {
+            if (fromObj) ptsArr[0] = fromObj;
+            if (toObj) ptsArr[ptsArr.length - 1] = toObj;
+            existingCableImport.properties.set('from', ptsArr[0]);
+            existingCableImport.properties.set('to', ptsArr[ptsArr.length - 1]);
+            existingCableImport.properties.set('points', ptsArr);
+            try {
+                var lineExisting = ptsArr.map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; }).filter(function(c) { return c && c.length >= 2; });
+                if (existingCableImport.geometry && lineExisting.length >= 2) existingCableImport.geometry.setCoordinates(lineExisting);
+                else if (existingCableImport.geometry && coords && coords.length >= 2) existingCableImport.geometry.setCoordinates(coords);
+            } catch (eEx) {}
+        }
+        if (item && 'cableName' in item) existingCableImport.properties.set('cableName', item.cableName);
+        if (typeof applySerializedCableProduct === 'function') applySerializedCableProduct(existingCableImport, item);
+        if (item.distance !== undefined) existingCableImport.properties.set('distance', item.distance);
+        applySerializedUndergroundToCable(existingCableImport, item, ptsArr);
+        applySerializedCopperMetadataToCable(existingCableImport, item);
+        applyImportedCableFiberProps(existingCableImport, item);
+        return;
+    }
+    var routePts = buildCableRoutePointsFromData(refsOnly, item, fromObj, toObj, coords);
+    if (routePts && routePts.length >= 2) {
+        addCable(routePts[0], routePts, item.cableType, item.uniqueId, undefined, true, true, itemCuMeta);
+    } else {
+        var points = (coords && coords.length >= 2) ? findObjectsAtGeometry(refsOnly, item.geometry) : null;
+        if (points && points.length >= 2) {
+            if (fromObj) points[0] = fromObj;
+            if (toObj) points[points.length - 1] = toObj;
+            addCable(points[0], points, item.cableType, item.uniqueId, undefined, true, true, itemCuMeta);
+        } else {
+            addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true, true, itemCuMeta);
+        }
+    }
+    var cable = (item.uniqueId != null && cableByUid[item.uniqueId]) || objects.find(function(obj) {
+        return obj.properties &&
+            obj.properties.get('type') === 'cable' &&
+            obj.properties.get('uniqueId') === item.uniqueId;
+    });
+    if (cable) {
+        if (item.uniqueId != null) cableByUid[item.uniqueId] = cable;
+        var ptList = cable.properties.get('points');
+        if (Array.isArray(ptList) && ptList.length >= 2) {
+            try {
+                var lineFromPts = ptList.map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; }).filter(function(c) { return c && c.length >= 2; });
+                if (cable.geometry && lineFromPts.length >= 2) cable.geometry.setCoordinates(lineFromPts);
+            } catch (eImp) {}
+        } else if (cable.geometry && coords && coords.length >= 2) {
+            cable.geometry.setCoordinates(coords);
+        }
+        if (!cable.properties.get('distance')) {
+            var fromCoords = fromObj.geometry.getCoordinates();
+            var toCoords = toObj.geometry.getCoordinates();
+            cable.properties.set('distance', calculateDistance(fromCoords, toCoords));
+        }
+        if (item && 'cableName' in item) cable.properties.set('cableName', item.cableName);
+        if (typeof applySerializedCableProduct === 'function') applySerializedCableProduct(cable, item);
+        applySerializedUndergroundToCable(cable, item, cable.properties.get('points'));
+        applyImportedCableFiberProps(cable, item);
+    }
+}
+
+function importDataRunCables(data, objectRefs, onDone) {
+    var refIndex = buildImportRefIndex(objectRefs);
     var cableByUid = Object.create(null);
-
-    data.forEach(function(item) {
-        if (!item || item.type !== 'cable') return;
-        var coords = normalizeCableGeometry(item.geometry);
-        var fromObj = null;
-        var toObj = null;
-
-        if (item.fromUniqueId) fromObj = refByUid[item.fromUniqueId] || null;
-        if (item.toUniqueId) toObj = refByUid[item.toUniqueId] || null;
-        if (!fromObj || !toObj) {
-            if (item.from !== undefined && item.to !== undefined &&
-                item.from < objectRefs.length && item.to < objectRefs.length) {
-                fromObj = fromObj || objectRefs[item.from];
-                toObj = toObj || objectRefs[item.to];
-            }
+    var cableItems = [];
+    if (Array.isArray(data)) {
+        for (var di = 0; di < data.length; di++) {
+            if (data[di] && data[di].type === 'cable') cableItems.push(data[di]);
         }
-        if (!fromObj || !toObj) {
-            if (coords && coords.length >= 2) {
-                var preferFiberEpImp = item.cableType !== 'copper';
-                fromObj = fromObj || findRefClosestToCoord(refsOnly, coords[0], undefined, preferFiberEpImp, item.fromUniqueId);
-                toObj = toObj || findRefClosestToCoord(refsOnly, coords[coords.length - 1], undefined, preferFiberEpImp, item.toUniqueId);
-            }
-        }
-        if ((!fromObj || !toObj) && coords && coords.length >= 2) {
-            var geomEp = findObjectsAtGeometry(refsOnly, coords);
-            if (geomEp && geomEp.length >= 2) {
-                fromObj = fromObj || geomEp[0];
-                toObj = toObj || geomEp[geomEp.length - 1];
-            }
-        }
-        if (!fromObj || !toObj) return;
-
-        var itemCuMeta = copperSerializedMetaFromItem(item);
-        var existingCableImport = (item.uniqueId != null && cableByUid[item.uniqueId]) || null;
-        if (!existingCableImport && item.uniqueId != null) {
-            existingCableImport = objects.find(function(o) {
-                return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId;
-            }) || null;
-            if (existingCableImport) cableByUid[item.uniqueId] = existingCableImport;
-        }
-        if (existingCableImport) {
-            var routeExisting = buildCableRoutePointsFromData(refsOnly, item, fromObj, toObj, coords);
-            var ptsArr = routeExisting;
-            if (!ptsArr || ptsArr.length < 2) {
-                ptsArr = (coords && coords.length >= 2) ? findObjectsAtGeometry(refsOnly, item.geometry) : null;
-                if (!ptsArr || ptsArr.length < 2) ptsArr = [fromObj, toObj];
-            }
-            if (ptsArr && ptsArr.length >= 2) {
-                if (fromObj) ptsArr[0] = fromObj;
-                if (toObj) ptsArr[ptsArr.length - 1] = toObj;
-                existingCableImport.properties.set('from', ptsArr[0]);
-                existingCableImport.properties.set('to', ptsArr[ptsArr.length - 1]);
-                existingCableImport.properties.set('points', ptsArr);
-                try {
-                    var lineExisting = ptsArr.map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; }).filter(function(c) { return c && c.length >= 2; });
-                    if (existingCableImport.geometry && lineExisting.length >= 2) existingCableImport.geometry.setCoordinates(lineExisting);
-                    else if (existingCableImport.geometry && coords && coords.length >= 2) existingCableImport.geometry.setCoordinates(coords);
-                } catch (eEx) {}
-            }
-            if (item && 'cableName' in item) existingCableImport.properties.set('cableName', item.cableName);
-            if (typeof applySerializedCableProduct === 'function') applySerializedCableProduct(existingCableImport, item);
-            if (item.distance !== undefined) existingCableImport.properties.set('distance', item.distance);
-            applySerializedUndergroundToCable(existingCableImport, item, ptsArr);
-            applySerializedCopperMetadataToCable(existingCableImport, item);
-            applyImportedCableFiberProps(existingCableImport, item);
+    }
+    var useCableBatch = isMapBulkImportActive()
+        && cableItems.length >= (typeof MAP_BULK_IMPORT_CABLE_BATCH_SIZE === 'number' ? MAP_BULK_IMPORT_CABLE_BATCH_SIZE : 40);
+    if (!useCableBatch) {
+        try {
+            cableItems.forEach(function(item) {
+                importDataRunOneCable(item, objectRefs, refIndex, cableByUid);
+            });
+        } catch (syncCableErr) {
+            if (typeof onDone === 'function') onDone(syncCableErr);
             return;
         }
-        var routePts = buildCableRoutePointsFromData(refsOnly, item, fromObj, toObj, coords);
-        if (routePts && routePts.length >= 2) {
-            addCable(routePts[0], routePts, item.cableType, item.uniqueId, undefined, true, true, itemCuMeta);
-        } else {
-            var points = (coords && coords.length >= 2) ? findObjectsAtGeometry(refsOnly, item.geometry) : null;
-            if (points && points.length >= 2) {
-                if (fromObj) points[0] = fromObj;
-                if (toObj) points[points.length - 1] = toObj;
-                addCable(points[0], points, item.cableType, item.uniqueId, undefined, true, true, itemCuMeta);
-            } else {
-                addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true, true, itemCuMeta);
+        if (typeof onDone === 'function') onDone();
+        return;
+    }
+    var cableIdx = 0;
+    var cableBatchSize = typeof MAP_BULK_IMPORT_CABLE_BATCH_SIZE === 'number' ? MAP_BULK_IMPORT_CABLE_BATCH_SIZE : 40;
+    function importCableBatch() {
+        try {
+            var end = Math.min(cableIdx + cableBatchSize, cableItems.length);
+            for (; cableIdx < end; cableIdx++) {
+                importDataRunOneCable(cableItems[cableIdx], objectRefs, refIndex, cableByUid);
             }
+        } catch (batchCableErr) {
+            if (typeof onDone === 'function') onDone(batchCableErr);
+            return;
         }
-        var cable = (item.uniqueId != null && cableByUid[item.uniqueId]) || objects.find(function(obj) {
-            return obj.properties &&
-                obj.properties.get('type') === 'cable' &&
-                obj.properties.get('uniqueId') === item.uniqueId;
-        });
-        if (cable) {
-            if (item.uniqueId != null) cableByUid[item.uniqueId] = cable;
-            var ptList = cable.properties.get('points');
-            if (Array.isArray(ptList) && ptList.length >= 2) {
-                try {
-                    var lineFromPts = ptList.map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; }).filter(function(c) { return c && c.length >= 2; });
-                    if (cable.geometry && lineFromPts.length >= 2) cable.geometry.setCoordinates(lineFromPts);
-                } catch (eImp) {}
-            } else if (cable.geometry && coords && coords.length >= 2) {
-                cable.geometry.setCoordinates(coords);
-            }
-            if (!cable.properties.get('distance')) {
-                var fromCoords = fromObj.geometry.getCoordinates();
-                var toCoords = toObj.geometry.getCoordinates();
-                cable.properties.set('distance', calculateDistance(fromCoords, toCoords));
-            }
-            if (item && 'cableName' in item) cable.properties.set('cableName', item.cableName);
-            if (typeof applySerializedCableProduct === 'function') applySerializedCableProduct(cable, item);
-            applySerializedUndergroundToCable(cable, item, cable.properties.get('points'));
-            applyImportedCableFiberProps(cable, item);
+        if (typeof setMapLoadingOverlayText === 'function' && cableItems.length > 0) {
+            setMapLoadingOverlayText('Прокладка кабелей… ' + cableIdx + ' / ' + cableItems.length);
         }
-    });
+        if (cableIdx < cableItems.length) {
+            requestAnimationFrame(importCableBatch);
+            return;
+        }
+        if (typeof onDone === 'function') onDone();
+    }
+    requestAnimationFrame(importCableBatch);
 }
 
 function importDataPostProcess(opts, onDone) {
@@ -1789,6 +1830,75 @@ function importDataPostProcess(opts, onDone) {
         if (opts && opts.undoRedo) requestAnimationFrame(finish);
         else finish();
     };
+    var useChunkedPostProcess = isMapBulkImportActive() && !(opts && opts.undoRedo);
+    if (useChunkedPostProcess) {
+        if (typeof setMapLoadingOverlayText === 'function') {
+            setMapLoadingOverlayText(opts && opts.bulkImport ? 'Финализация импорта…' : 'Подготовка карты…');
+        }
+        var postSteps = [
+            function() {
+                if (typeof syncAllCabinetMembersToCabinets === 'function') {
+                    syncAllCabinetMembersToCabinets({ skipDisplay: true });
+                }
+                repairCablesAfterImport();
+                validateAndFixCableGeometryOnLoad();
+                refreshAllCableUndergroundOverlays();
+                applyAllOpticalCableMapStyles();
+                ensureNodeLabelsVisible();
+            },
+            function() {
+                updateCableVisualization();
+                updateCrossDisplay();
+                updateNodeDisplay();
+                if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
+            },
+            function() {
+                scheduleConnectionLinesUpdate('full');
+                migrateStandaloneSwitchesIntoNodes();
+                if (window.EmbeddedSplitters && typeof EmbeddedSplitters.migrateAllFromMap === 'function') {
+                    EmbeddedSplitters.migrateAllFromMap();
+                }
+                if (window.EmbeddedSplitters && typeof EmbeddedSplitters.syncAllInputs === 'function') {
+                    objects.forEach(function(obj) {
+                        if (EmbeddedSplitters.isHost(obj)) EmbeddedSplitters.syncAllInputs(obj);
+                    });
+                }
+            },
+            function() {
+                if (migrateNodeLevelSwitchMetaToAttached() && !(opts && opts.skipSave)) saveData();
+                if (typeof migrateAllRadioBridgeCopperPorts === 'function') migrateAllRadioBridgeCopperPorts();
+                if (typeof repairRadioBridgeFiberLinksAfterLoad === 'function') repairRadioBridgeFiberLinksAfterLoad();
+                rebuildAllCopperPortUsageFromCables();
+                if (window.CameraPlayer && CameraPlayer.startStreamMonitor) CameraPlayer.startStreamMonitor();
+                if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
+            },
+            function() {
+                if (window.MapRegions && MapRegions.sendAllRegionsToMapBack && myMap) {
+                    MapRegions.sendAllRegionsToMapBack(myMap, objects);
+                }
+                if (window.MapRegions && MapRegions.rebuildAllRegionLabels && myMap) {
+                    MapRegions.rebuildAllRegionLabels(myMap, objects);
+                } else if (window.MapRegions && MapRegions.syncAllRegionLabels && myMap) {
+                    MapRegions.syncAllRegionLabels(myMap, objects);
+                }
+                objects.forEach(function(obj) {
+                    if (obj && obj.properties && obj.properties.get('type') === 'cable') ensureCableMapZIndex(obj);
+                });
+                if (typeof applyMapFilter === 'function') applyMapFilter();
+            }
+        ];
+        var stepIdx = 0;
+        function runPostStep() {
+            if (stepIdx >= postSteps.length) {
+                finish();
+                return;
+            }
+            postSteps[stepIdx++]();
+            requestAnimationFrame(runPostStep);
+        }
+        requestAnimationFrame(runPostStep);
+        return;
+    }
     if (opts && opts.undoRedo) requestAnimationFrame(work);
     else work();
 }
@@ -1796,19 +1906,27 @@ function importDataPostProcess(opts, onDone) {
 function importData(data, opts, done) {
     opts = opts || {};
     var undoRedo = !!opts.undoRedo;
-    var useBulk = !!opts.bulkImport || undoRedo;
     var bulkMinItems = undoRedo ? MAP_UNDO_REDO_BATCH_MIN : MAP_BULK_IMPORT_MIN_ITEMS;
+    var useBulk = !!opts.bulkImport || undoRedo || (Array.isArray(data) && data.length >= bulkMinItems);
     var importBatchSize = undoRedo ? MAP_UNDO_REDO_BATCH_SIZE : MAP_BULK_IMPORT_BATCH_SIZE;
     _mapBulkImportActive = useBulk;
     clearMap(opts || {});
     importDataAssignUniqueIds(data);
 
-    function completeImport() {
+    function completeImport(err) {
         importDataPostProcess(opts, function() {
             _mapBulkImportActive = false;
             if (typeof MapPerf !== 'undefined') MapPerf.reindexAllObjects(objects);
-            if (typeof done === 'function') done();
+            if (typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization()) {
+                MapPerf.adoptExistingGeoObjects(objects);
+            }
+            if (typeof done === 'function') done(err || null);
         });
+    }
+
+    function failImport(err) {
+        _mapBulkImportActive = false;
+        if (typeof done === 'function') done(err || new Error('import failed'));
     }
 
     if (useBulk && Array.isArray(data) && data.length >= bulkMinItems) {
@@ -1819,21 +1937,28 @@ function importData(data, opts, done) {
         data.forEach(function(it) { if (it && it.type !== 'cable' && it.type !== 'cableLabel') placemarkTotal++; });
 
         function importPlacemarkBatch() {
-            var end = Math.min(idx + importBatchSize, data.length);
-            for (; idx < end; idx++) {
-                var item = data[idx];
-                if (!item) continue;
-                if (item.type === 'cable' || item.type === 'cableLabel') {
-                    objectRefs[idx] = null;
-                    continue;
+            try {
+                var end = Math.min(idx + importBatchSize, data.length);
+                for (; idx < end; idx++) {
+                    var item = data[idx];
+                    if (!item) continue;
+                    if (item.type === 'cable' || item.type === 'cableLabel') {
+                        objectRefs[idx] = null;
+                        continue;
+                    }
+                    objectRefs[idx] = importDataCreatePlacemarkRef(item);
+                    if (objectRefs[idx]) placemarkLoaded++;
                 }
-                objectRefs[idx] = importDataCreatePlacemarkRef(item);
-                if (objectRefs[idx]) placemarkLoaded++;
+            } catch (batchErr) {
+                failImport(batchErr);
+                return;
             }
             if (typeof setMapLoadingOverlayText === 'function' && placemarkTotal > 0) {
                 var progressText = undoRedo
                     ? ('Восстановление объектов… ' + placemarkLoaded + ' / ' + placemarkTotal)
-                    : ('Загрузка объектов… ' + placemarkLoaded + ' / ' + placemarkTotal);
+                    : (opts.bulkImport
+                        ? ('Импорт объектов… ' + placemarkLoaded + ' / ' + placemarkTotal)
+                        : ('Загрузка объектов… ' + placemarkLoaded + ' / ' + placemarkTotal));
                 setMapLoadingOverlayText(progressText);
             }
             if (idx < data.length) {
@@ -1844,8 +1969,13 @@ function importData(data, opts, done) {
                 setMapLoadingOverlayText(undoRedo ? 'Восстановление кабелей…' : 'Прокладка кабелей…');
             }
             requestAnimationFrame(function() {
-                importDataRunCables(data, objectRefs);
-                completeImport();
+                importDataRunCables(data, objectRefs, function(err) {
+                    if (err) {
+                        failImport(err);
+                        return;
+                    }
+                    completeImport();
+                });
             });
         }
         requestAnimationFrame(importPlacemarkBatch);
@@ -1853,16 +1983,26 @@ function importData(data, opts, done) {
     }
 
     var objectRefs = [];
-    data.forEach(function(item) {
-        if (item.type === 'cable' || item.type === 'cableLabel') {
-            objectRefs.push(null);
+    try {
+        data.forEach(function(item) {
+            if (item.type === 'cable' || item.type === 'cableLabel') {
+                objectRefs.push(null);
+                return;
+            }
+            objectRefs.push(importDataCreatePlacemarkRef(item));
+        });
+    } catch (syncErr) {
+        failImport(syncErr);
+        return;
+    }
+    importDataRunCables(data, objectRefs, function(err) {
+        if (err) {
+            failImport(err);
             return;
         }
-        objectRefs.push(importDataCreatePlacemarkRef(item));
+        if (typeof MapPerf !== 'undefined') MapPerf.reindexAllObjects(objects);
+        completeImport();
     });
-    importDataRunCables(data, objectRefs);
-    if (typeof MapPerf !== 'undefined') MapPerf.reindexAllObjects(objects);
-    completeImport();
 }
 
 function populateRegionFromSerializedData(regionObj, data) {
@@ -2477,10 +2617,11 @@ function createObjectFromData(data, opts, createOpts) {
             var uid = placemark.properties.get('uniqueId');
             var skipGroupSnapPm = typeof shouldSkipGroupSnapAfterPlacement === 'function' && shouldSkipGroupSnapAfterPlacement(placemark);
             updateConnectedCables(placemark);
+            if (typeof MapPerf !== 'undefined' && MapPerf.updateSpatialPosition) MapPerf.updateSpatialPosition(placemark);
             const label = placemark.properties.get('label');
             if (label) {
                 label.geometry.setCoordinates(placemark.geometry.getCoordinates());
-                try { myMap.geoObjects.add(label); } catch (e) {} 
+                try { mapGeoAdd(label); } catch (e) {}
             }
             scheduleConnectionLinesUpdate();
             updateSelectionPulsePosition(placemark);
@@ -2525,34 +2666,1429 @@ function createObjectFromData(data, opts, createOpts) {
         mapPerfRegister(placemark);
         if (type !== 'cross' && type !== 'node') {
             var skipMapAdd = typeof getObjectCabinetId === 'function' && getObjectCabinetId(placemark);
-            if (!skipMapAdd) myMap.geoObjects.add(placemark);
+            if (!skipMapAdd) mapGeoAdd(placemark);
         }
         var objLabel = placemark.properties.get('label');
         if (objLabel && !(typeof getObjectCabinetId === 'function' && getObjectCabinetId(placemark))) {
-            try { myMap.geoObjects.add(objLabel); } catch(e) {}
+            if (!(typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization && MapPerf.shouldUseVirtualization())) {
+                try { mapGeoAdd(objLabel); } catch(e) {}
+            }
         }
         if (!isMapBulkImportActive() && !(createOpts && createOpts.bulkImport)) updateStats();
     }
     return placemark;
 }
 
-function exportData() {
-    if (typeof requireAdmin === 'function' && !requireAdmin()) return;
-    var data = getSerializedData();
-
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    
-    const a = document.createElement('a');
+function downloadTextFile(content, filename, mimeType) {
+    var blob = new Blob([content], { type: mimeType || 'text/plain;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
     a.href = url;
-    a.download = 'network-map-export.json';
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
-    showSuccess(`Карта экспортирована (${objects.length} объектов)`, 'Экспорт');
-    logAction(ActionTypes.EXPORT_DATA, { count: objects.length });
+}
+
+var _pdfUnicodeFontBase64 = null;
+var PDF_UNICODE_FONT_URLS = [
+    '/fonts/TILDASANS-VF_5.TTF',
+    '/fonts/TildaSans-VF_5.ttf',
+    '/fonts/NotoSans-Regular.ttf',
+    '/api/pdf-font'
+];
+
+function uint8ToBase64(bytes) {
+    var chunkSize = 0x8000;
+    var binary = '';
+    for (var i = 0; i < bytes.length; i += chunkSize) {
+        var chunk = bytes.subarray(i, i + chunkSize);
+        binary += String.fromCharCode.apply(null, chunk);
+    }
+    return btoa(binary);
+}
+
+async function ensurePdfUnicodeFont(doc) {
+    try {
+        if (!_pdfUnicodeFontBase64) {
+            var loaded = false;
+            for (var i = 0; i < PDF_UNICODE_FONT_URLS.length; i++) {
+                var url = PDF_UNICODE_FONT_URLS[i];
+                try {
+                    var response = await fetch(url);
+                    if (!response.ok) continue;
+                    var buffer = await response.arrayBuffer();
+                    _pdfUnicodeFontBase64 = uint8ToBase64(new Uint8Array(buffer));
+                    loaded = true;
+                    break;
+                } catch (eOne) {}
+            }
+            if (!loaded || !_pdfUnicodeFontBase64) throw new Error('font-download-failed');
+        }
+        doc.addFileToVFS('NotoSans-Regular.ttf', _pdfUnicodeFontBase64);
+        doc.addFont('NotoSans-Regular.ttf', 'NotoSans', 'normal');
+        doc.setFont('NotoSans', 'normal');
+        return true;
+    } catch (eFont) {
+        return false;
+    }
+}
+
+function buildZabbixExportPayload(data) {
+    var mapItems = Array.isArray(data) ? data : [];
+    var nodes = [];
+    var links = [];
+    var nodeByIndex = Object.create(null);
+    mapItems.forEach(function(item, index) {
+        if (!item || !item.type) return;
+        if (item.type === 'cable' || item.type === 'cableLabel' || item.type === 'region' || item.type === 'regionLabel') return;
+        var geometry = Array.isArray(item.geometry) ? item.geometry : [null, null];
+        var lat = Number(geometry[0]);
+        var lon = Number(geometry[1]);
+        var node = {
+            id: item.uniqueId || ('idx-' + index),
+            name: item.name || (item.type + '-' + index),
+            type: item.type,
+            lat: Number.isFinite(lat) ? lat : null,
+            lon: Number.isFinite(lon) ? lon : null
+        };
+        nodeByIndex[index] = node;
+        nodes.push(node);
+    });
+
+    mapItems.forEach(function(item, index) {
+        if (!item || item.type !== 'cable') return;
+        var fromNode = nodeByIndex[item.from];
+        var toNode = nodeByIndex[item.to];
+        if (!fromNode || !toNode) return;
+        links.push({
+            id: item.uniqueId || ('cable-' + index),
+            name: item.cableName || ('Cable ' + (index + 1)),
+            cableType: item.cableType || 'fiber',
+            from: fromNode.id,
+            to: toNode.id,
+            fromName: fromNode.name,
+            toName: toNode.name,
+            distance: item.distance != null ? item.distance : null
+        });
+    });
+
+    return {
+        generatedAt: new Date().toISOString(),
+        version: 1,
+        source: 'network-map',
+        stats: {
+            itemsTotal: mapItems.length,
+            nodesTotal: nodes.length,
+            linksTotal: links.length
+        },
+        zabbix: {
+            // LLD для автообнаружения узлов.
+            hosts_discovery: nodes.map(function(node) {
+                return {
+                    '{#ID}': node.id,
+                    '{#NAME}': node.name,
+                    '{#TYPE}': node.type,
+                    '{#LAT}': node.lat,
+                    '{#LON}': node.lon
+                };
+            }),
+            links_discovery: links.map(function(link) {
+                return {
+                    '{#ID}': link.id,
+                    '{#NAME}': link.name,
+                    '{#TYPE}': link.cableType,
+                    '{#FROM}': link.from,
+                    '{#TO}': link.to
+                };
+            })
+        },
+        // Полный снимок схемы для восстановления/доп. интеграций.
+        full_map: mapItems,
+        nodes: nodes,
+        links: links
+    };
+}
+
+function resolveMapExportObjectName(item) {
+    if (!item) return '';
+    var name = item.name != null ? String(item.name).trim() : '';
+    return name || '';
+}
+
+function resolveMapExportCableName(item) {
+    if (!item) return 'Кабель';
+    var cableName = item.cableName != null ? String(item.cableName).trim() : '';
+    if (cableName) return cableName;
+    if (typeof getCableDescription === 'function') {
+        return getCableDescription(item.cableType);
+    }
+    return 'Кабель';
+}
+
+var MAP_EXPORT_OBJECT_TYPE_SINGULAR = {
+    region: 'Регион',
+    support: 'Опора',
+    sleeve: 'Муфта',
+    cross: 'Кросс',
+    spliceCassette: 'Сплайс-кассета',
+    attachment: 'Крепление',
+    manhole: 'Колодец',
+    signalPost: 'Столб',
+    cabinet: 'Ящик',
+    olt: 'OLT',
+    splitter: 'Сплиттер',
+    onu: 'ONU',
+    node: 'Узел',
+    camera: 'Камера',
+    mediaConverter: 'Медиаконвертер',
+    radioBridge: 'Радиомост'
+};
+
+function resolveMapExportObjectTypeLabel(type, plural) {
+    if (!type) return '';
+    if (plural) {
+        if (type === 'region') return 'Регионы';
+        if (typeof getObjectTypeLabel === 'function') {
+            var pluralLabel = getObjectTypeLabel(type);
+            if (pluralLabel) return pluralLabel;
+        }
+        return type;
+    }
+    return MAP_EXPORT_OBJECT_TYPE_SINGULAR[type] || (typeof getObjectTypeLabel === 'function' ? getObjectTypeLabel(type) : type);
+}
+
+function resolveMapExportCableTypeLabel(cableType) {
+    if (typeof isCopperCableType === 'function' && isCopperCableType(cableType)) return 'Медный кабель';
+    if (cableType === 'copper') return 'Медный кабель';
+    if (typeof isOpticalCableType === 'function' && isOpticalCableType(cableType)) return 'ВОЛС';
+    if (cableType === 'fiber') return 'ВОЛС';
+    if (typeof getCableDescription === 'function') return getCableDescription(cableType);
+    return 'Кабель';
+}
+
+function formatMapExportPointCoords(geometry, itemType) {
+    if (!Array.isArray(geometry) || !geometry.length) return '';
+    if (itemType === 'region') return '';
+    var lat = geometry[0];
+    var lon = geometry.length > 1 ? geometry[1] : null;
+    if (Array.isArray(lat)) {
+        lon = lat.length > 1 ? lat[1] : lon;
+        lat = lat[0];
+    }
+    lat = Number(lat);
+    lon = Number(lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return '';
+    return ', ' + lat.toFixed(6) + '°; ' + lon.toFixed(6) + '°';
+}
+
+function formatMapExportObjectLine(item, index) {
+    if (!item) return '';
+    var typeLabel = resolveMapExportObjectTypeLabel(item.type, false);
+    var name = resolveMapExportObjectName(item);
+    var coords = formatMapExportPointCoords(item.geometry, item.type);
+    if (name && typeLabel) return (index + 1) + '. ' + typeLabel + ' «' + name + '»' + coords;
+    if (name) return (index + 1) + '. ' + name + coords;
+    if (typeLabel) return (index + 1) + '. ' + typeLabel + coords;
+    return String(index + 1) + '.' + coords;
+}
+
+function resolveMapExportCableRoute(item, objectByIndex) {
+    var fromName = item && item.from != null && objectByIndex[item.from] ? resolveMapExportObjectName(objectByIndex[item.from]) : '';
+    var toName = item && item.to != null && objectByIndex[item.to] ? resolveMapExportObjectName(objectByIndex[item.to]) : '';
+    if (fromName && toName) return fromName + ' → ' + toName;
+    return fromName || toName || '';
+}
+
+function formatMapExportCableLine(item, objectByIndex, index) {
+    if (!item) return '';
+    var typeLabel = resolveMapExportCableTypeLabel(item.cableType);
+    var cableName = item.cableName != null ? String(item.cableName).trim() : '';
+    var routeText = resolveMapExportCableRoute(item, objectByIndex);
+    var title = cableName || routeText || resolveMapExportCableName(item);
+    var line = (index + 1) + '. ' + typeLabel + ': ' + title;
+    if (cableName && routeText && cableName !== routeText) line += ' · ' + routeText;
+    if (item.distance != null && Number.isFinite(Number(item.distance))) {
+        line += ', ' + Math.round(Number(item.distance)) + ' м';
+    }
+    return line;
+}
+
+function buildPdfExportHtml(data, snapshotHtml) {
+    var mapItems = Array.isArray(data) ? data : [];
+    function esc(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+    var cables = mapItems.filter(function(item) { return item && item.type === 'cable'; });
+    var objectByIndex = Object.create(null);
+    mapItems.forEach(function(item, index) {
+        if (!item || !item.type) return;
+        if (item.type === 'cable' || item.type === 'cableLabel' || item.type === 'regionLabel') return;
+        objectByIndex[index] = item;
+    });
+    var objectsOnly = mapItems.filter(function(item) {
+        if (!item || !item.type) return false;
+        return item.type !== 'cable' && item.type !== 'cableLabel' && item.type !== 'regionLabel';
+    });
+    var byType = Object.create(null);
+    objectsOnly.forEach(function(item) {
+        byType[item.type] = (byType[item.type] || 0) + 1;
+    });
+    var typeRows = Object.keys(byType).sort().map(function(type) {
+        return '<tr><td>' + esc(resolveMapExportObjectTypeLabel(type, true)) + '</td><td>' + byType[type] + '</td></tr>';
+    }).join('');
+    if (!typeRows) typeRows = '<tr><td>Нет данных</td><td>0</td></tr>';
+
+    var now = new Date();
+    var objectRows = objectsOnly.map(function(item, index) {
+        var name = resolveMapExportObjectName(item);
+        var type = resolveMapExportObjectTypeLabel(item.type, false);
+        var geometry = Array.isArray(item.geometry) ? item.geometry : [];
+        var lat = '';
+        var lon = '';
+        if (item.type !== 'region' && geometry.length > 0) {
+            lat = geometry[0];
+            lon = geometry.length > 1 ? geometry[1] : '';
+            if (Array.isArray(lat)) {
+                lon = lat.length > 1 ? lat[1] : lon;
+                lat = lat[0];
+            }
+        }
+        return '<tr>'
+            + '<td>' + esc(index + 1) + '</td>'
+            + '<td>' + esc(type) + '</td>'
+            + '<td>' + esc(name) + '</td>'
+            + '<td>' + esc(lat) + '</td>'
+            + '<td>' + esc(lon) + '</td>'
+            + '</tr>';
+    }).join('');
+    if (!objectRows) {
+        objectRows = '<tr><td colspan="5">Нет объектов</td></tr>';
+    }
+
+    var cableRows = cables.map(function(item, index) {
+        var fromName = '';
+        var toName = '';
+        if (item.from != null && objectByIndex[item.from]) fromName = resolveMapExportObjectName(objectByIndex[item.from]);
+        if (item.to != null && objectByIndex[item.to]) toName = resolveMapExportObjectName(objectByIndex[item.to]);
+        var cableName = item.cableName != null ? String(item.cableName).trim() : '';
+        var routeText = resolveMapExportCableRoute(item, objectByIndex);
+        var title = cableName || routeText || resolveMapExportCableName(item);
+        return '<tr>'
+            + '<td>' + esc(index + 1) + '</td>'
+            + '<td>' + esc(resolveMapExportCableTypeLabel(item.cableType)) + '</td>'
+            + '<td>' + esc(title) + '</td>'
+            + '<td>' + esc(fromName) + '</td>'
+            + '<td>' + esc(toName) + '</td>'
+            + '<td>' + esc(item.distance != null ? Math.round(Number(item.distance)) + ' м' : '') + '</td>'
+            + '</tr>';
+    }).join('');
+    if (!cableRows) {
+        cableRows = '<tr><td colspan="6">Нет кабелей</td></tr>';
+    }
+
+    return ''
+        + '<!doctype html><html><head><meta charset="utf-8">'
+        + '<title>Network Map Export</title>'
+        + '<style>'
+        + 'body{font-family:Arial,sans-serif;color:#1f2937;padding:24px;line-height:1.4;}'
+        + 'h1{margin:0 0 8px;font-size:24px;}'
+        + '.meta{color:#6b7280;margin-bottom:20px;}'
+        + '.cards{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;}'
+        + '.card{border:1px solid #e5e7eb;border-radius:10px;padding:12px;min-width:180px;}'
+        + '.card .label{font-size:12px;color:#6b7280;text-transform:uppercase;}'
+        + '.card .value{font-size:22px;font-weight:700;margin-top:4px;}'
+        + 'table{width:100%;border-collapse:collapse;}'
+        + 'th,td{border:1px solid #e5e7eb;padding:8px;text-align:left;font-size:13px;}'
+        + 'th{background:#f9fafb;}'
+        + '.table-wrap{overflow-x:auto;margin-bottom:20px;}'
+        + '.snapshot-wrap{margin:8px 0 18px;}'
+        + '.map-snapshot{max-width:100%;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;background:#f8fafc;}'
+        + '.map-snapshot > *{width:100% !important;height:100% !important;}'
+        + '@media print{body{padding:12mm;}}'
+        + '</style></head><body>'
+        + '<h1>Отчёт по карте сети</h1>'
+        + '<div class="meta">Дата выгрузки: ' + now.toLocaleString() + '</div>'
+        + '<div class="cards">'
+        + '<div class="card"><div class="label">Объектов</div><div class="value">' + objectsOnly.length + '</div></div>'
+        + '<div class="card"><div class="label">Кабелей</div><div class="value">' + cables.length + '</div></div>'
+        + '<div class="card"><div class="label">Всего элементов</div><div class="value">' + mapItems.length + '</div></div>'
+        + '</div>'
+        + '<h2>Скрин схемы</h2>'
+        + '<div class="snapshot-wrap">'
+        + (snapshotHtml || '<div class="meta">Скрин карты недоступен в текущем окружении.</div>')
+        + '</div>'
+        + '<h2>Сводка по типам объектов</h2>'
+        + '<div class="table-wrap"><table><thead><tr><th>Тип</th><th>Количество</th></tr></thead><tbody>' + typeRows + '</tbody></table></div>'
+        + '<h2>Объекты (полный список)</h2>'
+        + '<div class="table-wrap"><table><thead><tr><th>#</th><th>Тип</th><th>Название</th><th>Широта</th><th>Долгота</th></tr></thead><tbody>' + objectRows + '</tbody></table></div>'
+        + '<h2>Кабели (полный список)</h2>'
+        + '<div class="table-wrap"><table><thead><tr><th>#</th><th>Тип</th><th>Название</th><th>Откуда</th><th>Куда</th><th>Длина</th></tr></thead><tbody>' + cableRows + '</tbody></table></div>'
+        + '<p style="margin-top:18px;color:#6b7280;font-size:12px;">'
+        + 'Для сохранения в PDF выберите в окне печати: "Сохранить как PDF".'
+        + '</p>'
+        + '</body></html>';
+}
+
+function collectSnapshotBoundsFromData(data) {
+    var coreMinLat = Infinity;
+    var coreMinLon = Infinity;
+    var coreMaxLat = -Infinity;
+    var coreMaxLon = -Infinity;
+    var allMinLat = Infinity;
+    var allMinLon = Infinity;
+    var allMaxLat = -Infinity;
+    var allMaxLon = -Infinity;
+    function visitCoord(value) {
+        if (!Array.isArray(value) || value.length < 2) return;
+        if (Array.isArray(value[0])) {
+            value.forEach(visitCoord);
+            return;
+        }
+        var lat = Number(value[0]);
+        var lon = Number(value[1]);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+        if (lat < allMinLat) allMinLat = lat;
+        if (lat > allMaxLat) allMaxLat = lat;
+        if (lon < allMinLon) allMinLon = lon;
+        if (lon > allMaxLon) allMaxLon = lon;
+    }
+    function visitCoreCoord(value) {
+        if (!Array.isArray(value) || value.length < 2) return;
+        if (Array.isArray(value[0])) {
+            value.forEach(visitCoreCoord);
+            return;
+        }
+        var lat = Number(value[0]);
+        var lon = Number(value[1]);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+        if (lat < coreMinLat) coreMinLat = lat;
+        if (lat > coreMaxLat) coreMaxLat = lat;
+        if (lon < coreMinLon) coreMinLon = lon;
+        if (lon > coreMaxLon) coreMaxLon = lon;
+    }
+    (Array.isArray(data) ? data : []).forEach(function(item) {
+        if (!item || !item.geometry) return;
+        if (item.type === 'cableLabel' || item.type === 'regionLabel') return;
+        visitCoord(item.geometry);
+        // Приоритет для bounds: реальные объекты и связи, но не регион-полигон.
+        if (item.type !== 'region') visitCoreCoord(item.geometry);
+    });
+    if (Number.isFinite(coreMinLat) && Number.isFinite(coreMinLon) && Number.isFinite(coreMaxLat) && Number.isFinite(coreMaxLon)) {
+        return [[coreMinLat, coreMinLon], [coreMaxLat, coreMaxLon]];
+    }
+    if (Number.isFinite(allMinLat) && Number.isFinite(allMinLon) && Number.isFinite(allMaxLat) && Number.isFinite(allMaxLon)) {
+        return [[allMinLat, allMinLon], [allMaxLat, allMaxLon]];
+    }
+    return null;
+}
+
+function collectSnapshotBoundsForPdf(data) {
+    var fromData = collectSnapshotBoundsFromData(data);
+    if (fromData) return fromData;
+    if (!myMap || !myMap.geoObjects || typeof myMap.geoObjects.getBounds !== 'function') return null;
+    try {
+        var geoBounds = myMap.geoObjects.getBounds();
+        if (geoBounds && geoBounds.length >= 2) return geoBounds;
+    } catch (eBounds) {}
+    return null;
+}
+
+function beginMapPdfExportCapture() {
+    window._mapPdfExportCaptureActive = true;
+}
+
+function endMapPdfExportCapture() {
+    window._mapPdfExportCaptureActive = false;
+}
+
+var MAP_PDF_MODE_LABELS = {
+    overview: 'Обзор — вся сеть на одном листе',
+    viewport: 'Как на экране — текущий масштаб'
+};
+
+function normalizeMapBoundsRect(bounds) {
+    if (!bounds || bounds.length < 2) return null;
+    var minLat = Math.min(bounds[0][0], bounds[1][0]);
+    var maxLat = Math.max(bounds[0][0], bounds[1][0]);
+    var minLon = Math.min(bounds[0][1], bounds[1][1]);
+    var maxLon = Math.max(bounds[0][1], bounds[1][1]);
+    if (!Number.isFinite(minLat) || !Number.isFinite(minLon) || !Number.isFinite(maxLat) || !Number.isFinite(maxLon)) {
+        return null;
+    }
+    return { minLat: minLat, maxLat: maxLat, minLon: minLon, maxLon: maxLon };
+}
+
+function getMapVisibleBounds() {
+    if (!myMap || typeof myMap.getBounds !== 'function') return null;
+    try {
+        return normalizeMapBoundsRect(myMap.getBounds());
+    } catch (eBounds) {
+        return null;
+    }
+}
+
+function collectMapItemGeoPoints(item) {
+    var points = [];
+    if (!item || !item.geometry) return points;
+    function visit(value) {
+        if (!Array.isArray(value) || value.length < 2) return;
+        if (Array.isArray(value[0])) {
+            value.forEach(visit);
+            return;
+        }
+        var lat = Number(value[0]);
+        var lon = Number(value[1]);
+        if (Number.isFinite(lat) && Number.isFinite(lon)) points.push([lat, lon]);
+    }
+    visit(item.geometry);
+    return points;
+}
+
+function isGeoPointInBounds(lat, lon, bounds) {
+    if (!bounds) return true;
+    return lat >= bounds.minLat && lat <= bounds.maxLat && lon >= bounds.minLon && lon <= bounds.maxLon;
+}
+
+function isMapExportItemInBounds(item, bounds, mapItems) {
+    if (!bounds) return true;
+    if (!item) return false;
+    if (item.type === 'cable') {
+        if (item.from != null && mapItems[item.from] && isMapExportItemInBounds(mapItems[item.from], bounds, mapItems)) return true;
+        if (item.to != null && mapItems[item.to] && isMapExportItemInBounds(mapItems[item.to], bounds, mapItems)) return true;
+        var cablePts = collectMapItemGeoPoints(item);
+        for (var ci = 0; ci < cablePts.length; ci++) {
+            if (isGeoPointInBounds(cablePts[ci][0], cablePts[ci][1], bounds)) return true;
+        }
+        return false;
+    }
+    var pts = collectMapItemGeoPoints(item);
+    if (!pts.length) return false;
+    for (var pi = 0; pi < pts.length; pi++) {
+        if (isGeoPointInBounds(pts[pi][0], pts[pi][1], bounds)) return true;
+    }
+    return false;
+}
+
+function filterMapExportDataByBounds(data, bounds) {
+    if (!bounds) return Array.isArray(data) ? data.slice() : [];
+    var mapItems = Array.isArray(data) ? data : [];
+    return mapItems.filter(function(item) {
+        if (!item || !item.type) return false;
+        if (item.type === 'cableLabel' || item.type === 'regionLabel') return false;
+        return isMapExportItemInBounds(item, bounds, mapItems);
+    });
+}
+
+function getDefaultMapPdfExportOptions() {
+    return {
+        mode: 'overview',
+        pageFormat: 'a4'
+    };
+}
+
+function getMapPdfPlacemarkCount() {
+    if (!Array.isArray(objects)) return 0;
+    var count = 0;
+    objects.forEach(function(obj) {
+        if (!obj || !obj.properties) return;
+        var type = obj.properties.get('type');
+        if (!type || type === 'cable' || type === 'cableLabel' || type === 'regionLabel' || type === 'region') return;
+        count++;
+    });
+    return count;
+}
+
+function getMapPdfLargeMapThreshold() {
+    if (typeof MapPerf !== 'undefined' && MapPerf.VIEWPORT_CULL_MIN_OBJECTS) {
+        return MapPerf.VIEWPORT_CULL_MIN_OBJECTS;
+    }
+    return 120;
+}
+
+function shouldHideObjectsOnPdfOverviewSnapshot() {
+    return getMapPdfPlacemarkCount() >= getMapPdfLargeMapThreshold();
+}
+
+function isMapPdfDarkTheme() {
+    return document.documentElement.getAttribute('data-theme') === 'dark';
+}
+
+function applyMapPdfLabelInlineStyles(labelEl) {
+    if (!labelEl || !labelEl.style) return;
+    var isDark = isMapPdfDarkTheme();
+    labelEl.style.display = 'inline-block';
+    labelEl.style.color = isDark ? '#f1f5f9' : '#1e293b';
+    labelEl.style.fontSize = '11px';
+    labelEl.style.fontWeight = '600';
+    labelEl.style.lineHeight = '1.25';
+    labelEl.style.textAlign = 'center';
+    labelEl.style.whiteSpace = 'nowrap';
+    labelEl.style.padding = '3px 8px';
+    labelEl.style.marginTop = '0';
+    labelEl.style.marginLeft = '50%';
+    labelEl.style.transform = 'translateX(-50%)';
+    labelEl.style.background = isDark ? 'rgba(30, 41, 59, 0.92)' : 'rgba(255, 255, 255, 0.94)';
+    labelEl.style.border = isDark ? '1px solid rgba(148, 163, 184, 0.35)' : '1px solid #e2e8f0';
+    labelEl.style.borderRadius = '6px';
+    labelEl.style.boxShadow = isDark
+        ? '0 2px 8px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08)'
+        : '0 1px 3px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.8)';
+    labelEl.style.letterSpacing = '0.01em';
+}
+
+function applyMapPdfLabelStylesInRoot(root) {
+    if (!root || !root.querySelectorAll) return;
+    root.querySelectorAll('.map-label').forEach(applyMapPdfLabelInlineStyles);
+}
+
+function prepareMapLabelsDomForPdfCapture(mapEl) {
+    var restores = [];
+    if (!mapEl || !mapEl.querySelectorAll) return function() {};
+    mapEl.querySelectorAll('.map-label').forEach(function(labelEl) {
+        restores.push({ el: labelEl, cssText: labelEl.style.cssText });
+        applyMapPdfLabelInlineStyles(labelEl);
+    });
+    return function() {
+        restores.forEach(function(saved) {
+            try { saved.el.style.cssText = saved.cssText; } catch (eRestore) {}
+        });
+    };
+}
+
+function refreshVisibleMapLabelsForPdfCapture(boundsRect, opts) {
+    opts = opts || {};
+    if (opts.hideObjects) return;
+    if (typeof updateObjectLabel === 'function') {
+        objects.forEach(function(obj) {
+            if (!obj || !obj.properties) return;
+            var type = obj.properties.get('type');
+            if (!isMapPdfObjectType(type)) return;
+            if (!opts.showAll && boundsRect && !isLiveObjectInPdfBounds(obj, boundsRect)) return;
+            try {
+                updateObjectLabel(obj, obj.properties.get('name'));
+                var label = obj.properties.get('label');
+                if (label && label.options) label.options.set('visible', true);
+            } catch (eLabel) {}
+        });
+    }
+}
+
+function isMapPdfObjectType(type) {
+    return !!type && type !== 'cable' && type !== 'cableLabel' && type !== 'regionLabel' && type !== 'region';
+}
+
+function showMapPdfExportDialog() {
+    return new Promise(function(resolve) {
+        var modal = document.getElementById('mapPdfExportModal');
+        if (!modal) {
+            resolve(getDefaultMapPdfExportOptions());
+            return;
+        }
+        var cancelBtn = document.getElementById('mapPdfExportCancel');
+        var confirmBtn = document.getElementById('mapPdfExportConfirm');
+        var closeBtn = modal.querySelector('.close-map-pdf-export-modal');
+        var pageFormatEl = document.getElementById('mapPdfPageFormat');
+        var modeInputs = modal.querySelectorAll('input[name="mapPdfMode"]');
+        var settled = false;
+
+        function finish(result) {
+            if (settled) return;
+            settled = true;
+            modal.style.display = 'none';
+            document.removeEventListener('keydown', onKeyDown);
+            resolve(result);
+        }
+
+        function readOptions() {
+            var mode = 'overview';
+            modeInputs.forEach(function(input) {
+                if (input.checked) mode = input.value || 'overview';
+            });
+            if (mode !== 'viewport') mode = 'overview';
+            var pageFormat = pageFormatEl && pageFormatEl.value === 'a3' ? 'a3' : 'a4';
+            return { mode: mode, pageFormat: pageFormat };
+        }
+
+        function onKeyDown(e) {
+            if (e.key === 'Escape') finish(null);
+        }
+
+        if (cancelBtn) cancelBtn.onclick = function() { finish(null); };
+        if (closeBtn) closeBtn.onclick = function() { finish(null); };
+        if (confirmBtn) {
+            confirmBtn.onclick = function() { finish(readOptions()); };
+        }
+        modal.onclick = function(e) {
+            if (e.target === modal) finish(null);
+        };
+
+        modal.style.display = 'block';
+        document.addEventListener('keydown', onKeyDown);
+        if (confirmBtn) confirmBtn.focus();
+    });
+}
+
+function getMapPdfCaptureScale(mode) {
+    if (mode === 'viewport') {
+        return Math.max(1.25, Math.min(2, window.devicePixelRatio || 1.5));
+    }
+    return Math.max(1, Math.min(1.5, window.devicePixelRatio || 1));
+}
+
+function getMapPdfCaptureElement() {
+    var el = null;
+    if (myMap && myMap.container && typeof myMap.container.getElement === 'function') {
+        el = myMap.container.getElement();
+    }
+    if (!el || el.offsetWidth < 8 || el.offsetHeight < 8) {
+        el = document.getElementById('map');
+    }
+    return el;
+}
+
+function computeSafeMapPdfCaptureScale(mapEl, desiredScale) {
+    var scale = Number(desiredScale);
+    if (!Number.isFinite(scale) || scale <= 0) scale = 1;
+    if (!mapEl) return scale;
+    var maxSide = 4096;
+    var w = Math.max(1, mapEl.offsetWidth || mapEl.clientWidth || 1);
+    var h = Math.max(1, mapEl.offsetHeight || mapEl.clientHeight || 1);
+    var maxByW = maxSide / w;
+    var maxByH = maxSide / h;
+    var maxScale = Math.min(maxByW, maxByH, 2.5);
+    return Math.max(1, Math.min(scale, maxScale));
+}
+
+async function waitForMapElementReady(mapEl, timeoutMs) {
+    var deadline = Date.now() + (timeoutMs || 3000);
+    while (Date.now() < deadline) {
+        if (mapEl && mapEl.offsetWidth >= 8 && mapEl.offsetHeight >= 8) return true;
+        await new Promise(function(resolve) { setTimeout(resolve, 60); });
+    }
+    return !!(mapEl && mapEl.offsetWidth >= 8 && mapEl.offsetHeight >= 8);
+}
+
+function isYmapsTileLikeNode(node) {
+    if (!node || !node.className) return false;
+    var cls = String(node.className);
+    if (cls.indexOf('ymaps') === -1) return false;
+    return /tiles|ground|layer|pane/i.test(cls);
+}
+
+function stabilizeYmapsDomForHtml2Canvas(rootEl) {
+    var restores = [];
+    if (!rootEl || !rootEl.querySelectorAll) return function() {};
+    var nodes = rootEl.querySelectorAll('*');
+    nodes.forEach(function(node) {
+        if (!isYmapsTileLikeNode(node) || !node.style) return;
+        try {
+            var computed = window.getComputedStyle(node);
+            var transform = computed.transform || computed.webkitTransform;
+            if (!transform || transform === 'none') return;
+            var matrixMatch = transform.match(/matrix(3d)?\(([^)]+)\)/);
+            if (!matrixMatch) return;
+            var parts = matrixMatch[2].split(',').map(function(v) { return parseFloat(v.trim()); });
+            if (parts.length < 6) return;
+            var tx = parts[4];
+            var ty = parts[5];
+            if (!Number.isFinite(tx) || !Number.isFinite(ty)) return;
+            if (Math.abs(tx) < 0.5 && Math.abs(ty) < 0.5) return;
+            restores.push({
+                node: node,
+                transform: node.style.transform,
+                webkitTransform: node.style.webkitTransform,
+                left: node.style.left,
+                top: node.style.top,
+                position: node.style.position
+            });
+            if (!node.style.position || node.style.position === 'static') {
+                node.style.position = 'absolute';
+            }
+            var left = parseFloat(node.style.left);
+            var top = parseFloat(node.style.top);
+            node.style.left = (Number.isFinite(left) ? left + tx : tx) + 'px';
+            node.style.top = (Number.isFinite(top) ? top + ty : ty) + 'px';
+            node.style.transform = 'none';
+            node.style.webkitTransform = 'none';
+        } catch (eNode) {}
+    });
+    return function() {
+        restores.forEach(function(saved) {
+            try {
+                saved.node.style.transform = saved.transform;
+                saved.node.style.webkitTransform = saved.webkitTransform;
+                saved.node.style.left = saved.left;
+                saved.node.style.top = saved.top;
+                saved.node.style.position = saved.position;
+            } catch (eRestore) {}
+        });
+    };
+}
+
+function shouldIgnoreMapPdfCaptureElement(el) {
+    if (!el || el.nodeType !== 1) return false;
+    var tag = el.tagName ? el.tagName.toLowerCase() : '';
+    if (tag === 'iframe' || tag === 'video' || tag === 'script' || tag === 'link') return true;
+    if (el.id === 'mapLoadingOverlay') return true;
+    return false;
+}
+
+function sanitizeMapPdfCaptureClone(clonedRoot) {
+    if (!clonedRoot || !clonedRoot.querySelectorAll) return;
+    clonedRoot.querySelectorAll('canvas').forEach(function(canvas) {
+        if (!canvas || canvas.width < 1 || canvas.height < 1) {
+            if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
+        }
+    });
+}
+
+async function prepareMapDomForPdfCapture(mapEl) {
+    if (myMap && myMap.container && typeof myMap.container.fitToViewport === 'function') {
+        try { myMap.container.fitToViewport(); } catch (eFit) {}
+    }
+    await waitForMapElementReady(mapEl, 2500);
+    await new Promise(function(resolve) {
+        requestAnimationFrame(function() { requestAnimationFrame(resolve); });
+    });
+}
+
+async function loadMapPdfImage(url) {
+    return new Promise(function(resolve, reject) {
+        var img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = function() { resolve(img); };
+        img.onerror = function() { reject(new Error('Image load failed')); };
+        img.src = url;
+    });
+}
+
+function estimateZoomForMapBounds(rect, width, height) {
+    if (!rect) return 12;
+    var latSpan = Math.max(0.00001, rect.maxLat - rect.minLat);
+    var lonSpan = Math.max(0.00001, rect.maxLon - rect.minLon);
+    var latMid = (rect.minLat + rect.maxLat) / 2;
+    var lonSpanCorrected = lonSpan * Math.cos(latMid * Math.PI / 180);
+    var maxSpan = Math.max(latSpan, lonSpanCorrected);
+    var worldPx = Math.min(width, height) * 256;
+    var zoom = Math.log2(worldPx / maxSpan) - 8;
+    return Math.max(3, Math.min(17, Math.round(zoom)));
+}
+
+async function captureYandexStaticMapSnapshot(bounds, mapEl) {
+    var rect = normalizeMapBoundsRect(bounds);
+    if (!rect) return null;
+    var width = Math.max(320, Math.min(650, mapEl && mapEl.offsetWidth ? mapEl.offsetWidth : 650));
+    var height = Math.max(240, Math.min(450, mapEl && mapEl.offsetHeight ? mapEl.offsetHeight : 450));
+    var centerLon = (rect.minLon + rect.maxLon) / 2;
+    var centerLat = (rect.minLat + rect.maxLat) / 2;
+    var zoom = estimateZoomForMapBounds(rect, width, height);
+    var apiKey = '';
+    try {
+        var resp = await fetch('/api/public-config');
+        var config = await resp.json();
+        apiKey = config && config.yandexMapsApiKey ? String(config.yandexMapsApiKey).trim() : '';
+    } catch (eCfg) {}
+    var url = 'https://static-maps.yandex.ru/1.x/?lang=ru_RU&ll='
+        + centerLon.toFixed(6) + ',' + centerLat.toFixed(6)
+        + '&z=' + zoom + '&l=map&size=' + width + ',' + height;
+    if (apiKey && apiKey !== 'YOUR_YANDEX_MAPS_API_KEY') {
+        url += '&apikey=' + encodeURIComponent(apiKey);
+    }
+    var img = await loadMapPdfImage(url);
+    var canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+    return canvas;
+}
+
+async function captureMapSnapshot(mapEl, scale) {
+    if (!mapEl) throw new Error('Map element is missing');
+    await prepareMapDomForPdfCapture(mapEl);
+    var desiredScale = computeSafeMapPdfCaptureScale(mapEl, scale);
+    var attempts = [desiredScale];
+    if (desiredScale > 1.25) attempts.push(1.25);
+    if (desiredScale > 1) attempts.push(1);
+    var lastError = null;
+    for (var i = 0; i < attempts.length; i++) {
+        var attemptScale = attempts[i];
+        var restoreDom = stabilizeYmapsDomForHtml2Canvas(mapEl);
+        var restoreLabelStyles = prepareMapLabelsDomForPdfCapture(mapEl);
+        try {
+            var canvas = await window.html2canvas(mapEl, {
+                backgroundColor: '#ffffff',
+                useCORS: true,
+                allowTaint: true,
+                scale: attemptScale,
+                logging: false,
+                imageTimeout: 15000,
+                width: mapEl.offsetWidth,
+                height: mapEl.offsetHeight,
+                windowWidth: mapEl.offsetWidth,
+                windowHeight: mapEl.offsetHeight,
+                scrollX: 0,
+                scrollY: 0,
+                ignoreElements: shouldIgnoreMapPdfCaptureElement,
+                onclone: function(_doc, clonedElement) {
+                    sanitizeMapPdfCaptureClone(clonedElement);
+                    applyMapPdfLabelStylesInRoot(clonedElement);
+                }
+            });
+            if (canvas && canvas.width > 0 && canvas.height > 0) return canvas;
+            lastError = new Error('Empty canvas');
+        } catch (eCapture) {
+            lastError = eCapture;
+        } finally {
+            restoreLabelStyles();
+            restoreDom();
+        }
+    }
+    throw lastError || new Error('Map capture failed');
+}
+
+function getLiveObjectGeoPoints(obj) {
+    if (!obj || !obj.geometry || typeof obj.geometry.getCoordinates !== 'function') return [];
+    try {
+        return collectMapItemGeoPoints({ geometry: obj.geometry.getCoordinates() });
+    } catch (eCoords) {
+        return [];
+    }
+}
+
+function isLiveObjectInPdfBounds(obj, boundsRect) {
+    if (!boundsRect) return true;
+    var pts = getLiveObjectGeoPoints(obj);
+    for (var i = 0; i < pts.length; i++) {
+        if (isGeoPointInBounds(pts[i][0], pts[i][1], boundsRect)) return true;
+    }
+    return false;
+}
+
+function setPdfExportConnectionLinesVisible(visible) {
+    var groups = [];
+    if (typeof nodeConnectionLines !== 'undefined') groups.push(nodeConnectionLines);
+    if (typeof onuConnectionLines !== 'undefined') groups.push(onuConnectionLines);
+    if (typeof oltConnectionLines !== 'undefined') groups.push(oltConnectionLines);
+    if (typeof splitterConnectionLines !== 'undefined') groups.push(splitterConnectionLines);
+    if (typeof splitterOutputConnectionLines !== 'undefined') groups.push(splitterOutputConnectionLines);
+    if (typeof radioBridgeConnectionLines !== 'undefined') groups.push(radioBridgeConnectionLines);
+    groups.forEach(function(arr) {
+        if (!Array.isArray(arr)) return;
+        arr.forEach(function(line) {
+            if (!line || !line.options) return;
+            try { line.options.set('visible', !!visible); } catch (eLine) {}
+        });
+    });
+}
+
+function prepareMapVisibilityForPdfCapture(boundsRect, opts) {
+    opts = opts || {};
+    var showAll = !!opts.showAll;
+    var showAllCables = !!opts.showAllCables;
+    var hideObjects = !!opts.hideObjects;
+    if (!Array.isArray(objects)) return;
+    objects.forEach(function(obj) {
+        if (!obj || !obj.options || !obj.properties) return;
+        var type = obj.properties.get('type');
+        if (type === 'region') {
+            try { obj.options.set('visible', true); } catch (eRegion) {}
+            return;
+        }
+        if (type === 'cable') {
+            if (!showAllCables && !showAll && !isLiveObjectInPdfBounds(obj, boundsRect)) return;
+            try {
+                obj.options.set('visible', true);
+                if (window.CableUnderground && CableUnderground.setOverlaysVisible) {
+                    CableUnderground.setOverlaysVisible(obj, true);
+                }
+            } catch (eCable) {}
+            return;
+        }
+        if (type === 'cableLabel') {
+            try { obj.options.set('visible', !hideObjects); } catch (eCableLabel) {}
+            return;
+        }
+        if (!isMapPdfObjectType(type)) return;
+        if (hideObjects) {
+            try {
+                obj.options.set('visible', false);
+                var hiddenLabel = obj.properties.get('label');
+                if (hiddenLabel && hiddenLabel.options) hiddenLabel.options.set('visible', false);
+            } catch (eHideObj) {}
+            return;
+        }
+        if (!showAll && !isLiveObjectInPdfBounds(obj, boundsRect)) return;
+        try {
+            obj.options.set('visible', true);
+            var label = obj.properties.get('label');
+            if (label && label.options) label.options.set('visible', true);
+        } catch (eObj) {}
+    });
+    if (typeof crossGroupPlacemarks !== 'undefined' && Array.isArray(crossGroupPlacemarks)) {
+        crossGroupPlacemarks.forEach(function(pm) {
+            if (!pm || !pm.options) return;
+            if (hideObjects) {
+                try {
+                    pm.options.set('visible', false);
+                    var hiddenLbl = pm.properties && pm.properties.get('crossGroupLabel');
+                    if (hiddenLbl && hiddenLbl.options) hiddenLbl.options.set('visible', false);
+                } catch (eHideCross) {}
+                return;
+            }
+            if (!showAll && !isLiveObjectInPdfBounds(pm, boundsRect)) return;
+            try {
+                pm.options.set('visible', true);
+                var lbl = pm.properties && pm.properties.get('crossGroupLabel');
+                if (lbl && lbl.options) lbl.options.set('visible', true);
+            } catch (eCross) {}
+        });
+    }
+    if (typeof nodeGroupPlacemarks !== 'undefined' && Array.isArray(nodeGroupPlacemarks)) {
+        nodeGroupPlacemarks.forEach(function(pm) {
+            if (!pm || !pm.options) return;
+            if (hideObjects) {
+                try {
+                    pm.options.set('visible', false);
+                    var hiddenLbl = pm.properties && pm.properties.get('nodeGroupLabel');
+                    if (hiddenLbl && hiddenLbl.options) hiddenLbl.options.set('visible', false);
+                } catch (eHideNode) {}
+                return;
+            }
+            if (!showAll && !isLiveObjectInPdfBounds(pm, boundsRect)) return;
+            try {
+                pm.options.set('visible', true);
+                var lbl = pm.properties && pm.properties.get('nodeGroupLabel');
+                if (lbl && lbl.options) lbl.options.set('visible', true);
+            } catch (eNode) {}
+        });
+    }
+    setPdfExportConnectionLinesVisible(!hideObjects);
+    if (!hideObjects) {
+        try {
+            if (typeof updateAllConnectionLines === 'function') updateAllConnectionLines();
+        } catch (eLines) {}
+    }
+    if (!opts.skipConnectionVisibilitySync && typeof applyConnectionLinesVisibility === 'function') {
+        applyConnectionLinesVisibility();
+    }
+    refreshVisibleMapLabelsForPdfCapture(boundsRect, opts);
+    applyMapPdfLabelStylesInRoot(document.getElementById('map'));
+}
+
+function restoreMapVisibilityAfterPdfExport() {
+    if (typeof applyMapFilter === 'function') applyMapFilter();
+}
+
+async function waitForMapViewChange(opts) {
+    opts = opts || {};
+    await new Promise(function(resolve) {
+        var done = false;
+        var finish = function() {
+            if (done) return;
+            done = true;
+            try {
+                if (myMap && myMap.events) myMap.events.remove('actionend', onEnd);
+            } catch (eRemove) {}
+            resolve();
+        };
+        var onEnd = function() { finish(); };
+        try {
+            if (myMap && myMap.events) myMap.events.add('actionend', onEnd);
+            if (opts.center && opts.zoom != null && myMap && typeof myMap.setCenter === 'function') {
+                myMap.setCenter(opts.center, opts.zoom, { duration: 0 });
+            } else if (opts.bounds && myMap && typeof myMap.setBounds === 'function') {
+                myMap.setBounds(opts.bounds, {
+                    checkZoomRange: true,
+                    zoomMargin: opts.zoomMargin != null ? opts.zoomMargin : 55,
+                    duration: 0
+                });
+            }
+            setTimeout(finish, opts.timeout || 1700);
+        } catch (eFit) {
+            finish();
+        }
+    });
+    await new Promise(function(resolve) { setTimeout(resolve, opts.renderDelay || 550); });
+}
+
+async function ensureMapPdfMinZoom(minZoom, center) {
+    if (!myMap || minZoom == null) return;
+    try {
+        var z = myMap.getZoom();
+        if (z >= minZoom) return;
+        var targetCenter = center || myMap.getCenter();
+        if (targetCenter && typeof myMap.setCenter === 'function') {
+            myMap.setCenter(targetCenter, minZoom, { duration: 0 });
+            await new Promise(function(resolve) { setTimeout(resolve, 850); });
+        }
+    } catch (eZoom) {}
+}
+
+async function prepareMapFrameForPdfCapture(boundsRect, minZoom, opts) {
+    opts = opts || {};
+    if (boundsRect && minZoom != null) {
+        var center = [
+            (boundsRect.minLat + boundsRect.maxLat) / 2,
+            (boundsRect.minLon + boundsRect.maxLon) / 2
+        ];
+        await ensureMapPdfMinZoom(minZoom, center);
+    }
+    prepareMapVisibilityForPdfCapture(boundsRect, opts);
+    await new Promise(function(resolve) { setTimeout(resolve, opts.renderDelay || 320); });
+}
+
+function restoreMapView(center, zoom) {
+    if (!center || zoom == null || !myMap) return;
+    try { myMap.setCenter(center, zoom, { duration: 0 }); } catch (eRestore) {}
+}
+
+function createMapPdfTextHelpers(doc, unicodeFontReady, compact) {
+    var cyrMap = {
+        'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e',
+        'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
+        'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+        'ф': 'f', 'х': 'kh', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch',
+        'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya'
+    };
+    function toAsciiSafeText(value) {
+        var source = String(value == null ? '' : value);
+        if (unicodeFontReady) return source;
+        var out = '';
+        for (var i = 0; i < source.length; i++) {
+            var ch = source.charAt(i);
+            var lower = ch.toLowerCase();
+            if (Object.prototype.hasOwnProperty.call(cyrMap, lower)) {
+                var mapped = cyrMap[lower];
+                if (ch !== lower) mapped = mapped.charAt(0).toUpperCase() + mapped.slice(1);
+                out += mapped;
+            } else if (ch.charCodeAt(0) <= 127) {
+                out += ch;
+            } else {
+                out += '?';
+            }
+        }
+        return out;
+    }
+    var margin = compact ? 24 : 34;
+    var pageW = doc.internal.pageSize.getWidth();
+    var pageH = doc.internal.pageSize.getHeight();
+    var y = margin;
+    var defaultSize = compact ? 8 : 10;
+    var defaultGap = compact ? 10 : 14;
+    function ensureSpace(heightNeeded) {
+        if (y + heightNeeded > pageH - margin) {
+            doc.addPage('a4', 'p');
+            y = margin;
+        }
+    }
+    function writeLine(text, size, gap) {
+        doc.setFontSize(size || defaultSize);
+        ensureSpace((size || defaultSize) + 6);
+        doc.text(toAsciiSafeText(text), margin, y);
+        y += gap || defaultGap;
+    }
+    function writeTitle(text, size, gap) {
+        doc.setFontSize(size || (compact ? 14 : 18));
+        ensureSpace((size || (compact ? 14 : 18)) + 8);
+        doc.text(toAsciiSafeText(text), margin, y);
+        y += gap || (compact ? 18 : 24);
+    }
+    return {
+        margin: margin,
+        pageW: pageW,
+        pageH: pageH,
+        toAsciiSafeText: toAsciiSafeText,
+        writeTitle: writeTitle,
+        writeLine: writeLine,
+        resetPage: function() { y = margin; },
+        addGap: function(extra) { y += extra || 0; }
+    };
+}
+
+function addMapSnapshotsCompactToPdf(doc, snapshots, pageFormat, meta) {
+    if (!snapshots || !snapshots.length) return;
+    meta = meta || {};
+    var margin = 12;
+    var snapshot = snapshots[0];
+    var pageW = doc.internal.pageSize.getWidth();
+    var pageH = doc.internal.pageSize.getHeight();
+    var top = margin;
+
+    doc.setFontSize(11);
+    doc.text(meta.titleLine || 'Отчёт по карте сети', margin, top + 10);
+    if (meta.metaLine) {
+        doc.setFontSize(8);
+        doc.text(meta.metaLine, margin, top + 22);
+    }
+    top += 34;
+
+    var captionH = snapshot.caption ? 10 : 0;
+    var availW = pageW - margin * 2;
+    var availH = pageH - top - margin - captionH;
+    var canvas = snapshot.canvas;
+    var imgW = availW;
+    var imgH = canvas.height * (imgW / canvas.width);
+    if (imgH > availH) {
+        imgH = availH;
+        imgW = canvas.width * (imgH / canvas.height);
+    }
+    var imgX = margin + (availW - imgW) / 2;
+    var imgY = top + captionH + (availH - imgH) / 2;
+    if (snapshot.caption) {
+        doc.setFontSize(8);
+        doc.text(snapshot.caption, margin, top + 8);
+    }
+    doc.addImage(canvas, 'PNG', imgX, imgY, imgW, imgH);
+}
+
+function appendMapPdfReportTables(doc, data, helpers, fullData, listScopeLabel, compact) {
+    var mapItems = Array.isArray(data) ? data : [];
+    var sourceItems = Array.isArray(fullData) ? fullData : mapItems;
+    var cables = mapItems.filter(function(item) { return item && item.type === 'cable'; });
+    var objectsOnly = mapItems.filter(function(item) {
+        if (!item || !item.type) return false;
+        return item.type !== 'cable' && item.type !== 'cableLabel' && item.type !== 'regionLabel';
+    });
+    var byType = Object.create(null);
+    objectsOnly.forEach(function(item) { byType[item.type] = (byType[item.type] || 0) + 1; });
+    var objectByIndex = Object.create(null);
+    sourceItems.forEach(function(item, index) {
+        if (!item || !item.type) return;
+        if (item.type === 'cable' || item.type === 'cableLabel' || item.type === 'regionLabel') return;
+        objectByIndex[index] = item;
+    });
+    var objectsTitle = listScopeLabel ? ('Объекты (' + listScopeLabel + ')') : 'Объекты';
+    var cablesTitle = listScopeLabel ? ('Кабели (' + listScopeLabel + ')') : 'Кабели';
+    var sectionSize = compact ? 10 : 12;
+    var lineSize = compact ? 8 : 9;
+    var lineGap = compact ? 9 : 12;
+
+    helpers.addGap(compact ? 2 : 6);
+    helpers.writeLine('Сводка по типам:', sectionSize, compact ? 12 : 16);
+    Object.keys(byType).sort().forEach(function(type) {
+        helpers.writeLine('- ' + resolveMapExportObjectTypeLabel(type, true) + ': ' + byType[type], lineSize, compact ? 10 : 13);
+    });
+    if (Object.keys(byType).length === 0) helpers.writeLine('- Нет данных', lineSize, compact ? 10 : 13);
+
+    helpers.addGap(compact ? 2 : 6);
+    helpers.writeLine(objectsTitle, sectionSize, compact ? 12 : 16);
+    objectsOnly.forEach(function(item, index) {
+        helpers.writeLine(formatMapExportObjectLine(item, index), lineSize, lineGap);
+    });
+    if (objectsOnly.length === 0) helpers.writeLine('Нет объектов', lineSize, lineGap);
+
+    helpers.addGap(compact ? 2 : 6);
+    helpers.writeLine(cablesTitle, sectionSize, compact ? 12 : 16);
+    cables.forEach(function(item, index) {
+        helpers.writeLine(formatMapExportCableLine(item, objectByIndex, index), lineSize, lineGap);
+    });
+    if (cables.length === 0) helpers.writeLine('Нет кабелей', lineSize, lineGap);
+}
+
+async function openPdfExportWindow(data, exportOptions) {
+    if (!window.jspdf || !window.jspdf.jsPDF || !window.html2canvas) {
+        showError('PDF-библиотеки не загружены. Обновите страницу и попробуйте снова.', 'Экспорт');
+        return false;
+    }
+    if (!myMap || !myMap.container || typeof myMap.container.getElement !== 'function') {
+        showError('Карта недоступна для формирования PDF.', 'Экспорт');
+        return false;
+    }
+
+    exportOptions = exportOptions || getDefaultMapPdfExportOptions();
+    var mode = exportOptions.mode === 'viewport' ? 'viewport' : 'overview';
+    var pageFormat = exportOptions.pageFormat === 'a3' ? 'a3' : 'a4';
+    var hideObjectsOnSnapshot = mode === 'overview' && shouldHideObjectsOnPdfOverviewSnapshot();
+    var modeLabel = MAP_PDF_MODE_LABELS[mode] || MAP_PDF_MODE_LABELS.overview;
+    if (hideObjectsOnSnapshot) {
+        modeLabel += ' · без объектов на снимке';
+    }
+
+    var mapEl = getMapPdfCaptureElement();
+    if (!mapEl) {
+        showError('Не удалось получить контейнер карты.', 'Экспорт');
+        return false;
+    }
+
+    var restoreCenter = null;
+    var restoreZoom = null;
+    try { restoreCenter = myMap.getCenter(); } catch (eCenter) {}
+    try { restoreZoom = myMap.getZoom(); } catch (eZoom) {}
+
+    var viewportBounds = mode === 'viewport' ? getMapVisibleBounds() : null;
+    var reportData = mode === 'viewport' ? filterMapExportDataByBounds(data, viewportBounds) : data;
+    var listScopeLabel = mode === 'viewport' ? 'видимая область' : '';
+
+    var bounds = collectSnapshotBoundsForPdf(data);
+    if (mode === 'overview' && !bounds) {
+        showWarning('Не удалось определить границы карты. Используется режим «Как на экране».', 'Экспорт');
+        mode = 'viewport';
+        modeLabel = MAP_PDF_MODE_LABELS.viewport;
+        viewportBounds = getMapVisibleBounds();
+        reportData = filterMapExportDataByBounds(data, viewportBounds);
+        listScopeLabel = 'видимая область';
+        hideObjectsOnSnapshot = false;
+    }
+
+    var captureScale = getMapPdfCaptureScale(mode);
+    var mapSnapshots = [];
+    var visibilityOpts = {
+        hideObjects: hideObjectsOnSnapshot,
+        showAllCables: mode === 'overview',
+        showAll: mode === 'overview' && !hideObjectsOnSnapshot,
+        skipConnectionVisibilitySync: mode === 'overview' || hideObjectsOnSnapshot
+    };
+    var snapshotCaption = mode === 'viewport'
+        ? 'Текущий вид карты'
+        : (hideObjectsOnSnapshot ? 'Обзор (трассы и регионы)' : 'Обзор всей сети');
+    beginMapPdfExportCapture();
+    try {
+        if (mode === 'viewport') {
+            await waitForMapViewChange({ renderDelay: 350 });
+            await prepareMapFrameForPdfCapture(
+                viewportBounds,
+                16,
+                Object.assign({}, visibilityOpts, { renderDelay: 350 })
+            );
+            prepareMapVisibilityForPdfCapture(viewportBounds, visibilityOpts);
+            mapSnapshots.push({
+                canvas: await captureMapSnapshot(mapEl, captureScale),
+                caption: snapshotCaption
+            });
+        } else if (mode === 'overview') {
+            await waitForMapViewChange({
+                bounds: bounds,
+                zoomMargin: 48,
+                timeout: 2200,
+                renderDelay: hideObjectsOnSnapshot ? 700 : 1000
+            });
+            await prepareMapFrameForPdfCapture(null, null, Object.assign({}, visibilityOpts, {
+                renderDelay: hideObjectsOnSnapshot ? 320 : 500
+            }));
+            prepareMapVisibilityForPdfCapture(null, visibilityOpts);
+            await new Promise(function(resolve) { setTimeout(resolve, hideObjectsOnSnapshot ? 250 : 450); });
+            mapSnapshots.push({
+                canvas: await captureMapSnapshot(mapEl, captureScale),
+                caption: snapshotCaption
+            });
+        }
+    } catch (eCapture) {
+        console.error('PDF map capture failed:', eCapture);
+        if (mode === 'overview' && bounds) {
+            try {
+                var fallbackCanvas = await captureYandexStaticMapSnapshot(bounds, mapEl);
+                if (fallbackCanvas) {
+                    mapSnapshots.push({
+                        canvas: fallbackCanvas,
+                        caption: 'Обзор (статическая карта)'
+                    });
+                    showWarning('Снимок интерактивной карты не удался — в PDF добавлена статическая карта. Таблицы объектов и кабелей сохранены.', 'Экспорт');
+                }
+            } catch (eStatic) {
+                console.error('PDF static map fallback failed:', eStatic);
+            }
+        }
+        if (!mapSnapshots.length && viewportBounds) {
+            try {
+                var viewportFallback = await captureYandexStaticMapSnapshot([
+                    [viewportBounds.minLat, viewportBounds.minLon],
+                    [viewportBounds.maxLat, viewportBounds.maxLon]
+                ], mapEl);
+                if (viewportFallback) {
+                    mapSnapshots.push({
+                        canvas: viewportFallback,
+                        caption: 'Видимая область (статическая карта)'
+                    });
+                    showWarning('Снимок интерактивной карты не удался — в PDF добавлена статическая карта. Таблицы объектов и кабелей сохранены.', 'Экспорт');
+                }
+            } catch (eViewportStatic) {
+                console.error('PDF viewport static map fallback failed:', eViewportStatic);
+            }
+        }
+        if (!mapSnapshots.length) {
+            restoreMapView(restoreCenter, restoreZoom);
+            restoreMapVisibilityAfterPdfExport();
+            endMapPdfExportCapture();
+            showError('Не удалось снять скрин карты для PDF. Попробуйте режим «Как на экране» или уменьшите окно браузера.', 'Экспорт');
+            return false;
+        }
+    }
+
+    restoreMapView(restoreCenter, restoreZoom);
+    restoreMapVisibilityAfterPdfExport();
+    endMapPdfExportCapture();
+
+    if (!mapSnapshots.length) {
+        showError('Не удалось сформировать снимок карты для PDF.', 'Экспорт');
+        return false;
+    }
+
+    var mapItems = Array.isArray(reportData) ? reportData : [];
+    var cables = mapItems.filter(function(item) { return item && item.type === 'cable'; });
+    var objectsOnly = mapItems.filter(function(item) {
+        if (!item || !item.type) return false;
+        return item.type !== 'cable' && item.type !== 'cableLabel' && item.type !== 'regionLabel';
+    });
+
+    var statsLine = mode === 'viewport'
+        ? ('Объектов в видимой области: ' + objectsOnly.length + ' | Кабелей: ' + cables.length)
+        : ('Объектов: ' + objectsOnly.length + ' | Кабелей: ' + cables.length);
+    var metaLine = new Date().toLocaleString() + ' · ' + statsLine + ' · ' + modeLabel;
+
+    var doc = new window.jspdf.jsPDF({ orientation: 'l', unit: 'pt', format: pageFormat });
+    var unicodeFontReady = await ensurePdfUnicodeFont(doc);
+    if (!unicodeFontReady) {
+        showWarning('Не удалось загрузить шрифт для кириллицы. Проверьте интернет — иначе текст в PDF может быть искажён.', 'Экспорт');
+    }
+
+    addMapSnapshotsCompactToPdf(doc, mapSnapshots, pageFormat, {
+        titleLine: unicodeFontReady ? 'Отчёт по карте сети' : 'Network map report',
+        metaLine: metaLine
+    });
+
+    doc.addPage('a4', 'p');
+    var helpers = createMapPdfTextHelpers(doc, unicodeFontReady, true);
+    appendMapPdfReportTables(doc, reportData, helpers, data, listScopeLabel, true);
+
+    doc.save('network-map-export.pdf');
+    return true;
+}
+
+function exportData(preferredFormat) {
+    if (typeof requireAdmin === 'function' && !requireAdmin()) return;
+    var data = getSerializedData();
+    var choice = preferredFormat ? String(preferredFormat).trim().toLowerCase() : 'json';
+
+    if (choice === '1' || choice === 'json') {
+        downloadTextFile(JSON.stringify(data, null, 2), 'network-map-export.json', 'application/json');
+        showSuccess('Карта экспортирована в JSON', 'Экспорт');
+        logAction(ActionTypes.EXPORT_DATA, { count: objects.length, format: 'json' });
+        return;
+    }
+    if (choice === 'pdf') {
+        showMapPdfExportDialog().then(function(options) {
+            if (!options) return null;
+            return openPdfExportWindow(data, options).then(function(opened) {
+                return opened ? options : null;
+            });
+        }).then(function(result) {
+            if (!result) return;
+            showSuccess('PDF-файл сформирован и скачан', 'Экспорт');
+            logAction(ActionTypes.EXPORT_DATA, { count: objects.length, format: 'pdf', mode: result.mode });
+        }).catch(function() {
+            showError('Не удалось сформировать PDF.', 'Экспорт');
+        });
+        return;
+    }
+
+    showWarning('Неизвестный формат. Используйте JSON или PDF.', 'Экспорт');
 }
 
 function clearMap(opts) {

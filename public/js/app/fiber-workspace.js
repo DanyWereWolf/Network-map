@@ -10,7 +10,7 @@ function updateCableVisualization() {
 
     if (labelsToRemove.length) {
         labelsToRemove.forEach(function(label) {
-            myMap.geoObjects.remove(label);
+            mapGeoRemove(label);
         });
         var labelSet = new Set(labelsToRemove);
         objects = objects.filter(function(o) { return !labelSet.has(o); });
@@ -42,7 +42,7 @@ function updateCableVisualization() {
             
             objects.push(label);
             mapPerfRegister(label);
-            myMap.geoObjects.add(label);
+            mapGeoAdd(label);
         }
     });
     if (typeof applyMapFilter === 'function') applyMapFilter();
@@ -582,6 +582,9 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     if (window.EmbeddedSplitters && EmbeddedSplitters.getList(sleeveObj).length) {
         html += '<button type="button" class="fiber-scheme-toolbar-btn fiber-scheme-toolbar-btn--secondary" id="fiber-scheme-fit-splitters" title="Прокрутить схему к сплиттерам">◎ Найти</button>';
     }
+    html += '</div>';
+    html += '<div class="fiber-ws-toolbar-export" id="fiber-ws-toolbar-export">';
+    html += '<button type="button" class="fiber-scheme-toolbar-btn fiber-scheme-toolbar-btn--secondary" id="fiber-scheme-export-pdf" title="Скачать схему сварки жил в PDF">⤓ PDF</button>';
     html += '</div></div>';
     html += '<div class="fiber-ws-panels"><div class="fiber-ws-panel fiber-ws-panel-scheme active" data-panel="scheme">';
     html += '<div class="fiber-scheme-viewport" id="fiber-scheme-viewport">';
@@ -861,6 +864,9 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
 
     if (cablesData.length >= 2) {
         function cableNameById(id) {
+            if (typeof resolveCableDisplayNameById === 'function') {
+                return resolveCableDisplayNameById(id, { hostObj: sleeveObj });
+            }
             const d = cablesData.find(function(c) { return c.cableUniqueId === id; });
             return d ? (d.cableName || ('Кабель ' + d.index)) : id.substring(0, 8) + '…';
         }
@@ -1933,6 +1939,724 @@ function layoutFiberSchemeReference(cablesData, svgWidth, opts, sidePartition) {
     const minH = opts.minSvgHeight || 120;
     const svgHeight = Math.max(leftBottom, rightBottom, minH) + sidePad;
     return { fiberPositions: fiberPositions, blocks: blocks, svgHeight: svgHeight };
+}
+
+function resolveFiberExportCableName(cableId, hostObj) {
+    if (typeof resolveCableDisplayNameById === 'function') {
+        return resolveCableDisplayNameById(cableId, { hostObj: hostObj });
+    }
+    if (!cableId) return 'Кабель';
+    var found = objects.find(function(o) {
+        return o && o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === cableId;
+    });
+    if (!found) return 'Кабель';
+    return found.properties.get('cableName') || getCableDescription(found.properties.get('cableType'), found);
+}
+
+function buildFiberSchemePdfFilename(hostObj) {
+    var name = hostObj && hostObj.properties ? String(hostObj.properties.get('name') || 'obekt').trim() : 'obekt';
+    var safe = name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/\s+/g, '-').replace(/\.+$/g, '').slice(0, 80);
+    if (!safe) safe = 'obekt';
+    return 'shema-zhil-' + safe + '.pdf';
+}
+
+function removeSchemeLabelsFromSvgClone(clone) {
+    var labelSelectors = [
+        '.fiber-scheme-link-labels',
+        '.fiber-scheme-conn-label',
+        '.fiber-scheme-fiber-labels',
+        '.fiber-scheme-fiber-label',
+        '.fiber-scheme-cross-link-labels',
+        '.fiber-scheme-cross-link-label',
+        '.fiber-scheme-splitter-conn-label',
+        '.fiber-scheme-splitter-cross-link-label',
+        '.fiber-scheme-splitter-link-labels'
+    ].join(', ');
+    clone.querySelectorAll(labelSelectors).forEach(function(el) {
+        el.remove();
+    });
+}
+
+function resetFiberSchemeSvgHoverState(svg) {
+    if (!svg) return;
+    svg.classList.remove('fiber-scheme-hover-active');
+    var hoverClasses = [
+        'fiber-scheme-hovered', 'fiber-scheme-dimmed', 'fiber-scheme-link-hovered', 'fiber-scheme-link-dimmed',
+        'fiber-scheme-splitter-link-hovered', 'fiber-scheme-splitter-link-dimmed',
+        'fiber-scheme-splitter-cross-link-hovered', 'fiber-scheme-splitter-cross-link-dimmed',
+        'fiber-cable-block-hovered', 'fiber-scheme-cross-link-hovered', 'fiber-scheme-cross-link-dimmed',
+        'fiber-scheme-cross-port-hovered', 'fiber-scheme-link-selected', 'fiber-scheme-splitter-link-selected',
+        'fiber-scheme-cross-link-selected', 'fiber-scheme-splitter-cross-link-selected'
+    ];
+    hoverClasses.forEach(function(cls) {
+        svg.querySelectorAll('.' + cls).forEach(function(el) {
+            el.classList.remove(cls);
+        });
+    });
+}
+
+function ensureFiberSchemePathExportAttrs(pathEl, fallbackStroke, fallbackWidth) {
+    if (!pathEl || pathEl.tagName !== 'path') return;
+    var stroke = pathEl.getAttribute('stroke');
+    if (!stroke || stroke === 'transparent' || stroke === 'none') {
+        if (!fallbackStroke) return;
+        pathEl.setAttribute('stroke', fallbackStroke);
+    }
+    if (!pathEl.getAttribute('stroke-width') && fallbackWidth) {
+        pathEl.setAttribute('stroke-width', String(fallbackWidth));
+    }
+    if (!pathEl.getAttribute('stroke-linecap')) {
+        pathEl.setAttribute('stroke-linecap', 'round');
+    }
+    pathEl.setAttribute('fill', 'none');
+    pathEl.removeAttribute('style');
+    pathEl.setAttribute('opacity', pathEl.classList.contains('fiber-scheme-link-shadow') ? '0.35' : '1');
+}
+
+function promoteFiberSchemeConnectionsForExport(clone) {
+    var topLayer = clone.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'g');
+    topLayer.setAttribute('class', 'fiber-scheme-export-connections-top');
+    topLayer.setAttribute('fill', 'none');
+    topLayer.setAttribute('pointer-events', 'none');
+
+    function moveAll(selector) {
+        var nodes = clone.querySelectorAll(selector);
+        for (var i = 0; i < nodes.length; i++) {
+            topLayer.appendChild(nodes[i]);
+        }
+    }
+
+    moveAll('.fiber-scheme-link-group');
+    moveAll('.fiber-scheme-cross-link-group');
+    moveAll('.fiber-scheme-splitter-links');
+    moveAll('.fiber-scheme-cross-splitter-links');
+
+    if (topLayer.childNodes.length) {
+        clone.appendChild(topLayer);
+    }
+}
+
+function prepareFiberSchemeSvgCloneForExport(clone) {
+    removeSchemeLabelsFromSvgClone(clone);
+    [
+        '.fiber-scheme-link-hits',
+        '.fiber-scheme-link-hit',
+        '.fiber-scheme-cross-link-hit',
+        '.fiber-scheme-splitter-link-hit',
+        '.fiber-cable-side-flip-hit',
+        '.fiber-cable-side-flip-icon',
+        '.fiber-scheme-splitter-edit-hit',
+        '.fiber-scheme-splitter-delete-hit',
+        '.fiber-scheme-splitter-rotate-hit',
+        '.fiber-scheme-cross-port-hit'
+    ].forEach(function(sel) {
+        clone.querySelectorAll(sel).forEach(function(el) { el.remove(); });
+    });
+
+    resetFiberSchemeSvgHoverState(clone);
+
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var defaultLinkStroke = isDark ? '#fbbf24' : '#d97706';
+    var defaultCrossStroke = isDark ? 'rgba(167, 139, 250, 0.85)' : 'rgba(109, 40, 217, 0.75)';
+    var defaultSplitterStroke = isDark ? '#4ade80' : '#16a34a';
+
+    clone.querySelectorAll('.fiber-scheme-link, .fiber-scheme-link-stripe-a, .fiber-scheme-link-stripe-b').forEach(function(el) {
+        ensureFiberSchemePathExportAttrs(el, defaultLinkStroke, 4.5);
+    });
+    clone.querySelectorAll('.fiber-scheme-link-shadow').forEach(function(el) {
+        ensureFiberSchemePathExportAttrs(el, isDark ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.2)', 7);
+    });
+    clone.querySelectorAll('.fiber-scheme-link-outline').forEach(function(el) {
+        ensureFiberSchemePathExportAttrs(el, '#000000', 5.5);
+    });
+    clone.querySelectorAll('.fiber-scheme-cross-link').forEach(function(el) {
+        ensureFiberSchemePathExportAttrs(el, el.getAttribute('stroke') || defaultCrossStroke, 2.5);
+    });
+    clone.querySelectorAll('.fiber-scheme-splitter-link').forEach(function(el) {
+        ensureFiberSchemePathExportAttrs(el, el.getAttribute('stroke') || defaultSplitterStroke, 4.5);
+    });
+    clone.querySelectorAll('.fiber-scheme-splitter-cross-link').forEach(function(el) {
+        ensureFiberSchemePathExportAttrs(el, el.getAttribute('stroke') || defaultCrossStroke, 2.5);
+    });
+    clone.querySelectorAll('.fiber-scheme-splitter-link-shadow').forEach(function(el) {
+        ensureFiberSchemePathExportAttrs(el, isDark ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.2)', 6);
+    });
+
+    promoteFiberSchemeConnectionsForExport(clone);
+
+    var defs = clone.querySelector('defs');
+    if (!defs) {
+        defs = clone.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        clone.insertBefore(defs, clone.firstChild);
+    }
+    var exportStyle = clone.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'style');
+    exportStyle.setAttribute('type', 'text/css');
+    exportStyle.textContent = [
+        '.fiber-scheme-export-connections-top, .fiber-scheme-link-group, .fiber-scheme-cross-link-group { opacity: 1 !important; }',
+        '.fiber-scheme-link, .fiber-scheme-link-stripe-a, .fiber-scheme-link-stripe-b,',
+        '.fiber-scheme-cross-link, .fiber-scheme-splitter-link, .fiber-scheme-splitter-cross-link {',
+        'opacity: 1; visibility: visible; fill: none; }'
+    ].join(' ');
+    defs.appendChild(exportStyle);
+}
+
+function parseFiberConnKey(key) {
+    if (!key || typeof key !== 'string') return null;
+    var lastDash = key.lastIndexOf('-');
+    if (lastDash < 0) return null;
+    var fiberNumber = parseInt(key.substring(lastDash + 1), 10);
+    if (isNaN(fiberNumber)) return null;
+    return {
+        cableId: key.substring(0, lastDash),
+        fiberNumber: fiberNumber,
+        fiberKey: key
+    };
+}
+
+function formatFiberSchemeExportCableFiber(cableId, fiberNumber, hostObj) {
+    return resolveFiberExportCableName(cableId, hostObj) + ', ж.' + fiberNumber;
+}
+
+function resolveFiberSchemeExportObjectName(uid, type, fallback) {
+    if (!uid || typeof objects === 'undefined' || !objects) return fallback || String(uid);
+    var found = objects.find(function(o) {
+        return o && o.properties && o.properties.get('type') === type && getObjectUniqueId(o) === uid;
+    });
+    if (!found || !found.properties) return fallback || String(uid);
+    return found.properties.get('name') || fallback || type;
+}
+
+function collectFiberSchemeExportSplices(hostObj) {
+    if (!hostObj || !hostObj.properties) return [];
+    var fiberConnections = hostObj.properties.get('fiberConnections') || [];
+    var fiberLabels = hostObj.properties.get('fiberLabels') || {};
+    var lines = [];
+    fiberConnections.forEach(function(conn) {
+        if (!conn || !conn.from || !conn.to) return;
+        var fromName = resolveFiberExportCableName(conn.from.cableId, hostObj);
+        var toName = resolveFiberExportCableName(conn.to.cableId, hostObj);
+        var label = typeof resolveFiberConnectionLabel === 'function'
+            ? resolveFiberConnectionLabel(conn, fiberLabels)
+            : '';
+        var line = fromName + ', ж.' + conn.from.fiberNumber +
+            ' ↔ ' + toName + ', ж.' + conn.to.fiberNumber;
+        if (label) line += ' — ' + label;
+        lines.push(line);
+    });
+    return lines;
+}
+
+function formatFiberNumberRanges(numbers) {
+    if (!numbers || !numbers.length) return '';
+    var sorted = numbers.slice().sort(function(a, b) { return a - b; });
+    var parts = [];
+    var rangeStart = sorted[0];
+    var rangeEnd = sorted[0];
+    for (var i = 1; i < sorted.length; i++) {
+        if (sorted[i] === rangeEnd + 1) {
+            rangeEnd = sorted[i];
+        } else {
+            parts.push(rangeStart === rangeEnd ? String(rangeStart) : (rangeStart + '\u2013' + rangeEnd));
+            rangeStart = rangeEnd = sorted[i];
+        }
+    }
+    parts.push(rangeStart === rangeEnd ? String(rangeStart) : (rangeStart + '\u2013' + rangeEnd));
+    return parts.join(', ');
+}
+
+function isFiberFreeForSchemeExport(hostObj, cableId, fiberNumber, cableData, ctx) {
+    var occ = computeFiberOccupancy(
+        cableId, fiberNumber, cableData,
+        ctx.fiberConnections, ctx.nodeConnections, ctx.oltConnections, ctx.onuConnections,
+        ctx.mediaConverterConnections, ctx.splitterConnections, hostObj
+    );
+    if (occ.isOccupied) return false;
+    if (ctx.isCross) {
+        var fiberKey = cableId + '-' + fiberNumber;
+        var portVal = ctx.fiberPorts[fiberKey];
+        if (portVal != null && portVal !== '') {
+            if (!(typeof isFiberSplicedAtHost === 'function' && isFiberSplicedAtHost(hostObj, cableId, fiberNumber))) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+function collectFiberSchemeExportFreeFibers(hostObj) {
+    if (!hostObj || !hostObj.properties) return { lines: [], totalFree: 0 };
+    var cables = typeof getConnectedCables === 'function' ? getConnectedCables(hostObj) : [];
+    if (!cables.length) return { lines: [], totalFree: 0 };
+
+    var hostType = hostObj.properties.get('type');
+    var isCross = typeof isCrossLikeHostType === 'function' && isCrossLikeHostType(hostType);
+    var ctx = {
+        isCross: isCross,
+        fiberConnections: hostObj.properties.get('fiberConnections') || [],
+        fiberPorts: hostObj.properties.get('fiberPorts') || {},
+        nodeConnections: hostObj.properties.get('nodeConnections') || {},
+        oltConnections: hostObj.properties.get('oltConnections') || {},
+        onuConnections: hostObj.properties.get('onuConnections') || {},
+        mediaConverterConnections: hostObj.properties.get('mediaConverterConnections') || {},
+        splitterConnections: hostObj.properties.get('splitterConnections') || {}
+    };
+    var entries = [];
+    var totalFree = 0;
+
+    cables.forEach(function(cable) {
+        if (!cable || !cable.properties) return;
+        var cableId = cable.properties.get('uniqueId');
+        if (!cableId) return;
+        var cableName = resolveFiberExportCableName(cableId, hostObj);
+        var otherEnd = typeof getOtherEndOfCable === 'function' ? getOtherEndOfCable(cable, hostObj) : null;
+        var cableData = {
+            cableUniqueId: cableId,
+            usedFibers: getUsedFibers(hostObj, cableId),
+            isFromOlt: !!(otherEnd && otherEnd.properties && otherEnd.properties.get('type') === 'olt')
+        };
+        var freeNums = [];
+        getFiberColors(cable).forEach(function(fiber) {
+            if (isFiberFreeForSchemeExport(hostObj, cableId, fiber.number, cableData, ctx)) {
+                freeNums.push(fiber.number);
+            }
+        });
+        if (!freeNums.length) return;
+        totalFree += freeNums.length;
+        entries.push({
+            sortName: cableName,
+            text: '\u00ab' + cableName + '\u00bb: ж. ' + formatFiberNumberRanges(freeNums) +
+                ' (' + freeNums.length + ' ' + (freeNums.length === 1 ? 'свободна' : 'свободны') + ')'
+        });
+    });
+
+    entries.sort(function(a, b) {
+        return a.sortName.localeCompare(b.sortName, 'ru');
+    });
+    return {
+        lines: entries.map(function(entry) { return entry.text; }),
+        totalFree: totalFree
+    };
+}
+
+function collectFiberSchemeExportConnectionKeys(hostObj, isCross) {
+    var keys = {};
+    function noteKey(key) {
+        if (key) keys[key] = true;
+    }
+    ['nodeConnections', 'oltConnections', 'onuConnections', 'mediaConverterConnections',
+        'radioBridgeConnections', 'splitterConnections'].forEach(function(prop) {
+        var map = hostObj.properties.get(prop) || {};
+        Object.keys(map).forEach(noteKey);
+    });
+    if (isCross) {
+        var fiberPorts = hostObj.properties.get('fiberPorts') || {};
+        Object.keys(fiberPorts).forEach(noteKey);
+    }
+    if (typeof getConnectedCables === 'function' && typeof findSplitterOutputAtHost === 'function') {
+        getConnectedCables(hostObj).forEach(function(cable) {
+            if (!cable || !cable.properties) return;
+            var cableId = cable.properties.get('uniqueId');
+            if (!cableId) return;
+            getFiberColors(cable).forEach(function(fiber) {
+                if (findSplitterOutputAtHost(hostObj, cableId, fiber.number)) {
+                    noteKey(cableId + '-' + fiber.number);
+                }
+            });
+        });
+    }
+    return Object.keys(keys);
+}
+
+function buildFiberSchemeExportConnectionLine(hostObj, cableId, fiberNumber, ctx) {
+    var fiberKey = cableId + '-' + fiberNumber;
+    var chain = [];
+    var portNum = null;
+
+    if (ctx.isCross) {
+        var portVal = ctx.fiberPorts[fiberKey];
+        if (portVal != null && portVal !== '') {
+            portNum = parseInt(portVal, 10);
+            if (isNaN(portNum)) portNum = null;
+            else if (typeof isFiberSplicedAtHost === 'function' &&
+                isFiberSplicedAtHost(hostObj, cableId, fiberNumber)) {
+                portNum = null;
+            }
+        }
+    }
+
+    if (typeof findSplitterOutputAtHost === 'function') {
+        var spOut = findSplitterOutputAtHost(hostObj, cableId, fiberNumber);
+        if (spOut) {
+            var spName = 'Сплиттер';
+            if (spOut.splitterObj && spOut.splitterObj.properties) {
+                spName = spOut.splitterObj.properties.get('name') || spName;
+            } else if (spOut.splitterName) {
+                spName = spOut.splitterName;
+            }
+            chain.push('вых.' + (spOut.outputIndex + 1) + ' сплиттера «' + spName + '»');
+        }
+    }
+
+    if (portNum != null) {
+        chain.push('порт ' + portNum);
+        if (typeof getCrossPortPatch === 'function') {
+            var patch = getCrossPortPatch(hostObj, portNum);
+            if (patch) {
+                var mate = typeof resolveCrossPortPatchHost === 'function'
+                    ? resolveCrossPortPatchHost(patch.crossId) : null;
+                var mateName = mate ? (mate.properties.get('name') || 'Кросс') : 'Кросс';
+                chain.push('кроссировка с «' + mateName + '» п.' + patch.port);
+            }
+        }
+    }
+
+    if (typeof getHostAssignment === 'function') {
+        var nodeConn = getHostAssignment(hostObj, 'nodeConnections', cableId, fiberNumber);
+        if (nodeConn && nodeConn.nodeId) {
+            var nodeName = nodeConn.nodeName || resolveFiberSchemeExportObjectName(nodeConn.nodeId, 'node', 'Узел');
+            var nodePart = 'узел «' + nodeName + '»';
+            if (nodeConn.switchPort != null) nodePart += ', порт свитча ' + nodeConn.switchPort;
+            chain.push(nodePart);
+        } else {
+            var oltConn = getHostAssignment(hostObj, 'oltConnections', cableId, fiberNumber);
+            if (oltConn && oltConn.oltId) {
+                var oltName = oltConn.oltName || resolveFiberSchemeExportObjectName(oltConn.oltId, 'olt', 'OLT');
+                if (oltConn.incoming) {
+                    chain.push('приход OLT «' + oltName + '»');
+                } else if (oltConn.physicalCableOnly) {
+                    chain.push('OLT «' + oltName + '»');
+                } else {
+                    var oltObj = objects && objects.find(function(o) {
+                        return o && o.properties && o.properties.get('type') === 'olt' &&
+                            getObjectUniqueId(o) === oltConn.oltId;
+                    });
+                    var portLbl = oltObj && typeof getOltPortLabel === 'function'
+                        ? getOltPortLabel(oltObj, oltConn.portNumber) : '';
+                    var portText = typeof formatOltPortDisplay === 'function'
+                        ? formatOltPortDisplay(oltConn.portNumber || '?', portLbl, true)
+                        : ('порт ' + (oltConn.portNumber || '?'));
+                    chain.push('OLT «' + oltName + '», ' + portText);
+                }
+            } else {
+                var onuConn = getHostAssignment(hostObj, 'onuConnections', cableId, fiberNumber);
+                if (onuConn && onuConn.onuId) {
+                    var onuName = onuConn.onuName || resolveFiberSchemeExportObjectName(onuConn.onuId, 'onu', 'ONU');
+                    chain.push('ONU «' + onuName + '»');
+                } else {
+                    var mcConn = getHostAssignment(hostObj, 'mediaConverterConnections', cableId, fiberNumber);
+                    if (mcConn && mcConn.mediaConverterId) {
+                        var mcName = mcConn.mediaConverterName ||
+                            resolveFiberSchemeExportObjectName(mcConn.mediaConverterId, 'mediaConverter', 'Медиаконвертер');
+                        chain.push('МК «' + mcName + '»');
+                    } else {
+                        var rbConn = getHostAssignment(hostObj, 'radioBridgeConnections', cableId, fiberNumber);
+                        if (rbConn && rbConn.radioBridgeId) {
+                            var rbName = rbConn.radioBridgeName ||
+                                resolveFiberSchemeExportObjectName(rbConn.radioBridgeId, 'radioBridge', 'Радиомост');
+                            chain.push('РМ «' + rbName + '»');
+                        } else {
+                            var spConn = getHostAssignment(hostObj, 'splitterConnections', cableId, fiberNumber);
+                            if (spConn && spConn.splitterId) {
+                                var spInName = spConn.splitterName || 'Сплиттер';
+                                chain.push('сплиттер «' + spInName + '» (вход)');
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (!chain.length) return null;
+    var line = formatFiberSchemeExportCableFiber(cableId, fiberNumber, hostObj) + ' → ' + chain.join(' → ');
+    var directLabel = (ctx.fiberLabels[fiberKey] || '').trim();
+    if (directLabel) line += ' — ' + directLabel;
+    return line;
+}
+
+function collectFiberSchemeExportConnections(hostObj) {
+    if (!hostObj || !hostObj.properties) return [];
+    var lines = [];
+    var hostType = hostObj.properties.get('type');
+    var isCross = typeof isCrossLikeHostType === 'function' && isCrossLikeHostType(hostType);
+    var ctx = {
+        isCross: isCross,
+        fiberPorts: hostObj.properties.get('fiberPorts') || {},
+        fiberLabels: hostObj.properties.get('fiberLabels') || {}
+    };
+
+    function pushLine(text) {
+        if (text) lines.push(text);
+    }
+
+    var fiberKeys = collectFiberSchemeExportConnectionKeys(hostObj, isCross);
+    var entries = [];
+    fiberKeys.forEach(function(key) {
+        var parsed = parseFiberConnKey(key);
+        if (!parsed) return;
+        var line = buildFiberSchemeExportConnectionLine(hostObj, parsed.cableId, parsed.fiberNumber, ctx);
+        if (!line) return;
+        entries.push({
+            sortCable: resolveFiberExportCableName(parsed.cableId, hostObj),
+            sortFiber: parsed.fiberNumber,
+            text: line
+        });
+    });
+    entries.sort(function(a, b) {
+        var byCable = a.sortCable.localeCompare(b.sortCable, 'ru');
+        if (byCable !== 0) return byCable;
+        return a.sortFiber - b.sortFiber;
+    });
+    entries.forEach(function(entry) { pushLine(entry.text); });
+
+    if (isCross) {
+        var crossPortPatches = hostObj.properties.get('crossPortPatches') || {};
+        var patchedPorts = {};
+        Object.keys(ctx.fiberPorts).forEach(function(key) {
+            var portVal = parseInt(ctx.fiberPorts[key], 10);
+            if (!isNaN(portVal)) patchedPorts[portVal] = true;
+        });
+        Object.keys(crossPortPatches).sort(function(a, b) {
+            return parseInt(a, 10) - parseInt(b, 10);
+        }).forEach(function(portKey) {
+            var patch = crossPortPatches[portKey];
+            if (!patch || patch.crossId == null || patch.port == null) return;
+            var portNum = parseInt(portKey, 10);
+            if (patchedPorts[portNum]) return;
+            var mate = typeof resolveCrossPortPatchHost === 'function' ? resolveCrossPortPatchHost(patch.crossId) : null;
+            var mateName = mate ? (mate.properties.get('name') || 'Кросс') : 'Кросс';
+            pushLine('Порт ' + portKey + ' ⇄ «' + mateName + '» п.' + patch.port);
+        });
+    }
+
+    if (window.EmbeddedSplitters) {
+        EmbeddedSplitters.getList(hostObj).forEach(function(rec) {
+            var spName = rec.name || 'Сплиттер';
+            (rec.outputConnections || []).forEach(function(out, outputIndex) {
+                if (!out) return;
+                var outNo = outputIndex + 1;
+                var prefix = 'Сплиттер «' + spName + '» вых.' + outNo + ' → ';
+                if (out.cableId != null && out.fiberNumber != null) {
+                    pushLine(prefix + formatFiberSchemeExportCableFiber(out.cableId, out.fiberNumber, hostObj));
+                } else if (out.onuId) {
+                    pushLine(prefix + 'ONU «' + resolveFiberSchemeExportObjectName(out.onuId, 'onu', 'ONU') + '»');
+                } else if (out.mediaConverterId) {
+                    pushLine(prefix + 'МК «' + resolveFiberSchemeExportObjectName(out.mediaConverterId, 'mediaConverter', 'Медиаконвертер') + '»');
+                } else if (out.splitterId) {
+                    var targetSp = EmbeddedSplitters.findInHost(hostObj, out.splitterId);
+                    var targetName = targetSp ? (targetSp.name || 'Сплиттер') : 'Сплиттер';
+                    pushLine(prefix + 'сплиттер «' + targetName + '» (вход)');
+                } else if (out.crossPort != null) {
+                    pushLine(prefix + 'порт ' + out.crossPort);
+                } else if (out.hostId && out.cableId != null && out.fiberNumber != null) {
+                    var remoteHost = typeof getFiberHostByUid === 'function' ? getFiberHostByUid(out.hostId) : null;
+                    var remoteName = remoteHost ? (remoteHost.properties.get('name') || 'Объект') : 'Объект';
+                    pushLine(prefix + '«' + remoteName + '» / ' + formatFiberSchemeExportCableFiber(out.cableId, out.fiberNumber, hostObj));
+                }
+            });
+        });
+    }
+
+    return lines;
+}
+
+function svgElementToCanvas(svgEl, scale, opts) {
+    opts = opts || {};
+    scale = scale || 1;
+    var svgW = parseFloat(svgEl.getAttribute('width')) || svgEl.clientWidth || 800;
+    var svgH = parseFloat(svgEl.getAttribute('height')) || svgEl.clientHeight || 600;
+    resetFiberSchemeSvgHoverState(svgEl);
+    var clone = svgEl.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.setAttribute('width', String(svgW));
+    clone.setAttribute('height', String(svgH));
+    if (opts.hideSchemeLabels !== false) {
+        prepareFiberSchemeSvgCloneForExport(clone);
+    }
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var bg = isDark ? '#1e293b' : '#ffffff';
+    var bgRect = clone.querySelector('.fiber-scheme-bg');
+    if (bgRect) bgRect.setAttribute('fill', bg);
+    var svgData = new XMLSerializer().serializeToString(clone);
+    var svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    var url = URL.createObjectURL(svgBlob);
+    return new Promise(function(resolve, reject) {
+        var img = new Image();
+        img.onload = function() {
+            var canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(svgW * scale));
+            canvas.height = Math.max(1, Math.round(svgH * scale));
+            var ctx = canvas.getContext('2d');
+            ctx.fillStyle = bg;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            URL.revokeObjectURL(url);
+            resolve(canvas);
+        };
+        img.onerror = function() {
+            URL.revokeObjectURL(url);
+            reject(new Error('svg-render-failed'));
+        };
+        img.src = url;
+    });
+}
+
+async function exportFiberSchemeToPdf(hostObj) {
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+        if (typeof showError === 'function') showError('PDF-библиотеки не загружены. Обновите страницу и попробуйте снова.', 'Экспорт');
+        return false;
+    }
+    if (!hostObj || !hostObj.properties) {
+        if (typeof showError === 'function') showError('Объект недоступен для экспорта.', 'Экспорт');
+        return false;
+    }
+    var svg = document.getElementById('fiber-connections-svg');
+    if (!svg) {
+        if (typeof showError === 'function') showError('Схема сварки жил не найдена. Откройте кросс или муфту.', 'Экспорт');
+        return false;
+    }
+
+    var exportBtn = document.getElementById('fiber-scheme-export-pdf');
+    var exportBtnHtml = exportBtn ? exportBtn.innerHTML : '';
+    if (exportBtn) {
+        exportBtn.disabled = true;
+        exportBtn.textContent = 'Формирование…';
+    }
+
+    try {
+        var hostType = hostObj.properties.get('type');
+        var isCross = typeof isCrossLikeHostType === 'function' && isCrossLikeHostType(hostType);
+        var typeLabel = isCross ? 'Оптический кросс' : (hostType === 'spliceCassette' ? 'Сплайс-кассета' : 'Кабельная муфта');
+        var hostName = hostObj.properties.get('name') || (isCross ? 'Кросс' : 'Муфта');
+        var exportSplices = collectFiberSchemeExportSplices(hostObj);
+        var exportConnections = collectFiberSchemeExportConnections(hostObj);
+        var exportFreeFibers = collectFiberSchemeExportFreeFibers(hostObj);
+        var cables = typeof getConnectedCables === 'function' ? getConnectedCables(hostObj) : [];
+        var scale = Math.min(2, Math.max(1, window.devicePixelRatio || 1.5));
+        var schemeCanvas = await svgElementToCanvas(svg, scale, { hideSchemeLabels: true });
+        var svgW = parseFloat(svg.getAttribute('width')) || schemeCanvas.width / scale;
+        var svgH = parseFloat(svg.getAttribute('height')) || schemeCanvas.height / scale;
+        var orientation = svgW >= svgH ? 'l' : 'p';
+        var doc = new window.jspdf.jsPDF({ orientation: orientation, unit: 'pt', format: 'a4' });
+        var unicodeFontReady = typeof ensurePdfUnicodeFont === 'function' ? await ensurePdfUnicodeFont(doc) : false;
+        if (!unicodeFontReady && typeof showWarning === 'function') {
+            showWarning('Не удалось загрузить шрифт для кириллицы. Текст в PDF может отображаться некорректно.', 'Экспорт');
+        }
+        var pageW = doc.internal.pageSize.getWidth();
+        var pageH = doc.internal.pageSize.getHeight();
+        var margin = 28;
+        var schemeMargin = 12;
+        var y = margin;
+        var schemeImgData = schemeCanvas.toDataURL('image/png');
+        var exportDate = new Date().toLocaleString();
+        var statsLine = 'Кабелей: ' + cables.length + ' | Сращений: ' + exportSplices.length +
+            ' | Подключений: ' + exportConnections.length +
+            ' | Свободных жил: ' + exportFreeFibers.totalFree;
+        function pdfText(value) {
+            return unicodeFontReady ? String(value == null ? '' : value) : String(value == null ? '' : value);
+        }
+        function startTextPage() {
+            doc.addPage();
+            y = margin;
+        }
+        function ensureSpace(heightNeeded) {
+            if (y + heightNeeded > pageH - margin) {
+                doc.addPage();
+                y = margin;
+            }
+        }
+        function writeLine(text, size, gap) {
+            doc.setFontSize(size || 9);
+            ensureSpace((size || 9) + 4);
+            doc.text(pdfText(text), margin, y);
+            y += gap || 11;
+        }
+        function writeSectionTitle(text) {
+            if (y > margin + 4) y += 4;
+            writeLine(text, 10, 10);
+        }
+        function writeWrappedListItem(index, text, size, gap) {
+            var lineSize = size || 8;
+            var prefix = (index + 1) + '. ';
+            var maxW = pageW - margin * 2;
+            doc.setFontSize(lineSize);
+            var lines = doc.splitTextToSize(pdfText(prefix + text), maxW);
+            for (var li = 0; li < lines.length; li++) {
+                ensureSpace(lineSize + 3);
+                doc.text(lines[li], margin, y);
+                y += gap || 10;
+            }
+        }
+
+        // Страница 1: схема на весь лист + краткая подпись снизу
+        var schemeFooterH = 14;
+        doc.setFontSize(8);
+        doc.text(pdfText(hostName + ' · ' + typeLabel), schemeMargin, schemeMargin + 7);
+        var schemeTop = schemeMargin + 10;
+        var availW = pageW - schemeMargin * 2;
+        var availH = pageH - schemeTop - schemeMargin - schemeFooterH;
+        var imgW = availW;
+        var imgH = schemeCanvas.height * (imgW / schemeCanvas.width);
+        if (imgH > availH) {
+            imgH = availH;
+            imgW = schemeCanvas.width * (imgH / schemeCanvas.height);
+        }
+        var imgX = schemeMargin + (availW - imgW) / 2;
+        var imgY = schemeTop + (availH - imgH) / 2;
+        doc.addImage(schemeImgData, 'PNG', imgX, imgY, imgW, imgH);
+        doc.setFontSize(7);
+        doc.text(pdfText(statsLine + ' · ' + exportDate), schemeMargin, pageH - schemeMargin);
+
+        // Страница 2+ только если есть что перечислить; всё на одном потоке
+        if (exportSplices.length || exportConnections.length || exportFreeFibers.lines.length) {
+            startTextPage();
+            writeLine(hostName + ' · ' + typeLabel, 9, 10);
+            writeLine(statsLine + ' · ' + exportDate, 8, 12);
+
+            if (exportFreeFibers.lines.length) {
+                writeSectionTitle('Свободные жилы');
+                exportFreeFibers.lines.forEach(function(line, index) {
+                    writeWrappedListItem(index, line, 8, 10);
+                });
+            }
+
+            if (exportSplices.length) {
+                writeSectionTitle('Сращения');
+                exportSplices.forEach(function(line, index) {
+                    writeWrappedListItem(index, line, 8, 10);
+                });
+            }
+
+            if (exportConnections.length) {
+                writeSectionTitle('Подключения');
+                exportConnections.forEach(function(line, index) {
+                    writeWrappedListItem(index, line, 8, 10);
+                });
+            }
+        }
+
+        doc.save(buildFiberSchemePdfFilename(hostObj));
+        if (typeof showSuccess === 'function') showSuccess('PDF со схемой сварки жил сформирован', 'Экспорт');
+        if (typeof logAction === 'function' && typeof ActionTypes !== 'undefined' && ActionTypes.EXPORT_DATA) {
+            logAction(ActionTypes.EXPORT_DATA, {
+                format: 'fiber-scheme-pdf',
+                hostType: hostType,
+                hostName: hostName,
+                splices: exportSplices.length,
+                connections: exportConnections.length,
+                freeFibers: exportFreeFibers.totalFree
+            });
+        }
+        return true;
+    } catch (eExport) {
+        if (typeof showError === 'function') showError('Не удалось сформировать PDF схемы сварки жил.', 'Экспорт');
+        return false;
+    } finally {
+        if (exportBtn) {
+            exportBtn.disabled = false;
+            exportBtn.innerHTML = exportBtnHtml || '⤓ PDF';
+        }
+    }
 }
 
 function getFiberColors(arg) {

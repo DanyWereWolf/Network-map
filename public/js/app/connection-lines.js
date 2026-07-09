@@ -420,6 +420,7 @@ function scheduleConnectionLinesUpdate(uidOrList) {
 }
 
 function applyConnectionLinesVisibility() {
+    if (window._mapPdfExportCaptureActive) return;
     if (!myMap || typeof myMap.getZoom !== 'function') return;
     var zoom = myMap.getZoom();
     if (!mapObjectsVisibleAtZoom(zoom)) {

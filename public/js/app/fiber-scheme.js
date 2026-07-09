@@ -1360,9 +1360,15 @@ function buildFiberAssignRow(kind, icon, text, disconnectBtn) {
 }
 
 function resolveCableDisplayName(cablesData, cableId) {
-    if (!cableId || !cablesData) return cableId ? cableId.substring(0, 8) + '…' : '';
-    var cd = cablesData.find(function(c) { return c.cableUniqueId === cableId; });
-    return cd ? (cd.cableName || ('К' + cd.index)) : cableId.substring(0, 8) + '…';
+    if (!cableId) return '';
+    if (cablesData) {
+        var cd = cablesData.find(function(c) { return c.cableUniqueId === cableId; });
+        if (cd) return cd.cableName || ('К' + cd.index);
+    }
+    if (typeof resolveCableDisplayNameById === 'function') {
+        return resolveCableDisplayNameById(cableId, { shortIndex: true });
+    }
+    return cableId.substring(0, 8) + '…';
 }
 
 function getEmbeddedSplitterInputSource(hostObj, rec) {

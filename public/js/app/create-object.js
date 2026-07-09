@@ -456,10 +456,11 @@ function createObject(type, name, coords, options = {}) {
             onMemberObjectDragEnd(placemark);
         }
         updateConnectedCables(placemark);
+        if (typeof MapPerf !== 'undefined' && MapPerf.updateSpatialPosition) MapPerf.updateSpatialPosition(placemark);
         const label = placemark.properties.get('label');
         if (label) {
             label.geometry.setCoordinates(placemark.geometry.getCoordinates());
-            try { myMap.geoObjects.add(label); } catch (e) {}
+            try { mapGeoAdd(label); } catch (e) {}
         }
         scheduleConnectionLinesUpdate();
         updateSelectionPulsePosition(placemark);
@@ -471,6 +472,7 @@ function createObject(type, name, coords, options = {}) {
         if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
         if (typeof applyMapFilter === 'function') applyMapFilter();
         releaseDragObjectLock(uid);
+        if (typeof MapPerf !== 'undefined' && MapPerf.unpinObject) MapPerf.unpinObject(placemark);
         if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
         if (typeof resumeMapPanAfterPlacementObjectDrag === 'function') resumeMapPanAfterPlacementObjectDrag();
     });
@@ -482,6 +484,7 @@ function createObject(type, name, coords, options = {}) {
         if (!window.syncDragInProgress) {
             window.syncDragInProgress = true;
             acquireDragObjectLock(placemark);
+            if (typeof mapGeoPin === 'function') mapGeoPin(placemark);
         }
         const label = placemark.properties.get('label');
         if (label) { try { myMap.geoObjects.remove(label); } catch (e) {} } 
@@ -505,13 +508,13 @@ function createObject(type, name, coords, options = {}) {
     } else if (type === 'node') {
         updateNodeDisplay();
     } else if (type === 'cabinet') {
-        myMap.geoObjects.add(placemark);
+        mapGeoAdd(placemark);
         if (typeof applyMapFilter === 'function') applyMapFilter();
         if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
     } else if (placemarkProperties.cabinetId) {
         if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
     } else {
-        myMap.geoObjects.add(placemark);
+        mapGeoAdd(placemark);
         if (typeof applyMapFilter === 'function') applyMapFilter();
         if (window.MapRegions && MapRegions.sendAllRegionsToMapBack) MapRegions.sendAllRegionsToMapBack(myMap, objects);
         if (window.MapRegions && MapRegions.removeErrantRegionObjectLabels) MapRegions.removeErrantRegionObjectLabels(myMap, objects);

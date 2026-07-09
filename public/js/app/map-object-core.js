@@ -39,6 +39,23 @@ function mapPerfUnregister(obj) {
     if (typeof MapPerf !== 'undefined' && obj) MapPerf.unregisterMapObject(obj);
 }
 
+function mapGeoAdd(obj) {
+    if (!obj) return;
+    if (typeof MapPerf !== 'undefined' && MapPerf.mapAdd) MapPerf.mapAdd(obj);
+    else if (myMap) try { myMap.geoObjects.add(obj); } catch (e) {}
+}
+
+function mapGeoRemove(obj, force) {
+    if (!obj) return;
+    if (typeof MapPerf !== 'undefined' && MapPerf.mapRemove) MapPerf.mapRemove(obj, force);
+    else if (myMap) try { myMap.geoObjects.remove(obj); } catch (e) {}
+}
+
+function mapGeoPin(obj) {
+    if (typeof MapPerf !== 'undefined' && MapPerf.pinObject && obj) MapPerf.pinObject(obj);
+    else mapGeoAdd(obj);
+}
+
 function generateUniqueId(prefix) {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }

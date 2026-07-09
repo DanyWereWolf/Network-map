@@ -9,6 +9,7 @@ var _mapLoadSafetyTimer = null;
 var _mapBulkImportActive = false;
 var MAP_BULK_IMPORT_MIN_ITEMS = 350;
 var MAP_BULK_IMPORT_BATCH_SIZE = 60;
+var MAP_BULK_IMPORT_CABLE_BATCH_SIZE = 40;
 var MAP_UNDO_REDO_BATCH_MIN = 1;
 var MAP_UNDO_REDO_BATCH_SIZE = 50;
 var INCREMENTAL_UNDO_MAX_CHANGES = 50;

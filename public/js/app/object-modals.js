@@ -2289,6 +2289,11 @@ function showCableInfoBody(cable) {
     const toObj = cable.properties.get('to');
     const uniqueId = cable.properties.get('uniqueId');
     const cableName = cable.properties.get('cableName') || '';
+    const cableNamePlaceholder = cableName
+        ? 'Введите название кабеля'
+        : ((typeof buildCableRouteDisplayName === 'function' ? buildCableRouteDisplayName(cable) : '') ||
+            getCableDescription(cableType, cable) ||
+            'Например: Муфта → Кросс');
     const cableProduct = getCableProductFromObject(cable);
     const cableProductLabel = getCableProductLabel(cableProduct.manufacturer, cableProduct.model);
     const fiberCount = getFiberCount(cable);
@@ -2449,8 +2454,11 @@ function showCableInfoBody(cable) {
     html += '<div class="form-group" style="margin-bottom: 16px;">';
     html += '<label style="display: block; margin-bottom: 6px; font-weight: 600; color: var(--text-primary); font-size: 0.8125rem;">Название кабеля</label>';
     if (modalIsEditMode()) {
-        html += `<input type="text" id="cableNameInput" class="form-input" value="${escapeHtml(cableName)}" placeholder="Введите название кабеля" 
+        html += `<input type="text" id="cableNameInput" class="form-input" value="${escapeHtml(cableName)}" placeholder="${escapeHtml(cableNamePlaceholder)}" 
             oninput="updateCableName('${uniqueId}', this.value)" onchange="updateCableName('${uniqueId}', this.value)">`;
+        if (!cableName) {
+            html += '<p class="form-hint" style="margin-top:6px;">Если не задано, в схеме и PDF: «Кабель 1», тип ВОЛС или маршрут между объектами.</p>';
+        }
     } else {
         html += `<div style="padding: 10px 12px; background: var(--bg-tertiary); border-radius: 6px; font-size: 0.875rem; border: 1px solid var(--border-color); color: var(--text-primary);">${cableName ? escapeHtml(cableName) : '<span style="color: var(--text-muted); font-style: italic;">Не задано</span>'}</div>`;
     }

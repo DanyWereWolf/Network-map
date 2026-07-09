@@ -435,7 +435,13 @@ function findObjectAtCoords(coords, tolerance, opts) {
     }
 
     var matches = [];
-    objects.forEach(function(obj) {
+    var scanList = objects;
+    if (typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization && MapPerf.shouldUseVirtualization() &&
+        MapPerf.querySpatialNearCoords) {
+        var near = MapPerf.querySpatialNearCoords(coords, usePixelSnap ? 2 : 3);
+        if (near && near.length) scanList = near;
+    }
+    scanList.forEach(function(obj) {
         if (!obj || !obj.geometry || !obj.properties) return;
         var objType = obj.properties.get('type');
         if (objType === 'cable' || objType === 'cableLabel') return;

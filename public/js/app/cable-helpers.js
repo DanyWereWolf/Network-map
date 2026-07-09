@@ -389,6 +389,60 @@ function getCableDescription(type, cable) {
     return 'Кабель';
 }
 
+function getCableEndpointDisplayName(obj) {
+    if (!obj || !obj.properties) return '';
+    var name = String(obj.properties.get('name') || '').trim();
+    if (name) return name;
+    var type = obj.properties.get('type');
+    if (typeof getObjectTypeLabel === 'function') {
+        var typeLabel = getObjectTypeLabel(type);
+        if (typeLabel) return typeLabel;
+    }
+    return 'Объект';
+}
+
+function buildCableRouteDisplayName(cable) {
+    if (!cable || !cable.properties) return '';
+    var from = cable.properties.get('from');
+    var to = cable.properties.get('to');
+    if (!from || !to) return '';
+    var fromLabel = getCableEndpointDisplayName(from);
+    var toLabel = getCableEndpointDisplayName(to);
+    if (!fromLabel && !toLabel) return '';
+    return fromLabel + ' → ' + toLabel;
+}
+
+/** Человекочитаемое имя кабеля: своё название, «Кабель N» в кроссе/муфте, маршрут или тип ВОЛС. */
+function resolveCableDisplayNameById(cableId, opts) {
+    opts = opts || {};
+    if (!cableId) return 'Кабель';
+    var cable = typeof objects !== 'undefined' ? objects.find(function(o) {
+        return o && o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === cableId;
+    }) : null;
+    if (!cable) {
+        return opts.allowUidFallback ? String(cableId) : String(cableId).substring(0, 12) + '…';
+    }
+    var cableName = cable.properties.get('cableName');
+    if (cableName && String(cableName).trim()) return String(cableName).trim();
+
+    if (opts.hostObj && typeof getConnectedCables === 'function') {
+        var connected = getConnectedCables(opts.hostObj);
+        for (var i = 0; i < connected.length; i++) {
+            if (connected[i].properties.get('uniqueId') === cableId) {
+                if (opts.shortIndex) return 'К' + (i + 1);
+                return 'Кабель ' + (i + 1);
+            }
+        }
+    }
+
+    if (opts.preferRoute !== false) {
+        var route = buildCableRouteDisplayName(cable);
+        if (route) return route;
+    }
+
+    return getCableDescription(cable.properties.get('cableType'), cable);
+}
+
 function isCopperCableType(cableType) {
     return cableType === 'copper';
 }

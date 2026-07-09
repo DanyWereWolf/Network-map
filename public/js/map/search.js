@@ -202,6 +202,7 @@ function goToSearchResult(result) {
         coords = obj.geometry.getCoordinates();
     }
     if (!coords) return;
+    if (typeof mapGeoPin === 'function') mapGeoPin(obj);
     myMap.setCenter(coords, 21, { duration: 500 });
     setTimeout(function() {
         if (result.type === 'cable') showCableInfo(obj);

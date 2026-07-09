@@ -12,6 +12,12 @@ function handleFileImport(e) {
     const reader = new FileReader();
     reader.onload = function(ev) {
         (async function() {
+        var overlayShown = false;
+        function hideImportOverlay() {
+            if (!overlayShown) return;
+            overlayShown = false;
+            if (typeof hideMapLoadingOverlay === 'function') hideMapLoadingOverlay();
+        }
         try {
             const raw = ev.target.result;
             const data = JSON.parse(raw);
@@ -20,20 +26,57 @@ function handleFileImport(e) {
                 fileInput.value = '';
                 return;
             }
-            
+
             if (objects.length > 0 && !(await showConfirm('Текущая карта будет полностью заменена импортируемыми данными. Продолжить?', 'Импорт', { confirmText: 'Продолжить' }))) {
                 fileInput.value = '';
                 return;
             }
-            clearMap();
-            importData(data);
-            // После импорта фиксируем состояние, чтобы оно не терялось при перезагрузке.
-            saveData({ syncFull: true });
-            showSuccess('Карта импортирована (' + data.length + ' объектов)', 'Импорт');
-            logAction(ActionTypes.IMPORT_DATA, { count: data.length });
+
+            var bulkImport = data.length >= (typeof MAP_BULK_IMPORT_MIN_ITEMS === 'number' ? MAP_BULK_IMPORT_MIN_ITEMS : 350);
+            if (bulkImport && typeof showUndoRedoLoadingOverlay === 'function') {
+                showUndoRedoLoadingOverlay('Импорт карты…');
+                overlayShown = true;
+                await new Promise(function(resolve) {
+                    requestAnimationFrame(function() { requestAnimationFrame(resolve); });
+                });
+            }
+
+            var importOpts = { skipSave: true, skipHistory: true };
+            if (bulkImport) importOpts.bulkImport = true;
+            clearMap(importOpts);
+            await new Promise(function(resolve, reject) {
+                importData(data, importOpts, function(err) {
+                    if (err) {
+                        hideImportOverlay();
+                        reject(err);
+                        return;
+                    }
+                    if (bulkImport && typeof setMapLoadingOverlayText === 'function') {
+                        setMapLoadingOverlayText('Сохранение…');
+                    }
+                    requestAnimationFrame(function() {
+                        try {
+                            saveData({ syncFull: true });
+                            hideImportOverlay();
+                            showSuccess('Карта импортирована (' + data.length + ' объектов)', 'Импорт');
+                            logAction(ActionTypes.IMPORT_DATA, { count: data.length });
+                            resolve();
+                        } catch (saveErr) {
+                            hideImportOverlay();
+                            reject(saveErr);
+                        }
+                    });
+                });
+            });
         } catch (error) {
+            hideImportOverlay();
             console.error('Ошибка при импорте файла:', error);
-            showError('Ошибка при чтении файла. Проверьте, что выбран корректный JSON-файл экспорта карты.', 'Импорт');
+            showError(
+                error && error.message
+                    ? ('Ошибка импорта: ' + error.message)
+                    : 'Ошибка при чтении файла. Проверьте, что выбран корректный JSON-файл экспорта карты.',
+                'Импорт'
+            );
         }
         fileInput.value = '';
         })();

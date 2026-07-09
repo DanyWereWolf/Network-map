@@ -236,7 +236,7 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     attachHoverEventsToObject(polyline);
     objects.push(polyline);
     mapPerfRegister(polyline);
-    myMap.geoObjects.add(polyline);
+    mapGeoAdd(polyline);
     if (!isCopperCableType(cableType) && spansForCable.length && window.CableUnderground) {
         CableUnderground.applyCableRouteGeometry(polyline, points, spansForCable);
         if (!isMapBulkImportActive()) CableUnderground.refreshCableUndergroundOverlays(polyline);
