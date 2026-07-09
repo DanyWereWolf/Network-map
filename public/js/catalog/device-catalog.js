@@ -2559,19 +2559,130 @@ function populateModelDatalistForManufacturer(manufacturer, datalistId, catalogK
     }
 }
 
+function getComboboxPanelBounds(wrapper) {
+    var margin = 8;
+    var section = wrapper.closest('.object-card-section');
+    var modalBody = wrapper.closest('.modal-body');
+    var boundsEl = section || modalBody || wrapper.closest('.modal-content') || wrapper.closest('.modal');
+    if (!boundsEl) return null;
+    var rect = boundsEl.getBoundingClientRect();
+    return {
+        top: rect.top + margin,
+        bottom: rect.bottom - margin,
+        left: rect.left + margin,
+        right: rect.right - margin
+    };
+}
+
+function needsFloatingComboboxPanel(wrapper) {
+    if (!wrapper) return false;
+    if (wrapper.closest('.sidebar')) return true;
+    if (wrapper.closest('.modal')) return false;
+    var el = wrapper.parentElement;
+    while (el && el !== document.documentElement) {
+        var st = window.getComputedStyle(el);
+        if (st.overflow === 'hidden' || st.overflowX === 'hidden' || st.overflowY === 'hidden') return true;
+        el = el.parentElement;
+    }
+    return false;
+}
+
+function positionComboboxPanelFloating(trigger, panel) {
+    var rect = trigger.getBoundingClientRect();
+    var margin = 8;
+    var searchEl = panel.querySelector('.device-combobox-search');
+    var searchHeight = searchEl ? searchEl.offsetHeight : 34;
+    var spaceBelow = window.innerHeight - rect.bottom - margin;
+    var spaceAbove = rect.top - margin;
+    var openBelow = spaceBelow >= 100 || spaceBelow >= spaceAbove;
+    var maxPanelHeight = Math.min(220, Math.max(80, openBelow ? spaceBelow - 4 : spaceAbove - 4));
+    var listEl = panel.querySelector('.device-combobox-list');
+
+    panel.classList.add('is-floating');
+    panel.classList.remove('is-open-up');
+    panel.style.position = 'fixed';
+    panel.style.left = rect.left + 'px';
+    panel.style.width = rect.width + 'px';
+    panel.style.minWidth = rect.width + 'px';
+    panel.style.right = 'auto';
+    panel.style.maxHeight = maxPanelHeight + 'px';
+    panel.style.marginTop = '';
+    panel.style.marginBottom = '';
+    if (openBelow) {
+        panel.style.top = (rect.bottom + 4) + 'px';
+        panel.style.bottom = 'auto';
+    } else {
+        panel.style.top = 'auto';
+        panel.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+        panel.classList.add('is-open-up');
+    }
+    if (listEl) listEl.style.maxHeight = Math.max(40, maxPanelHeight - searchHeight) + 'px';
+}
+
+function positionComboboxPanelAnchored(trigger, panel, wrapper) {
+    var bounds = getComboboxPanelBounds(wrapper);
+    if (!bounds) return;
+    var rect = trigger.getBoundingClientRect();
+    var searchEl = panel.querySelector('.device-combobox-search');
+    var searchHeight = searchEl ? searchEl.offsetHeight : 34;
+    var spaceBelow = bounds.bottom - rect.bottom;
+    var spaceAbove = rect.top - bounds.top;
+    var openBelow = spaceBelow >= 80 || spaceBelow >= spaceAbove;
+    var maxPanelHeight = Math.min(220, Math.max(80, (openBelow ? spaceBelow : spaceAbove) - 4));
+    var listEl = panel.querySelector('.device-combobox-list');
+
+    panel.classList.remove('is-floating');
+    panel.classList.toggle('is-open-up', !openBelow);
+    panel.style.position = 'absolute';
+    panel.style.left = '0';
+    panel.style.right = '0';
+    panel.style.width = '';
+    panel.style.minWidth = '';
+    panel.style.maxHeight = maxPanelHeight + 'px';
+    if (openBelow) {
+        panel.style.top = '100%';
+        panel.style.bottom = 'auto';
+        panel.style.marginTop = '4px';
+        panel.style.marginBottom = '';
+    } else {
+        panel.style.top = 'auto';
+        panel.style.bottom = '100%';
+        panel.style.marginTop = '';
+        panel.style.marginBottom = '4px';
+    }
+    if (listEl) listEl.style.maxHeight = Math.max(40, maxPanelHeight - searchHeight) + 'px';
+}
+
+function positionComboboxPanel(trigger, panel, wrapper) {
+    if (wrapper && wrapper.closest('.modal')) {
+        positionComboboxPanelAnchored(trigger, panel, wrapper);
+    } else {
+        positionComboboxPanelFloating(trigger, panel);
+    }
+}
+
+function resetComboboxPanelPosition(pnl) {
+    if (!pnl || !pnl.style) return;
+    var wasPositioned = pnl.classList.contains('is-floating') || pnl.classList.contains('is-open-up')
+        || pnl.style.position === 'fixed' || pnl.style.maxHeight;
+    if (!wasPositioned) return;
+    pnl.classList.remove('is-floating', 'is-open-up');
+    pnl.style.position = '';
+    pnl.style.top = '';
+    pnl.style.left = '';
+    pnl.style.width = '';
+    pnl.style.minWidth = '';
+    pnl.style.right = '';
+    pnl.style.bottom = '';
+    pnl.style.maxHeight = '';
+    pnl.style.marginTop = '';
+    pnl.style.marginBottom = '';
+    var listEl = pnl.querySelector('.device-combobox-list');
+    if (listEl) listEl.style.maxHeight = '';
+}
+
 function initDeviceComboboxes(container) {
     container = container || document;
-
-    function resetComboboxPanelPosition(pnl) {
-        if (!pnl || !pnl.style) return;
-        if (pnl.style.position === 'fixed') {
-            pnl.style.position = '';
-            pnl.style.top = '';
-            pnl.style.left = '';
-            pnl.style.width = '';
-            pnl.style.minWidth = '';
-        }
-    }
 
     var comboboxes = container.querySelectorAll('.device-combobox');
     comboboxes.forEach(function(wrapper) {
@@ -2750,14 +2861,8 @@ function initDeviceComboboxes(container) {
             } else {
                 panel.classList.add('is-open');
                 trigger.setAttribute('aria-expanded', 'true');
-                if (wrapper.closest('.sidebar')) {
-                    var rect = trigger.getBoundingClientRect();
-                    panel.style.position = 'fixed';
-                    panel.style.top = (rect.bottom + 4) + 'px';
-                    panel.style.left = rect.left + 'px';
-                    panel.style.width = rect.width + 'px';
-                    panel.style.minWidth = rect.width + 'px';
-                    panel.style.right = 'auto';
+                if (needsFloatingComboboxPanel(wrapper) || wrapper.closest('.modal')) {
+                    positionComboboxPanel(trigger, panel, wrapper);
                 }
                 renderList('');
                 if (searchInput) { searchInput.value = ''; searchInput.focus(); }
@@ -2774,22 +2879,26 @@ function initDeviceComboboxes(container) {
                     p.classList.remove('is-open');
                     var t = p.closest('.device-combobox').querySelector('.device-combobox-trigger');
                     if (t) t.setAttribute('aria-expanded', 'false');
-                    if (initDeviceComboboxes.resetPanelPosition) initDeviceComboboxes.resetPanelPosition(p);
+                    resetComboboxPanelPosition(p);
                 });
             }
         }, true);
     }
-}
-initDeviceComboboxes.resetPanelPosition = function(pnl) {
-    if (!pnl || !pnl.style) return;
-    if (pnl.style.position === 'fixed') {
-        pnl.style.position = '';
-        pnl.style.top = '';
-        pnl.style.left = '';
-        pnl.style.width = '';
-        pnl.style.minWidth = '';
+
+    if (!window._deviceComboboxRepositionBound) {
+        window._deviceComboboxRepositionBound = true;
+        function repositionOpenComboboxPanels() {
+            document.querySelectorAll('.device-combobox-panel.is-open').forEach(function(pnl) {
+                var combobox = pnl.closest('.device-combobox');
+                var comboboxTrigger = combobox && combobox.querySelector('.device-combobox-trigger');
+                if (comboboxTrigger) positionComboboxPanel(comboboxTrigger, pnl, combobox);
+            });
+        }
+        window.addEventListener('resize', repositionOpenComboboxPanels);
+        window.addEventListener('scroll', repositionOpenComboboxPanels, true);
     }
-};
+}
+initDeviceComboboxes.resetPanelPosition = resetComboboxPanelPosition;
 
 function renderSleeveCatalogList(container, searchQ) {
     var types = getAllSleeveTypes();

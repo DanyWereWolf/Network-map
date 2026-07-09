@@ -513,7 +513,6 @@ function handleAddObject() {
             currentPlacementType = type;
             currentPlacementName = name || '';
             if (placeObjectAtCoords(formCoords)) {
-                saveData();
                 clearObjectPlacementCoordsForm();
                 if (myMap) {
                     try { myMap.setCenter(formCoords, myMap.getZoom(), { duration: 200 }); } catch (e) {}
@@ -540,7 +539,6 @@ function handleAddObject() {
             currentPlacementType = type;
             currentPlacementName = '';
             if (placeObjectAtCoords(formCoordsOther)) {
-                saveData();
                 clearObjectPlacementCoordsForm();
                 if (myMap) {
                     try { myMap.setCenter(formCoordsOther, myMap.getZoom(), { duration: 200 }); } catch (e) {}

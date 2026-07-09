@@ -1392,6 +1392,8 @@ function refreshRemoteObjectVisuals(obj) {
         updateCrossDisplay(groupKey(obj.geometry.getCoordinates()));
     } else if (type === 'node') {
         updateNodeDisplay(groupKey(obj.geometry.getCoordinates()));
+    } else if (typeof canBeCabinetMember === 'function' && canBeCabinetMember(type) && typeof updateCabinetAfterMemberChange === 'function') {
+        updateCabinetAfterMemberChange(obj);
     } else if (typeof canBeCabinetMember === 'function' && canBeCabinetMember(type) && typeof updateCabinetDisplay === 'function') {
         updateCabinetDisplay();
     } else if (typeof applyMapFilter === 'function') {
@@ -3488,16 +3490,19 @@ async function prepareMapDomForPdfCapture(mapEl) {
 }
 
 async function loadMapPdfImage(url) {
-    if (url && /^https?:\/\//i.test(url)) {
+    var shouldFetchFirst = url && (/^https?:\/\//i.test(url) || String(url).charAt(0) === '/');
+    if (shouldFetchFirst) {
         try {
-            var response = await fetch(url, { mode: 'cors', credentials: 'omit', cache: 'no-store' });
+            var response = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
             if (response.ok) {
                 var blob = await response.blob();
-                var objectUrl = URL.createObjectURL(blob);
-                try {
-                    return await loadMapPdfImage(objectUrl);
-                } finally {
-                    URL.revokeObjectURL(objectUrl);
+                if (blob && blob.type && blob.type.indexOf('image/') === 0) {
+                    var objectUrl = URL.createObjectURL(blob);
+                    try {
+                        return await loadMapPdfImage(objectUrl);
+                    } finally {
+                        URL.revokeObjectURL(objectUrl);
+                    }
                 }
             }
         } catch (eFetch) {}
@@ -4050,11 +4055,7 @@ async function openPdfExportWindow(data, exportOptions) {
             }
         }
         if (!mapSnapshots.length) {
-            restoreMapView(restoreCenter, restoreZoom);
-            restoreMapVisibilityAfterPdfExport();
-            endMapPdfExportCapture();
-            showError('Не удалось снять скрин карты для PDF. Попробуйте режим «Как на экране» или уменьшите окно браузера.', 'Экспорт');
-            return false;
+            showWarning('Снимок карты недоступен — PDF будет содержать только таблицы объектов и кабелей.', 'Экспорт');
         }
     }
 
@@ -4062,32 +4063,32 @@ async function openPdfExportWindow(data, exportOptions) {
     restoreMapVisibilityAfterPdfExport();
     endMapPdfExportCapture();
 
-    if (!mapSnapshots.length) {
-        showError('Не удалось сформировать снимок карты для PDF.', 'Экспорт');
-        return false;
-    }
-
     for (var snapIdx = 0; snapIdx < mapSnapshots.length; snapIdx++) {
-        if (!isCanvasExportable(mapSnapshots[snapIdx].canvas)) {
-            var snapBounds = mode === 'viewport' && viewportBounds
-                ? [[viewportBounds.minLat, viewportBounds.minLon], [viewportBounds.maxLat, viewportBounds.maxLon]]
-                : bounds;
-            if (snapBounds) {
-                try {
-                    var repairedCanvas = await captureYandexStaticMapSnapshot(snapBounds, mapEl);
-                    if (repairedCanvas && isCanvasExportable(repairedCanvas)) {
-                        mapSnapshots[snapIdx].canvas = repairedCanvas;
-                        mapSnapshots[snapIdx].caption = (mapSnapshots[snapIdx].caption || 'Карта') + ' (статическая)';
-                        showWarning('Снимок интерактивной карты не удалось встроить в PDF — добавлена статическая карта.', 'Экспорт');
-                        continue;
-                    }
-                } catch (eRepair) {
-                    console.error('PDF canvas repair failed:', eRepair);
+        if (isCanvasExportable(mapSnapshots[snapIdx].canvas)) continue;
+        var snapBounds = mode === 'viewport' && viewportBounds
+            ? [[viewportBounds.minLat, viewportBounds.minLon], [viewportBounds.maxLat, viewportBounds.maxLon]]
+            : bounds;
+        var repaired = false;
+        if (snapBounds) {
+            try {
+                var repairedCanvas = await captureYandexStaticMapSnapshot(snapBounds, mapEl);
+                if (repairedCanvas && isCanvasExportable(repairedCanvas)) {
+                    mapSnapshots[snapIdx].canvas = repairedCanvas;
+                    mapSnapshots[snapIdx].caption = (mapSnapshots[snapIdx].caption || 'Карта') + ' (статическая)';
+                    showWarning('Снимок интерактивной карты не удалось встроить в PDF — добавлена статическая карта.', 'Экспорт');
+                    repaired = true;
                 }
+            } catch (eRepair) {
+                console.error('PDF canvas repair failed:', eRepair);
             }
-            showError('Не удалось встроить снимок карты в PDF (ограничения браузера). Попробуйте режим «Как на экране» или другой браузер.', 'Экспорт');
-            return false;
         }
+        if (!repaired) {
+            mapSnapshots.splice(snapIdx, 1);
+            snapIdx--;
+        }
+    }
+    if (!mapSnapshots.length) {
+        showWarning('Снимок карты недоступен — PDF будет содержать только таблицы объектов и кабелей.', 'Экспорт');
     }
 
     var mapItems = Array.isArray(reportData) ? reportData : [];
@@ -4102,19 +4103,29 @@ async function openPdfExportWindow(data, exportOptions) {
         : ('Объектов: ' + objectsOnly.length + ' | Кабелей: ' + cables.length);
     var metaLine = new Date().toLocaleString() + ' · ' + statsLine + ' · ' + modeLabel;
 
-    var doc = new window.jspdf.jsPDF({ orientation: 'l', unit: 'pt', format: pageFormat });
+    var doc = new window.jspdf.jsPDF({
+        orientation: mapSnapshots.length ? 'l' : 'p',
+        unit: 'pt',
+        format: mapSnapshots.length ? pageFormat : 'a4'
+    });
     var unicodeFontReady = await ensurePdfUnicodeFont(doc);
     if (!unicodeFontReady) {
         showWarning('Не удалось загрузить шрифт для кириллицы. Проверьте интернет — иначе текст в PDF может быть искажён.', 'Экспорт');
     }
 
     try {
-        addMapSnapshotsCompactToPdf(doc, mapSnapshots, pageFormat, {
-            titleLine: unicodeFontReady ? 'Отчёт по карте сети' : 'Network map report',
-            metaLine: metaLine
-        });
-
-        doc.addPage('a4', 'p');
+        if (mapSnapshots.length) {
+            addMapSnapshotsCompactToPdf(doc, mapSnapshots, pageFormat, {
+                titleLine: unicodeFontReady ? 'Отчёт по карте сети' : 'Network map report',
+                metaLine: metaLine
+            });
+            doc.addPage('a4', 'p');
+        } else {
+            doc.setFontSize(11);
+            doc.text(unicodeFontReady ? 'Отчёт по карте сети' : 'Network map report', 28, 40);
+            doc.setFontSize(8);
+            doc.text(metaLine, 28, 54);
+        }
         var helpers = createMapPdfTextHelpers(doc, unicodeFontReady, true);
         appendMapPdfReportTables(doc, reportData, helpers, data, listScopeLabel, true);
 

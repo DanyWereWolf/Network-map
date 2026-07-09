@@ -509,10 +509,10 @@ function createObject(type, name, coords, options = {}) {
         updateNodeDisplay();
     } else if (type === 'cabinet') {
         mapGeoAdd(placemark);
+        if (typeof updateCabinetLabel === 'function') updateCabinetLabel(placemark);
         if (typeof applyMapFilter === 'function') applyMapFilter();
-        if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
     } else if (placemarkProperties.cabinetId) {
-        if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
+        if (typeof updateCabinetAfterMemberChange === 'function') updateCabinetAfterMemberChange(placemark);
     } else {
         mapGeoAdd(placemark);
         if (typeof applyMapFilter === 'function') applyMapFilter();

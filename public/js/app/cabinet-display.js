@@ -856,7 +856,6 @@ function createCabinetMemberObject(cabinet, type, name, options) {
     var cabUid = getObjectUniqueId(cabinet);
     options = Object.assign({}, options || {}, { cabinetId: cabUid });
     var obj = createObject(type, name || '', coords.slice(), options);
-    if (obj && typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
     return obj;
 }
 
@@ -982,6 +981,49 @@ function updateCabinetLabel(cabinet) {
     if (typeof updateObjectLabel === 'function') updateObjectLabel(cabinet, labelText);
 }
 
+function getCabinetGroupScopeKey(cabinet) {
+    if (!cabinet || !cabinet.geometry) return null;
+    try {
+        var coords = cabinet.geometry.getCoordinates();
+        if (coords && coords.length >= 2 && !Array.isArray(coords[0])) return groupKey(coords);
+    } catch (e) {}
+    return null;
+}
+
+/** Точечное обновление после добавления/удаления объекта в ящике (без полной перестройки карты). */
+function updateCabinetAfterMemberChange(member, cabinet) {
+    if (!member || !member.properties) return;
+    var cab = cabinet;
+    if (!cab) {
+        var cabId = getObjectCabinetId(member);
+        if (cabId) cab = getCabinetByUid(cabId);
+    }
+    if (getObjectCabinetId(member)) {
+        hidePlacemarkFromMap(member);
+    } else {
+        showCabinetMemberOnMap(member);
+    }
+    if (cab && typeof updateCabinetLabel === 'function') updateCabinetLabel(cab);
+
+    var memberType = member.properties.get('type');
+    var scopeKey = cab ? getCabinetGroupScopeKey(cab) : null;
+    if (!scopeKey && (memberType === 'cross' || memberType === 'node') && member.geometry) {
+        try {
+            var memCoords = member.geometry.getCoordinates();
+            if (memCoords && memCoords.length >= 2 && !Array.isArray(memCoords[0])) scopeKey = groupKey(memCoords);
+        } catch (e2) {}
+    }
+    if (memberType === 'cross' && scopeKey && typeof updateCrossDisplay === 'function') {
+        updateCrossDisplay(scopeKey);
+    } else if (memberType === 'node' && scopeKey && typeof updateNodeDisplay === 'function') {
+        updateNodeDisplay(scopeKey);
+    }
+    if (typeof applyMapFilter === 'function') applyMapFilter();
+    if (typeof scheduleConnectionLinesUpdate === 'function') {
+        scheduleConnectionLinesUpdate(getObjectUniqueId(member));
+    }
+}
+
 function updateCabinetDisplay(opts) {
     opts = opts || {};
     if (!opts.skipMemberSync && typeof syncAllCabinetMembersToCabinets === 'function') {
@@ -1046,8 +1088,7 @@ function assignObjectToCabinet(member, cabinetUid, opts) {
     moveObjectToCoords(member, coords);
     if (typeof updateConnectedCables === 'function') updateConnectedCables(member);
 
-    hidePlacemarkFromMap(member);
-    updateCabinetDisplay();
+    updateCabinetAfterMemberChange(member, cabinet);
     if (!opts.skipSave) {
         if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(member);
         else if (typeof saveData === 'function') saveData({ object: member, syncImmediate: true });
@@ -1073,7 +1114,9 @@ function finishMemberCabinetPlacement(obj) {
 
 function removeObjectFromCabinet(member, offsetCoords) {
     if (!member || !member.properties) return false;
-    if (!getObjectCabinetId(member)) return false;
+    var cabUid = getObjectCabinetId(member);
+    if (!cabUid) return false;
+    var cabinet = getCabinetByUid(cabUid);
 
     clearObjectCabinetId(member);
     if (offsetCoords && member.geometry) {
@@ -1084,7 +1127,7 @@ function removeObjectFromCabinet(member, offsetCoords) {
     }
     if (typeof updateConnectedCables === 'function') updateConnectedCables(member);
 
-    updateCabinetDisplay();
+    updateCabinetAfterMemberChange(member, cabinet);
     if (typeof updateStats === 'function') updateStats();
     if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(member);
     else if (typeof saveData === 'function') saveData({ object: member, syncImmediate: true });
@@ -1094,16 +1137,40 @@ function removeObjectFromCabinet(member, offsetCoords) {
 
 function releaseAllCabinetMembers(cabinetUid) {
     if (!cabinetUid) return;
-    getCabinetMembers(cabinetUid).forEach(function(member) {
+    var cabinet = getCabinetByUid(cabinetUid);
+    var members = getCabinetMembers(cabinetUid).slice();
+    members.forEach(function(member) {
         clearObjectCabinetId(member);
     });
-    updateCabinetDisplay();
+    if (!cabinet || !members.length) {
+        updateCabinetDisplay();
+        return;
+    }
+    var scopeKey = getCabinetGroupScopeKey(cabinet);
+    var needsCross = false;
+    var needsNode = false;
+    members.forEach(function(member) {
+        showCabinetMemberOnMap(member);
+        var mt = member.properties && member.properties.get('type');
+        if (mt === 'cross') needsCross = true;
+        else if (mt === 'node') needsNode = true;
+    });
+    if (typeof updateCabinetLabel === 'function') updateCabinetLabel(cabinet);
+    if (needsCross && scopeKey && typeof updateCrossDisplay === 'function') updateCrossDisplay(scopeKey);
+    if (needsNode && scopeKey && typeof updateNodeDisplay === 'function') updateNodeDisplay(scopeKey);
+    if (typeof applyMapFilter === 'function') applyMapFilter();
 }
 
 function onCabinetDragEnd(cabinet) {
     if (!cabinet || !cabinet.geometry) return;
     syncCabinetMemberCoords(cabinet);
-    updateCabinetDisplay();
+    if (typeof updateCabinetLabel === 'function') updateCabinetLabel(cabinet);
+    var uid = getObjectUniqueId(cabinet);
+    if (uid && typeof scheduleConnectionLinesUpdate === 'function') {
+        getCabinetMembers(uid).forEach(function(m) {
+            scheduleConnectionLinesUpdate(getObjectUniqueId(m));
+        });
+    }
 }
 
 function onMemberObjectDragEnd(obj) {
@@ -1132,7 +1199,7 @@ function onMemberObjectDragEnd(obj) {
             if (!nearHome) {
                 clearObjectCabinetId(obj);
                 if (typeof updateConnectedCables === 'function') updateConnectedCables(obj);
-                updateCabinetDisplay();
+                updateCabinetAfterMemberChange(obj, homeCab);
                 if (typeof updateStats === 'function') updateStats();
                 if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(obj);
                 else if (typeof saveData === 'function') saveData({ object: obj, syncImmediate: true });

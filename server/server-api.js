@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const https = require('https');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -2340,6 +2341,104 @@ function ensurePdfFontDeployed() {
 
 ensurePdfFontDeployed();
 
+function httpGetBuffer(targetUrl, timeoutMs) {
+    return new Promise(function(resolve, reject) {
+        var parsed;
+        try {
+            parsed = new URL(targetUrl);
+        } catch (eUrl) {
+            reject(eUrl);
+            return;
+        }
+        var lib = parsed.protocol === 'https:' ? https : http;
+        var req = lib.request({
+            protocol: parsed.protocol,
+            hostname: parsed.hostname,
+            port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+            path: parsed.pathname + parsed.search,
+            method: 'GET',
+            headers: {
+                'User-Agent': 'Network-map static-map-proxy',
+                'Accept': 'image/*,*/*'
+            },
+            timeout: timeoutMs || 20000
+        }, function(upstream) {
+            if (upstream.statusCode >= 300 && upstream.statusCode < 400 && upstream.headers.location) {
+                var next = upstream.headers.location;
+                if (!/^https?:\/\//i.test(next)) {
+                    next = parsed.protocol + '//' + parsed.host + next;
+                }
+                upstream.resume();
+                httpGetBuffer(next, timeoutMs).then(resolve, reject);
+                return;
+            }
+            var chunks = [];
+            upstream.on('data', function(chunk) { chunks.push(chunk); });
+            upstream.on('end', function() {
+                var buffer = Buffer.concat(chunks);
+                if (upstream.statusCode !== 200) {
+                    reject(new Error('upstream-http-' + upstream.statusCode));
+                    return;
+                }
+                resolve({
+                    buffer: buffer,
+                    contentType: upstream.headers['content-type'] || 'image/png'
+                });
+            });
+        });
+        req.on('error', reject);
+        req.on('timeout', function() {
+            req.destroy();
+            reject(new Error('upstream-timeout'));
+        });
+        req.end();
+    });
+}
+
+function buildStaticMapUpstreamUrls(ll, zoom, size, lang, apiKey) {
+    var urls = [];
+    if (apiKey && apiKey !== 'YOUR_YANDEX_MAPS_API_KEY') {
+        urls.push('https://static-maps.yandex.ru/v1?apikey=' + encodeURIComponent(apiKey)
+            + '&ll=' + encodeURIComponent(ll)
+            + '&z=' + zoom
+            + '&size=' + encodeURIComponent(size)
+            + '&lang=' + encodeURIComponent(lang));
+    }
+    var legacy = 'https://static-maps.yandex.ru/1.x/?lang=' + encodeURIComponent(lang)
+        + '&ll=' + encodeURIComponent(ll)
+        + '&z=' + zoom
+        + '&l=map&size=' + encodeURIComponent(size);
+    if (apiKey && apiKey !== 'YOUR_YANDEX_MAPS_API_KEY') {
+        legacy += '&apikey=' + encodeURIComponent(apiKey);
+    }
+    urls.push(legacy);
+    return urls;
+}
+
+async function fetchStaticMapImage(ll, zoom, size, lang, apiKey) {
+    var urls = buildStaticMapUpstreamUrls(ll, zoom, size, lang, apiKey);
+    var lastError = null;
+    for (var i = 0; i < urls.length; i++) {
+        try {
+            if (typeof fetch === 'function') {
+                var upstream = await fetch(urls[i], { redirect: 'follow' });
+                if (upstream.ok) {
+                    return {
+                        buffer: Buffer.from(await upstream.arrayBuffer()),
+                        contentType: upstream.headers.get('content-type') || 'image/png'
+                    };
+                }
+                lastError = new Error('upstream-http-' + upstream.status);
+                continue;
+            }
+            return await httpGetBuffer(urls[i]);
+        } catch (eTry) {
+            lastError = eTry;
+        }
+    }
+    throw lastError || new Error('static-map-unavailable');
+}
+
 function getSiteBaseUrl(req) {
     const configured = serverConfig.publicSiteUrl || process.env.PUBLIC_SITE_URL || '';
     if (configured) return String(configured).trim().replace(/\/$/, '');
@@ -2422,26 +2521,14 @@ app.get('/api/static-map-image', async (req, res) => {
     if (!/^\d+,\d+$/.test(size)) {
         return res.status(400).json({ error: 'Invalid size parameter' });
     }
-    let url = 'https://static-maps.yandex.ru/1.x/?lang=' + encodeURIComponent(lang)
-        + '&ll=' + encodeURIComponent(ll)
-        + '&z=' + zoom
-        + '&l=map&size=' + encodeURIComponent(size);
     const apiKey = String(serverConfig.yandexMapsApiKey || process.env.YANDEX_MAPS_API_KEY || '').trim();
-    if (apiKey && apiKey !== 'YOUR_YANDEX_MAPS_API_KEY') {
-        url += '&apikey=' + encodeURIComponent(apiKey);
-    }
     try {
-        const upstream = await fetch(url, { redirect: 'follow' });
-        if (!upstream.ok) {
-            return res.status(502).json({ error: 'Static map upstream failed', status: upstream.status });
-        }
-        const contentType = upstream.headers.get('content-type') || 'image/png';
-        const buffer = Buffer.from(await upstream.arrayBuffer());
-        res.setHeader('Content-Type', contentType);
+        const result = await fetchStaticMapImage(ll, zoom, size, lang, apiKey);
+        res.setHeader('Content-Type', result.contentType || 'image/png');
         res.setHeader('Cache-Control', 'private, max-age=300');
-        res.send(buffer);
+        res.send(result.buffer);
     } catch (eMap) {
-        console.error('[PDF] static-map-image proxy failed:', eMap && eMap.message ? eMap.message : eMap);
+        console.error('[PDF] static-map-image proxy failed:', eMap && eMap.message ? eMap.message : eMap, { ll, size, zoom });
         res.status(502).json({ error: 'Static map proxy failed' });
     }
 });

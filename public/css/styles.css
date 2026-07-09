@@ -3768,6 +3768,23 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     pointer-events: auto;
     transform: translateY(0) scale(1);
 }
+.device-combobox-panel.is-open-up {
+    transform-origin: bottom center;
+}
+.device-combobox-panel.is-open-up.is-open {
+    transform: translateY(0) scale(1);
+}
+.device-combobox-panel.is-floating {
+    z-index: 10000;
+}
+#infoModal[data-device-card] .node-card-add-switch,
+#infoModal[data-device-card] .node-card-switch-item,
+#infoModal[data-device-card] .object-card-section--switches {
+    overflow: visible;
+}
+#infoModal[data-device-card] .device-combobox-panel {
+    z-index: 5;
+}
 .device-combobox-search {
     padding: 6px 8px;
     border: none;
