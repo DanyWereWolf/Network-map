@@ -1565,6 +1565,8 @@ function applyOperationToMap(op) {
 window.applyOperationToMap = applyOperationToMap;
 
 function ensureNodeLabelsVisible() {
+    var zoom = (myMap && typeof myMap.getZoom === 'function') ? myMap.getZoom() : 16;
+    var hideLabels = typeof zoom === 'number' && zoom < 16;
     objects.forEach(obj => {
         if (obj.properties) {
             const type = obj.properties.get('type');
@@ -1572,8 +1574,11 @@ function ensureNodeLabelsVisible() {
             const name = obj.properties.get('name') || '';
             updateObjectLabel(obj, name);
             var label = obj.properties.get('label');
-            if (label && (!myMap.geoObjects.indexOf || myMap.geoObjects.indexOf(label) === -1)) {
-                try { myMap.geoObjects.add(label); } catch(e) {}
+            if (label && !hideLabels && (!myMap.geoObjects.indexOf || myMap.geoObjects.indexOf(label) === -1)) {
+                if (typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization && MapPerf.shouldUseVirtualization()) {
+                    if (typeof MapPerf.shouldMountObject === 'function' && !MapPerf.shouldMountObject(obj)) return;
+                }
+                try { mapGeoAdd(label); } catch(e) {}
             }
         }
     });

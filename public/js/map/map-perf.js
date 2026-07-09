@@ -454,6 +454,23 @@
             }
         });
         for (var ui = 0; ui < toUnmount.length; ui++) unmountObject(toUnmount[ui]);
+
+        mountedUids.forEach(function(uid) {
+            if (pinnedUids.has(uid)) return;
+            var obj = objectsById.get(uid);
+            if (!obj) return;
+            var label = obj.properties && obj.properties.get('label');
+            if (!label) return;
+            var showLabel = shouldShowLabelForObject(obj, ctx);
+            try {
+                if (label.options) label.options.set('visible', showLabel);
+                if (showLabel && global.myMap.geoObjects.indexOf(label) === -1) {
+                    global.myMap.geoObjects.add(label);
+                } else if (!showLabel && global.myMap.geoObjects.indexOf(label) !== -1) {
+                    global.myMap.geoObjects.remove(label);
+                }
+            } catch (eLbl) {}
+        });
     }
 
     function scheduleSyncViewportMounts(ctx) {

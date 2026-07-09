@@ -483,8 +483,13 @@ function setupEventListeners() {
         var zoomPending = mapBoundsChangeZoomPending;
         mapBoundsChangeZoomPending = false;
         try {
-            if (typeof applyMapViewportUpdate === 'function') applyMapViewportUpdate();
-            else if (typeof applyMapFilter === 'function') applyMapFilter();
+            if (zoomPending) {
+                if (typeof applyMapFilter === 'function') applyMapFilter();
+            } else if (typeof applyMapViewportUpdate === 'function') {
+                applyMapViewportUpdate();
+            } else if (typeof applyMapFilter === 'function') {
+                applyMapFilter();
+            }
             if (zoomPending && window.MapRegions && MapRegions.rebuildAllRegionLabels && myMap) {
                 MapRegions.rebuildAllRegionLabels(myMap, objects);
             }

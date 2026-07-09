@@ -302,16 +302,47 @@ function applyExpertZoomVisibility() {
     applyRegionZoomVisibility(zoom);
 }
 
-function buildMapMountContext() {
+function getExpertZoomFlags() {
     var zoom = (myMap && typeof myMap.getZoom === 'function') ? myMap.getZoom() : 16;
+    return {
+        zoom: zoom,
+        hideLabels: typeof zoom === 'number' && zoom < EXPERT_ZOOM_HIDE_LABELS_BELOW,
+        hideObjects: typeof zoom === 'number' && zoom < EXPERT_ZOOM_HIDE_OBJECTS_BELOW
+    };
+}
+
+function applyGroupPlacemarkFilterVisibility(filter, zoomFlags) {
+    zoomFlags = zoomFlags || getExpertZoomFlags();
+    var hideLabels = zoomFlags.hideLabels;
+    var hideObjects = zoomFlags.hideObjects;
+    crossGroupPlacemarks.forEach(function(pm) {
+        var v = filter.cross && !hideObjects;
+        try { if (pm.options) pm.options.set('visible', v); } catch (e) {}
+        var lbl = pm.properties && pm.properties.get('crossGroupLabel');
+        try { if (lbl && lbl.options) lbl.options.set('visible', v && !hideLabels); } catch (e) {}
+    });
+    nodeGroupPlacemarks.forEach(function(pm) {
+        var visible = filter.node && !hideObjects;
+        if (visible && filter.nodeAggregationOnly) {
+            var group = pm.properties && pm.properties.get('nodeGroup');
+            visible = Array.isArray(group) && group.some(function(nd) { return nd.properties && nd.properties.get('nodeKind') === 'aggregation'; });
+        }
+        try { if (pm.options) pm.options.set('visible', visible); } catch (e) {}
+        var lbl = pm.properties && pm.properties.get('nodeGroupLabel');
+        try { if (lbl && lbl.options) lbl.options.set('visible', visible && !hideLabels); } catch (e) {}
+    });
+}
+
+function buildMapMountContext() {
+    var zoomFlags = getExpertZoomFlags();
     var bounds = (typeof MapPerf !== 'undefined' && MapPerf.getExpandedBounds) ? MapPerf.getExpandedBounds(myMap) : null;
     return {
         bounds: bounds,
-        zoom: zoom,
-        hideLabels: typeof zoom === 'number' && zoom < EXPERT_ZOOM_HIDE_LABELS_BELOW,
-        hideObjects: typeof zoom === 'number' && zoom < EXPERT_ZOOM_HIDE_OBJECTS_BELOW,
+        zoom: zoomFlags.zoom,
+        hideLabels: zoomFlags.hideLabels,
+        hideObjects: zoomFlags.hideObjects,
         showConnectionLines: typeof MapPerf !== 'undefined' && MapPerf.connectionLinesVisibleAtZoom
-            ? MapPerf.connectionLinesVisibleAtZoom(zoom) : (typeof zoom !== 'number' || zoom >= EXPERT_ZOOM_HIDE_OBJECTS_BELOW)
+            ? MapPerf.connectionLinesVisibleAtZoom(zoomFlags.zoom) : (typeof zoomFlags.zoom !== 'number' || zoomFlags.zoom >= EXPERT_ZOOM_HIDE_OBJECTS_BELOW)
     };
 }
 
@@ -321,6 +352,7 @@ function applyMapViewportUpdate() {
     applyConnectionLinesVisibility();
     if (typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization()) {
         MapPerf.syncViewportMounts(buildMapMountContext());
+        try { applyExpertZoomVisibility(); } catch (eExpVirt) {}
         try { applyRegionZoomVisibility(myMap.getZoom()); } catch (eReg) {}
     } else {
         applyViewportCullToMap();
@@ -402,27 +434,14 @@ function applyMapFilter() {
             }
         } catch (e) {}
     });
-    crossGroupPlacemarks.forEach(function(pm) {
-        var v = filter.cross;
-        try { if (pm.options) pm.options.set('visible', v); } catch (e) {}
-        var lbl = pm.properties && pm.properties.get('crossGroupLabel');
-        try { if (lbl && lbl.options) lbl.options.set('visible', v); } catch (e) {}
-    });
-    nodeGroupPlacemarks.forEach(function(pm) {
-        var visible = filter.node;
-        if (visible && filter.nodeAggregationOnly) {
-            var group = pm.properties && pm.properties.get('nodeGroup');
-            visible = Array.isArray(group) && group.some(function(nd) { return nd.properties && nd.properties.get('nodeKind') === 'aggregation'; });
-        }
-        try { if (pm.options) pm.options.set('visible', visible); } catch (e) {}
-        var lbl = pm.properties && pm.properties.get('nodeGroupLabel');
-        try { if (lbl && lbl.options) lbl.options.set('visible', visible); } catch (e) {}
-    });
+    var zoomFlags = getExpertZoomFlags();
+    applyGroupPlacemarkFilterVisibility(filter, zoomFlags);
 
     if (useVirtual) {
         var mountCtx = buildMapMountContext();
         MapPerf.syncViewportMounts(mountCtx);
         applyConnectionLinesVisibility();
+        try { applyExpertZoomVisibility(); } catch (eVirt) {}
     } else {
         applyViewportCullToMap();
         applyConnectionLinesVisibility();
