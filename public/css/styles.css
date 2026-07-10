@@ -6071,6 +6071,12 @@ button {
     background: repeating-linear-gradient(90deg, #2563eb 0 5px, #16a34a 5px 10px);
 }
 
+.fiber-ws-leg-cross-link {
+    background: #7c3aed;
+    height: 3px;
+    border-radius: 2px;
+}
+
 .fiber-ws-leg-splitter-link {
     background: #f97316;
 }
@@ -6084,8 +6090,8 @@ button {
 }
 
 .fiber-ws-leg-connected {
-    border-color: var(--accent-warning);
-    background: rgba(245, 158, 11, 0.2);
+    border-color: #7c3aed;
+    background: rgba(109, 40, 217, 0.22);
 }
 
 .fiber-ws-leg-used {
@@ -6909,16 +6915,24 @@ button {
     opacity: 1;
 }
 
-#fiber-connections-svg.fiber-scheme-svg--view .fiber-scheme-cross-link-label {
-    opacity: 1;
-}
-
 #fiber-connections-svg .fiber-scheme-cross-port--assigned .fiber-scheme-cross-port-node {
     filter: drop-shadow(0 0 3px rgba(109, 40, 217, 0.35));
 }
 
 #fiber-connections-svg.fiber-scheme-svg--view .fiber-scheme-cross-port {
     pointer-events: none;
+}
+
+#fiber-connections-svg.fiber-scheme-svg--view .fiber-scheme-cross-link-hit,
+#fiber-connections-svg.fiber-scheme-svg--view .fiber-scheme-splitter-cross-link-hit {
+    pointer-events: stroke;
+    cursor: default;
+}
+
+#fiber-connections-svg.fiber-scheme-svg--view .fiber-scheme-cross-link-label,
+#fiber-connections-svg.fiber-scheme-svg--view .fiber-scheme-splitter-cross-link-label {
+    pointer-events: all;
+    cursor: default;
 }
 
 #fiber-connections-svg .fiber-scheme-cross-port--pick .fiber-scheme-cross-port-node {
@@ -7096,17 +7110,23 @@ button {
 
 #fiber-connections-svg .fiber-scheme-splitter-edit-hit,
 #fiber-connections-svg .fiber-scheme-splitter-delete-hit,
-#fiber-connections-svg .fiber-scheme-splitter-rotate-hit {
+#fiber-connections-svg .fiber-scheme-splitter-orient-hit,
+#fiber-connections-svg .fiber-scheme-splitter-mirror-hit,
+#fiber-connections-svg .fiber-scheme-splitter-flipv-hit {
     cursor: pointer;
 }
 
-#fiber-connections-svg .fiber-scheme-splitter-rotate-hit:hover,
+#fiber-connections-svg .fiber-scheme-splitter-orient-hit:hover,
+#fiber-connections-svg .fiber-scheme-splitter-mirror-hit:hover,
+#fiber-connections-svg .fiber-scheme-splitter-flipv-hit:hover,
 #fiber-connections-svg .fiber-scheme-splitter-edit-hit:hover,
 #fiber-connections-svg .fiber-scheme-splitter-delete-hit:hover {
     fill: rgba(234, 88, 12, 0.22);
 }
 
-[data-theme="dark"] #fiber-connections-svg .fiber-scheme-splitter-rotate-hit:hover,
+[data-theme="dark"] #fiber-connections-svg .fiber-scheme-splitter-orient-hit:hover,
+[data-theme="dark"] #fiber-connections-svg .fiber-scheme-splitter-mirror-hit:hover,
+[data-theme="dark"] #fiber-connections-svg .fiber-scheme-splitter-flipv-hit:hover,
 [data-theme="dark"] #fiber-connections-svg .fiber-scheme-splitter-edit-hit:hover,
 [data-theme="dark"] #fiber-connections-svg .fiber-scheme-splitter-delete-hit:hover {
     fill: rgba(255, 255, 255, 0.24);
@@ -7126,11 +7146,31 @@ button {
     pointer-events: none;
 }
 
+.fiber-scheme-links .fiber-scheme-link {
+    transition: stroke-width 0.15s ease, opacity 0.15s ease;
+}
+
+.fiber-scheme-splitter-orient-group {
+    margin: 10px 0 4px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--panel-glass-border);
+    background: color-mix(in srgb, var(--bg-card) 70%, transparent);
+}
+
+.fiber-scheme-splitter-orient-title {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
 .fiber-scheme-splitter-orient-label {
     display: flex;
     align-items: flex-start;
     gap: 8px;
-    margin: 10px 0 4px;
+    margin: 6px 0 0;
     font-size: 0.875rem;
     color: var(--text-secondary);
     cursor: pointer;
@@ -7536,7 +7576,12 @@ button {
     filter: brightness(1.12);
 }
 
-#fiber-connections-svg .fiber-scheme-link:hover {
+#fiber-connections-svg .fiber-scheme-link.fiber-scheme-cross-link:hover {
+    stroke-width: 4;
+    filter: drop-shadow(0 0 4px rgba(109, 40, 217, 0.45));
+}
+
+#fiber-connections-svg .fiber-scheme-link:not(.fiber-scheme-cross-link):hover {
     stroke-width: 4.5;
     filter: brightness(1.08);
 }
@@ -7546,14 +7591,26 @@ button {
     transition: opacity 0.15s ease;
 }
 
-#fiber-connections-svg .fiber-cable-side-flip-hit {
+.fiber-scheme-cables .fiber-cable-side-btns-svg {
+    pointer-events: all;
+}
+
+.fiber-scheme-cables .fiber-cable-block--top .fiber-cable-side-btns-svg {
+    opacity: 0.95;
+}
+
+#fiber-connections-svg .fiber-cable-side-flip-hit,
+#fiber-connections-svg .fiber-cable-side-btn-hit,
+#fiber-connections-svg .fiber-cable-mirror-hit {
     pointer-events: all;
     cursor: pointer;
     stroke: rgba(148, 163, 184, 0.45);
     stroke-width: 1;
 }
 
-#fiber-connections-svg .fiber-cable-side-flip-hit:hover {
+#fiber-connections-svg .fiber-cable-side-flip-hit:hover,
+#fiber-connections-svg .fiber-cable-side-btn-hit:hover,
+#fiber-connections-svg .fiber-cable-mirror-hit:hover {
     stroke: #f97316;
     filter: brightness(1.08);
 }
@@ -7568,16 +7625,16 @@ button {
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    max-height: 180px;
+    gap: 6px;
+    max-height: 220px;
     overflow-y: auto;
 }
 
 .fiber-ws-cable-side-item {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 8px;
+    gap: 8px;
+    padding: 8px 10px;
     border: 1px solid var(--panel-glass-border);
     border-radius: var(--radius-sm);
     background: color-mix(in srgb, #f0f9ff 45%, var(--panel-glass-surface));
@@ -7597,7 +7654,63 @@ button {
 .fiber-ws-cable-side-label {
     flex-shrink: 0;
     font-size: 0.6875rem;
+    font-weight: 600;
     color: var(--text-secondary);
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-card) 80%, transparent);
+    border: 1px solid var(--panel-glass-border);
+}
+
+.fiber-ws-cable-side-btns {
+    display: inline-flex;
+    flex-shrink: 0;
+    gap: 2px;
+    padding: 2px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+    border: 1px solid var(--panel-glass-border);
+}
+
+.fiber-ws-cable-side-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: calc(var(--radius-sm) - 2px);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.875rem;
+    line-height: 1;
+    transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.fiber-ws-cable-mirror-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: calc(var(--radius-sm) - 2px);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.875rem;
+    line-height: 1;
+    transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.fiber-ws-cable-side-btn:hover,
+.fiber-ws-cable-mirror-btn:hover {
+    background: #fff7ed;
+    color: #9a3412;
+}
+
+.fiber-ws-cable-side-btn.is-active,
+.fiber-ws-cable-mirror-btn.is-active {
+    background: #f97316;
+    color: #fff;
+    box-shadow: 0 1px 3px rgba(234, 88, 12, 0.35);
 }
 
 .fiber-ws-cable-side-flip {
@@ -7643,12 +7756,35 @@ button {
     cursor: pointer;
 }
 
+#fiber-connections-svg .fiber-scheme-port--cross-linked .fiber-port-node {
+    filter: drop-shadow(0 0 3px rgba(109, 40, 217, 0.35));
+}
+
 #fiber-connections-svg .fiber-scheme-port[data-fiber-selectable="true"] {
     cursor: pointer;
 }
 
 .fiber-scheme-port .fiber-port-num {
     pointer-events: none;
+}
+
+.fiber-scheme-port-nums {
+    pointer-events: none;
+}
+
+.fiber-scheme-port-nums .fiber-port-badge--top {
+    pointer-events: none;
+}
+
+.fiber-scheme-port-nums .fiber-port-num {
+    paint-order: stroke fill;
+    stroke: rgba(255, 255, 255, 0.95);
+    stroke-width: 4px;
+    stroke-linejoin: round;
+}
+
+[data-theme="dark"] .fiber-scheme-port-nums .fiber-port-num {
+    stroke: rgba(15, 23, 42, 0.92);
 }
 
 .fiber-scheme-label-fo {

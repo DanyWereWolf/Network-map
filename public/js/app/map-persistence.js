@@ -104,19 +104,19 @@ function serializeMapItemFromObject(obj) {
             if (props.maxFibers !== undefined) result.maxFibers = props.maxFibers;
             appendFiberSchemeCanvasPropsToResult(props, result);
             appendFiberSchemeViewPropsToResult(props, result);
-            appendFiberSchemeCableSidesToResult(props, result);
+            appendFiberSchemeCableSidesToResult(props, result, obj);
         }
         if (props.type === 'spliceCassette') {
             if (props.cassetteType) result.cassetteType = props.cassetteType;
             if (props.maxFibers !== undefined) result.maxFibers = props.maxFibers;
             appendFiberSchemeCanvasPropsToResult(props, result);
             appendFiberSchemeViewPropsToResult(props, result);
-            appendFiberSchemeCableSidesToResult(props, result);
+            appendFiberSchemeCableSidesToResult(props, result, obj);
         }
         if (props.type === 'cross') {
             appendFiberSchemeCanvasPropsToResult(props, result);
             appendFiberSchemeViewPropsToResult(props, result);
-            appendFiberSchemeCableSidesToResult(props, result);
+            appendFiberSchemeCableSidesToResult(props, result, obj);
             if (props.crossType) result.crossType = props.crossType;
             if (props.crossPorts) result.crossPorts = props.crossPorts;
             if (props.crossCopperPorts !== undefined && props.crossCopperPorts !== null) result.crossCopperPorts = props.crossCopperPorts;

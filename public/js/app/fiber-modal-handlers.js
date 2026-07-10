@@ -967,27 +967,55 @@ function setupFiberSchemeCrossPortHandlers(crossObj) {
 
 function setupFiberSchemeCableSideHandlers(hostObj) {
     if (!hostObj || !isEditMode) return;
-    function flipCableSide(cableId) {
-        if (!cableId || typeof toggleFiberSchemeCableSide !== 'function') return;
-        if (typeof captureFiberWorkspaceUiState === 'function') captureFiberWorkspaceUiState();
-        if (!toggleFiberSchemeCableSide(hostObj, cableId)) return;
+    function refreshCableSchemeUi() {
         if (typeof refreshObjectModal === 'function') refreshObjectModal(hostObj);
         else if (typeof showObjectInfo === 'function') showObjectInfo(hostObj);
     }
-    document.querySelectorAll('.fiber-ws-cable-side-flip').forEach(function(btn) {
+    function setCableSide(cableId, side) {
+        if (!cableId || !side) return;
+        if (typeof setFiberSchemeCableSide === 'function') {
+            if (typeof captureFiberWorkspaceUiState === 'function') captureFiberWorkspaceUiState();
+            if (!setFiberSchemeCableSide(hostObj, cableId, side)) return;
+        } else if (typeof toggleFiberSchemeCableSide === 'function') {
+            if (typeof captureFiberWorkspaceUiState === 'function') captureFiberWorkspaceUiState();
+            if (!toggleFiberSchemeCableSide(hostObj, cableId)) return;
+        } else return;
+        refreshCableSchemeUi();
+    }
+    function toggleCableMirror(cableId) {
+        if (!cableId || typeof toggleFiberSchemeCableMirrored !== 'function') return;
+        if (typeof captureFiberWorkspaceUiState === 'function') captureFiberWorkspaceUiState();
+        if (!toggleFiberSchemeCableMirrored(hostObj, cableId)) return;
+        refreshCableSchemeUi();
+    }
+    document.querySelectorAll('.fiber-ws-cable-side-btn').forEach(function(btn) {
         btn.addEventListener('click', function(e) {
             e.stopPropagation();
-            flipCableSide(this.getAttribute('data-cable-id'));
+            setCableSide(this.getAttribute('data-cable-id'), this.getAttribute('data-cable-side'));
+        });
+    });
+    document.querySelectorAll('.fiber-ws-cable-mirror-btn').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            toggleCableMirror(this.getAttribute('data-cable-id'));
         });
     });
     var svg = document.getElementById('fiber-connections-svg');
     if (!svg) return;
-    svg.querySelectorAll('.fiber-cable-side-flip-hit').forEach(function(hit) {
+    svg.querySelectorAll('.fiber-cable-side-btn-hit').forEach(function(hit) {
         hit.addEventListener('mousedown', function(e) { e.stopPropagation(); });
         hit.addEventListener('click', function(e) {
             e.stopPropagation();
             e.preventDefault();
-            flipCableSide(hit.getAttribute('data-cable-id'));
+            setCableSide(hit.getAttribute('data-cable-id'), hit.getAttribute('data-cable-side'));
+        });
+    });
+    svg.querySelectorAll('.fiber-cable-mirror-hit').forEach(function(hit) {
+        hit.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+        hit.addEventListener('click', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            toggleCableMirror(hit.getAttribute('data-cable-id'));
         });
     });
 }
@@ -1086,7 +1114,20 @@ function setupFiberSchemeSplitterHandlers(hostObj) {
         });
     });
 
-    svg.querySelectorAll('.fiber-scheme-splitter-rotate-hit').forEach(function(hit) {
+    svg.querySelectorAll('.fiber-scheme-splitter-orient-hit').forEach(function(hit) {
+        hit.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+        hit.addEventListener('click', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            if (!isEditMode) return;
+            var sid = hit.getAttribute('data-splitter-id');
+            if (!sid || !window.EmbeddedSplitters) return;
+            EmbeddedSplitters.toggleSchemeOrientation(hostObj, sid, svgW, svgH);
+            showObjectInfo(hostObj);
+        });
+    });
+
+    svg.querySelectorAll('.fiber-scheme-splitter-mirror-hit').forEach(function(hit) {
         hit.addEventListener('mousedown', function(e) { e.stopPropagation(); });
         hit.addEventListener('click', function(e) {
             e.stopPropagation();
@@ -1095,6 +1136,19 @@ function setupFiberSchemeSplitterHandlers(hostObj) {
             var sid = hit.getAttribute('data-splitter-id');
             if (!sid || !window.EmbeddedSplitters) return;
             EmbeddedSplitters.toggleSchemeMirrored(hostObj, sid, svgW, svgH);
+            showObjectInfo(hostObj);
+        });
+    });
+
+    svg.querySelectorAll('.fiber-scheme-splitter-flipv-hit').forEach(function(hit) {
+        hit.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+        hit.addEventListener('click', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            if (!isEditMode) return;
+            var sid = hit.getAttribute('data-splitter-id');
+            if (!sid || !window.EmbeddedSplitters) return;
+            EmbeddedSplitters.toggleSchemeFlipVertical(hostObj, sid, svgW, svgH);
             showObjectInfo(hostObj);
         });
     });
@@ -1164,15 +1218,17 @@ function setupFiberSchemeSplitterHandlers(hostObj) {
         if (!dragState.moved) return;
         var rec = EmbeddedSplitters.findInHost(hostObj, dragState.id);
         var ratio = rec ? rec.splitRatio : 8;
-        var clamped = EmbeddedSplitters.clampPosition(p.x, p.y, svgW, svgH, ratio);
+        var orient = rec && EmbeddedSplitters.getSchemeOrientation ? EmbeddedSplitters.getSchemeOrientation(rec) : 'horizontal';
+        var clamped = EmbeddedSplitters.clampPosition(p.x, p.y, svgW, svgH, ratio, orient);
         EmbeddedSplitters.move(hostObj, dragState.id, clamped.x, clamped.y, svgW, svgH);
         var spBox = EmbeddedSplitters.computeSchemeSplitterBox
-            ? EmbeddedSplitters.computeSchemeSplitterBox(parseInt(ratio, 10) || 8)
+            ? EmbeddedSplitters.computeSchemeSplitterBox(parseInt(ratio, 10) || 8, orient)
             : { w: EmbeddedSplitters.DEFAULT_W, h: EmbeddedSplitters.DEFAULT_H };
         dragState.el.setAttribute('transform', 'translate(' + (clamped.x - spBox.w / 2) + ',' + (clamped.y - spBox.h / 2) + ')');
         if (EmbeddedSplitters.updateSplitterLinkPaths) {
             EmbeddedSplitters.updateSplitterLinkPaths(svg, dragState.id, clamped.x, clamped.y, ratio, {
                 buildConnectionPath: buildFiberSchemeConnectionPath,
+                buildBendPath: buildFiberSchemeBendAtPointPath,
                 nodeR: 4,
                 badgeW: 22,
                 svgWidth: svgW,

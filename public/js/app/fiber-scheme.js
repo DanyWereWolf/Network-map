@@ -221,11 +221,14 @@ function getFiberSchemeLayoutOpts(cablesData, maxFibers) {
     var compact = maxFibers <= 16 && cablesData.length <= 4;
     return {
         rowHeight: compact ? 15 : 17,
+        sideFiberGap: compact ? 9 : 10,
+        topFiberGap: compact ? 6 : 6,
         sidePad: compact ? 10 : 12,
         panelW: compact ? 176 : 192,
         fiberFanLen: compact ? 34 : 38,
         blockGap: compact ? 8 : 12,
         labelH: compact ? 22 : 24,
+        cableLabelW: compact ? 76 : 92,
         minSvgHeight: compact ? 96 : 120
     };
 }
@@ -1195,11 +1198,22 @@ function loadFiberSchemeViewPropsFromData(data, placemark) {
     if (data.fiberSchemeTableScrollTop != null) placemark.properties.set('fiberSchemeTableScrollTop', data.fiberSchemeTableScrollTop);
 }
 
+function cloneFiberSchemeCableSideMap(map) {
+    if (!map || typeof map !== 'object') return {};
+    try {
+        return JSON.parse(JSON.stringify(map));
+    } catch (e) {
+        return Object.assign({}, map);
+    }
+}
+
 function getFiberSchemeCableSides(hostObj) {
     if (!hostObj || !hostObj.properties) return {};
     var sides = hostObj.properties.get('fiberSchemeCableSides');
-    return (sides && typeof sides === 'object') ? sides : {};
+    return cloneFiberSchemeCableSideMap(sides && typeof sides === 'object' ? sides : {});
 }
+
+var FIBER_SCHEME_CABLE_SIDES = ['left', 'right', 'top'];
 
 function getDefaultCableSchemeSide(cableIndex, totalCount) {
     if (totalCount <= 0) return 'left';
@@ -1208,20 +1222,45 @@ function getDefaultCableSchemeSide(cableIndex, totalCount) {
 
 function resolveCableSchemeSide(hostObj, cableUniqueId, cableIndex, totalCount) {
     var stored = getFiberSchemeCableSides(hostObj)[cableUniqueId];
-    if (stored === 'left' || stored === 'right') return stored;
+    if (FIBER_SCHEME_CABLE_SIDES.indexOf(stored) >= 0) return stored;
     return getDefaultCableSchemeSide(cableIndex, totalCount);
+}
+
+function getCableSchemeSideLabel(side) {
+    if (side === 'right') return 'Справа';
+    if (side === 'top') return 'Сверху';
+    return 'Слева';
 }
 
 function partitionCablesBySchemeSide(hostObj, cablesData) {
     var left = [];
     var right = [];
+    var top = [];
     var total = cablesData.length;
     cablesData.forEach(function(cableData, index) {
         var side = resolveCableSchemeSide(hostObj, cableData.cableUniqueId, index, total);
         if (side === 'right') right.push(cableData);
+        else if (side === 'top') top.push(cableData);
         else left.push(cableData);
     });
-    return { left: left, right: right };
+    return { left: left, right: right, top: top };
+}
+
+function setFiberSchemeCableSide(hostObj, cableUniqueId, side) {
+    if (!hostObj || !cableUniqueId || FIBER_SCHEME_CABLE_SIDES.indexOf(side) < 0) return false;
+    var cables = typeof getConnectedCables === 'function' ? getConnectedCables(hostObj) : [];
+    var cableIds = cables.map(function(c) {
+        return (c.properties && c.properties.get('uniqueId')) || '';
+    });
+    var idx = cableIds.indexOf(cableUniqueId);
+    var total = cables.length;
+    var current = resolveCableSchemeSide(hostObj, cableUniqueId, idx >= 0 ? idx : 0, total);
+    if (current === side) return false;
+    var sides = Object.assign({}, getFiberSchemeCableSides(hostObj));
+    sides[cableUniqueId] = side;
+    hostObj.properties.set('fiberSchemeCableSides', cloneFiberSchemeCableSideMap(sides));
+    if (typeof saveData === 'function') saveData({ fiberSchemeViewOnly: true, object: hostObj, syncImmediate: true });
+    return true;
 }
 
 function toggleFiberSchemeCableSide(hostObj, cableUniqueId) {
@@ -1234,23 +1273,61 @@ function toggleFiberSchemeCableSide(hostObj, cableUniqueId) {
     var total = cables.length;
     var sides = Object.assign({}, getFiberSchemeCableSides(hostObj));
     var current = resolveCableSchemeSide(hostObj, cableUniqueId, idx >= 0 ? idx : 0, total);
-    sides[cableUniqueId] = current === 'left' ? 'right' : 'left';
-    hostObj.properties.set('fiberSchemeCableSides', sides);
+    var nextIdx = (FIBER_SCHEME_CABLE_SIDES.indexOf(current) + 1) % FIBER_SCHEME_CABLE_SIDES.length;
+    sides[cableUniqueId] = FIBER_SCHEME_CABLE_SIDES[nextIdx];
+    hostObj.properties.set('fiberSchemeCableSides', cloneFiberSchemeCableSideMap(sides));
     if (typeof saveData === 'function') saveData({ fiberSchemeViewOnly: true, object: hostObj, syncImmediate: true });
     return true;
 }
 
-function appendFiberSchemeCableSidesToResult(props, result) {
-    var sides = props.fiberSchemeCableSides;
+function getFiberSchemeCableMirrored(hostObj) {
+    if (!hostObj || !hostObj.properties) return {};
+    var mirrored = hostObj.properties.get('fiberSchemeCableMirrored');
+    return cloneFiberSchemeCableSideMap(mirrored && typeof mirrored === 'object' ? mirrored : {});
+}
+
+function isCableSchemeMirrored(hostObj, cableUniqueId) {
+    if (!hostObj || !cableUniqueId) return false;
+    return !!getFiberSchemeCableMirrored(hostObj)[cableUniqueId];
+}
+
+function toggleFiberSchemeCableMirrored(hostObj, cableUniqueId) {
+    if (!hostObj || !cableUniqueId) return false;
+    var mirrored = Object.assign({}, getFiberSchemeCableMirrored(hostObj));
+    mirrored[cableUniqueId] = !mirrored[cableUniqueId];
+    if (!mirrored[cableUniqueId]) delete mirrored[cableUniqueId];
+    var stored = cloneFiberSchemeCableSideMap(mirrored);
+    if (Object.keys(stored).length) {
+        hostObj.properties.set('fiberSchemeCableMirrored', stored);
+    } else {
+        hostObj.properties.unset('fiberSchemeCableMirrored');
+    }
+    if (typeof saveData === 'function') saveData({ fiberSchemeViewOnly: true, object: hostObj, syncImmediate: true });
+    return true;
+}
+
+function appendFiberSchemeCableSidesToResult(props, result, placemark) {
+    var sides = placemark && placemark.properties
+        ? placemark.properties.get('fiberSchemeCableSides')
+        : props.fiberSchemeCableSides;
+    var mirrored = placemark && placemark.properties
+        ? placemark.properties.get('fiberSchemeCableMirrored')
+        : props.fiberSchemeCableMirrored;
     if (sides && typeof sides === 'object' && Object.keys(sides).length) {
-        result.fiberSchemeCableSides = sides;
+        result.fiberSchemeCableSides = cloneFiberSchemeCableSideMap(sides);
+    }
+    if (mirrored && typeof mirrored === 'object' && Object.keys(mirrored).length) {
+        result.fiberSchemeCableMirrored = cloneFiberSchemeCableSideMap(mirrored);
     }
 }
 
 function loadFiberSchemeCableSidesFromData(data, placemark) {
     if (!placemark || !placemark.properties || !data) return;
-    if (data.fiberSchemeCableSides && typeof data.fiberSchemeCableSides === 'object') {
-        placemark.properties.set('fiberSchemeCableSides', data.fiberSchemeCableSides);
+    if (data.fiberSchemeCableSides && typeof data.fiberSchemeCableSides === 'object' && Object.keys(data.fiberSchemeCableSides).length) {
+        placemark.properties.set('fiberSchemeCableSides', cloneFiberSchemeCableSideMap(data.fiberSchemeCableSides));
+    }
+    if (data.fiberSchemeCableMirrored && typeof data.fiberSchemeCableMirrored === 'object' && Object.keys(data.fiberSchemeCableMirrored).length) {
+        placemark.properties.set('fiberSchemeCableMirrored', cloneFiberSchemeCableSideMap(data.fiberSchemeCableMirrored));
     }
 }
 
@@ -2163,7 +2240,12 @@ function buildFiberSchemeSplitterPanelsHtml() {
     html += '<input type="text" id="fiber-scheme-splitter-edit-name" class="form-input" placeholder="Сплиттер" autocomplete="off" maxlength="64">';
     html += '<label class="fiber-conn-label-modal__label" for="fiber-scheme-splitter-edit-ratio">Количество выходных жил</label>';
     html += '<select id="fiber-scheme-splitter-edit-ratio" class="form-select">' + buildEmbeddedSplitterRatioOptionsHtml(8) + '</select>';
-    html += '<label class="fiber-scheme-splitter-orient-label"><input type="checkbox" id="fiber-scheme-splitter-edit-mirrored"> Зеркально (вход справа, выходы слева)</label>';
+    html += '<div class="fiber-scheme-splitter-orient-group">';
+    html += '<span class="fiber-scheme-splitter-orient-title">Ориентация и зеркалирование</span>';
+    html += '<label class="fiber-scheme-splitter-orient-label"><input type="checkbox" id="fiber-scheme-splitter-edit-vertical"> Вертикально (вход сверху, выходы снизу)</label>';
+    html += '<label class="fiber-scheme-splitter-orient-label"><input type="checkbox" id="fiber-scheme-splitter-edit-mirrored"> Зеркально (вход с другой стороны)</label>';
+    html += '<label class="fiber-scheme-splitter-orient-label"><input type="checkbox" id="fiber-scheme-splitter-edit-flipv"> Перевернуть порядок выходов (⇅)</label>';
+    html += '</div>';
     html += '<p id="fiber-scheme-splitter-edit-warn" class="fiber-scheme-splitter-panel-hint fiber-scheme-splitter-panel-hint--warn" hidden></p>';
     html += '<p class="fiber-scheme-splitter-panel-hint">Уменьшение числа выходов отключит лишние соединения.</p>';
     html += '<div class="fiber-conn-label-modal__actions">';
@@ -2251,7 +2333,11 @@ function openFiberSchemeSplitterEditPanel(hostObj, splitterId) {
     if (nameEl) nameEl.value = rec.name || '';
     if (ratioEl) ratioEl.value = String(parseInt(rec.splitRatio, 10) || 8);
     var mirrorEl = document.getElementById('fiber-scheme-splitter-edit-mirrored');
+    var verticalEl = document.getElementById('fiber-scheme-splitter-edit-vertical');
+    var flipvEl = document.getElementById('fiber-scheme-splitter-edit-flipv');
     if (mirrorEl) mirrorEl.checked = EmbeddedSplitters.isSchemeMirrored ? EmbeddedSplitters.isSchemeMirrored(rec) : !!rec.schemeMirrored;
+    if (verticalEl) verticalEl.checked = EmbeddedSplitters.isSchemeVertical ? EmbeddedSplitters.isSchemeVertical(rec) : rec.schemeOrientation === 'vertical';
+    if (flipvEl) flipvEl.checked = EmbeddedSplitters.isSchemeFlipVertical ? EmbeddedSplitters.isSchemeFlipVertical(rec) : !!rec.schemeFlipVertical;
     refreshSplitterEditWarn(hostObj, splitterId);
     if (panel) { panel.hidden = false; panel.setAttribute('aria-hidden', 'false'); }
     if (nameEl) {
@@ -2266,9 +2352,13 @@ function confirmFiberSchemeSplitterEdit(hostObj) {
     var nameEl = document.getElementById('fiber-scheme-splitter-edit-name');
     var ratioEl = document.getElementById('fiber-scheme-splitter-edit-ratio');
     var mirrorEl = document.getElementById('fiber-scheme-splitter-edit-mirrored');
+    var verticalEl = document.getElementById('fiber-scheme-splitter-edit-vertical');
+    var flipvEl = document.getElementById('fiber-scheme-splitter-edit-flipv');
     var name = nameEl ? String(nameEl.value).trim() : '';
     var newRatio = ratioEl ? (parseInt(ratioEl.value, 10) || 8) : parseInt(rec.splitRatio, 10) || 8;
     var schemeMirrored = mirrorEl ? !!mirrorEl.checked : (EmbeddedSplitters.isSchemeMirrored ? EmbeddedSplitters.isSchemeMirrored(rec) : !!rec.schemeMirrored);
+    var schemeOrientation = verticalEl && verticalEl.checked ? 'vertical' : 'horizontal';
+    var schemeFlipVertical = flipvEl ? !!flipvEl.checked : (EmbeddedSplitters.isSchemeFlipVertical ? EmbeddedSplitters.isSchemeFlipVertical(rec) : !!rec.schemeFlipVertical);
     if (!name) {
         if (typeof showWarning === 'function') showWarning('Укажите название сплиттера.', 'Сплиттер');
         else if (nameEl) nameEl.focus();
@@ -2288,6 +2378,8 @@ function confirmFiberSchemeSplitterEdit(hostObj) {
             name: name,
             splitRatio: newRatio,
             schemeMirrored: schemeMirrored,
+            schemeOrientation: schemeOrientation,
+            schemeFlipVertical: schemeFlipVertical,
             svgWidth: svgW,
             svgHeight: svgH
         });

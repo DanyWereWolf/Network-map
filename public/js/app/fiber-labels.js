@@ -171,7 +171,10 @@ function refreshFiberSchemeFiberLabelDom(fiberKey, labelText) {
     const cableId = lastDash >= 0 ? fiberKey.slice(0, lastDash) : fiberKey;
     const portEl = port || svg.querySelector('.fiber-scheme-port[data-cable-id="' + cableId + '"][data-fiber-number="' + fiberNumber + '"]');
     if (!portEl) return;
-    const badge = portEl.querySelector('.fiber-port-badge');
+    var isTop = portEl.getAttribute('data-is-top') === '1';
+    var isLeft = portEl.getAttribute('data-is-left') === '1';
+    const badge = svg.querySelector('.fiber-port-badge[data-fiber-key="' + fiberKey + '"]') ||
+        portEl.querySelector('.fiber-port-badge');
     if (!badge) return;
     const bx = parseFloat(badge.getAttribute('x')) || 0;
     const by = parseFloat(badge.getAttribute('y')) || 0;
@@ -180,9 +183,16 @@ function refreshFiberSchemeFiberLabelDom(fiberKey, labelText) {
     const cx = bx + bw / 2;
     const cy = by + bh / 2;
     const colors = getFiberSchemeLabelColors();
-    const tw = Math.min(120, Math.max(36, trimmed.length * 6.5 + 14));
-    const tx = cx - tw / 2;
-    const ty = cy - 22;
+    var layout = null;
+    if (typeof fiberSchemeFiberLabelLayout === 'function') {
+        layout = fiberSchemeFiberLabelLayout({ x: cx, y: cy, isTop: isTop, isLeft: isLeft }, trimmed, bw, bh, 4);
+    }
+    const tw = layout ? layout.tw : Math.min(120, Math.max(36, trimmed.length * 6.5 + 14));
+    const tx = layout ? layout.tx : (cx - tw / 2);
+    const ty = layout ? layout.ty : (cy - 22);
+    const textX = layout ? layout.textX : cx;
+    const textY = layout ? layout.textY : (ty + 13);
+    const textAnchor = layout ? layout.anchor : 'middle';
     if (!labelG) {
         const container = svg.querySelector('.fiber-scheme-fiber-labels');
         if (!container) return;
@@ -193,7 +203,7 @@ function refreshFiberSchemeFiberLabelDom(fiberKey, labelText) {
         rect.setAttribute('class', 'fiber-scheme-fiber-label-bg');
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         text.setAttribute('class', 'fiber-scheme-fiber-label-text');
-        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('text-anchor', textAnchor);
         text.setAttribute('style', 'font-size: 9px; font-weight: 600; fill: ' + colors.fill + '; pointer-events: none;');
         labelG.appendChild(rect);
         labelG.appendChild(text);
@@ -212,8 +222,9 @@ function refreshFiberSchemeFiberLabelDom(fiberKey, labelText) {
         rect.setAttribute('stroke-width', '0.75');
     }
     if (text) {
-        text.setAttribute('x', String(cx));
-        text.setAttribute('y', String(ty + 13));
+        text.setAttribute('x', String(textX));
+        text.setAttribute('y', String(textY));
+        text.setAttribute('text-anchor', textAnchor);
         text.textContent = trimmed;
     }
     if (labelG.classList.contains('is-visible')) {
@@ -372,8 +383,15 @@ function refreshCrossPortLinkLabelDom(linkKey, labelText) {
     }
     if (!link) return;
     var pathD = link.getAttribute('d');
-    if (!pathD) return;
-    var mid = fiberSchemePathMidpoint(pathD);
+    var mid = null;
+    var lx = parseFloat(link.getAttribute('data-label-x'));
+    var ly = parseFloat(link.getAttribute('data-label-y'));
+    if (isFinite(lx) && isFinite(ly)) {
+        mid = { x: lx, y: ly };
+    } else if (pathD) {
+        mid = fiberSchemePathMidpoint(pathD);
+    }
+    if (!mid) return;
     var colors = getFiberSchemeLabelColors();
     var tw = Math.min(148, Math.max(40, trimmed.length * 6.5 + 16));
     var tx = mid.x - tw / 2;
@@ -882,18 +900,39 @@ function deleteFiberConnectionByIndex(sleeveObj, connIndex) {
 }
 
 function fiberSchemePathMidpoint(pathD) {
-    const m = pathD.match(/M\s*([\d.-]+)\s+([\d.-]+)\s+C\s*([\d.-]+)\s+([\d.-]+),\s*([\d.-]+)\s+([\d.-]+),\s*([\d.-]+)\s+([\d.-]+)/);
-    if (!m) return { x: 0, y: 0 };
-    const p0 = { x: parseFloat(m[1]), y: parseFloat(m[2]) };
-    const p1 = { x: parseFloat(m[3]), y: parseFloat(m[4]) };
-    const p2 = { x: parseFloat(m[5]), y: parseFloat(m[6]) };
-    const p3 = { x: parseFloat(m[7]), y: parseFloat(m[8]) };
-    const t = 0.5;
-    const u = 1 - t;
-    return {
-        x: u * u * u * p0.x + 3 * u * u * t * p1.x + 3 * u * t * t * p2.x + t * t * t * p3.x,
-        y: u * u * u * p0.y + 3 * u * u * t * p1.y + 3 * u * t * t * p2.y + t * t * t * p3.y
-    };
+    if (!pathD) return { x: 0, y: 0 };
+    if (typeof document !== 'undefined' && document.createElementNS) {
+        if (!fiberSchemePathMidpoint._probe) {
+            fiberSchemePathMidpoint._probe = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        }
+        try {
+            fiberSchemePathMidpoint._probe.setAttribute('d', pathD);
+            var len = fiberSchemePathMidpoint._probe.getTotalLength();
+            if (len > 0) {
+                var pt = fiberSchemePathMidpoint._probe.getPointAtLength(len * 0.5);
+                if (pt && isFinite(pt.x) && isFinite(pt.y)) return { x: pt.x, y: pt.y };
+            }
+        } catch (ePathMid) {}
+    }
+    var m = pathD.match(/M\s*([\d.-]+)\s+([\d.-]+)/);
+    var ends = pathD.match(/([\d.-]+)\s+([\d.-]+)\s*$/);
+    if (m && ends) {
+        return {
+            x: (parseFloat(m[1]) + parseFloat(ends[1])) / 2,
+            y: (parseFloat(m[2]) + parseFloat(ends[2])) / 2
+        };
+    }
+    return { x: 0, y: 0 };
+}
+
+/** Точка подписи на линии жилы → порт кросса (горизонтальный участок). */
+function fiberSchemeCrossLinkLabelPoint(fx, fy, px, py, opts) {
+    opts = opts || {};
+    if (opts.isTop) {
+        var approachY = opts.approachY != null ? opts.approachY : (py - 28);
+        return { x: (fx + px) / 2, y: approachY - 13 };
+    }
+    return { x: (fx + px) / 2, y: fy - 13 };
 }
 
 function updateFiberPort(crossObj, cableId, fiberNumber, portValue) {
