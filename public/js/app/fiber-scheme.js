@@ -222,7 +222,7 @@ function getFiberSchemeLayoutOpts(cablesData, maxFibers) {
     return {
         rowHeight: compact ? 15 : 17,
         sideFiberGap: compact ? 9 : 10,
-        topFiberGap: compact ? 6 : 6,
+        topFiberGap: compact ? 6 : 8,
         sidePad: compact ? 10 : 12,
         panelW: compact ? 176 : 192,
         fiberFanLen: compact ? 34 : 38,
@@ -231,6 +231,26 @@ function getFiberSchemeLayoutOpts(cablesData, maxFibers) {
         cableLabelW: compact ? 76 : 92,
         minSvgHeight: compact ? 96 : 120
     };
+}
+
+/** Минимальная ширина SVG, чтобы бейджи жил верхнего кабеля не слипались. */
+function estimateFiberSchemeTopStripMinWidth(topCables, opts) {
+    opts = opts || {};
+    if (!topCables || !topCables.length) return 0;
+    var badgeW = opts.badgeW != null ? opts.badgeW : 22;
+    var topFiberGap = opts.topFiberGap != null ? opts.topFiberGap : 8;
+    var sidePad = opts.sidePad != null ? opts.sidePad : 12;
+    var topGap = 8;
+    var sideInset = 8;
+    var pitch = badgeW + topFiberGap;
+    var widthsSum = 0;
+    for (var i = 0; i < topCables.length; i++) {
+        var fibers = topCables[i].fibers;
+        var n = Math.max((fibers && fibers.length) || 1, 1);
+        widthsSum += Math.max(120, n * pitch + 20);
+    }
+    widthsSum += Math.max(0, topCables.length - 1) * topGap;
+    return sidePad * 2 + sideInset * 2 + widthsSum;
 }
 
 function computeFiberSchemeFitZoom(viewport, svg) {
@@ -254,6 +274,42 @@ function resolveFiberSchemeCanvasSize(hostObj, autoWidth, layoutHeight, layoutMi
     var hFloor = stored.height > 0 ? FIBER_SCHEME_CANVAS.HEIGHT_MIN : Math.max(100, layoutHeight);
     h = Math.min(FIBER_SCHEME_CANVAS.HEIGHT_MAX, Math.max(hFloor, h));
     return { width: w, height: h, layoutHeight: layoutHeight, layoutWidth: autoWidth };
+}
+
+/** Сохранённая позиция панели кросса на схеме (левый верхний угол). */
+function getFiberSchemeCrossPanelPos(hostObj) {
+    if (!hostObj || !hostObj.properties) return { x: null, y: null };
+    var x = parseFloat(hostObj.properties.get('fiberSchemeCrossX'));
+    var y = parseFloat(hostObj.properties.get('fiberSchemeCrossY'));
+    return {
+        x: (!isNaN(x) && isFinite(x)) ? x : null,
+        y: (!isNaN(y) && isFinite(y)) ? y : null
+    };
+}
+
+function clampFiberSchemeCrossPanelPos(x, y, panelW, panelH, svgW, svgH, minTop) {
+    var pad = 8;
+    var maxX = Math.max(pad, (svgW || 800) - (panelW || 0) - pad);
+    var maxY = Math.max(minTop != null ? minTop : pad, (svgH || 400) - (panelH || 0) - pad);
+    return {
+        x: Math.max(pad, Math.min(maxX, x)),
+        y: Math.max(minTop != null ? minTop : pad, Math.min(maxY, y))
+    };
+}
+
+function setFiberSchemeCrossPanelPos(hostObj, x, y) {
+    if (!hostObj || !hostObj.properties) return false;
+    hostObj.properties.set('fiberSchemeCrossX', Math.round(x));
+    hostObj.properties.set('fiberSchemeCrossY', Math.round(y));
+    if (typeof saveData === 'function') saveData();
+    return true;
+}
+
+function clearFiberSchemeCrossPanelPos(hostObj) {
+    if (!hostObj || !hostObj.properties) return;
+    hostObj.properties.unset('fiberSchemeCrossX');
+    hostObj.properties.unset('fiberSchemeCrossY');
+    if (typeof saveData === 'function') saveData();
 }
 
 function applyFiberSchemeCanvasSize(hostObj, width, height) {
@@ -328,6 +384,43 @@ function bindFiberSchemeCanvasHandlers(hostObj) {
             if (e.key === 'Enter') { e.preventDefault(); readAndApply(); }
         });
     });
+}
+
+function bindFiberSchemeCrossGridHandlers(hostObj) {
+    if (!hostObj || !isEditMode) return;
+    if (!isCrossLikeHostType(hostObj.properties.get('type'))) return;
+    var rowsEl = document.getElementById('fiber-scheme-cross-rows');
+    var applyBtn = document.getElementById('fiber-scheme-cross-rows-apply');
+    var autoBtn = document.getElementById('fiber-scheme-cross-rows-auto');
+    function applyRows(value) {
+        if (typeof captureFiberWorkspaceUiState === 'function') captureFiberWorkspaceUiState();
+        if (typeof setFiberSchemeCrossRows === 'function') setFiberSchemeCrossRows(hostObj, value);
+        if (typeof refreshObjectModal === 'function') refreshObjectModal(hostObj);
+        else if (typeof showObjectInfo === 'function') showObjectInfo(hostObj);
+    }
+    if (applyBtn) {
+        applyBtn.addEventListener('click', function() {
+            applyRows(rowsEl ? rowsEl.value : 0);
+        });
+    }
+    if (autoBtn) {
+        autoBtn.addEventListener('click', function() {
+            if (rowsEl) rowsEl.value = '';
+            applyRows(0);
+        });
+    }
+    document.querySelectorAll('.fiber-scheme-cross-rows-preset').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var r = parseInt(btn.getAttribute('data-cross-rows'), 10) || 0;
+            if (rowsEl) rowsEl.value = r > 0 ? String(r) : '';
+            applyRows(r);
+        });
+    });
+    if (rowsEl) {
+        rowsEl.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); applyRows(rowsEl.value); }
+        });
+    }
 }
 
 function switchFiberWorkspaceToSchemeTab() {
@@ -1153,6 +1246,57 @@ function appendFiberSchemeCanvasPropsToResult(props, result) {
     }
 }
 
+/** Позиция и сетка панели кросса на схеме. */
+function appendFiberSchemeCrossPanelPropsToResult(props, result) {
+    if (!props || !result) return;
+    if (props.fiberSchemeCrossX != null && props.fiberSchemeCrossX !== '') {
+        result.fiberSchemeCrossX = props.fiberSchemeCrossX;
+    }
+    if (props.fiberSchemeCrossY != null && props.fiberSchemeCrossY !== '') {
+        result.fiberSchemeCrossY = props.fiberSchemeCrossY;
+    }
+    if (props.fiberSchemeCrossRows != null && props.fiberSchemeCrossRows !== '') {
+        result.fiberSchemeCrossRows = props.fiberSchemeCrossRows;
+    }
+}
+
+function loadFiberSchemeCrossPanelPropsFromData(data, placemark) {
+    if (!placemark || !placemark.properties || !data) return;
+    if (data.fiberSchemeCrossX != null && data.fiberSchemeCrossX !== '') {
+        placemark.properties.set('fiberSchemeCrossX', data.fiberSchemeCrossX);
+    } else {
+        placemark.properties.unset('fiberSchemeCrossX');
+    }
+    if (data.fiberSchemeCrossY != null && data.fiberSchemeCrossY !== '') {
+        placemark.properties.set('fiberSchemeCrossY', data.fiberSchemeCrossY);
+    } else {
+        placemark.properties.unset('fiberSchemeCrossY');
+    }
+    if (data.fiberSchemeCrossRows != null && data.fiberSchemeCrossRows !== '') {
+        placemark.properties.set('fiberSchemeCrossRows', data.fiberSchemeCrossRows);
+    } else {
+        placemark.properties.unset('fiberSchemeCrossRows');
+    }
+}
+
+function getFiberSchemeCrossRows(hostObj) {
+    if (!hostObj || !hostObj.properties) return 0;
+    var rows = parseInt(hostObj.properties.get('fiberSchemeCrossRows'), 10);
+    return (!isNaN(rows) && rows > 0) ? rows : 0;
+}
+
+function setFiberSchemeCrossRows(hostObj, rows) {
+    if (!hostObj || !hostObj.properties) return false;
+    rows = parseInt(rows, 10);
+    if (isNaN(rows) || rows < 1) {
+        hostObj.properties.unset('fiberSchemeCrossRows');
+    } else {
+        hostObj.properties.set('fiberSchemeCrossRows', Math.min(48, rows));
+    }
+    if (typeof saveData === 'function') saveData();
+    return true;
+}
+
 function loadFiberSchemeCanvasPropsFromData(data, placemark) {
     if (!placemark || !placemark.properties || !data) return;
     if (data.fiberSchemeCanvasAuto) {
@@ -1282,8 +1426,7 @@ function toggleFiberSchemeCableSide(hostObj, cableUniqueId) {
 
 function getFiberSchemeCableMirrored(hostObj) {
     if (!hostObj || !hostObj.properties) return {};
-    var mirrored = hostObj.properties.get('fiberSchemeCableMirrored');
-    return cloneFiberSchemeCableSideMap(mirrored && typeof mirrored === 'object' ? mirrored : {});
+    return normalizeFiberSchemeCableMirrored(hostObj.properties.get('fiberSchemeCableMirrored'));
 }
 
 function isCableSchemeMirrored(hostObj, cableUniqueId) {
@@ -1291,14 +1434,38 @@ function isCableSchemeMirrored(hostObj, cableUniqueId) {
     return !!getFiberSchemeCableMirrored(hostObj)[cableUniqueId];
 }
 
+/** Нормализация зеркала жил: массив id или map id→flag → map id→1. */
+function normalizeFiberSchemeCableMirrored(raw) {
+    var out = {};
+    if (!raw) return out;
+    if (Array.isArray(raw)) {
+        raw.forEach(function(id) {
+            if (id != null && id !== '') out[String(id)] = 1;
+        });
+        return out;
+    }
+    if (typeof raw === 'object') {
+        Object.keys(raw).forEach(function(k) {
+            var v = raw[k];
+            if (v && v !== '0' && v !== 'false' && v !== false) out[String(k)] = 1;
+        });
+    }
+    return out;
+}
+
+function fiberSchemeCableMirroredToStorage(map) {
+    return Object.keys(normalizeFiberSchemeCableMirrored(map));
+}
+
 function toggleFiberSchemeCableMirrored(hostObj, cableUniqueId) {
     if (!hostObj || !cableUniqueId) return false;
     var mirrored = Object.assign({}, getFiberSchemeCableMirrored(hostObj));
-    mirrored[cableUniqueId] = !mirrored[cableUniqueId];
-    if (!mirrored[cableUniqueId]) delete mirrored[cableUniqueId];
-    var stored = cloneFiberSchemeCableSideMap(mirrored);
-    if (Object.keys(stored).length) {
-        hostObj.properties.set('fiberSchemeCableMirrored', stored);
+    if (mirrored[cableUniqueId]) delete mirrored[cableUniqueId];
+    else mirrored[cableUniqueId] = 1;
+    var ids = fiberSchemeCableMirroredToStorage(mirrored);
+    if (ids.length) {
+        // Массив id — надёжнее для properties Яндекс.Карт, чем map с boolean.
+        hostObj.properties.set('fiberSchemeCableMirrored', ids.slice());
     } else {
         hostObj.properties.unset('fiberSchemeCableMirrored');
     }
@@ -1309,16 +1476,22 @@ function toggleFiberSchemeCableMirrored(hostObj, cableUniqueId) {
 function appendFiberSchemeCableSidesToResult(props, result, placemark) {
     var sides = placemark && placemark.properties
         ? placemark.properties.get('fiberSchemeCableSides')
-        : props.fiberSchemeCableSides;
-    var mirrored = placemark && placemark.properties
+        : (props && props.fiberSchemeCableSides);
+    var mirroredRaw = placemark && placemark.properties
         ? placemark.properties.get('fiberSchemeCableMirrored')
-        : props.fiberSchemeCableMirrored;
-    if (sides && typeof sides === 'object' && Object.keys(sides).length) {
+        : (props && props.fiberSchemeCableMirrored);
+    if ((!sides || typeof sides !== 'object' || !Object.keys(sides).length) && props && props.fiberSchemeCableSides) {
+        sides = props.fiberSchemeCableSides;
+    }
+    if ((mirroredRaw == null || (typeof mirroredRaw === 'object' && !Array.isArray(mirroredRaw) && !Object.keys(mirroredRaw).length)) &&
+        props && props.fiberSchemeCableMirrored != null) {
+        mirroredRaw = props.fiberSchemeCableMirrored;
+    }
+    if (sides && typeof sides === 'object' && !Array.isArray(sides) && Object.keys(sides).length) {
         result.fiberSchemeCableSides = cloneFiberSchemeCableSideMap(sides);
     }
-    if (mirrored && typeof mirrored === 'object' && Object.keys(mirrored).length) {
-        result.fiberSchemeCableMirrored = cloneFiberSchemeCableSideMap(mirrored);
-    }
+    // Всегда пишем поле (даже []), иначе Object.assign на сервере не снимет зеркало.
+    result.fiberSchemeCableMirrored = fiberSchemeCableMirroredToStorage(mirroredRaw);
 }
 
 function loadFiberSchemeCableSidesFromData(data, placemark) {
@@ -1326,8 +1499,13 @@ function loadFiberSchemeCableSidesFromData(data, placemark) {
     if (data.fiberSchemeCableSides && typeof data.fiberSchemeCableSides === 'object' && Object.keys(data.fiberSchemeCableSides).length) {
         placemark.properties.set('fiberSchemeCableSides', cloneFiberSchemeCableSideMap(data.fiberSchemeCableSides));
     }
-    if (data.fiberSchemeCableMirrored && typeof data.fiberSchemeCableMirrored === 'object' && Object.keys(data.fiberSchemeCableMirrored).length) {
-        placemark.properties.set('fiberSchemeCableMirrored', cloneFiberSchemeCableSideMap(data.fiberSchemeCableMirrored));
+    if (Object.prototype.hasOwnProperty.call(data, 'fiberSchemeCableMirrored')) {
+        var ids = fiberSchemeCableMirroredToStorage(data.fiberSchemeCableMirrored);
+        if (ids.length) {
+            placemark.properties.set('fiberSchemeCableMirrored', ids.slice());
+        } else {
+            placemark.properties.unset('fiberSchemeCableMirrored');
+        }
     }
 }
 

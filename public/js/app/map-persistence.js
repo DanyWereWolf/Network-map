@@ -117,6 +117,9 @@ function serializeMapItemFromObject(obj) {
             appendFiberSchemeCanvasPropsToResult(props, result);
             appendFiberSchemeViewPropsToResult(props, result);
             appendFiberSchemeCableSidesToResult(props, result, obj);
+            if (typeof appendFiberSchemeCrossPanelPropsToResult === 'function') {
+                appendFiberSchemeCrossPanelPropsToResult(props, result);
+            }
             if (props.crossType) result.crossType = props.crossType;
             if (props.crossPorts) result.crossPorts = props.crossPorts;
             if (props.crossCopperPorts !== undefined && props.crossCopperPorts !== null) result.crossCopperPorts = props.crossCopperPorts;
@@ -2139,6 +2142,9 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         loadFiberSchemeCanvasPropsFromData(data, placemark);
         loadFiberSchemeViewPropsFromData(data, placemark);
         loadFiberSchemeCableSidesFromData(data, placemark);
+        if (typeof loadFiberSchemeCrossPanelPropsFromData === 'function') {
+            loadFiberSchemeCrossPanelPropsFromData(data, placemark);
+        }
     }
     if (type === 'olt') {
         placemark.properties.set('ponPorts', data.ponPorts || 8);

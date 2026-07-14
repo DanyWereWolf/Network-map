@@ -879,11 +879,13 @@ function setupFiberConnectionHandlers() {
     });
 
     setupFiberSchemeCrossPortHandlers(sleeveObj);
+    if (typeof setupFiberSchemeCrossDragHandlers === 'function') setupFiberSchemeCrossDragHandlers(sleeveObj);
     if (typeof setupCrossPortPatchHandlers === 'function') setupCrossPortPatchHandlers(sleeveObj);
 
     setupFiberWorkspaceUI();
     bindModalObjectNameEditors();
     bindFiberSchemeCanvasHandlers(sleeveObj);
+    if (typeof bindFiberSchemeCrossGridHandlers === 'function') bindFiberSchemeCrossGridHandlers(sleeveObj);
     setupFiberSchemeCableSideHandlers(sleeveObj);
 
     document.querySelectorAll('.fiber-conn-delete').forEach(function(btn) {
@@ -963,6 +965,97 @@ function setupFiberSchemeCrossPortHandlers(crossObj) {
             if (meta) selectCrossPortLinkForLabel(crossObj, meta, { focusInput: true });
         });
     });
+}
+
+/** Перетаскивание панели кросса по схеме (как у сплиттеров). */
+function setupFiberSchemeCrossDragHandlers(hostObj) {
+    if (!hostObj || !isCrossLikeHostType(hostObj.properties.get('type'))) return;
+    var svg = document.getElementById('fiber-connections-svg');
+    if (!svg) return;
+    var body = svg.querySelector('.fiber-scheme-cross-body');
+    var panel = svg.querySelector('.fiber-scheme-cross-panel');
+    var portsLayer = svg.querySelector('.fiber-scheme-cross-ports-layer');
+    var root = svg.querySelector('.fiber-scheme-cross');
+    if (!body || !panel || !root) return;
+
+    function svgPointFromEvent(evt) {
+        var pt = svg.createSVGPoint();
+        pt.x = evt.clientX;
+        pt.y = evt.clientY;
+        var ctm = svg.getScreenCTM();
+        if (!ctm) return { x: 0, y: 0 };
+        var sp = pt.matrixTransform(ctm.inverse());
+        return { x: sp.x, y: sp.y };
+    }
+
+    function setCrossPanelTransform(ox, oy) {
+        var t = 'translate(' + ox + ',' + oy + ')';
+        panel.setAttribute('transform', t);
+        if (portsLayer) portsLayer.setAttribute('transform', t);
+    }
+
+    var dragState = null;
+    body.style.cursor = 'grab';
+    body.addEventListener('mousedown', function(e) {
+        if (e.button !== 0) return;
+        if (e.target.closest('.fiber-scheme-cross-port, .fiber-scheme-cross-port-hit')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var p = svgPointFromEvent(e);
+        dragState = {
+            start: p,
+            baseX: parseFloat(root.getAttribute('data-panel-x')) || 0,
+            baseY: parseFloat(root.getAttribute('data-panel-top')) || 0,
+            panelW: parseFloat(root.getAttribute('data-panel-w')) || 0,
+            panelH: parseFloat(root.getAttribute('data-panel-h')) || 0,
+            moved: false
+        };
+        root.classList.add('fiber-scheme-cross--dragging');
+        body.style.cursor = 'grabbing';
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    });
+
+    function onMove(e) {
+        if (!dragState) return;
+        var p = svgPointFromEvent(e);
+        var dx = p.x - dragState.start.x;
+        var dy = p.y - dragState.start.y;
+        if (!dragState.moved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) dragState.moved = true;
+        if (!dragState.moved) return;
+        var svgW = parseFloat(svg.getAttribute('width')) || 800;
+        var svgH = parseFloat(svg.getAttribute('height')) || 400;
+        var next = typeof clampFiberSchemeCrossPanelPos === 'function'
+            ? clampFiberSchemeCrossPanelPos(dragState.baseX + dx, dragState.baseY + dy, dragState.panelW, dragState.panelH, svgW, svgH, 8)
+            : { x: dragState.baseX + dx, y: dragState.baseY + dy };
+        var ox = next.x - dragState.baseX;
+        var oy = next.y - dragState.baseY;
+        setCrossPanelTransform(ox, oy);
+        if (typeof updateSchemeCrossPanelLinkPaths === 'function') {
+            updateSchemeCrossPanelLinkPaths(svg, hostObj);
+        }
+    }
+
+    function onUp() {
+        if (!dragState) return;
+        var wasDrag = dragState.moved;
+        var off = typeof getCrossPanelTransformOffset === 'function' ? getCrossPanelTransformOffset(panel) : { x: 0, y: 0 };
+        root.classList.remove('fiber-scheme-cross--dragging');
+        body.style.cursor = 'grab';
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        var state = dragState;
+        dragState = null;
+        if (!wasDrag) return;
+        var newX = state.baseX + off.x;
+        var newY = state.baseY + off.y;
+        if (typeof captureFiberWorkspaceUiState === 'function') captureFiberWorkspaceUiState();
+        if (typeof setFiberSchemeCrossPanelPos === 'function') {
+            setFiberSchemeCrossPanelPos(hostObj, newX, newY);
+        }
+        if (typeof refreshObjectModal === 'function') refreshObjectModal(hostObj);
+        else if (typeof showObjectInfo === 'function') showObjectInfo(hostObj);
+    }
 }
 
 function setupFiberSchemeCableSideHandlers(hostObj) {
