@@ -4,7 +4,6 @@
   "yandexMapsApiKey": "YOUR_YANDEX_MAPS_API_KEY",
   "publicSiteUrl": "https://volsmap.ru",
   "serveObfuscatedClient": false,
-  "devtoolsGuard": true,
   "freeMapObjectLimit": 20000,
   "maxConcurrentUsers": 4,
   "authRateLimitWindowMs": 900000,

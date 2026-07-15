@@ -445,31 +445,6 @@ app.post('/api/map', (req, res) => {
     }
 });
 
-/** Разблокировка DevTools: только учётные данные главного (глобального) администратора. */
-app.post('/api/auth/devtools-unlock', async function(req, res) {
-    var ip = getClientIp(req);
-    var rate = security.checkRateLimit('devtools:' + ip, getAuthRateLimitOptions());
-    if (!rate.ok) {
-        return res.status(429).json({
-            success: false,
-            error: 'Слишком много попыток. Повторите через ' + rate.retryAfterSec + ' с.'
-        });
-    }
-    var body = req.body || {};
-    try {
-        var cred = await validateCredentials(body.username, body.password);
-    } catch (e) {
-        return res.status(500).json({ success: false, error: 'Ошибка проверки пароля' });
-    }
-    if (!cred.ok) {
-        return res.json({ success: false, error: 'Неверный логин или пароль' });
-    }
-    if (!isGlobalAdmin(cred.user)) {
-        return res.json({ success: false, error: 'Нужен пароль главного администратора' });
-    }
-    return res.json({ success: true });
-});
-
 app.post('/api/auth/login', async function(req, res) {
     var ip = getClientIp(req);
     var rate = security.checkRateLimit('auth:' + ip, getAuthRateLimitOptions());
@@ -2504,9 +2479,7 @@ app.get('/api/public-config', (req, res) => {
         yandexMapsApiKey: key,
         publicSiteUrl: publicSiteUrl ? String(publicSiteUrl).trim().replace(/\/$/, '') : '',
         freeMapObjectLimit: getDefaultFreeMapObjectLimit(),
-        defaultMaxConcurrentUsers: getDefaultMaxConcurrentUsers(),
-        // false в конфиге отключает ловушку DevTools; по умолчанию включена (кроме localhost на клиенте)
-        devtoolsGuard: serverConfig.devtoolsGuard !== false
+        defaultMaxConcurrentUsers: getDefaultMaxConcurrentUsers()
     });
 });
 

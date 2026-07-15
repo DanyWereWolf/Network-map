@@ -98,7 +98,6 @@ JSON-хранилище в одном файле `store.json` (не SQLite):
 - Роли: глобальный admin (`site-admin`), admin организации, user (только просмотр)
 - Размер тела запроса и WebSocket ограничены в `server-api.js`
 - Секреты только в `server-config.json` (не в git)
-- Ловушка DevTools (`devtoolsGuard`, скрипт `devtools-guard.js`): пароль главного админа; неверный → полноэкранный экран. На localhost выключена.
 
 ## Деплой (кратко)
 
