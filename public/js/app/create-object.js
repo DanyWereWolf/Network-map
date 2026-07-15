@@ -18,26 +18,6 @@ function createObject(type, name, coords, options = {}) {
         notifyMapObjectLimitBlocked();
         return null;
     }
-    var balloonContent;
-    switch (type) {
-        case 'support': balloonContent = name ? 'Опора связи: ' + name : 'Опора связи'; break;
-        case 'sleeve': balloonContent = name ? 'Кабельная муфта: ' + name : 'Кабельная муфта'; break;
-        case 'spliceCassette': balloonContent = name ? 'Сплайс-кассета: ' + name : 'Сплайс-кассета'; break;
-        case 'cross': balloonContent = 'Оптический кросс: ' + name; break;
-        case 'node': balloonContent = 'Узел сети: ' + name; break;
-        case 'attachment': balloonContent = name ? 'Крепление узлов: ' + name : 'Крепление узлов'; break;
-        case 'manhole': balloonContent = name ? 'Колодец: ' + name : 'Колодец'; break;
-        case 'signalPost': balloonContent = name ? 'Сигнальный столб: ' + name : 'Сигнальный столб'; break;
-        case 'cabinet': balloonContent = name ? 'Ящик: ' + name : 'Ящик'; break;
-        case 'olt': balloonContent = name ? 'OLT: ' + name : 'OLT (GPON)'; break;
-        case 'splitter': balloonContent = name ? 'Сплиттер: ' + name : 'Сплиттер'; break;
-        case 'onu': balloonContent = name ? 'ONU: ' + name : 'ONU'; break;
-        case 'camera': balloonContent = name ? 'Камера: ' + name : 'Камера'; break;
-        case 'mediaConverter': balloonContent = name ? 'Медиаконвертер: ' + name : 'Медиаконвертер'; break;
-        case 'radioBridge': balloonContent = name ? 'Wi‑Fi радиомост: ' + name : 'Wi‑Fi радиомост'; break;
-        case 'switch': balloonContent = name ? 'Коммутатор: ' + name : 'Коммутатор'; break;
-        default: balloonContent = 'Объект';
-    }
 
     var mapIcon = buildMapPlacemarkIcon(type, 'normal', type === 'node' ? { nodeKind: options.nodeKind || 'network' } : null);
     if (!mapIcon) return null;
@@ -47,13 +27,14 @@ function createObject(type, name, coords, options = {}) {
         iconImageHref: mapIcon.href,
         iconImageSize: mapIcon.iconImageSize,
         iconImageOffset: mapIcon.iconImageOffset,
-        draggable: isEditMode
+        draggable: isEditMode,
+        hasBalloon: false,
+        openBalloonOnClick: false
     };
     
     const placemarkProperties = {
         type: type,
-        name: name,
-        balloonContent: balloonContent
+        name: name
     };
 
     if (type === 'node') {
@@ -208,13 +189,10 @@ function createObject(type, name, coords, options = {}) {
         placemarkProperties.uniqueId = 'obj-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
     }
     const placemark = new ymaps.Placemark(coords, placemarkProperties, placemarkOptions);
+    if (typeof disableNativePlacemarkBalloon === 'function') disableNativePlacemarkBalloon(placemark);
 
     updateObjectLabel(placemark, name);
     if (type === 'camera') refreshCameraMapPresentation(placemark);
-    var objLabel = placemark.properties.get('label');
-    if (objLabel && !placemarkProperties.cabinetId) {
-        myMap.geoObjects.add(objLabel);
-    }
     placemark.events.add('dragend', function() {
         var c = placemark.geometry.getCoordinates();
         var lbl = placemark.properties.get('label');
@@ -436,6 +414,10 @@ function createObject(type, name, coords, options = {}) {
         }
     });
 
+    placemark.events.add('dragstart', function() {
+        if (typeof captureObjectDragStartState === 'function') captureObjectDragStartState(placemark);
+    });
+
     placemark.events.add('dragend', function() {
         window.syncDragInProgress = false;
         ensurePlacemarkUniqueIdForSync(placemark);
@@ -444,37 +426,16 @@ function createObject(type, name, coords, options = {}) {
             if (typeof showWarning === 'function') showWarning('Объект редактирует другой пользователь', 'Перемещение недоступно');
             if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
             if (typeof resumeMapPanAfterPlacementObjectDrag === 'function') resumeMapPanAfterPlacementObjectDrag();
+            clearObjectDragStartState(placemark);
             return;
         }
-        var skipGroupSnap = typeof shouldSkipGroupSnapAfterPlacement === 'function' && shouldSkipGroupSnapAfterPlacement(placemark);
-        if ((type === 'cross' || type === 'node') && !skipGroupSnap && typeof snapCoordsToObjectGroup === 'function') {
-            if (!(typeof onMemberObjectDragEnd === 'function' && onMemberObjectDragEnd(placemark))) {
-                var snappedCoords = snapCoordsToObjectGroup(placemark.geometry.getCoordinates(), type, placemark);
-                placemark.geometry.setCoordinates(snappedCoords);
-            }
-        } else if (typeof onMemberObjectDragEnd === 'function') {
-            onMemberObjectDragEnd(placemark);
+        if (typeof finalizeMapObjectDragEnd === 'function') {
+            finalizeMapObjectDragEnd(placemark);
+        } else {
+            updateConnectedCables(placemark);
+            saveData({ object: placemark, syncImmediate: true });
+            if (typeof resumeMapPanAfterPlacementObjectDrag === 'function') resumeMapPanAfterPlacementObjectDrag();
         }
-        updateConnectedCables(placemark);
-        if (typeof MapPerf !== 'undefined' && MapPerf.updateSpatialPosition) MapPerf.updateSpatialPosition(placemark);
-        const label = placemark.properties.get('label');
-        if (label) {
-            label.geometry.setCoordinates(placemark.geometry.getCoordinates());
-            try { mapGeoAdd(label); } catch (e) {}
-        }
-        scheduleConnectionLinesUpdate();
-        updateSelectionPulsePosition(placemark);
-        if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(placemark);
-        else saveData({ object: placemark, syncImmediate: true });
-        if (type === 'cross') updateCrossDisplay();
-        if (type === 'node') updateNodeDisplay();
-        if (type === 'cabinet' && typeof onCabinetDragEnd === 'function') onCabinetDragEnd(placemark);
-        if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
-        if (typeof applyMapFilter === 'function') applyMapFilter();
-        releaseDragObjectLock(uid);
-        if (typeof MapPerf !== 'undefined' && MapPerf.unpinObject) MapPerf.unpinObject(placemark);
-        if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
-        if (typeof resumeMapPanAfterPlacementObjectDrag === 'function') resumeMapPanAfterPlacementObjectDrag();
     });
     
     placemark.events.add('drag', function() {
@@ -483,6 +444,9 @@ function createObject(type, name, coords, options = {}) {
         }
         if (!window.syncDragInProgress) {
             window.syncDragInProgress = true;
+            if (typeof captureObjectDragStartState === 'function' && !placemark.properties.get('_preDragGroupKey')) {
+                captureObjectDragStartState(placemark);
+            }
             acquireDragObjectLock(placemark);
             if (typeof mapGeoPin === 'function') mapGeoPin(placemark);
         }
@@ -503,22 +467,30 @@ function createObject(type, name, coords, options = {}) {
         }
         updateMapLimitBanner();
     }
+
+    var groupScope = null;
+    try {
+        if ((type === 'cross' || type === 'node') && typeof groupKey === 'function' && placemark.geometry) {
+            groupScope = groupKey(placemark.geometry.getCoordinates());
+        }
+    } catch (eGroupScope) {}
+
+    if (typeof applyMapFilterForObject === 'function') applyMapFilterForObject(placemark);
+
     if (type === 'cross') {
-        updateCrossDisplay();
+        updateCrossDisplay(groupScope);
     } else if (type === 'node') {
-        updateNodeDisplay();
+        updateNodeDisplay(groupScope);
     } else if (type === 'cabinet') {
         mapGeoAdd(placemark);
-        if (typeof updateCabinetLabel === 'function') updateCabinetLabel(placemark);
-        if (typeof applyMapFilter === 'function') applyMapFilter();
+        if (typeof ensureObjectLabelOnMap === 'function') ensureObjectLabelOnMap(placemark);
     } else if (placemarkProperties.cabinetId) {
         if (typeof updateCabinetAfterMemberChange === 'function') updateCabinetAfterMemberChange(placemark);
     } else {
         mapGeoAdd(placemark);
-        if (typeof applyMapFilter === 'function') applyMapFilter();
-        if (window.MapRegions && MapRegions.sendAllRegionsToMapBack) MapRegions.sendAllRegionsToMapBack(myMap, objects);
-        if (window.MapRegions && MapRegions.removeErrantRegionObjectLabels) MapRegions.removeErrantRegionObjectLabels(myMap, objects);
+        if (typeof ensureObjectLabelOnMap === 'function') ensureObjectLabelOnMap(placemark);
     }
+
     if (typeof window.syncSendOp === 'function') {
         var data = serializeOneObject(placemark);
         if (data) {
@@ -526,8 +498,34 @@ function createObject(type, name, coords, options = {}) {
             if (typeof bumpMapRevisionAfterSyncAdd === 'function') bumpMapRevisionAfterSyncAdd(placemark);
         }
     }
-    saveData({ skipSync: true });
-    updateStats();
+    saveData({ skipSync: true, addObject: placemark });
+
+    var deferCreateSideEffects = function() {
+        if (type === 'cabinet' && typeof updateCabinetLabel === 'function') {
+            try { updateCabinetLabel(placemark); } catch (eCab) {}
+        }
+        if (type !== 'cross' && type !== 'node' && type !== 'cabinet' && !placemarkProperties.cabinetId) {
+            if (window.MapRegions && MapRegions.sendAllRegionsToMapBack) {
+                try { MapRegions.sendAllRegionsToMapBack(myMap, objects); } catch (eReg) {}
+            }
+            if (window.MapRegions && MapRegions.removeErrantRegionObjectLabels) {
+                try { MapRegions.removeErrantRegionObjectLabels(myMap, objects); } catch (eReg2) {}
+            }
+        }
+        updateStats();
+    };
+    if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(function() {
+            if (typeof requestIdleCallback === 'function') {
+                requestIdleCallback(deferCreateSideEffects, { timeout: 120 });
+            } else {
+                setTimeout(deferCreateSideEffects, 0);
+            }
+        });
+    } else {
+        setTimeout(deferCreateSideEffects, 0);
+    }
+
     if (objectPlacementMode && typeof canBeCabinetMember === 'function' && canBeCabinetMember(type) && typeof finishMemberCabinetPlacement === 'function' && !placemarkProperties.cabinetId) {
         finishMemberCabinetPlacement(placemark);
     }

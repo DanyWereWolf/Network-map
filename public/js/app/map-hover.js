@@ -140,7 +140,7 @@ function updatePhantomPlacemark(type, coords) {
     phantomPlacemark = new ymaps.Placemark(coords, {
         type: 'phantom',
         phantomType: type,
-        balloonContent: 'Предпросмотр объекта'
+        balloonContent: ''
     }, {
         iconLayout: 'default#image',
         iconImageHref: phantomIcon.href,
@@ -149,7 +149,9 @@ function updatePhantomPlacemark(type, coords) {
         iconImageOpacity: 0.7, 
         zIndex: 9999, 
         interactive: false, 
-        cursor: 'crosshair'
+        cursor: 'crosshair',
+        hasBalloon: false,
+        openBalloonOnClick: false
     });
     
     myMap.geoObjects.add(phantomPlacemark);

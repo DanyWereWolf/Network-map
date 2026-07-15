@@ -79,7 +79,7 @@ npm run api
 | `npm run api` | Сервер API + WebSocket + статика |
 | `npm run sync` | Только WebSocket (`server/server.js`) |
 | `npm run check` | Проверка синтаксиса JS |
-| `npm run build` | Обфускация `main.js` и `auth.js` в `dist/` |
+| `npm run build` | Копия `public/` → `dist/` + обфускация всех `js/` |
 
 ## Режимы и объекты
 

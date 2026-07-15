@@ -7,7 +7,6 @@ const fs = require('fs');
 const cors = require('cors');
 const WebSocket = require('ws');
 const ROOT_DIR = path.join(__dirname, '..');
-const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
 const DATA_DIR = path.join(ROOT_DIR, 'data');
 const db = require('./database');
 const avatars = require('./avatars');
@@ -33,6 +32,30 @@ function loadServerConfig() {
     return config;
 }
 
+/**
+ * Dev: public/ (читаемые исходники). Prod: dist/ после `npm run build`,
+ * если serveObfuscatedClient / SERVE_OBFUSCATED_CLIENT включены.
+ */
+function resolvePublicDir(config) {
+    const wantObfuscated =
+        config.serveObfuscatedClient === true ||
+        String(process.env.SERVE_OBFUSCATED_CLIENT || '').trim() === '1' ||
+        String(process.env.SERVE_OBFUSCATED_CLIENT || '').toLowerCase() === 'true';
+    const distDir = path.join(ROOT_DIR, 'dist');
+    const publicDir = path.join(ROOT_DIR, 'public');
+    if (wantObfuscated) {
+        if (fs.existsSync(path.join(distDir, 'js'))) {
+            console.log('[Static] Раздача обфусцированного клиента из dist/');
+            return distDir;
+        }
+        console.warn('[Static] serveObfuscatedClient включён, но dist/ нет — сначала npm run build. Раздаётся public/');
+    }
+    return publicDir;
+}
+
+const serverConfig = loadServerConfig();
+const PUBLIC_DIR = resolvePublicDir(serverConfig);
+
 function logServerConfigWarnings() {
     const configPath = path.join(ROOT_DIR, 'server-config.json');
     if (!require('fs').existsSync(configPath)) {
@@ -56,7 +79,6 @@ function logServerConfigWarnings() {
     }
 }
 
-const serverConfig = loadServerConfig();
 const PORT = parseInt(process.env.PORT || process.argv[2] || serverConfig.port || '3000', 10);
 const HOST = process.env.HOST || serverConfig.host || '0.0.0.0';
 const app = express();
@@ -421,6 +443,31 @@ app.post('/api/map', (req, res) => {
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
     }
+});
+
+/** Разблокировка DevTools: только учётные данные главного (глобального) администратора. */
+app.post('/api/auth/devtools-unlock', async function(req, res) {
+    var ip = getClientIp(req);
+    var rate = security.checkRateLimit('devtools:' + ip, getAuthRateLimitOptions());
+    if (!rate.ok) {
+        return res.status(429).json({
+            success: false,
+            error: 'Слишком много попыток. Повторите через ' + rate.retryAfterSec + ' с.'
+        });
+    }
+    var body = req.body || {};
+    try {
+        var cred = await validateCredentials(body.username, body.password);
+    } catch (e) {
+        return res.status(500).json({ success: false, error: 'Ошибка проверки пароля' });
+    }
+    if (!cred.ok) {
+        return res.json({ success: false, error: 'Неверный логин или пароль' });
+    }
+    if (!isGlobalAdmin(cred.user)) {
+        return res.json({ success: false, error: 'Нужен пароль главного администратора' });
+    }
+    return res.json({ success: true });
 });
 
 app.post('/api/auth/login', async function(req, res) {
@@ -2457,7 +2504,9 @@ app.get('/api/public-config', (req, res) => {
         yandexMapsApiKey: key,
         publicSiteUrl: publicSiteUrl ? String(publicSiteUrl).trim().replace(/\/$/, '') : '',
         freeMapObjectLimit: getDefaultFreeMapObjectLimit(),
-        defaultMaxConcurrentUsers: getDefaultMaxConcurrentUsers()
+        defaultMaxConcurrentUsers: getDefaultMaxConcurrentUsers(),
+        // false в конфиге отключает ловушку DevTools; по умолчанию включена (кроме localhost на клиенте)
+        devtoolsGuard: serverConfig.devtoolsGuard !== false
     });
 });
 

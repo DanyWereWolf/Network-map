@@ -2,10 +2,8 @@
  * Сериализация, save/load, undo/redo, импорт/экспорт.
  */
 function serializeOneObject(obj) {
-    var idx = objects.indexOf(obj);
-    if (idx < 0) return null;
-    var arr = getSerializedData();
-    return arr[idx] || null;
+    if (!obj || objects.indexOf(obj) < 0) return null;
+    return serializeMapItemFromObject(obj);
 }
 
 function serializeMapItemFromObject(obj) {
@@ -476,16 +474,99 @@ function restoreMapStateFull(stateToRestore, message, title) {
     });
 }
 
+function patchLastSavedStateItems(serializedItems) {
+    if (!Array.isArray(lastSavedState) || !serializedItems || !serializedItems.length) return null;
+    var byUid = Object.create(null);
+    var pending = 0;
+    for (var i = 0; i < serializedItems.length; i++) {
+        var it = serializedItems[i];
+        if (!it || it.uniqueId == null || it.uniqueId === '') return null;
+        byUid[String(it.uniqueId)] = it;
+        pending++;
+    }
+    var next = new Array(lastSavedState.length);
+    var patched = 0;
+    for (var j = 0; j < lastSavedState.length; j++) {
+        var cur = lastSavedState[j];
+        var uid = cur && cur.uniqueId != null && cur.uniqueId !== '' ? String(cur.uniqueId) : '';
+        if (uid && byUid[uid]) {
+            next[j] = cloneMapSnapshot(byUid[uid]);
+            delete byUid[uid];
+            patched++;
+        } else {
+            next[j] = cur;
+        }
+    }
+    for (var left in byUid) {
+        if (Object.prototype.hasOwnProperty.call(byUid, left)) return null;
+    }
+    if (patched !== pending) return null;
+    return next;
+}
+
+function collectSerializedPatchItems(opts) {
+    var out = [];
+    function add(obj) {
+        if (!obj) return false;
+        var item = serializeMapItemFromObject(obj);
+        if (!item || item.uniqueId == null || item.uniqueId === '') return false;
+        out.push(item);
+        return true;
+    }
+    if (opts.object && !add(opts.object)) return null;
+    if (opts.cable && !add(opts.cable)) return null;
+    if (opts.objects && opts.objects.length) {
+        for (var i = 0; i < opts.objects.length; i++) {
+            if (!add(opts.objects[i])) return null;
+        }
+    }
+    if (opts.cables && opts.cables.length) {
+        for (var j = 0; j < opts.cables.length; j++) {
+            if (!add(opts.cables[j])) return null;
+        }
+    }
+    return out.length ? out : null;
+}
+
 function saveData(opts) {
     opts = opts || {};
     if (currentModalObject && infoModalEditModeSession && !infoModalEditMode && !opts.fiberSchemeViewOnly) return;
+    // Инкрементальный add: без полной сериализации и deep-clone всей карты (критично для INP).
+    if (opts.addObject && !inUndoRedo && Array.isArray(lastSavedState) &&
+        lastSavedState.length === objects.length - 1) {
+        var addItem = serializeMapItemFromObject(opts.addObject);
+        if (addItem) {
+            undoStack.push(lastSavedState);
+            if (undoStack.length > UNDO_MAX) undoStack.shift();
+            redoStack = [];
+            lastSavedState = lastSavedState.concat([cloneMapSnapshot(addItem)]);
+            if (!opts.skipSync) pushSaveDataToSync(opts);
+            if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
+            return;
+        }
+    }
+    // Инкрементальный update (перемещение / правка): патч только затронутых uniqueId.
+    if (!inUndoRedo && Array.isArray(lastSavedState) &&
+        (opts.object || opts.cable || (opts.objects && opts.objects.length) || (opts.cables && opts.cables.length))) {
+        var patchItems = collectSerializedPatchItems(opts);
+        var patchedState = patchItems ? patchLastSavedStateItems(patchItems) : null;
+        if (patchedState) {
+            undoStack.push(lastSavedState);
+            if (undoStack.length > UNDO_MAX) undoStack.shift();
+            redoStack = [];
+            lastSavedState = patchedState;
+            if (!opts.skipSync) pushSaveDataToSync(opts);
+            if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
+            return;
+        }
+    }
     if (!inUndoRedo && lastSavedState !== null) {
-        undoStack.push(JSON.parse(JSON.stringify(lastSavedState)));
+        undoStack.push(lastSavedState);
         if (undoStack.length > UNDO_MAX) undoStack.shift();
         redoStack = [];
     }
     var data = getSerializedData();
-    lastSavedState = JSON.parse(JSON.stringify(data));
+    lastSavedState = cloneMapSnapshot(data);
     if (!(opts && opts.skipSync) && !inUndoRedo) pushSaveDataToSync(opts || {});
     if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
 }
@@ -2062,17 +2143,7 @@ function populatePlacemarkFromSerializedData(placemark, data) {
     if (type) placemark.properties.set('type', type);
     if (data.name != null) {
         placemark.properties.set('name', data.name);
-        var opName = data.name;
-        if (type === 'cross') {
-            placemark.properties.set('balloonContent', opName ? 'Оптический кросс: ' + opName : 'Оптический кросс');
-        } else if (type === 'sleeve') {
-            placemark.properties.set('balloonContent', opName ? 'Кабельная муфта: ' + opName : 'Кабельная муфта');
-        } else if (type === 'spliceCassette') {
-            placemark.properties.set('balloonContent', opName ? 'Сплайс-кассета: ' + opName : 'Сплайс-кассета');
-        } else if (type === 'node') {
-            placemark.properties.set('balloonContent', opName ? 'Узел сети: ' + opName : 'Узел сети');
-        }
-        if (typeof updateObjectLabel === 'function') updateObjectLabel(placemark, opName);
+        if (typeof updateObjectLabel === 'function') updateObjectLabel(placemark, data.name);
     }
     if (data.revision != null) {
         var revIncoming = Number(data.revision);
@@ -2357,27 +2428,6 @@ function applySerializedCableToMap(cable, data, opts) {
 function createObjectFromData(data, opts, createOpts) {
     createOpts = createOpts || opts || {};
     const { type, name, geometry, usedFibers, fiberConnections, fiberLabels, fiberPorts, sleeveType, maxFibers, crossType, crossPorts, crossCopperPorts, copperPortUsage, nodeConnections, oltConnections, onuConnections, mediaConverterConnections, uniqueId, nodeKind, manufacturer, model, comment, ponPorts, splitRatio, splitterConnections, incomingFiber, portAssignments, portLabels, inputFiber, outputConnections, parentNodeId, switchPortTypes, attachedSwitches, streamType, streamUrl, streamUser, streamPass, streamAutoplay, streamMuted, snapshotPhoto, cabinetId } = data;
-    
-    var balloonContent;
-    switch (type) {
-        case 'support': balloonContent = name ? 'Опора связи: ' + name : 'Опора связи'; break;
-        case 'sleeve': balloonContent = name ? 'Кабельная муфта: ' + name : 'Кабельная муфта'; break;
-        case 'spliceCassette': balloonContent = name ? 'Сплайс-кассета: ' + name : 'Сплайс-кассета'; break;
-        case 'cross': balloonContent = 'Оптический кросс: ' + name; break;
-        case 'node': balloonContent = 'Узел сети: ' + name; break;
-        case 'attachment': balloonContent = name ? 'Крепление узлов: ' + name : 'Крепление узлов'; break;
-        case 'manhole': balloonContent = name ? 'Колодец: ' + name : 'Колодец'; break;
-        case 'signalPost': balloonContent = name ? 'Сигнальный столб: ' + name : 'Сигнальный столб'; break;
-        case 'cabinet': balloonContent = name ? 'Ящик: ' + name : 'Ящик'; break;
-        case 'olt': balloonContent = name ? 'OLT: ' + name : 'OLT (GPON)'; break;
-        case 'splitter': balloonContent = name ? 'Сплиттер: ' + name : 'Сплиттер'; break;
-        case 'onu': balloonContent = name ? 'ONU: ' + name : 'ONU'; break;
-        case 'camera': balloonContent = name ? 'Камера: ' + name : 'Камера'; break;
-        case 'mediaConverter': balloonContent = name ? 'Медиаконвертер: ' + name : 'Медиаконвертер'; break;
-        case 'radioBridge': balloonContent = name ? 'Wi‑Fi радиомост: ' + name : 'Wi‑Fi радиомост'; break;
-        case 'switch': balloonContent = name ? 'Коммутатор: ' + name : 'Коммутатор'; break;
-        default: balloonContent = 'Объект';
-    }
 
     var mapIcon = buildMapPlacemarkIcon(type, 'normal', { nodeKind: nodeKind || 'network' });
     if (!mapIcon) return null;
@@ -2387,13 +2437,14 @@ function createObjectFromData(data, opts, createOpts) {
         iconImageHref: mapIcon.href,
         iconImageSize: mapIcon.iconImageSize,
         iconImageOffset: mapIcon.iconImageOffset,
-        draggable: isEditMode
+        draggable: isEditMode,
+        hasBalloon: false,
+        openBalloonOnClick: false
     };
     
     const placemark = new ymaps.Placemark(geometry, {
         type: type,
-        name: name,
-        balloonContent: balloonContent
+        name: name
     }, placemarkOptions);
 
     if (type === 'node' || type === 'cross' || type === 'switch') {
@@ -2415,6 +2466,7 @@ function createObjectFromData(data, opts, createOpts) {
     }
     if (!data.revision) data.revision = 0;
     populatePlacemarkFromSerializedData(placemark, data);
+    disableNativePlacemarkBalloon(placemark);
 
     placemark.events.add('click', function(e) {
         if (objectPlacementMode) {
@@ -2632,10 +2684,25 @@ function createObjectFromData(data, opts, createOpts) {
         }
     });
 
+    placemark.events.add('dragstart', function() {
+        if (typeof captureObjectDragStartState === 'function') captureObjectDragStartState(placemark);
+    });
+
     placemark.events.add('dragend', function() {
             window.syncDragInProgress = false;
             ensurePlacemarkUniqueIdForSync(placemark);
             var uid = placemark.properties.get('uniqueId');
+            if (uid && typeof isObjectLockedByOther === 'function' && isObjectLockedByOther(uid)) {
+                if (typeof showWarning === 'function') showWarning('Объект редактирует другой пользователь', 'Перемещение недоступно');
+                if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
+                if (typeof resumeMapPanAfterPlacementObjectDrag === 'function') resumeMapPanAfterPlacementObjectDrag();
+                if (typeof clearObjectDragStartState === 'function') clearObjectDragStartState(placemark);
+                return;
+            }
+            if (typeof finalizeMapObjectDragEnd === 'function') {
+                finalizeMapObjectDragEnd(placemark);
+                return;
+            }
             var skipGroupSnapPm = typeof shouldSkipGroupSnapAfterPlacement === 'function' && shouldSkipGroupSnapAfterPlacement(placemark);
             updateConnectedCables(placemark);
             if (typeof MapPerf !== 'undefined' && MapPerf.updateSpatialPosition) MapPerf.updateSpatialPosition(placemark);
@@ -2670,6 +2737,9 @@ function createObjectFromData(data, opts, createOpts) {
         }
         if (!window.syncDragInProgress) {
             window.syncDragInProgress = true;
+            if (typeof captureObjectDragStartState === 'function' && placemark.properties && !placemark.properties.get('_preDragGroupKey')) {
+                captureObjectDragStartState(placemark);
+            }
             acquireDragObjectLock(placemark);
         }
         const label = placemark.properties.get('label');

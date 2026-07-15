@@ -484,8 +484,15 @@ function handleMapMouseMove(e) {
 
     if (objectPlacementMode) {
         const type = currentPlacementType;
-        updatePhantomPlacemark(type, mapCoords);
-        if (type) updateCursorIndicator(e, type);
+        if (mapMouseMoveRafId != null) cancelAnimationFrame(mapMouseMoveRafId);
+        var coordsPh = mapCoords;
+        var typePh = type;
+        var evPh = e;
+        mapMouseMoveRafId = requestAnimationFrame(function() {
+            mapMouseMoveRafId = null;
+            updatePhantomPlacemark(typePh, coordsPh);
+            if (typePh) updateCursorIndicator(evPh, typePh);
+        });
         return;
     }
 

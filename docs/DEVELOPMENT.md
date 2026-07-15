@@ -33,10 +33,7 @@ npm run api
 | `npm run api` | Основной сервер: REST + WebSocket `/sync` + статика из `public/` |
 | `npm run sync` | Только WebSocket (`server/server.js`), без REST |
 | `npm run check` | Синтаксическая проверка всех клиентских и серверных `.js` |
-| `npm run build` | Обфускация `public/js/app/main.js` и `auth.js` → `dist/` |
-| `npm run obfuscate:main` | Только main.js |
-| `npm run obfuscate:auth` | Только auth.js |
-| `npm run copy-assets` | Копирование `public/` в `dist/public` (Windows xcopy) |
+| `npm run build` | Копия `public/` → `dist/` + обфускация всех клиентских JS |
 
 ## Проверка перед коммитом
 
@@ -65,6 +62,7 @@ npm run verify
 |------------|----------------|
 | `PORT` | `port` |
 | `HOST` | `host` |
+| `SERVE_OBFUSCATED_CLIENT` | `serveObfuscatedClient` (`1` / `true` — раздавать `dist/` после `npm run build`) |
 | `TURNSTILE_SITE_KEY` | `turnstileSiteKey` |
 | `TURNSTILE_SECRET_KEY` | `turnstileSecretKey` |
 | `AUTH_RATE_LIMIT_WINDOW_MS` | `authRateLimitWindowMs` |

@@ -33,6 +33,22 @@ function getFiberHostByUid(uid) {
 
 function mapPerfRegister(obj) {
     if (typeof MapPerf !== 'undefined' && obj) MapPerf.registerMapObject(obj);
+    disableNativePlacemarkBalloon(obj);
+}
+
+/** Нативные balloon Яндекс.Карт не используем — инфо через модалки/подписи. */
+function disableNativePlacemarkBalloon(obj) {
+    if (!obj || !obj.options) return;
+    try {
+        obj.options.set({ hasBalloon: false, openBalloonOnClick: false });
+    } catch (e) {}
+    if (obj.properties) {
+        try {
+            if (obj.properties.get('balloonContent') != null) obj.properties.unset('balloonContent');
+        } catch (e2) {
+            try { obj.properties.set('balloonContent', ''); } catch (e3) {}
+        }
+    }
 }
 
 function mapPerfUnregister(obj) {

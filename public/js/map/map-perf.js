@@ -218,6 +218,25 @@
             lon >= bounds.minLon && lon <= bounds.maxLon;
     }
 
+    function ringAabbOverlapsBounds(ring, bounds) {
+        if (!Array.isArray(ring) || !bounds) return false;
+        var minLat = Infinity;
+        var maxLat = -Infinity;
+        var minLon = Infinity;
+        var maxLon = -Infinity;
+        for (var i = 0; i < ring.length; i++) {
+            var p = ring[i];
+            if (!p || p.length < 2) continue;
+            if (p[0] < minLat) minLat = p[0];
+            if (p[0] > maxLat) maxLat = p[0];
+            if (p[1] < minLon) minLon = p[1];
+            if (p[1] > maxLon) maxLon = p[1];
+        }
+        if (minLat === Infinity) return false;
+        return !(maxLat < bounds.minLat || minLat > bounds.maxLat ||
+            maxLon < bounds.minLon || minLon > bounds.maxLon);
+    }
+
     function geometryIntersectsBounds(obj, bounds) {
         if (!obj || !bounds) return true;
         try {
@@ -232,12 +251,10 @@
                     return false;
                 }
                 if (Array.isArray(c[0]) && Array.isArray(c[0][0])) {
+                    // Polygons: AABB overlap, not only vertices — otherwise zooming
+                    // into a large region (all vertices off-screen) unmounts it.
                     for (var ri = 0; ri < c.length; ri++) {
-                        var ring = c[ri];
-                        if (!Array.isArray(ring)) continue;
-                        for (var j = 0; j < ring.length; j++) {
-                            if (coordInBounds(ring[j], bounds)) return true;
-                        }
+                        if (ringAabbOverlapsBounds(c[ri], bounds)) return true;
                     }
                     return false;
                 }
@@ -265,6 +282,9 @@
     function isObjectInViewport(obj, bounds) {
         if (!obj || !bounds) return true;
         var type = obj.properties && obj.properties.get('type');
+        // Never viewport-cull regions (same as applyViewportCullToMap). Their area
+        // can still cover the view when every vertex is off-screen after a deep zoom-in.
+        if (type === 'region') return true;
         if (type === 'cable') return cableInViewport(obj, bounds);
         if (type === 'cableLabel') {
             var cables = obj.properties.get('cables');

@@ -50,6 +50,79 @@ function getCrossGroups() {
     return clusterPlacemarksByProximity(crosses, 'crosses');
 }
 
+function parseGroupKeyToCoords(key) {
+    if (!key || typeof key !== 'string') return null;
+    var parts = key.split(',');
+    if (parts.length < 2) return null;
+    var lat = parseFloat(parts[0]);
+    var lon = parseFloat(parts[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    return [lat, lon];
+}
+
+function collectTypedObjectsNearGroupKeys(type, keys) {
+    var out = [];
+    var seen = typeof Set !== 'undefined' ? new Set() : null;
+    var keySet = Object.create(null);
+    for (var ki = 0; ki < keys.length; ki++) keySet[keys[ki]] = true;
+    function consider(obj) {
+        if (!obj || !obj.properties || obj.properties.get('type') !== type) return;
+        if (typeof getObjectCabinetId === 'function' && getObjectCabinetId(obj)) return;
+        var uid = obj.properties.get('uniqueId');
+        if (seen) {
+            if (uid && seen.has(uid)) return;
+            if (uid) seen.add(uid);
+        } else if (out.indexOf(obj) >= 0) {
+            return;
+        }
+        out.push(obj);
+    }
+    function considerIfKeyMatch(obj) {
+        if (!obj || !obj.geometry) return;
+        try {
+            if (!keySet[groupKey(obj.geometry.getCoordinates())]) return;
+        } catch (e) { return; }
+        consider(obj);
+    }
+    var usedSpatial = false;
+    if (typeof MapPerf !== 'undefined' && MapPerf.querySpatialNearCoords) {
+        for (var i = 0; i < keys.length; i++) {
+            var coords = parseGroupKeyToCoords(keys[i]);
+            if (!coords) continue;
+            var near = MapPerf.querySpatialNearCoords(coords, 2);
+            if (!near) continue;
+            usedSpatial = true;
+            for (var j = 0; j < near.length; j++) consider(near[j]);
+        }
+    }
+    if (!usedSpatial || !out.length) {
+        objects.forEach(considerIfKeyMatch);
+    }
+    return out;
+}
+
+function getCrossGroupsForKeys(keys) {
+    if (!keys || !keys.length) return [];
+    var keySet = Object.create(null);
+    for (var i = 0; i < keys.length; i++) keySet[keys[i]] = true;
+    var crosses = collectTypedObjectsNearGroupKeys('cross', keys);
+    if (!crosses.length) return [];
+    return clusterPlacemarksByProximity(crosses, 'crosses').filter(function(g) {
+        return !!keySet[groupKey(g.coords)];
+    });
+}
+
+function getNodeGroupsForKeys(keys) {
+    if (!keys || !keys.length) return [];
+    var keySet = Object.create(null);
+    for (var i = 0; i < keys.length; i++) keySet[keys[i]] = true;
+    var nodes = collectTypedObjectsNearGroupKeys('node', keys);
+    if (!nodes.length) return [];
+    return clusterPlacemarksByProximity(nodes, 'nodes').filter(function(g) {
+        return !!keySet[groupKey(g.coords)];
+    });
+}
+
 function parseGroupDisplayScope(scope) {
     if (scope == null || scope === true) return { full: true, keys: null };
     if (typeof scope === 'string') return { full: false, keys: [scope] };
@@ -67,8 +140,9 @@ function detachCrossesAtGroupKey(key) {
         crossGroupPlacemarks = crossGroupPlacemarks.filter(function(p) { return p !== pm; });
         crossGroupPlacemarkByKey.delete(key);
     }
-    objects.forEach(function(obj) {
-        if (!obj.properties || obj.properties.get('type') !== 'cross' || !obj.geometry) return;
+    var scan = collectTypedObjectsNearGroupKeys('cross', [key]);
+    scan.forEach(function(obj) {
+        if (!obj.geometry) return;
         try {
             if (groupKey(obj.geometry.getCoordinates()) !== key) return;
             try { myMap.geoObjects.remove(obj); } catch (e2) {}
@@ -87,8 +161,9 @@ function detachNodesAtGroupKey(key) {
         nodeGroupPlacemarks = nodeGroupPlacemarks.filter(function(p) { return p !== pm; });
         nodeGroupPlacemarkByKey.delete(key);
     }
-    objects.forEach(function(obj) {
-        if (!obj.properties || obj.properties.get('type') !== 'node' || !obj.geometry) return;
+    var scan = collectTypedObjectsNearGroupKeys('node', [key]);
+    scan.forEach(function(obj) {
+        if (!obj.geometry) return;
         try {
             if (groupKey(obj.geometry.getCoordinates()) !== key) return;
             try { myMap.geoObjects.remove(obj); } catch (e2) {}
@@ -118,11 +193,7 @@ function updateCrossDisplay(scope) {
             if (label) try { myMap.geoObjects.remove(label); } catch (e) {}
         });
     }
-    const allCrosses = objects.filter(obj => obj.properties && obj.properties.get('type') === 'cross');
-    const groups = getCrossGroups();
-    const groupsToRender = keysOnly
-        ? groups.filter(function(g) { return parsed.keys.indexOf(groupKey(g.coords)) >= 0; })
-        : groups;
+    const groupsToRender = keysOnly ? getCrossGroupsForKeys(parsed.keys) : getCrossGroups();
     groupsToRender.forEach(group => {
         const gKey = groupKey(group.coords);
         if (group.crosses.length === 1) {
@@ -345,11 +416,25 @@ function updateCrossDisplay(scope) {
     
     var crossesForCables = keysOnly ? groupsToRender.reduce(function(acc, g) {
         return acc.concat(g.crosses);
-    }, []) : allCrosses;
+    }, []) : objects.filter(function(obj) {
+        return obj.properties && obj.properties.get('type') === 'cross';
+    });
     crossesForCables.forEach(function(cross) {
         updateConnectedCables(cross);
     });
-    if (typeof applyMapFilter === 'function') applyMapFilter();
+    if (keysOnly) {
+        if (typeof applyMapFilterForObject === 'function') {
+            crossesForCables.forEach(function(cross) { applyMapFilterForObject(cross); });
+        }
+        if (typeof applyGroupPlacemarkFilterVisibility === 'function') {
+            applyGroupPlacemarkFilterVisibility(
+                typeof getMapFilterState === 'function' ? getMapFilterState() : {},
+                typeof getExpertZoomFlags === 'function' ? getExpertZoomFlags() : null
+            );
+        }
+    } else if (typeof applyMapFilter === 'function') {
+        applyMapFilter();
+    }
 }
 
 function getNodeGroups() {
@@ -381,13 +466,9 @@ function updateNodeDisplay(scope) {
             if (label) try { myMap.geoObjects.remove(label); } catch (e) {}
         });
     }
-    const allNodes = objects.filter(obj => obj.properties && obj.properties.get('type') === 'node');
     const mapFilterState = typeof getMapFilterState === 'function' ? getMapFilterState() : {};
     const aggregationOnly = !!mapFilterState.nodeAggregationOnly;
-    const groups = getNodeGroups();
-    const groupsToRender = keysOnly
-        ? groups.filter(function(g) { return parsed.keys.indexOf(groupKey(g.coords)) >= 0; })
-        : groups;
+    const groupsToRender = keysOnly ? getNodeGroupsForKeys(parsed.keys) : getNodeGroups();
     groupsToRender.forEach(group => {
         const displayNodes = aggregationOnly
             ? group.nodes.filter(function(nd) { return (nd.properties && nd.properties.get('nodeKind')) === 'aggregation'; })
@@ -571,9 +652,23 @@ function updateNodeDisplay(scope) {
     
     var nodesForCables = keysOnly ? groupsToRender.reduce(function(acc, g) {
         return acc.concat(g.nodes);
-    }, []) : allNodes;
+    }, []) : objects.filter(function(obj) {
+        return obj.properties && obj.properties.get('type') === 'node';
+    });
     nodesForCables.forEach(function(node) {
         updateConnectedCables(node);
     });
-    if (typeof applyMapFilter === 'function') applyMapFilter();
+    if (keysOnly) {
+        if (typeof applyMapFilterForObject === 'function') {
+            nodesForCables.forEach(function(node) { applyMapFilterForObject(node); });
+        }
+        if (typeof applyGroupPlacemarkFilterVisibility === 'function') {
+            applyGroupPlacemarkFilterVisibility(
+                typeof getMapFilterState === 'function' ? getMapFilterState() : {},
+                typeof getExpertZoomFlags === 'function' ? getExpertZoomFlags() : null
+            );
+        }
+    } else if (typeof applyMapFilter === 'function') {
+        applyMapFilter();
+    }
 }

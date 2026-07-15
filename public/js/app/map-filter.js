@@ -443,6 +443,91 @@ function applyMapViewportUpdate() {
     }
 }
 
+function isMapFilterObjVisible(obj, filter) {
+    if (!obj || !obj.properties) return false;
+    filter = filter || (typeof mapFilter !== 'undefined' && mapFilter ? mapFilter : getMapFilterState());
+    var type = obj.properties.get('type');
+    if (type === 'cable' || type === 'cableLabel' || type === 'region') return false;
+    if (type === 'node') {
+        if (!filter.node) return false;
+        if (filter.nodeAggregationOnly) return obj.properties.get('nodeKind') === 'aggregation';
+    } else if (type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'radioBridge') {
+        if (filter[type] === false) return false;
+    } else if (type === 'spliceCassette') {
+        if (filter.sleeve === false) return false;
+    } else if (filter[type] !== true) {
+        return false;
+    }
+    if (window.MapRegions && MapRegions.isObjectInAnyHiddenRegion(obj, objects)) return false;
+    return true;
+}
+
+/** Инкрементально выставить visibility одному объекту (create path, без полного O(n) applyMapFilter). */
+function applyMapFilterForObject(obj) {
+    if (window._mapPdfExportCaptureActive) return;
+    if (!obj || !obj.properties || !myMap) return;
+    var filter = getMapFilterState();
+    mapFilter = filter;
+    var type = obj.properties.get('type');
+    var visible = false;
+    if (type === 'cable' || type === 'cableLabel' || type === 'region') {
+        return;
+    }
+    visible = isMapFilterObjVisible(obj, filter);
+    if (typeof getObjectCabinetId === 'function' && getObjectCabinetId(obj)) visible = false;
+    var useVirtual = typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization();
+    try {
+        obj.properties.set('_mapFilterVisible', visible);
+        if (!useVirtual) {
+            if (obj.options) obj.options.set('visible', visible);
+            var label = obj.properties.get('label');
+            if (label && label.options) label.options.set('visible', visible);
+        } else if (type === 'cross' || type === 'node') {
+            if (obj.options) obj.options.set('visible', visible);
+        }
+    } catch (e) {}
+}
+
+function ensureObjectLabelOnMap(obj) {
+    if (!obj || !obj.properties || !myMap) return;
+    if (obj.properties.get('_mapFilterVisible') === false) return;
+    if (typeof getObjectCabinetId === 'function' && getObjectCabinetId(obj)) return;
+    var type = obj.properties.get('type');
+    if (type === 'cross' || type === 'node') {
+        // Подписи одиночных кроссов/узлов возвращает updateCross/NodeDisplay;
+        // для групп отдельные label не нужны.
+        if (typeof crossGroupPlacemarkByKey !== 'undefined' || typeof nodeGroupPlacemarkByKey !== 'undefined') {
+            try {
+                var gk = typeof groupKey === 'function' && obj.geometry ? groupKey(obj.geometry.getCoordinates()) : null;
+                if (gk) {
+                    if (type === 'cross' && crossGroupPlacemarkByKey && crossGroupPlacemarkByKey.has(gk)) return;
+                    if (type === 'node' && nodeGroupPlacemarkByKey && nodeGroupPlacemarkByKey.has(gk)) return;
+                }
+            } catch (eGroup) {}
+        }
+    }
+    var label = obj.properties.get('label');
+    if (!label) return;
+    try {
+        if (obj.geometry && label.geometry) {
+            label.geometry.setCoordinates(obj.geometry.getCoordinates());
+        }
+    } catch (eCoords) {}
+    var hideLabels = false;
+    if (typeof getExpertZoomFlags === 'function') {
+        var zf = getExpertZoomFlags();
+        hideLabels = !!(zf && zf.hideLabels);
+    }
+    try {
+        if (!hideLabels) {
+            if (myMap.geoObjects.indexOf(label) === -1) myMap.geoObjects.add(label);
+            if (label.options) label.options.set('visible', true);
+        } else if (label.options) {
+            label.options.set('visible', false);
+        }
+    } catch (e) {}
+}
+
 function applyMapFilter() {
     if (window._mapPdfExportCaptureActive) return;
     if (!myMap || !objects) return;
@@ -450,23 +535,6 @@ function applyMapFilter() {
     mapFilter = filter;
     var useVirtual = typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization();
     if (typeof updateMapFilterBadge === 'function') updateMapFilterBadge();
-    function isObjVisible(obj) {
-        if (!obj || !obj.properties) return false;
-        var type = obj.properties.get('type');
-        if (type === 'cable' || type === 'cableLabel' || type === 'region') return false;
-        if (type === 'node') {
-            if (!filter.node) return false;
-            if (filter.nodeAggregationOnly) return obj.properties.get('nodeKind') === 'aggregation';
-        } else if (type === 'olt' || type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'radioBridge') {
-            if (filter[type] === false) return false;
-        } else if (type === 'spliceCassette') {
-            if (filter.sleeve === false) return false;
-        } else if (filter[type] !== true) {
-            return false;
-        }
-        if (window.MapRegions && MapRegions.isObjectInAnyHiddenRegion(obj, objects)) return false;
-        return true;
-    }
     var visibleCables = new Set();
     objects.forEach(function(obj) {
         if (!obj.properties) return;
@@ -475,8 +543,8 @@ function applyMapFilter() {
             var from = obj.properties.get('from');
             var to = obj.properties.get('to');
             var points = obj.properties.get('points');
-            var visible = from && to && isObjVisible(from) && isObjVisible(to) &&
-                (!Array.isArray(points) || points.length === 0 || points.every(function(p) { return isObjVisible(p); }));
+            var visible = from && to && isMapFilterObjVisible(from, filter) && isMapFilterObjVisible(to, filter) &&
+                (!Array.isArray(points) || points.length === 0 || points.every(function(p) { return isMapFilterObjVisible(p, filter); }));
             if (visible && window.MapRegions && MapRegions.isCableInAnyHiddenRegion(obj, objects)) visible = false;
             if (visible) visibleCables.add(obj);
         }
@@ -500,7 +568,7 @@ function applyMapFilter() {
                 visible = window.MapRegions ? MapRegions.isRegionVisible(obj) : true;
             }
         } else {
-            visible = isObjVisible(obj);
+            visible = isMapFilterObjVisible(obj, filter);
             if (typeof getObjectCabinetId === 'function' && getObjectCabinetId(obj)) visible = false;
         }
         try {

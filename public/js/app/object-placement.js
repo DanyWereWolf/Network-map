@@ -47,23 +47,24 @@ function showPlacementCoordsOnMap(coords) {
 
     if (previewIcon) {
         placementCoordsPreviewPlacemark = new ymaps.Placemark(coords, {
-            type: 'coordsPreview',
-            balloonContent: 'Предпросмотр: ' + coords[0].toFixed(6) + ', ' + coords[1].toFixed(6)
+            type: 'coordsPreview'
         }, {
             iconLayout: 'default#image',
             iconImageHref: previewIcon.href,
             iconImageSize: previewIcon.iconImageSize,
             iconImageOffset: previewIcon.iconImageOffset,
             zIndex: 9998,
-            interactive: false
+            interactive: false,
+            hasBalloon: false,
+            openBalloonOnClick: false
         });
     } else {
-        placementCoordsPreviewPlacemark = new ymaps.Placemark(coords, {
-            balloonContent: coords[0].toFixed(6) + ', ' + coords[1].toFixed(6)
-        }, {
+        placementCoordsPreviewPlacemark = new ymaps.Placemark(coords, {}, {
             preset: 'islands#orangeCircleDotIcon',
             zIndex: 9998,
-            interactive: false
+            interactive: false,
+            hasBalloon: false,
+            openBalloonOnClick: false
         });
     }
 
@@ -228,17 +229,26 @@ function coordsMatchForPlacement(coords, objCoords, placementType) {
 function getPlacemarksAtCoords(coords, placementType) {
     if (!coords || coords.length < 2) return [];
     var found = [];
-    objects.forEach(function(obj) {
-        if (!obj || !obj.geometry || !obj.properties) return;
+    var scanList = objects;
+    if (typeof MapPerf !== 'undefined' && MapPerf.querySpatialNearCoords) {
+        var near = MapPerf.querySpatialNearCoords(coords, getObjectPlacementGroupType(placementType) ? 2 : 1);
+        // Пустой near означает «никого рядом» только если spatial-индекс уже наполнен.
+        if (near && (near.length > 0 || (typeof MapPerf.shouldUseViewportCull === 'function' && MapPerf.shouldUseViewportCull()))) {
+            scanList = near;
+        }
+    }
+    for (var i = 0; i < scanList.length; i++) {
+        var obj = scanList[i];
+        if (!obj || !obj.geometry || !obj.properties) continue;
         var objType = obj.properties.get('type');
-        if (objType === 'cable' || objType === 'cableLabel') return;
+        if (objType === 'cable' || objType === 'cableLabel') continue;
         try {
             var objCoords = obj.geometry.getCoordinates();
             if (coordsMatchForPlacement(coords, objCoords, placementType)) {
                 found.push(obj);
             }
         } catch (error) {}
-    });
+    }
     return found;
 }
 
@@ -380,6 +390,7 @@ function placeObjectAtCoords(coords) {
     }
 
     removePhantomPlacemark();
+    try { if (myMap && myMap.balloon) myMap.balloon.close(); } catch (eCloseBalloon) {}
     return true;
 }
 

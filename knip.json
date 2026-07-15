@@ -36,9 +36,9 @@
     "server/server-api.js",
     "server/server.js",
     "scripts/check-js-syntax.js",
-    "scripts/find-dead-globals.js"
+    "scripts/find-dead-globals.js",
+    "scripts/build-client.js"
   ],
   "project": ["public/js/**/*.js", "server/**/*.js", "scripts/**/*.js"],
-  "ignore": ["dist/**", "data/**"],
-  "ignoreDependencies": ["javascript-obfuscator"]
+  "ignore": ["dist/**", "data/**"]
 }

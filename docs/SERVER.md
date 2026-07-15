@@ -98,13 +98,17 @@ JSON-хранилище в одном файле `store.json` (не SQLite):
 - Роли: глобальный admin (`site-admin`), admin организации, user (только просмотр)
 - Размер тела запроса и WebSocket ограничены в `server-api.js`
 - Секреты только в `server-config.json` (не в git)
+- Ловушка DevTools (`devtoolsGuard`, скрипт `devtools-guard.js`): пароль главного админа; неверный → полноэкранный экран. На localhost выключена.
 
 ## Деплой (кратко)
 
-1. `npm install --production` (или полный install)
-2. `server-config.json` на сервере с боевыми ключами
-3. Процесс-менеджер: `node server/server-api.js` или `npm run api`
-4. Reverse proxy (nginx) → HTTPS, при необходимости WebSocket upgrade на `/sync`
-5. Каталог `data/` на постоянном томе с бэкапами
+1. `npm install` (полный — нужен `javascript-obfuscator` для сборки клиента)
+2. `npm run build` — копирует `public/` в `dist/` и обфусцирует все JS
+3. `server-config.json` на сервере: боевые ключи и `"serveObfuscatedClient": true` (или `SERVE_OBFUSCATED_CLIENT=1`)
+4. Процесс-менеджер: `node server/server-api.js` или `npm run api`
+5. Reverse proxy (nginx) → HTTPS, при необходимости WebSocket upgrade на `/sync`
+6. Каталог `data/` на постоянном томе с бэкапами
+
+Локально без флага раздаётся читаемый `public/` — удобно для отладки. Обфускация усложняет чтение кода в DevTools, но не заменяет серверные секреты и права доступа.
 
 Подробности окружения — у хостинга; структура путей после реорганизации не меняет URL для пользователей.

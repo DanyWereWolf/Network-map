@@ -47,12 +47,20 @@ function findNearestGroupMemberCoords(coords, objectType, excludeObj) {
     if (!coords || !objectType) return null;
     var best = null;
     var bestDist = Infinity;
-    objects.forEach(function(obj) {
-        if (!obj || !obj.geometry || !obj.properties) return;
-        if (excludeObj && obj === excludeObj) return;
-        if (obj.properties.get('type') !== objectType) return;
+    var scanList = objects;
+    if (typeof MapPerf !== 'undefined' && MapPerf.querySpatialNearCoords) {
+        var near = MapPerf.querySpatialNearCoords(coords, 2);
+        if (near && (near.length || (typeof MapPerf.shouldUseViewportCull === 'function' && MapPerf.shouldUseViewportCull()))) {
+            scanList = near;
+        }
+    }
+    for (var i = 0; i < scanList.length; i++) {
+        var obj = scanList[i];
+        if (!obj || !obj.geometry || !obj.properties) continue;
+        if (excludeObj && obj === excludeObj) continue;
+        if (obj.properties.get('type') !== objectType) continue;
         var objCoords = obj.geometry.getCoordinates();
-        if (!coordsWithinGroupMergeDistance(coords, objCoords)) return;
+        if (!coordsWithinGroupMergeDistance(coords, objCoords)) continue;
         var dx = coords[0] - objCoords[0];
         var dy = coords[1] - objCoords[1];
         var dist = dx * dx + dy * dy;
@@ -60,7 +68,7 @@ function findNearestGroupMemberCoords(coords, objectType, excludeObj) {
             bestDist = dist;
             best = objCoords;
         }
-    });
+    }
     return best ? best.slice() : null;
 }
 

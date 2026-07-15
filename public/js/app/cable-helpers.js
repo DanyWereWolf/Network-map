@@ -319,14 +319,20 @@ function validateAndFixCableGeometryOnLoad() {
 
 function getCablesTouchingObject(obj) {
     if (!obj) return [];
-    return objects.filter(function(cable) {
-        if (!cable.properties || cable.properties.get('type') !== 'cable') return false;
+    var out = [];
+    for (var i = 0; i < objects.length; i++) {
+        var cable = objects[i];
+        if (!cable || !cable.properties || cable.properties.get('type') !== 'cable') continue;
         var from = cable.properties.get('from');
         var to = cable.properties.get('to');
-        if (from === obj || to === obj) return true;
+        if (from === obj || to === obj) {
+            out.push(cable);
+            continue;
+        }
         var points = cable.properties.get('points');
-        return Array.isArray(points) && points.indexOf(obj) !== -1;
-    });
+        if (Array.isArray(points) && points.indexOf(obj) !== -1) out.push(cable);
+    }
+    return out;
 }
 
 function updateConnectedCables(obj) {

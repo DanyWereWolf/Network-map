@@ -248,6 +248,125 @@ function saveObjectWithConnectedCables(obj) {
     saveLinkedMapObjects(toSave);
 }
 
+function captureObjectDragStartState(obj) {
+    if (!obj || !obj.properties || !obj.geometry) return;
+    try {
+        var c = obj.geometry.getCoordinates();
+        if (!c || c.length < 2 || typeof c[0] !== 'number') return;
+        obj.properties.set('_preDragCoords', [c[0], c[1]]);
+        if (typeof groupKey === 'function') {
+            obj.properties.set('_preDragGroupKey', groupKey(c));
+        }
+    } catch (e) {}
+}
+
+function getObjectDragGroupScope(obj) {
+    var keys = [];
+    var preKey = obj && obj.properties ? obj.properties.get('_preDragGroupKey') : null;
+    if (preKey) keys.push(preKey);
+    try {
+        if (obj && obj.geometry && typeof groupKey === 'function') {
+            var newKey = groupKey(obj.geometry.getCoordinates());
+            if (newKey && keys.indexOf(newKey) < 0) keys.push(newKey);
+        }
+    } catch (e) {}
+    return keys.length ? keys : null;
+}
+
+function clearObjectDragStartState(obj) {
+    if (!obj || !obj.properties) return;
+    try {
+        obj.properties.set('_preDragCoords', null);
+        obj.properties.set('_preDragGroupKey', null);
+    } catch (e) {}
+}
+
+/** Лёгкий finalize после dragend: без полного applyMapFilter / полной пересборки карты. */
+function finalizeMapObjectDragEnd(placemark) {
+    if (!placemark || !placemark.properties) return;
+    var type = placemark.properties.get('type');
+    var uid = placemark.properties.get('uniqueId');
+    var groupScope = (type === 'cross' || type === 'node') ? getObjectDragGroupScope(placemark) : null;
+    clearObjectDragStartState(placemark);
+
+    var skipGroupSnap = typeof shouldSkipGroupSnapAfterPlacement === 'function' && shouldSkipGroupSnapAfterPlacement(placemark);
+    if ((type === 'cross' || type === 'node') && !skipGroupSnap && typeof snapCoordsToObjectGroup === 'function') {
+        if (!(typeof onMemberObjectDragEnd === 'function' && onMemberObjectDragEnd(placemark))) {
+            var snappedCoords = snapCoordsToObjectGroup(placemark.geometry.getCoordinates(), type, placemark);
+            placemark.geometry.setCoordinates(snappedCoords);
+            if (groupScope && typeof groupKey === 'function') {
+                try {
+                    var snappedKey = groupKey(snappedCoords);
+                    if (snappedKey && groupScope.indexOf(snappedKey) < 0) groupScope.push(snappedKey);
+                } catch (eSnapKey) {}
+            }
+        }
+    } else if (typeof onMemberObjectDragEnd === 'function') {
+        onMemberObjectDragEnd(placemark);
+    }
+
+    if (typeof updateConnectedCables === 'function') updateConnectedCables(placemark);
+    if (typeof MapPerf !== 'undefined' && MapPerf.updateSpatialPosition) MapPerf.updateSpatialPosition(placemark);
+    var label = placemark.properties.get('label');
+    if (label && placemark.geometry) {
+        try { label.geometry.setCoordinates(placemark.geometry.getCoordinates()); } catch (eLbl) {}
+    }
+    if (typeof scheduleConnectionLinesUpdate === 'function') scheduleConnectionLinesUpdate();
+    if (typeof updateSelectionPulsePosition === 'function') updateSelectionPulsePosition(placemark);
+
+    if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(placemark);
+    else saveData({ object: placemark, syncImmediate: true });
+
+    if (type === 'cross' && typeof updateCrossDisplay === 'function') {
+        updateCrossDisplay(groupScope);
+    } else if (type === 'node' && typeof updateNodeDisplay === 'function') {
+        updateNodeDisplay(groupScope);
+    } else if (type === 'cabinet' && typeof onCabinetDragEnd === 'function') {
+        onCabinetDragEnd(placemark);
+    }
+
+    if (type !== 'cross' && type !== 'node') {
+        if (typeof applyMapFilterForObject === 'function') {
+            applyMapFilterForObject(placemark);
+            if (typeof getCablesTouchingObject === 'function') {
+                getCablesTouchingObject(placemark).forEach(function(cable) {
+                    applyMapFilterForObject(cable);
+                });
+            }
+        } else if (typeof applyMapFilter === 'function') {
+            applyMapFilter();
+        }
+    }
+
+    // Подпись снимается на drag — вернуть сразу (в т.ч. при virtualization), не ждать pan/sync.
+    if (typeof ensureObjectLabelOnMap === 'function') ensureObjectLabelOnMap(placemark);
+
+    releaseDragObjectLock(uid);
+    if (typeof MapPerf !== 'undefined' && MapPerf.unpinObject) MapPerf.unpinObject(placemark);
+
+    var deferDragSideEffects = function() {
+        if (typeof renderRegionsSidebarList === 'function') {
+            try { renderRegionsSidebarList(); } catch (eReg) {}
+        }
+        if (typeof window.syncApplyPendingState === 'function') {
+            try { window.syncApplyPendingState(); } catch (eSync) {}
+        }
+    };
+    if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(function() {
+            if (typeof requestIdleCallback === 'function') {
+                requestIdleCallback(deferDragSideEffects, { timeout: 120 });
+            } else {
+                setTimeout(deferDragSideEffects, 0);
+            }
+        });
+    } else {
+        setTimeout(deferDragSideEffects, 0);
+    }
+
+    if (typeof resumeMapPanAfterPlacementObjectDrag === 'function') resumeMapPanAfterPlacementObjectDrag();
+}
+
 function saveLinkedMapObjects(objectsToSave) {
     if (!objectsToSave || !objectsToSave.length) {
         saveData();

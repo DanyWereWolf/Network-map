@@ -97,4 +97,4 @@ Network-map/
 | Каталог | Назначение |
 |---------|------------|
 | `node_modules/` | Зависимости npm |
-| `dist/` | Обфусцированные `public/js/app/main.js` и `auth.js` после `npm run build` |
+| `dist/` | Обфусцированная копия `public/` после `npm run build` (раздаётся при `serveObfuscatedClient`) |
