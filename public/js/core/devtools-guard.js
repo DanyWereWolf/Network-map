@@ -4,7 +4,6 @@
  */
 (function () {
     var STORAGE_KEY = 'networkMap_devtoolsUnlocked';
-    var DENIED_KEY = 'networkMap_devtoolsDenied';
     var IMAGE_SRC = 'img/devtools-denied.png';
     var THRESHOLD_PX = 160;
     var CHECK_MS = 800;
@@ -23,8 +22,9 @@
 
     function readUnlockFlags() {
         try {
+            // Старый флаг отказа больше не используем — картинка только до перезагрузки
+            sessionStorage.removeItem('networkMap_devtoolsDenied');
             if (sessionStorage.getItem(STORAGE_KEY) === '1') unlocked = true;
-            if (sessionStorage.getItem(DENIED_KEY) === '1') denied = true;
         } catch (e) {}
     }
 
@@ -33,7 +33,6 @@
         denied = false;
         try {
             sessionStorage.setItem(STORAGE_KEY, '1');
-            sessionStorage.removeItem(DENIED_KEY);
         } catch (e) {}
         hidePrompt();
         hideDenied();
@@ -41,9 +40,6 @@
 
     function setDenied() {
         denied = true;
-        try {
-            sessionStorage.setItem(DENIED_KEY, '1');
-        } catch (e) {}
         hidePrompt();
         showDenied();
     }
@@ -178,30 +174,38 @@
         showPrompt();
     }
 
-    function onDevtoolsAttempt(e) {
-        if (!enabled || unlocked) return;
-        if (denied) {
-            if (e) e.preventDefault();
-            showDenied();
-            return;
-        }
-        if (e) e.preventDefault();
-        challenge();
+    function blockEvent(e) {
+        if (!e) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+        return false;
     }
 
-    function onKeyDown(e) {
+    function handleDevtoolsHotkey(e) {
         if (!enabled || unlocked) return;
         var key = e.key || '';
+        var code = e.code || '';
+        var keyCode = e.keyCode || e.which || 0;
         var ctrl = e.ctrlKey || e.metaKey;
         var shift = e.shiftKey;
-        var isF12 = key === 'F12';
-        var isI = ctrl && shift && (key === 'I' || key === 'i');
-        var isJ = ctrl && shift && (key === 'J' || key === 'j');
-        var isC = ctrl && shift && (key === 'C' || key === 'c');
-        var isU = ctrl && (key === 'U' || key === 'u');
-        if (isF12 || isI || isJ || isC || isU) {
-            onDevtoolsAttempt(e);
-        }
+        var isF12 = key === 'F12' || code === 'F12' || keyCode === 123;
+        var isI = ctrl && shift && (key === 'I' || key === 'i' || code === 'KeyI' || keyCode === 73);
+        var isJ = ctrl && shift && (key === 'J' || key === 'j' || code === 'KeyJ' || keyCode === 74);
+        var isC = ctrl && shift && (key === 'C' || key === 'c' || code === 'KeyC' || keyCode === 67);
+        var isU = ctrl && !shift && (key === 'U' || key === 'u' || code === 'KeyU' || keyCode === 85);
+        var isK = ctrl && shift && (key === 'K' || key === 'k' || code === 'KeyK' || keyCode === 75);
+        if (!(isF12 || isI || isJ || isC || isU || isK)) return;
+        blockEvent(e);
+        if (denied) showDenied();
+        else challenge();
+    }
+
+    function onContextMenu(e) {
+        if (!enabled || unlocked) return;
+        blockEvent(e);
+        if (denied) showDenied();
+        else challenge();
     }
 
     function tick() {
@@ -232,24 +236,25 @@
             .catch(function () {});
     }
 
+    function bindGuards() {
+        // capture на window+document: F12 и «Исследовать» часто не доходят до обычных слушателей
+        ['keydown', 'keyup', 'keypress'].forEach(function (type) {
+            window.addEventListener(type, handleDevtoolsHotkey, true);
+            document.addEventListener(type, handleDevtoolsHotkey, true);
+        });
+        window.addEventListener('contextmenu', onContextMenu, true);
+        document.addEventListener('contextmenu', onContextMenu, true);
+    }
+
     function init() {
         readUnlockFlags();
         bootFromConfig();
         if (isLocalHost()) return;
-        if (denied) {
-            showDenied();
-            return;
-        }
         if (isGlobalAdminSession()) {
             setUnlocked();
             return;
         }
-        document.addEventListener('keydown', onKeyDown, true);
-        document.addEventListener('contextmenu', function (e) {
-            if (!enabled || unlocked) return;
-            // Не блокируем обычное меню; только если уже denied
-            if (denied) e.preventDefault();
-        }, true);
+        bindGuards();
         setInterval(tick, CHECK_MS);
         setTimeout(tick, 400);
     }
