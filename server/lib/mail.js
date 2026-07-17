@@ -39,28 +39,36 @@ function isMailConfigured(serverConfig) {
     return !!getSmtpConfig(serverConfig);
 }
 
-let transporterCache = null;
-let transporterKey = '';
-
-function invalidateTransporterCache() {
-    transporterCache = null;
-    transporterKey = '';
-}
-
-function getTransporter(serverConfig) {
-    const smtp = getSmtpConfig(serverConfig);
-    if (!smtp) return null;
-    // pass в ключе: смена пароля SMTP без рестарта процесса
-    const key = [smtp.host, smtp.port, smtp.secure, smtp.auth.user, smtp.auth.pass].join('|');
-    if (transporterCache && transporterKey === key) return transporterCache;
-    transporterCache = nodemailer.createTransport({
+/**
+ * Новый транспорт на каждую операцию.
+ * Кэш ломал повторную отправку: после 1-го письма Reg.ru/хостинг
+ * закрывает SMTP-сессию, а повтор шёл в уже мёртвое соединение
+ * (пока процесс не перезапустят).
+ */
+function createTransporter(smtp) {
+    return nodemailer.createTransport({
         host: smtp.host,
         port: smtp.port,
         secure: smtp.secure,
-        auth: smtp.auth
+        auth: smtp.auth,
+        pool: false,
+        connectionTimeout: 15000,
+        greetingTimeout: 15000,
+        socketTimeout: 30000
     });
-    transporterKey = key;
-    return transporterCache;
+}
+
+function closeTransporter(transporter) {
+    if (!transporter) return;
+    try {
+        transporter.close();
+    } catch (e) { /* ignore */ }
+}
+
+function sendWithTransporter(transporter, mailOptions) {
+    return transporter.sendMail(mailOptions).finally(function() {
+        closeTransporter(transporter);
+    });
 }
 
 function sendMail(serverConfig, options) {
@@ -68,7 +76,6 @@ function sendMail(serverConfig, options) {
     if (!smtp) {
         return Promise.resolve({ ok: false, error: 'Почтовый сервер не настроен' });
     }
-    const transporter = getTransporter(serverConfig);
     const to = options && options.to ? String(options.to).trim() : '';
     const subject = options && options.subject ? String(options.subject) : '';
     const text = options && options.text ? String(options.text) : '';
@@ -76,17 +83,26 @@ function sendMail(serverConfig, options) {
     if (!to || !subject || (!text && !html)) {
         return Promise.resolve({ ok: false, error: 'Некорректные параметры письма' });
     }
-    return transporter.sendMail({
+    const mailOptions = {
         from: smtp.from,
         to: to,
         subject: subject,
         text: text || undefined,
         html: html || undefined
-    }).then(function() {
+    };
+
+    return sendWithTransporter(createTransporter(smtp), mailOptions).then(function() {
         return { ok: true };
     }).catch(function(err) {
         console.error('[Mail] Ошибка отправки:', err && err.message ? err.message : err);
-        return { ok: false, error: 'Не удалось отправить письмо. Попробуйте позже.' };
+        // Одна повторная попытка с новым соединением
+        return sendWithTransporter(createTransporter(smtp), mailOptions).then(function() {
+            console.log('[Mail] Повторная отправка успешна');
+            return { ok: true };
+        }).catch(function(err2) {
+            console.error('[Mail] Повторная отправка не удалась:', err2 && err2.message ? err2.message : err2);
+            return { ok: false, error: 'Не удалось отправить письмо. Попробуйте позже.' };
+        });
     });
 }
 
@@ -95,16 +111,19 @@ function verifySmtp(serverConfig) {
     if (!smtp) {
         return Promise.resolve({ ok: false, error: 'Почтовый сервер не настроен' });
     }
-    const transporter = getTransporter(serverConfig);
-    if (!transporter) {
-        return Promise.resolve({ ok: false, error: 'Не удалось создать SMTP-транспорт' });
-    }
+    const transporter = createTransporter(smtp);
     return transporter.verify().then(function() {
+        closeTransporter(transporter);
         return { ok: true, user: smtp.auth.user };
     }).catch(function(err) {
+        closeTransporter(transporter);
         const message = err && err.message ? err.message : String(err);
         return { ok: false, error: message, user: smtp.auth.user };
     });
+}
+
+function invalidateTransporterCache() {
+    // совместимость: кэша больше нет
 }
 
 module.exports = {
