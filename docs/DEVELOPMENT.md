@@ -118,7 +118,7 @@ sudo MYSQL_PASSWORD='секрет' bash scripts/setup-mysql-linux.sh
 npm run api
 ```
 
-Скрипт: ставит `mysql-server` (если нет), создаёт БД/пользователя, пишет `server-config.json` (`storage: mysql`), делает `npm run migrate:mysql`.
+Скрипт: ставит `mysql-server` или на Debian — `default-mysql-server` / `mariadb-server` (если нет), создаёт БД/пользователя, пишет `server-config.json` (`storage: mysql`), делает `npm run migrate:mysql`.
 
 Консольные операции (статус, dump, restore, SQL): см. [SERVER.md](SERVER.md) — «Операции MySQL (Debian / console)».  
 В UI: **site-admin → База данных** (статус, JSON-снимки, MySQL dumps).

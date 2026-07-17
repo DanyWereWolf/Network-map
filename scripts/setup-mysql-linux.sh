@@ -49,10 +49,35 @@ ensure_password() {
   fi
 }
 
+mysql_service_active() {
+  systemctl is-active --quiet mysql 2>/dev/null ||
+    systemctl is-active --quiet mysqld 2>/dev/null ||
+    systemctl is-active --quiet mariadb 2>/dev/null
+}
+
+start_mysql_service() {
+  systemctl enable --now mariadb 2>/dev/null ||
+    systemctl enable --now mysql 2>/dev/null ||
+    systemctl enable --now mysqld 2>/dev/null ||
+    true
+}
+
+# apt: candidate exists in current indexes (Debian has no mysql-server by default)
+apt_pkg_available() {
+  local pkg="$1"
+  apt-cache show "$pkg" >/dev/null 2>&1
+}
+
 install_mysql() {
-  if command -v mysqld >/dev/null 2>&1 || command -v mysql >/dev/null 2>&1; then
-    if systemctl is-active --quiet mysql 2>/dev/null || systemctl is-active --quiet mysqld 2>/dev/null || systemctl is-active --quiet mariadb 2>/dev/null; then
+  if command -v mysqld >/dev/null 2>&1 || command -v mariadbd >/dev/null 2>&1 || command -v mysql >/dev/null 2>&1; then
+    if mysql_service_active; then
       log "MySQL/MariaDB уже установлен и запущен"
+      return 0
+    fi
+    log "Сервер установлен, но не запущен — пробую стартовать…"
+    start_mysql_service
+    if mysql_service_active; then
+      log "MySQL/MariaDB запущен"
       return 0
     fi
   fi
@@ -63,21 +88,44 @@ install_mysql() {
   fi
 
   if command -v apt-get >/dev/null 2>&1; then
-    log "Установка mysql-server через apt…"
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -y
-    apt-get install -y mysql-server
-    systemctl enable --now mysql || systemctl enable --now mysqld || true
+    # Debian: mysql-server обычно нет; default-mysql-server / mariadb-server — да
+    if apt_pkg_available mysql-server; then
+      log "Установка mysql-server через apt…"
+      apt-get install -y mysql-server
+    elif apt_pkg_available default-mysql-server; then
+      log "Установка default-mysql-server (MariaDB) через apt…"
+      apt-get install -y default-mysql-server
+    elif apt_pkg_available mariadb-server; then
+      log "Установка mariadb-server через apt…"
+      apt-get install -y mariadb-server
+    else
+      echo "[setup-mysql] Нет пакетов mysql-server / default-mysql-server / mariadb-server в apt."
+      echo "[setup-mysql] Установите MariaDB вручную: sudo apt-get install -y mariadb-server"
+      exit 1
+    fi
+    start_mysql_service
   elif command -v dnf >/dev/null 2>&1; then
-    log "Установка mysql-server через dnf…"
-    dnf install -y mysql-server
-    systemctl enable --now mysqld
+    if dnf list available mysql-server >/dev/null 2>&1; then
+      log "Установка mysql-server через dnf…"
+      dnf install -y mysql-server
+    else
+      log "Установка mariadb-server через dnf…"
+      dnf install -y mariadb-server
+    fi
+    start_mysql_service
   elif command -v yum >/dev/null 2>&1; then
-    log "Установка mysql-server через yum…"
-    yum install -y mysql-server
-    systemctl enable --now mysqld
+    if yum list available mysql-server >/dev/null 2>&1; then
+      log "Установка mysql-server через yum…"
+      yum install -y mysql-server
+    else
+      log "Установка mariadb-server через yum…"
+      yum install -y mariadb-server
+    fi
+    start_mysql_service
   else
-    echo "[setup-mysql] Не найден apt/dnf/yum. Установите MySQL вручную и повторите с SKIP_APT=1"
+    echo "[setup-mysql] Не найден apt/dnf/yum. Установите MySQL/MariaDB вручную и повторите с SKIP_APT=1"
     exit 1
   fi
 }

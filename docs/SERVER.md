@@ -122,7 +122,7 @@ app.use(express.static(PUBLIC_DIR));
 
 Cutover: остановить API → `npm run migrate:mysql` → `"storage": "mysql"` → старт API. Откат: `"storage": "json"` и восстановление `store.json` из `data/backups/full/`.
 
-На Linux одной командой: `sudo bash scripts/setup-mysql-linux.sh` (ставит MySQL при необходимости, пишет конфиг, мигрирует `data/store.json`).
+На Linux одной командой: `sudo bash scripts/setup-mysql-linux.sh` (на Debian ставит MariaDB через `default-mysql-server` / `mariadb-server`, если пакета `mysql-server` нет; пишет конфиг, мигрирует `data/store.json`).
 
 ### Админка (`site-admin` → «База данных»)
 
