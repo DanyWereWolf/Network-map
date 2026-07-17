@@ -1083,7 +1083,11 @@ function resetDeviceCatalogTabToDefault(kind) {
     if (!DEVICE_CATALOG_ALLOWED_TABS[kind]) return;
     var def = getCatalogDefault(kind);
     if (kind === 'node') nodeDeviceCatalog = cloneDeepCatalog(def);
-    else if (kind === 'olt') oltDeviceCatalog = cloneDeepCatalog(def);
+    else if (kind === 'olt') {
+        oltDeviceCatalog = cloneDeepCatalog(def);
+        oltModelDefaultPorts = {};
+        oltModelPortTypes = {};
+    }
     else if (kind === 'onu') onuDeviceCatalog = cloneDeepCatalog(def);
     else if (kind === 'camera') cameraDeviceCatalog = cloneDeepCatalog(def);
     else if (kind === 'radioBridge') {
@@ -1095,10 +1099,6 @@ function resetDeviceCatalogTabToDefault(kind) {
         switchDeviceCatalog = cloneDeepCatalog(def);
         switchModelDefaultPorts = {};
         switchModelPortTypes = {};
-    } else if (kind === 'olt') {
-        oltDeviceCatalog = cloneDeepCatalog(def);
-        oltModelDefaultPorts = {};
-        oltModelPortTypes = {};
     } else if (kind === 'cable') {
         cableDeviceCatalog = cloneDeepCatalog(def);
         cableModelFiberSettings = {};

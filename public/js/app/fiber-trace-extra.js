@@ -164,9 +164,9 @@ function traceFromNodeSplitter(nodeObj, splitterId, outputIndex) {
         bodyHtml += '<div class="trace-branch-block" data-branch-index="' + pi + '">' + pathHtml.html + '</div>';
         stepNum = pathHtml.nextStepNumber;
     }
-    if (window.FiberTrace && FiberTrace.buildTraceActionsHtml) {
-        bodyHtml += FiberTrace.buildTraceActionsHtml();
-    }
+    bodyHtml = (typeof appendFiberTraceExtrasHtml === 'function')
+        ? appendFiberTraceExtrasHtml(bodyHtml, paths)
+        : bodyHtml + ((window.FiberTrace && FiberTrace.buildTraceActionsHtml) ? FiberTrace.buildTraceActionsHtml() : '');
     openFiberTraceModal({
         title: 'Трассировка к узлу',
         subtitle: nodeName + ' · выход сплиттера ' + (outputIndex + 1),
@@ -528,7 +528,8 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
     }
     var stepNumber = startStepNumber;
     var html = '';
-    var displayPath = (window.FiberTrace && FiberTrace.compressPathForDisplay) ? FiberTrace.compressPathForDisplay(path) : path;
+    var enrichedPath = (window.FiberTrace && FiberTrace.enrichPathWithLengths) ? FiberTrace.enrichPathWithLengths(path) : path;
+    var displayPath = (window.FiberTrace && FiberTrace.compressPathForDisplay) ? FiberTrace.compressPathForDisplay(enrichedPath) : enrichedPath;
     if (window.FiberTrace && FiberTrace.renderPathStatusHtml) {
         html += FiberTrace.renderPathStatusHtml(path);
     }
@@ -539,12 +540,14 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
         
         if (item.type === 'start') {
             var portBadge = (item.objectType === 'cross' && item.port) ? ' <span class="trace-port-badge">Порт ' + escapeHtml(String(item.port)) + '</span>' : '';
-            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-start">' + stepNumber + '</span><div class="trace-path-block trace-path-start"><div><span>' + traceIcon + ' ' + escapeHtml(item.objectName) + '</span>' + portBadge + '<span class="trace-path-muted"> (' + getObjectTypeName(item.objectType) + ')</span></div>' + showOnMapBtn + '</div></div>';
+            var reserveBadge = (item.reserveM != null && item.reserveM > 0) ? ' <span class="trace-item-reserve">+' + item.reserveM + ' м</span>' : '';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-start">' + stepNumber + '</span><div class="trace-path-block trace-path-start"><div><span>' + traceIcon + ' ' + escapeHtml(item.objectName) + '</span>' + portBadge + reserveBadge + '<span class="trace-path-muted"> (' + getObjectTypeName(item.objectType) + ')</span></div>' + showOnMapBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'object') {
             portBadge = (item.objectType === 'cross' && item.port) ? ' <span class="trace-port-badge">Порт ' + escapeHtml(String(item.port)) + '</span>' : '';
+            var reserveBadgeObj = (item.reserveM != null && item.reserveM > 0) ? ' <span class="trace-item-reserve">+' + item.reserveM + ' м</span>' : '';
             var wpMuted = (window.FiberTrace && FiberTrace.isWaypointType(item.objectType)) ? ' trace-path-block--waypoint' : '';
-            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">' + stepNumber + '</span><div class="trace-path-block trace-path-object' + wpMuted + '"><div><span>' + traceIcon + ' ' + escapeHtml(item.objectName) + '</span>' + portBadge + '<span class="trace-path-muted"> (' + getObjectTypeName(item.objectType) + ')</span></div>' + showOnMapBtn + '</div></div>';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">' + stepNumber + '</span><div class="trace-path-block trace-path-object' + wpMuted + '"><div><span>' + traceIcon + ' ' + escapeHtml(item.objectName) + '</span>' + portBadge + reserveBadgeObj + '<span class="trace-path-muted"> (' + getObjectTypeName(item.objectType) + ')</span></div>' + showOnMapBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'onuConnection') {
             var onuConnObjId = item.onu ? getObjectUniqueId(item.onu) : null;
@@ -567,7 +570,8 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
             var fiberName = fiber ? fiber.name : '';
             var fiberTextColor = (fiberColor === '#FFFFFF' || fiberColor === '#FFFACD' || fiberColor === '#FFFF00') ? '#000' : '#fff';
             var waypointsHtml = (item.waypoints && window.FiberTrace && FiberTrace.renderWaypointsInlineHtml) ? FiberTrace.renderWaypointsInlineHtml(item.waypoints) : '';
-            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-cable">➡</span><div class="trace-path-block trace-path-cable" style="border-left-color: ' + fiberColor + ';"><div style="display: flex; align-items: center; flex-wrap: wrap; gap: 4px;"><span>📡 ' + escapeHtml(item.cableName) + '</span><span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 16px; height: 16px; border-radius: 50%; background: ' + fiberColor + '; border: 1px solid #333; display: inline-block;"></span><span style="background: ' + fiberColor + '; color: ' + fiberTextColor + '; padding: 2px 8px; border-radius: 4px; font-weight: 600;">Жила ' + item.fiberNumber + (fiberName ? ': ' + fiberName : '') + '</span></span>' + waypointsHtml + '</div>' + cableShowBtn + '</div></div>';
+            var segLenHtml = (item.segmentLengthM != null) ? '<span class="trace-item-len">~' + item.segmentLengthM + ' м</span>' : '';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-cable">➡</span><div class="trace-path-block trace-path-cable" style="border-left-color: ' + fiberColor + ';"><div style="display: flex; align-items: center; flex-wrap: wrap; gap: 4px;"><span>📡 ' + escapeHtml(item.cableName) + '</span><span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 16px; height: 16px; border-radius: 50%; background: ' + fiberColor + '; border: 1px solid #333; display: inline-block;"></span><span style="background: ' + fiberColor + '; color: ' + fiberTextColor + '; padding: 2px 8px; border-radius: 4px; font-weight: 600;">Жила ' + item.fiberNumber + (fiberName ? ': ' + fiberName : '') + '</span></span>' + segLenHtml + waypointsHtml + '</div>' + cableShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'connection') {
             var fromCableTrace = item.fromCable || (item.fromCableId ? objects.find(function(o) { return o.properties && o.properties.get('uniqueId') === item.fromCableId; }) : null);
@@ -1316,9 +1320,9 @@ function showFiberTraceFromOLTPort(oltObj, oltName, portNumber, startObj, cableI
         bodyHtml += '<div class="trace-branch-block" data-branch-index="' + pi + '">' + pathHtml.html + '</div>';
         stepNum = pathHtml.nextStepNumber;
     }
-    if (window.FiberTrace && FiberTrace.buildTraceActionsHtml) {
-        bodyHtml += FiberTrace.buildTraceActionsHtml();
-    }
+    bodyHtml = (typeof appendFiberTraceExtrasHtml === 'function')
+        ? appendFiberTraceExtrasHtml(bodyHtml, displayPaths)
+        : bodyHtml + ((window.FiberTrace && FiberTrace.buildTraceActionsHtml) ? FiberTrace.buildTraceActionsHtml() : '');
     openFiberTraceModal({
         title: 'Трассировка от OLT',
         subtitle: formatOltPortDisplay(portNumber, portLabel, true) + ' · ' + oltName,
@@ -1441,9 +1445,9 @@ function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeO
         var pathHtmlSingle = renderOnePathToTraceHtml(displayPaths[0], 1);
         bodyHtml += pathHtmlSingle.html;
     }
-    if (window.FiberTrace && FiberTrace.buildTraceActionsHtml) {
-        bodyHtml += FiberTrace.buildTraceActionsHtml();
-    }
+    bodyHtml = (typeof appendFiberTraceExtrasHtml === 'function')
+        ? appendFiberTraceExtrasHtml(bodyHtml, highlightPaths)
+        : bodyHtml + ((window.FiberTrace && FiberTrace.buildTraceActionsHtml) ? FiberTrace.buildTraceActionsHtml() : '');
     openFiberTraceModal({
         title: 'Трассировка',
         subtitle: traceSubtitle,

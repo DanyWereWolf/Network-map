@@ -23,7 +23,7 @@ DATA_DIR   = ROOT_DIR/data
 
 | Модуль | Каталог данных |
 |--------|----------------|
-| `database.js` | `data/store.json`, `data/backups/<orgId>/` |
+| `database.js` | `data/store.json` (режим `json`) или MySQL (режим `mysql`); бэкапы `data/backups/<orgId>/` |
 | `avatars.js` | `data/avatars/` |
 | `chat-media.js` | `data/chat-media/` |
 | `news-media.js` | `data/news-media/` |
@@ -39,6 +39,8 @@ DATA_DIR   = ROOT_DIR/data
 | `publicSiteUrl` | Базовый URL для ссылок и SEO |
 | `freeMapObjectLimit` | Лимит объектов на карте (бесплатный тариф) |
 | `maxConcurrentUsers` | Одновременные сессии организации |
+| `storage` | `"json"` или `"mysql"` |
+| `mysql` | `{ host, port, user, password, database, connectionLimit }` |
 | `turnstileSiteKey`, `turnstileSecretKey` | Cloudflare Turnstile |
 | `authRateLimitWindowMs`, `authRateLimitMax` | Лимит попыток входа с IP |
 
@@ -71,7 +73,7 @@ app.use(express.static(PUBLIC_DIR));
 
 - Подключение: тот же host, путь `/sync`
 - Сообщения: `hello`, `state`, `op`, `cursor`, `lock_object`, `groupNames`, …
-- Состояние карты по организации: `mapDataByOrg` в `store.json`
+- Состояние карты по организации: `mapDataByOrg` (JSON-файл или сборка из MySQL)
 - Операции применяются на сервере (`applyOperationToState`) и рассылаются другим клиентам той же организации
 - Конфликты версий: поле `revision` на объектах/кабелях
 
@@ -84,10 +86,42 @@ app.use(express.static(PUBLIC_DIR));
 
 ## `database.js`
 
-JSON-хранилище в одном файле `store.json` (не SQLite):
+Хранилище за единым фасадом (`getMapData` / `setMapData` и платформенные CRUD). Режим задаётся в `server-config.json`:
 
-- `organizations`, `users`, `sessions`
-- `mapDataByOrg`, `historyByOrg`, `settingsByOrg`, `chatByOrg`
+| `storage` | Поведение |
+|-----------|-----------|
+| `"json"` (по умолчанию) | `data/store.json` |
+| `"mysql"` | MySQL: платформа + реляционная карта; клиенту по-прежнему отдаётся собранный JSON |
+
+### MySQL
+
+- Драйвер: `mysql2`, пул в `server/db/mysql.js`
+- Схема: `server/db/schema.sql`, миграции: `npm run db:migrate`
+- Сборка карты: `server/db/map-assemble.js` (`assembleMapData` / `disassembleMapData`)
+- Импорт из JSON: `npm run migrate:mysql` (читает `data/store.json` → таблицы + `org_map_blobs`)
+- Паритет JSON↔SQL: `npm run test:mysql-parity -- --org wew`
+- Бэкап: ежедневные per-org JSON как раньше; полный логический экспорт + опционально `mysqldump`: `npm run backup:mysql -- --dump`
+
+Конфиг:
+
+```json
+"storage": "mysql",
+"mysql": {
+  "host": "127.0.0.1",
+  "port": 3306,
+  "user": "root",
+  "password": "",
+  "database": "network_map"
+}
+```
+
+Переменные окружения: `STORAGE`, `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`.  
+`MYSQL_MIRROR_JSON=1` — дополнительно писать `store.json` как зеркало.
+
+Cutover: остановить API → `npm run migrate:mysql` → `"storage": "mysql"` → старт API. Откат: `"storage": "json"` и восстановление `store.json` из `data/backups/full/`.
+
+На Linux одной командой: `sudo bash scripts/setup-mysql-linux.sh` (ставит MySQL при необходимости, пишет конфиг, мигрирует `data/store.json`).
+
 - Ежедневные бэкапы карт в `data/backups/<org_id>/backup-YYYY-MM-DD.json`
 - Санитизация тел новостей через `news-sanitize.js` + `sanitize-html`
 

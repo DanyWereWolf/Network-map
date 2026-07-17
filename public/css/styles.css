@@ -11541,14 +11541,32 @@ html.cable-split-mode-active #map {
     -webkit-filter: invert(1) hue-rotate(180deg);
 }
 
-/* Трассировка: компактная карточка в модалке */
+/* Трассировка: на весь экран */
+#infoModal[data-trace-view="1"] {
+    padding: 0;
+    align-items: stretch;
+}
 #infoModal[data-trace-view="1"] .modal-content {
-    width: min(520px, 96vw);
-    max-width: 520px;
+    width: 100%;
+    max-width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+}
+#infoModal[data-trace-view="1"] .modal-content.panel-glass {
+    border: none;
+    box-shadow: none;
 }
 #infoModal[data-trace-view="1"] .modal-body {
     padding: 0;
-    max-height: min(72vh, 640px);
+    flex: 1;
+    min-height: 0;
+    max-height: none;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -11561,6 +11579,7 @@ html.cable-split-mode-active #map {
 }
 #infoModal[data-trace-view="1"] .fiber-modal-header {
     padding-bottom: 6px;
+    flex-shrink: 0;
 }
 #infoModal[data-trace-view="1"] .fiber-modal-header--trace #modalTitle {
     font-size: 1.05rem;
@@ -11568,6 +11587,69 @@ html.cable-split-mode-active #map {
 #infoModal[data-trace-view="1"] .fiber-modal-header--trace #modalTitleSub {
     font-size: 0.78rem;
     opacity: 0.9;
+}
+.trace-modal-pdf-bar {
+    display: none;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--accent-primary, #2563eb) 12%, var(--bg-card, #0f172a));
+}
+#infoModal[data-trace-view="1"] .trace-modal-pdf-bar {
+    display: flex;
+}
+.trace-modal-pdf-bar__text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.trace-modal-pdf-bar__text strong {
+    font-size: 0.92rem;
+    color: var(--text-primary);
+}
+.trace-modal-pdf-bar__text span {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+.trace-modal-pdf-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 40px;
+    padding: 8px 16px;
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, #06b6d4 55%, transparent);
+    background: #0891b2;
+    color: #fff;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 1px 2px rgba(8, 145, 178, 0.35);
+}
+.trace-modal-pdf-btn:hover {
+    background: #0e7490;
+}
+.trace-modal-pdf-btn:disabled {
+    opacity: 0.65;
+    cursor: wait;
+}
+[data-theme="dark"] .trace-modal-pdf-bar {
+    background: color-mix(in srgb, #06b6d4 14%, #0f172a);
+}
+[data-theme="dark"] .trace-modal-pdf-btn {
+    background: #06b6d4;
+    color: #0f172a;
+    border-color: #22d3ee;
+}
+[data-theme="dark"] .trace-modal-pdf-btn:hover {
+    background: #22d3ee;
 }
 .trace-view {
     display: flex;
@@ -11928,6 +12010,354 @@ html.cable-split-mode-active #map {
     font-size: 0.8rem;
     white-space: nowrap;
 }
+.trace-path-status-reserve {
+    color: var(--accent-warning, #f59e0b);
+    font-size: 0.8rem;
+    white-space: nowrap;
+    font-weight: 600;
+}
+.trace-item-len {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+.trace-item-reserve {
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--accent-warning, #b45309);
+    white-space: nowrap;
+}
+.trace-free-fibers {
+    margin: 10px 0 8px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+}
+.trace-free-fibers-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+.trace-free-fibers-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.trace-free-fibers-item {
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card, var(--bg-primary));
+    padding: 0;
+}
+.trace-free-fibers-item summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+    list-style: none;
+    font-size: 0.78rem;
+}
+.trace-free-fibers-item summary::-webkit-details-marker {
+    display: none;
+}
+.trace-free-fibers-name {
+    font-weight: 500;
+    color: var(--text-primary);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.trace-free-fibers-count {
+    flex-shrink: 0;
+    font-weight: 600;
+    color: var(--accent-success, #16a34a);
+    font-size: 0.72rem;
+}
+.trace-free-fibers-count--none {
+    color: var(--text-muted);
+}
+.trace-free-fibers-nums {
+    padding: 4px 10px 8px;
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+    line-height: 1.35;
+    word-break: break-word;
+}
+.trace-free-fibers-nums--empty {
+    color: var(--text-muted);
+    font-style: italic;
+}
+.trace-free-fibers-hint {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+/* Схема жил (Fiberbase-like) */
+.trace-schematic {
+    margin: 0 0 14px;
+    padding: 12px 14px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+    flex: 0 0 auto;
+}
+.trace-schematic-branch {
+    margin-bottom: 12px;
+}
+.trace-schematic-branch-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--accent-primary);
+    margin-bottom: 6px;
+}
+.trace-schematic-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 12px;
+    margin-bottom: 10px;
+}
+.trace-schematic-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.trace-schematic-tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+.trace-sch-zoom-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 6px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm, 6px);
+    background: var(--bg-card);
+}
+.trace-sch-zoom-btn {
+    min-width: 26px;
+    height: 26px;
+    padding: 0 5px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm, 6px);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 1;
+}
+.trace-sch-zoom-btn:hover {
+    background: var(--bg-hover, var(--bg-accent));
+}
+.trace-sch-zoom-slider {
+    width: 72px;
+    accent-color: var(--accent-primary, #3b82f6);
+}
+.trace-sch-zoom-label {
+    min-width: 38px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-align: center;
+}
+.trace-sch-export-pdf {
+    margin-left: 0 !important;
+}
+.trace-schematic-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+.trace-sch-leg {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.trace-sch-leg::before {
+    content: '';
+    width: 18px;
+    height: 4px;
+    border-radius: 2px;
+    background: currentColor;
+}
+.trace-sch-leg--traced { color: #06b6d4; font-weight: 600; }
+.trace-sch-leg--traced::before { height: 5px; background: #06b6d4; box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.25); }
+.trace-sch-leg--used { color: #64748b; }
+.trace-sch-leg--free { color: #94a3b8; }
+.trace-sch-leg--free::before { background: repeating-linear-gradient(90deg, #94a3b8 0 2px, transparent 2px 4px); }
+.trace-sch-leg--branch { color: #f59e0b; }
+.trace-sch-overview {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    overflow-x: auto;
+    padding: 6px 0 10px;
+    margin-bottom: 4px;
+}
+.trace-sch-overview-node {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    min-width: 72px;
+    max-width: 120px;
+}
+.trace-sch-overview-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #3b82f6;
+    border: 2px solid var(--bg-card, #fff);
+    box-shadow: 0 0 0 1px #3b82f6;
+}
+.trace-sch-overview-label {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    text-align: center;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+.trace-sch-overview-line {
+    flex: 1 1 32px;
+    min-width: 20px;
+    height: 3px;
+    background: #3b82f6;
+    opacity: 0.55;
+    margin: 0 4px 16px;
+}
+.trace-schematic-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+.trace-schematic-scroll {
+    overflow-x: auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 6px 4px 10px;
+    min-height: 200px;
+    max-height: min(38vh, 360px);
+    background: var(--bg-card, var(--bg-primary));
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+}
+#infoModal[data-trace-view="1"] .trace-schematic-scroll {
+    min-height: 220px;
+    max-height: min(40vh, 380px);
+}
+.trace-schematic-svg {
+    display: block;
+    width: auto;
+    max-width: none;
+    height: auto;
+    min-height: 0;
+    font-family: inherit;
+}
+.trace-sch-zoom-inner {
+    display: inline-block;
+    min-width: 100%;
+    line-height: 0;
+}
+.trace-sch-band {
+    fill: rgba(148, 163, 184, 0.08);
+    stroke: rgba(148, 163, 184, 0.18);
+    stroke-width: 1;
+}
+[data-theme="dark"] .trace-sch-band {
+    fill: rgba(148, 163, 184, 0.06);
+    stroke: rgba(148, 163, 184, 0.14);
+}
+.trace-sch-node-bg {
+    fill: var(--bg-card, rgba(15, 23, 42, 0.55));
+    stroke: rgba(59, 130, 246, 0.45);
+    stroke-width: 1.5;
+}
+[data-theme="dark"] .trace-sch-node-bg {
+    fill: rgba(15, 23, 42, 0.65);
+    stroke: rgba(96, 165, 250, 0.4);
+}
+.trace-sch-node-axis { display: none; }
+.trace-sch-node-title {
+    font-size: 11px;
+    font-weight: 700;
+    fill: var(--text-primary, #e2e8f0);
+}
+.trace-sch-node-type {
+    font-size: 9px;
+    fill: var(--text-secondary, #94a3b8);
+}
+.trace-sch-node-port {
+    font-size: 10px;
+    font-weight: 700;
+    fill: #a78bfa;
+}
+.trace-sch-node-reserve {
+    font-size: 10px;
+    font-weight: 600;
+    fill: #d97706;
+}
+.trace-sch-cable-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    fill: var(--text-secondary, #94a3b8);
+}
+.trace-sch-cable-label--link { fill: #a78bfa; }
+.trace-sch-traced-badge,
+.trace-sch-trunk,
+.trace-sch-trunk--link { display: none; }
+.trace-sch-fiber-num {
+    font-size: 9px;
+    font-weight: 600;
+    fill: var(--text-muted, #64748b);
+}
+.trace-sch-fiber-num--traced {
+    font-size: 11px;
+    font-weight: 800;
+    fill: #22d3ee;
+}
+.trace-sch-branch-label,
+.trace-sch-end-label {
+    font-size: 10px;
+    font-weight: 500;
+    fill: var(--text-secondary, #94a3b8);
+}
+.trace-sch-splice-label {
+    font-size: 10px;
+    font-weight: 700;
+    fill: #22d3ee;
+}
+.trace-schematic-hint {
+    margin: 8px 0 0;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    line-height: 1.35;
+}
+
 .trace-waypoints-inline {
     display: block;
     width: 100%;

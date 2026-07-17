@@ -11,36 +11,130 @@ function getCableRoutePointsForTrace(cable) {
     return pts;
 }
 
+function getTraceRouteMatchFn() {
+    if (typeof traceRouteObjectsMatch === 'function') return traceRouteObjectsMatch;
+    return function(a, b) {
+        return a === b || !!(a && b && getObjectUniqueId(a) === getObjectUniqueId(b));
+    };
+}
+
+function getTracePointIndexOnRoute(pts, obj) {
+    if (!pts || !obj) return -1;
+    if (typeof getPointIndexOnCableRoute === 'function') return getPointIndexOnCableRoute(pts, obj);
+    var routeMatch = getTraceRouteMatchFn();
+    for (var i = 0; i < pts.length; i++) {
+        if (routeMatch(pts[i], obj)) return i;
+    }
+    return -1;
+}
+
+/**
+ * Следующий индекс в points[] с учётом направления.
+ * cameFrom — объект, откуда пришли на current (не «устаревший» previous из прошлого шага).
+ * Возвращает -1 если шаг не найден; -2 если направление выводит за пределы points[].
+ */
+function getNextCableRoutePointIndex(pts, currentObj, cameFrom) {
+    if (!pts || !currentObj || pts.length < 2) return -1;
+    var routeMatch = getTraceRouteMatchFn();
+    var idx = getTracePointIndexOnRoute(pts, currentObj);
+    if (idx === -1) return -1;
+
+    var fromIdx = cameFrom ? getTracePointIndexOnRoute(pts, cameFrom) : -1;
+    if (fromIdx !== -1 && fromIdx !== idx) {
+        var dir = fromIdx < idx ? 1 : -1;
+        var stepped = idx + dir;
+        if (stepped >= 0 && stepped < pts.length) return stepped;
+        return -2;
+    }
+
+    var prevIdx = idx - 1;
+    var nextIdx = idx + 1;
+    if (cameFrom) {
+        if (prevIdx >= 0 && routeMatch(pts[prevIdx], cameFrom) && nextIdx < pts.length) return nextIdx;
+        if (nextIdx < pts.length && routeMatch(pts[nextIdx], cameFrom) && prevIdx >= 0) return prevIdx;
+    }
+    if (nextIdx < pts.length) return nextIdx;
+    // На конце маршрута без соседа вперёд — не разворачиваться назад (это обрывало трассировку).
+    if (idx === pts.length - 1 || idx === 0) return -2;
+    if (prevIdx >= 0) return prevIdx;
+    return -1;
+}
+
+/** Если шаг вышел за points[], взять from/to, которого ещё нет в текущей точке. */
+function getCableRouteEndpointBeyondPoints(cable, pts, currentObj, cameFrom) {
+    if (!cable || !cable.properties || !currentObj) return null;
+    var fromObj = cable.properties.get('from');
+    var toObj = cable.properties.get('to');
+    if (!fromObj || !toObj) return null;
+    var routeMatch = getTraceRouteMatchFn();
+    var curIdx = pts ? getTracePointIndexOnRoute(pts, currentObj) : -1;
+    var fromIdx = cameFrom && pts ? getTracePointIndexOnRoute(pts, cameFrom) : -1;
+    var movingForward = fromIdx !== -1 && curIdx !== -1 ? fromIdx < curIdx : curIdx === (pts ? pts.length - 1 : -1);
+
+    if (movingForward) {
+        if (!routeMatch(toObj, currentObj)) return toObj;
+        if (!routeMatch(fromObj, currentObj)) return fromObj;
+    } else {
+        if (!routeMatch(fromObj, currentObj)) return fromObj;
+        if (!routeMatch(toObj, currentObj)) return toObj;
+    }
+    if (routeMatch(fromObj, currentObj)) return toObj;
+    if (routeMatch(toObj, currentObj)) return fromObj;
+    if (pts && pts.length && curIdx === pts.length - 1 && !routeMatch(toObj, pts[pts.length - 1])) return toObj;
+    if (pts && curIdx === 0 && !routeMatch(fromObj, pts[0])) return fromObj;
+    return null;
+}
+
+/** Следующая точка маршрута на том же кабеле (опора/крепление/колодец или конец). */
+function resolveNextPointThroughWaypoint(cable, waypointObj, cameFrom) {
+    if (!cable || !waypointObj) return null;
+    var pts = getCableRoutePointsForTrace(cable);
+    var routeMatch = getTraceRouteMatchFn();
+    if (pts && pts.length >= 2) {
+        var nextIdx = getNextCableRoutePointIndex(pts, waypointObj, cameFrom);
+        if (nextIdx >= 0 && nextIdx < pts.length) {
+            var nextPt = pts[nextIdx];
+            if (nextPt && !routeMatch(nextPt, waypointObj)) return nextPt;
+        }
+        if (nextIdx === -2) {
+            var beyond = getCableRouteEndpointBeyondPoints(cable, pts, waypointObj, cameFrom);
+            if (beyond && !routeMatch(beyond, waypointObj)) return beyond;
+        }
+        // На краю points[] без явного направления — не разворачиваться назад, а выйти на from/to.
+        var curIdx = getTracePointIndexOnRoute(pts, waypointObj);
+        if (curIdx === 0 || curIdx === pts.length - 1) {
+            var endBeyond = getCableRouteEndpointBeyondPoints(cable, pts, waypointObj, cameFrom);
+            if (endBeyond && !routeMatch(endBeyond, waypointObj) && getTracePointIndexOnRoute(pts, endBeyond) === -1) {
+                return endBeyond;
+            }
+        }
+    }
+    var fromObj = cable.properties.get('from');
+    var toObj = cable.properties.get('to');
+    if (fromObj && toObj) {
+        if (routeMatch(fromObj, waypointObj)) return toObj;
+        if (routeMatch(toObj, waypointObj)) return fromObj;
+    }
+    return null;
+}
+
 /** Продолжить трассировку по промежуточной точке маршрута кабеля (муфта/кросс на трассе без сварки). */
 function tryAdvanceTraceAlongCableRoute(path, hostOnRoute, previousObject, currentCable, currentCableId, currentFiberNumber) {
     if (!hostOnRoute || !currentCable) return null;
+    var routeMatch = getTraceRouteMatchFn();
+    var fromObj = currentCable.properties.get('from');
+    var toObj = currentCable.properties.get('to');
+    // Конец кабеля (from/to) — не разворачиваться назад по той же трассе.
+    if ((fromObj && routeMatch(fromObj, hostOnRoute)) || (toObj && routeMatch(toObj, hostOnRoute))) {
+        return null;
+    }
     var pts = getCableRoutePointsForTrace(currentCable);
-    if (!pts || !Array.isArray(pts) || pts.length <= 2) return null;
-    var routeMatch = typeof traceRouteObjectsMatch === 'function' ? traceRouteObjectsMatch : function(a, b) {
-        return a === b || (a && b && getObjectUniqueId(a) === getObjectUniqueId(b));
-    };
-    var idx = -1;
-    for (var i = 0; i < pts.length; i++) {
-        if (routeMatch(pts[i], hostOnRoute)) { idx = i; break; }
-    }
-    if (idx === -1) return null;
-    var prevId = previousObject ? getObjectUniqueId(previousObject) : null;
-    var nextIdx = -1;
-    if (prevId) {
-        var pi = idx - 1;
-        var ni = idx + 1;
-        var prevPtId = (pi >= 0 && pts[pi]) ? getObjectUniqueId(pts[pi]) : null;
-        var nextPtId = (ni < pts.length && pts[ni]) ? getObjectUniqueId(pts[ni]) : null;
-        if (prevPtId === prevId && ni < pts.length) nextIdx = ni;
-        else if (nextPtId === prevId && pi >= 0) nextIdx = pi;
-    }
-    if (nextIdx === -1) {
-        if (idx < pts.length - 1) nextIdx = idx + 1;
-        else if (idx > 0) nextIdx = idx - 1;
-    }
-    if (nextIdx < 0 || nextIdx >= pts.length) return null;
-    var nextPt = pts[nextIdx];
+    if (!pts || pts.length <= 2) return null;
+    var hostIdx = getTracePointIndexOnRoute(pts, hostOnRoute);
+    if (hostIdx <= 0 || hostIdx >= pts.length - 1) return null;
+    var nextPt = resolveNextPointThroughWaypoint(currentCable, hostOnRoute, previousObject);
     if (!nextPt || !nextPt.properties) return null;
+    if (routeMatch(nextPt, hostOnRoute)) return null;
     var nextType = nextPt.properties.get('type');
     path.push({
         type: 'object',
@@ -201,19 +295,14 @@ function getOtherEndOnCableRoute(cable, currentObj, previousObj, traceOpts) {
     var currentId = getObjectUniqueId(currentObj);
     var previousId = previousObj ? getObjectUniqueId(previousObj) : null;
     var endpointRole = cableEndpointRole(cable, currentObj);
-    var routeMatch = typeof traceRouteObjectsMatch === 'function' ? traceRouteObjectsMatch : function(a, b) {
-        return a === b || (a && b && getObjectUniqueId(a) === getObjectUniqueId(b));
-    };
+    var routeMatch = getTraceRouteMatchFn();
     var finishRouteHop = function(obj) {
         if (!obj || typeof resolveTraceRouteObject !== 'function') return obj;
         return resolveTraceRouteObject(obj, cable, traceOpts) || obj;
     };
 
     if (pts && pts.length > 2) {
-        var idx = -1;
-        for (var i = 0; i < pts.length; i++) {
-            if (routeMatch(pts[i], currentObj)) { idx = i; break; }
-        }
+        var idx = getTracePointIndexOnRoute(pts, currentObj);
         if (idx === -1 && endpointRole) {
             var firstPt = pts[0];
             var lastPt = pts[pts.length - 1];
@@ -244,14 +333,14 @@ function getOtherEndOnCableRoute(cable, currentObj, previousObj, traceOpts) {
             return null;
         }
         if (idx === -1) return null;
+        var steppedIdx = getNextCableRoutePointIndex(pts, currentObj, previousObj);
+        if (steppedIdx >= 0 && steppedIdx < pts.length) return finishRouteHop(pts[steppedIdx]);
+        if (steppedIdx === -2) {
+            var beyond = getCableRouteEndpointBeyondPoints(cable, pts, currentObj, previousObj);
+            if (beyond) return finishRouteHop(beyond);
+        }
         var nextIdx = idx + 1;
         var prevIdx = idx - 1;
-        if (previousId) {
-            var prevPtId = (prevIdx >= 0 && pts[prevIdx]) ? getObjectUniqueId(pts[prevIdx]) : null;
-            var nextPtId = (nextIdx < pts.length && pts[nextIdx]) ? getObjectUniqueId(pts[nextIdx]) : null;
-            if (prevPtId === previousId && nextIdx < pts.length) return finishRouteHop(pts[nextIdx]);
-            if (nextPtId === previousId && prevIdx >= 0) return finishRouteHop(pts[prevIdx]);
-        }
         if (nextIdx < pts.length) return finishRouteHop(pts[nextIdx]);
         if (prevIdx >= 0) return finishRouteHop(pts[prevIdx]);
         return null;
@@ -352,9 +441,23 @@ function getCableRoutePosition(cable, currentObj) {
 }
 
 function findNextCableThroughSupport(supportObj, excludeCable) {
+    if (!supportObj) return null;
+    var excludeId = excludeCable ? excludeCable.properties.get('uniqueId') : null;
+    var candidates = typeof getCablesThroughSupport === 'function'
+        ? getCablesThroughSupport(supportObj)
+        : null;
+    if (Array.isArray(candidates) && candidates.length) {
+        for (var i = 0; i < candidates.length; i++) {
+            var c = candidates[i];
+            if (!c || !c.properties || c.properties.get('type') !== 'cable') continue;
+            var cid = c.properties.get('uniqueId');
+            if (excludeId && cid === excludeId) continue;
+            return c;
+        }
+        return null;
+    }
     var supportCoords = supportObj.geometry ? supportObj.geometry.getCoordinates() : null;
     var supportId = getObjectUniqueId(supportObj);
-    var excludeId = excludeCable ? excludeCable.properties.get('uniqueId') : null;
     for (var ci = 0; ci < objects.length; ci++) {
         var cable = objects[ci];
         if (!cable.properties || cable.properties.get('type') !== 'cable') continue;
@@ -367,6 +470,10 @@ function findNextCableThroughSupport(supportObj, excludeCable) {
         var fromId = getObjectUniqueId(fromObj);
         var toId = getObjectUniqueId(toObj);
         if (supportId && (fromId === supportId || toId === supportId)) return cable;
+        var points = cable.properties.get('points');
+        if (Array.isArray(points) && points.some(function(p) {
+            return p === supportObj || (p && getObjectUniqueId(p) === supportId);
+        })) return cable;
         if (supportCoords) {
             var fromCoords = fromObj.geometry ? fromObj.geometry.getCoordinates() : null;
             var toCoords = toObj.geometry ? toObj.geometry.getCoordinates() : null;
@@ -527,6 +634,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
     let iterations = 0;
     var afterSplitterInputBranch = false;
     var allowHostRevisitFromSplitter = false;
+    var originCableExitUsed = false;
     var nextObject;
     
     while (iterations < maxIterations) {
@@ -640,8 +748,12 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
                 previousObject = currentObject;
                 currentObject = nextObject;
             } else if (traceOptions.originNodeId && (traceOptions.startHostId || traceOptions.startCrossId) && nextObjectId === (traceOptions.startHostId || traceOptions.startCrossId)) {
+                // Один раз выйти с стартового кросса в другую сторону; иначе — пинг-понг по тому же кабелю.
+                if (originCableExitUsed) break;
                 var exitOnOriginCross = getOtherEnd(currentCable, nextObject, currentObject);
-                if (exitOnOriginCross) {
+                var exitId = exitOnOriginCross ? getObjectUniqueId(exitOnOriginCross) : null;
+                if (exitOnOriginCross && exitId && !visitedObjects.has(exitId)) {
+                    originCableExitUsed = true;
                     if (path.length && path[path.length - 1].type === 'object' && path[path.length - 1].object === nextObject) {
                         path.pop();
                     }
@@ -1057,54 +1169,55 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
             currentObject = nextObject;
             
         } else if (objType === 'support' || objType === 'attachment' || objType === 'manhole') {
-            var pts = getCableRoutePointsForTrace(currentCable);
-            if (pts && Array.isArray(pts) && pts.length > 2) {
-                var currentIdx = -1;
-                var nextObjId = getObjectUniqueId(nextObject);
-                for (var pi = 0; pi < pts.length; pi++) {
-                    if (pts[pi] === nextObject || (pts[pi] && getObjectUniqueId(pts[pi]) === nextObjId)) {
-                        currentIdx = pi;
-                        break;
-                    }
-                }
-                if (currentIdx !== -1) {
-                    var prevObjId = previousObject ? getObjectUniqueId(previousObject) : null;
-                    var nextPointIdx = -1;
-                    
-                    if (prevObjId) {
-                        var prevIdx = currentIdx - 1;
-                        var nextIdx = currentIdx + 1;
-                        var prevPtId = (prevIdx >= 0 && pts[prevIdx]) ? getObjectUniqueId(pts[prevIdx]) : null;
-                        var nextPtId = (nextIdx < pts.length && pts[nextIdx]) ? getObjectUniqueId(pts[nextIdx]) : null;
-                        
-                        if (prevPtId === prevObjId && nextIdx < pts.length) {
-                            nextPointIdx = nextIdx;
-                        } else if (nextPtId === prevObjId && prevIdx >= 0) {
-                            nextPointIdx = prevIdx;
-                        }
-                    }
-                    
-                    if (nextPointIdx === -1) {
-                        if (currentIdx < pts.length - 1) nextPointIdx = currentIdx + 1;
-                        else if (currentIdx > 0) nextPointIdx = currentIdx - 1;
-                    }
-                    
-                    if (nextPointIdx !== -1 && nextPointIdx >= 0 && nextPointIdx < pts.length) {
-                        var nextPt = pts[nextPointIdx];
-                        if (nextPt) {
-                            path.push({
-                                type: 'object',
-                                objectType: nextPt.properties.get('type'),
-                                objectName: nextPt.properties.get('name') || getObjectTypeName(nextPt.properties.get('type')),
-                                object: nextPt,
-                                port: (nextPt.properties.get('type') === 'cross') ? ((nextPt.properties.get('fiberPorts') || {})[currentCableId + '-' + currentFiberNumber] || null) : null
-                            });
-                            previousObject = nextObject;
-                            currentObject = nextPt;
-                            afterSplitterInputBranch = true;
-                            continue;
-                        }
-                    }
+            // Откуда реально пришли: currentObject на первом заходе, previousObject при afterSplitter.
+            var wpMatch = getTraceRouteMatchFn();
+            var cameFromWp = currentObject;
+            if (!cameFromWp || wpMatch(cameFromWp, nextObject)) {
+                cameFromWp = previousObject;
+            }
+            var nextPt = typeof resolveNextPointThroughWaypoint === 'function'
+                ? resolveNextPointThroughWaypoint(currentCable, nextObject, cameFromWp)
+                : null;
+            if (nextPt && nextPt.properties) {
+                path.push({
+                    type: 'object',
+                    objectType: nextPt.properties.get('type'),
+                    objectName: nextPt.properties.get('name') || getObjectTypeName(nextPt.properties.get('type')),
+                    object: nextPt,
+                    port: (nextPt.properties.get('type') === 'cross') ? ((nextPt.properties.get('fiberPorts') || {})[currentCableId + '-' + currentFiberNumber] || null) : null
+                });
+                previousObject = nextObject;
+                currentObject = nextPt;
+                afterSplitterInputBranch = true;
+                continue;
+            }
+            var nextCableViaWp = findNextCableThroughSupport(nextObject, currentCable);
+            if (nextCableViaWp) {
+                var afterHop = getOtherEnd(nextCableViaWp, nextObject, cameFromWp || previousObject);
+                var afterHopId = afterHop ? getObjectUniqueId(afterHop) : null;
+                if (afterHop && afterHopId && !visitedObjects.has(afterHopId)) {
+                    var hopCableId = nextCableViaWp.properties.get('uniqueId');
+                    var hopCableName = nextCableViaWp.properties.get('cableName') || getCableDescription(nextCableViaWp.properties.get('cableType'));
+                    path.push({
+                        type: 'cable',
+                        cableId: hopCableId,
+                        cableName: hopCableName,
+                        fiberNumber: currentFiberNumber,
+                        cable: nextCableViaWp
+                    });
+                    path.push({
+                        type: 'object',
+                        objectType: afterHop.properties.get('type'),
+                        objectName: afterHop.properties.get('name') || getObjectTypeName(afterHop.properties.get('type')),
+                        object: afterHop,
+                        port: (afterHop.properties.get('type') === 'cross') ? ((afterHop.properties.get('fiberPorts') || {})[hopCableId + '-' + currentFiberNumber] || null) : null
+                    });
+                    currentCable = nextCableViaWp;
+                    currentCableId = hopCableId;
+                    previousObject = nextObject;
+                    currentObject = afterHop;
+                    afterSplitterInputBranch = true;
+                    continue;
                 }
             }
             break;
@@ -1639,54 +1752,41 @@ function traceFiberPath(startCableId, startFiberNumber) {
             previousObject = currentObject;
             currentObject = nextObject;
         } else if (objType === 'support' || objType === 'attachment' || objType === 'manhole') {
-            var ptsWp = getCableRoutePointsForTrace(currentCable);
-            if (ptsWp && Array.isArray(ptsWp) && ptsWp.length > 2) {
-                var wpIdx = -1;
-                var wpObjId = getObjectUniqueId(currentObject);
-                for (var wpi = 0; wpi < ptsWp.length; wpi++) {
-                    if (ptsWp[wpi] === currentObject || (ptsWp[wpi] && getObjectUniqueId(ptsWp[wpi]) === wpObjId)) {
-                        wpIdx = wpi;
-                        break;
-                    }
-                }
-                if (wpIdx !== -1) {
-                    var wpPrevObjId = previousObject ? getObjectUniqueId(previousObject) : null;
-                    var wpNextPointIdx = -1;
-                    if (wpPrevObjId) {
-                        var wpPrevIdx = wpIdx - 1;
-                        var wpNextIdx = wpIdx + 1;
-                        var wpPrevPtId = (wpPrevIdx >= 0 && ptsWp[wpPrevIdx]) ? getObjectUniqueId(ptsWp[wpPrevIdx]) : null;
-                        var wpNextPtId = (wpNextIdx < ptsWp.length && ptsWp[wpNextIdx]) ? getObjectUniqueId(ptsWp[wpNextIdx]) : null;
-                        if (wpPrevPtId === wpPrevObjId && wpNextIdx < ptsWp.length) {
-                            wpNextPointIdx = wpNextIdx;
-                        } else if (wpNextPtId === wpPrevObjId && wpPrevIdx >= 0) {
-                            wpNextPointIdx = wpPrevIdx;
-                        }
-                    }
-                    if (wpNextPointIdx === -1) {
-                        if (wpIdx < ptsWp.length - 1) wpNextPointIdx = wpIdx + 1;
-                        else if (wpIdx > 0) wpNextPointIdx = wpIdx - 1;
-                    }
-                    if (wpNextPointIdx !== -1 && wpNextPointIdx >= 0 && wpNextPointIdx < ptsWp.length) {
-                        path.push({
-                            type: 'cable',
-                            cableId: currentCableId,
-                            cableName: currentCable.properties.get('cableName') || getCableDescription(currentCable.properties.get('cableType')),
-                            fiberNumber: currentFiberNumber,
-                            cable: currentCable
-                        });
-                        previousObject = currentObject;
-                        currentObject = ptsWp[wpNextPointIdx];
-                        continue;
-                    }
-                }
+            var nextPtLegacy = typeof resolveNextPointThroughWaypoint === 'function'
+                ? resolveNextPointThroughWaypoint(currentCable, currentObject, previousObject)
+                : null;
+            if (nextPtLegacy) {
+                var nextPtLegacyId = getObjectUniqueId(nextPtLegacy);
+                if (nextPtLegacyId && visitedObjects.has(nextPtLegacyId)) break;
+                path.push({
+                    type: 'cable',
+                    cableId: currentCableId,
+                    cableName: currentCable.properties.get('cableName') || getCableDescription(currentCable.properties.get('cableType')),
+                    fiberNumber: currentFiberNumber,
+                    cable: currentCable
+                });
+                path.push({
+                    type: 'object',
+                    objectType: nextPtLegacy.properties.get('type'),
+                    objectName: nextPtLegacy.properties.get('name') || getObjectTypeName(nextPtLegacy.properties.get('type')),
+                    object: nextPtLegacy,
+                    port: null
+                });
+                previousObject = currentObject;
+                currentObject = nextPtLegacy;
+                continue;
             }
-            if (objType !== 'support') break;
 
             const nextCableForSupport = findNextCableThroughSupport(currentObject, currentCable);
             
             if (!nextCableForSupport) {
                 
+                break;
+            }
+
+            const nextObjectAfterSupport = getOtherEnd(nextCableForSupport, currentObject, previousObject);
+            const afterSupportId = nextObjectAfterSupport ? getObjectUniqueId(nextObjectAfterSupport) : null;
+            if (!nextObjectAfterSupport || (afterSupportId && visitedObjects.has(afterSupportId))) {
                 break;
             }
 
@@ -1700,12 +1800,6 @@ function traceFiberPath(startCableId, startFiberNumber) {
                 fiberNumber: currentFiberNumber,
                 cable: nextCableForSupport
             });
-
-            const nextObjectAfterSupport = getOtherEnd(nextCableForSupport, currentObject, previousObject);
-            
-            if (!nextObjectAfterSupport) {
-                break;
-            }
             
             currentCable = nextCableForSupport;
             currentCableId = supportNextCableId;
@@ -1732,16 +1826,29 @@ function showFiberTrace(cableId, fiberNumber) {
     const path = result.path;
 
     var pathHtml = renderOnePathToTraceHtml(path, 1);
-    var bodyHtml = pathHtml.html;
-    if (window.FiberTrace && FiberTrace.buildTraceActionsHtml) {
-        bodyHtml += FiberTrace.buildTraceActionsHtml();
-    }
+    var bodyHtml = appendFiberTraceExtrasHtml(pathHtml.html, [path]);
     openFiberTraceModal({
         title: 'Трассировка · жила ' + fiberNumber,
         subtitle: 'Маршрут по кабелю',
         bodyHtml: bodyHtml,
         paths: [path]
     });
+}
+
+function appendFiberTraceExtrasHtml(bodyHtml, paths) {
+    bodyHtml = bodyHtml || '';
+    var extras = '';
+    if (window.FiberTrace && FiberTrace.buildTraceSchematicsHtml) {
+        extras += FiberTrace.buildTraceSchematicsHtml(paths || []);
+    }
+    extras += bodyHtml;
+    if (window.FiberTrace && FiberTrace.buildFreeFibersHtml) {
+        extras += FiberTrace.buildFreeFibersHtml(paths || []);
+    }
+    if (window.FiberTrace && FiberTrace.buildTraceActionsHtml) {
+        extras += FiberTrace.buildTraceActionsHtml();
+    }
+    return extras;
 }
 
 let traceHighlightObjects = [];
@@ -1767,6 +1874,9 @@ function returnFromTraceToObjectCard() {
     if (modal) {
         modal.removeAttribute('data-trace-view');
         modal.classList.remove('modal--centered');
+    }
+    if (window.FiberTrace && FiberTrace.removeTraceModalPdfBar) {
+        FiberTrace.removeTraceModalPdfBar();
     }
     var traceHeader = document.getElementById('fiberModalHeader');
     if (traceHeader) traceHeader.classList.remove('fiber-modal-header--trace');

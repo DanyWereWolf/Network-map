@@ -9,6 +9,15 @@
   "authRateLimitWindowMs": 900000,
   "authRateLimitMax": 20,
   "adminEmail": "admin@example.com",
+  "storage": "json",
+  "mysql": {
+    "host": "127.0.0.1",
+    "port": 3306,
+    "user": "root",
+    "password": "",
+    "database": "network_map",
+    "connectionLimit": 10
+  },
   "smtp": {
     "host": "smtp.mail.ru",
     "port": 465,

@@ -431,6 +431,18 @@ app.post('/api/map', (req, res) => {
     try {
         const data = req.body && req.body.data;
         if (!Array.isArray(data)) return res.status(400).json({ error: 'Ожидается массив data' });
+        var allowShrink = !!(req.body && req.body.allowShrink && isGlobalAdmin(user));
+        var shrink = db.assertMapDataNotDangerousShrink
+            ? db.assertMapDataNotDangerousShrink(orgId, data, { allowShrink: allowShrink })
+            : { ok: true };
+        if (!shrink.ok) {
+            return res.status(400).json({
+                error: shrink.error,
+                code: 'MAP_DANGEROUS_SHRINK',
+                previous: shrink.previous,
+                next: shrink.next
+            });
+        }
         var validation = validateMapDataObjectLimit(orgId, data);
         if (!validation.ok) {
             return res.status(403).json({
@@ -438,10 +450,11 @@ app.post('/api/map', (req, res) => {
                 mapLimits: { count: validation.count, limit: validation.limit, unlocked: validation.unlocked }
             });
         }
-        db.setMapData(orgId, data);
+        db.setMapData(orgId, data, { allowShrink: allowShrink });
         res.json({ ok: true, mapLimits: getMapObjectLimitPayload(orgId) });
     } catch (e) {
-        res.status(500).json({ error: String(e.message) });
+        var status = (e && e.code === 'MAP_DANGEROUS_SHRINK') ? 400 : 500;
+        res.status(status).json({ error: String(e.message), code: e.code || undefined });
     }
 });
 
@@ -2298,8 +2311,9 @@ app.post('/api/backups/restore', (req, res) => {
     if (!orgId) return res.status(403).json({ error: 'Восстановление доступно только для привязанной организации' });
     const filename = req.body && req.body.filename;
     if (!filename || typeof filename !== 'string') return res.status(400).json({ error: 'Укажите filename' });
+    var force = !!(req.body && req.body.force && isGlobalAdmin(user));
     try {
-        db.restoreFromBackup(orgId, filename.trim());
+        db.restoreFromBackup(orgId, filename.trim(), { force: force });
         Object.keys(syncCurrentStateByOrg).forEach(function(oid) {
             if (wsClientBelongsToOrg(oid, orgId)) delete syncCurrentStateByOrg[oid];
         });
@@ -2312,6 +2326,57 @@ app.post('/api/backups/restore', (req, res) => {
     } catch (e) {
         const msg = e && e.message ? String(e.message) : 'Ошибка восстановления';
         res.status(400).json({ error: msg });
+    }
+});
+
+app.get('/api/admin/store-backups', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!admin) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для главного администратора' });
+    try {
+        res.json({ backups: db.listFullStoreBackups ? db.listFullStoreBackups() : [] });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/admin/store-backups/restore', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!admin) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для главного администратора' });
+    const filename = req.body && req.body.filename;
+    if (!filename || typeof filename !== 'string') return res.status(400).json({ error: 'Укажите filename' });
+    try {
+        var result = db.restoreFullStoreBackup(filename.trim());
+        // Drop in-memory sync caches — clients must reconnect
+        Object.keys(syncCurrentStateByOrg).forEach(function (oid) {
+            delete syncCurrentStateByOrg[oid];
+        });
+        wss.clients.forEach(function (client) {
+            if (client.readyState === WebSocket.OPEN) {
+                try { client.close(4002, 'База данных восстановлена'); } catch (e) {}
+            }
+        });
+        res.json({
+            ok: true,
+            message: 'Полная база восстановлена. Все сессии сброшены — войдите снова.',
+            organizations: result && result.organizations,
+            users: result && result.users
+        });
+    } catch (e) {
+        res.status(400).json({ error: e && e.message ? String(e.message) : 'Ошибка восстановления' });
+    }
+});
+
+app.post('/api/admin/store-backups/create', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!admin) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для главного администратора' });
+    try {
+        if (db.createDailyBackup) db.createDailyBackup();
+        res.json({ ok: true, backups: db.listFullStoreBackups ? db.listFullStoreBackups() : [] });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
     }
 });
 
@@ -2587,7 +2652,7 @@ app.use('/js', express.static(path.join(PUBLIC_DIR, 'js'), {
 
 app.use(express.static(PUBLIC_DIR));
 
-db.getDb();
+// Storage bootstrap (JSON sync or MySQL hydrate) happens in initStorage before listen.
 
 function normalizeSyncOrgId(orgId) {
     if (orgId == null || orgId === '') return null;
@@ -2645,8 +2710,10 @@ function scheduleMapDbSave(orgId) {
         mapDbSaveTimersByOrg[orgId] = null;
         try {
             var state = syncCurrentStateByOrg[orgId];
-            if (state && state.data) db.setMapData(orgId, state.data);
-        } catch (e) {}
+            if (state && Array.isArray(state.data)) db.setMapData(orgId, state.data);
+        } catch (e) {
+            console.error('[Sync] setMapData refused for', orgId, e && e.message);
+        }
     }, MAP_DB_SAVE_DEBOUNCE_MS);
 }
 
@@ -2658,8 +2725,10 @@ function flushMapDbSave(orgId) {
     }
     try {
         var state = syncCurrentStateByOrg[orgId];
-        if (state && state.data) db.setMapData(orgId, state.data);
-    } catch (e) {}
+        if (state && Array.isArray(state.data)) db.setMapData(orgId, state.data);
+    } catch (e) {
+        console.error('[Sync] flush setMapData refused for', orgId, e && e.message);
+    }
 }
 
 const wss = new WebSocket.Server({ server, path: '/sync' });
@@ -3257,6 +3326,22 @@ wss.on('connection', (ws, req) => {
                 var state = getSyncStateForOrg(orgId);
                 if (!state) return;
                 var nextData = db.stripMapItemsFromOtherOrganizations(orgId, msg.data);
+                var shrinkCheck = db.assertMapDataNotDangerousShrink
+                    ? db.assertMapDataNotDangerousShrink(orgId, nextData, { allowShrink: !!msg.allowShrink })
+                    : { ok: true };
+                if (!shrinkCheck.ok) {
+                    try {
+                        ws.send(JSON.stringify({
+                            type: 'sync_error',
+                            error: shrinkCheck.error || 'Отказ записи: опасное уменьшение карты',
+                            code: 'MAP_DANGEROUS_SHRINK',
+                            previous: shrinkCheck.previous,
+                            next: shrinkCheck.next
+                        }));
+                    } catch (eShrink) {}
+                    console.warn('[Sync] Refused dangerous state shrink for', orgId, shrinkCheck);
+                    return;
+                }
                 var validationFull = validateMapDataObjectLimit(orgId, nextData);
                 if (!validationFull.ok) {
                     try {
@@ -3391,7 +3476,10 @@ server.on('error', function(err) {
     process.exit(1);
 });
 
-db.initDefaultAdmin().then(function() {
+db.initStorage().then(function () {
+    db.getDb();
+    return db.initDefaultAdmin();
+}).then(function() {
     server.listen(PORT, HOST, () => {
         console.log('Приложение и API:');
         console.log('  Локально:    http://localhost:' + PORT);
@@ -3401,7 +3489,11 @@ db.initDefaultAdmin().then(function() {
             console.log('  На других устройствах откройте адрес «В сети» в браузере.');
         }
         console.log('Синхронизация: ws://...:' + PORT + '/sync (в одном процессе с API)');
-        console.log('Данные: ' + path.join(DATA_DIR, 'store.json'));
+        if (db.getStorageMode && db.getStorageMode() === 'mysql') {
+            console.log('Данные: MySQL (storage=mysql)');
+        } else {
+            console.log('Данные: ' + path.join(DATA_DIR, 'store.json'));
+        }
         if (db.createDailyBackup) console.log('Резервные копии: ежедневно в data/backups/, хранятся 30 дней.');
         logServerConfigWarnings();
         if (mail.isMailConfigured(serverConfig) && mail.verifySmtp) {
@@ -3418,3 +3510,15 @@ db.initDefaultAdmin().then(function() {
     console.error('[ОШИБКА] Не удалось инициализировать данные:', err && err.message ? err.message : err);
     process.exit(1);
 });
+
+function flushAndExit(code) {
+    var done = function () { process.exit(code); };
+    if (db.flushMysqlPersist) {
+        db.flushMysqlPersist().then(done).catch(done);
+        setTimeout(done, 5000);
+    } else {
+        done();
+    }
+}
+process.on('SIGINT', function () { flushAndExit(0); });
+process.on('SIGTERM', function () { flushAndExit(0); });

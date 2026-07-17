@@ -357,18 +357,21 @@ function buildFiberWorkspaceSidebarHtml(sleeveObj, isCross, cablesData, fiberCon
             mainHtml += '<input type="text" id="editCrossName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Название кросса"></div>';
             mainHtml += '<div class="form-group"><label class="fiber-ws-label" for="editCrossType">Тип</label>';
             mainHtml += '<select id="editCrossType" class="form-select">' + getCrossTypeSelectOptionsHtml(storedCrossType ? String(storedCrossType) : '') + '</select></div>';
+            if (typeof buildHostReserveMFieldHtml === 'function') mainHtml += buildHostReserveMFieldHtml(sleeveObj, true);
         } else if (isCassette) {
             const storedCassetteType = sleeveObj.properties.get('cassetteType') || sleeveObj.properties.get('sleeveType');
             mainHtml += '<div class="form-group"><label class="fiber-ws-label" for="editCassetteName">Название</label>';
             mainHtml += '<input type="text" id="editCassetteName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Название сплайс-кассеты"></div>';
             mainHtml += '<div class="form-group"><label class="fiber-ws-label" for="editCassetteType">Тип</label>';
             mainHtml += '<select id="editCassetteType" class="form-select">' + (typeof getSpliceCassetteTypeSelectOptionsHtml === 'function' ? getSpliceCassetteTypeSelectOptionsHtml(storedCassetteType ? String(storedCassetteType) : '') : '') + '</select></div>';
+            if (typeof buildHostReserveMFieldHtml === 'function') mainHtml += buildHostReserveMFieldHtml(sleeveObj, true);
         } else {
             const storedSleeveType = sleeveObj.properties.get('sleeveType');
             mainHtml += '<div class="form-group"><label class="fiber-ws-label" for="editSleeveName">Название</label>';
             mainHtml += '<input type="text" id="editSleeveName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Название муфты"></div>';
             mainHtml += '<div class="form-group"><label class="fiber-ws-label" for="editSleeveType">Тип</label>';
             mainHtml += '<select id="editSleeveType" class="form-select">' + getSleeveTypeSelectOptionsHtml(storedSleeveType ? String(storedSleeveType) : '') + '</select></div>';
+            if (typeof buildHostReserveMFieldHtml === 'function') mainHtml += buildHostReserveMFieldHtml(sleeveObj, true);
         }
         mainHtml += '</div></div>';
     }
@@ -388,6 +391,10 @@ function buildFiberWorkspaceSidebarHtml(sleeveObj, isCross, cablesData, fiberCon
     } else {
         const usedFibers = getTotalUsedFibersInSleeve(sleeveObj);
         mainHtml += '<div class="fiber-ws-stat"><span class="fiber-ws-stat-val">' + usedFibers + '</span><span class="fiber-ws-stat-lbl">волок.</span></div>';
+    }
+    var reserveMStat = sleeveObj.properties.get('reserveM');
+    if (reserveMStat != null && reserveMStat !== '' && !isNaN(Number(reserveMStat)) && Number(reserveMStat) > 0) {
+        mainHtml += '<div class="fiber-ws-stat"><span class="fiber-ws-stat-val">' + Number(reserveMStat) + '</span><span class="fiber-ws-stat-lbl">запас м</span></div>';
     }
     mainHtml += '</div></div>';
 
@@ -2871,7 +2878,14 @@ function resolveFiberExportCableName(cableId, hostObj) {
 
 function buildFiberSchemePdfFilename(hostObj) {
     var name = hostObj && hostObj.properties ? String(hostObj.properties.get('name') || 'obekt').trim() : 'obekt';
-    var safe = name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/\s+/g, '-').replace(/\.+$/g, '').slice(0, 80);
+    var safe = '';
+    for (var ni = 0; ni < name.length; ni++) {
+        var ch = name.charAt(ni);
+        var code = name.charCodeAt(ni);
+        if (code < 32 || '<>:"/\\|?*'.indexOf(ch) >= 0) safe += '_';
+        else safe += ch;
+    }
+    safe = safe.replace(/\s+/g, '-').replace(/\.+$/g, '').slice(0, 80);
     if (!safe) safe = 'obekt';
     return 'shema-zhil-' + safe + '.pdf';
 }
@@ -3360,7 +3374,11 @@ function collectFiberSchemeExportConnections(hostObj) {
                 if (!out) return;
                 var outNo = outputIndex + 1;
                 var prefix = 'Сплиттер «' + spName + '» вых.' + outNo + ' → ';
-                if (out.cableId != null && out.fiberNumber != null) {
+                if (out.hostId && out.cableId != null && out.fiberNumber != null) {
+                    var remoteHost = typeof getFiberHostByUid === 'function' ? getFiberHostByUid(out.hostId) : null;
+                    var remoteName = remoteHost ? (remoteHost.properties.get('name') || 'Объект') : 'Объект';
+                    pushLine(prefix + '«' + remoteName + '» / ' + formatFiberSchemeExportCableFiber(out.cableId, out.fiberNumber, hostObj));
+                } else if (out.cableId != null && out.fiberNumber != null) {
                     pushLine(prefix + formatFiberSchemeExportCableFiber(out.cableId, out.fiberNumber, hostObj));
                 } else if (out.onuId) {
                     pushLine(prefix + 'ONU «' + resolveFiberSchemeExportObjectName(out.onuId, 'onu', 'ONU') + '»');
@@ -3372,10 +3390,6 @@ function collectFiberSchemeExportConnections(hostObj) {
                     pushLine(prefix + 'сплиттер «' + targetName + '» (вход)');
                 } else if (out.crossPort != null) {
                     pushLine(prefix + 'порт ' + out.crossPort);
-                } else if (out.hostId && out.cableId != null && out.fiberNumber != null) {
-                    var remoteHost = typeof getFiberHostByUid === 'function' ? getFiberHostByUid(out.hostId) : null;
-                    var remoteName = remoteHost ? (remoteHost.properties.get('name') || 'Объект') : 'Объект';
-                    pushLine(prefix + '«' + remoteName + '» / ' + formatFiberSchemeExportCableFiber(out.cableId, out.fiberNumber, hostObj));
                 }
             });
         });

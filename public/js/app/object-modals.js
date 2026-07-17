@@ -2164,6 +2164,9 @@ function closeInfoModal(opts) {
     var modal = document.getElementById('infoModal');
     if (!modal) return;
     modal.removeAttribute('data-trace-view');
+    if (window.FiberTrace && FiberTrace.removeTraceModalPdfBar) {
+        FiberTrace.removeTraceModalPdfBar();
+    }
     var modalInfo = document.getElementById('modalInfo');
     if (window.CameraPlayer && modalInfo) CameraPlayer.destroyPlayersInRoot(modalInfo);
     resetInfoModalFiberLayout();
@@ -2464,6 +2467,19 @@ function showCableInfoBody(cable) {
     }
     html += '</div>';
 
+    var lengthMVal = cable.properties.get('lengthM');
+    var lengthMStr = (lengthMVal != null && lengthMVal !== '' && !isNaN(Number(lengthMVal))) ? String(Number(lengthMVal)) : '';
+    html += '<div class="form-group" style="margin-bottom: 16px;">';
+    html += '<label for="cableLengthMInput" style="display: block; margin-bottom: 6px; font-weight: 600; color: var(--text-primary); font-size: 0.8125rem;">Длина кабеля, м</label>';
+    if (modalIsEditMode()) {
+        html += '<input type="number" id="cableLengthMInput" class="form-input" min="0" step="0.1" value="' + escapeHtml(lengthMStr) + '" placeholder="По геометрии карты" oninput="updateCableLengthM(\'' + uniqueId + '\', this.value)" onchange="updateCableLengthM(\'' + uniqueId + '\', this.value)">';
+        html += '<p class="form-hint" style="margin-top:6px;">Если задано — используется в трассе вместо длины по карте. Пусто — расчёт по маршруту.</p>';
+    } else {
+        html += '<div style="padding: 10px 12px; background: var(--bg-tertiary); border-radius: 6px; font-size: 0.875rem; border: 1px solid var(--border-color); color: var(--text-primary);">' +
+            (lengthMStr ? (escapeHtml(lengthMStr) + ' м') : '<span style="color: var(--text-muted); font-style: italic;">По геометрии</span>') + '</div>';
+    }
+    html += '</div>';
+
     if (modalIsEditMode()) {
         html += '<div class="cable-fiber-settings-row form-group">';
         html += '<label>Число жил и цвета</label>';
@@ -2655,6 +2671,63 @@ function updateCableName(cableUniqueId, newName) {
         cable.properties.set('cableName', newName);
         saveData();
     }
+}
+
+function updateCableLengthM(cableUniqueId, rawValue) {
+    const cable = objects.find(obj =>
+        obj.properties &&
+        obj.properties.get('type') === 'cable' &&
+        obj.properties.get('uniqueId') === cableUniqueId
+    );
+    if (!cable) return;
+    var trimmed = String(rawValue == null ? '' : rawValue).trim();
+    if (!trimmed) {
+        cable.properties.set('lengthM', null);
+    } else {
+        var n = parseFloat(trimmed.replace(',', '.'));
+        if (isNaN(n) || n < 0) return;
+        cable.properties.set('lengthM', Math.round(n * 10) / 10);
+    }
+    saveData({ objects: [cable] });
+}
+
+function applyHostReserveMChange(rawValue) {
+    if (!currentModalObject || !currentModalObject.properties) return;
+    var t = currentModalObject.properties.get('type');
+    if (t !== 'sleeve' && t !== 'cross' && t !== 'spliceCassette' && !isCrossLikeHostType(t)) return;
+    var trimmed = String(rawValue == null ? '' : rawValue).trim();
+    if (!trimmed) {
+        currentModalObject.properties.set('reserveM', null);
+    } else {
+        var n = parseFloat(trimmed.replace(',', '.'));
+        if (isNaN(n) || n < 0) return;
+        currentModalObject.properties.set('reserveM', Math.round(n * 10) / 10);
+    }
+    saveData({ object: currentModalObject });
+}
+
+function flushHostReserveMFromEditor() {
+    var inp = document.getElementById('editHostReserveM');
+    if (!inp || !currentModalObject || !currentModalObject.properties) return;
+    var cur = currentModalObject.properties.get('reserveM');
+    var curStr = (cur != null && cur !== '' && !isNaN(Number(cur))) ? String(Number(cur)) : '';
+    var next = String(inp.value == null ? '' : inp.value).trim();
+    if (next !== curStr) applyHostReserveMChange(next);
+}
+
+function buildHostReserveMFieldHtml(obj, isEditMode) {
+    if (!obj || !obj.properties) return '';
+    var reserveVal = obj.properties.get('reserveM');
+    var reserveStr = (reserveVal != null && reserveVal !== '' && !isNaN(Number(reserveVal))) ? String(Number(reserveVal)) : '';
+    var html = '';
+    if (isEditMode) {
+        html += '<div class="form-group"><label class="fiber-ws-label object-card-label" for="editHostReserveM">Запас кабеля в узле, м</label>';
+        html += '<input type="number" id="editHostReserveM" class="form-input" min="0" step="0.1" value="' + escapeHtml(reserveStr) + '" placeholder="0">';
+        html += '<p class="form-hint" style="margin-top:6px;">Учитывается в трассе волокна (как в Fiberbase).</p></div>';
+    } else if (reserveStr) {
+        html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Запас в узле:</strong> ' + escapeHtml(reserveStr) + ' м</div>';
+    }
+    return html;
 }
 
 function updateCableProduct(cableUniqueId, manufacturer, model) {
@@ -3325,6 +3398,7 @@ function showObjectInfoBody(obj) {
         if (name) html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Название:</strong> ${escapeHtml(name)}</div>`;
         html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Тип муфты:</strong> ${escapeHtml(sleeveTypeDisplay)}</div>`;
         html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Использовано волокон:</strong> ${usedFibers}${maxFibers ? (' / ' + maxFibers) : ''}</div>`;
+        if (typeof buildHostReserveMFieldHtml === 'function') html += buildHostReserveMFieldHtml(obj, false);
         html += buildObjectCoordsInlineHtml(obj);
         html += '</div>';
         if (modalIsEditMode()) {
@@ -3338,6 +3412,7 @@ function showObjectInfoBody(obj) {
             html += '<label for="editSleeveType" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Тип муфты</label>';
             html += '<select id="editSleeveType" class="form-select">' + getSleeveTypeSelectOptionsHtml(storedSleeveType ? String(storedSleeveType) : '') + '</select>';
             html += '</div>';
+            html += typeof buildHostReserveMFieldHtml === 'function' ? buildHostReserveMFieldHtml(obj, true) : '';
             html += '</div>';
         }
     }
@@ -3364,6 +3439,7 @@ function showObjectInfoBody(obj) {
         html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Тип кросса:</strong> ${escapeHtml(crossTypeLabel)}</div>`;
         html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Количество портов:</strong> ${crossPorts}</div>`;
         html += `<div style="color: var(--text-secondary); font-size: 0.875rem;"><strong>Использовано:</strong> <span style="color: ${statusColor}; font-weight: 600;">${usedPorts}/${crossPorts} портов</span> (${usagePercent}%)</div>`;
+        if (typeof buildHostReserveMFieldHtml === 'function') html += buildHostReserveMFieldHtml(obj, false);
         html += buildObjectCoordsInlineHtml(obj);
         html += '</div>';
 
@@ -3378,6 +3454,7 @@ function showObjectInfoBody(obj) {
             html += '<label for="editCrossType" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Тип кросса</label>';
             html += '<select id="editCrossType" class="form-select">' + getCrossTypeSelectOptionsHtml(storedCrossType ? String(storedCrossType) : '') + '</select>';
             html += '</div>';
+            html += typeof buildHostReserveMFieldHtml === 'function' ? buildHostReserveMFieldHtml(obj, true) : '';
             html += '</div>';
         }
     }
@@ -3567,6 +3644,10 @@ function buildSpliceCassetteCardContent(obj, isEditMode, name, connectedCables) 
     html += '<div class="cassette-card-stat"><dt>Тип</dt><dd title="' + escapeHtml(cassetteTypeDisplay) + '">' + escapeHtml(cassetteTypeDisplay) + '</dd></div>';
     html += '<div class="cassette-card-stat"><dt>Ёмкость</dt><dd>' + (maxFibers > 0 ? maxFibers : '—') + '</dd></div>';
     html += '<div class="cassette-card-stat"><dt>Кабелей</dt><dd>' + cableCount + '</dd></div>';
+    var cassetteReserve = obj.properties.get('reserveM');
+    if (cassetteReserve != null && cassetteReserve !== '' && !isNaN(Number(cassetteReserve)) && Number(cassetteReserve) > 0) {
+        html += '<div class="cassette-card-stat"><dt>Запас</dt><dd>' + Number(cassetteReserve) + ' м</dd></div>';
+    }
     html += '</dl>';
 
     if (maxFibers > 0) {
@@ -3591,7 +3672,9 @@ function buildSpliceCassetteCardContent(obj, isEditMode, name, connectedCables) 
         html += '</div>';
         html += '<div class="form-group" style="margin-bottom:0;"><label for="editCassetteType" class="object-card-label">Тип кассеты</label>';
         html += '<select id="editCassetteType" class="form-select">' + (typeof getSpliceCassetteTypeSelectOptionsHtml === 'function' ? getSpliceCassetteTypeSelectOptionsHtml(storedCassetteType ? String(storedCassetteType) : '') : '') + '</select>';
-        html += '</div></section>';
+        html += '</div>';
+        html += typeof buildHostReserveMFieldHtml === 'function' ? buildHostReserveMFieldHtml(obj, true) : '';
+        html += '</section>';
     }
 
     if (!cableCount) {
@@ -4337,6 +4420,7 @@ function setupEditAndDeleteListeners() {
     if (saveChangesBtn) {
         saveChangesBtn.addEventListener('click', function() {
             flushModalNamesFromEditor();
+            if (typeof flushHostReserveMFromEditor === 'function') flushHostReserveMFromEditor();
             saveData();
             showInfo('Изменения сохранены', 'Сохранено');
         });
@@ -4721,6 +4805,11 @@ function bindModalObjectNameEditors() {
     bindModalNameField('editRadioBridgeName', applyRadioBridgeNameChange);
     bindModalNameField('editSupportName', applySupportNameChange);
     bindModalNameField('editSignalPostName', applySignalPostNameChange);
+    var reserveEl = document.getElementById('editHostReserveM');
+    if (reserveEl) {
+        reserveEl.onchange = function() { applyHostReserveMChange(this.value); };
+        reserveEl.onblur = function() { applyHostReserveMChange(this.value); };
+    }
 }
 
 function flushCrossNameFromEditor() {

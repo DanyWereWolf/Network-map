@@ -689,6 +689,46 @@ html {
         flex-wrap: wrap;
     }
 
+    .trace-path-status {
+        flex-wrap: wrap;
+        gap: 4px 8px;
+    }
+
+    .trace-free-fibers {
+        padding: 8px 10px;
+    }
+
+    .trace-free-fibers-item summary {
+        min-height: 40px;
+    }
+
+    .trace-schematic {
+        padding: 8px;
+    }
+
+    .trace-schematic-scroll {
+        margin: 0 -2px;
+    }
+
+    .trace-schematic-tools {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .trace-sch-zoom-slider {
+        width: 56px;
+    }
+
+    .trace-modal-pdf-bar {
+        padding: 8px 12px;
+    }
+
+    .trace-modal-pdf-btn {
+        min-height: 40px;
+        padding: 8px 12px;
+        font-size: 0.85rem;
+    }
+
     .trace-show-on-map-btn {
         min-height: 40px;
         padding: 8px 12px !important;

@@ -1,13 +1,29 @@
 const path = require('path');
 const fs = require('fs');
 const { sanitizeNewsBody } = require('./news-sanitize');
+const { isMysqlEnabled, closePool } = require('./db/mysql');
 
 const ROOT_DIR = path.join(__dirname, '..');
 const STORE_PATH = process.env.DB_PATH ? process.env.DB_PATH.replace(/\.db$/i, '-store.json') : path.join(ROOT_DIR, 'data', 'store.json');
 const BACKUPS_DIR = path.join(path.dirname(STORE_PATH), 'backups');
-const BACKUP_RETENTION_DAYS = 30; 
+const FULL_BACKUPS_DIR = path.join(BACKUPS_DIR, 'full');
+const BACKUP_RETENTION_DAYS = 30;
+const FULL_SNAPSHOT_KEEP = 48;
+const FULL_SNAPSHOT_MIN_INTERVAL_MS = 60 * 60 * 1000;
+const DANGEROUS_SAVE_MIN_EXISTING_BYTES = 50 * 1024;
+const DANGEROUS_SAVE_RATIO = 0.15;
+const MAP_SHRINK_MIN_EXISTING = 20;
+const MAP_SHRINK_RATIO = 0.2;
+const MYSQL_PERSIST_DEBOUNCE_MS = 400;
+const MIRROR_JSON = String(process.env.MYSQL_MIRROR_JSON || '').trim() === '1';
 
 let store = null;
+let lastFullSnapshotAt = 0;
+let allowDangerousSaveOnce = false;
+let mysqlInitialized = false;
+let mysqlPersistTimer = null;
+let mysqlPersistChain = Promise.resolve();
+let mysqlPersistDirty = false;
 
 /** Сравнение id организации без учёта типа (строка/число), чтобы лимиты и данные не «терялись». */
 function organizationIdsMatch(a, b) {
@@ -40,52 +56,259 @@ function ensureOrgBackupsDir(orgId) {
     return dir;
 }
 
+function ensureFullBackupsDir() {
+    if (!fs.existsSync(FULL_BACKUPS_DIR)) fs.mkdirSync(FULL_BACKUPS_DIR, { recursive: true });
+    return FULL_BACKUPS_DIR;
+}
+
+function emptyStoreSkeleton() {
+    return {
+        mapData: [],
+        users: [],
+        history: [],
+        settings: {},
+        sessions: [],
+        organizations: [],
+        mapDataByOrg: {},
+        historyByOrg: {},
+        settingsByOrg: {},
+        chatByOrg: {},
+        chatMediaByOrg: {},
+        pricingPlans: [],
+        visitLogs: [],
+        deviceTokens: [],
+        supportThreads: [],
+        passwordResetTokens: []
+    };
+}
+
+function normalizeStoreShape(s) {
+    if (!s || typeof s !== 'object') return emptyStoreSkeleton();
+    if (!s.sessions) s.sessions = [];
+    if (!s.settings) s.settings = {};
+    if (!Array.isArray(s.organizations)) s.organizations = [];
+    if (typeof s.mapDataByOrg !== 'object' || !s.mapDataByOrg) s.mapDataByOrg = {};
+    if (typeof s.historyByOrg !== 'object' || !s.historyByOrg) s.historyByOrg = {};
+    if (typeof s.settingsByOrg !== 'object' || !s.settingsByOrg) s.settingsByOrg = {};
+    if (typeof s.chatByOrg !== 'object' || !s.chatByOrg) s.chatByOrg = {};
+    if (typeof s.chatMediaByOrg !== 'object' || !s.chatMediaByOrg) s.chatMediaByOrg = {};
+    if (!Array.isArray(s.pricingPlans)) s.pricingPlans = [];
+    if (!Array.isArray(s.deviceTokens)) s.deviceTokens = [];
+    if (!Array.isArray(s.visitLogs)) s.visitLogs = [];
+    if (!Array.isArray(s.supportThreads)) s.supportThreads = [];
+    if (!Array.isArray(s.passwordResetTokens)) s.passwordResetTokens = [];
+    if (!Array.isArray(s.mapData)) s.mapData = [];
+    if (!Array.isArray(s.users)) s.users = [];
+    if (!Array.isArray(s.history)) s.history = [];
+    return s;
+}
+
+function countMapDataByOrgItems(mapDataByOrg) {
+    if (!mapDataByOrg || typeof mapDataByOrg !== 'object') return 0;
+    var n = 0;
+    Object.keys(mapDataByOrg).forEach(function (k) {
+        if (Array.isArray(mapDataByOrg[k])) n += mapDataByOrg[k].length;
+    });
+    return n;
+}
+
+function tryParseStoreFile(filePath) {
+    try {
+        var raw = fs.readFileSync(filePath, 'utf8');
+        var parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        return normalizeStoreShape(parsed);
+    } catch (e) {
+        return null;
+    }
+}
+
+function findLastKnownGoodStore() {
+    var candidates = [];
+    var dir = path.dirname(STORE_PATH);
+    try {
+        fs.readdirSync(dir).forEach(function (name) {
+            if (name === 'store.json') return;
+            if (/^store\.json\.(bak|before|corrupt)/i.test(name) || /^store\.full-/i.test(name) || name.endsWith('.bak')) {
+                candidates.push(path.join(dir, name));
+            }
+        });
+    } catch (e) {}
+    try {
+        if (fs.existsSync(FULL_BACKUPS_DIR)) {
+            fs.readdirSync(FULL_BACKUPS_DIR).forEach(function (name) {
+                if (/^store-.*\.json$/i.test(name)) candidates.push(path.join(FULL_BACKUPS_DIR, name));
+            });
+        }
+    } catch (e2) {}
+    candidates = candidates
+        .map(function (p) {
+            try {
+                return { path: p, mtime: fs.statSync(p).mtimeMs, size: fs.statSync(p).size };
+            } catch (e3) {
+                return null;
+            }
+        })
+        .filter(Boolean)
+        .sort(function (a, b) { return b.mtime - a.mtime; });
+    for (var i = 0; i < candidates.length; i++) {
+        if (candidates[i].size < 100) continue;
+        var parsed = tryParseStoreFile(candidates[i].path);
+        if (!parsed) continue;
+        var hasData = (parsed.organizations && parsed.organizations.length) ||
+            (parsed.users && parsed.users.length) ||
+            countMapDataByOrgItems(parsed.mapDataByOrg) > 0;
+        if (hasData) {
+            console.warn('[DB] Восстановлен last-known-good из:', candidates[i].path);
+            return parsed;
+        }
+    }
+    return null;
+}
+
 function loadStore() {
     if (store) return store;
+    if (isMysqlEnabled()) {
+        if (!mysqlInitialized) {
+            throw new Error('MySQL storage not initialized — await db.initStorage() before use');
+        }
+        return store;
+    }
     const dir = path.dirname(STORE_PATH);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     if (!fs.existsSync(STORE_PATH)) {
-        store = {
-            mapData: [],
-            users: [],
-            history: [],
-            settings: {},
-            sessions: [],
-            organizations: [],
-            mapDataByOrg: {},
-            historyByOrg: {},
-            settingsByOrg: {},
-            chatByOrg: {},
-            chatMediaByOrg: {},
-            pricingPlans: [],
-            visitLogs: [],
-            deviceTokens: []
-        };
+        var recovered = findLastKnownGoodStore();
+        if (recovered) {
+            store = recovered;
+            allowDangerousSaveOnce = true;
+            saveStore();
+            allowDangerousSaveOnce = false;
+            migrateToOrganizations();
+            stripNetboxFromStore(store);
+            return store;
+        }
+        store = emptyStoreSkeleton();
+        allowDangerousSaveOnce = true;
         saveStore();
+        allowDangerousSaveOnce = false;
         return store;
     }
     try {
-        store = JSON.parse(fs.readFileSync(STORE_PATH, 'utf8'));
+        store = normalizeStoreShape(JSON.parse(fs.readFileSync(STORE_PATH, 'utf8')));
     } catch (e) {
-        store = { mapData: [], users: [], history: [], settings: {}, sessions: [], organizations: [], mapDataByOrg: {}, historyByOrg: {}, settingsByOrg: {}, chatByOrg: {}, chatMediaByOrg: {}, pricingPlans: [], visitLogs: [], deviceTokens: [] };
-        saveStore();
+        var corruptPath = STORE_PATH + '.corrupt-' + Date.now();
+        try {
+            fs.copyFileSync(STORE_PATH, corruptPath);
+            console.error('[DB] Не удалось прочитать store.json, копия:', corruptPath, e.message);
+        } catch (copyErr) {
+            console.error('[DB] Не удалось прочитать store.json:', e.message);
+        }
+        var recoveredAfterCorrupt = findLastKnownGoodStore();
+        if (recoveredAfterCorrupt) {
+            store = recoveredAfterCorrupt;
+            allowDangerousSaveOnce = true;
+            saveStore();
+            allowDangerousSaveOnce = false;
+        } else {
+            // Не затираем битый файл пустым store — поднимаем in-memory пустой только для аварийного старта
+            store = emptyStoreSkeleton();
+            console.error('[DB] ВАЖНО: store.json повреждён и last-known-good не найден. Пустой store в памяти, диск не перезаписан.');
+        }
     }
-    if (!store.sessions) store.sessions = [];
-    if (!store.settings) store.settings = {};
-    if (!Array.isArray(store.organizations)) store.organizations = [];
-    if (typeof store.mapDataByOrg !== 'object') store.mapDataByOrg = {};
-    if (typeof store.historyByOrg !== 'object') store.historyByOrg = {};
-    if (typeof store.settingsByOrg !== 'object') store.settingsByOrg = {};
-    if (typeof store.chatByOrg !== 'object') store.chatByOrg = {};
-    if (typeof store.chatMediaByOrg !== 'object') store.chatMediaByOrg = {};
-    if (!Array.isArray(store.pricingPlans)) store.pricingPlans = [];
-    if (!Array.isArray(store.deviceTokens)) store.deviceTokens = [];
-    if (!Array.isArray(store.visitLogs)) store.visitLogs = [];
-    if (!Array.isArray(store.supportThreads)) store.supportThreads = [];
-    if (!Array.isArray(store.passwordResetTokens)) store.passwordResetTokens = [];
     migrateToOrganizations();
     stripNetboxFromStore(store);
     return store;
+}
+
+/**
+ * Async bootstrap: migrations + hydrate when storage=mysql; otherwise sync JSON load.
+ * Must be awaited before accepting HTTP / calling getDb() in MySQL mode.
+ */
+async function initStorage() {
+    if (isMysqlEnabled()) {
+        const { runMigrations } = require('./db/migrate');
+        const mysqlPersist = require('./db/mysql-persist');
+        await runMigrations();
+        store = normalizeStoreShape(await mysqlPersist.hydrateStoreFromMysql());
+        migrateToOrganizations();
+        stripNetboxFromStore(store);
+        mysqlInitialized = true;
+        initSchema();
+        console.log('[DB] Storage: MySQL (' +
+            ((store.organizations || []).length) + ' orgs, ' +
+            ((store.users || []).length) + ' users, ' +
+            countMapDataByOrgItems(store.mapDataByOrg) + ' map items)');
+        return store;
+    }
+    mysqlInitialized = false;
+    loadStore();
+    initSchema();
+    console.log('[DB] Storage: JSON (' + STORE_PATH + ')');
+    return store;
+}
+
+function scheduleMysqlPersist() {
+    mysqlPersistDirty = true;
+    if (mysqlPersistTimer) clearTimeout(mysqlPersistTimer);
+    mysqlPersistTimer = setTimeout(function () {
+        mysqlPersistTimer = null;
+        flushMysqlPersist().catch(function (e) {
+            console.error('[DB] MySQL persist failed:', e && e.message ? e.message : e);
+        });
+    }, MYSQL_PERSIST_DEBOUNCE_MS);
+}
+
+async function flushMysqlPersist() {
+    if (!isMysqlEnabled() || !store || !mysqlInitialized) return;
+    if (mysqlPersistTimer) {
+        clearTimeout(mysqlPersistTimer);
+        mysqlPersistTimer = null;
+    }
+    if (!mysqlPersistDirty) return;
+    mysqlPersistDirty = false;
+    const snapshot = store;
+    const mysqlPersist = require('./db/mysql-persist');
+    mysqlPersistChain = mysqlPersistChain.then(async function () {
+        await mysqlPersist.persistStoreToMysql(snapshot, { skipRelationalMap: false });
+    }).catch(function (e) {
+        mysqlPersistDirty = true;
+        console.error('[DB] MySQL persist error:', e && e.message ? e.message : e);
+    });
+    await mysqlPersistChain;
+}
+
+function writeJsonStoreFile(json, existingRaw) {
+    const dir = path.dirname(STORE_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (existingRaw && isDangerousStoreShrink(existingRaw, json, store)) {
+        var rejectedPath = STORE_PATH + '.rejected-' + Date.now();
+        try { fs.writeFileSync(rejectedPath, json, 'utf8'); } catch (e2) {}
+        console.error('[DB] REFUSED dangerous save (shrink). Rejected payload:', rejectedPath,
+            'existingBytes=', existingRaw.length, 'newBytes=', json.length);
+        var err = new Error('Отказ записи: попытка затереть большую базу уменьшенными данными');
+        err.code = 'DB_DANGEROUS_SAVE';
+        throw err;
+    }
+    const tmpPath = STORE_PATH + '.tmp.' + Date.now();
+    try {
+        fs.writeFileSync(tmpPath, json, 'utf8');
+        fs.renameSync(tmpPath, STORE_PATH);
+        maybeWriteRotatingFullSnapshot(STORE_PATH);
+    } catch (e) {
+        try { fs.unlinkSync(tmpPath); } catch (_) {}
+        throw e;
+    }
+}
+
+function exportLogicalStoreSnapshot(label) {
+    if (!store) return null;
+    ensureFullBackupsDir();
+    var stamp = formatSnapshotStamp(new Date());
+    var name = label ? ('store-' + label + '-' + stamp + '.json') : ('store-' + stamp + '.json');
+    var outPath = path.join(FULL_BACKUPS_DIR, name);
+    fs.writeFileSync(outPath, JSON.stringify(store, null, 0), 'utf8');
+    pruneFullSnapshots(FULL_SNAPSHOT_KEEP);
+    return { filename: name, path: outPath };
 }
 
 function stripNetboxFromStore(s) {
@@ -135,6 +358,34 @@ function stripNetboxFromStore(s) {
 function migrateToOrganizations() {
     const s = store;
     if (s.organizations && s.organizations.length > 0) return;
+
+    const existingMapByOrg = (s.mapDataByOrg && typeof s.mapDataByOrg === 'object') ? s.mapDataByOrg : {};
+    const existingHistByOrg = (s.historyByOrg && typeof s.historyByOrg === 'object') ? s.historyByOrg : {};
+    const existingSettingsByOrg = (s.settingsByOrg && typeof s.settingsByOrg === 'object') ? s.settingsByOrg : {};
+    const hasOrgMaps = countMapDataByOrgItems(existingMapByOrg) > 0 || Object.keys(existingMapByOrg).length > 0;
+
+    // Если mapDataByOrg уже есть — не затираем его, только создаём org-записи при необходимости
+    if (hasOrgMaps) {
+        s.organizations = s.organizations || [];
+        Object.keys(existingMapByOrg).forEach(function (orgId) {
+            var exists = s.organizations.some(function (o) { return organizationIdsMatch(o.id, orgId); });
+            if (!exists) {
+                s.organizations.push({
+                    id: orgId,
+                    name: 'Организация ' + String(orgId).slice(-8),
+                    mapObjectLimitUnlocked: false,
+                    status: 'active',
+                    createdAt: new Date().toISOString()
+                });
+            }
+        });
+        s.mapDataByOrg = existingMapByOrg;
+        s.historyByOrg = existingHistByOrg;
+        s.settingsByOrg = existingSettingsByOrg;
+        saveStore();
+        return;
+    }
+
     const hasLegacyData = (Array.isArray(s.mapData) && s.mapData.length > 0) || (Array.isArray(s.history) && s.history.length > 0);
     const defaultOrgId = 'org_default_' + Date.now();
     s.organizations = [{
@@ -144,8 +395,9 @@ function migrateToOrganizations() {
         status: 'active',
         createdAt: new Date().toISOString()
     }];
-    s.mapDataByOrg = {};
-    s.historyByOrg = {};
+    // Не обнуляем существующие ключи без нужды — только если пусто
+    if (!s.mapDataByOrg || typeof s.mapDataByOrg !== 'object') s.mapDataByOrg = {};
+    if (!s.historyByOrg || typeof s.historyByOrg !== 'object') s.historyByOrg = {};
     s.settingsByOrg = s.settingsByOrg || {};
     if (hasLegacyData) {
         s.mapDataByOrg[defaultOrgId] = Array.isArray(s.mapData) ? s.mapData : [];
@@ -167,19 +419,133 @@ function migrateToOrganizations() {
     saveStore();
 }
 
+function isDangerousStoreShrink(existingRaw, newJson, newStoreObj) {
+    if (allowDangerousSaveOnce) return false;
+    if (!existingRaw || existingRaw.length < DANGEROUS_SAVE_MIN_EXISTING_BYTES) return false;
+    if (newJson.length >= Math.floor(existingRaw.length * DANGEROUS_SAVE_RATIO)) {
+        // size ok — still check structural wipe
+    } else {
+        return true;
+    }
+    try {
+        var oldObj = JSON.parse(existingRaw);
+        var oldOrgs = (oldObj.organizations && oldObj.organizations.length) || 0;
+        var oldUsers = (oldObj.users && oldObj.users.length) || 0;
+        var oldMaps = countMapDataByOrgItems(oldObj.mapDataByOrg);
+        var newOrgs = (newStoreObj.organizations && newStoreObj.organizations.length) || 0;
+        var newUsers = (newStoreObj.users && newStoreObj.users.length) || 0;
+        var newMaps = countMapDataByOrgItems(newStoreObj.mapDataByOrg);
+        if ((oldOrgs > 0 && newOrgs === 0) || (oldUsers > 0 && newUsers === 0)) return true;
+        if (oldMaps >= MAP_SHRINK_MIN_EXISTING && newMaps < Math.floor(oldMaps * MAP_SHRINK_RATIO)) return true;
+    } catch (e) {
+        // if old unreadable, don't block
+    }
+    return false;
+}
+
+function formatSnapshotStamp(d) {
+    var pad = function (n) { return String(n).padStart(2, '0'); };
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + '-' +
+        pad(d.getHours()) + pad(d.getMinutes());
+}
+
+function pruneFullSnapshots(keepCount) {
+    keepCount = keepCount || FULL_SNAPSHOT_KEEP;
+    try {
+        ensureFullBackupsDir();
+        var files = fs.readdirSync(FULL_BACKUPS_DIR)
+            .filter(function (f) { return /^store-.*\.json$/i.test(f); })
+            .map(function (f) {
+                var p = path.join(FULL_BACKUPS_DIR, f);
+                try { return { name: f, path: p, mtime: fs.statSync(p).mtimeMs }; } catch (e) { return null; }
+            })
+            .filter(Boolean)
+            .sort(function (a, b) { return b.mtime - a.mtime; });
+        for (var i = keepCount; i < files.length; i++) {
+            try { fs.unlinkSync(files[i].path); } catch (e2) {}
+        }
+    } catch (e) {
+        console.error('[DB] pruneFullSnapshots:', e.message);
+    }
+}
+
+function maybeWriteRotatingFullSnapshot(sourcePathOrBuffer) {
+    var now = Date.now();
+    if (now - lastFullSnapshotAt < FULL_SNAPSHOT_MIN_INTERVAL_MS) return;
+    try {
+        ensureFullBackupsDir();
+        var stamp = formatSnapshotStamp(new Date());
+        var dest = path.join(FULL_BACKUPS_DIR, 'store-' + stamp + '.json');
+        if (typeof sourcePathOrBuffer === 'string' && fs.existsSync(sourcePathOrBuffer)) {
+            fs.copyFileSync(sourcePathOrBuffer, dest);
+        } else if (Buffer.isBuffer(sourcePathOrBuffer) || typeof sourcePathOrBuffer === 'string') {
+            fs.writeFileSync(dest, sourcePathOrBuffer, 'utf8');
+        } else if (fs.existsSync(STORE_PATH)) {
+            fs.copyFileSync(STORE_PATH, dest);
+        } else {
+            return;
+        }
+        lastFullSnapshotAt = now;
+        pruneFullSnapshots(FULL_SNAPSHOT_KEEP);
+        console.log('[DB] Full snapshot:', path.basename(dest));
+    } catch (e) {
+        console.error('[DB] Full snapshot error:', e.message);
+    }
+}
+
 function saveStore() {
     if (!store) return;
-    const dir = path.dirname(STORE_PATH);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const json = JSON.stringify(store, null, 0);
-    const tmpPath = STORE_PATH + '.tmp.' + Date.now();
-    try {
-        fs.writeFileSync(tmpPath, json, 'utf8');
-        fs.renameSync(tmpPath, STORE_PATH);
-    } catch (e) {
-        try { fs.unlinkSync(tmpPath); } catch (_) {}
-        throw e;
+    if (isMysqlEnabled()) {
+        if (!mysqlInitialized) {
+            throw new Error('MySQL storage not initialized');
+        }
+        scheduleMysqlPersist();
+        if (MIRROR_JSON) {
+            const json = JSON.stringify(store, null, 0);
+            var existingRaw = null;
+            if (fs.existsSync(STORE_PATH)) {
+                try { existingRaw = fs.readFileSync(STORE_PATH, 'utf8'); } catch (e) { existingRaw = null; }
+            }
+            writeJsonStoreFile(json, existingRaw);
+        }
+        return;
     }
+    const json = JSON.stringify(store, null, 0);
+    var existingRawJson = null;
+    if (fs.existsSync(STORE_PATH)) {
+        try { existingRawJson = fs.readFileSync(STORE_PATH, 'utf8'); } catch (e) { existingRawJson = null; }
+    }
+    writeJsonStoreFile(json, existingRawJson);
+}
+
+/**
+ * Проверка опасного сжатия карты организации.
+ * @returns {{ ok: boolean, error?: string, previous?: number, next?: number }}
+ */
+function assertMapDataNotDangerousShrink(orgId, data, opts) {
+    opts = opts || {};
+    if (opts.allowShrink) return { ok: true };
+    if (!Array.isArray(data)) return { ok: false, error: 'data must be array' };
+    if (!orgId) return { ok: false, error: 'orgId required' };
+    var previous = [];
+    try {
+        previous = getMapData(orgId) || [];
+    } catch (e) {
+        previous = [];
+    }
+    var prevLen = Array.isArray(previous) ? previous.length : 0;
+    var nextLen = data.length;
+    if (prevLen >= MAP_SHRINK_MIN_EXISTING) {
+        if (nextLen === 0 || nextLen < Math.floor(prevLen * MAP_SHRINK_RATIO)) {
+            return {
+                ok: false,
+                error: 'Отказ: нельзя заменить карту из ' + prevLen + ' объектов на ' + nextLen + ' без явного подтверждения',
+                previous: prevLen,
+                next: nextLen
+            };
+        }
+    }
+    return { ok: true, previous: prevLen, next: nextLen };
 }
 
 function getDb() {
@@ -288,7 +654,7 @@ function initSchema() {
     if (!Array.isArray(s.visitLogs)) s.visitLogs = [];
     if (!Array.isArray(s.supportThreads)) s.supportThreads = [];
     backfillUserEmails();
-    saveStore();
+    if (!isMysqlEnabled()) saveStore();
 }
 
 /** Убирает объекты, чей uniqueId есть в данных другой организации. */
@@ -348,15 +714,29 @@ function getMapData(orgId) {
     return stripMapItemsFromOtherOrganizations(orgId, raw);
 }
 
-function setMapData(orgId, data) {
+function setMapData(orgId, data, opts) {
     if (!orgId) throw new Error('orgId required');
     if (!Array.isArray(data)) throw new Error('data must be array');
+    opts = opts || {};
+    var shrink = assertMapDataNotDangerousShrink(orgId, data, opts);
+    if (!shrink.ok) {
+        var err = new Error(shrink.error || 'Отказ записи карты');
+        err.code = 'MAP_DANGEROUS_SHRINK';
+        err.previous = shrink.previous;
+        err.next = shrink.next;
+        throw err;
+    }
     const s = loadStore();
     if (!s.mapDataByOrg) s.mapDataByOrg = {};
     var org = getOrganization(orgId);
     var key = org ? org.id : orgId;
     s.mapDataByOrg[key] = stripMapItemsFromOtherOrganizations(orgId, data);
-    saveStore();
+    if (opts.allowShrink) allowDangerousSaveOnce = true;
+    try {
+        saveStore();
+    } finally {
+        if (opts.allowShrink) allowDangerousSaveOnce = false;
+    }
 }
 
 function getMapDataLegacy() {
@@ -1027,7 +1407,6 @@ function setThemeForUser(userId, theme) {
 
 function createDailyBackup() {
     try {
-        if (!fs.existsSync(STORE_PATH)) return;
         const s = loadStore();
         const orgs = Array.isArray(s.organizations) ? s.organizations : [];
         if (!orgs.length) return;
@@ -1050,10 +1429,45 @@ function createDailyBackup() {
                 history: getHistory(orgId),
                 settings: getSettings(orgId)
             };
+            // Не затираем сегодняшний непустой бэкап пустым
+            if (fs.existsSync(backupPath)) {
+                try {
+                    var prev = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
+                    var prevN = Array.isArray(prev.mapData) ? prev.mapData.length : 0;
+                    var nextN = Array.isArray(payload.mapData) ? payload.mapData.length : 0;
+                    if (prevN >= MAP_SHRINK_MIN_EXISTING && nextN < Math.floor(prevN * MAP_SHRINK_RATIO)) {
+                        console.warn('[Backup] Пропуск перезаписи пустым/урезанным:', orgId + '/backup-' + dateStr + '.json');
+                        return;
+                    }
+                } catch (ePrev) {}
+            }
             fs.writeFileSync(backupPath, JSON.stringify(payload), 'utf8');
             pruneBackupsKeepDays(orgId, BACKUP_RETENTION_DAYS);
             console.log('[Backup] Сохранён: ' + orgId + '/backup-' + dateStr + '.json');
         });
+
+        // Полный логический снимок (JSON export) — работает и для MySQL, и для store.json
+        ensureFullBackupsDir();
+        var fullDaily = path.join(FULL_BACKUPS_DIR, 'store-' + dateStr + '.json');
+        var json = JSON.stringify(s, null, 0);
+        if (fs.existsSync(fullDaily)) {
+            try {
+                var existingFull = fs.statSync(fullDaily);
+                if (existingFull.size >= DANGEROUS_SAVE_MIN_EXISTING_BYTES &&
+                    Buffer.byteLength(json, 'utf8') < Math.floor(existingFull.size * DANGEROUS_SAVE_RATIO)) {
+                    console.warn('[Backup] Пропуск полного дневного снимка: новый store заметно меньше');
+                } else {
+                    fs.writeFileSync(fullDaily, json, 'utf8');
+                    console.log('[Backup] Полный снимок:', path.basename(fullDaily));
+                }
+            } catch (eFull) {
+                fs.writeFileSync(fullDaily, json, 'utf8');
+            }
+        } else {
+            fs.writeFileSync(fullDaily, json, 'utf8');
+            console.log('[Backup] Полный снимок:', path.basename(fullDaily));
+        }
+        pruneFullSnapshots(FULL_SNAPSHOT_KEEP);
     } catch (e) {
         console.error('[Backup] Ошибка:', e.message);
     }
@@ -1078,8 +1492,9 @@ function listBackups(orgId) {
     }
 }
 
-function restoreFromBackup(orgId, filename) {
+function restoreFromBackup(orgId, filename, opts) {
     if (!orgId) throw new Error('orgId required');
+    opts = opts || {};
     const trimmed = typeof filename === 'string' ? filename.trim() : '';
     if (!/^backup-\d{4}-\d{2}-\d{2}\.json$/.test(trimmed)) throw new Error('Недопустимое имя файла');
     const backupPath = path.join(getOrgBackupsDir(orgId), trimmed);
@@ -1095,6 +1510,11 @@ function restoreFromBackup(orgId, filename) {
     if (!parsed || typeof parsed !== 'object') throw new Error('Неверный формат бэкапа');
     const payloadOrgId = parsed.organizationId || orgId;
     if (!organizationIdsMatch(payloadOrgId, orgId)) throw new Error('Бэкап принадлежит другой организации');
+    const incomingMap = Array.isArray(parsed.mapData) ? parsed.mapData : [];
+    var shrink = assertMapDataNotDangerousShrink(orgId, incomingMap, { allowShrink: !!opts.force });
+    if (!shrink.ok) {
+        throw new Error(shrink.error + '. Для принудительного восстановления передайте force: true (только главный admin).');
+    }
     const s = loadStore();
     if (!s.mapDataByOrg || typeof s.mapDataByOrg !== 'object') s.mapDataByOrg = {};
     if (!s.historyByOrg || typeof s.historyByOrg !== 'object') s.historyByOrg = {};
@@ -1102,15 +1522,102 @@ function restoreFromBackup(orgId, filename) {
     var org = getOrganization(orgId);
     var key = org ? org.id : orgId;
 
-    s.mapDataByOrg[key] = Array.isArray(parsed.mapData) ? parsed.mapData : [];
+    s.mapDataByOrg[key] = incomingMap;
     s.historyByOrg[key] = Array.isArray(parsed.history) ? parsed.history : [];
     var restoredSettings = (parsed.settings && typeof parsed.settings === 'object') ? parsed.settings : {};
     delete restoredSettings.netboxConfig;
     s.settingsByOrg[key] = restoredSettings;
 
-    saveStore();
+    if (opts.force) allowDangerousSaveOnce = true;
+    try {
+        saveStore();
+    } finally {
+        if (opts.force) allowDangerousSaveOnce = false;
+    }
     deleteSessionsForOrganization(orgId);
     console.log('[Backup] Восстановлено из:', orgId + '/' + trimmed);
+}
+
+function listFullStoreBackups() {
+    try {
+        ensureFullBackupsDir();
+        return fs.readdirSync(FULL_BACKUPS_DIR)
+            .filter(function (f) { return /^store-.*\.json$/i.test(f); })
+            .map(function (f) {
+                var p = path.join(FULL_BACKUPS_DIR, f);
+                try {
+                    var st = fs.statSync(p);
+                    return { filename: f, size: st.size, mtime: st.mtime.toISOString() };
+                } catch (e) {
+                    return null;
+                }
+            })
+            .filter(Boolean)
+            .sort(function (a, b) { return String(b.mtime).localeCompare(String(a.mtime)); });
+    } catch (e) {
+        console.error('[DB] listFullStoreBackups:', e.message);
+        return [];
+    }
+}
+
+function restoreFullStoreBackup(filename) {
+    const trimmed = typeof filename === 'string' ? filename.trim() : '';
+    if (!/^store-[\w.-]+\.json$/i.test(trimmed) || trimmed.includes('..') || trimmed.includes('/') || trimmed.includes('\\')) {
+        throw new Error('Недопустимое имя файла');
+    }
+    const backupPath = path.join(FULL_BACKUPS_DIR, trimmed);
+    if (!fs.existsSync(backupPath)) throw new Error('Файл снимка не найден');
+    const parsed = tryParseStoreFile(backupPath);
+    if (!parsed) throw new Error('Неверный формат снимка');
+    // Safety: copy current store aside (JSON mode) or logical export (MySQL)
+    if (!isMysqlEnabled() && fs.existsSync(STORE_PATH)) {
+        try {
+            fs.copyFileSync(STORE_PATH, STORE_PATH + '.before-full-restore-' + Date.now());
+        } catch (e) {}
+    } else if (isMysqlEnabled() && store) {
+        try { exportLogicalStoreSnapshot('before-full-restore'); } catch (e2) {}
+    }
+    allowDangerousSaveOnce = true;
+    store = parsed;
+    try {
+        saveStore();
+    } finally {
+        allowDangerousSaveOnce = false;
+    }
+    if (isMysqlEnabled()) {
+        // Force immediate flush so restore is durable before clients reconnect
+        mysqlPersistDirty = true;
+        flushMysqlPersist().catch(function (e) {
+            console.error('[DB] MySQL flush after full restore failed:', e && e.message ? e.message : e);
+        });
+    }
+    console.log('[DB] Полный store восстановлен из:', trimmed);
+    return { ok: true, organizations: (parsed.organizations || []).length, users: (parsed.users || []).length };
+}
+
+/** Сброс in-memory store (после полного restore извне). */
+function reloadStoreFromDisk() {
+    store = null;
+    if (isMysqlEnabled()) {
+        mysqlInitialized = false;
+        throw new Error('reloadStoreFromDisk: в режиме MySQL используйте await reloadStoreFromMysql()');
+    }
+    return loadStore();
+}
+
+async function reloadStoreFromMysql() {
+    if (!isMysqlEnabled()) return reloadStoreFromDisk();
+    await flushMysqlPersist();
+    const mysqlPersist = require('./db/mysql-persist');
+    store = normalizeStoreShape(await mysqlPersist.hydrateStoreFromMysql());
+    migrateToOrganizations();
+    stripNetboxFromStore(store);
+    mysqlInitialized = true;
+    return store;
+}
+
+function getStorageMode() {
+    return isMysqlEnabled() ? 'mysql' : 'json';
 }
 
 function pruneBackupsKeepDays(orgId, keepDays) {
@@ -1693,6 +2200,11 @@ function getPublicMaintenanceNotice() {
 
 module.exports = {
     getDb,
+    initStorage,
+    flushMysqlPersist,
+    getStorageMode,
+    isMysqlEnabled,
+    exportLogicalStoreSnapshot,
     getMapData,
     setMapData,
     stripMapItemsFromOtherOrganizations,
@@ -1727,6 +2239,11 @@ module.exports = {
     createDailyBackup,
     listBackups,
     restoreFromBackup,
+    listFullStoreBackups,
+    restoreFullStoreBackup,
+    reloadStoreFromDisk,
+    reloadStoreFromMysql,
+    assertMapDataNotDangerousShrink,
     initDefaultAdmin,
     getOrganizations,
     getOrganization,
@@ -1771,5 +2288,6 @@ module.exports = {
     setShowcaseConfig,
     getProductUpdatesPublic,
     getProductUpdatesAdmin,
-    setProductUpdates
+    setProductUpdates,
+    closePool
 };

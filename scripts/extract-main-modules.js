@@ -212,7 +212,7 @@ scriptLines.push('    <script src="js/app/main.js"></script>');
 let indexHtml = fs.readFileSync(indexPath, 'utf8');
 const scriptBlock = scriptLines.join('\n');
 indexHtml = indexHtml.replace(
-    /    <script src="js\/app\/object-sync\.js"><\/script>\n(?:    <script src="js\/app\/[^"]+\.js"><\/script>\n)*    <script src="js\/app\/main\.js"><\/script>/,
+    / {4}<script src="js\/app\/object-sync\.js"><\/script>\n(?: {4}<script src="js\/app\/[^"]+\.js"><\/script>\n)* {4}<script src="js\/app\/main\.js"><\/script>/,
     scriptBlock
 );
 fs.writeFileSync(indexPath, indexHtml, 'utf8');
