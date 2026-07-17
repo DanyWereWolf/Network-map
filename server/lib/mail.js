@@ -42,10 +42,16 @@ function isMailConfigured(serverConfig) {
 let transporterCache = null;
 let transporterKey = '';
 
+function invalidateTransporterCache() {
+    transporterCache = null;
+    transporterKey = '';
+}
+
 function getTransporter(serverConfig) {
     const smtp = getSmtpConfig(serverConfig);
     if (!smtp) return null;
-    const key = [smtp.host, smtp.port, smtp.secure, smtp.auth.user].join('|');
+    // pass в ключе: смена пароля SMTP без рестарта процесса
+    const key = [smtp.host, smtp.port, smtp.secure, smtp.auth.user, smtp.auth.pass].join('|');
     if (transporterCache && transporterKey === key) return transporterCache;
     transporterCache = nodemailer.createTransport({
         host: smtp.host,
@@ -105,5 +111,6 @@ module.exports = {
     isMailConfigured: isMailConfigured,
     sendMail: sendMail,
     verifySmtp: verifySmtp,
-    getSmtpConfig: getSmtpConfig
+    getSmtpConfig: getSmtpConfig,
+    invalidateTransporterCache: invalidateTransporterCache
 };

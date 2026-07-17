@@ -19,17 +19,48 @@ const mail = require('./lib/mail');
 const passwordReset = require('./lib/password-reset');
 const passwords = require('./lib/password');
 
+const SERVER_CONFIG_PATH = path.join(ROOT_DIR, 'server-config.json');
+
 function loadServerConfig() {
-    let config = {};
     try {
-        const configPath = path.join(ROOT_DIR, 'server-config.json');
-        if (require('fs').existsSync(configPath)) {
-            config = JSON.parse(require('fs').readFileSync(configPath, 'utf8'));
-        }
+        if (!fs.existsSync(SERVER_CONFIG_PATH)) return { ok: true, config: {} };
+        const raw = fs.readFileSync(SERVER_CONFIG_PATH, 'utf8');
+        // BOM от некоторых редакторов Windows
+        const text = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
+        return { ok: true, config: JSON.parse(text) };
     } catch (e) {
         console.error('[Config] Не удалось прочитать server-config.json:', e && e.message ? e.message : e);
+        return { ok: false, error: e, config: null };
     }
-    return config;
+}
+
+/**
+ * Перечитать server-config.json без перезапуска процесса
+ * (SMTP, adminEmail, publicSiteUrl, ключи карт и т.п.).
+ * При ошибке парсинга оставляем прежний конфиг.
+ */
+function reloadServerConfig(options) {
+    const silent = !!(options && options.silent);
+    const prev = serverConfig;
+    const loaded = loadServerConfig();
+    if (!loaded.ok || !loaded.config) {
+        return serverConfig;
+    }
+    const next = loaded.config;
+    serverConfig = next;
+    if (mail.invalidateTransporterCache) mail.invalidateTransporterCache();
+    if (!silent) {
+        const prevSmtp = mail.getSmtpConfig(prev);
+        const nextSmtp = mail.getSmtpConfig(next);
+        const prevKey = prevSmtp ? (prevSmtp.auth.user + ' @ ' + prevSmtp.host + ':' + prevSmtp.port) : '';
+        const nextKey = nextSmtp ? (nextSmtp.auth.user + ' @ ' + nextSmtp.host + ':' + nextSmtp.port) : '';
+        if (prevKey !== nextKey) {
+            console.log('[Config] SMTP обновлён без перезапуска:', nextKey || '(отключён)');
+        } else {
+            console.log('[Config] server-config.json перезагружен');
+        }
+    }
+    return serverConfig;
 }
 
 /**
@@ -53,13 +84,27 @@ function resolvePublicDir(config) {
     return publicDir;
 }
 
-const serverConfig = loadServerConfig();
+var _initialConfigLoad = loadServerConfig();
+let serverConfig = (_initialConfigLoad.ok && _initialConfigLoad.config) ? _initialConfigLoad.config : {};
 const PUBLIC_DIR = resolvePublicDir(serverConfig);
 
+if (fs.existsSync(SERVER_CONFIG_PATH)) {
+    let configReloadTimer = null;
+    fs.watchFile(SERVER_CONFIG_PATH, { interval: 1000 }, function() {
+        clearTimeout(configReloadTimer);
+        configReloadTimer = setTimeout(function() {
+            try {
+                reloadServerConfig();
+            } catch (e) {
+                console.error('[Config] Ошибка перезагрузки:', e && e.message ? e.message : e);
+            }
+        }, 150);
+    });
+}
+
 function logServerConfigWarnings() {
-    const configPath = path.join(ROOT_DIR, 'server-config.json');
-    if (!require('fs').existsSync(configPath)) {
-        console.warn('[Config] Файл server-config.json не найден в корне проекта:', configPath);
+    if (!fs.existsSync(SERVER_CONFIG_PATH)) {
+        console.warn('[Config] Файл server-config.json не найден в корне проекта:', SERVER_CONFIG_PATH);
         return;
     }
     const mapsKey = String(serverConfig.yandexMapsApiKey || process.env.YANDEX_MAPS_API_KEY || '').trim();
@@ -1284,6 +1329,7 @@ app.post('/api/auth/forgot-password', function(req, res) {
             error: 'Слишком много запросов. Повторите через ' + rate.retryAfterSec + ' с.'
         });
     }
+    reloadServerConfig({ silent: true });
     if (!mail.isMailConfigured(serverConfig)) {
         return res.status(503).json({
             success: false,
