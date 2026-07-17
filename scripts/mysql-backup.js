@@ -8,7 +8,6 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 
@@ -16,7 +15,7 @@ async function main() {
     var wantDump = process.argv.indexOf('--dump') >= 0;
     var { runMigrations } = require('../server/db/migrate');
     var { hydrateStoreFromMysql } = require('../server/db/mysql-persist');
-    var { getMysqlConfig, closePool } = require('../server/db/mysql');
+    var { closePool } = require('../server/db/mysql');
 
     await runMigrations();
     var store = await hydrateStoreFromMysql();
@@ -29,27 +28,12 @@ async function main() {
     console.log('[backup] Logical export:', jsonPath);
 
     if (wantDump) {
-        var cfg = getMysqlConfig();
-        var dumpName = 'mysqldump-' + cfg.database + '-' + stamp + '.sql';
-        var dumpPath = path.join(dir, dumpName);
-        var args = [
-            '-h', cfg.host,
-            '-P', String(cfg.port),
-            '-u', cfg.user,
-            '--single-transaction',
-            '--routines',
-            '--databases', cfg.database
-        ];
-        var env = Object.assign({}, process.env);
-        if (cfg.password) env.MYSQL_PWD = cfg.password;
-        var r = spawnSync('mysqldump', args, { encoding: 'utf8', env: env, maxBuffer: 256 * 1024 * 1024 });
-        if (r.error) {
-            console.warn('[backup] mysqldump not available:', r.error.message);
-        } else if (r.status !== 0) {
-            console.warn('[backup] mysqldump failed:', r.stderr || r.stdout);
+        var { createMysqlDump } = require('../server/db/mysql-ops');
+        var dumpResult = createMysqlDump();
+        if (!dumpResult.ok) {
+            console.warn('[backup] mysqldump failed:', dumpResult.error);
         } else {
-            fs.writeFileSync(dumpPath, r.stdout, 'utf8');
-            console.log('[backup] SQL dump:', dumpPath);
+            console.log('[backup] SQL dump:', dumpResult.path);
         }
     }
 

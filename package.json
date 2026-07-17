@@ -17,10 +17,12 @@
     "verify": "npm run check && npm run lint",
     "test-smtp": "node scripts/test-smtp.js",
     "db:migrate": "node server/db/migrate.js",
+    "db:status": "node scripts/mysql-status.js",
     "migrate:mysql": "node scripts/migrate-store-to-mysql.js",
     "setup:mysql": "node scripts/configure-mysql-storage.js",
     "test:mysql-parity": "node scripts/mysql-parity-test.js",
-    "backup:mysql": "node scripts/mysql-backup.js"
+    "backup:mysql": "node scripts/mysql-backup.js",
+    "restore:mysql": "node scripts/mysql-restore.js"
   },
   "dependencies": {
     "argon2": "^0.44.0",

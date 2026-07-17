@@ -1335,23 +1335,59 @@
                     </div>
                 </section>
 
-                <!-- База данных: полные снимки store.json -->
+                <!-- База данных: статус хранилища, JSON-снимки, MySQL dumps -->
                 <section id="tab-database" class="tab-content">
                     <div class="panel-head">
                         <details class="panel-help">
                             <summary>Справка по разделу</summary>
                             <ul class="fact-list">
-                                <li>Полные снимки <code>store.json</code> (пользователи, организации, все карты) хранятся в <code>data/backups/full/</code>.</li>
-                                <li>Сервер сам отказывается записывать «пустую» базу поверх полной и блокирует опасное уменьшение карты организации.</li>
-                                <li>«Восстановить» заменяет текущую базу выбранным снимком. Все сессии будут сброшены.</li>
+                                <li>Режим <code>json</code> — файл <code>data/store.json</code>; режим <code>mysql</code> — таблицы MySQL (пароль в UI не показывается).</li>
+                                <li>JSON-снимки в <code>data/backups/full/store-*.json</code> — полный логический снимок платформы.</li>
+                                <li>SQL dumps (<code>mysqldump-*.sql</code>) — нативный бэкап MySQL. Восстановление перезаписывает БД и сбрасывает сессии.</li>
+                                <li>Сервер сам отказывается записывать «пустую» базу поверх полной.</li>
                             </ul>
                         </details>
                     </div>
-                    <p class="hint" style="margin:0 0 14px;">Защита от потери данных: автоснимки, запрет затирания и восстановление только для главного администратора.</p>
+
+                    <h3 class="panel-title" style="font-size:0.95rem;margin:0 0 12px;">Хранилище</h3>
+                    <p class="hint" style="margin:0 0 10px;">Текущий режим и состояние MySQL (без паролей).</p>
+                    <div class="field-row" style="margin-bottom:10px;gap:10px;align-items:center;">
+                        <button type="button" class="btn-sm" id="storageStatusRefreshBtn">Обновить статус</button>
+                        <span class="hint" id="storageStatusHint" style="margin:0;"></span>
+                    </div>
+                    <div id="storageStatusPanel" class="table-wrap" style="margin-bottom:22px;padding:12px 14px;">
+                        <p class="hint" style="margin:0;">Загрузка…</p>
+                    </div>
+
+                    <h3 class="panel-title" style="font-size:0.95rem;margin:0 0 12px;">JSON-снимки (store)</h3>
+                    <p class="hint" style="margin:0 0 14px;">Полные снимки пользователей, организаций и карт. «Восстановить» заменяет текущую базу выбранным снимком.</p>
                     <div class="field-row" style="margin-bottom:14px;gap:10px;align-items:center;">
                         <button type="button" class="btn-sm-primary" id="storeBackupCreateBtn">Создать снимок сейчас</button>
                         <button type="button" class="btn-sm" id="storeBackupRefreshBtn">Обновить список</button>
                         <span class="hint" id="storeBackupStatus" style="margin:0;"></span>
+                    </div>
+                    <div class="table-wrap" style="margin-bottom:22px;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Файл</th>
+                                    <th>Размер</th>
+                                    <th>Дата</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="storeBackupsTableBody">
+                                <tr><td colspan="4" class="hint">Загрузка…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <h3 class="panel-title" style="font-size:0.95rem;margin:0 0 12px;">MySQL SQL dumps</h3>
+                    <p class="hint" style="margin:0 0 14px;">Нативные dumps через <code>mysqldump</code> → <code>data/backups/full/</code>. Нужны клиенты <code>mysqldump</code>/<code>mysql</code> на сервере.</p>
+                    <div class="field-row" style="margin-bottom:14px;gap:10px;align-items:center;">
+                        <button type="button" class="btn-sm-primary" id="mysqlDumpCreateBtn">Создать SQL dump</button>
+                        <button type="button" class="btn-sm" id="mysqlDumpRefreshBtn">Обновить список</button>
+                        <span class="hint" id="mysqlDumpStatus" style="margin:0;"></span>
                     </div>
                     <div class="table-wrap">
                         <table>
@@ -1363,7 +1399,7 @@
                                     <th></th>
                                 </tr>
                             </thead>
-                            <tbody id="storeBackupsTableBody">
+                            <tbody id="mysqlDumpsTableBody">
                                 <tr><td colspan="4" class="hint">Загрузка…</td></tr>
                             </tbody>
                         </table>
@@ -1767,8 +1803,10 @@
             if (name === 'support' && typeof window.adminLoadSupportThreads === 'function') {
                 window.adminLoadSupportThreads();
             }
-            if (name === 'database' && typeof window.adminLoadStoreBackups === 'function') {
-                window.adminLoadStoreBackups();
+            if (name === 'database') {
+                if (typeof window.adminLoadStorageStatus === 'function') window.adminLoadStorageStatus();
+                if (typeof window.adminLoadStoreBackups === 'function') window.adminLoadStoreBackups();
+                if (typeof window.adminLoadMysqlDumps === 'function') window.adminLoadMysqlDumps();
             }
         };
 
@@ -2884,6 +2922,8 @@
                 loadMaintenanceNotice();
                 loadProductUpdates();
                 if (typeof window.adminLoadStoreBackups === 'function') window.adminLoadStoreBackups();
+                if (typeof window.adminLoadStorageStatus === 'function') window.adminLoadStorageStatus();
+                if (typeof window.adminLoadMysqlDumps === 'function') window.adminLoadMysqlDumps();
                 setAdminSyncTime(true);
                 return fetchVisitStats().then(renderVisitOverview);
             }).then(function() {
@@ -2906,6 +2946,89 @@
             var el = document.getElementById('storeBackupStatus');
             if (el) el.textContent = text || '';
         }
+
+        function setMysqlDumpStatus(text) {
+            var el = document.getElementById('mysqlDumpStatus');
+            if (el) el.textContent = text || '';
+        }
+
+        function setStorageStatusHint(text) {
+            var el = document.getElementById('storageStatusHint');
+            if (el) el.textContent = text || '';
+        }
+
+        window.adminLoadStorageStatus = function() {
+            var panel = document.getElementById('storageStatusPanel');
+            if (!panel) return Promise.resolve();
+            setStorageStatusHint('Загрузка…');
+            return fetch('api/admin/storage-status', { credentials: 'include', headers: authHeaders() })
+                .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, j: j }; }); })
+                .then(function(res) {
+                    if (!res.ok) throw new Error((res.j && res.j.error) || 'Ошибка статуса');
+                    var s = res.j || {};
+                    var m = s.mysql || {};
+                    var mig = (s.migrations || []).map(function(x) { return x.id; }).join(', ') || '—';
+                    var connLabel = s.connected
+                        ? '<span style="color:var(--ok,#0a7);font-weight:600;">подключено</span>'
+                        : '<span style="color:var(--danger,#c33);font-weight:600;">нет связи</span>';
+                    var rows = [
+                        ['Режим storage', '<code>' + escapeHtml(String(s.storage || '—')) + '</code>' +
+                            (s.mysqlEnabled ? ' (MySQL активен)' : ' (файл JSON)')],
+                        ['MySQL', escapeHtml((m.user || '') + '@' + (m.host || '') + ':' + (m.port || '') + '/' + (m.database || ''))],
+                        ['Связь', connLabel],
+                        ['Версия', escapeHtml(s.version || '—')],
+                        ['Миграции', escapeHtml(mig)],
+                        ['Организаций', s.organizations != null ? String(s.organizations) : '—'],
+                        ['Пользователей', s.users != null ? String(s.users) : '—']
+                    ];
+                    if (s.error) {
+                        rows.push(['Ошибка', '<span style="color:var(--danger,#c33);">' + escapeHtml(s.error) + '</span>']);
+                    }
+                    panel.innerHTML = '<table><tbody>' + rows.map(function(r) {
+                        return '<tr><th style="width:180px;text-align:left;">' + r[0] + '</th><td>' + r[1] + '</td></tr>';
+                    }).join('') + '</tbody></table>';
+                    setStorageStatusHint(s.connected ? 'OK' : 'Нет связи с MySQL');
+                })
+                .catch(function(err) {
+                    panel.innerHTML = '<p class="hint" style="margin:0;color:var(--danger,#c33);">Ошибка: ' +
+                        escapeHtml(err.message || String(err)) + '</p>';
+                    setStorageStatusHint('Ошибка');
+                });
+        };
+
+        window.adminLoadMysqlDumps = function() {
+            var tbody = document.getElementById('mysqlDumpsTableBody');
+            if (!tbody) return Promise.resolve();
+            setMysqlDumpStatus('Загрузка…');
+            return fetch('api/admin/mysql-dumps', { credentials: 'include', headers: authHeaders() })
+                .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, j: j }; }); })
+                .then(function(res) {
+                    if (!res.ok) throw new Error((res.j && res.j.error) || 'Ошибка загрузки');
+                    var list = (res.j && res.j.dumps) || [];
+                    if (!list.length) {
+                        tbody.innerHTML = '<tr><td colspan="4" class="hint">SQL dumps пока нет. Нажмите «Создать SQL dump».</td></tr>';
+                        setMysqlDumpStatus('Пусто');
+                        return;
+                    }
+                    tbody.innerHTML = list.map(function(b) {
+                        var name = String(b.filename || '');
+                        var mtime = b.mtime ? new Date(b.mtime).toLocaleString('ru-RU') : '—';
+                        return '<tr>' +
+                            '<td><code style="font-size:0.8em;">' + escapeHtml(name) + '</code></td>' +
+                            '<td>' + escapeHtml(formatBytes(b.size)) + '</td>' +
+                            '<td>' + escapeHtml(mtime) + '</td>' +
+                            '<td><button type="button" class="btn-sm mysql-dump-restore-btn" data-filename="' +
+                            escapeHtml(name) + '">Восстановить</button></td>' +
+                            '</tr>';
+                    }).join('');
+                    setMysqlDumpStatus('Dumps: ' + list.length);
+                })
+                .catch(function(err) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="hint">Ошибка: ' +
+                        escapeHtml(err.message || String(err)) + '</td></tr>';
+                    setMysqlDumpStatus('Ошибка');
+                });
+        };
 
         window.adminLoadStoreBackups = function() {
             var tbody = document.getElementById('storeBackupsTableBody');
@@ -2946,7 +3069,23 @@
             return h;
         }
 
+        function clearAdminSessionAndReload(message) {
+            alert(message || 'База восстановлена. Войдите снова.');
+            try {
+                sessionStorage.removeItem('networkMap_session');
+                sessionStorage.removeItem('networkMap_token');
+                localStorage.removeItem('networkMap_token');
+                localStorage.removeItem('networkMap_session');
+                localStorage.removeItem('networkMap_tokenExpiry');
+            } catch (e2) {}
+            location.reload();
+        }
+
         document.addEventListener('click', function(e) {
+            if (e.target.closest('#storageStatusRefreshBtn')) {
+                window.adminLoadStorageStatus();
+                return;
+            }
             var createBtn = e.target.closest('#storeBackupCreateBtn');
             if (createBtn) {
                 setStoreBackupStatus('Создание…');
@@ -2976,7 +3115,7 @@
             if (restoreBtn) {
                 var filename = restoreBtn.getAttribute('data-filename');
                 if (!filename) return;
-                if (!confirm('Восстановить полную базу из «' + filename + '»?\n\nТекущий store.json будет заменён. Все пользователи будут разлогинены.')) return;
+                if (!confirm('Восстановить полную базу из «' + filename + '»?\n\nТекущие данные будут заменены. Все пользователи будут разлогинены.')) return;
                 setStoreBackupStatus('Восстановление…');
                 fetch('api/admin/store-backups/restore', {
                     method: 'POST',
@@ -2986,18 +3125,56 @@
                 }).then(function(r) { return r.json().then(function(j) { return { ok: r.ok, j: j }; }); })
                     .then(function(res) {
                         if (!res.ok) throw new Error((res.j && res.j.error) || 'Ошибка восстановления');
-                        alert((res.j && res.j.message) || 'База восстановлена. Войдите снова.');
-                        try {
-                            sessionStorage.removeItem('networkMap_session');
-                            sessionStorage.removeItem('networkMap_token');
-                            localStorage.removeItem('networkMap_token');
-                            localStorage.removeItem('networkMap_session');
-                            localStorage.removeItem('networkMap_tokenExpiry');
-                        } catch (e2) {}
-                        location.reload();
+                        clearAdminSessionAndReload((res.j && res.j.message) || 'База восстановлена. Войдите снова.');
                     })
                     .catch(function(err) {
                         setStoreBackupStatus(err.message || 'Ошибка');
+                        alert(err.message || 'Ошибка');
+                    });
+                return;
+            }
+            if (e.target.closest('#mysqlDumpCreateBtn')) {
+                setMysqlDumpStatus('Создание dump…');
+                fetch('api/admin/mysql-dumps/create', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: authHeaders(),
+                    body: '{}'
+                }).then(function(r) { return r.json().then(function(j) { return { ok: r.ok, j: j }; }); })
+                    .then(function(res) {
+                        if (!res.ok) throw new Error((res.j && res.j.error) || 'Не удалось создать dump');
+                        setMysqlDumpStatus('Dump создан: ' + ((res.j && res.j.filename) || ''));
+                        return window.adminLoadMysqlDumps();
+                    })
+                    .catch(function(err) {
+                        setMysqlDumpStatus(err.message || 'Ошибка');
+                        alert(err.message || 'Ошибка');
+                    });
+                return;
+            }
+            if (e.target.closest('#mysqlDumpRefreshBtn')) {
+                window.adminLoadMysqlDumps();
+                return;
+            }
+            var mysqlRestoreBtn = e.target.closest('.mysql-dump-restore-btn');
+            if (mysqlRestoreBtn) {
+                var dumpName = mysqlRestoreBtn.getAttribute('data-filename');
+                if (!dumpName) return;
+                if (!confirm('Восстановить MySQL из «' + dumpName + '»?\n\nБаза будет перезаписана. Все сессии сбросятся.')) return;
+                if (!confirm('Подтвердите ещё раз: restore MySQL dump необратим без другого бэкапа.')) return;
+                setMysqlDumpStatus('Восстановление…');
+                fetch('api/admin/mysql-dumps/restore', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ filename: dumpName, confirm: true })
+                }).then(function(r) { return r.json().then(function(j) { return { ok: r.ok, j: j }; }); })
+                    .then(function(res) {
+                        if (!res.ok) throw new Error((res.j && res.j.error) || 'Ошибка restore');
+                        clearAdminSessionAndReload((res.j && res.j.message) || 'MySQL восстановлен. Войдите снова.');
+                    })
+                    .catch(function(err) {
+                        setMysqlDumpStatus(err.message || 'Ошибка');
                         alert(err.message || 'Ошибка');
                     });
             }

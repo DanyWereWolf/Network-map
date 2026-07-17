@@ -100,7 +100,9 @@ app.use(express.static(PUBLIC_DIR));
 - Сборка карты: `server/db/map-assemble.js` (`assembleMapData` / `disassembleMapData`)
 - Импорт из JSON: `npm run migrate:mysql` (читает `data/store.json` → таблицы + `org_map_blobs`)
 - Паритет JSON↔SQL: `npm run test:mysql-parity -- --org wew`
+- Статус: `npm run db:status`
 - Бэкап: ежедневные per-org JSON как раньше; полный логический экспорт + опционально `mysqldump`: `npm run backup:mysql -- --dump`
+- Restore SQL dump: `npm run restore:mysql -- --dump path/to/file.sql --yes` (API остановлен)
 
 Конфиг:
 
@@ -121,6 +123,81 @@ app.use(express.static(PUBLIC_DIR));
 Cutover: остановить API → `npm run migrate:mysql` → `"storage": "mysql"` → старт API. Откат: `"storage": "json"` и восстановление `store.json` из `data/backups/full/`.
 
 На Linux одной командой: `sudo bash scripts/setup-mysql-linux.sh` (ставит MySQL при необходимости, пишет конфиг, мигрирует `data/store.json`).
+
+### Админка (`site-admin` → «База данных»)
+
+Только глобальный admin. На вкладке:
+
+| Блок | Действие |
+|------|----------|
+| Хранилище | Режим `json`/`mysql`, host/user/db (без пароля), связь, версия, миграции, счётчики |
+| JSON-снимки | Создать / список / восстановить `store-*.json` |
+| MySQL SQL dumps | Создать `mysqldump`, список, восстановить (двойное подтверждение) |
+
+API:
+
+- `GET /api/admin/storage-status`
+- `GET|POST /api/admin/store-backups`, `POST …/create`, `POST …/restore`
+- `GET /api/admin/mysql-dumps`, `POST …/create`, `POST …/restore` (`confirm: true`)
+
+Общая логика: `server/db/mysql-ops.js`.
+
+### Операции MySQL (Debian / console)
+
+Полный контроль БД через shell (то же, что в админке, плюс прямой `mysql`). По умолчанию MySQL слушает только `127.0.0.1`.
+
+**Первый запуск (cutover):**
+
+```bash
+# 1. Остановить API
+# 2. Сохранить копию data/store.json
+sudo MYSQL_PASSWORD='секрет' bash scripts/setup-mysql-linux.sh
+npm run test:mysql-parity -- --org <orgId>
+npm run db:status
+npm run api   # в логах: «Данные: MySQL»
+```
+
+**Сервис:**
+
+```bash
+systemctl status mysql
+journalctl -u mysql -e
+```
+
+**Прямой SQL** (пользователь из `server-config.json`, часто `networkmap`):
+
+```bash
+mysql -h 127.0.0.1 -u networkmap -p network_map
+```
+
+Полезные запросы:
+
+```sql
+SHOW TABLES;
+SELECT id, name FROM organizations;
+SELECT COUNT(*) AS users FROM users;
+SELECT table_name, table_rows
+  FROM information_schema.tables
+  WHERE table_schema = DATABASE();
+SHOW PROCESSLIST;
+SELECT * FROM schema_migrations;
+```
+
+**Статус / бэкап / restore:**
+
+```bash
+npm run db:status
+npm run backup:mysql -- --dump
+# → data/backups/full/store-mysql-export-….json
+# → data/backups/full/mysqldump-network_map-….sql
+
+# Восстановление SQL dump (CLI — лучше остановить API; из site-admin можно «на горячую»):
+npm run restore:mysql -- --dump data/backups/full/mysqldump-network_map-….sql --yes
+```
+
+Либо через UI: **site-admin → База данных → MySQL SQL dumps**.
+
+**Откат на JSON:** `"storage": "json"` в `server-config.json`, восстановить `data/store.json` из `data/backups/full/store-….json`, запустить API.
 
 - Ежедневные бэкапы карт в `data/backups/<org_id>/backup-YYYY-MM-DD.json`
 - Санитизация тел новостей через `news-sanitize.js` + `sanitize-html`

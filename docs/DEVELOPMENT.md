@@ -38,9 +38,11 @@ npm run api
 | `npm run check` | Синтаксическая проверка всех клиентских и серверных `.js` |
 | `npm run build` | Копия `public/` → `dist/` + обфускация всех клиентских JS |
 | `npm run db:migrate` | Применить MySQL schema (`server/db/schema.sql`) |
+| `npm run db:status` | Статус storage + ping MySQL (без паролей) |
 | `npm run migrate:mysql` | Импорт `data/store.json` → MySQL |
 | `npm run test:mysql-parity` | Паритет assemble/disassemble для org |
 | `npm run backup:mysql` | Логический JSON-экспорт (+ `--dump` для mysqldump) |
+| `npm run restore:mysql` | Restore из `.sql` dump (`--dump path --yes`; API остановлен) |
 
 ## Проверка перед коммитом
 
@@ -117,6 +119,9 @@ npm run api
 ```
 
 Скрипт: ставит `mysql-server` (если нет), создаёт БД/пользователя, пишет `server-config.json` (`storage: mysql`), делает `npm run migrate:mysql`.
+
+Консольные операции (статус, dump, restore, SQL): см. [SERVER.md](SERVER.md) — «Операции MySQL (Debian / console)».  
+В UI: **site-admin → База данных** (статус, JSON-снимки, MySQL dumps).
 
 **Вручную:**
 

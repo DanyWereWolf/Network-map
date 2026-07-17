@@ -2380,7 +2380,92 @@ app.post('/api/admin/store-backups/create', (req, res) => {
     }
 });
 
-app.get('/api/health', (req, res) => res.json({ ok: true, db: 'sqlite' }));
+app.get('/api/admin/storage-status', async (req, res) => {
+    const admin = getSessionUser(req);
+    if (!admin) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для главного администратора' });
+    try {
+        const mysqlOps = require('./db/mysql-ops');
+        const status = await mysqlOps.getStorageStatus();
+        res.json(status);
+    } catch (e) {
+        res.status(500).json({ error: String(e && e.message ? e.message : e) });
+    }
+});
+
+app.get('/api/admin/mysql-dumps', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!admin) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для главного администратора' });
+    try {
+        const mysqlOps = require('./db/mysql-ops');
+        res.json({ dumps: mysqlOps.listMysqlDumps() });
+    } catch (e) {
+        res.status(500).json({ error: String(e && e.message ? e.message : e) });
+    }
+});
+
+app.post('/api/admin/mysql-dumps/create', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!admin) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для главного администратора' });
+    try {
+        const mysqlOps = require('./db/mysql-ops');
+        const result = mysqlOps.createMysqlDump();
+        if (!result.ok) return res.status(500).json({ error: result.error || 'mysqldump failed' });
+        res.json({ ok: true, filename: result.filename, dumps: mysqlOps.listMysqlDumps() });
+    } catch (e) {
+        res.status(500).json({ error: String(e && e.message ? e.message : e) });
+    }
+});
+
+app.post('/api/admin/mysql-dumps/restore', async (req, res) => {
+    const admin = getSessionUser(req);
+    if (!admin) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для главного администратора' });
+    const filename = req.body && req.body.filename;
+    const confirm = req.body && req.body.confirm === true;
+    if (!filename || typeof filename !== 'string') {
+        return res.status(400).json({ error: 'Укажите filename' });
+    }
+    if (!confirm) {
+        return res.status(400).json({ error: 'Нужно confirm: true' });
+    }
+    try {
+        const mysqlOps = require('./db/mysql-ops');
+        if (db.flushMysqlPersist) {
+            try { await db.flushMysqlPersist(); } catch (e) {}
+        }
+        const result = mysqlOps.restoreMysqlDump(filename.trim());
+        if (!result.ok) return res.status(400).json({ error: result.error || 'Ошибка restore' });
+
+        if (db.getStorageMode && db.getStorageMode() === 'mysql' && db.reloadStoreFromMysql) {
+            await db.reloadStoreFromMysql();
+        }
+
+        Object.keys(syncCurrentStateByOrg).forEach(function (oid) {
+            delete syncCurrentStateByOrg[oid];
+        });
+        wss.clients.forEach(function (client) {
+            if (client.readyState === WebSocket.OPEN) {
+                try { client.close(4002, 'База MySQL восстановлена'); } catch (e) {}
+            }
+        });
+
+        res.json({
+            ok: true,
+            message: 'MySQL dump восстановлен. Сессии сброшены — войдите снова.',
+            filename: result.filename
+        });
+    } catch (e) {
+        res.status(500).json({ error: String(e && e.message ? e.message : e) });
+    }
+});
+
+app.get('/api/health', (req, res) => res.json({
+    ok: true,
+    db: (db.getStorageMode && db.getStorageMode()) || 'json'
+}));
 
 const DEFAULT_PUBLIC_SITE_URL = 'https://volsmap.ru';
 
