@@ -19,7 +19,7 @@
     "connectionLimit": 10
   },
   "smtp": {
-    "host": "smtp.mail.ru",
+    "host": "mail.hosting.reg.ru",
     "port": 465,
     "secure": true,
     "user": "support@volsmap.ru",

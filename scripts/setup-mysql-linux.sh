@@ -62,11 +62,11 @@ start_mysql_service() {
     true
 }
 
-# apt: real installable Candidate (not just a dependency mention)
+# apt: real installable Candidate (force C locale — RU uses «Кандидат:»)
 apt_pkg_available() {
   local pkg="$1"
   local cand
-  cand="$(apt-cache policy "$pkg" 2>/dev/null | awk '/^[[:space:]]*Candidate:/ { print $2; exit }')"
+  cand="$(LC_ALL=C apt-cache policy "$pkg" 2>/dev/null | awk '/^[[:space:]]*Candidate:/ { print $2; exit }')"
   [[ -n "$cand" && "$cand" != "(none)" ]]
 }
 
@@ -80,8 +80,16 @@ install_apt_db_server() {
       return 0
     fi
   done
-  echo "[setup-mysql] Нет пакетов mariadb-server / default-mysql-server / mysql-server в apt."
-  echo "[setup-mysql] Установите MariaDB вручную: sudo apt-get install -y mariadb-server"
+  # Fallback: try install even if policy parse failed (mirrors / odd apt output)
+  for pkg in mariadb-server default-mysql-server; do
+    log "Пробую apt-get install -y $pkg …"
+    if apt-get install -y "$pkg"; then
+      return 0
+    fi
+  done
+  echo "[setup-mysql] Не удалось установить MariaDB из apt."
+  echo "[setup-mysql] Проверьте sources.list (нужен компонент main) и выполните:"
+  echo "  sudo apt-get update && sudo apt-get install -y mariadb-server"
   return 1
 }
 
