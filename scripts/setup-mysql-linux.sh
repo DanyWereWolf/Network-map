@@ -62,10 +62,27 @@ start_mysql_service() {
     true
 }
 
-# apt: candidate exists in current indexes (Debian has no mysql-server by default)
+# apt: real installable Candidate (not just a dependency mention)
 apt_pkg_available() {
   local pkg="$1"
-  apt-cache show "$pkg" >/dev/null 2>&1
+  local cand
+  cand="$(apt-cache policy "$pkg" 2>/dev/null | awk '/^[[:space:]]*Candidate:/ { print $2; exit }')"
+  [[ -n "$cand" && "$cand" != "(none)" ]]
+}
+
+install_apt_db_server() {
+  # Debian Bookworm: mysql-server often has no Candidate; use MariaDB meta/package.
+  local pkg
+  for pkg in mariadb-server default-mysql-server mysql-server; do
+    if apt_pkg_available "$pkg"; then
+      log "Установка $pkg через apt…"
+      apt-get install -y "$pkg"
+      return 0
+    fi
+  done
+  echo "[setup-mysql] Нет пакетов mariadb-server / default-mysql-server / mysql-server в apt."
+  echo "[setup-mysql] Установите MariaDB вручную: sudo apt-get install -y mariadb-server"
+  return 1
 }
 
 install_mysql() {
@@ -90,21 +107,7 @@ install_mysql() {
   if command -v apt-get >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -y
-    # Debian: mysql-server обычно нет; default-mysql-server / mariadb-server — да
-    if apt_pkg_available mysql-server; then
-      log "Установка mysql-server через apt…"
-      apt-get install -y mysql-server
-    elif apt_pkg_available default-mysql-server; then
-      log "Установка default-mysql-server (MariaDB) через apt…"
-      apt-get install -y default-mysql-server
-    elif apt_pkg_available mariadb-server; then
-      log "Установка mariadb-server через apt…"
-      apt-get install -y mariadb-server
-    else
-      echo "[setup-mysql] Нет пакетов mysql-server / default-mysql-server / mariadb-server в apt."
-      echo "[setup-mysql] Установите MariaDB вручную: sudo apt-get install -y mariadb-server"
-      exit 1
-    fi
+    install_apt_db_server
     start_mysql_service
   elif command -v dnf >/dev/null 2>&1; then
     if dnf list available mysql-server >/dev/null 2>&1; then
