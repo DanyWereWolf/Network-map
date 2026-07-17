@@ -390,7 +390,14 @@ function requestPasswordReset(usernameOrEmail) {
     }).then(function(r) { return r.json().then(function(body) { return { status: r.status, body: body }; }); })
     .then(function(res) {
         var body = res.body || {};
-        if (body.success) return { success: true, message: body.message || 'Письмо отправлено' };
+        if (body.success) {
+            return {
+                success: true,
+                sent: !!body.sent,
+                emailHint: body.emailHint || '',
+                message: body.message || 'Письмо отправлено'
+            };
+        }
         return { success: false, error: body.error || 'Ошибка запроса', status: res.status };
     }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
 }

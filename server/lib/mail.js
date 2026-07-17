@@ -66,8 +66,12 @@ function closeTransporter(transporter) {
 }
 
 function sendWithTransporter(transporter, mailOptions) {
-    return transporter.sendMail(mailOptions).finally(function() {
+    return transporter.sendMail(mailOptions).then(function(info) {
         closeTransporter(transporter);
+        return info;
+    }, function(err) {
+        closeTransporter(transporter);
+        throw err;
     });
 }
 

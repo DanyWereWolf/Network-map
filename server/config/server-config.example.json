@@ -8,6 +8,10 @@
   "maxConcurrentUsers": 4,
   "authRateLimitWindowMs": 900000,
   "authRateLimitMax": 20,
+  "passwordResetRateLimitWindowMs": 900000,
+  "passwordResetRateLimitMax": 3,
+  "passwordResetEmailLimitWindowMs": 300000,
+  "passwordResetEmailLimitMax": 1,
   "adminEmail": "admin@example.com",
   "storage": "json",
   "mysql": {

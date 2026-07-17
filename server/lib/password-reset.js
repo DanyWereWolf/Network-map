@@ -112,6 +112,18 @@ function escapeHtml(str) {
         .replace(/"/g, '&quot;');
 }
 
+/** Маска для UI: danil.sechin3@gmail.com → d***@gmail.com */
+function maskEmail(email) {
+    const raw = String(email || '').trim();
+    const at = raw.indexOf('@');
+    if (at < 1) return '';
+    const local = raw.slice(0, at);
+    const domain = raw.slice(at + 1);
+    if (!domain) return '';
+    const visible = local.charAt(0);
+    return visible + '***@' + domain;
+}
+
 module.exports = {
     RESET_TOKEN_TTL_MS: RESET_TOKEN_TTL_MS,
     isValidEmail: isValidEmail,
@@ -120,5 +132,6 @@ module.exports = {
     canResetPassword: canResetPassword,
     createResetToken: createResetToken,
     consumeResetToken: consumeResetToken,
-    buildResetEmail: buildResetEmail
+    buildResetEmail: buildResetEmail,
+    maskEmail: maskEmail
 };

@@ -359,6 +359,36 @@ function getAuthRateLimitOptions() {
     return { windowMs: windowMs, maxAttempts: maxAttempts };
 }
 
+/** Лимит запросов «забыли пароль» с одного IP (по умолчанию 3 / 15 мин). */
+function getPasswordResetIpLimitOptions() {
+    var windowMs = parseInt(
+        process.env.PASSWORD_RESET_RATE_LIMIT_WINDOW_MS || serverConfig.passwordResetRateLimitWindowMs || '900000',
+        10
+    );
+    var maxAttempts = parseInt(
+        process.env.PASSWORD_RESET_RATE_LIMIT_MAX || serverConfig.passwordResetRateLimitMax || '3',
+        10
+    );
+    if (isNaN(windowMs) || windowMs < 60000) windowMs = 900000;
+    if (isNaN(maxAttempts) || maxAttempts < 1) maxAttempts = 3;
+    return { windowMs: windowMs, maxAttempts: maxAttempts };
+}
+
+/** Лимит реальных писем на один аккаунт/почту (по умолчанию 1 / 5 мин). */
+function getPasswordResetEmailLimitOptions() {
+    var windowMs = parseInt(
+        process.env.PASSWORD_RESET_EMAIL_LIMIT_WINDOW_MS || serverConfig.passwordResetEmailLimitWindowMs || '300000',
+        10
+    );
+    var maxAttempts = parseInt(
+        process.env.PASSWORD_RESET_EMAIL_LIMIT_MAX || serverConfig.passwordResetEmailLimitMax || '1',
+        10
+    );
+    if (isNaN(windowMs) || windowMs < 60000) windowMs = 300000;
+    if (isNaN(maxAttempts) || maxAttempts < 1) maxAttempts = 1;
+    return { windowMs: windowMs, maxAttempts: maxAttempts };
+}
+
 function isOrgAdmin(user) {
     return !!(user && user.role === 'admin' && user.organizationId);
 }
@@ -1322,37 +1352,61 @@ var PASSWORD_RESET_GENERIC_MSG = 'Если указанный аккаунт с�
 
 app.post('/api/auth/forgot-password', function(req, res) {
     var ip = getClientIp(req);
-    var rate = security.checkRateLimit('forgot:' + ip, getAuthRateLimitOptions());
+    var rate = security.checkRateLimit('forgot:' + ip, getPasswordResetIpLimitOptions());
     if (!rate.ok) {
         return res.status(429).json({
             success: false,
-            error: 'Слишком много запросов. Повторите через ' + rate.retryAfterSec + ' с.'
+            sent: false,
+            error: 'Слишком много запросов на восстановление пароля. Повторите через ' + rate.retryAfterSec + ' с.'
         });
     }
     reloadServerConfig({ silent: true });
     if (!mail.isMailConfigured(serverConfig)) {
         return res.status(503).json({
             success: false,
+            sent: false,
             error: 'Восстановление пароля временно недоступно. Обратитесь в поддержку.'
         });
     }
     var body = req.body || {};
     var input = body.usernameOrEmail != null ? String(body.usernameOrEmail).trim() : '';
     if (!input) {
-        return res.status(400).json({ success: false, error: 'Укажите имя пользователя или e-mail' });
+        return res.status(400).json({ success: false, sent: false, error: 'Укажите имя пользователя или e-mail' });
     }
     var user = passwordReset.findUserForPasswordReset(input);
     if (!user || !passwordReset.canResetPassword(user)) {
-        return res.json({ success: true, message: PASSWORD_RESET_GENERIC_MSG });
+        return res.json({ success: true, sent: false, message: PASSWORD_RESET_GENERIC_MSG });
     }
     var email = passwordReset.resolveUserEmail(user, serverConfig);
     if (!email) {
         console.warn('[Auth] forgot-password: у пользователя', user.id, '(' + user.username + ') нет e-mail для отправки');
-        return res.json({ success: true, message: PASSWORD_RESET_GENERIC_MSG });
+        return res.status(400).json({
+            success: false,
+            sent: false,
+            error: 'У этой учётной записи не указан e-mail. Добавьте почту в профиле или обратитесь к администратору.'
+        });
+    }
+    var emailLimitOpts = getPasswordResetEmailLimitOptions();
+    var mailRate = security.checkRateLimit('forgot-mail:' + String(email).toLowerCase(), emailLimitOpts);
+    if (!mailRate.ok) {
+        return res.status(429).json({
+            success: false,
+            sent: false,
+            error: 'Письмо уже отправлялось. Повторите через ' + mailRate.retryAfterSec + ' с.'
+        });
+    }
+    var userRate = security.checkRateLimit('forgot-user:' + String(user.id), emailLimitOpts);
+    if (!userRate.ok) {
+        return res.status(429).json({
+            success: false,
+            sent: false,
+            error: 'Письмо уже отправлялось. Повторите через ' + userRate.retryAfterSec + ' с.'
+        });
     }
     var token = passwordReset.createResetToken(user.id);
     var siteUrl = serverConfig.publicSiteUrl || process.env.PUBLIC_SITE_URL || getSiteBaseUrl(req);
     var mailContent = passwordReset.buildResetEmail(siteUrl, token, user.username);
+    var emailHint = passwordReset.maskEmail(email);
     return mail.sendMail(serverConfig, {
         to: email,
         subject: mailContent.subject,
@@ -1363,15 +1417,22 @@ app.post('/api/auth/forgot-password', function(req, res) {
             console.error('[Auth] forgot-password mail failed for user', user.id, 'to', email, '-', result.error || 'unknown');
             return res.status(503).json({
                 success: false,
+                sent: false,
                 error: result.error || 'Не удалось отправить письмо. Попробуйте позже или обратитесь в поддержку.'
             });
         }
         console.log('[Auth] forgot-password mail sent for user', user.id, 'to', email);
-        return res.json({ success: true, message: PASSWORD_RESET_GENERIC_MSG });
+        return res.json({
+            success: true,
+            sent: true,
+            emailHint: emailHint,
+            message: 'Письмо со ссылкой отправлено на ' + emailHint + '. Проверьте входящие и папку «Спам».'
+        });
     }).catch(function(err) {
         console.error('[Auth] forgot-password error for user', user.id, '-', err && err.message ? err.message : err);
         return res.status(503).json({
             success: false,
+            sent: false,
             error: 'Не удалось отправить письмо. Попробуйте позже или обратитесь в поддержку.'
         });
     });
