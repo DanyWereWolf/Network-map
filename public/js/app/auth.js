@@ -911,11 +911,22 @@ document.addEventListener('DOMContentLoaded', function() {
         forgotPasswordForm.addEventListener('submit', function(e) {
             e.preventDefault();
             var input = document.getElementById('forgotUsernameOrEmail').value.trim();
+            var submitBtn = forgotPasswordForm.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.setAttribute('aria-busy', 'true');
+            }
+            showMessage('Отправка…', 'success');
             Promise.resolve(requestPasswordReset(input)).then(function(result) {
                 if (result.success) {
                     showMessage(result.message || 'Если аккаунт найден, письмо отправлено.', 'success');
                 } else {
-                    showMessage(result.error, 'error');
+                    showMessage(result.error || 'Не удалось отправить ссылку', 'error');
+                }
+            }).finally(function() {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.removeAttribute('aria-busy');
                 }
             });
         });

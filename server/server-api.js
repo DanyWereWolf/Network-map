@@ -1387,20 +1387,20 @@ app.post('/api/auth/forgot-password', function(req, res) {
         });
     }
     var emailLimitOpts = getPasswordResetEmailLimitOptions();
-    var mailRate = security.checkRateLimit('forgot-mail:' + String(email).toLowerCase(), emailLimitOpts);
-    if (!mailRate.ok) {
+    var mailPeek = security.peekRateLimit('forgot-mail:' + String(email).toLowerCase(), emailLimitOpts);
+    if (!mailPeek.ok) {
         return res.status(429).json({
             success: false,
             sent: false,
-            error: 'Письмо уже отправлялось. Повторите через ' + mailRate.retryAfterSec + ' с.'
+            error: 'Письмо уже отправлялось. Повторите через ' + mailPeek.retryAfterSec + ' с.'
         });
     }
-    var userRate = security.checkRateLimit('forgot-user:' + String(user.id), emailLimitOpts);
-    if (!userRate.ok) {
+    var userPeek = security.peekRateLimit('forgot-user:' + String(user.id), emailLimitOpts);
+    if (!userPeek.ok) {
         return res.status(429).json({
             success: false,
             sent: false,
-            error: 'Письмо уже отправлялось. Повторите через ' + userRate.retryAfterSec + ' с.'
+            error: 'Письмо уже отправлялось. Повторите через ' + userPeek.retryAfterSec + ' с.'
         });
     }
     var token = passwordReset.createResetToken(user.id);
@@ -1421,6 +1421,8 @@ app.post('/api/auth/forgot-password', function(req, res) {
                 error: result.error || 'Не удалось отправить письмо. Попробуйте позже или обратитесь в поддержку.'
             });
         }
+        security.checkRateLimit('forgot-mail:' + String(email).toLowerCase(), emailLimitOpts);
+        security.checkRateLimit('forgot-user:' + String(user.id), emailLimitOpts);
         console.log('[Auth] forgot-password mail sent for user', user.id, 'to', email);
         return res.json({
             success: true,

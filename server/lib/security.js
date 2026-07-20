@@ -15,17 +15,36 @@ function pruneRateBuckets(now) {
     });
 }
 
-function checkRateLimit(key, options) {
-    const windowMs = (options && options.windowMs) || DEFAULT_RATE_WINDOW_MS;
-    const maxAttempts = (options && options.maxAttempts) || DEFAULT_RATE_MAX;
-    const now = Date.now();
-    pruneRateBuckets(now);
+function getOrCreateRateEntry(key, windowMs, now) {
     var bucketKey = String(key || 'unknown');
     var entry = rateBuckets.get(bucketKey);
     if (!entry || entry.resetAt <= now) {
         entry = { count: 0, resetAt: now + windowMs };
         rateBuckets.set(bucketKey, entry);
     }
+    return entry;
+}
+
+/** Проверка без увеличения счётчика. */
+function peekRateLimit(key, options) {
+    const windowMs = (options && options.windowMs) || DEFAULT_RATE_WINDOW_MS;
+    const maxAttempts = (options && options.maxAttempts) || DEFAULT_RATE_MAX;
+    const now = Date.now();
+    pruneRateBuckets(now);
+    var entry = getOrCreateRateEntry(key, windowMs, now);
+    if (entry.count >= maxAttempts) {
+        var retryAfterSec = Math.max(1, Math.ceil((entry.resetAt - now) / 1000));
+        return { ok: false, retryAfterSec: retryAfterSec, remaining: 0 };
+    }
+    return { ok: true, remaining: Math.max(0, maxAttempts - entry.count) };
+}
+
+function checkRateLimit(key, options) {
+    const windowMs = (options && options.windowMs) || DEFAULT_RATE_WINDOW_MS;
+    const maxAttempts = (options && options.maxAttempts) || DEFAULT_RATE_MAX;
+    const now = Date.now();
+    pruneRateBuckets(now);
+    var entry = getOrCreateRateEntry(key, windowMs, now);
     entry.count += 1;
     if (entry.count > maxAttempts) {
         var retryAfterSec = Math.max(1, Math.ceil((entry.resetAt - now) / 1000));
@@ -90,6 +109,7 @@ function orgRequiresTotp(org) {
 
 module.exports = {
     checkRateLimit: checkRateLimit,
+    peekRateLimit: peekRateLimit,
     generateTotpSecret: generateTotpSecret,
     verifyTotpCode: verifyTotpCode,
     createPendingLogin: createPendingLogin,
