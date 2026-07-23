@@ -214,6 +214,7 @@
             stemEnd: pathOpts.stemEnd,
             laneIndex: pathOpts.laneIndex,
             cableApproachY: pathOpts.cableApproachY,
+            cableApproachX: pathOpts.cableApproachX,
             pad: 20
         });
     }
@@ -228,6 +229,27 @@
         return null;
     }
 
+    function getAssignSideApproachXs() {
+        if (typeof global.assignSideSplitterApproachXs === 'function') return global.assignSideSplitterApproachXs;
+        return null;
+    }
+
+    function getOrthogonalWaypointsPath() {
+        if (typeof global.buildFiberSchemeOrthogonalWaypointsPath === 'function') {
+            return global.buildFiberSchemeOrthogonalWaypointsPath;
+        }
+        return null;
+    }
+
+    function buildOrthogonalPts(pts) {
+        var fn = getOrthogonalWaypointsPath();
+        if (fn) return fn(pts, { smooth: true, filletScale: 1.3 });
+        if (!pts || pts.length < 2) return '';
+        var parts = ['M ' + pts[0].x + ' ' + pts[0].y];
+        for (var i = 1; i < pts.length; i++) parts.push('L ' + pts[i].x + ' ' + pts[i].y);
+        return parts.join(' ');
+    }
+
     function buildSplitterSchematicPath(x1, y1, x2, y2, pathOpts, preferHV) {
         var aroundD = tryAroundObstacles(x1, y1, x2, y2, pathOpts);
         if (aroundD) return aroundD;
@@ -236,6 +258,7 @@
             return elbow(x1, y1, x2, y2, {
                 preferHV: preferHV || 'vh',
                 cableApproachY: pathOpts && pathOpts.cableApproachY,
+                cableApproachX: pathOpts && pathOpts.cableApproachX,
                 fiberAtStart: pathOpts && pathOpts.fiberAtStart
             });
         }
@@ -291,6 +314,218 @@
         return buildSplitterSchematicPath(x1, y1, x2, y2, pathOpts, 'vh');
     }
 
+    /**
+     * Режим отрисовки жилы↔сплиттер: отдельно горизонтальная и вертикальная карточка.
+     * top-horizontal | top-vertical | side-horizontal | side-vertical
+     */
+    function resolveSplitterLinkMode(fiberMeta, orientation) {
+        fiberMeta = fiberMeta || {};
+        orientation = orientation || 'horizontal';
+        if (fiberMeta.isTop) {
+            return orientation === 'vertical' ? 'top-vertical' : 'top-horizontal';
+        }
+        return orientation === 'vertical' ? 'side-vertical' : 'side-horizontal';
+    }
+
+    /**
+     * Вертикальный сплиттер ↔ боковой кабель.
+     * Порты на одной горизонтали (верх/низ) — нельзя идти vh сквозь корпус:
+     * сначала вынос от карточки, затем своя X-дорожка к жиле.
+     */
+    function buildVerticalSplitterSidePath(portX, portY, fiberX, fiberY, pathOpts, kind, mirrored, fiberIsLeft) {
+        pathOpts = pathOpts || {};
+        var box = pathOpts.avoidBox;
+        var lane = pathOpts.laneIndex != null ? pathOpts.laneIndex : 0;
+        var stem = pathOpts.stemStart != null ? pathOpts.stemStart : (16 + lane * 10);
+        var leaveDown = kind === 'output' ? !mirrored : !!mirrored;
+        var stemY = leaveDown ? (portY + stem) : (portY - stem);
+        if (box) {
+            if (leaveDown) stemY = Math.max(stemY, box.y + box.h + 10 + lane * 8);
+            else stemY = Math.min(stemY, box.y - 10 - lane * 8);
+        }
+
+        var ax = resolveSideCableApproachX(fiberX, fiberIsLeft, pathOpts, box);
+        var pts;
+        if (kind === 'input') {
+            pts = [
+                { x: fiberX, y: fiberY },
+                { x: ax, y: fiberY },
+                { x: ax, y: stemY },
+                { x: portX, y: stemY },
+                { x: portX, y: portY }
+            ];
+        } else {
+            pts = [
+                { x: portX, y: portY },
+                { x: portX, y: stemY },
+                { x: ax, y: stemY },
+                { x: ax, y: fiberY },
+                { x: fiberX, y: fiberY }
+            ];
+        }
+        return buildOrthogonalPts(pts);
+    }
+
+    /** X-дорожка перед боковым кабелем: изгиб до бейджа, снаружи корпуса сплиттера. */
+    function resolveSideCableApproachX(fiberX, fiberIsLeft, pathOpts, box) {
+        pathOpts = pathOpts || {};
+        var lane = pathOpts.laneIndex != null ? pathOpts.laneIndex : 0;
+        var minLead = 28 + lane * 10;
+        var ax = pathOpts.cableApproachX;
+        if (ax == null || isNaN(ax)) {
+            ax = fiberIsLeft ? (fiberX + minLead) : (fiberX - minLead);
+        }
+        if (fiberIsLeft) {
+            ax = Math.max(ax, fiberX + 22);
+        } else {
+            ax = Math.min(ax, fiberX - 22);
+        }
+        if (box) {
+            if (fiberIsLeft) {
+                // Коридор слева от карточки и справа от жилы — без затаскивания внутрь корпуса.
+                var leftMax = box.x - 12;
+                var leftMin = fiberX + 18;
+                if (leftMin <= leftMax) ax = Math.max(leftMin, Math.min(leftMax, ax));
+                else ax = leftMax;
+            } else {
+                var rightMin = box.x + box.w + 12;
+                var rightMax = fiberX - 18;
+                if (rightMin <= rightMax) ax = Math.max(rightMin, Math.min(rightMax, ax));
+                else ax = rightMin;
+            }
+        }
+        return ax;
+    }
+
+    /**
+     * Горизонтальный сплиттер ↔ боковой кабель.
+     * Сначала вынос НАРУЖУ от корпуса, затем к X-дорожке.
+     * Если жила на противоположной стороне — обход сверху/снизу, не сквозь карточку.
+     */
+    function buildHorizontalSplitterSidePath(portX, portY, fiberX, fiberY, pathOpts, kind, fiberIsLeft) {
+        pathOpts = pathOpts || {};
+        var box = pathOpts.avoidBox;
+        var lane = pathOpts.laneIndex != null ? pathOpts.laneIndex : 0;
+        var ax = resolveSideCableApproachX(fiberX, fiberIsLeft, pathOpts, box);
+        var boxCx = box ? (box.cx != null ? box.cx : (box.x + box.w / 2)) : portX;
+        var portOnRight = portX >= boxCx;
+
+        // Короткий вынос от порта наружу (не внутрь карточки).
+        var exitX = portX + (portOnRight ? 1 : -1) * (12 + lane * 4);
+        if (box) {
+            if (portOnRight) exitX = Math.max(exitX, box.x + box.w + 10 + lane * 4);
+            else exitX = Math.min(exitX, box.x - 10 - lane * 4);
+        }
+
+        var dy = Math.abs(portY - fiberY);
+        var midY = fiberY;
+        if (dy < 12) {
+            var jogDir = (lane % 2 === 0) ? -1 : 1;
+            midY = fiberY + jogDir * (16 + Math.floor(lane / 2) * 7);
+        }
+
+        var sameSide = box
+            ? ((portOnRight && ax >= box.x + box.w - 2) || (!portOnRight && ax <= box.x + 2))
+            : ((portOnRight && ax >= portX - 1) || (!portOnRight && ax <= portX + 1));
+
+        var pts;
+        if (!sameSide && box) {
+            // Жила с другой стороны — обход под/над корпусом.
+            var preferBelow = fiberY >= portY;
+            var clearY = preferBelow
+                ? Math.max(box.y + box.h + 12 + lane * 8, Math.max(portY, fiberY, midY) + 14)
+                : Math.min(box.y - 12 - lane * 8, Math.min(portY, fiberY, midY) - 14);
+            if (kind === 'input') {
+                pts = [
+                    { x: fiberX, y: fiberY },
+                    { x: ax, y: fiberY },
+                    { x: ax, y: clearY },
+                    { x: exitX, y: clearY },
+                    { x: exitX, y: portY },
+                    { x: portX, y: portY }
+                ];
+            } else {
+                pts = [
+                    { x: portX, y: portY },
+                    { x: exitX, y: portY },
+                    { x: exitX, y: clearY },
+                    { x: ax, y: clearY },
+                    { x: ax, y: fiberY },
+                    { x: fiberX, y: fiberY }
+                ];
+            }
+        } else if (kind === 'input') {
+            pts = [
+                { x: fiberX, y: fiberY },
+                { x: ax, y: fiberY },
+                { x: ax, y: midY },
+                { x: ax, y: portY },
+                { x: exitX, y: portY },
+                { x: portX, y: portY }
+            ];
+        } else {
+            pts = [
+                { x: portX, y: portY },
+                { x: exitX, y: portY },
+                { x: ax, y: portY },
+                { x: ax, y: midY },
+                { x: ax, y: fiberY },
+                { x: fiberX, y: fiberY }
+            ];
+        }
+        return buildOrthogonalPts(pts);
+    }
+
+    /**
+     * Горизонтальный сплиттер ↔ верхний кабель.
+     * Все порты на одном X — прямой подъём сливает жилы у края карточки.
+     * Вынос наружу по Y порта, затем дорожка approachY НАД корпусом.
+     */
+    function buildHorizontalSplitterTopPath(portX, portY, fiberX, fiberY, pathOpts, kind, mirrored) {
+        pathOpts = pathOpts || {};
+        var box = pathOpts.avoidBox;
+        var lane = pathOpts.laneIndex != null ? pathOpts.laneIndex : 0;
+        var ay = pathOpts.cableApproachY;
+        if (ay == null || isNaN(ay)) ay = fiberY + 22 + lane * 10;
+        ay = Math.max(fiberY + 16, ay);
+
+        // Выходы справа (!mirrored) — колонка правее порта; вход слева — левее.
+        var leaveRight = kind === 'output' ? !mirrored : !!mirrored;
+        var riserX = pathOpts.portRiserX;
+        if (riserX == null || isNaN(riserX)) {
+            riserX = portX + (leaveRight ? 1 : -1) * (14 + lane * 11);
+        }
+        if (box) {
+            if (leaveRight) riserX = Math.max(riserX, box.x + box.w + 10 + lane * 6);
+            else riserX = Math.min(riserX, box.x - 10 - lane * 6);
+            // Дорожка строго над корпусом — иначе горизонталь режет карточку.
+            if (ay > box.y - 8) {
+                ay = Math.min(ay, box.y - 12);
+                ay = Math.max(fiberY + 16, ay);
+            }
+        }
+
+        var pts;
+        if (kind === 'input') {
+            pts = [
+                { x: fiberX, y: fiberY },
+                { x: fiberX, y: ay },
+                { x: riserX, y: ay },
+                { x: riserX, y: portY },
+                { x: portX, y: portY }
+            ];
+        } else {
+            pts = [
+                { x: portX, y: portY },
+                { x: riserX, y: portY },
+                { x: riserX, y: ay },
+                { x: fiberX, y: ay },
+                { x: fiberX, y: fiberY }
+            ];
+        }
+        return buildOrthogonalPts(pts);
+    }
+
     function buildVerticalPortRoute(x1, y1, x2, y2, pathOpts, bendMode) {
         return buildSplitterSchematicPath(x1, y1, x2, y2, pathOpts, 'vh');
     }
@@ -302,7 +537,7 @@
         kind = kind || 'output';
 
         var localOpts = pathOpts;
-        if (fiberMeta.routeSeed != null || fiberMeta.routeStagger != null || fiberMeta.preferLeft != null || fiberMeta.avoidBox || fiberMeta.stemStart != null || fiberMeta.stemEnd != null || fiberMeta.laneIndex != null || fiberMeta.cableApproachY != null) {
+        if (fiberMeta.routeSeed != null || fiberMeta.routeStagger != null || fiberMeta.preferLeft != null || fiberMeta.avoidBox || fiberMeta.stemStart != null || fiberMeta.stemEnd != null || fiberMeta.laneIndex != null || fiberMeta.cableApproachY != null || fiberMeta.cableApproachX != null || fiberMeta.portRiserX != null) {
             localOpts = withRouteMeta(pathOpts, {
                 routeSeed: fiberMeta.routeSeed != null ? fiberMeta.routeSeed : pathOpts.routeSeed,
                 routeStagger: fiberMeta.routeStagger != null ? fiberMeta.routeStagger : pathOpts.routeStagger,
@@ -312,6 +547,8 @@
                 stemEnd: fiberMeta.stemEnd != null ? fiberMeta.stemEnd : pathOpts.stemEnd,
                 laneIndex: fiberMeta.laneIndex != null ? fiberMeta.laneIndex : pathOpts.laneIndex,
                 cableApproachY: fiberMeta.cableApproachY != null ? fiberMeta.cableApproachY : pathOpts.cableApproachY,
+                cableApproachX: fiberMeta.cableApproachX != null ? fiberMeta.cableApproachX : pathOpts.cableApproachX,
+                portRiserX: fiberMeta.portRiserX != null ? fiberMeta.portRiserX : pathOpts.portRiserX,
                 // input: жила в начале пути; output: жила в конце
                 fiberAtStart: kind === 'input' ? !!fiberMeta.isTop : false
             });
@@ -319,13 +556,35 @@
             localOpts = withRouteMeta(pathOpts, { fiberAtStart: false });
         }
 
+        var mode = resolveSplitterLinkMode(fiberMeta, orientation);
+
+        if (mode === 'side-vertical') {
+            if (kind === 'input') {
+                return buildVerticalSplitterSidePath(toX, toY, fromX, fromY, localOpts, 'input', mirrored, fiberMeta.isLeft);
+            }
+            return buildVerticalSplitterSidePath(fromX, fromY, toX, toY, localOpts, 'output', mirrored, fiberMeta.isLeft);
+        }
+
+        if (mode === 'side-horizontal') {
+            if (kind === 'input') {
+                return buildHorizontalSplitterSidePath(toX, toY, fromX, fromY, localOpts, 'input', fiberMeta.isLeft);
+            }
+            return buildHorizontalSplitterSidePath(fromX, fromY, toX, toY, localOpts, 'output', fiberMeta.isLeft);
+        }
+
+        if (mode === 'top-horizontal') {
+            if (kind === 'input') {
+                return buildHorizontalSplitterTopPath(toX, toY, fromX, fromY, localOpts, 'input', mirrored);
+            }
+            return buildHorizontalSplitterTopPath(fromX, fromY, toX, toY, localOpts, 'output', mirrored);
+        }
+
         if (kind === 'input') {
             return buildSplitterInputCurvedPath(fromX, fromY, toX, toY, localOpts, fiberMeta, orientation, mirrored);
         }
 
-        var preferHV = orientation === 'vertical' ? 'vh' : 'hv';
-        if (fiberMeta.isTop) preferHV = 'vh';
-        return buildSplitterSchematicPath(fromX, fromY, toX, toY, localOpts, preferHV);
+        // top-vertical: порты на разных X — vh + cableApproachY
+        return buildSplitterSchematicPath(fromX, fromY, toX, toY, localOpts, 'vh');
     }
 
     function buildSplitterChainPath(srcPt, tgtPt, srcOrient, tgtOrient, srcMirrored, tgtMirrored, pathOpts) {
@@ -354,12 +613,14 @@
         );
     }
 
-    function buildRouteMeta(splitterId, kind, outputIndex, portX, boxCx) {
+    function buildRouteMeta(splitterId, kind, outputIndex, portX, boxCx, fiberIsLeft) {
         var seed = String(splitterId || 'sp') + ':' + (kind || 'out') + ':' + (outputIndex != null ? outputIndex : 'in');
         var hash = stableHash01(seed);
         var lane = outputIndex != null ? outputIndex : 0;
-        // Лестница выносов для разных горизонталей; линии остаются Г/П без лишних изломов.
-        var preferLeft = portX != null && boxCx != null ? portX <= boxCx : hash < 0.5;
+        // Сторона обхода — от кабеля, а не от половины карточки (иначе правые порты → левый кабель идут «не туда»).
+        var preferLeft = fiberIsLeft != null
+            ? !!fiberIsLeft
+            : (portX != null && boxCx != null ? portX <= boxCx : hash < 0.5);
         var stemStart = 18 + lane * 11 + hash * 6;
         var stemEnd = 12 + lane * 4 + stableHash01(seed + ':exit') * 6;
         var stagger = 14 + lane * 10 + hash * 8;
@@ -393,6 +654,8 @@
             stemEnd: meta.stemEnd != null ? meta.stemEnd : pathOpts.stemEnd,
             laneIndex: meta.laneIndex != null ? meta.laneIndex : pathOpts.laneIndex,
             cableApproachY: meta.cableApproachY != null ? meta.cableApproachY : pathOpts.cableApproachY,
+            cableApproachX: meta.cableApproachX != null ? meta.cableApproachX : pathOpts.cableApproachX,
+            portRiserX: meta.portRiserX != null ? meta.portRiserX : pathOpts.portRiserX,
             fiberAtStart: meta.fiberAtStart != null ? meta.fiberAtStart : pathOpts.fiberAtStart
         };
     }
@@ -411,6 +674,23 @@
         // База чуть ниже кабеля; полосы уходят вверх к жилам (как у кросса).
         var baseApproachY = maxFy + 22 + Math.max(0, entries.length - 1) * 10;
         return assignFn(entries, baseApproachY);
+    }
+
+    /** Дорожки у бокового кабеля для вертикального сплиттера. */
+    function buildSideCableSplitterApproachMap(entries, isLeft) {
+        var assignFn = getAssignSideApproachXs();
+        if (!assignFn || !entries || !entries.length) return new Map();
+        var baseFx = null;
+        entries.forEach(function (e) {
+            if (e && e.fx != null && !isNaN(e.fx)) {
+                baseFx = baseFx == null ? e.fx : (isLeft ? Math.max(baseFx, e.fx) : Math.min(baseFx, e.fx));
+            }
+        });
+        if (baseFx == null) return new Map();
+        var baseApproachX = isLeft
+            ? (baseFx + 28 + Math.max(0, entries.length - 1) * 4)
+            : (baseFx - 28 - Math.max(0, entries.length - 1) * 4);
+        return assignFn(entries, baseApproachX, { towardLeft: !isLeft });
     }
 
     function setSplitterLinkPathD(pathEl, d) {
@@ -509,9 +789,12 @@
         }
         pathOpts.avoidBox = avoidBox;
         var topUpdateEntries = [];
+        var leftUpdateEntries = [];
+        var rightUpdateEntries = [];
         svg.querySelectorAll('.fiber-scheme-splitter-link[data-splitter-id="' + splitterId + '"]').forEach(function (pathEl) {
             if (pathEl.getAttribute('data-target-splitter-id')) return;
-            if (pathEl.getAttribute('data-fiber-is-top') !== '1') return;
+            var isTopFiber = pathEl.getAttribute('data-fiber-is-top') === '1';
+            var isLeftFiber = pathEl.getAttribute('data-fiber-is-left') === '1';
             var kind = pathEl.getAttribute('data-link-kind');
             var fx = parseFloat(pathEl.getAttribute('data-fiber-exit-x'));
             var fy = parseFloat(pathEl.getAttribute('data-fiber-exit-y'));
@@ -531,9 +814,17 @@
                 portY = outPortCollect.y;
                 approachKey = 'out:' + fiberKey(pathEl.getAttribute('data-cable-id'), pathEl.getAttribute('data-fiber-number')) + ':' + splitterId + ':' + oiCollect;
             } else return;
-            topUpdateEntries.push({ fiberKey: approachKey, fx: fx, px: portX, fy: fy });
+            if (isTopFiber) {
+                topUpdateEntries.push({ fiberKey: approachKey, fx: fx, px: portX, fy: fy, py: portY });
+            } else {
+                var sideEntry = { fiberKey: approachKey, fx: fx, px: portX, fy: fy, py: portY };
+                if (isLeftFiber) leftUpdateEntries.push(sideEntry);
+                else rightUpdateEntries.push(sideEntry);
+            }
         });
         var topUpdateMap = buildTopCableSplitterApproachMap(topUpdateEntries);
+        var leftUpdateMap = buildSideCableSplitterApproachMap(leftUpdateEntries, true);
+        var rightUpdateMap = buildSideCableSplitterApproachMap(rightUpdateEntries, false);
         svg.querySelectorAll('.fiber-scheme-splitter-link[data-splitter-id="' + splitterId + '"]').forEach(function (pathEl) {
             if (pathEl.getAttribute('data-target-splitter-id')) return;
             var kind = pathEl.getAttribute('data-link-kind');
@@ -546,17 +837,25 @@
             var portY;
             var d;
             var cableAy = null;
+            var cableAx = null;
             if (kind === 'input') {
                 portX = inPortX;
                 portY = inPortY;
-                var inMeta = buildRouteMeta(splitterId, 'input', null, portX, cx);
+                var inMeta = buildRouteMeta(splitterId, 'input', null, portX, cx, isTopFiber ? null : isLeft);
                 inMeta.isLeft = isLeft;
                 inMeta.isTop = isTopFiber;
                 inMeta.avoidBox = avoidBox;
+                var inKey = 'in:' + fiberKey(pathEl.getAttribute('data-cable-id'), pathEl.getAttribute('data-fiber-number')) + ':' + splitterId;
                 if (isTopFiber) {
-                    var inKey = 'in:' + fiberKey(pathEl.getAttribute('data-cable-id'), pathEl.getAttribute('data-fiber-number')) + ':' + splitterId;
                     cableAy = topUpdateMap.has(inKey) ? topUpdateMap.get(inKey) : (fy + 22);
                     inMeta.cableApproachY = cableAy;
+                } else {
+                    if (isLeft) {
+                        cableAx = leftUpdateMap.has(inKey) ? leftUpdateMap.get(inKey) : (fx + 28);
+                    } else {
+                        cableAx = rightUpdateMap.has(inKey) ? rightUpdateMap.get(inKey) : (fx - 28);
+                    }
+                    inMeta.cableApproachX = cableAx;
                 }
                 d = buildSplitterLinkPath(fx, fy, portX, portY, inMeta, pathOpts, orientation, 'input', mirrored);
             } else if (kind === 'output') {
@@ -565,14 +864,21 @@
                 var outPort = schemeSplitterPortPos(cx, cy, box, 'output', oi, ratio, mirrored, flipVertical, orientation);
                 portX = outPort.x;
                 portY = outPort.y;
-                var outMeta = buildRouteMeta(splitterId, 'output', oi, portX, cx);
+                var outMeta = buildRouteMeta(splitterId, 'output', oi, portX, cx, isTopFiber ? null : isLeft);
                 outMeta.isLeft = isLeft;
                 outMeta.isTop = isTopFiber;
                 outMeta.avoidBox = avoidBox;
+                var outKey = 'out:' + fiberKey(pathEl.getAttribute('data-cable-id'), pathEl.getAttribute('data-fiber-number')) + ':' + splitterId + ':' + oi;
                 if (isTopFiber) {
-                    var outKey = 'out:' + fiberKey(pathEl.getAttribute('data-cable-id'), pathEl.getAttribute('data-fiber-number')) + ':' + splitterId + ':' + oi;
                     cableAy = topUpdateMap.has(outKey) ? topUpdateMap.get(outKey) : (fy + 22);
                     outMeta.cableApproachY = cableAy;
+                } else {
+                    if (isLeft) {
+                        cableAx = leftUpdateMap.has(outKey) ? leftUpdateMap.get(outKey) : (fx + 28);
+                    } else {
+                        cableAx = rightUpdateMap.has(outKey) ? rightUpdateMap.get(outKey) : (fx - 28);
+                    }
+                    outMeta.cableApproachX = cableAx;
                 }
                 d = buildSplitterLinkPath(portX, portY, fx, fy, outMeta, pathOpts, orientation, 'output', mirrored);
             } else return;
@@ -1203,8 +1509,10 @@
         var connLabelBorder = isDark ? '#334155' : '#dee2e6';
         var linksHtml = '<g class="fiber-scheme-splitter-links" fill="none">';
         var cardsHtml = '';
-        // Дорожки подхода у верхнего кабеля (как у кросса), чтобы жилы не сливались.
+        // Дорожки подхода: верхний кабель (Y) и боковые кабели (X) — для обеих ориентаций.
         var topApproachEntries = [];
+        var leftApproachEntries = [];
+        var rightApproachEntries = [];
         if (opts.fiberPositions) {
             var badgeWCollect = pathOpts.badgeW || 22;
             var badgeHCollect = pathOpts.badgeH || 16;
@@ -1215,23 +1523,38 @@
                 var rawY = rec.schemeY != null ? rec.schemeY : def.y;
                 var isMirrored = isSchemeMirrored(rec);
                 var isFlipV = isSchemeFlipVertical(rec);
-                var clamped = clampPosition(rawX, rawY, svgW, svgH, rec.splitRatio, getSchemeOrientation(rec));
+                var orient = getSchemeOrientation(rec);
+                var clamped = clampPosition(rawX, rawY, svgW, svgH, rec.splitRatio, orient);
                 var x = clamped.x;
                 var y = clamped.y;
                 var ratio = parseInt(rec.splitRatio, 10) || DEFAULT_RATIO;
-                var box = computeSchemeSplitterBox(ratio, getSchemeOrientation(rec));
+                var box = computeSchemeSplitterBox(ratio, orient);
                 var hasIn = !!(rec.inputCableId && rec.inputFiberNumber != null);
                 if (hasIn) {
                     var fpos = opts.fiberPositions.get(fiberKey(rec.inputCableId, rec.inputFiberNumber));
-                    if (fpos && fpos.isTop) {
-                        var inPt = schemeSplitterPortPos(x, y, box, 'input', 0, ratio, isMirrored, isFlipV, getSchemeOrientation(rec));
+                    if (fpos) {
+                        var inPt = schemeSplitterPortPos(x, y, box, 'input', 0, ratio, isMirrored, isFlipV, orient);
                         var fexit = fiberSchemeFiberExitPoint(fpos, badgeWCollect, badgeHCollect, nodeRCollect);
-                        topApproachEntries.push({
-                            fiberKey: 'in:' + fiberKey(rec.inputCableId, rec.inputFiberNumber) + ':' + rec.id,
-                            fx: fexit.x,
-                            px: inPt.x,
-                            fy: fexit.y
-                        });
+                        var inKey = 'in:' + fiberKey(rec.inputCableId, rec.inputFiberNumber) + ':' + rec.id;
+                        if (fpos.isTop) {
+                            topApproachEntries.push({
+                                fiberKey: inKey,
+                                fx: fexit.x,
+                                px: inPt.x,
+                                fy: fexit.y,
+                                py: inPt.y
+                            });
+                        } else {
+                            var inSide = {
+                                fiberKey: inKey,
+                                fx: fexit.x,
+                                px: inPt.x,
+                                fy: fexit.y,
+                                py: inPt.y
+                            };
+                            if (fpos.isLeft) leftApproachEntries.push(inSide);
+                            else rightApproachEntries.push(inSide);
+                        }
                     }
                 }
                 var outs = rec.outputConnections || [];
@@ -1242,19 +1565,35 @@
                     if (outLocal.onuId || outLocal.splitterId) continue;
                     if (outLocal.hostId && hostUid && outLocal.hostId !== hostUid) continue;
                     var opos = opts.fiberPositions.get(fiberKey(outLocal.cableId, outLocal.fiberNumber));
-                    if (!opos || !opos.isTop) continue;
-                    var outPt = schemeSplitterPortPos(x, y, box, 'output', oi, ratio, isMirrored, isFlipV, getSchemeOrientation(rec));
+                    if (!opos) continue;
+                    var outPt = schemeSplitterPortPos(x, y, box, 'output', oi, ratio, isMirrored, isFlipV, orient);
                     var ofexit = fiberSchemeFiberExitPoint(opos, badgeWCollect, badgeHCollect, nodeRCollect);
-                    topApproachEntries.push({
-                        fiberKey: 'out:' + fiberKey(outLocal.cableId, outLocal.fiberNumber) + ':' + rec.id + ':' + oi,
-                        fx: ofexit.x,
-                        px: outPt.x,
-                        fy: ofexit.y
-                    });
+                    var outKey = 'out:' + fiberKey(outLocal.cableId, outLocal.fiberNumber) + ':' + rec.id + ':' + oi;
+                    if (opos.isTop) {
+                        topApproachEntries.push({
+                            fiberKey: outKey,
+                            fx: ofexit.x,
+                            px: outPt.x,
+                            fy: ofexit.y,
+                            py: outPt.y
+                        });
+                    } else {
+                        var outSide = {
+                            fiberKey: outKey,
+                            fx: ofexit.x,
+                            px: outPt.x,
+                            fy: ofexit.y,
+                            py: outPt.y
+                        };
+                        if (opos.isLeft) leftApproachEntries.push(outSide);
+                        else rightApproachEntries.push(outSide);
+                    }
                 }
             });
         }
         var topApproachMap = buildTopCableSplitterApproachMap(topApproachEntries);
+        var leftApproachMap = buildSideCableSplitterApproachMap(leftApproachEntries, true);
+        var rightApproachMap = buildSideCableSplitterApproachMap(rightApproachEntries, false);
         list.forEach(function (rec, idx) {
             var def = defaultPosition(svgW, svgH, idx, list.length);
             var rawX = rec.schemeX != null ? rec.schemeX : def.x;
@@ -1408,11 +1747,23 @@
                     if (fpos) {
                         var inPt = schemeSplitterPortPos(x, y, box, 'input', 0, ratio, isMirrored, isFlipV, getSchemeOrientation(rec));
                         var fexit = fiberSchemeFiberExitPoint(fpos, badgeW, pathOpts.badgeH || 16, pathOpts.nodeR || 4);
-                        var inRouteMeta = buildRouteMeta(rec.id, 'input', null, inPt.x, x);
+                        var inRouteMeta = buildRouteMeta(rec.id, 'input', null, inPt.x, x, fpos.isTop ? null : fpos.isLeft);
                         var inApproachKey = 'in:' + fiberKey(rec.inputCableId, rec.inputFiberNumber) + ':' + rec.id;
                         var inCableAy = (fpos.isTop && topApproachMap.has(inApproachKey))
                             ? topApproachMap.get(inApproachKey)
                             : (fpos.isTop ? fexit.y + 22 : null);
+                        var inCableAx = null;
+                        if (!fpos.isTop) {
+                            if (fpos.isLeft) {
+                                inCableAx = leftApproachMap.has(inApproachKey)
+                                    ? leftApproachMap.get(inApproachKey)
+                                    : (fexit.x + 28);
+                            } else {
+                                inCableAx = rightApproachMap.has(inApproachKey)
+                                    ? rightApproachMap.get(inApproachKey)
+                                    : (fexit.x - 28);
+                            }
+                        }
                         var inPathD = buildSplitterLinkPath(
                             fexit.x, fexit.y, inPt.x, inPt.y,
                             {
@@ -1426,7 +1777,8 @@
                                 stemEnd: inRouteMeta.stemEnd,
                                 laneIndex: inRouteMeta.laneIndex,
                                 avoidBox: cardAvoidBox,
-                                cableApproachY: inCableAy
+                                cableApproachY: inCableAy,
+                                cableApproachX: inCableAx
                             },
                             pathOpts, getSchemeOrientation(rec), 'input', isMirrored
                         );
@@ -1452,11 +1804,23 @@
                     var ox = outPt.x;
                     var oy = outPt.y;
                     var ofexit = fiberSchemeFiberExitPoint(opos, badgeW, pathOpts.badgeH || 16, pathOpts.nodeR || 4);
-                    var outRouteMeta = buildRouteMeta(rec.id, 'output', oi, ox, x);
+                    var outRouteMeta = buildRouteMeta(rec.id, 'output', oi, ox, x, opos.isTop ? null : opos.isLeft);
                     var outApproachKey = 'out:' + fiberKey(outLocal.cableId, outLocal.fiberNumber) + ':' + rec.id + ':' + oi;
                     var outCableAy = (opos.isTop && topApproachMap.has(outApproachKey))
                         ? topApproachMap.get(outApproachKey)
                         : (opos.isTop ? ofexit.y + 22 : null);
+                    var outCableAx = null;
+                    if (!opos.isTop) {
+                        if (opos.isLeft) {
+                            outCableAx = leftApproachMap.has(outApproachKey)
+                                ? leftApproachMap.get(outApproachKey)
+                                : (ofexit.x + 28);
+                        } else {
+                            outCableAx = rightApproachMap.has(outApproachKey)
+                                ? rightApproachMap.get(outApproachKey)
+                                : (ofexit.x - 28);
+                        }
+                    }
                     var outPathD = buildSplitterLinkPath(
                         ox, oy, ofexit.x, ofexit.y,
                         {
@@ -1469,7 +1833,8 @@
                             stemEnd: outRouteMeta.stemEnd,
                             laneIndex: outRouteMeta.laneIndex,
                             avoidBox: cardAvoidBox,
-                            cableApproachY: outCableAy
+                            cableApproachY: outCableAy,
+                            cableApproachX: outCableAx
                         },
                         pathOpts, getSchemeOrientation(rec), 'output', isMirrored
                     );

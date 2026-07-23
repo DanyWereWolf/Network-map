@@ -1840,7 +1840,7 @@ function buildFiberSchemeOrthogonalWaypointsPath(pts, pathStyle) {
     return parts.join(' ');
 }
 
-/** Простая Г-линия со скруглённым углом. cableApproachY — отступ под верхним кабелем. */
+/** Простая Г-линия со скруглённым углом. cableApproachY/X — дорожки у верхнего/бокового кабеля. */
 function buildFiberSchemeElbowPath(x1, y1, x2, y2, opts) {
     opts = opts || {};
     var preferHV = opts.preferHV;
@@ -1848,11 +1848,12 @@ function buildFiberSchemeElbowPath(x1, y1, x2, y2, opts) {
         preferHV = Math.abs(y2 - y1) >= Math.abs(x2 - x1) ? 'vh' : 'hv';
     }
     var ay = opts.cableApproachY;
+    var ax = opts.cableApproachX;
     var pts;
     if (ay != null && !isNaN(ay)) {
         // Верхний кабель: сначала вертикальный вынос до дорожки, потом горизонталь, потом к порту.
-        var fiberAtStart = opts.fiberAtStart != null ? !!opts.fiberAtStart : (y1 < y2);
-        if (fiberAtStart) {
+        var fiberAtStartY = opts.fiberAtStart != null ? !!opts.fiberAtStart : (y1 < y2);
+        if (fiberAtStartY) {
             ay = Math.max(ay, y1 + 16);
             pts = [
                 { x: x1, y: y1 },
@@ -1866,6 +1867,24 @@ function buildFiberSchemeElbowPath(x1, y1, x2, y2, opts) {
                 { x: x1, y: y1 },
                 { x: x1, y: ay },
                 { x: x2, y: ay },
+                { x: x2, y: y2 }
+            ];
+        }
+    } else if (ax != null && !isNaN(ax)) {
+        // Боковой кабель: сначала горизонтальный вынос до дорожки, потом вертикаль, потом к порту.
+        var fiberAtStartX = opts.fiberAtStart != null ? !!opts.fiberAtStart : true;
+        if (fiberAtStartX) {
+            pts = [
+                { x: x1, y: y1 },
+                { x: ax, y: y1 },
+                { x: ax, y: y2 },
+                { x: x2, y: y2 }
+            ];
+        } else {
+            pts = [
+                { x: x1, y: y1 },
+                { x: ax, y: y1 },
+                { x: ax, y: y2 },
                 { x: x2, y: y2 }
             ];
         }
@@ -2002,6 +2021,11 @@ function buildFiberSchemeAroundObstaclesPath(x1, y1, x2, y2, obstacles, opts) {
     var pts;
     // Отступ под верхним кабелем, чтобы жилы не сливались на одной горизонтали у бейджей.
     var cableAy = opts.cableApproachY;
+    var cableAx = opts.cableApproachX;
+    if (cableAx != null && !isNaN(cableAx)) {
+        // Боковая дорожка: не делить один clearX — у каждой жилы свой коридор.
+        clearX = cableAx;
+    }
     function withCableApproachAbove(fiberX, fiberY, beforePts) {
         var ay = cableAy != null && !isNaN(cableAy) ? cableAy : (fiberY + 20 + lane * 8);
         ay = Math.max(fiberY + 16, ay);
@@ -2451,8 +2475,49 @@ function assignTopCrossLinkApproachYs(entries, baseApproachY, opts) {
     return result;
 }
 
+/**
+ * Дорожки подхода к боковому кабелю.
+ * Каждой жиле — своя колонка (по порядку Y), даже если py≈fy:
+ * иначе все схлопываются в одну X и идут прямой горизонталью в бейдж.
+ * @returns {Map<string, number>} fiberKey → approachX
+ */
+function assignSideSplitterApproachXs(entries, baseApproachX, opts) {
+    opts = opts || {};
+    var laneGap = opts.laneGap != null ? opts.laneGap : Math.max(12, FIBER_SCHEME_TOP_CROSS_LANE_GAP);
+    var towardLeft = !!opts.towardLeft;
+    var result = new Map();
+    if (!entries || !entries.length) return result;
+
+    var routed = [];
+    entries.forEach(function (e) {
+        if (!e || !e.fiberKey) return;
+        var py = e.py != null && !isNaN(e.py) ? e.py : 0;
+        var fy = e.fy != null && !isNaN(e.fy) ? e.fy : py;
+        routed.push({
+            fiberKey: e.fiberKey,
+            py: py,
+            fy: fy
+        });
+    });
+
+    routed.sort(function (a, b) {
+        if (a.py !== b.py) return a.py - b.py;
+        if (a.fy !== b.fy) return a.fy - b.fy;
+        return String(a.fiberKey).localeCompare(String(b.fiberKey));
+    });
+
+    routed.forEach(function (e, idx) {
+        var ax = towardLeft
+            ? (baseApproachX - idx * laneGap)
+            : (baseApproachX + idx * laneGap);
+        result.set(e.fiberKey, ax);
+    });
+    return result;
+}
+
 if (typeof window !== 'undefined') {
     window.assignTopCrossLinkApproachYs = assignTopCrossLinkApproachYs;
+    window.assignSideSplitterApproachXs = assignSideSplitterApproachXs;
 }
 
 /** Сколько вертикального запаса нужно под дорожки подхода верхних жил (для gap панели). */
@@ -2634,6 +2699,95 @@ function buildCrossFiberPortLinkPath(fx, fy, px, py, opts) {
         }
     }
     return parts.join(' ');
+}
+
+/**
+ * Сплиттер → порт кросса: короткий ортогональный путь.
+ * Обход корпуса только если прямой подъём/спуск шёл бы сквозь карточку.
+ * opts: { approachY, orientation, mirrored, avoidBox, laneIndex, panelTop }
+ */
+function buildSplitterToCrossPortPath(srcX, srcY, portX, portY, opts) {
+    opts = opts || {};
+    var orient = opts.orientation || 'horizontal';
+    var mirrored = !!opts.mirrored;
+    var box = opts.avoidBox;
+    var lane = opts.laneIndex != null ? opts.laneIndex : 0;
+    var laneStagger = Math.min(lane, 5) * 4;
+    var panelTop = opts.panelTop != null ? opts.panelTop : (portY - 8);
+    var ay = opts.approachY != null ? opts.approachY : (panelTop - 10);
+    ay = Math.min(ay, panelTop - 6);
+
+    function finish(pts) {
+        if (typeof buildFiberSchemeOrthogonalWaypointsPath === 'function') {
+            return buildFiberSchemeOrthogonalWaypointsPath(pts, { smooth: true, filletScale: 1.2 });
+        }
+        var parts = ['M ' + pts[0].x + ' ' + pts[0].y];
+        for (var i = 1; i < pts.length; i++) parts.push('L ' + pts[i].x + ' ' + pts[i].y);
+        return parts.join(' ');
+    }
+
+    // Простая Г: вниз/вверх до дорожки → к колонке порта → в порт.
+    function simpleElbow() {
+        if (Math.abs(srcX - portX) < 2) {
+            return finish([
+                { x: srcX, y: srcY },
+                { x: portX, y: portY }
+            ]);
+        }
+        return finish([
+            { x: srcX, y: srcY },
+            { x: srcX, y: ay },
+            { x: portX, y: ay },
+            { x: portX, y: portY }
+        ]);
+    }
+
+    if (orient === 'vertical') {
+        var portsOnBottom = !mirrored;
+        var goingDown = ay >= srcY - 2;
+        var goingUp = ay <= srcY + 2;
+        // Порты смотрят на кросс — прямая Г без боковых петель.
+        var facesCross = (portsOnBottom && goingDown) || (!portsOnBottom && goingUp);
+        if (facesCross || !box) {
+            return simpleElbow();
+        }
+        // Кросс с другой стороны: вдоль края портов → короткий вынос сбоку → к дорожке (без петли вниз).
+        var leftClear = box.x - 10 - laneStagger;
+        var rightClear = box.x + box.w + 10 + laneStagger;
+        var clearX = Math.abs(portX - rightClear) <= Math.abs(portX - leftClear) ? rightClear : leftClear;
+        if (box && ay > box.y - 4 && ay < box.y + box.h + 4) {
+            ay = Math.min(panelTop - 6, box.y - 10);
+        }
+        return finish([
+            { x: srcX, y: srcY },
+            { x: clearX, y: srcY },
+            { x: clearX, y: ay },
+            { x: portX, y: ay },
+            { x: portX, y: portY }
+        ]);
+    }
+
+    // Горизонтальный сплиттер: короткий вынос от бокового порта, затем к дорожке кросса.
+    var leaveRight = !mirrored;
+    var riserX = leaveRight
+        ? (box ? box.x + box.w + 10 + laneStagger : srcX + 14)
+        : (box ? box.x - 10 - laneStagger : srcX - 14);
+    if (box && ay > box.y - 4 && ay < box.y + box.h + 4) {
+        // Дорожка пересекает корпус по Y — ведём сбоку мимо, без лишней петли вниз.
+        ay = ay < box.cy ? Math.min(ay, box.y - 10) : Math.max(ay, box.y + box.h + 10);
+        ay = Math.min(ay, panelTop - 6);
+    }
+    return finish([
+        { x: srcX, y: srcY },
+        { x: riserX, y: srcY },
+        { x: riserX, y: ay },
+        { x: portX, y: ay },
+        { x: portX, y: portY }
+    ]);
+}
+
+if (typeof window !== 'undefined') {
+    window.buildSplitterToCrossPortPath = buildSplitterToCrossPortPath;
 }
 
 function getCrossPanelTransformOffset(svgOrPanel) {
@@ -2861,17 +3015,40 @@ function buildSplitterCrossPortLinksHtml(hostObj, crossLayout, isDark, isEditMod
         var srcPt = entry.srcPt;
         var portPos = entry.portPos;
         var portY = entry.py;
+        var x = entry.boxCx;
+        var y = rec.schemeY != null ? rec.schemeY : svgH * 0.42;
+        var orient = EmbeddedSplitters.getSchemeOrientation ? EmbeddedSplitters.getSchemeOrientation(rec) : 'horizontal';
+        var isMirrored = EmbeddedSplitters.isSchemeMirrored(rec);
+        var ratio = parseInt(rec.splitRatio, 10) || 8;
+        var box = EmbeddedSplitters.computeSchemeSplitterBox(ratio, orient);
+        var avoidBox = {
+            x: x - box.w / 2 - 8,
+            y: y - box.h / 2 - 8,
+            w: box.w + 16,
+            h: box.h + 16,
+            cx: x,
+            cy: y
+        };
         var approachY = approachMap.has(entry.fiberKey)
             ? approachMap.get(entry.fiberKey)
             : crossApproachY;
-        // Если выход сплиттера ниже линии подхода — чуть опустить дорожку, но всё равно перед панелью.
+        // Не опускать дорожку внутрь корпуса — иначе горизонталь режет сплиттер.
         if (srcPt.y > approachY - 8) {
-            approachY = Math.min(crossLayout.panelTop - 8, Math.max(srcPt.y + 18, crossApproachY));
+            approachY = Math.min(crossLayout.panelTop - 8, Math.max(avoidBox.y - 12, crossApproachY));
         }
-        var pathD = buildCrossFiberPortLinkPath(srcPt.x, srcPt.y, portPos.x, portY, {
-            isTop: true,
-            approachY: approachY
-        });
+        var pathD = typeof buildSplitterToCrossPortPath === 'function'
+            ? buildSplitterToCrossPortPath(srcPt.x, srcPt.y, portPos.x, portY, {
+                approachY: approachY,
+                orientation: orient,
+                mirrored: isMirrored,
+                avoidBox: avoidBox,
+                laneIndex: cpi,
+                panelTop: crossLayout.panelTop
+            })
+            : buildCrossFiberPortLinkPath(srcPt.x, srcPt.y, portPos.x, portY, {
+                isTop: true,
+                approachY: approachY
+            });
         var spTitle = 'Сплиттер «' + (rec.name || 'Сплиттер') + '» вых.' + (cpi + 1) + ' → порт ' + entry.crossPortNum;
         var outLabel = typeof getSplitterOutputLabelFromRec === 'function'
             ? getSplitterOutputLabelFromRec(rec, cpi) : '';
@@ -2935,17 +3112,34 @@ function updateSchemeSplitterCrossPortLinks(svg, splitterId, cx, cy, splitRatio,
     var approachMap = typeof assignTopCrossLinkApproachYs === 'function'
         ? assignTopCrossLinkApproachYs(entries, crossApproachY)
         : new Map();
+    var avoidBox = {
+        x: cx - box.w / 2 - 8,
+        y: cy - box.h / 2 - 8,
+        w: box.w + 16,
+        h: box.h + 16,
+        cx: cx,
+        cy: cy
+    };
     entries.forEach(function(entry) {
         var approachY = approachMap.has(entry.fiberKey)
             ? approachMap.get(entry.fiberKey)
             : crossApproachY;
         if (entry.srcPt.y > approachY - 8) {
-            approachY = Math.min(panelTop - 8, Math.max(entry.srcPt.y + 18, crossApproachY));
+            approachY = Math.min(panelTop - 8, Math.max(avoidBox.y - 12, crossApproachY));
         }
-        var d = buildCrossFiberPortLinkPath(entry.srcPt.x, entry.srcPt.y, entry.anchor.x, entry.anchor.y, {
-            isTop: true,
-            approachY: approachY
-        });
+        var d = typeof buildSplitterToCrossPortPath === 'function'
+            ? buildSplitterToCrossPortPath(entry.srcPt.x, entry.srcPt.y, entry.anchor.x, entry.anchor.y, {
+                approachY: approachY,
+                orientation: orient,
+                mirrored: mirrored,
+                avoidBox: avoidBox,
+                laneIndex: entry.oi,
+                panelTop: panelTop
+            })
+            : buildCrossFiberPortLinkPath(entry.srcPt.x, entry.srcPt.y, entry.anchor.x, entry.anchor.y, {
+                isTop: true,
+                approachY: approachY
+            });
         entry.pathEl.setAttribute('d', d);
         entry.pathEl.setAttribute('data-approach-y', String(approachY));
         entry.pathEl.setAttribute('data-conn-label', typeof getSplitterOutputLabelFromRec === 'function'

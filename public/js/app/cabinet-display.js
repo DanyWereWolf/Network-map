@@ -1,7 +1,7 @@
 /**
  * Ящики (cabinet): контейнер для кроссов, узлов, OLT и др.
  */
-var CABINET_MEMBER_TYPES = ['cross', 'spliceCassette', 'node', 'olt', 'mediaConverter', 'camera', 'onu'];
+var CABINET_MEMBER_TYPES = ['cross', 'spliceCassette', 'node', 'olt', 'mediaConverter', 'onu'];
 var CABINET_EXTRACT_OFFSET = 0.00008;
 
 var CABINET_MEMBER_BADGE = {
@@ -10,7 +10,6 @@ var CABINET_MEMBER_BADGE = {
     node: 'green',
     olt: 'sky',
     mediaConverter: 'teal',
-    camera: 'slate',
     splitter: 'purple',
     onu: 'cyan'
 };
@@ -738,7 +737,6 @@ function buildCabinetPickListHtml(candidates) {
 function getCabinetCreateCatalogKind(type) {
     if (type === 'olt') return 'olt';
     if (type === 'onu') return 'onu';
-    if (type === 'camera') return 'camera';
     if (type === 'mediaConverter') return 'node';
     return null;
 }
@@ -791,7 +789,7 @@ function buildCabinetCreateFieldsHtml(type) {
         });
         html += '</select>';
         html += buildCabinetCreateDeviceComboboxHtml('olt');
-    } else if (type === 'onu' || type === 'camera' || type === 'mediaConverter') {
+    } else if (type === 'onu' || type === 'mediaConverter') {
         html += buildCabinetCreateDeviceComboboxHtml(getCabinetCreateCatalogKind(type));
     }
     return html;
@@ -822,7 +820,7 @@ function collectCabinetCreateOptions(root, type) {
         var mod = root.querySelector('#cabinetCreateModel');
         if (mfr && mfr.value) opts.manufacturer = mfr.value.trim();
         if (mod && mod.value) opts.model = mod.value.trim();
-    } else if (type === 'onu' || type === 'camera' || type === 'mediaConverter') {
+    } else if (type === 'onu' || type === 'mediaConverter') {
         var mfr2 = root.querySelector('#cabinetCreateMfr');
         var mod2 = root.querySelector('#cabinetCreateModel');
         if (mfr2 && mfr2.value) opts.manufacturer = mfr2.value.trim();
@@ -931,7 +929,6 @@ function showCabinetMemberOnMap(obj) {
     if (!obj || !myMap || !obj.properties) return;
     if (getObjectCabinetId(obj)) return;
     var type = obj.properties.get('type');
-    if (!canBeCabinetMember(type)) return;
     // Кроссы и узлы снова отрисовывает updateCrossDisplay / updateNodeDisplay.
     if (type === 'cross' || type === 'node') return;
 
@@ -951,6 +948,35 @@ function showCabinetMemberOnMap(obj) {
     if (typeof syncConnectionLinesForObject === 'function') {
         syncConnectionLinesForObject(obj);
     }
+}
+
+/** Выносит из ящиков объекты типов, которые больше нельзя туда помещать (напр. камеры). */
+function releaseUnsupportedCabinetMembers(opts) {
+    opts = opts || {};
+    if (!Array.isArray(objects)) return 0;
+    var released = [];
+    objects.forEach(function(member) {
+        if (!member || !member.properties) return;
+        if (!getObjectCabinetId(member)) return;
+        if (canBeCabinetMember(member.properties.get('type'))) return;
+        clearObjectCabinetId(member);
+        if (member.geometry) {
+            var c = member.geometry.getCoordinates();
+            if (c && c.length >= 2) {
+                moveObjectToCoords(member, [c[0] + CABINET_EXTRACT_OFFSET, c[1]]);
+            }
+        }
+        if (typeof updateConnectedCables === 'function') updateConnectedCables(member);
+        released.push(member);
+    });
+    released.forEach(function(member) {
+        showCabinetMemberOnMap(member);
+        if (!opts.skipSave) {
+            if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(member);
+            else if (typeof saveData === 'function') saveData({ object: member, syncImmediate: true });
+        }
+    });
+    return released.length;
 }
 
 function moveObjectToCoords(obj, coords) {
@@ -1030,6 +1056,8 @@ function updateCabinetDisplay(opts) {
         syncAllCabinetMembersToCabinets({ skipDisplay: true });
     }
     if (!Array.isArray(objects)) return;
+
+    releaseUnsupportedCabinetMembers({ skipSave: !!opts.skipUnsupportedSave });
 
     objects.forEach(function(obj) {
         if (!obj || !obj.properties) return;

@@ -144,7 +144,15 @@ function createMysqlDump() {
     if (r.status !== 0) {
         return { ok: false, error: (r.stderr || r.stdout || 'mysqldump failed').trim() };
     }
-    fs.writeFileSync(dumpPath, r.stdout, 'utf8');
+    try {
+        fs.writeFileSync(dumpPath, r.stdout, 'utf8');
+    } catch (e) {
+        var msg = e && e.message ? String(e.message) : String(e);
+        if (e && e.code === 'EACCES') {
+            msg += ' — каталог data/ принадлежит root? Выполните: sudo chown -R "$USER:$USER" data';
+        }
+        return { ok: false, error: msg };
+    }
     return { ok: true, path: dumpPath, filename: dumpName };
 }
 

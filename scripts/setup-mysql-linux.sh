@@ -216,6 +216,19 @@ run_migrate() {
   fi
 }
 
+# After sudo setup, data/ and config must be writable by the normal app user
+fix_ownership() {
+  if [[ "$RUN_AS" == "root" ]] || ! id "$RUN_AS" >/dev/null 2>&1; then
+    return 0
+  fi
+  log "Владелец data/ и server-config.json → $RUN_AS"
+  mkdir -p "$ROOT/data/backups/full" "$ROOT/data/backups/daily"
+  chown -R "$RUN_AS:$RUN_AS" "$ROOT/data" 2>/dev/null || true
+  if [[ -f "$ROOT/server-config.json" ]]; then
+    chown "$RUN_AS:$RUN_AS" "$ROOT/server-config.json" 2>/dev/null || true
+  fi
+}
+
 main() {
   log "Корень проекта: $ROOT"
   ensure_password
@@ -232,9 +245,10 @@ main() {
     fi
   fi
   run_migrate
+  fix_ownership
   log "Готово."
   log "  storage=mysql  db=$MYSQL_DATABASE  user=$MYSQL_USER  host=$MYSQL_HOST:$MYSQL_PORT"
-  log "  Запуск: npm run api"
+  log "  Запуск: npm run api  (без sudo)"
   log "  Пароль MySQL пользователя: $MYSQL_PASSWORD"
 }
 
