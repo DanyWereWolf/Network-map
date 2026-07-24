@@ -295,7 +295,7 @@ var mapLimitsCache = { count: 0, limit: 20000, unlocked: false, remaining: 20000
 var MAP_LIMIT_WARN_RATIO = 0.98;
 var MAP_LIMIT_BANNER_DISMISS_KEY = 'mapLimitBannerDismissedCount';
 var mapLimitBannerCloseBound = false;
-var OWNER_CONTACT_EMAIL = 'danil.sechin3@gmail.com';
+var OWNER_CONTACT_EMAIL = 'support@volsmap.ru';
 var OWNER_CONTACT_MAILTO = 'mailto:' + OWNER_CONTACT_EMAIL + '?subject=' + encodeURIComponent('Снятие лимита объектов — Карта оптической сети');
 
 function applyMapLimitsCache(limits) {
