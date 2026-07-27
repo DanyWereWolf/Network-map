@@ -425,18 +425,29 @@
     function mapAdd(obj) {
         if (!obj) return;
         registerSpatial(obj);
+        // Always use current zoom/bounds — stale mountContext caused newly created
+        // objects to stay mounted at low zoom (expert hide ignored).
+        var ctx = buildDefaultMountContext();
+        mountContext = ctx;
         if (!shouldUseVirtualization()) {
             if (global.myMap) {
                 try {
                     if (global.myMap.geoObjects.indexOf(obj) === -1) global.myMap.geoObjects.add(obj);
                     var uid = uidFromObj(obj);
                     if (uid) mountedUids.add(uid);
+                    var type = obj.properties && obj.properties.get('type');
+                    if (ctx.hideObjects && type !== 'region' && obj.options) {
+                        obj.options.set('visible', false);
+                    }
+                    var label = obj.properties && obj.properties.get('label');
+                    if (label && label.options && (ctx.hideObjects || ctx.hideLabels)) {
+                        label.options.set('visible', false);
+                    }
                 } catch (e) {}
             }
             return;
         }
         if (isBulkImportActive()) return;
-        var ctx = mountContext || buildDefaultMountContext();
         if (shouldMountObject(obj, ctx)) mountObject(obj, ctx);
     }
 

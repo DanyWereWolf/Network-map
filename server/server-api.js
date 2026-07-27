@@ -249,7 +249,8 @@ function validateMapDataObjectLimit(orgId, data) {
 }
 
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json({ limit: '10mb' }));
+// 50mb: карты 10k+ объектов / фото в payload; 10mb часто мало и провоцирует обрывы/ретраи.
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '50mb' }));
 
 function generateToken() {
     return 'tk_' + Date.now() + '_' + require('crypto').randomBytes(16).toString('hex');
@@ -2845,6 +2846,39 @@ app.use('/js', express.static(path.join(PUBLIC_DIR, 'js'), {
 }));
 
 app.use(express.static(PUBLIC_DIR));
+
+/** Клиент оборвал соединение во время чтения body (reload, таймаут, cancel) — не ошибка приложения. */
+function isRequestAbortedError(err) {
+    if (!err) return false;
+    if (err.type === 'request.aborted') return true;
+    if (err.code === 'ECONNABORTED' || err.code === 'ECONNRESET' || err.code === 'EPIPE') return true;
+    var msg = String(err.message || '').toLowerCase();
+    return msg === 'request aborted' || msg.indexOf('request aborted') !== -1;
+}
+
+app.use(function(err, req, res, next) {
+    if (isRequestAbortedError(err)) {
+        if (!res.headersSent) {
+            try { res.status(400).end(); } catch (eEnd) {}
+        }
+        return;
+    }
+    if (err && (err.type === 'entity.too.large' || err.status === 413 || err.statusCode === 413)) {
+        if (!res.headersSent) {
+            return res.status(413).json({
+                error: 'Слишком большой запрос. Для карт с большим числом объектов увеличьте лимит body на сервере.'
+            });
+        }
+        return;
+    }
+    var status = err && (err.status || err.statusCode) ? (err.status || err.statusCode) : 500;
+    if (status >= 500) {
+        console.error('[API]', err && err.stack ? err.stack : err);
+    }
+    if (!res.headersSent) {
+        res.status(status).json({ error: (err && err.message) ? String(err.message) : 'Internal Server Error' });
+    }
+});
 
 // Storage bootstrap (JSON sync or MySQL hydrate) happens in initStorage before listen.
 

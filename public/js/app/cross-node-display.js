@@ -247,6 +247,9 @@ function updateCrossDisplay(scope) {
         });
     }
     const groupsToRender = keysOnly ? getCrossGroupsForKeys(parsed.keys) : getCrossGroupsForDisplay(parsed);
+    var zoomFlags = typeof getExpertZoomFlags === 'function' ? getExpertZoomFlags() : null;
+    var hideObjectsByZoom = !!(zoomFlags && zoomFlags.hideObjects);
+    var hideLabelsByZoom = !!(zoomFlags && zoomFlags.hideLabels);
     groupsToRender.forEach(group => {
         const gKey = groupKey(group.coords);
         if (group.crosses.length === 1) {
@@ -255,11 +258,25 @@ function updateCrossDisplay(scope) {
             if (typeof updateObjectLabel === 'function') {
                 updateObjectLabel(cross, cross.properties.get('name') || '');
             }
+            if (hideObjectsByZoom) {
+                try { if (cross.options) cross.options.set('visible', false); } catch (eHid) {}
+                var hidLbl = cross.properties.get('label');
+                if (hidLbl && hidLbl.options) {
+                    try { hidLbl.options.set('visible', false); } catch (eHidL) {}
+                }
+                return;
+            }
             myMap.geoObjects.add(cross);
             const label = cross.properties.get('label');
-            if (label) myMap.geoObjects.add(label);
+            if (label) {
+                myMap.geoObjects.add(label);
+                if (hideLabelsByZoom && label.options) {
+                    try { label.options.set('visible', false); } catch (eLblZ) {}
+                }
+            }
             return;
         }
+        if (hideObjectsByZoom) return;
         const coords = group.coords;
         const n = group.crosses.length;
         const crossGroupName = getCrossGroupName(coords);
@@ -524,6 +541,9 @@ function updateNodeDisplay(scope) {
     const mapFilterState = typeof getMapFilterState === 'function' ? getMapFilterState() : {};
     const aggregationOnly = !!mapFilterState.nodeAggregationOnly;
     const groupsToRender = keysOnly ? getNodeGroupsForKeys(parsed.keys) : getNodeGroupsForDisplay(parsed);
+    var zoomFlags = typeof getExpertZoomFlags === 'function' ? getExpertZoomFlags() : null;
+    var hideObjectsByZoom = !!(zoomFlags && zoomFlags.hideObjects);
+    var hideLabelsByZoom = !!(zoomFlags && zoomFlags.hideLabels);
     groupsToRender.forEach(group => {
         const displayNodes = aggregationOnly
             ? group.nodes.filter(function(nd) { return (nd.properties && nd.properties.get('nodeKind')) === 'aggregation'; })
@@ -536,11 +556,25 @@ function updateNodeDisplay(scope) {
             if (typeof updateObjectLabel === 'function') {
                 updateObjectLabel(node, node.properties.get('name') || '');
             }
+            if (hideObjectsByZoom) {
+                try { if (node.options) node.options.set('visible', false); } catch (eHid) {}
+                var hidLbl = node.properties.get('label');
+                if (hidLbl && hidLbl.options) {
+                    try { hidLbl.options.set('visible', false); } catch (eHidL) {}
+                }
+                return;
+            }
             myMap.geoObjects.add(node);
             const label = node.properties.get('label');
-            if (label) myMap.geoObjects.add(label);
+            if (label) {
+                myMap.geoObjects.add(label);
+                if (hideLabelsByZoom && label.options) {
+                    try { label.options.set('visible', false); } catch (eLblZ) {}
+                }
+            }
             return;
         }
+        if (hideObjectsByZoom) return;
         const coords = group.coords;
         const n = displayNodes.length;
         const hasAggregation = displayNodes.some(function(nd) { return (nd.properties && nd.properties.get('nodeKind')) === 'aggregation'; });

@@ -484,15 +484,22 @@ function applyMapFilterForObject(obj) {
     }
     visible = isMapFilterObjVisible(obj, filter);
     if (typeof getObjectCabinetId === 'function' && getObjectCabinetId(obj)) visible = false;
+    var filterVisible = visible;
+    var zoomFlags = typeof getExpertZoomFlags === 'function' ? getExpertZoomFlags() : null;
+    var hideObjects = !!(zoomFlags && zoomFlags.hideObjects);
+    var hideLabels = !!(zoomFlags && zoomFlags.hideLabels);
+    if (hideObjects) visible = false;
     var useVirtual = typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization();
     try {
-        obj.properties.set('_mapFilterVisible', visible);
+        obj.properties.set('_mapFilterVisible', filterVisible);
         if (!useVirtual) {
             if (obj.options) obj.options.set('visible', visible);
             var label = obj.properties.get('label');
-            if (label && label.options) label.options.set('visible', visible);
+            if (label && label.options) label.options.set('visible', visible && !hideLabels);
         } else if (type === 'cross' || type === 'node') {
             if (obj.options) obj.options.set('visible', visible);
+            var cnLabel = obj.properties.get('label');
+            if (cnLabel && cnLabel.options) cnLabel.options.set('visible', visible && !hideLabels);
         }
     } catch (e) {}
 }
@@ -501,6 +508,14 @@ function ensureObjectLabelOnMap(obj) {
     if (!obj || !obj.properties || !myMap) return;
     if (obj.properties.get('_mapFilterVisible') === false) return;
     if (typeof getObjectCabinetId === 'function' && getObjectCabinetId(obj)) return;
+    var hideLabels = false;
+    var hideObjects = false;
+    if (typeof getExpertZoomFlags === 'function') {
+        var zf = getExpertZoomFlags();
+        hideLabels = !!(zf && zf.hideLabels);
+        hideObjects = !!(zf && zf.hideObjects);
+    }
+    if (hideObjects) return;
     var type = obj.properties.get('type');
     if (type === 'cross' || type === 'node') {
         // Подписи одиночных кроссов/узлов возвращает updateCross/NodeDisplay;
@@ -522,11 +537,6 @@ function ensureObjectLabelOnMap(obj) {
             label.geometry.setCoordinates(obj.geometry.getCoordinates());
         }
     } catch (eCoords) {}
-    var hideLabels = false;
-    if (typeof getExpertZoomFlags === 'function') {
-        var zf = getExpertZoomFlags();
-        hideLabels = !!(zf && zf.hideLabels);
-    }
     try {
         if (!hideLabels) {
             if (myMap.geoObjects.indexOf(label) === -1) myMap.geoObjects.add(label);
