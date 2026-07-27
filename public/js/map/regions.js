@@ -7,6 +7,10 @@
     var DEFAULT_FILL_OPACITY = 0.22;
     var REGION_Z_INDEX = 1;
     var REGION_LABEL_Z_INDEX = 3;
+    // Cache: getHiddenRegions used to re-scan all objects on every object check → O(n²) in applyMapFilter.
+    var _hiddenRegionsCache = null;
+    var _hiddenRegionsCacheToken = null;
+    var _hiddenRegionsCacheGen = 0;
 
     function svgEscapeText(text) {
         return String(text == null ? '' : text)
@@ -231,8 +235,22 @@
         return regionObj.properties.get('regionVisible') !== false;
     }
 
+    function invalidateHiddenRegionsCache() {
+        _hiddenRegionsCache = null;
+        _hiddenRegionsCacheToken = null;
+        _hiddenRegionsCacheGen++;
+    }
+
     function getHiddenRegions(objects) {
-        return getAllRegions(objects).filter(function (r) { return !isRegionVisible(r); });
+        var token = objects;
+        if (_hiddenRegionsCache && _hiddenRegionsCacheToken === token) return _hiddenRegionsCache;
+        _hiddenRegionsCacheToken = token;
+        _hiddenRegionsCache = getAllRegions(objects).filter(function (r) { return !isRegionVisible(r); });
+        return _hiddenRegionsCache;
+    }
+
+    function hasAnyHiddenRegion(objects) {
+        return getHiddenRegions(objects).length > 0;
     }
 
     function getObjectCoords(obj) {
@@ -269,9 +287,10 @@
         return false;
     }
 
-    function isCoordInAnyHiddenRegion(coord, objects) {
+    function isCoordInAnyHiddenRegion(coord, objects, hiddenOverride) {
         if (!coord) return false;
-        var hidden = getHiddenRegions(objects);
+        var hidden = hiddenOverride || getHiddenRegions(objects);
+        if (!hidden || !hidden.length) return false;
         for (var i = 0; i < hidden.length; i++) {
             var ring = getRegionRing(hidden[i]);
             if (ring.length >= 3 && pointInPolygon(coord, ring)) return true;
@@ -279,18 +298,22 @@
         return false;
     }
 
-    function isObjectInAnyHiddenRegion(obj, objects) {
+    function isObjectInAnyHiddenRegion(obj, objects, hiddenOverride) {
         if (!obj || !obj.properties) return false;
         var type = obj.properties.get('type');
         if (type === 'region' || type === 'cableLabel' || type === 'regionLabel') return false;
-        if (type === 'cable') return isCableInAnyHiddenRegion(obj, objects);
-        return isCoordInAnyHiddenRegion(getObjectCoords(obj), objects);
+        var hidden = hiddenOverride || getHiddenRegions(objects);
+        if (!hidden || !hidden.length) return false;
+        if (type === 'cable') return isCableInAnyHiddenRegion(obj, objects, hidden);
+        return isCoordInAnyHiddenRegion(getObjectCoords(obj), objects, hidden);
     }
 
-    function isCableInAnyHiddenRegion(cable, objects) {
+    function isCableInAnyHiddenRegion(cable, objects, hiddenOverride) {
+        var hidden = hiddenOverride || getHiddenRegions(objects);
+        if (!hidden || !hidden.length) return false;
         var coords = getCableCoords(cable);
         for (var i = 0; i < coords.length; i++) {
-            if (isCoordInAnyHiddenRegion(coords[i], objects)) return true;
+            if (isCoordInAnyHiddenRegion(coords[i], objects, hidden)) return true;
         }
         return false;
     }
@@ -679,6 +702,8 @@
         getAllRegions: getAllRegions,
         isRegionVisible: isRegionVisible,
         getHiddenRegions: getHiddenRegions,
+        hasAnyHiddenRegion: hasAnyHiddenRegion,
+        invalidateHiddenRegionsCache: invalidateHiddenRegionsCache,
         collectObjectsInRegion: collectObjectsInRegion,
         isObjectInAnyHiddenRegion: isObjectInAnyHiddenRegion,
         isCableInAnyHiddenRegion: isCableInAnyHiddenRegion,

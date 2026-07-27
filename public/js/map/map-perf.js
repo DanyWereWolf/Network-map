@@ -16,6 +16,11 @@
     var mountContext = null;
     var syncMountRaf = null;
     var syncMountPending = false;
+    var objectsByType = {
+        cable: [],
+        cableLabel: [],
+        region: []
+    };
 
     function uidFromObj(obj) {
         if (!obj || !obj.properties) return null;
@@ -23,15 +28,34 @@
         return id != null && id !== '' ? String(id) : null;
     }
 
+    function addToTypeIndex(obj) {
+        if (!obj || !obj.properties) return;
+        var type = obj.properties.get('type');
+        var bucket = objectsByType[type];
+        if (!bucket) return;
+        if (bucket.indexOf(obj) === -1) bucket.push(obj);
+    }
+
+    function removeFromTypeIndex(obj) {
+        if (!obj || !obj.properties) return;
+        var type = obj.properties.get('type');
+        var bucket = objectsByType[type];
+        if (!bucket) return;
+        var idx = bucket.indexOf(obj);
+        if (idx !== -1) bucket.splice(idx, 1);
+    }
+
     function registerMapObject(obj) {
         var uid = uidFromObj(obj);
         if (!uid) return;
         objectsById.set(uid, obj);
+        addToTypeIndex(obj);
         registerSpatial(obj);
     }
 
     function unregisterMapObject(obj) {
         var uid = uidFromObj(obj);
+        removeFromTypeIndex(obj);
         if (uid) {
             objectsById.delete(uid);
             mountedUids.delete(uid);
@@ -53,6 +77,9 @@
         spatialGrid.clear();
         mountedUids.clear();
         pinnedUids.clear();
+        objectsByType.cable = [];
+        objectsByType.cableLabel = [];
+        objectsByType.region = [];
     }
 
     function reindexAllObjects(list) {
@@ -484,15 +511,17 @@
             }
         }
 
-        for (var i = global.objects.length - 1; i >= 0; i--) {
-            var cableObj = global.objects[i];
-            if (!cableObj || !cableObj.properties) continue;
-            var cableType = cableObj.properties.get('type');
-            if (cableType !== 'cable' && cableType !== 'cableLabel' && cableType !== 'region') continue;
-            if (!shouldMountObject(cableObj, ctx)) continue;
-            var cableUid = uidFromObj(cableObj);
-            if (cableUid) candidateSet.add(cableUid);
-            if (!isMounted(cableObj)) mountObject(cableObj, ctx);
+        // Avoid full objects[] scan: use typed indexes for cable/cableLabel/region.
+        var typedLists = [objectsByType.cable, objectsByType.cableLabel, objectsByType.region];
+        for (var tl = 0; tl < typedLists.length; tl++) {
+            var list = typedLists[tl];
+            for (var i = 0; i < list.length; i++) {
+                var cableObj = list[i];
+                if (!shouldMountObject(cableObj, ctx)) continue;
+                var cableUid = uidFromObj(cableObj);
+                if (cableUid) candidateSet.add(cableUid);
+                if (!isMounted(cableObj)) mountObject(cableObj, ctx);
+            }
         }
 
         var toUnmount = [];
@@ -619,6 +648,9 @@
         adoptExistingGeoObjects: adoptExistingGeoObjects,
         buildDefaultMountContext: buildDefaultMountContext,
         shouldMountObject: shouldMountObject,
+        getObjectsByType: function(type) {
+            return objectsByType[type] || null;
+        },
         ZOOM_SHOW_CONNECTION_LINES: ZOOM_SHOW_CONNECTION_LINES,
         VIEWPORT_CULL_MIN_OBJECTS: VIEWPORT_CULL_MIN_OBJECTS,
         VIRTUALIZATION_MIN_OBJECTS: VIRTUALIZATION_MIN_OBJECTS

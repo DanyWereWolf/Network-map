@@ -341,6 +341,9 @@ function focusRegionOnMap(regionObj) {
 function setRegionVisible(regionObj, visible, opts) {
     if (!regionObj || !regionObj.properties) return;
     regionObj.properties.set('regionVisible', !!visible);
+    if (window.MapRegions && MapRegions.invalidateHiddenRegionsCache) {
+        try { MapRegions.invalidateHiddenRegionsCache(); } catch (eInv) {}
+    }
     if (!(opts && opts.skipSave)) saveData();
     if (typeof applyMapFilter === 'function') applyMapFilter();
     renderRegionsSidebarList();

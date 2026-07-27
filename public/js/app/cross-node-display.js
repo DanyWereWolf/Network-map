@@ -3,8 +3,13 @@
  */
 function getCableGroups() {
     const groups = new Map();
+    var cableSource = objects;
+    if (typeof MapPerf !== 'undefined' && MapPerf.getObjectsByType) {
+        var typed = MapPerf.getObjectsByType('cable');
+        if (Array.isArray(typed)) cableSource = typed;
+    }
     
-    objects.forEach(obj => {
+    cableSource.forEach(obj => {
         if (obj.properties && obj.properties.get('type') === 'cable') {
             const fromObj = obj.properties.get('from');
             const toObj = obj.properties.get('to');
@@ -172,7 +177,8 @@ function parseGroupDisplayScope(scope) {
             full: scope.full !== false,
             keys: Array.isArray(scope.keys) ? scope.keys : (scope.keys ? [scope.keys] : null),
             viewportOnly: !!scope.viewportOnly,
-            skipFilter: !!scope.skipFilter
+            skipFilter: !!scope.skipFilter,
+            skipCableUpdate: !!scope.skipCableUpdate
         };
     }
     return { full: true, keys: null };
@@ -466,9 +472,11 @@ function updateCrossDisplay(scope) {
     }, []) : objects.filter(function(obj) {
         return obj.properties && obj.properties.get('type') === 'cross';
     });
-    crossesForCables.forEach(function(cross) {
-        updateConnectedCables(cross);
-    });
+    if (!parsed.skipCableUpdate) {
+        crossesForCables.forEach(function(cross) {
+            updateConnectedCables(cross);
+        });
+    }
     if (keysOnly) {
         if (typeof applyMapFilterForObject === 'function') {
             crossesForCables.forEach(function(cross) { applyMapFilterForObject(cross); });
@@ -702,9 +710,11 @@ function updateNodeDisplay(scope) {
     }, []) : objects.filter(function(obj) {
         return obj.properties && obj.properties.get('type') === 'node';
     });
-    nodesForCables.forEach(function(node) {
-        updateConnectedCables(node);
-    });
+    if (!parsed.skipCableUpdate) {
+        nodesForCables.forEach(function(node) {
+            updateConnectedCables(node);
+        });
+    }
     if (keysOnly) {
         if (typeof applyMapFilterForObject === 'function') {
             nodesForCables.forEach(function(node) { applyMapFilterForObject(node); });
@@ -720,9 +730,20 @@ function updateNodeDisplay(scope) {
     }
 }
 
+var _crossNodeViewportRefreshTimer = null;
 function refreshCrossNodeViewportDisplay() {
     if (isMapBulkImportActive()) return;
     if (!shouldUseViewportLimitedGroupDisplay({ viewportOnly: true })) return;
-    updateCrossDisplay({ full: true, viewportOnly: true, skipFilter: true });
-    updateNodeDisplay({ full: true, viewportOnly: true, skipFilter: true });
+    if (_crossNodeViewportRefreshTimer) clearTimeout(_crossNodeViewportRefreshTimer);
+    _crossNodeViewportRefreshTimer = setTimeout(function() {
+        _crossNodeViewportRefreshTimer = null;
+        if (isMapBulkImportActive()) return;
+        if (window.mapUserGestureActive) {
+            refreshCrossNodeViewportDisplay();
+            return;
+        }
+        // skipCableUpdate: getCablesTouchingObject is O(n) per object — catastrophic on pan with 10k+.
+        updateCrossDisplay({ full: true, viewportOnly: true, skipFilter: true, skipCableUpdate: true });
+        updateNodeDisplay({ full: true, viewportOnly: true, skipFilter: true, skipCableUpdate: true });
+    }, 140);
 }

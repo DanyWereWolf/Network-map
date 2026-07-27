@@ -446,7 +446,7 @@ function applyMapViewportUpdate() {
     }
 }
 
-function isMapFilterObjVisible(obj, filter) {
+function isMapFilterObjVisible(obj, filter, hiddenRegions) {
     if (!obj || !obj.properties) return false;
     filter = filter || (typeof mapFilter !== 'undefined' && mapFilter ? mapFilter : getMapFilterState());
     var type = obj.properties.get('type');
@@ -461,7 +461,13 @@ function isMapFilterObjVisible(obj, filter) {
     } else if (filter[type] !== true) {
         return false;
     }
-    if (window.MapRegions && MapRegions.isObjectInAnyHiddenRegion(obj, objects)) return false;
+    if (window.MapRegions) {
+        if (hiddenRegions) {
+            if (hiddenRegions.length && MapRegions.isObjectInAnyHiddenRegion(obj, objects, hiddenRegions)) return false;
+        } else if (MapRegions.isObjectInAnyHiddenRegion(obj, objects)) {
+            return false;
+        }
+    }
     return true;
 }
 
@@ -538,27 +544,41 @@ function applyMapFilter() {
     mapFilter = filter;
     var useVirtual = typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization();
     if (typeof updateMapFilterBadge === 'function') updateMapFilterBadge();
+    // One scan for hidden regions — previously each object re-scanned all objects (O(n²)).
+    if (window.MapRegions && MapRegions.invalidateHiddenRegionsCache) {
+        try { MapRegions.invalidateHiddenRegionsCache(); } catch (eInv) {}
+    }
+    var hiddenRegions = (window.MapRegions && MapRegions.getHiddenRegions)
+        ? MapRegions.getHiddenRegions(objects)
+        : [];
     var visibleCables = new Set();
-    objects.forEach(function(obj) {
-        if (!obj.properties) return;
-        var type = obj.properties.get('type');
-        if (type === 'cable') {
-            var from = obj.properties.get('from');
-            var to = obj.properties.get('to');
-            var points = obj.properties.get('points');
-            var visible = from && to && isMapFilterObjVisible(from, filter) && isMapFilterObjVisible(to, filter) &&
-                (!Array.isArray(points) || points.length === 0 || points.every(function(p) { return isMapFilterObjVisible(p, filter); }));
-            if (visible && window.MapRegions && MapRegions.isCableInAnyHiddenRegion(obj, objects)) visible = false;
-            if (visible) visibleCables.add(obj);
+    var i;
+    var obj;
+    var type;
+    var visible;
+    for (i = 0; i < objects.length; i++) {
+        obj = objects[i];
+        if (!obj || !obj.properties) continue;
+        type = obj.properties.get('type');
+        if (type !== 'cable') continue;
+        var from = obj.properties.get('from');
+        var to = obj.properties.get('to');
+        var points = obj.properties.get('points');
+        visible = from && to && isMapFilterObjVisible(from, filter, hiddenRegions) && isMapFilterObjVisible(to, filter, hiddenRegions) &&
+            (!Array.isArray(points) || points.length === 0 || points.every(function(p) { return isMapFilterObjVisible(p, filter, hiddenRegions); }));
+        if (visible && hiddenRegions.length && window.MapRegions && MapRegions.isCableInAnyHiddenRegion(obj, objects, hiddenRegions)) {
+            visible = false;
         }
-    });
-    objects.forEach(function(obj) {
-        if (!obj.properties) return;
-        var type = obj.properties.get('type');
-        var visible = false;
+        if (visible) visibleCables.add(obj);
+    }
+    for (i = 0; i < objects.length; i++) {
+        obj = objects[i];
+        if (!obj || !obj.properties) continue;
+        type = obj.properties.get('type');
+        visible = false;
         if (type === 'cable') {
             visible = visibleCables.has(obj);
-            if (window.CableUnderground) CableUnderground.setOverlaysVisible(obj, visible);
+            if (!useVirtual && window.CableUnderground) CableUnderground.setOverlaysVisible(obj, visible);
         } else if (type === 'cableLabel') {
             var cables = obj.properties.get('cables');
             visible = Array.isArray(cables) && cables.some(function(c) { return visibleCables.has(c); });
@@ -571,7 +591,7 @@ function applyMapFilter() {
                 visible = window.MapRegions ? MapRegions.isRegionVisible(obj) : true;
             }
         } else {
-            visible = isMapFilterObjVisible(obj, filter);
+            visible = isMapFilterObjVisible(obj, filter, hiddenRegions);
             if (typeof getObjectCabinetId === 'function' && getObjectCabinetId(obj)) visible = false;
         }
         try {
@@ -586,7 +606,7 @@ function applyMapFilter() {
                 if (obj.options) obj.options.set('visible', visible);
             }
         } catch (e) {}
-    });
+    }
     var zoomFlags = getExpertZoomFlags();
     applyGroupPlacemarkFilterVisibility(filter, zoomFlags);
 

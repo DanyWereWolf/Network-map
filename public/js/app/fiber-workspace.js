@@ -1,7 +1,7 @@
 /**
  * Рабочее место жил: SVG-схема, sidebar, раскладка.
  */
-function updateCableVisualization() {
+function updateCableVisualization(opts) {
     const groups = getCableGroups();
 
     const labelsToRemove = objects.filter(obj => 
@@ -16,12 +16,25 @@ function updateCableVisualization() {
         objects = objects.filter(function(o) { return !labelSet.has(o); });
     }
 
+    var bounds = null;
+    var useViewportLabels = typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization &&
+        MapPerf.shouldUseVirtualization() && MapPerf.getExpandedBounds;
+    if (useViewportLabels) {
+        try { bounds = MapPerf.getExpandedBounds(myMap); } catch (eB) { bounds = null; }
+    }
+
     groups.forEach((group, key) => {
         if (group.cables.length > 1) {
-            
             const midLat = (group.fromCoords[0] + group.toCoords[0]) / 2;
             const midLon = (group.fromCoords[1] + group.toCoords[1]) / 2;
             const midCoords = [midLat, midLon];
+
+            if (bounds && typeof MapPerf.coordInBounds === 'function' &&
+                !MapPerf.coordInBounds(midCoords, bounds) &&
+                !(group.fromCoords && MapPerf.coordInBounds(group.fromCoords, bounds)) &&
+                !(group.toCoords && MapPerf.coordInBounds(group.toCoords, bounds))) {
+                return;
+            }
 
             const label = new ymaps.Placemark(midCoords, {}, {
                 iconLayout: 'default#imageWithContent',
@@ -45,7 +58,7 @@ function updateCableVisualization() {
             mapGeoAdd(label);
         }
     });
-    if (typeof applyMapFilter === 'function') applyMapFilter();
+    if (!(opts && opts.skipFilter) && typeof applyMapFilter === 'function') applyMapFilter();
 }
 
 function getUsedFibers(obj, cableUniqueId) {

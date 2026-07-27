@@ -320,8 +320,13 @@ function validateAndFixCableGeometryOnLoad() {
 function getCablesTouchingObject(obj) {
     if (!obj) return [];
     var out = [];
-    for (var i = 0; i < objects.length; i++) {
-        var cable = objects[i];
+    var scan = objects;
+    if (typeof MapPerf !== 'undefined' && MapPerf.getObjectsByType) {
+        var typed = MapPerf.getObjectsByType('cable');
+        if (Array.isArray(typed)) scan = typed;
+    }
+    for (var i = 0; i < scan.length; i++) {
+        var cable = scan[i];
         if (!cable || !cable.properties || cable.properties.get('type') !== 'cable') continue;
         var from = cable.properties.get('from');
         var to = cable.properties.get('to');

@@ -1902,11 +1902,10 @@ function importDataPostProcess(opts, onDone) {
         refreshAllCableUndergroundOverlays();
         applyAllOpticalCableMapStyles();
         ensureNodeLabelsVisible();
-        updateCableVisualization();
-        updateCrossDisplay();
-        updateNodeDisplay();
+        updateCableVisualization({ skipFilter: true });
+        updateCrossDisplay({ skipFilter: true });
+        updateNodeDisplay({ skipFilter: true });
         if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
-        scheduleConnectionLinesUpdate('full');
         migrateStandaloneSwitchesIntoNodes();
         if (window.EmbeddedSplitters && typeof EmbeddedSplitters.migrateAllFromMap === 'function') {
             EmbeddedSplitters.migrateAllFromMap();
@@ -1920,7 +1919,6 @@ function importDataPostProcess(opts, onDone) {
         if (typeof migrateAllRadioBridgeCopperPorts === 'function') migrateAllRadioBridgeCopperPorts();
         if (typeof repairRadioBridgeFiberLinksAfterLoad === 'function') repairRadioBridgeFiberLinksAfterLoad();
         rebuildAllCopperPortUsageFromCables();
-        if (window.CameraPlayer && CameraPlayer.startStreamMonitor) CameraPlayer.startStreamMonitor();
         if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
         if (window.MapRegions && MapRegions.sendAllRegionsToMapBack && myMap) {
             MapRegions.sendAllRegionsToMapBack(myMap, objects);
@@ -1934,6 +1932,12 @@ function importDataPostProcess(opts, onDone) {
             if (obj && obj.properties && obj.properties.get('type') === 'cable') ensureCableMapZIndex(obj);
         });
         if (typeof applyMapFilter === 'function') applyMapFilter();
+        setTimeout(function() {
+            try { scheduleConnectionLinesUpdate('full'); } catch (eCl) {}
+            try {
+                if (window.CameraPlayer && CameraPlayer.startStreamMonitor) CameraPlayer.startStreamMonitor();
+            } catch (eCam) {}
+        }, 0);
         if (opts && opts.undoRedo) requestAnimationFrame(finish);
         else finish();
     };
@@ -1954,19 +1958,29 @@ function importDataPostProcess(opts, onDone) {
                 ensureNodeLabelsVisible();
             },
             function() {
-                updateCableVisualization();
+                updateCableVisualization({ skipFilter: true });
             },
             function() {
-                updateCrossDisplay();
+                // On large maps only build cross/node groups for current viewport.
+                var large = typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization && MapPerf.shouldUseVirtualization();
+                if (large) {
+                    updateCrossDisplay({ full: true, viewportOnly: true, skipFilter: true, skipCableUpdate: true });
+                } else {
+                    updateCrossDisplay({ skipFilter: true });
+                }
             },
             function() {
-                updateNodeDisplay();
+                var large = typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization && MapPerf.shouldUseVirtualization();
+                if (large) {
+                    updateNodeDisplay({ full: true, viewportOnly: true, skipFilter: true, skipCableUpdate: true });
+                } else {
+                    updateNodeDisplay({ skipFilter: true });
+                }
             },
             function() {
                 if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
             },
             function() {
-                scheduleConnectionLinesUpdate('full');
                 migrateStandaloneSwitchesIntoNodes();
                 if (window.EmbeddedSplitters && typeof EmbeddedSplitters.migrateAllFromMap === 'function') {
                     EmbeddedSplitters.migrateAllFromMap();
@@ -1982,7 +1996,6 @@ function importDataPostProcess(opts, onDone) {
                 if (typeof migrateAllRadioBridgeCopperPorts === 'function') migrateAllRadioBridgeCopperPorts();
                 if (typeof repairRadioBridgeFiberLinksAfterLoad === 'function') repairRadioBridgeFiberLinksAfterLoad();
                 rebuildAllCopperPortUsageFromCables();
-                if (window.CameraPlayer && CameraPlayer.startStreamMonitor) CameraPlayer.startStreamMonitor();
                 if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
             },
             function() {
@@ -2003,7 +2016,21 @@ function importDataPostProcess(opts, onDone) {
                 });
             },
             function() {
-                if (typeof applyMapFilter === 'function') applyMapFilter();
+                // Prefer viewport sync over full filter on large maps.
+                if (typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization && MapPerf.shouldUseVirtualization()) {
+                    if (typeof applyMapFilter === 'function') applyMapFilter();
+                } else if (typeof applyMapFilter === 'function') {
+                    applyMapFilter();
+                }
+            },
+            function() {
+                // Defer connection lines + camera monitor — not needed for first paint.
+                setTimeout(function() {
+                    try { scheduleConnectionLinesUpdate('full'); } catch (eCl) {}
+                    try {
+                        if (window.CameraPlayer && CameraPlayer.startStreamMonitor) CameraPlayer.startStreamMonitor();
+                    } catch (eCam) {}
+                }, 0);
             }
         ];
         var stepIdx = 0;
