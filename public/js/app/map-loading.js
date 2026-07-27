@@ -8,31 +8,11 @@ var _mapStateReceived = false;
 var _mapLoadSafetyTimer = null;
 var _mapBulkImportActive = false;
 var MAP_BULK_IMPORT_MIN_ITEMS = 350;
-var MAP_BULK_IMPORT_BATCH_SIZE = 40;
-var MAP_BULK_IMPORT_CABLE_BATCH_SIZE = 30;
-/** Larger maps: keep batches small to protect INP (long tasks kill interaction). */
-var MAP_LARGE_IMPORT_THRESHOLD = 5000;
-var MAP_BULK_IMPORT_BATCH_SIZE_LARGE = 28;
-var MAP_BULK_IMPORT_CABLE_BATCH_SIZE_LARGE = 24;
-/** Soft time budget per animation frame during bulk import (ms). */
-var MAP_IMPORT_FRAME_BUDGET_MS = 8;
+var MAP_BULK_IMPORT_BATCH_SIZE = 60;
+var MAP_BULK_IMPORT_CABLE_BATCH_SIZE = 40;
 var MAP_UNDO_REDO_BATCH_MIN = 1;
 var MAP_UNDO_REDO_BATCH_SIZE = 50;
 var INCREMENTAL_UNDO_MAX_CHANGES = 50;
-
-function getMapImportBatchSize(totalItems) {
-    if (totalItems >= MAP_LARGE_IMPORT_THRESHOLD) return MAP_BULK_IMPORT_BATCH_SIZE_LARGE;
-    return MAP_BULK_IMPORT_BATCH_SIZE;
-}
-
-function getMapImportCableBatchSize(totalItems) {
-    if (totalItems >= MAP_LARGE_IMPORT_THRESHOLD) return MAP_BULK_IMPORT_CABLE_BATCH_SIZE_LARGE;
-    return MAP_BULK_IMPORT_CABLE_BATCH_SIZE;
-}
-
-function isLargeMapImport(totalItems) {
-    return (totalItems || 0) >= MAP_LARGE_IMPORT_THRESHOLD;
-}
 
 function isMapBulkImportActive() {
     return !!_mapBulkImportActive;

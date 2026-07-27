@@ -9,56 +9,33 @@ function handleFileImport(e) {
     const file = e.target.files[0];
     if (!file) return;
     const fileInput = e.target;
-    var overlayShown = false;
-    function hideImportOverlay() {
-        if (!overlayShown) return;
-        overlayShown = false;
-        if (typeof hideMapLoadingOverlay === 'function') hideMapLoadingOverlay();
-    }
-    function showImportOverlay(text) {
-        if (typeof showUndoRedoLoadingOverlay === 'function') {
-            showUndoRedoLoadingOverlay(text || 'Импорт карты…');
-            overlayShown = true;
-        }
-    }
-
-    // Large files: show overlay before JSON.parse freezes the UI.
-    var likelyLarge = file.size >= 1.5 * 1024 * 1024;
-    if (likelyLarge) showImportOverlay('Чтение файла…');
-
     const reader = new FileReader();
     reader.onload = function(ev) {
         (async function() {
+        var overlayShown = false;
+        function hideImportOverlay() {
+            if (!overlayShown) return;
+            overlayShown = false;
+            if (typeof hideMapLoadingOverlay === 'function') hideMapLoadingOverlay();
+        }
         try {
-            if (likelyLarge && typeof setMapLoadingOverlayText === 'function') {
-                setMapLoadingOverlayText('Разбор JSON…');
-                await new Promise(function(resolve) {
-                    requestAnimationFrame(function() { requestAnimationFrame(resolve); });
-                });
-            }
             const raw = ev.target.result;
             const data = JSON.parse(raw);
             if (!Array.isArray(data)) {
-                hideImportOverlay();
                 showError('Файл должен содержать массив объектов карты (JSON-массив).', 'Импорт');
                 fileInput.value = '';
                 return;
             }
 
             if (objects.length > 0 && !(await showConfirm('Текущая карта будет полностью заменена импортируемыми данными. Продолжить?', 'Импорт', { confirmText: 'Продолжить' }))) {
-                hideImportOverlay();
                 fileInput.value = '';
                 return;
             }
 
             var bulkImport = data.length >= (typeof MAP_BULK_IMPORT_MIN_ITEMS === 'number' ? MAP_BULK_IMPORT_MIN_ITEMS : 350);
-            var largeImport = typeof isLargeMapImport === 'function'
-                ? isLargeMapImport(data.length)
-                : data.length >= 5000;
-            if (bulkImport) {
-                showImportOverlay(largeImport
-                    ? ('Импорт большой карты… 0 / ' + data.length)
-                    : 'Импорт карты…');
+            if (bulkImport && typeof showUndoRedoLoadingOverlay === 'function') {
+                showUndoRedoLoadingOverlay('Импорт карты…');
+                overlayShown = true;
                 await new Promise(function(resolve) {
                     requestAnimationFrame(function() { requestAnimationFrame(resolve); });
                 });
@@ -66,8 +43,7 @@ function handleFileImport(e) {
 
             var importOpts = { skipSave: true, skipHistory: true };
             if (bulkImport) importOpts.bulkImport = true;
-            if (largeImport) importOpts.largeImport = true;
-            // importData clears the map itself — avoid double clearMap.
+            clearMap(importOpts);
             await new Promise(function(resolve, reject) {
                 importData(data, importOpts, function(err) {
                     if (err) {
@@ -80,16 +56,7 @@ function handleFileImport(e) {
                     }
                     requestAnimationFrame(function() {
                         try {
-                            // Suppress map_refresh echo from HTTP persist for this tab.
-                            window._suppressMapRefreshUntil = Date.now() + 8000;
-                            // Reuse imported JSON: no re-serialize of 11k geoobjects, HTTP persist + map_refresh.
-                            saveData({
-                                syncFull: true,
-                                persistHttp: true,
-                                allowShrink: true,
-                                state: data,
-                                reuseStateSnapshot: true
-                            });
+                            saveData({ syncFull: true });
                             hideImportOverlay();
                             showSuccess('Карта импортирована (' + data.length + ' объектов)', 'Импорт');
                             logAction(ActionTypes.IMPORT_DATA, { count: data.length });
@@ -113,11 +80,6 @@ function handleFileImport(e) {
         }
         fileInput.value = '';
         })();
-    };
-    reader.onerror = function() {
-        hideImportOverlay();
-        showError('Не удалось прочитать файл.', 'Импорт');
-        fileInput.value = '';
     };
     reader.readAsText(file);
 }

@@ -565,13 +565,8 @@ function saveData(opts) {
         if (undoStack.length > UNDO_MAX) undoStack.shift();
         redoStack = [];
     }
-    // Prefer caller-provided snapshot (e.g. imported JSON) — avoids re-serializing 11k+ Yandex objects.
-    var data = Array.isArray(opts.state) ? opts.state : getSerializedData();
-    if (opts.reuseStateSnapshot && Array.isArray(opts.state)) {
-        lastSavedState = opts.state;
-    } else {
-        lastSavedState = cloneMapSnapshot(data);
-    }
+    var data = getSerializedData();
+    lastSavedState = cloneMapSnapshot(data);
     if (!(opts && opts.skipSync) && !inUndoRedo) pushSaveDataToSync(opts || {});
     if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
 }
@@ -671,60 +666,17 @@ function loadData() {
         if (!token) return;
 
         function fetchMapFromApi() {
-            var authHeaders = { 'Authorization': 'Bearer ' + token };
-            var PAGE_SIZE = 900;
-            var LARGE_MAP_THRESHOLD = 2500;
-
-            function applyMapBody(body) {
-                if (!body || !Array.isArray(body.data)) return false;
-                if (typeof currentUser !== 'undefined' && currentUser && currentUser.organizationId != null) {
-                    window._mapOrgIdLoaded = String(currentUser.organizationId);
-                }
-                if (typeof applyRemoteState === 'function') {
-                    applyRemoteState(body.data, { fromApi: true, organizationId: body.organizationId });
-                }
-                return true;
-            }
-
-            function fetchFullMap() {
-                return fetch(getApiBase() + '/api/map', { headers: authHeaders })
-                    .then(function(r) { return r.ok ? r.json() : null; })
-                    .then(applyMapBody);
-            }
-
-            function fetchMapPages(startCursor, acc, orgId, total) {
-                var url = getApiBase() + '/api/map?cursor=' + encodeURIComponent(startCursor) +
-                    '&limit=' + PAGE_SIZE;
-                return fetch(url, { headers: authHeaders })
-                    .then(function(r) { return r.ok ? r.json() : null; })
-                    .then(function(body) {
-                        if (!body || !Array.isArray(body.data)) return false;
-                        acc = acc.concat(body.data);
-                        if (typeof setMapLoadingOverlayText === 'function' && total) {
-                            setMapLoadingOverlayText('Загрузка объектов… ' + Math.min(acc.length, total) + ' / ' + total);
-                        }
-                        if (body.nextCursor != null && body.nextCursor !== '') {
-                            return fetchMapPages(body.nextCursor, acc, body.organizationId || orgId, body.total || total);
-                        }
-                        return applyMapBody({ data: acc, organizationId: body.organizationId || orgId });
-                    });
-            }
-
-            // Probe size; large maps load in pages to avoid one huge JSON parse stall.
-            return fetch(getApiBase() + '/api/map?cursor=0&limit=1', { headers: authHeaders })
+            return fetch(getApiBase() + '/api/map', { headers: { 'Authorization': 'Bearer ' + token } })
                 .then(function(r) { return r.ok ? r.json() : null; })
-                .then(function(probe) {
-                    if (!probe) return fetchFullMap();
-                    var total = typeof probe.total === 'number' ? probe.total : (probe.data && probe.data.length) || 0;
-                    if (total < LARGE_MAP_THRESHOLD) return fetchFullMap();
-                    if (typeof setMapLoadingOverlayText === 'function') {
-                        setMapLoadingOverlayText('Загрузка объектов… 0 / ' + total);
+                .then(function(body) {
+                    if (!body || !Array.isArray(body.data)) return false;
+                    if (typeof currentUser !== 'undefined' && currentUser && currentUser.organizationId != null) {
+                        window._mapOrgIdLoaded = String(currentUser.organizationId);
                     }
-                    var first = Array.isArray(probe.data) ? probe.data.slice() : [];
-                    if (probe.nextCursor == null) {
-                        return applyMapBody({ data: first, organizationId: probe.organizationId });
+                    if (typeof applyRemoteState === 'function') {
+                        applyRemoteState(body.data, { fromApi: true, organizationId: body.organizationId });
                     }
-                    return fetchMapPages(probe.nextCursor, first, probe.organizationId, total);
+                    return true;
                 });
         }
 
@@ -1892,9 +1844,7 @@ function importDataRunCables(data, objectRefs, onDone) {
         }
     }
     var useCableBatch = isMapBulkImportActive()
-        && cableItems.length >= (typeof getMapImportCableBatchSize === 'function'
-            ? Math.min(40, getMapImportCableBatchSize(data && data.length))
-            : 40);
+        && cableItems.length >= (typeof MAP_BULK_IMPORT_CABLE_BATCH_SIZE === 'number' ? MAP_BULK_IMPORT_CABLE_BATCH_SIZE : 40);
     if (!useCableBatch) {
         try {
             cableItems.forEach(function(item) {
@@ -1908,21 +1858,12 @@ function importDataRunCables(data, objectRefs, onDone) {
         return;
     }
     var cableIdx = 0;
-    var cableBatchSize = typeof getMapImportCableBatchSize === 'function'
-        ? getMapImportCableBatchSize(data && data.length)
-        : (typeof MAP_BULK_IMPORT_CABLE_BATCH_SIZE === 'number' ? MAP_BULK_IMPORT_CABLE_BATCH_SIZE : 40);
-    var frameBudget = typeof MAP_IMPORT_FRAME_BUDGET_MS === 'number' ? MAP_IMPORT_FRAME_BUDGET_MS : 12;
+    var cableBatchSize = typeof MAP_BULK_IMPORT_CABLE_BATCH_SIZE === 'number' ? MAP_BULK_IMPORT_CABLE_BATCH_SIZE : 40;
     function importCableBatch() {
         try {
-            var started = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-            var processed = 0;
-            while (cableIdx < cableItems.length) {
+            var end = Math.min(cableIdx + cableBatchSize, cableItems.length);
+            for (; cableIdx < end; cableIdx++) {
                 importDataRunOneCable(cableItems[cableIdx], objectRefs, refIndex, cableByUid);
-                cableIdx++;
-                processed++;
-                var now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                if (now - started >= frameBudget) break;
-                if (processed >= cableBatchSize) break;
             }
         } catch (batchCableErr) {
             if (typeof onDone === 'function') onDone(batchCableErr);
@@ -1990,71 +1931,47 @@ function importDataPostProcess(opts, onDone) {
     };
     var useChunkedPostProcess = isMapBulkImportActive() && !(opts && opts.undoRedo);
     if (useChunkedPostProcess) {
-        var largeImport = !!(opts && opts.largeImport) ||
-            (typeof isLargeMapImport === 'function' && isLargeMapImport(objects && objects.length));
         if (typeof setMapLoadingOverlayText === 'function') {
             setMapLoadingOverlayText(opts && opts.bulkImport ? 'Финализация импорта…' : 'Подготовка карты…');
         }
         var postSteps = [
             function() {
-                if (typeof setMapLoadingOverlayText === 'function') {
-                    setMapLoadingOverlayText(largeImport ? 'Финализация: кабели…' : 'Финализация импорта…');
-                }
                 if (typeof syncAllCabinetMembersToCabinets === 'function') {
                     syncAllCabinetMembersToCabinets({ skipDisplay: true });
                 }
                 repairCablesAfterImport();
-            },
-            function() {
                 validateAndFixCableGeometryOnLoad();
-                if (!largeImport) refreshAllCableUndergroundOverlays();
+                refreshAllCableUndergroundOverlays();
                 applyAllOpticalCableMapStyles();
                 ensureNodeLabelsVisible();
             },
             function() {
-                if (typeof setMapLoadingOverlayText === 'function') {
-                    setMapLoadingOverlayText(largeImport ? 'Финализация: группы…' : 'Финализация импорта…');
-                }
                 updateCableVisualization();
-                if (!largeImport) {
-                    updateCrossDisplay();
-                    updateNodeDisplay();
-                    if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
-                }
+                updateCrossDisplay();
+                updateNodeDisplay();
+                if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
             },
             function() {
-                // Connection lines are expensive at 11k+ — defer for large imports until after UI unlock.
-                if (!largeImport) scheduleConnectionLinesUpdate('full');
-                if (!largeImport) migrateStandaloneSwitchesIntoNodes();
-                if (!largeImport && window.EmbeddedSplitters && typeof EmbeddedSplitters.migrateAllFromMap === 'function') {
+                scheduleConnectionLinesUpdate('full');
+                migrateStandaloneSwitchesIntoNodes();
+                if (window.EmbeddedSplitters && typeof EmbeddedSplitters.migrateAllFromMap === 'function') {
                     EmbeddedSplitters.migrateAllFromMap();
                 }
-                if (!largeImport && window.EmbeddedSplitters && typeof EmbeddedSplitters.syncAllInputs === 'function') {
-                    if (typeof forEachFiberHostObject === 'function') {
-                        forEachFiberHostObject(function(obj) {
-                            if (EmbeddedSplitters.isHost(obj)) EmbeddedSplitters.syncAllInputs(obj);
-                        });
-                    } else {
-                        objects.forEach(function(obj) {
-                            if (EmbeddedSplitters.isHost(obj)) EmbeddedSplitters.syncAllInputs(obj);
-                        });
-                    }
+                if (window.EmbeddedSplitters && typeof EmbeddedSplitters.syncAllInputs === 'function') {
+                    objects.forEach(function(obj) {
+                        if (EmbeddedSplitters.isHost(obj)) EmbeddedSplitters.syncAllInputs(obj);
+                    });
                 }
             },
             function() {
-                if (!largeImport) {
-                    if (migrateNodeLevelSwitchMetaToAttached() && !(opts && opts.skipSave)) saveData();
-                    if (typeof migrateAllRadioBridgeCopperPorts === 'function') migrateAllRadioBridgeCopperPorts();
-                    if (typeof repairRadioBridgeFiberLinksAfterLoad === 'function') repairRadioBridgeFiberLinksAfterLoad();
-                    rebuildAllCopperPortUsageFromCables();
-                }
+                if (migrateNodeLevelSwitchMetaToAttached() && !(opts && opts.skipSave)) saveData();
+                if (typeof migrateAllRadioBridgeCopperPorts === 'function') migrateAllRadioBridgeCopperPorts();
+                if (typeof repairRadioBridgeFiberLinksAfterLoad === 'function') repairRadioBridgeFiberLinksAfterLoad();
+                rebuildAllCopperPortUsageFromCables();
                 if (window.CameraPlayer && CameraPlayer.startStreamMonitor) CameraPlayer.startStreamMonitor();
                 if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
             },
             function() {
-                if (typeof setMapLoadingOverlayText === 'function') {
-                    setMapLoadingOverlayText(largeImport ? 'Финализация: фильтр…' : 'Финализация импорта…');
-                }
                 if (window.MapRegions && MapRegions.sendAllRegionsToMapBack && myMap) {
                     MapRegions.sendAllRegionsToMapBack(myMap, objects);
                 }
@@ -2063,63 +1980,19 @@ function importDataPostProcess(opts, onDone) {
                 } else if (window.MapRegions && MapRegions.syncAllRegionLabels && myMap) {
                     MapRegions.syncAllRegionLabels(myMap, objects);
                 }
-                if (!largeImport) {
-                    objects.forEach(function(obj) {
-                        if (obj && obj.properties && obj.properties.get('type') === 'cable') ensureCableMapZIndex(obj);
-                    });
-                } else if (typeof getMapObjectsByType === 'function') {
-                    var cables = getMapObjectsByType('cable');
-                    for (var zi = 0; zi < cables.length; zi++) ensureCableMapZIndex(cables[zi]);
-                }
+                objects.forEach(function(obj) {
+                    if (obj && obj.properties && obj.properties.get('type') === 'cable') ensureCableMapZIndex(obj);
+                });
                 if (typeof applyMapFilter === 'function') applyMapFilter();
             }
         ];
         var stepIdx = 0;
         function runPostStep() {
             if (stepIdx >= postSteps.length) {
-                if (largeImport) {
-                    // Deferred heavy work after the map is interactive.
-                    setTimeout(function() {
-                        try {
-                            var runDeferred = function() {
-                                if (typeof refreshAllCableUndergroundOverlays === 'function') refreshAllCableUndergroundOverlays();
-                                if (typeof updateCrossDisplay === 'function') updateCrossDisplay();
-                                if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
-                                if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
-                                scheduleConnectionLinesUpdate('full');
-                                migrateStandaloneSwitchesIntoNodes();
-                                if (window.EmbeddedSplitters && EmbeddedSplitters.migrateAllFromMap) EmbeddedSplitters.migrateAllFromMap();
-                                if (typeof migrateAllRadioBridgeCopperPorts === 'function') migrateAllRadioBridgeCopperPorts();
-                                if (typeof repairRadioBridgeFiberLinksAfterLoad === 'function') repairRadioBridgeFiberLinksAfterLoad();
-                                if (typeof rebuildAllCopperPortUsageFromCables === 'function') rebuildAllCopperPortUsageFromCables();
-                                if (typeof updateStats === 'function') updateStats();
-                            };
-                            if (window.MapPerfLog && MapPerfLog.isEnabled()) {
-                                MapPerfLog.mark('deferred-post-process-start', { objects: objects && objects.length });
-                                MapPerfLog.measure('import.deferredPostProcess', runDeferred);
-                                MapPerfLog.report();
-                            } else {
-                                runDeferred();
-                            }
-                        } catch (eDefer) {
-                            console.warn('[Import] Deferred post-process error:', eDefer);
-                        }
-                    }, 750);
-                }
                 finish();
                 return;
             }
-            try {
-                var stepFn = postSteps[stepIdx++];
-                var stepName = 'importDataPostProcess.step' + (stepIdx);
-                if (window.MapPerfLog && MapPerfLog.isEnabled()) {
-                    MapPerfLog.measure(stepName, stepFn);
-                } else {
-                    stepFn();
-                }
-            } catch (stepErr) {
-                console.warn('[Import] Post-process step failed:', stepErr);
-            }
+            postSteps[stepIdx++]();
             requestAnimationFrame(runPostStep);
         }
         requestAnimationFrame(runPostStep);
@@ -2134,13 +2007,7 @@ function importData(data, opts, done) {
     var undoRedo = !!opts.undoRedo;
     var bulkMinItems = undoRedo ? MAP_UNDO_REDO_BATCH_MIN : MAP_BULK_IMPORT_MIN_ITEMS;
     var useBulk = !!opts.bulkImport || undoRedo || (Array.isArray(data) && data.length >= bulkMinItems);
-    var importBatchSize = undoRedo
-        ? MAP_UNDO_REDO_BATCH_SIZE
-        : (typeof getMapImportBatchSize === 'function' ? getMapImportBatchSize(data && data.length) : MAP_BULK_IMPORT_BATCH_SIZE);
-    var frameBudget = typeof MAP_IMPORT_FRAME_BUDGET_MS === 'number' ? MAP_IMPORT_FRAME_BUDGET_MS : 12;
-    if (typeof isLargeMapImport === 'function' && isLargeMapImport(data && data.length)) {
-        opts.largeImport = true;
-    }
+    var importBatchSize = undoRedo ? MAP_UNDO_REDO_BATCH_SIZE : MAP_BULK_IMPORT_BATCH_SIZE;
     _mapBulkImportActive = useBulk;
     clearMap(opts || {});
     importDataAssignUniqueIds(data);
@@ -2170,26 +2037,16 @@ function importData(data, opts, done) {
 
         function importPlacemarkBatch() {
             try {
-                var started = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                var processed = 0;
-                while (idx < data.length) {
+                var end = Math.min(idx + importBatchSize, data.length);
+                for (; idx < end; idx++) {
                     var item = data[idx];
-                    if (!item) {
-                        idx++;
-                        continue;
-                    }
+                    if (!item) continue;
                     if (item.type === 'cable' || item.type === 'cableLabel') {
                         objectRefs[idx] = null;
-                        idx++;
                         continue;
                     }
                     objectRefs[idx] = importDataCreatePlacemarkRef(item);
                     if (objectRefs[idx]) placemarkLoaded++;
-                    idx++;
-                    processed++;
-                    var now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                    if (now - started >= frameBudget) break;
-                    if (processed >= importBatchSize) break;
                 }
             } catch (batchErr) {
                 failImport(batchErr);
@@ -2286,12 +2143,7 @@ function populatePlacemarkFromSerializedData(placemark, data) {
     if (type) placemark.properties.set('type', type);
     if (data.name != null) {
         placemark.properties.set('name', data.name);
-        // Labels are a second Placemark each — defer during bulk import (critical for INP at 10k+).
-        if (typeof isMapBulkImportActive === 'function' && isMapBulkImportActive()) {
-            placemark._labelDeferred = true;
-        } else if (typeof updateObjectLabel === 'function') {
-            updateObjectLabel(placemark, data.name);
-        }
+        if (typeof updateObjectLabel === 'function') updateObjectLabel(placemark, data.name);
     }
     if (data.revision != null) {
         var revIncoming = Number(data.revision);
@@ -2306,12 +2158,7 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         placemark.properties.set('nodeKind', data.nodeKind || 'network');
         if (data.comment) placemark.properties.set('comment', data.comment);
         if (Array.isArray(data.attachedSwitches) && data.attachedSwitches.length) {
-            // Avoid JSON deep-clone of every node during bulk import (major INP cost at 10k+).
-            if (typeof isMapBulkImportActive === 'function' && isMapBulkImportActive()) {
-                placemark.properties.set('attachedSwitches', data.attachedSwitches.slice());
-            } else {
-                placemark.properties.set('attachedSwitches', JSON.parse(JSON.stringify(data.attachedSwitches)));
-            }
+            placemark.properties.set('attachedSwitches', JSON.parse(JSON.stringify(data.attachedSwitches)));
         } else {
             placemark.properties.set('attachedSwitches', placemark.properties.get('attachedSwitches') || []);
         }
@@ -2599,9 +2446,6 @@ function createObjectFromData(data, opts, createOpts) {
         type: type,
         name: name
     }, placemarkOptions);
-
-    var deferLabels = !!(createOpts && createOpts.bulkImport) ||
-        (typeof isMapBulkImportActive === 'function' && isMapBulkImportActive());
 
     if (type === 'node' || type === 'cross' || type === 'switch') {
         placemark.events.add('dragend', function() {
@@ -2903,14 +2747,10 @@ function createObjectFromData(data, opts, createOpts) {
         scheduleDragUpdate(placemark);
     });
 
-    if (deferLabels) {
-        placemark._labelDeferred = true;
-        placemark._hoverEventsDeferred = true;
-    } else {
-        updateObjectLabel(placemark, name);
-        attachHoverEventsToObject(placemark);
-    }
+    updateObjectLabel(placemark, name);
     if (type === 'camera') refreshCameraMapPresentation(placemark);
+
+    attachHoverEventsToObject(placemark);
     if (typeof bindPlacemarkPlacementDragSupport === 'function') bindPlacemarkPlacementDragSupport(placemark);
     if (!(createOpts && createOpts.skipAddToObjects)) {
         objects.push(placemark);

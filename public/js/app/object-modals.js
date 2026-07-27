@@ -2882,102 +2882,89 @@ function setStatsGroupSum(elId, value) {
     if (group) group.classList.toggle('stats-group--empty', n === 0);
 }
 
-var _statsUpdateRaf = null;
-var _statsChunkRaf = null;
-var _statsComputeGen = 0;
-var STATS_CHUNK_MIN_OBJECTS = 2500;
-var STATS_FRAME_BUDGET_MS = 6;
-
-function emptyStatsCounts() {
-    return {
-        networkNodeCount: 0,
-        aggregationNodeCount: 0,
-        supportCount: 0,
-        attachmentCount: 0,
-        manholeCount: 0,
-        signalPostCount: 0,
-        cabinetCount: 0,
-        sleeveCount: 0,
-        spliceCassetteCount: 0,
-        crossCount: 0,
-        oltCount: 0,
-        splitterCount: 0,
-        onuCount: 0,
-        cameraCount: 0,
-        mediaConverterCount: 0,
-        radioBridgeCount: 0,
-        switchCount: 0,
-        cableOpticalCount: 0,
-        cableCopperCount: 0
-    };
-}
-
-function accumulateStatsForObject(obj, counts) {
-    if (!obj || !obj.properties) return;
-    var type = obj.properties.get('type');
-    if (type === 'node') {
-        if ((obj.properties.get('nodeKind') || 'network') === 'aggregation') counts.aggregationNodeCount++;
-        else counts.networkNodeCount++;
-        var attached = typeof getNodeAttachedSwitches === 'function' ? getNodeAttachedSwitches(obj) : [];
-        counts.switchCount += attached.length;
-    } else if (type === 'support') counts.supportCount++;
-    else if (type === 'attachment') counts.attachmentCount++;
-    else if (type === 'manhole') counts.manholeCount++;
-    else if (type === 'signalPost') counts.signalPostCount++;
-    else if (type === 'cabinet') counts.cabinetCount++;
-    else if (type === 'sleeve') {
-        counts.sleeveCount++;
-        if (window.EmbeddedSplitters) counts.splitterCount += EmbeddedSplitters.getList(obj).length;
-    } else if (type === 'spliceCassette') {
-        counts.spliceCassetteCount++;
-        if (window.EmbeddedSplitters) counts.splitterCount += EmbeddedSplitters.getList(obj).length;
-    } else if (type === 'cross') {
-        counts.crossCount++;
-        if (window.EmbeddedSplitters) counts.splitterCount += EmbeddedSplitters.getList(obj).length;
-    } else if (type === 'olt') counts.oltCount++;
-    else if (type === 'splitter') counts.splitterCount++;
-    else if (type === 'onu') counts.onuCount++;
-    else if (type === 'camera') counts.cameraCount++;
-    else if (type === 'mediaConverter') counts.mediaConverterCount++;
-    else if (type === 'radioBridge') counts.radioBridgeCount++;
-    else if (type === 'switch') counts.switchCount++;
-    else if (type === 'cable') {
-        if (typeof isCopperCableType === 'function' && isCopperCableType(obj.properties.get('cableType'))) {
-            counts.cableCopperCount++;
-        } else {
-            counts.cableOpticalCount++;
+function updateStats() {
+    initStatsIcons();
+    var networkNodeCount = 0;
+    var aggregationNodeCount = 0;
+    var supportCount = 0;
+    var attachmentCount = 0;
+    var manholeCount = 0;
+    var signalPostCount = 0;
+    var cabinetCount = 0;
+    var sleeveCount = 0;
+    var spliceCassetteCount = 0;
+    var crossCount = 0;
+    var oltCount = 0;
+    var splitterCount = 0;
+    var onuCount = 0;
+    var cameraCount = 0;
+    var mediaConverterCount = 0;
+    var radioBridgeCount = 0;
+    var switchCount = 0;
+    var cableOpticalCount = 0;
+    var cableCopperCount = 0;
+    objects.forEach(function(obj) {
+        if (!obj || !obj.properties) return;
+        var type = obj.properties.get('type');
+        if (type === 'node') {
+            if ((obj.properties.get('nodeKind') || 'network') === 'aggregation') aggregationNodeCount++;
+            else networkNodeCount++;
+            switchCount += getNodeAttachedSwitches(obj).length;
+        } else if (type === 'support') supportCount++;
+        else if (type === 'attachment') attachmentCount++;
+        else if (type === 'manhole') manholeCount++;
+        else if (type === 'signalPost') signalPostCount++;
+        else if (type === 'cabinet') cabinetCount++;
+        else if (type === 'sleeve') {
+            sleeveCount++;
+            if (window.EmbeddedSplitters) splitterCount += EmbeddedSplitters.getList(obj).length;
+        } else if (type === 'spliceCassette') {
+            spliceCassetteCount++;
+            if (window.EmbeddedSplitters) splitterCount += EmbeddedSplitters.getList(obj).length;
+        } else if (type === 'cross') {
+            crossCount++;
+            if (window.EmbeddedSplitters) splitterCount += EmbeddedSplitters.getList(obj).length;
+        } else if (type === 'olt') oltCount++;
+        else if (type === 'splitter') splitterCount++;
+        else if (type === 'onu') onuCount++;
+        else if (type === 'camera') cameraCount++;
+        else if (type === 'mediaConverter') mediaConverterCount++;
+        else if (type === 'radioBridge') radioBridgeCount++;
+        else if (type === 'switch') switchCount++;
+        else if (type === 'cable') {
+            if (typeof isCopperCableType === 'function' && isCopperCableType(obj.properties.get('cableType'))) {
+                cableCopperCount++;
+            } else {
+                cableOpticalCount++;
+            }
         }
-    }
-}
+    });
 
-function applyStatsCountsToDom(counts) {
-    setStatCount(document.getElementById('networkNodeCount'), counts.networkNodeCount);
-    setStatCount(document.getElementById('aggregationNodeCount'), counts.aggregationNodeCount);
-    setStatCount(document.getElementById('switchCount'), counts.switchCount);
-    setStatCount(document.getElementById('supportCount'), counts.supportCount);
-    setStatCount(document.getElementById('attachmentCount'), counts.attachmentCount);
-    setStatCount(document.getElementById('manholeCount'), counts.manholeCount);
-    setStatCount(document.getElementById('signalPostCount'), counts.signalPostCount);
-    setStatCount(document.getElementById('cabinetCount'), counts.cabinetCount);
-    setStatCount(document.getElementById('sleeveCount'), counts.sleeveCount);
-    setStatCount(document.getElementById('spliceCassetteCount'), counts.spliceCassetteCount);
-    setStatCount(document.getElementById('crossCount'), counts.crossCount);
-    setStatCount(document.getElementById('oltCount'), counts.oltCount);
-    setStatCount(document.getElementById('splitterCount'), counts.splitterCount);
-    setStatCount(document.getElementById('onuCount'), counts.onuCount);
-    setStatCount(document.getElementById('cameraCount'), counts.cameraCount);
-    setStatCount(document.getElementById('mediaConverterCount'), counts.mediaConverterCount);
-    setStatCount(document.getElementById('radioBridgeCount'), counts.radioBridgeCount);
-    setStatCount(document.getElementById('cableOpticalCount'), counts.cableOpticalCount);
-    setStatCount(document.getElementById('cableCopperCount'), counts.cableCopperCount);
+    setStatCount(document.getElementById('networkNodeCount'), networkNodeCount);
+    setStatCount(document.getElementById('aggregationNodeCount'), aggregationNodeCount);
+    setStatCount(document.getElementById('switchCount'), switchCount);
+    setStatCount(document.getElementById('supportCount'), supportCount);
+    setStatCount(document.getElementById('attachmentCount'), attachmentCount);
+    setStatCount(document.getElementById('manholeCount'), manholeCount);
+    setStatCount(document.getElementById('signalPostCount'), signalPostCount);
+    setStatCount(document.getElementById('cabinetCount'), cabinetCount);
+    setStatCount(document.getElementById('sleeveCount'), sleeveCount);
+    setStatCount(document.getElementById('spliceCassetteCount'), spliceCassetteCount);
+    setStatCount(document.getElementById('crossCount'), crossCount);
+    setStatCount(document.getElementById('oltCount'), oltCount);
+    setStatCount(document.getElementById('splitterCount'), splitterCount);
+    setStatCount(document.getElementById('onuCount'), onuCount);
+    setStatCount(document.getElementById('cameraCount'), cameraCount);
+    setStatCount(document.getElementById('mediaConverterCount'), mediaConverterCount);
+    setStatCount(document.getElementById('radioBridgeCount'), radioBridgeCount);
+    setStatCount(document.getElementById('cableOpticalCount'), cableOpticalCount);
+    setStatCount(document.getElementById('cableCopperCount'), cableCopperCount);
 
-    var sumNodes = counts.networkNodeCount + counts.aggregationNodeCount + counts.switchCount;
-    var sumInfra = counts.supportCount + counts.attachmentCount + counts.manholeCount +
-        counts.signalPostCount + counts.cabinetCount + counts.sleeveCount +
-        counts.spliceCassetteCount + counts.crossCount;
-    var sumGpon = counts.oltCount + counts.splitterCount + counts.onuCount;
-    var sumEquip = counts.cameraCount + counts.mediaConverterCount + counts.radioBridgeCount;
-    var sumCables = counts.cableOpticalCount + counts.cableCopperCount;
+    var sumNodes = networkNodeCount + aggregationNodeCount + switchCount;
+    var sumInfra = supportCount + attachmentCount + manholeCount + signalPostCount + cabinetCount + sleeveCount + spliceCassetteCount + crossCount;
+    var sumGpon = oltCount + splitterCount + onuCount;
+    var sumEquip = cameraCount + mediaConverterCount + radioBridgeCount;
+    var sumCables = cableOpticalCount + cableCopperCount;
 
     setStatsGroupSum('statsSumNodes', sumNodes);
     setStatsGroupSum('statsSumInfra', sumInfra);
@@ -2990,70 +2977,6 @@ function applyStatsCountsToDom(counts) {
         statsTotalEl.textContent = String(sumNodes + sumInfra + sumGpon + sumEquip + sumCables);
     }
 }
-
-function computeStatsCountsSync() {
-    var counts = emptyStatsCounts();
-    if (!Array.isArray(objects)) return counts;
-    for (var i = 0; i < objects.length; i++) {
-        accumulateStatsForObject(objects[i], counts);
-    }
-    return counts;
-}
-
-function updateStatsNow() {
-    function run() {
-    initStatsIcons();
-    if (typeof isMapBulkImportActive === 'function' && isMapBulkImportActive()) return;
-    if (!Array.isArray(objects) || objects.length < STATS_CHUNK_MIN_OBJECTS) {
-        applyStatsCountsToDom(computeStatsCountsSync());
-        return;
-    }
-
-    // Large maps: count in time-budgeted chunks so stats never create a multi-second INP.
-    var gen = ++_statsComputeGen;
-    var counts = emptyStatsCounts();
-    var idx = 0;
-    var list = objects;
-    if (_statsChunkRaf) {
-        cancelAnimationFrame(_statsChunkRaf);
-        _statsChunkRaf = null;
-    }
-    function step() {
-        _statsChunkRaf = null;
-        if (gen !== _statsComputeGen) return;
-        var started = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-        while (idx < list.length) {
-            accumulateStatsForObject(list[idx], counts);
-            idx++;
-            var now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-            if (now - started >= STATS_FRAME_BUDGET_MS) break;
-        }
-        if (idx < list.length) {
-            _statsChunkRaf = requestAnimationFrame(step);
-            return;
-        }
-        if (gen === _statsComputeGen) applyStatsCountsToDom(counts);
-    }
-    _statsChunkRaf = requestAnimationFrame(step);
-    }
-    if (window.MapPerfLog && MapPerfLog.isEnabled()) {
-        MapPerfLog.measure('updateStatsNow', run);
-    } else {
-        run();
-    }
-}
-
-/** Debounced: coalesces bursts of updateStats() during import/edit into one paint. */
-function updateStats() {
-    if (typeof isMapBulkImportActive === 'function' && isMapBulkImportActive()) return;
-    if (_statsUpdateRaf) return;
-    _statsUpdateRaf = requestAnimationFrame(function() {
-        _statsUpdateRaf = null;
-        updateStatsNow();
-    });
-}
-window.updateStats = updateStats;
-window.updateStatsNow = updateStatsNow;
 
 function showInfoModalLoadingShell(title) {
     var modal = document.getElementById('infoModal');

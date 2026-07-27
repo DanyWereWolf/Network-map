@@ -426,6 +426,9 @@ function applyMapViewportUpdate() {
         }
         return;
     }
+    if (typeof refreshCrossNodeViewportDisplay === 'function') {
+        try { refreshCrossNodeViewportDisplay(); } catch (eCrossNode) {}
+    }
     applyConnectionLinesVisibility();
     if (typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization()) {
         MapPerf.syncViewportMounts(buildMapMountContext());
@@ -529,12 +532,6 @@ function ensureObjectLabelOnMap(obj) {
 }
 
 function applyMapFilter() {
-    if (window.MapPerfLog && MapPerfLog.isEnabled()) {
-        return MapPerfLog.measure('applyMapFilter', applyMapFilterInstrumented);
-    }
-    return applyMapFilterInstrumented();
-}
-function applyMapFilterInstrumented() {
     if (window._mapPdfExportCaptureActive) return;
     if (!myMap || !objects) return;
     var filter = getMapFilterState();

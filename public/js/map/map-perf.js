@@ -3,7 +3,6 @@
  */
 (function(global) {
     var objectsById = new Map();
-    var objectsByType = new Map();
     var VIEWPORT_CULL_MIN_OBJECTS = 120;
     var VIRTUALIZATION_MIN_OBJECTS = 400;
     var VIEWPORT_BUFFER_RATIO = 0.12;
@@ -24,54 +23,15 @@
         return id != null && id !== '' ? String(id) : null;
     }
 
-    function typeFromObj(obj) {
-        if (!obj || !obj.properties) return null;
-        var t = obj.properties.get('type');
-        return t != null && t !== '' ? String(t) : null;
-    }
-
-    function addToTypeIndex(obj) {
-        var t = typeFromObj(obj);
-        if (!t) return;
-        var bucket = objectsByType.get(t);
-        if (!bucket) {
-            bucket = [];
-            objectsByType.set(t, bucket);
-        }
-        if (bucket.indexOf(obj) === -1) bucket.push(obj);
-    }
-
-    function removeFromTypeIndex(obj) {
-        var t = typeFromObj(obj);
-        if (!t) return;
-        var bucket = objectsByType.get(t);
-        if (!bucket) return;
-        var idx = bucket.indexOf(obj);
-        if (idx !== -1) bucket.splice(idx, 1);
-        if (!bucket.length) objectsByType.delete(t);
-    }
-
-    function getByType(type) {
-        if (!type) return [];
-        return objectsByType.get(String(type)) || [];
-    }
-
-    function forEachOfType(type, fn) {
-        var list = getByType(type);
-        for (var i = 0; i < list.length; i++) fn(list[i], i);
-    }
-
     function registerMapObject(obj) {
         var uid = uidFromObj(obj);
         if (!uid) return;
         objectsById.set(uid, obj);
-        addToTypeIndex(obj);
         registerSpatial(obj);
     }
 
     function unregisterMapObject(obj) {
         var uid = uidFromObj(obj);
-        removeFromTypeIndex(obj);
         if (uid) {
             objectsById.delete(uid);
             mountedUids.delete(uid);
@@ -90,7 +50,6 @@
 
     function clearObjectsIndex() {
         objectsById.clear();
-        objectsByType.clear();
         spatialGrid.clear();
         mountedUids.clear();
         pinnedUids.clear();
@@ -403,20 +362,6 @@
         if (!uid || mountedUids.has(uid)) return;
         if (!shouldMountObject(obj, ctx)) return;
         try {
-            // Lazy label / hover: created only for viewport objects (cuts INP during 10k+ import).
-            if (obj._labelDeferred) {
-                obj._labelDeferred = false;
-                try {
-                    if (typeof global.updateObjectLabel === 'function') {
-                        global.updateObjectLabel(obj, obj.properties.get('name'));
-                    } else if (typeof updateObjectLabel === 'function') {
-                        updateObjectLabel(obj, obj.properties.get('name'));
-                    }
-                } catch (eLbl) {}
-            }
-            if (obj._hoverEventsDeferred && typeof global.attachHoverEventsToObject === 'function') {
-                try { global.attachHoverEventsToObject(obj); } catch (eHover) {}
-            }
             if (global.myMap.geoObjects.indexOf(obj) === -1) global.myMap.geoObjects.add(obj);
             mountedUids.add(uid);
             var type = obj.properties && obj.properties.get('type');
@@ -439,9 +384,6 @@
         if (!uid || !mountedUids.has(uid)) return;
         if (pinnedUids.has(uid)) return;
         try {
-            if (typeof global.detachHoverEventsFromObject === 'function') {
-                try { global.detachHoverEventsFromObject(obj); } catch (eDet) {}
-            }
             global.myMap.geoObjects.remove(obj);
             var label = obj.properties && obj.properties.get('label');
             if (label) global.myMap.geoObjects.remove(label);
@@ -514,71 +456,6 @@
         for (var i = 0; i < toUnmount.length; i++) unmountObject(toUnmount[i]);
     }
 
-    var aggregatePlacemarks = [];
-    var AGGREGATE_MIN_OBJECTS = 800;
-    var AGGREGATE_MIN_COUNT = 3;
-
-    function clearAggregateOverlays() {
-        if (!global.myMap) {
-            aggregatePlacemarks = [];
-            return;
-        }
-        for (var i = 0; i < aggregatePlacemarks.length; i++) {
-            try { global.myMap.geoObjects.remove(aggregatePlacemarks[i]); } catch (e) {}
-        }
-        aggregatePlacemarks = [];
-    }
-
-    function syncAggregateOverlays(ctx) {
-        clearAggregateOverlays();
-        if (!global.myMap || typeof ymaps === 'undefined') return;
-        if (!ctx || !ctx.hideObjects) return;
-        if (!Array.isArray(global.objects) || global.objects.length < AGGREGATE_MIN_OBJECTS) return;
-        var zoom = ctx.zoom;
-        var cellDeg = (typeof zoom === 'number' && zoom >= 14) ? 0.008
-            : (typeof zoom === 'number' && zoom >= 12) ? 0.02
-            : 0.06;
-        var cells = Object.create(null);
-        for (var i = 0; i < global.objects.length; i++) {
-            var obj = global.objects[i];
-            if (!obj || !obj.properties) continue;
-            var t = obj.properties.get('type');
-            if (!t || t === 'cable' || t === 'cableLabel' || t === 'region' || t === 'crossGroup' || t === 'nodeGroup') continue;
-            var c = getObjectAnchorCoord(obj);
-            if (!c) continue;
-            if (ctx.bounds && !coordInBounds(c, ctx.bounds)) continue;
-            var key = Math.floor(c[0] / cellDeg) + ':' + Math.floor(c[1] / cellDeg);
-            if (!cells[key]) cells[key] = { lat: 0, lon: 0, count: 0 };
-            cells[key].lat += c[0];
-            cells[key].lon += c[1];
-            cells[key].count++;
-        }
-        Object.keys(cells).forEach(function(key) {
-            var cell = cells[key];
-            if (cell.count < AGGREGATE_MIN_COUNT) return;
-            var lat = cell.lat / cell.count;
-            var lon = cell.lon / cell.count;
-            var size = cell.count >= 100 ? 44 : (cell.count >= 30 ? 36 : 28);
-            var pm = new ymaps.Placemark([lat, lon], {
-                type: 'clusterAggregate',
-                iconContent: String(cell.count),
-                hintContent: cell.count + ' объектов'
-            }, {
-                preset: 'islands#blueCircleIcon',
-                iconColor: '#2563eb',
-                hasBalloon: false,
-                openBalloonOnClick: false
-            });
-            try {
-                pm.options.set('iconImageSize', [size, size]);
-            } catch (eSz) {}
-            try {
-                global.myMap.geoObjects.add(pm);
-                aggregatePlacemarks.push(pm);
-            } catch (eAdd) {}
-        });
-    }
-
     function syncViewportMounts(ctx) {
         if (!shouldUseVirtualization() || !global.myMap || !Array.isArray(global.objects)) return;
         mountContext = ctx || buildDefaultMountContext();
@@ -586,10 +463,8 @@
 
         if (ctx.hideObjects) {
             unmountNonRegionObjects(ctx);
-            syncAggregateOverlays(ctx);
             return;
         }
-        clearAggregateOverlays();
 
         var bounds = ctx.bounds;
         if (!bounds) return;
@@ -720,10 +595,7 @@
         unregisterMapObject: unregisterMapObject,
         clearObjectsIndex: clearObjectsIndex,
         reindexAllObjects: reindexAllObjects,
-        clearAggregateOverlays: clearAggregateOverlays,
         getByUid: getByUid,
-        getByType: getByType,
-        forEachOfType: forEachOfType,
         shouldUseViewportCull: shouldUseViewportCull,
         shouldUseVirtualization: shouldUseVirtualization,
         getExpandedBounds: getExpandedBounds,

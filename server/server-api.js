@@ -249,7 +249,7 @@ function validateMapDataObjectLimit(orgId, data) {
 }
 
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json({ limit: '64mb' }));
+app.use(express.json({ limit: '10mb' }));
 
 function generateToken() {
     return 'tk_' + Date.now() + '_' + require('crypto').randomBytes(16).toString('hex');
@@ -489,67 +489,8 @@ app.get('/api/map', (req, res) => {
         }
         var orgId = (user && user.organizationId) ? user.organizationId : null;
         if (!orgId && user) return res.status(403).json({ error: 'Выберите организацию или привяжите учётную запись к организации' });
-        var q = req.query || {};
-        var hasViewportOpts = !!(q.bbox || q.cursor || q.limit || q.aggregate || q.lite || q.types || q.zoom);
-        if (orgId && hasViewportOpts && db.queryMapDataViewport) {
-            var result = db.queryMapDataViewport(orgId, {
-                bbox: q.bbox,
-                zoom: q.zoom,
-                types: q.types,
-                cursor: q.cursor,
-                limit: q.limit,
-                aggregate: q.aggregate === '1' || q.aggregate === 'true',
-                lite: q.lite === '1' || q.lite === 'true'
-            });
-            return res.json({
-                data: result.data,
-                aggregates: result.aggregates,
-                organizationId: orgId,
-                total: result.total,
-                matched: result.matched,
-                nextCursor: result.nextCursor,
-                truncated: result.truncated,
-                mode: result.mode
-            });
-        }
         var data = orgId ? db.getMapData(orgId) : [];
-        res.json({ data: data, organizationId: orgId || null, total: Array.isArray(data) ? data.length : 0 });
-    } catch (e) {
-        res.status(500).json({ error: String(e.message) });
-    }
-});
-
-app.get('/api/map/viewport', (req, res) => {
-    try {
-        var user = getSessionUser(req);
-        if (isGlobalAdmin(user)) {
-            return res.status(403).json({ error: 'Главному администратору недоступен интерфейс карты.' });
-        }
-        var orgId = (user && user.organizationId) ? user.organizationId : null;
-        if (!orgId) return res.status(403).json({ error: 'Укажите организацию' });
-        var q = req.query || {};
-        if (!db.queryMapDataViewport) {
-            return res.json({ data: db.getMapData(orgId) || [], organizationId: orgId });
-        }
-        var result = db.queryMapDataViewport(orgId, {
-            bbox: q.bbox,
-            zoom: q.zoom != null ? q.zoom : 12,
-            types: q.types,
-            cursor: q.cursor,
-            limit: q.limit || 2000,
-            aggregate: q.aggregate !== '0' && q.aggregate !== 'false',
-            lite: q.lite !== '0' && q.lite !== 'false'
-        });
-        res.json({
-            data: result.data,
-            aggregates: result.aggregates,
-            organizationId: orgId,
-            total: result.total,
-            matched: result.matched,
-            nextCursor: result.nextCursor,
-            truncated: result.truncated,
-            mode: result.mode
-        });
+        res.json({ data: data, organizationId: orgId || null });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
     }
@@ -565,7 +506,7 @@ app.post('/api/map', (req, res) => {
     try {
         const data = req.body && req.body.data;
         if (!Array.isArray(data)) return res.status(400).json({ error: 'Ожидается массив data' });
-        var allowShrink = !!(req.body && req.body.allowShrink && (user.role === 'admin' || isGlobalAdmin(user)));
+        var allowShrink = !!(req.body && req.body.allowShrink && isGlobalAdmin(user));
         var shrink = db.assertMapDataNotDangerousShrink
             ? db.assertMapDataNotDangerousShrink(orgId, data, { allowShrink: allowShrink })
             : { ok: true };
@@ -585,21 +526,6 @@ app.post('/api/map', (req, res) => {
             });
         }
         db.setMapData(orgId, data, { allowShrink: allowShrink });
-        // Keep sync room in sync and notify peers without requiring the client to WS-blast the full map.
-        try {
-            var syncKey = normalizeSyncOrgId(orgId) || orgId;
-            if (typeof syncCurrentStateByOrg !== 'undefined' && syncCurrentStateByOrg) {
-                syncCurrentStateByOrg[syncKey] = { clientId: 'server', data: data };
-            }
-            if (typeof wss !== 'undefined' && wss && wss.clients) {
-                var refreshPayload = JSON.stringify({ type: 'map_refresh', organizationId: syncKey });
-                wss.clients.forEach(function(client) {
-                    if (client.readyState === WebSocket.OPEN && syncOrgIdsEqual(client.orgId, syncKey)) {
-                        try { client.send(refreshPayload); } catch (eSend) {}
-                    }
-                });
-            }
-        } catch (eSync) {}
         res.json({ ok: true, mapLimits: getMapObjectLimitPayload(orgId) });
     } catch (e) {
         var status = (e && e.code === 'MAP_DANGEROUS_SHRINK') ? 400 : 500;
@@ -2937,31 +2863,11 @@ function getSyncStateForOrg(orgId, options) {
     options = options || {};
     var key = normalizeSyncOrgId(orgId);
     if (!key) return null;
-    var needFresh = options.forceFromDb || !syncCurrentStateByOrg[key];
-    if (needFresh) {
-        // Prefer in-memory map already loaded by db; clone only when creating/refreshing sync room.
-        var mapData = db.getMapData(key) || [];
+    if (options.forceFromDb || !syncCurrentStateByOrg[key]) {
         syncCurrentStateByOrg[key] = {
             clientId: 'server',
-            data: Array.isArray(mapData) ? mapData.slice() : []
+            data: JSON.parse(JSON.stringify(db.getMapData(key) || []))
         };
-        // Deep-clone only when callers need isolation from further db mutations without ops.
-        // Shallow copy of array + objects is enough for op patches; full JSON clone was O(n) and blocked event loop.
-        if (options.deepClone !== false && mapData.length && mapData.length <= 500) {
-            try {
-                syncCurrentStateByOrg[key].data = JSON.parse(JSON.stringify(mapData));
-            } catch (eClone) {}
-        } else if (mapData.length > 500) {
-            // Structured clone of top-level items only (avoid nested deep copy cost)
-            syncCurrentStateByOrg[key].data = mapData.map(function (item) {
-                if (!item || typeof item !== 'object') return item;
-                var copy = {};
-                for (var k in item) {
-                    if (Object.prototype.hasOwnProperty.call(item, k)) copy[k] = item[k];
-                }
-                return copy;
-            });
-        }
         try {
             var sett = db.getSettings(key);
             if (sett && sett.groupNames && (sett.groupNames.cross || sett.groupNames.node)) {
@@ -2970,23 +2876,6 @@ function getSyncStateForOrg(orgId, options) {
         } catch (e) {}
     }
     return syncCurrentStateByOrg[key];
-}
-
-function countSyncClientsForOrg(orgId) {
-    if (!orgId || !wss) return 0;
-    var n = 0;
-    wss.clients.forEach(function (client) {
-        if (client.readyState === WebSocket.OPEN && syncOrgIdsEqual(client.orgId, orgId)) n++;
-    });
-    return n;
-}
-
-function releaseSyncStateIfIdle(orgId) {
-    if (!orgId) return;
-    var key = normalizeSyncOrgId(orgId) || orgId;
-    if (countSyncClientsForOrg(key) > 0) return;
-    flushMapDbSave(key);
-    delete syncCurrentStateByOrg[key];
 }
 
 if (db.createDailyBackup) {
@@ -3506,10 +3395,7 @@ wss.on('connection', (ws, req) => {
                     if (orgId) syncClientOrgIds.set(clientId, orgId);
                 }
                 if (orgId) {
-                    var hasActivePeers = countSyncClientsForOrg(orgId) > 1;
-                    var state = getSyncStateForOrg(orgId, {
-                        forceFromDb: !hasActivePeers && !syncCurrentStateByOrg[orgId]
-                    });
+                    var state = getSyncStateForOrg(orgId, { forceFromDb: true });
                     if (state) {
                         var groupNames = syncGroupNamesByOrg[orgId] || syncGroupNames;
                         var helloPayload = { type: 'map_refresh', organizationId: orgId };
@@ -3693,7 +3579,6 @@ wss.on('connection', (ws, req) => {
         setImmediate(function() {
             broadcastSyncClients();
             broadcastCursors();
-            if (closedOrgId) releaseSyncStateIfIdle(closedOrgId);
         });
     });
 });

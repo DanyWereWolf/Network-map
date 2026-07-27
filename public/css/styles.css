@@ -5179,9 +5179,6 @@ button {
     background: var(--bg-secondary);
     box-shadow: var(--shadow-map), inset 0 0 0 1px var(--border-color);
     transition: opacity 0.35s ease, visibility 0.35s ease;
-    pointer-events: auto;
-    touch-action: none;
-    user-select: none;
 }
 
 .map-loading-overlay.is-hidden {

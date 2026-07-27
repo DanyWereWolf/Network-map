@@ -24,17 +24,6 @@ function getMapObjectByUid(uid, typeFilter) {
     }) || null;
 }
 
-function getMapObjectsByType(type) {
-    if (!type) return [];
-    if (typeof MapPerf !== 'undefined' && MapPerf.getByType) {
-        return MapPerf.getByType(type);
-    }
-    if (!Array.isArray(objects)) return [];
-    return objects.filter(function(o) {
-        return o && o.properties && o.properties.get('type') === type;
-    });
-}
-
 function getFiberHostByUid(uid) {
     return getMapObjectByUid(uid, 'cross')
         || getMapObjectByUid(uid, 'spliceCassette')

@@ -254,17 +254,6 @@ function attachHoverEventsToObject(obj) {
     if (!obj || !obj.events) return;
     const objType = obj.properties ? obj.properties.get('type') : null;
     if (!objType || objType === 'cableLabel' || objType === 'cableAerialOverlay') return;
-    if (obj._hoverEventsBound) return;
-    // Defer hover listeners until the object is mounted (large maps).
-    if (typeof isMapBulkImportActive === 'function' && isMapBulkImportActive()) {
-        obj._hoverEventsDeferred = true;
-        return;
-    }
-    if (typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization && MapPerf.shouldUseVirtualization() &&
-        MapPerf.isMounted && !MapPerf.isMounted(obj)) {
-        obj._hoverEventsDeferred = true;
-        return;
-    }
     
     function onMouseEnter(e) {
         const domEvent = e.get && e.get('domEvent');
@@ -286,30 +275,7 @@ function attachHoverEventsToObject(obj) {
     obj.events.add('mouseleave', onMouseLeave);
     obj.events.add('mouseover', onMouseEnter);
     obj.events.add('mouseout', onMouseLeave);
-    obj._hoverEventsBound = true;
-    obj._hoverEventsDeferred = false;
-    obj._hoverEnterHandler = onMouseEnter;
-    obj._hoverLeaveHandler = onMouseLeave;
 }
-
-function detachHoverEventsFromObject(obj) {
-    if (!obj || !obj.events || !obj._hoverEventsBound) return;
-    try {
-        if (obj._hoverEnterHandler) {
-            obj.events.remove('mouseenter', obj._hoverEnterHandler);
-            obj.events.remove('mouseover', obj._hoverEnterHandler);
-        }
-        if (obj._hoverLeaveHandler) {
-            obj.events.remove('mouseleave', obj._hoverLeaveHandler);
-            obj.events.remove('mouseout', obj._hoverLeaveHandler);
-        }
-    } catch (e) {}
-    obj._hoverEventsBound = false;
-    obj._hoverEventsDeferred = true;
-}
-
-window.attachHoverEventsToObject = attachHoverEventsToObject;
-window.detachHoverEventsFromObject = detachHoverEventsFromObject;
 
 function highlightObjectOnHover(obj, e) {
     if (!obj || !obj.properties) {

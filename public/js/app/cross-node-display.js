@@ -50,6 +50,46 @@ function getCrossGroups() {
     return clusterPlacemarksByProximity(crosses, 'crosses');
 }
 
+function shouldUseViewportLimitedGroupDisplay(scopeMeta) {
+    if (!myMap || !Array.isArray(objects) || !objects.length) return false;
+    if (scopeMeta && scopeMeta.keys && scopeMeta.keys.length) return false;
+    if (scopeMeta && scopeMeta.viewportOnly) return true;
+    if (typeof MapPerf === 'undefined') return false;
+    return !!(
+        (typeof MapPerf.shouldUseVirtualization === 'function' && MapPerf.shouldUseVirtualization()) ||
+        (typeof MapPerf.shouldUseViewportCull === 'function' && MapPerf.shouldUseViewportCull())
+    );
+}
+
+function collectViewportTypedObjects(type) {
+    if (!myMap || typeof MapPerf === 'undefined' || typeof MapPerf.getExpandedBounds !== 'function' ||
+        typeof MapPerf.querySpatialInBounds !== 'function') {
+        return null;
+    }
+    var bounds = MapPerf.getExpandedBounds(myMap);
+    if (!bounds) return null;
+    var candidates = MapPerf.querySpatialInBounds(bounds);
+    if (!Array.isArray(candidates)) return null;
+    return candidates.filter(function(obj) {
+        if (!obj || !obj.properties || obj.properties.get('type') !== type) return false;
+        return !(typeof getObjectCabinetId === 'function' && getObjectCabinetId(obj));
+    });
+}
+
+function getCrossGroupsForDisplay(scopeMeta) {
+    var crosses = shouldUseViewportLimitedGroupDisplay(scopeMeta) ? collectViewportTypedObjects('cross') : null;
+    if (!Array.isArray(crosses)) return getCrossGroups();
+    if (!crosses.length) return [];
+    return clusterPlacemarksByProximity(crosses, 'crosses');
+}
+
+function getNodeGroupsForDisplay(scopeMeta) {
+    var nodes = shouldUseViewportLimitedGroupDisplay(scopeMeta) ? collectViewportTypedObjects('node') : null;
+    if (!Array.isArray(nodes)) return getNodeGroups();
+    if (!nodes.length) return [];
+    return clusterPlacemarksByProximity(nodes, 'nodes');
+}
+
 function parseGroupKeyToCoords(key) {
     if (!key || typeof key !== 'string') return null;
     var parts = key.split(',');
@@ -127,7 +167,14 @@ function parseGroupDisplayScope(scope) {
     if (scope == null || scope === true) return { full: true, keys: null };
     if (typeof scope === 'string') return { full: false, keys: [scope] };
     if (Array.isArray(scope)) return { full: false, keys: scope };
-    if (typeof scope === 'object' && scope.keys) return { full: !!scope.full, keys: scope.keys };
+    if (typeof scope === 'object') {
+        return {
+            full: scope.full !== false,
+            keys: Array.isArray(scope.keys) ? scope.keys : (scope.keys ? [scope.keys] : null),
+            viewportOnly: !!scope.viewportOnly,
+            skipFilter: !!scope.skipFilter
+        };
+    }
     return { full: true, keys: null };
 }
 
@@ -174,15 +221,6 @@ function detachNodesAtGroupKey(key) {
 }
 
 function updateCrossDisplay(scope) {
-    if (window.MapPerfLog && MapPerfLog.isEnabled()) {
-        var args = arguments;
-        return MapPerfLog.measure('updateCrossDisplay', function() {
-            return updateCrossDisplayInstrumented.apply(null, args);
-        });
-    }
-    return updateCrossDisplayInstrumented(scope);
-}
-function updateCrossDisplayInstrumented(scope) {
     var parsed = parseGroupDisplayScope(scope);
     var keysOnly = !parsed.full && parsed.keys && parsed.keys.length && !isMapBulkImportActive();
     if (keysOnly) {
@@ -202,7 +240,7 @@ function updateCrossDisplayInstrumented(scope) {
             if (label) try { myMap.geoObjects.remove(label); } catch (e) {}
         });
     }
-    const groupsToRender = keysOnly ? getCrossGroupsForKeys(parsed.keys) : getCrossGroups();
+    const groupsToRender = keysOnly ? getCrossGroupsForKeys(parsed.keys) : getCrossGroupsForDisplay(parsed);
     groupsToRender.forEach(group => {
         const gKey = groupKey(group.coords);
         if (group.crosses.length === 1) {
@@ -423,17 +461,15 @@ function updateCrossDisplayInstrumented(scope) {
         crossGroupPlacemarkByKey.set(gKey, groupPlacemark);
     });
     
-    var crossesForCables = keysOnly ? groupsToRender.reduce(function(acc, g) {
+    var crossesForCables = keysOnly || shouldUseViewportLimitedGroupDisplay(parsed) ? groupsToRender.reduce(function(acc, g) {
         return acc.concat(g.crosses);
     }, []) : objects.filter(function(obj) {
         return obj.properties && obj.properties.get('type') === 'cross';
     });
-    // Full rebuild does not move endpoints — scanning every cable per cross is O(n²) and kills INP at 10k+.
-    // Only sync cables for scoped group updates (actual moves).
+    crossesForCables.forEach(function(cross) {
+        updateConnectedCables(cross);
+    });
     if (keysOnly) {
-        crossesForCables.forEach(function(cross) {
-            updateConnectedCables(cross);
-        });
         if (typeof applyMapFilterForObject === 'function') {
             crossesForCables.forEach(function(cross) { applyMapFilterForObject(cross); });
         }
@@ -443,7 +479,7 @@ function updateCrossDisplayInstrumented(scope) {
                 typeof getExpertZoomFlags === 'function' ? getExpertZoomFlags() : null
             );
         }
-    } else if (typeof applyMapFilter === 'function' && !(typeof isMapBulkImportActive === 'function' && isMapBulkImportActive())) {
+    } else if (!parsed.skipFilter && typeof applyMapFilter === 'function') {
         applyMapFilter();
     }
 }
@@ -458,15 +494,6 @@ function getNodeGroups() {
 }
 
 function updateNodeDisplay(scope) {
-    if (window.MapPerfLog && MapPerfLog.isEnabled()) {
-        var args = arguments;
-        return MapPerfLog.measure('updateNodeDisplay', function() {
-            return updateNodeDisplayInstrumented.apply(null, args);
-        });
-    }
-    return updateNodeDisplayInstrumented(scope);
-}
-function updateNodeDisplayInstrumented(scope) {
     var parsed = parseGroupDisplayScope(scope);
     var keysOnly = !parsed.full && parsed.keys && parsed.keys.length && !isMapBulkImportActive();
     if (keysOnly) {
@@ -488,7 +515,7 @@ function updateNodeDisplayInstrumented(scope) {
     }
     const mapFilterState = typeof getMapFilterState === 'function' ? getMapFilterState() : {};
     const aggregationOnly = !!mapFilterState.nodeAggregationOnly;
-    const groupsToRender = keysOnly ? getNodeGroupsForKeys(parsed.keys) : getNodeGroups();
+    const groupsToRender = keysOnly ? getNodeGroupsForKeys(parsed.keys) : getNodeGroupsForDisplay(parsed);
     groupsToRender.forEach(group => {
         const displayNodes = aggregationOnly
             ? group.nodes.filter(function(nd) { return (nd.properties && nd.properties.get('nodeKind')) === 'aggregation'; })
@@ -670,16 +697,15 @@ function updateNodeDisplayInstrumented(scope) {
         nodeGroupPlacemarkByKey.set(nKey, groupPlacemark);
     });
     
-    var nodesForCables = keysOnly ? groupsToRender.reduce(function(acc, g) {
+    var nodesForCables = keysOnly || shouldUseViewportLimitedGroupDisplay(parsed) ? groupsToRender.reduce(function(acc, g) {
         return acc.concat(g.nodes);
     }, []) : objects.filter(function(obj) {
         return obj.properties && obj.properties.get('type') === 'node';
     });
-    // Same as crosses: full rebuild must not call updateConnectedCables for every node.
+    nodesForCables.forEach(function(node) {
+        updateConnectedCables(node);
+    });
     if (keysOnly) {
-        nodesForCables.forEach(function(node) {
-            updateConnectedCables(node);
-        });
         if (typeof applyMapFilterForObject === 'function') {
             nodesForCables.forEach(function(node) { applyMapFilterForObject(node); });
         }
@@ -689,7 +715,14 @@ function updateNodeDisplayInstrumented(scope) {
                 typeof getExpertZoomFlags === 'function' ? getExpertZoomFlags() : null
             );
         }
-    } else if (typeof applyMapFilter === 'function' && !(typeof isMapBulkImportActive === 'function' && isMapBulkImportActive())) {
+    } else if (!parsed.skipFilter && typeof applyMapFilter === 'function') {
         applyMapFilter();
     }
+}
+
+function refreshCrossNodeViewportDisplay() {
+    if (isMapBulkImportActive()) return;
+    if (!shouldUseViewportLimitedGroupDisplay({ viewportOnly: true })) return;
+    updateCrossDisplay({ full: true, viewportOnly: true, skipFilter: true });
+    updateNodeDisplay({ full: true, viewportOnly: true, skipFilter: true });
 }

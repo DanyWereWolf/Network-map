@@ -242,16 +242,10 @@ function applySerializedUndergroundToCable(cable, item, pointsArr) {
 
 function repairCablesAfterImport() {
     if (!objects || !objects.length || !myMap) return;
-    var useVirtual = typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization && MapPerf.shouldUseVirtualization();
     objects.forEach(function (cable) {
         if (!cable || !cable.properties || cable.properties.get('type') !== 'cable') return;
         try {
-            // Do not force-mount every cable onto the map — virtualization mounts viewport only.
-            if (!useVirtual) {
-                if (myMap.geoObjects.indexOf(cable) === -1) myMap.geoObjects.add(cable);
-            } else if (typeof mapGeoAdd === 'function') {
-                mapGeoAdd(cable);
-            }
+            if (myMap.geoObjects.indexOf(cable) === -1) myMap.geoObjects.add(cable);
         } catch (eAdd) {}
         var points = cable.properties.get('points');
         var spans = cable.properties.get('undergroundSpans') || [];
@@ -326,12 +320,8 @@ function validateAndFixCableGeometryOnLoad() {
 function getCablesTouchingObject(obj) {
     if (!obj) return [];
     var out = [];
-    var cableList = (typeof getMapObjectsByType === 'function')
-        ? getMapObjectsByType('cable')
-        : objects;
-    if (!cableList || !cableList.length) return out;
-    for (var i = 0; i < cableList.length; i++) {
-        var cable = cableList[i];
+    for (var i = 0; i < objects.length; i++) {
+        var cable = objects[i];
         if (!cable || !cable.properties || cable.properties.get('type') !== 'cable') continue;
         var from = cable.properties.get('from');
         var to = cable.properties.get('to');

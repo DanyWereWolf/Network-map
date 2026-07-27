@@ -7,7 +7,6 @@ const ROOT_DIR = path.join(__dirname, '..');
 const STORE_PATH = process.env.DB_PATH ? process.env.DB_PATH.replace(/\.db$/i, '-store.json') : path.join(ROOT_DIR, 'data', 'store.json');
 const BACKUPS_DIR = path.join(path.dirname(STORE_PATH), 'backups');
 const FULL_BACKUPS_DIR = path.join(BACKUPS_DIR, 'full');
-const MAPS_DIR = path.join(path.dirname(STORE_PATH), 'maps');
 const BACKUP_RETENTION_DAYS = 30;
 const FULL_SNAPSHOT_KEEP = 48;
 const FULL_SNAPSHOT_MIN_INTERVAL_MS = 60 * 60 * 1000;
@@ -25,12 +24,6 @@ let mysqlInitialized = false;
 let mysqlPersistTimer = null;
 let mysqlPersistChain = Promise.resolve();
 let mysqlPersistDirty = false;
-/** Orgs whose maps need MySQL write (avoids rewriting every org on one save). */
-let mysqlDirtyOrgIds = new Set();
-/** Non-map store fields changed — full meta persist. */
-let mysqlPersistMetaDirty = false;
-/** Org map keys currently held in memory (lazy-loaded). */
-let mapLoadedKeys = new Set();
 
 /** Сравнение id организации без учёта типа (строка/число), чтобы лимиты и данные не «терялись». */
 function organizationIdsMatch(a, b) {
@@ -119,229 +112,6 @@ function countMapDataByOrgItems(mapDataByOrg) {
     return n;
 }
 
-function ensureMapsDir() {
-    if (!fs.existsSync(MAPS_DIR)) fs.mkdirSync(MAPS_DIR, { recursive: true });
-    return MAPS_DIR;
-}
-
-function safeOrgMapFileName(orgId) {
-    return String(orgId).replace(/[^a-zA-Z0-9._-]/g, '_') + '.json';
-}
-
-function getOrgMapFilePath(orgId) {
-    return path.join(MAPS_DIR, safeOrgMapFileName(orgId));
-}
-
-function readOrgMapFile(orgId) {
-    var filePath = getOrgMapFilePath(orgId);
-    if (!fs.existsSync(filePath)) return null;
-    try {
-        var parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-        return Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.data) ? parsed.data : []);
-    } catch (e) {
-        console.error('[DB] Failed to read org map file', orgId, e && e.message);
-        return null;
-    }
-}
-
-function writeOrgMapFile(orgId, data) {
-    ensureMapsDir();
-    var filePath = getOrgMapFilePath(orgId);
-    var tmpPath = filePath + '.tmp.' + Date.now();
-    var json = JSON.stringify(Array.isArray(data) ? data : []);
-    try {
-        fs.writeFileSync(tmpPath, json, 'utf8');
-        fs.renameSync(tmpPath, filePath);
-    } catch (e) {
-        try { fs.unlinkSync(tmpPath); } catch (_) {}
-        throw e;
-    }
-}
-
-function deleteOrgMapFile(orgId) {
-    var filePath = getOrgMapFilePath(orgId);
-    try {
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    } catch (e) {
-        console.error('[DB] Failed to delete org map file', orgId, e && e.message);
-    }
-}
-
-function resolveOrgMapKey(orgId) {
-    if (!orgId || !store) return orgId ? String(orgId) : null;
-    var org = getOrganization(orgId);
-    return org ? org.id : String(orgId);
-}
-
-/**
- * Lazy-load one org map into memory (JSON file or MySQL assemble/blob).
- * Does not load other organizations' maps.
- */
-function ensureMapLoaded(orgId) {
-    if (!orgId) return [];
-    const s = loadStore();
-    if (!s.mapDataByOrg || typeof s.mapDataByOrg !== 'object') s.mapDataByOrg = {};
-    var key = resolveOrgMapKey(orgId);
-    if (Array.isArray(s.mapDataByOrg[key]) && mapLoadedKeys.has(String(key))) {
-        return s.mapDataByOrg[key];
-    }
-    var existingKey = Object.keys(s.mapDataByOrg).find(function (k) {
-        return organizationIdsMatch(k, orgId) && Array.isArray(s.mapDataByOrg[k]) && mapLoadedKeys.has(String(k));
-    });
-    if (existingKey) return s.mapDataByOrg[existingKey];
-
-    var data = null;
-    if (!isMysqlEnabled()) {
-        data = readOrgMapFile(key);
-        if (data == null && key !== String(orgId)) data = readOrgMapFile(orgId);
-        if (data == null && Array.isArray(s.mapDataByOrg[key])) data = s.mapDataByOrg[key];
-        if (data == null) {
-            var inlineKey = Object.keys(s.mapDataByOrg).find(function (k) {
-                return organizationIdsMatch(k, orgId) && Array.isArray(s.mapDataByOrg[k]);
-            });
-            if (inlineKey) data = s.mapDataByOrg[inlineKey];
-        }
-        if (data == null) data = [];
-        s.mapDataByOrg[key] = data;
-        mapLoadedKeys.add(String(key));
-        return data;
-    }
-
-    // MySQL: sync path uses in-memory cache; async hydrate fills on demand via loadOrgMapFromMysqlSync bridge
-    if (Array.isArray(s.mapDataByOrg[key])) {
-        mapLoadedKeys.add(String(key));
-        return s.mapDataByOrg[key];
-    }
-    var mysqlData = loadOrgMapFromMysqlSync(key);
-    s.mapDataByOrg[key] = Array.isArray(mysqlData) ? mysqlData : [];
-    mapLoadedKeys.add(String(key));
-    return s.mapDataByOrg[key];
-}
-
-/** Raw map_json blobs from MySQL hydrate (parsed on demand per org). */
-var mysqlRawMapBlobsByOrg = Object.create(null);
-
-function loadOrgMapFromMysqlSync(orgId) {
-    if (!isMysqlEnabled() || !mysqlInitialized) return [];
-    var key = String(orgId);
-    var raw = mysqlRawMapBlobsByOrg[key];
-    if (raw == null) {
-        var alt = Object.keys(mysqlRawMapBlobsByOrg).find(function (k) {
-            return organizationIdsMatch(k, orgId);
-        });
-        if (alt) raw = mysqlRawMapBlobsByOrg[alt];
-    }
-    if (raw == null || raw === '') return [];
-    try {
-        var parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        return Array.isArray(parsed) ? parsed : [];
-    } catch (e) {
-        console.error('[DB] Failed to parse MySQL map blob for', orgId, e && e.message);
-        return [];
-    }
-}
-
-async function loadOrgMapFromMysqlAsync(orgId) {
-    var mysqlPersist = require('./db/mysql-persist');
-    if (typeof mysqlPersist.loadOrgMap === 'function') {
-        return await mysqlPersist.loadOrgMap(orgId);
-    }
-    return loadOrgMapFromMysqlSync(orgId);
-}
-
-function setMysqlRawMapBlob(orgId, mapData) {
-    if (!orgId) return;
-    mysqlRawMapBlobsByOrg[String(orgId)] = JSON.stringify(Array.isArray(mapData) ? mapData : []);
-}
-
-/** Migrate inline mapDataByOrg from store.json into per-org files; clear heavy maps from main store. */
-function migrateInlineMapsToFiles(s) {
-    if (!s || isMysqlEnabled()) return false;
-    if (!s.mapDataByOrg || typeof s.mapDataByOrg !== 'object') return false;
-    var keys = Object.keys(s.mapDataByOrg);
-    if (!keys.length) return false;
-    var migrated = false;
-    ensureMapsDir();
-    keys.forEach(function (orgId) {
-        var arr = s.mapDataByOrg[orgId];
-        if (!Array.isArray(arr)) return;
-        var filePath = getOrgMapFilePath(orgId);
-        var existing = readOrgMapFile(orgId);
-        // Prefer larger dataset if both exist
-        if (existing && existing.length > arr.length) {
-            s.mapDataByOrg[orgId] = existing;
-        } else if (arr.length || !fs.existsSync(filePath)) {
-            writeOrgMapFile(orgId, arr);
-            migrated = true;
-        }
-    });
-    // Drop maps from main document — they live in data/maps/
-    s.mapDataByOrg = {};
-    mapLoadedKeys.clear();
-    return migrated;
-}
-
-/** Build store snapshot for JSON write without embedding all org maps. */
-function buildStoreJsonWithoutMaps(s) {
-    var out = {};
-    Object.keys(s).forEach(function (k) {
-        if (k === 'mapDataByOrg') {
-            out.mapDataByOrg = {};
-            return;
-        }
-        out[k] = s[k];
-    });
-    return out;
-}
-
-/** Full logical store including all maps (backups / export). */
-function buildFullLogicalStore() {
-    const s = loadStore();
-    var out = buildStoreJsonWithoutMaps(s);
-    out.mapDataByOrg = {};
-    if (!isMysqlEnabled()) {
-        try {
-            ensureMapsDir();
-            fs.readdirSync(MAPS_DIR).forEach(function (name) {
-                if (!/\.json$/i.test(name) || name.indexOf('.tmp.') !== -1) return;
-                var orgId = name.replace(/\.json$/i, '');
-                var data = readOrgMapFile(orgId);
-                if (data) out.mapDataByOrg[orgId] = data;
-            });
-        } catch (e) {}
-        // Also include currently loaded keys (may use canonical org ids)
-        Object.keys(s.mapDataByOrg || {}).forEach(function (k) {
-            if (mapLoadedKeys.has(String(k)) && Array.isArray(s.mapDataByOrg[k])) {
-                out.mapDataByOrg[k] = s.mapDataByOrg[k];
-            }
-        });
-    } else {
-        Object.keys(s.mapDataByOrg || {}).forEach(function (k) {
-            if (Array.isArray(s.mapDataByOrg[k])) out.mapDataByOrg[k] = s.mapDataByOrg[k];
-        });
-        (s.organizations || []).forEach(function (org) {
-            if (!org || !org.id) return;
-            if (!out.mapDataByOrg[org.id]) {
-                try {
-                    out.mapDataByOrg[org.id] = ensureMapLoaded(org.id);
-                } catch (e) {}
-            }
-        });
-    }
-    return out;
-}
-
-function markMysqlOrgMapDirty(orgId) {
-    if (!orgId) return;
-    mysqlDirtyOrgIds.add(String(orgId));
-    mysqlPersistDirty = true;
-}
-
-function markMysqlMetaDirty() {
-    mysqlPersistMetaDirty = true;
-    mysqlPersistDirty = true;
-}
-
 function tryParseStoreFile(filePath) {
     try {
         var raw = fs.readFileSync(filePath, 'utf8');
@@ -410,7 +180,6 @@ function loadStore() {
         var recovered = findLastKnownGoodStore();
         if (recovered) {
             store = recovered;
-            migrateInlineMapsToFiles(store);
             allowDangerousSaveOnce = true;
             saveStore();
             allowDangerousSaveOnce = false;
@@ -437,7 +206,6 @@ function loadStore() {
         var recoveredAfterCorrupt = findLastKnownGoodStore();
         if (recoveredAfterCorrupt) {
             store = recoveredAfterCorrupt;
-            migrateInlineMapsToFiles(store);
             allowDangerousSaveOnce = true;
             saveStore();
             allowDangerousSaveOnce = false;
@@ -445,14 +213,6 @@ function loadStore() {
             // Не затираем битый файл пустым store — поднимаем in-memory пустой только для аварийного старта
             store = emptyStoreSkeleton();
             console.error('[DB] ВАЖНО: store.json повреждён и last-known-good не найден. Пустой store в памяти, диск не перезаписан.');
-        }
-    }
-    if (store) {
-        var hadInlineMaps = store.mapDataByOrg && Object.keys(store.mapDataByOrg).length > 0;
-        if (migrateInlineMapsToFiles(store) || hadInlineMaps) {
-            // Maps extracted to data/maps/; rewrite slim store once
-            allowDangerousSaveOnce = true;
-            try { saveStore(); } finally { allowDangerousSaveOnce = false; }
         }
     }
     migrateToOrganizations();
@@ -469,26 +229,21 @@ async function initStorage() {
         const { runMigrations } = require('./db/migrate');
         const mysqlPersist = require('./db/mysql-persist');
         await runMigrations();
-        var hydrated = await mysqlPersist.hydrateStoreFromMysql({ lazyMaps: true });
-        store = normalizeStoreShape(hydrated.store || hydrated);
-        mysqlRawMapBlobsByOrg = hydrated.rawMapBlobsByOrg || Object.create(null);
-        store.mapDataByOrg = store.mapDataByOrg || {};
-        mapLoadedKeys.clear();
+        store = normalizeStoreShape(await mysqlPersist.hydrateStoreFromMysql());
         migrateToOrganizations();
         stripNetboxFromStore(store);
         mysqlInitialized = true;
         initSchema();
-        var blobCount = Object.keys(mysqlRawMapBlobsByOrg).length;
         console.log('[DB] Storage: MySQL (' +
             ((store.organizations || []).length) + ' orgs, ' +
             ((store.users || []).length) + ' users, ' +
-            blobCount + ' map blobs lazy)');
+            countMapDataByOrgItems(store.mapDataByOrg) + ' map items)');
         return store;
     }
     mysqlInitialized = false;
     loadStore();
     initSchema();
-    console.log('[DB] Storage: JSON (' + STORE_PATH + ', maps in ' + MAPS_DIR + ')');
+    console.log('[DB] Storage: JSON (' + STORE_PATH + ')');
     return store;
 }
 
@@ -509,38 +264,13 @@ async function flushMysqlPersist() {
         clearTimeout(mysqlPersistTimer);
         mysqlPersistTimer = null;
     }
-    if (!mysqlPersistDirty && !mysqlDirtyOrgIds.size && !mysqlPersistMetaDirty) return;
+    if (!mysqlPersistDirty) return;
     mysqlPersistDirty = false;
-    var dirtyOrgs = Array.from(mysqlDirtyOrgIds);
-    mysqlDirtyOrgIds = new Set();
-    var metaDirty = mysqlPersistMetaDirty;
-    mysqlPersistMetaDirty = false;
     const snapshot = store;
     const mysqlPersist = require('./db/mysql-persist');
     mysqlPersistChain = mysqlPersistChain.then(async function () {
-        if (metaDirty) {
-            await mysqlPersist.persistStoreToMysql(snapshot, {
-                skipRelationalMap: true,
-                skipMaps: true
-            });
-        }
-        for (var i = 0; i < dirtyOrgs.length; i++) {
-            var oid = dirtyOrgs[i];
-            var mapData = [];
-            if (snapshot.mapDataByOrg && Array.isArray(snapshot.mapDataByOrg[oid])) {
-                mapData = snapshot.mapDataByOrg[oid];
-            } else {
-                var alt = Object.keys(snapshot.mapDataByOrg || {}).find(function (k) {
-                    return organizationIdsMatch(k, oid);
-                });
-                if (alt) mapData = snapshot.mapDataByOrg[alt] || [];
-            }
-            await mysqlPersist.persistOrgMap(oid, mapData);
-            setMysqlRawMapBlob(oid, mapData);
-        }
+        await mysqlPersist.persistStoreToMysql(snapshot, { skipRelationalMap: false });
     }).catch(function (e) {
-        dirtyOrgs.forEach(function (oid) { mysqlDirtyOrgIds.add(oid); });
-        if (metaDirty) mysqlPersistMetaDirty = true;
         mysqlPersistDirty = true;
         console.error('[DB] MySQL persist error:', e && e.message ? e.message : e);
     });
@@ -576,7 +306,7 @@ function exportLogicalStoreSnapshot(label) {
     var stamp = formatSnapshotStamp(new Date());
     var name = label ? ('store-' + label + '-' + stamp + '.json') : ('store-' + stamp + '.json');
     var outPath = path.join(FULL_BACKUPS_DIR, name);
-    fs.writeFileSync(outPath, JSON.stringify(buildFullLogicalStore(), null, 0), 'utf8');
+    fs.writeFileSync(outPath, JSON.stringify(store, null, 0), 'utf8');
     pruneFullSnapshots(FULL_SNAPSHOT_KEEP);
     return { filename: name, path: outPath };
 }
@@ -671,13 +401,6 @@ function migrateToOrganizations() {
     s.settingsByOrg = s.settingsByOrg || {};
     if (hasLegacyData) {
         s.mapDataByOrg[defaultOrgId] = Array.isArray(s.mapData) ? s.mapData : [];
-        mapLoadedKeys.add(String(defaultOrgId));
-        if (!isMysqlEnabled()) {
-            writeOrgMapFile(defaultOrgId, s.mapDataByOrg[defaultOrgId]);
-        } else {
-            markMysqlOrgMapDirty(defaultOrgId);
-            setMysqlRawMapBlob(defaultOrgId, s.mapDataByOrg[defaultOrgId]);
-        }
         s.historyByOrg[defaultOrgId] = Array.isArray(s.history) ? s.history : [];
     }
     const users = Array.isArray(s.users) ? s.users : [];
@@ -699,23 +422,21 @@ function migrateToOrganizations() {
 function isDangerousStoreShrink(existingRaw, newJson, newStoreObj) {
     if (allowDangerousSaveOnce) return false;
     if (!existingRaw || existingRaw.length < DANGEROUS_SAVE_MIN_EXISTING_BYTES) return false;
-    // Maps are stored in data/maps/*.json; store.json without mapDataByOrg is expected and may be much smaller.
-    var oldHadInlineMaps = false;
-    try {
-        var peek = JSON.parse(existingRaw);
-        oldHadInlineMaps = countMapDataByOrgItems(peek.mapDataByOrg) > 0;
-    } catch (ePeek) {}
-    if (!oldHadInlineMaps && newJson.length < Math.floor(existingRaw.length * DANGEROUS_SAVE_RATIO)) {
+    if (newJson.length >= Math.floor(existingRaw.length * DANGEROUS_SAVE_RATIO)) {
+        // size ok — still check structural wipe
+    } else {
         return true;
     }
     try {
         var oldObj = JSON.parse(existingRaw);
         var oldOrgs = (oldObj.organizations && oldObj.organizations.length) || 0;
         var oldUsers = (oldObj.users && oldObj.users.length) || 0;
+        var oldMaps = countMapDataByOrgItems(oldObj.mapDataByOrg);
         var newOrgs = (newStoreObj.organizations && newStoreObj.organizations.length) || 0;
         var newUsers = (newStoreObj.users && newStoreObj.users.length) || 0;
+        var newMaps = countMapDataByOrgItems(newStoreObj.mapDataByOrg);
         if ((oldOrgs > 0 && newOrgs === 0) || (oldUsers > 0 && newUsers === 0)) return true;
-        // Ignore mapDataByOrg size: maps are externalized to per-org files.
+        if (oldMaps >= MAP_SHRINK_MIN_EXISTING && newMaps < Math.floor(oldMaps * MAP_SHRINK_RATIO)) return true;
     } catch (e) {
         // if old unreadable, don't block
     }
@@ -778,10 +499,9 @@ function saveStore() {
         if (!mysqlInitialized) {
             throw new Error('MySQL storage not initialized');
         }
-        markMysqlMetaDirty();
         scheduleMysqlPersist();
         if (MIRROR_JSON) {
-            const json = JSON.stringify(buildStoreJsonWithoutMaps(store), null, 0);
+            const json = JSON.stringify(store, null, 0);
             var existingRaw = null;
             if (fs.existsSync(STORE_PATH)) {
                 try { existingRaw = fs.readFileSync(STORE_PATH, 'utf8'); } catch (e) { existingRaw = null; }
@@ -790,7 +510,7 @@ function saveStore() {
         }
         return;
     }
-    const json = JSON.stringify(buildStoreJsonWithoutMaps(store), null, 0);
+    const json = JSON.stringify(store, null, 0);
     var existingRawJson = null;
     if (fs.existsSync(STORE_PATH)) {
         try { existingRawJson = fs.readFileSync(STORE_PATH, 'utf8'); } catch (e) { existingRawJson = null; }
@@ -937,7 +657,7 @@ function initSchema() {
     if (!isMysqlEnabled()) saveStore();
 }
 
-/** Убирает объекты, чей uniqueId есть в данных другой уже загруженной организации. */
+/** Убирает объекты, чей uniqueId есть в данных другой организации. */
 function stripMapItemsFromOtherOrganizations(orgId, data) {
     if (!orgId || !Array.isArray(data) || !data.length) return Array.isArray(data) ? data : [];
     const s = loadStore();
@@ -946,10 +666,8 @@ function stripMapItemsFromOtherOrganizations(orgId, data) {
     function isForeignUid(uid) {
         if (uid == null || uid === '') return false;
         var u = String(uid);
-        // Only scan maps already in memory — do not force-load every org.
         return Object.keys(byOrg).some(function(k) {
             if (organizationIdsMatch(k, orgId)) return false;
-            if (!mapLoadedKeys.has(String(k))) return false;
             var arr = byOrg[k];
             return Array.isArray(arr) && arr.some(function(i) {
                 return i && i.uniqueId != null && i.uniqueId !== '' && String(i.uniqueId) === u;
@@ -985,7 +703,14 @@ function stripMapItemsFromOtherOrganizations(orgId, data) {
 
 function getMapData(orgId) {
     if (!orgId) return [];
-    var raw = ensureMapLoaded(orgId);
+    const s = loadStore();
+    const byOrg = s.mapDataByOrg || {};
+    var raw = null;
+    if (Array.isArray(byOrg[orgId])) raw = byOrg[orgId];
+    else {
+        var k = Object.keys(byOrg).find(function(key) { return organizationIdsMatch(key, orgId); });
+        raw = k && Array.isArray(byOrg[k]) ? byOrg[k] : [];
+    }
     return stripMapItemsFromOtherOrganizations(orgId, raw);
 }
 
@@ -1005,18 +730,10 @@ function setMapData(orgId, data, opts) {
     if (!s.mapDataByOrg) s.mapDataByOrg = {};
     var org = getOrganization(orgId);
     var key = org ? org.id : orgId;
-    var cleaned = stripMapItemsFromOtherOrganizations(orgId, data);
-    s.mapDataByOrg[key] = cleaned;
-    mapLoadedKeys.add(String(key));
-    if (isMysqlEnabled()) {
-        markMysqlOrgMapDirty(key);
-        setMysqlRawMapBlob(key, cleaned);
-        scheduleMysqlPersist();
-        return;
-    }
+    s.mapDataByOrg[key] = stripMapItemsFromOtherOrganizations(orgId, data);
     if (opts.allowShrink) allowDangerousSaveOnce = true;
     try {
-        writeOrgMapFile(key, cleaned);
+        saveStore();
     } finally {
         if (opts.allowShrink) allowDangerousSaveOnce = false;
     }
@@ -1032,166 +749,6 @@ function setMapDataLegacy(data) {
     const s = loadStore();
     s.mapData = data;
     saveStore();
-}
-
-/** Extract [lat, lon] anchor from a serialized map item. */
-function getMapItemAnchorCoords(item) {
-    if (!item) return null;
-    var g = item.geometry;
-    if (Array.isArray(g) && typeof g[0] === 'number' && typeof g[1] === 'number') return [g[0], g[1]];
-    if (Array.isArray(g) && Array.isArray(g[0]) && typeof g[0][0] === 'number') return [g[0][0], g[0][1]];
-    if (Array.isArray(g) && Array.isArray(g[0]) && Array.isArray(g[0][0])) return [g[0][0][0], g[0][0][1]];
-    if (item.from && Array.isArray(item.from) && typeof item.from[0] === 'number') return item.from;
-    if (item.to && Array.isArray(item.to) && typeof item.to[0] === 'number') return item.to;
-    return null;
-}
-
-function parseBboxParam(bbox) {
-    if (!bbox) return null;
-    if (Array.isArray(bbox) && bbox.length >= 4) {
-        return {
-            minLat: Number(bbox[0]), minLon: Number(bbox[1]),
-            maxLat: Number(bbox[2]), maxLon: Number(bbox[3])
-        };
-    }
-    var parts = String(bbox).split(',').map(Number);
-    if (parts.length < 4 || parts.some(function (n) { return isNaN(n); })) return null;
-    return {
-        minLat: Math.min(parts[0], parts[2]),
-        minLon: Math.min(parts[1], parts[3]),
-        maxLat: Math.max(parts[0], parts[2]),
-        maxLon: Math.max(parts[1], parts[3])
-    };
-}
-
-function coordInBbox(coord, bbox) {
-    if (!coord || !bbox) return true;
-    return coord[0] >= bbox.minLat && coord[0] <= bbox.maxLat &&
-        coord[1] >= bbox.minLon && coord[1] <= bbox.maxLon;
-}
-
-/**
- * Filter / paginate / aggregate map data for viewport APIs.
- * opts: { bbox, zoom, types, cursor, limit, aggregate, lite }
- */
-function queryMapDataViewport(orgId, opts) {
-    opts = opts || {};
-    var data = getMapData(orgId) || [];
-    var total = data.length;
-    var bbox = parseBboxParam(opts.bbox);
-    var types = null;
-    if (opts.types) {
-        types = {};
-        String(opts.types).split(',').forEach(function (t) {
-            t = String(t).trim();
-            if (t) types[t] = true;
-        });
-    }
-    var filtered = data;
-    if (types) {
-        filtered = filtered.filter(function (item) {
-            return item && types[item.type];
-        });
-    }
-    if (bbox) {
-        var uidInView = Object.create(null);
-        filtered.forEach(function (item) {
-            if (!item) return;
-            var c = getMapItemAnchorCoords(item);
-            if (c && coordInBbox(c, bbox) && item.uniqueId != null) {
-                uidInView[String(item.uniqueId)] = true;
-            }
-        });
-        filtered = filtered.filter(function (item) {
-            if (!item) return false;
-            if (item.type === 'cable') {
-                if (item.fromUniqueId && uidInView[String(item.fromUniqueId)]) return true;
-                if (item.toUniqueId && uidInView[String(item.toUniqueId)]) return true;
-                var cc = getMapItemAnchorCoords(item);
-                return !!(cc && coordInBbox(cc, bbox));
-            }
-            if (item.type === 'region') return true;
-            var ac = getMapItemAnchorCoords(item);
-            if (!ac) return item.type === 'cableLabel';
-            return coordInBbox(ac, bbox);
-        });
-    }
-
-    var zoom = opts.zoom != null ? Number(opts.zoom) : null;
-    var wantAggregate = !!opts.aggregate || (zoom != null && !isNaN(zoom) && zoom < 14 && filtered.length > 800);
-    if (wantAggregate) {
-        var cellDeg = zoom != null && zoom >= 12 ? 0.01 : (zoom != null && zoom >= 10 ? 0.03 : 0.08);
-        var cells = Object.create(null);
-        filtered.forEach(function (item) {
-            if (!item || item.type === 'cable' || item.type === 'cableLabel' || item.type === 'region') return;
-            var c = getMapItemAnchorCoords(item);
-            if (!c) return;
-            var key = Math.floor(c[0] / cellDeg) + ':' + Math.floor(c[1] / cellDeg);
-            if (!cells[key]) {
-                cells[key] = {
-                    type: 'clusterAggregate',
-                    uniqueId: 'agg-' + key,
-                    geometry: [c[0], c[1]],
-                    count: 0,
-                    types: {}
-                };
-            }
-            cells[key].count++;
-            cells[key].types[item.type] = (cells[key].types[item.type] || 0) + 1;
-            // Keep centroid-ish average
-            var g = cells[key].geometry;
-            g[0] = (g[0] * (cells[key].count - 1) + c[0]) / cells[key].count;
-            g[1] = (g[1] * (cells[key].count - 1) + c[1]) / cells[key].count;
-        });
-        var aggregates = Object.keys(cells).map(function (k) { return cells[k]; });
-        return {
-            data: [],
-            aggregates: aggregates,
-            total: total,
-            matched: filtered.length,
-            truncated: true,
-            mode: 'aggregate'
-        };
-    }
-
-    var cursor = Math.max(0, parseInt(opts.cursor, 10) || 0);
-    var limit = parseInt(opts.limit, 10);
-    if (isNaN(limit) || limit <= 0) limit = 0;
-    var page = filtered;
-    var nextCursor = null;
-    if (limit > 0) {
-        page = filtered.slice(cursor, cursor + limit);
-        if (cursor + limit < filtered.length) nextCursor = cursor + limit;
-    }
-
-    if (opts.lite) {
-        page = page.map(function (item) {
-            if (!item || typeof item !== 'object') return item;
-            var lite = {
-                type: item.type,
-                uniqueId: item.uniqueId,
-                name: item.name,
-                geometry: item.geometry,
-                revision: item.revision
-            };
-            if (item.cableType != null) lite.cableType = item.cableType;
-            if (item.fromUniqueId != null) lite.fromUniqueId = item.fromUniqueId;
-            if (item.toUniqueId != null) lite.toUniqueId = item.toUniqueId;
-            if (item.nodeKind != null) lite.nodeKind = item.nodeKind;
-            if (item.cabinetId != null) lite.cabinetId = item.cabinetId;
-            return lite;
-        });
-    }
-
-    return {
-        data: page,
-        aggregates: null,
-        total: total,
-        matched: filtered.length,
-        nextCursor: nextCursor,
-        truncated: nextCursor != null,
-        mode: 'items'
-    };
 }
 
 function getUsers() {
@@ -1458,11 +1015,9 @@ function getPublicStats() {
     const orgs = Array.isArray(s.organizations) ? s.organizations : [];
     const users = Array.isArray(s.users) ? s.users : [];
     let mapObjectCount = 0;
-    orgs.forEach(function(org) {
-        if (!org || !org.id) return;
-        try {
-            mapObjectCount += countMapObjectsForOrganization(org.id);
-        } catch (e) {}
+    const byOrg = s.mapDataByOrg && typeof s.mapDataByOrg === 'object' ? s.mapDataByOrg : {};
+    Object.keys(byOrg).forEach(function(oid) {
+        mapObjectCount += countActualMapObjectsInArray(byOrg[oid]);
     });
     let userAccountCount = 0;
     users.forEach(function(u) {
@@ -1545,17 +1100,8 @@ function deleteOrganization(orgId) {
     s.organizations = (s.organizations || []).filter(function(o) { return !organizationIdsMatch(o.id, orgId); });
     if (s.mapDataByOrg && typeof s.mapDataByOrg === 'object') {
         Object.keys(s.mapDataByOrg).forEach(function(k) {
-            if (organizationIdsMatch(k, orgId)) {
-                delete s.mapDataByOrg[k];
-                mapLoadedKeys.delete(String(k));
-            }
+            if (organizationIdsMatch(k, orgId)) delete s.mapDataByOrg[k];
         });
-    }
-    deleteOrgMapFile(orgId);
-    delete mysqlRawMapBlobsByOrg[String(orgId)];
-    if (isMysqlEnabled()) {
-        markMysqlOrgMapDirty(orgId);
-        markMysqlMetaDirty();
     }
     if (s.historyByOrg && typeof s.historyByOrg === 'object') {
         Object.keys(s.historyByOrg).forEach(function(k) {
@@ -1903,8 +1449,7 @@ function createDailyBackup() {
         // Полный логический снимок (JSON export) — работает и для MySQL, и для store.json
         ensureFullBackupsDir();
         var fullDaily = path.join(FULL_BACKUPS_DIR, 'store-' + dateStr + '.json');
-        var fullStore = buildFullLogicalStore();
-        var json = JSON.stringify(fullStore, null, 0);
+        var json = JSON.stringify(s, null, 0);
         if (fs.existsSync(fullDaily)) {
             try {
                 var existingFull = fs.statSync(fullDaily);
@@ -1978,7 +1523,6 @@ function restoreFromBackup(orgId, filename, opts) {
     var key = org ? org.id : orgId;
 
     s.mapDataByOrg[key] = incomingMap;
-    mapLoadedKeys.add(String(key));
     s.historyByOrg[key] = Array.isArray(parsed.history) ? parsed.history : [];
     var restoredSettings = (parsed.settings && typeof parsed.settings === 'object') ? parsed.settings : {};
     delete restoredSettings.netboxConfig;
@@ -1986,14 +1530,7 @@ function restoreFromBackup(orgId, filename, opts) {
 
     if (opts.force) allowDangerousSaveOnce = true;
     try {
-        if (isMysqlEnabled()) {
-            markMysqlOrgMapDirty(key);
-            setMysqlRawMapBlob(key, incomingMap);
-            saveStore();
-        } else {
-            writeOrgMapFile(key, incomingMap);
-            saveStore();
-        }
+        saveStore();
     } finally {
         if (opts.force) allowDangerousSaveOnce = false;
     }
@@ -2072,11 +1609,7 @@ async function reloadStoreFromMysql() {
     if (!isMysqlEnabled()) return reloadStoreFromDisk();
     await flushMysqlPersist();
     const mysqlPersist = require('./db/mysql-persist');
-    var hydrated = await mysqlPersist.hydrateStoreFromMysql({ lazyMaps: true });
-    store = normalizeStoreShape(hydrated.store || hydrated);
-    mysqlRawMapBlobsByOrg = hydrated.rawMapBlobsByOrg || Object.create(null);
-    store.mapDataByOrg = store.mapDataByOrg || {};
-    mapLoadedKeys.clear();
+    store = normalizeStoreShape(await mysqlPersist.hydrateStoreFromMysql());
     migrateToOrganizations();
     stripNetboxFromStore(store);
     mysqlInitialized = true;
@@ -2674,8 +2207,6 @@ module.exports = {
     exportLogicalStoreSnapshot,
     getMapData,
     setMapData,
-    queryMapDataViewport,
-    parseBboxParam,
     stripMapItemsFromOtherOrganizations,
     getMapDataLegacy,
     setMapDataLegacy,

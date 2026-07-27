@@ -486,10 +486,14 @@ function setupEventListeners() {
         try {
             var currentZoom = (typeof myMap.getZoom === 'function') ? myMap.getZoom() : null;
             var lowZoom = typeof currentZoom === 'number' && currentZoom < 16;
+            var useVirtual = typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization && MapPerf.shouldUseVirtualization();
             if (zoomPending && lowZoom && typeof applyLowZoomMapUpdate === 'function') {
                 applyLowZoomMapUpdate();
             } else if (zoomPending) {
-                if (typeof applyMapFilter === 'function') applyMapFilter();
+                // При виртуализации фильтр (applyMapFilter) делает полный O(n) проход по `objects`
+                // и может раздувать INP при частых зумах. Для изменения видимости достаточно applyMapViewportUpdate.
+                if (useVirtual && typeof applyMapViewportUpdate === 'function') applyMapViewportUpdate();
+                else if (typeof applyMapFilter === 'function') applyMapFilter();
             } else if (typeof applyMapViewportUpdate === 'function') {
                 applyMapViewportUpdate();
             } else if (typeof applyMapFilter === 'function') {
