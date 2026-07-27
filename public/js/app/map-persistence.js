@@ -2081,16 +2081,26 @@ function importDataPostProcess(opts, onDone) {
                     // Deferred heavy work after the map is interactive.
                     setTimeout(function() {
                         try {
-                            if (typeof refreshAllCableUndergroundOverlays === 'function') refreshAllCableUndergroundOverlays();
-                            if (typeof updateCrossDisplay === 'function') updateCrossDisplay();
-                            if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
-                            if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
-                            scheduleConnectionLinesUpdate('full');
-                            migrateStandaloneSwitchesIntoNodes();
-                            if (window.EmbeddedSplitters && EmbeddedSplitters.migrateAllFromMap) EmbeddedSplitters.migrateAllFromMap();
-                            if (typeof migrateAllRadioBridgeCopperPorts === 'function') migrateAllRadioBridgeCopperPorts();
-                            if (typeof repairRadioBridgeFiberLinksAfterLoad === 'function') repairRadioBridgeFiberLinksAfterLoad();
-                            if (typeof rebuildAllCopperPortUsageFromCables === 'function') rebuildAllCopperPortUsageFromCables();
+                            var runDeferred = function() {
+                                if (typeof refreshAllCableUndergroundOverlays === 'function') refreshAllCableUndergroundOverlays();
+                                if (typeof updateCrossDisplay === 'function') updateCrossDisplay();
+                                if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
+                                if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
+                                scheduleConnectionLinesUpdate('full');
+                                migrateStandaloneSwitchesIntoNodes();
+                                if (window.EmbeddedSplitters && EmbeddedSplitters.migrateAllFromMap) EmbeddedSplitters.migrateAllFromMap();
+                                if (typeof migrateAllRadioBridgeCopperPorts === 'function') migrateAllRadioBridgeCopperPorts();
+                                if (typeof repairRadioBridgeFiberLinksAfterLoad === 'function') repairRadioBridgeFiberLinksAfterLoad();
+                                if (typeof rebuildAllCopperPortUsageFromCables === 'function') rebuildAllCopperPortUsageFromCables();
+                                if (typeof updateStats === 'function') updateStats();
+                            };
+                            if (window.MapPerfLog && MapPerfLog.isEnabled()) {
+                                MapPerfLog.mark('deferred-post-process-start', { objects: objects && objects.length });
+                                MapPerfLog.measure('import.deferredPostProcess', runDeferred);
+                                MapPerfLog.report();
+                            } else {
+                                runDeferred();
+                            }
                         } catch (eDefer) {
                             console.warn('[Import] Deferred post-process error:', eDefer);
                         }
@@ -2100,10 +2110,15 @@ function importDataPostProcess(opts, onDone) {
                 return;
             }
             try {
-                postSteps[stepIdx++]();
+                var stepFn = postSteps[stepIdx++];
+                var stepName = 'importDataPostProcess.step' + (stepIdx);
+                if (window.MapPerfLog && MapPerfLog.isEnabled()) {
+                    MapPerfLog.measure(stepName, stepFn);
+                } else {
+                    stepFn();
+                }
             } catch (stepErr) {
                 console.warn('[Import] Post-process step failed:', stepErr);
-                stepIdx++;
             }
             requestAnimationFrame(runPostStep);
         }

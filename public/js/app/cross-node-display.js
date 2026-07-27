@@ -174,6 +174,15 @@ function detachNodesAtGroupKey(key) {
 }
 
 function updateCrossDisplay(scope) {
+    if (window.MapPerfLog && MapPerfLog.isEnabled()) {
+        var args = arguments;
+        return MapPerfLog.measure('updateCrossDisplay', function() {
+            return updateCrossDisplayInstrumented.apply(null, args);
+        });
+    }
+    return updateCrossDisplayInstrumented(scope);
+}
+function updateCrossDisplayInstrumented(scope) {
     var parsed = parseGroupDisplayScope(scope);
     var keysOnly = !parsed.full && parsed.keys && parsed.keys.length && !isMapBulkImportActive();
     if (keysOnly) {
@@ -449,6 +458,15 @@ function getNodeGroups() {
 }
 
 function updateNodeDisplay(scope) {
+    if (window.MapPerfLog && MapPerfLog.isEnabled()) {
+        var args = arguments;
+        return MapPerfLog.measure('updateNodeDisplay', function() {
+            return updateNodeDisplayInstrumented.apply(null, args);
+        });
+    }
+    return updateNodeDisplayInstrumented(scope);
+}
+function updateNodeDisplayInstrumented(scope) {
     var parsed = parseGroupDisplayScope(scope);
     var keysOnly = !parsed.full && parsed.keys && parsed.keys.length && !isMapBulkImportActive();
     if (keysOnly) {

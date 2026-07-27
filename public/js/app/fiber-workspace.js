@@ -2,6 +2,12 @@
  * Рабочее место жил: SVG-схема, sidebar, раскладка.
  */
 function updateCableVisualization() {
+    if (window.MapPerfLog && MapPerfLog.isEnabled()) {
+        return MapPerfLog.measure('updateCableVisualization', updateCableVisualizationInstrumented);
+    }
+    return updateCableVisualizationInstrumented();
+}
+function updateCableVisualizationInstrumented() {
     const groups = getCableGroups();
 
     const labelsToRemove = objects.filter(obj => 

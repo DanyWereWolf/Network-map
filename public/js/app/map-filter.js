@@ -529,6 +529,12 @@ function ensureObjectLabelOnMap(obj) {
 }
 
 function applyMapFilter() {
+    if (window.MapPerfLog && MapPerfLog.isEnabled()) {
+        return MapPerfLog.measure('applyMapFilter', applyMapFilterInstrumented);
+    }
+    return applyMapFilterInstrumented();
+}
+function applyMapFilterInstrumented() {
     if (window._mapPdfExportCaptureActive) return;
     if (!myMap || !objects) return;
     var filter = getMapFilterState();
