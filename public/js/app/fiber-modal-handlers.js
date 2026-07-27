@@ -6,6 +6,11 @@ function setupFiberConnectionHandlers() {
     if (!currentModalObject || (!isFiberHostType(objType))) {
         return;
     }
+
+    const svgEl = document.getElementById('fiber-connections-svg');
+    if (svgEl && typeof ensureFiberSchemePortNumsOnTop === 'function') {
+        ensureFiberSchemePortNumsOnTop(svgEl);
+    }
     
     const sleeveObj = currentModalObject;
     let fiberConnections = sleeveObj.properties.get('fiberConnections');
@@ -17,7 +22,23 @@ function setupFiberConnectionHandlers() {
     selectedFiberForConnection = null;
     selectedFiberConnectionIndex = null;
 
+    function runFiberTraceFromWorkspace(cableId, fiberNumber) {
+        if (!cableId || isNaN(fiberNumber)) return;
+        if (typeof showFiberTraceFromCross !== 'function') {
+            if (typeof showError === 'function') showError('Трассировка недоступна', 'Трассировка');
+            return;
+        }
+        showFiberTraceFromCross(sleeveObj, cableId, fiberNumber);
+    }
+
     document.querySelectorAll('#fiber-connections-svg g[id^="fiber-"], #fiber-connections-svg circle[id^="fiber-"]').forEach(function(el) {
+        el.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var cableId = this.getAttribute('data-cable-id');
+            var fiberNumber = parseInt(this.getAttribute('data-fiber-number'), 10);
+            runFiberTraceFromWorkspace(cableId, fiberNumber);
+        });
         el.addEventListener('click', function(e) {
             e.stopPropagation();
             if (!isEditMode) return;
@@ -371,7 +392,7 @@ function setupFiberConnectionHandlers() {
 
     document.querySelectorAll('.fiber-connections-container .cross-fiber-table .fiber-item').forEach(function(tableItem) {
         tableItem.addEventListener('click', function(e) {
-            if (e.target.closest('button, input, select, textarea, label, .fiber-port-row, .fiber-item__actions, .fiber-item__assigns')) return;
+            if (e.target.closest('button, input, select, textarea, label, .fiber-port-row, .fiber-item__actions, .fiber-item__assigns, .fiber-item__trace')) return;
             if (!isEditMode) return;
             var splitterId = tableItem.getAttribute('data-splitter-id');
             var cableId = tableItem.getAttribute('data-cable-id');
@@ -627,6 +648,15 @@ function setupFiberConnectionHandlers() {
         input.addEventListener('click', function(e) { e.stopPropagation(); });
         input.addEventListener('change', function(e) { e.stopPropagation(); saveConnLabel(); });
         input.addEventListener('blur', function(e) { e.stopPropagation(); saveConnLabel(); });
+    });
+
+    document.querySelectorAll('.btn-trace-fiber').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var cableId = this.getAttribute('data-cable-id');
+            var fiberNumber = parseInt(this.getAttribute('data-fiber-number'), 10);
+            runFiberTraceFromWorkspace(cableId, fiberNumber);
+        });
     });
 
     document.querySelectorAll('.btn-connect-node').forEach(btn => {
@@ -1530,6 +1560,7 @@ function setupFiberSchemeHoverHandlers() {
     let activeConnIndex = null;
     let activeSplitterLinkKey = null;
     let activeCrossPortLinkKey = null;
+    let activeCrossPortNum = null;
 
     function setCrossPortLinkLabelVisible(linkKey, visible) {
         svg.querySelectorAll('.fiber-scheme-cross-link-label').forEach(function(el) {
@@ -1558,16 +1589,38 @@ function setupFiberSchemeHoverHandlers() {
         activeCrossPortLinkKey = linkKey;
         activeConnIndex = null;
         activeSplitterLinkKey = null;
+        activeCrossPortNum = null;
         if (fiberKeyForHighlight) activeFiberKey = fiberKeyForHighlight;
         svg.classList.add('fiber-scheme-hover-active');
         setConnLabelVisible(null, false);
         setFiberLabelVisible(null, false);
+        setCrossPortSignalLabelVisible(null, false);
         setSplitterLinkLabelVisible(null, false);
         showCrossPortLinkHover(linkKey);
         var fiberKey = fiberKeyForHighlight;
         if (!fiberKey) {
             var linkEl = svg.querySelector('.fiber-scheme-cross-link[data-link-key="' + linkKey + '"]');
             fiberKey = linkEl ? linkEl.getAttribute('data-fiber-key') : null;
+        }
+        if (fiberKey) activeFiberKey = fiberKey;
+        var crossPortFromLink = null;
+        var linkMetaEl = svg.querySelector('.fiber-scheme-cross-link[data-link-key="' + linkKey + '"]');
+        if (linkMetaEl) crossPortFromLink = linkMetaEl.getAttribute('data-cross-port');
+        if (crossPortFromLink) activeCrossPortNum = String(crossPortFromLink);
+        var showedFiberLabel = false;
+        if (fiberKey) {
+            var portEl = svg.querySelector('.fiber-scheme-port[data-fiber-key="' + fiberKey + '"]');
+            var hasSignalSource = portEl && portEl.getAttribute('data-signal-source');
+            var hasDirectLabel = portEl && portEl.getAttribute('data-direct-label');
+            var hasLabelDom = !!svg.querySelector('.fiber-scheme-fiber-label[data-fiber-key="' + fiberKey + '"]');
+            if (hasSignalSource || hasDirectLabel || hasLabelDom) {
+                setFiberLabelVisible(fiberKey, true);
+                showedFiberLabel = true;
+            }
+        }
+        /* Подпись у жилы приоритетнее; подпись у порта кросса — если у жилы нет своей. */
+        if (crossPortFromLink && !showedFiberLabel) {
+            setCrossPortSignalLabelVisible(crossPortFromLink, true);
         }
         svg.querySelectorAll('.fiber-scheme-port').forEach(function(el) {
             var hit = fiberKey && el.getAttribute('data-fiber-key') === fiberKey;
@@ -1581,12 +1634,9 @@ function setupFiberSchemeHoverHandlers() {
                 el.classList.toggle('fiber-cable-block-hovered', cableId && el.getAttribute('data-cable-id') === cableId);
             });
         }
-        var crossPort = null;
-        var linkMetaEl = svg.querySelector('.fiber-scheme-cross-link[data-link-key="' + linkKey + '"]');
-        if (linkMetaEl) crossPort = linkMetaEl.getAttribute('data-cross-port');
-        if (crossPort) {
+        if (crossPortFromLink) {
             svg.querySelectorAll('.fiber-scheme-cross-port').forEach(function(el) {
-                el.classList.toggle('fiber-scheme-cross-port-hovered', el.getAttribute('data-cross-port') === crossPort);
+                el.classList.toggle('fiber-scheme-cross-port-hovered', el.getAttribute('data-cross-port') === crossPortFromLink);
             });
         }
     }
@@ -1601,7 +1651,30 @@ function setupFiberSchemeHoverHandlers() {
     function setFiberLabelVisible(fiberKey, visible) {
         svg.querySelectorAll('.fiber-scheme-fiber-label').forEach(function(el) {
             const fk = el.getAttribute('data-fiber-key');
-            el.classList.toggle('is-visible', visible && fiberKey != null && fk === fiberKey);
+            var match = visible && fiberKey != null && fk === fiberKey;
+            if (!match) {
+                el.classList.toggle('is-visible', false);
+                return;
+            }
+            var portEl = svg.querySelector('.fiber-scheme-port[data-fiber-key="' + fiberKey + '"]');
+            var hasSignal = portEl && portEl.getAttribute('data-signal-source');
+            var labelKind = el.getAttribute('data-label-kind');
+            if (hasSignal && labelKind === 'direct') {
+                el.classList.toggle('is-visible', false);
+                return;
+            }
+            if (!hasSignal && labelKind === 'signal') {
+                el.classList.toggle('is-visible', false);
+                return;
+            }
+            el.classList.toggle('is-visible', true);
+        });
+    }
+
+    function setCrossPortSignalLabelVisible(portNum, visible) {
+        svg.querySelectorAll('.fiber-scheme-cross-port-label').forEach(function(el) {
+            el.classList.toggle('is-visible', visible && portNum != null &&
+                String(el.getAttribute('data-cross-port')) === String(portNum));
         });
     }
 
@@ -1667,11 +1740,12 @@ function setupFiberSchemeHoverHandlers() {
     }
 
     function clearHover() {
-        if (!activeFiberKey && activeConnIndex == null && !activeSplitterLinkKey && !activeCrossPortLinkKey) return;
+        if (!activeFiberKey && activeConnIndex == null && !activeSplitterLinkKey && !activeCrossPortLinkKey && activeCrossPortNum == null) return;
         activeFiberKey = null;
         activeConnIndex = null;
         activeSplitterLinkKey = null;
         activeCrossPortLinkKey = null;
+        activeCrossPortNum = null;
         svg.classList.remove('fiber-scheme-hover-active');
         svg.querySelectorAll('.fiber-scheme-hovered, .fiber-scheme-dimmed, .fiber-scheme-link-hovered, .fiber-scheme-link-dimmed, .fiber-scheme-splitter-link-hovered, .fiber-scheme-splitter-link-dimmed, .fiber-scheme-splitter-cross-link-hovered, .fiber-scheme-splitter-cross-link-dimmed, .fiber-cable-block-hovered, .fiber-scheme-cross-link-hovered, .fiber-scheme-cross-link-dimmed, .fiber-scheme-cross-port-hovered').forEach(function(el) {
             el.classList.remove('fiber-scheme-hovered', 'fiber-scheme-dimmed', 'fiber-scheme-link-hovered', 'fiber-scheme-link-dimmed', 'fiber-scheme-splitter-link-hovered', 'fiber-scheme-splitter-link-dimmed', 'fiber-scheme-splitter-cross-link-hovered', 'fiber-scheme-splitter-cross-link-dimmed', 'fiber-cable-block-hovered', 'fiber-scheme-cross-link-hovered', 'fiber-scheme-cross-link-dimmed', 'fiber-scheme-cross-port-hovered');
@@ -1686,6 +1760,7 @@ function setupFiberSchemeHoverHandlers() {
         setFiberLabelVisible(null, false);
         setSplitterLinkLabelVisible(null, false);
         setCrossPortLinkLabelVisible(null, false);
+        setCrossPortSignalLabelVisible(null, false);
     }
 
     function applySplitterLinkHover(linkKey) {
@@ -1694,9 +1769,11 @@ function setupFiberSchemeHoverHandlers() {
         activeConnIndex = null;
         activeFiberKey = null;
         activeCrossPortLinkKey = null;
+        activeCrossPortNum = null;
         svg.classList.add('fiber-scheme-hover-active');
         setFiberLabelVisible(null, false);
         setCrossPortLinkLabelVisible(null, false);
+        setCrossPortSignalLabelVisible(null, false);
         var linkEl = svg.querySelector('.fiber-scheme-splitter-link[data-link-key="' + linkKey + '"], .fiber-scheme-splitter-link-hit[data-link-key="' + linkKey + '"]');
         var cableId = linkEl ? linkEl.getAttribute('data-cable-id') : null;
         var fiberNumber = linkEl ? linkEl.getAttribute('data-fiber-number') : null;
@@ -1729,12 +1806,14 @@ function setupFiberSchemeHoverHandlers() {
         if (connIndex == null) return;
         activeConnIndex = connIndex;
         activeCrossPortLinkKey = null;
+        activeCrossPortNum = null;
         if (fiberKeyForHighlight) activeFiberKey = fiberKeyForHighlight;
         svg.classList.add('fiber-scheme-hover-active');
         setConnLabelVisible(connIndex, true);
         setFiberLabelVisible(null, false);
         setSplitterLinkLabelVisible(null, false);
         setCrossPortLinkLabelVisible(null, false);
+        setCrossPortSignalLabelVisible(null, false);
 
         var linkEl = svg.querySelector('.fiber-scheme-link[data-connection-index="' + connIndex + '"]');
         var fromKey = linkEl ? linkEl.getAttribute('data-from-fiber') : null;
@@ -1778,10 +1857,14 @@ function setupFiberSchemeHoverHandlers() {
         activeFiberKey = fiberKey;
         activeConnIndex = null;
         activeCrossPortLinkKey = null;
+        activeCrossPortNum = null;
         setConnLabelVisible(null, false);
+        setCrossPortSignalLabelVisible(null, false);
         const portEl = svg.querySelector('.fiber-scheme-port[data-fiber-key="' + fiberKey + '"]');
+        const hasSignalSource = portEl && portEl.getAttribute('data-signal-source');
         const hasDirectLabel = portEl && portEl.getAttribute('data-direct-label');
-        setFiberLabelVisible(fiberKey, !!hasDirectLabel);
+        const hasLabelDom = !!svg.querySelector('.fiber-scheme-fiber-label[data-fiber-key="' + fiberKey + '"]');
+        setFiberLabelVisible(fiberKey, !!(hasSignalSource || hasDirectLabel || hasLabelDom));
         svg.classList.add('fiber-scheme-hover-active');
         const port = svg.querySelector('.fiber-scheme-port[data-fiber-key="' + fiberKey + '"]');
         const cableId = port ? port.getAttribute('data-cable-id') : null;
@@ -1803,6 +1886,52 @@ function setupFiberSchemeHoverHandlers() {
         svg.querySelectorAll('.fiber-cable-block').forEach(function(el) {
             el.classList.toggle('fiber-cable-block-hovered', cableId && el.getAttribute('data-cable-id') === cableId);
         });
+        var crossPortForFiber = null;
+        var crossLinkForFiber = svg.querySelector('.fiber-scheme-cross-link[data-fiber-key="' + fiberKey + '"]');
+        if (crossLinkForFiber) crossPortForFiber = crossLinkForFiber.getAttribute('data-cross-port');
+        if (crossPortForFiber) setCrossPortSignalLabelVisible(crossPortForFiber, true);
+    }
+
+    function applyCrossPortHover(portNum) {
+        if (portNum == null || portNum === '') return;
+        portNum = String(portNum);
+        activeFiberKey = null;
+        activeConnIndex = null;
+        activeSplitterLinkKey = null;
+        activeCrossPortLinkKey = null;
+        activeCrossPortNum = portNum;
+        svg.classList.add('fiber-scheme-hover-active');
+        setConnLabelVisible(null, false);
+        setFiberLabelVisible(null, false);
+        setSplitterLinkLabelVisible(null, false);
+        setCrossPortLinkLabelVisible(null, false);
+        setCrossPortSignalLabelVisible(portNum, true);
+        svg.querySelectorAll('.fiber-scheme-cross-port').forEach(function(el) {
+            el.classList.toggle('fiber-scheme-cross-port-hovered', String(el.getAttribute('data-cross-port')) === portNum);
+        });
+        var fiberKey = null;
+        var linkEl = svg.querySelector('.fiber-scheme-cross-link[data-cross-port="' + portNum + '"]');
+        if (linkEl) fiberKey = linkEl.getAttribute('data-fiber-key');
+        if (fiberKey) {
+            svg.querySelectorAll('.fiber-scheme-port').forEach(function(el) {
+                var hit = el.getAttribute('data-fiber-key') === fiberKey;
+                el.classList.toggle('fiber-scheme-hovered', hit);
+                el.classList.toggle('fiber-scheme-dimmed', !hit);
+            });
+            var portEl = svg.querySelector('.fiber-scheme-port[data-fiber-key="' + fiberKey + '"]');
+            if (portEl && (portEl.getAttribute('data-direct-label') || portEl.getAttribute('data-signal-source'))) {
+                setFiberLabelVisible(fiberKey, true);
+            }
+            var cableId = portEl ? portEl.getAttribute('data-cable-id') : null;
+            svg.querySelectorAll('.fiber-cable-block').forEach(function(el) {
+                el.classList.toggle('fiber-cable-block-hovered', cableId && el.getAttribute('data-cable-id') === cableId);
+            });
+        } else {
+            svg.querySelectorAll('.fiber-scheme-port').forEach(function(el) {
+                el.classList.add('fiber-scheme-dimmed');
+                el.classList.remove('fiber-scheme-hovered');
+            });
+        }
     }
 
     svg.addEventListener('mouseover', function(e) {
@@ -1841,8 +1970,19 @@ function setupFiberSchemeHoverHandlers() {
             if (clk) applyCrossPortLinkHover(clk, null);
             return;
         }
-        const port = e.target.closest('.fiber-scheme-port');
-        if (port) applyHover(port.getAttribute('data-fiber-key'));
+        const crossPortEl = e.target.closest('.fiber-scheme-cross-port, .fiber-scheme-cross-port-hit');
+        if (crossPortEl) {
+            var cpNum = crossPortEl.getAttribute('data-cross-port') ||
+                (crossPortEl.closest('.fiber-scheme-cross-port') && crossPortEl.closest('.fiber-scheme-cross-port').getAttribute('data-cross-port'));
+            if (cpNum) applyCrossPortHover(cpNum);
+            return;
+        }
+        const fiberHit = e.target.closest('.fiber-port-hit, .fiber-scheme-port');
+        if (fiberHit) {
+            var fiberKeyHit = fiberHit.getAttribute('data-fiber-key') ||
+                (fiberHit.closest('.fiber-scheme-port') && fiberHit.closest('.fiber-scheme-port').getAttribute('data-fiber-key'));
+            if (fiberKeyHit) applyHover(fiberKeyHit);
+        }
     });
     svg.addEventListener('mouseleave', function(e) {
         const rt = e.relatedTarget;

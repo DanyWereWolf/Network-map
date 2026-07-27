@@ -52,10 +52,20 @@ function syncFiberConnectionLabelInputs(connIndex, label) {
 
 function getFiberSchemeLabelColors() {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    if (typeof getFiberSchemeFiberLabelColors === 'function') {
+        var c = getFiberSchemeFiberLabelColors(isDark, 'signal');
+        return {
+            bg: c.bg,
+            fill: c.titleFill,
+            border: c.border,
+            subFill: c.subFill,
+            accent: c.accent
+        };
+    }
     return {
-        bg: isDark ? 'rgba(30, 41, 59, 0.92)' : 'rgba(255, 255, 255, 0.92)',
-        fill: isDark ? '#f1f5f9' : '#1e293b',
-        border: isDark ? '#334155' : '#dee2e6'
+        bg: isDark ? 'rgba(67, 20, 7, 0.92)' : 'rgba(255, 247, 237, 0.96)',
+        fill: isDark ? '#ffedd5' : '#9a3412',
+        border: isDark ? 'rgba(251, 146, 60, 0.5)' : 'rgba(234, 88, 12, 0.35)'
     };
 }
 
@@ -74,6 +84,76 @@ function setSvgTitle(parent, text) {
     titleEl.textContent = trimmed;
 }
 
+/** Обновить DOM callout-чипа на середине линии (без нативного title). */
+function applyFiberSchemeCalloutChipDom(labelG, mid, labelText, extraClass) {
+    if (!labelG || !mid) return;
+    const trimmed = labelText ? String(labelText).trim() : '';
+    if (!trimmed) return;
+    const colors = getFiberSchemeLabelColors();
+    const fs = 9.5;
+    const padX = 14;
+    const display = typeof fitFiberSchemeTextToWidth === 'function'
+        ? fitFiberSchemeTextToWidth(trimmed, 180 - padX * 2 - 6, fs) : trimmed;
+    const tw = Math.min(180, Math.max(56,
+        (typeof estimateFiberSchemeTextWidth === 'function'
+            ? estimateFiberSchemeTextWidth(display, fs) : display.length * 6) + padX * 2 + 6));
+    const th = 22;
+    const tx = mid.x - tw / 2;
+    const ty = mid.y - th / 2;
+    const railColor = colors.accent || '#f97316';
+    const baseClass = extraClass || 'fiber-scheme-conn-label';
+    labelG.setAttribute('class', baseClass + ' fiber-scheme-signal-label');
+
+    let rect = labelG.querySelector('.fiber-scheme-signal-label-bg');
+    if (!rect) {
+        rect = labelG.querySelector('rect:not(.fiber-scheme-signal-label-rail)');
+        if (rect) rect.setAttribute('class', 'fiber-scheme-signal-label-bg');
+    }
+    if (!rect) {
+        rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('class', 'fiber-scheme-signal-label-bg');
+        labelG.insertBefore(rect, labelG.firstChild);
+    }
+    rect.setAttribute('x', String(tx));
+    rect.setAttribute('y', String(ty));
+    rect.setAttribute('width', String(tw));
+    rect.setAttribute('height', String(th));
+    rect.setAttribute('rx', '6');
+    rect.setAttribute('fill', colors.bg);
+    rect.setAttribute('stroke', colors.border);
+    rect.setAttribute('stroke-width', '1');
+
+    let rail = labelG.querySelector('.fiber-scheme-signal-label-rail');
+    if (!rail) {
+        rail = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rail.setAttribute('class', 'fiber-scheme-signal-label-rail');
+        labelG.insertBefore(rail, rect.nextSibling);
+    }
+    rail.setAttribute('x', String(tx));
+    rail.setAttribute('y', String(ty + 4));
+    rail.setAttribute('width', '3');
+    rail.setAttribute('height', String(th - 8));
+    rail.setAttribute('rx', '1.5');
+    rail.setAttribute('fill', railColor);
+    rail.setAttribute('opacity', '0.95');
+
+    let text = labelG.querySelector('.fiber-scheme-signal-label-place');
+    if (!text) {
+        text = labelG.querySelector('text');
+        if (text) text.setAttribute('class', 'fiber-scheme-signal-label-place');
+    }
+    if (!text) {
+        text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('class', 'fiber-scheme-signal-label-place');
+        labelG.appendChild(text);
+    }
+    text.setAttribute('x', String(mid.x));
+    text.setAttribute('y', String(ty + 15));
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('style', 'font-size:' + fs + 'px;font-weight:700;letter-spacing:0.01em;fill:' + colors.fill + ';pointer-events:none;');
+    text.textContent = display;
+}
+
 function refreshFiberSchemeConnectionLabelDom(connIndex, labelText) {
     const svg = document.getElementById('fiber-connections-svg');
     if (!svg || connIndex == null || isNaN(connIndex)) return;
@@ -82,9 +162,9 @@ function refreshFiberSchemeConnectionLabelDom(connIndex, labelText) {
     const linkHit = svg.querySelector('.fiber-scheme-link-hit[data-connection-index="' + connIndex + '"]');
     if (link) {
         link.setAttribute('data-conn-label', trimmed);
-        setSvgTitle(link, trimmed);
+        setSvgTitle(link, '');
     }
-    setSvgTitle(linkHit, trimmed);
+    setSvgTitle(linkHit, '');
 
     let labelG = svg.querySelector('.fiber-scheme-conn-label[data-connection-index="' + connIndex + '"]');
     if (!trimmed) {
@@ -95,45 +175,15 @@ function refreshFiberSchemeConnectionLabelDom(connIndex, labelText) {
     const pathD = link.getAttribute('d');
     if (!pathD) return;
     const mid = fiberSchemePathMidpoint(pathD);
-    const colors = getFiberSchemeLabelColors();
-    const labelFoW = 148;
-    const tw = Math.min(labelFoW, Math.max(40, trimmed.length * 6.5 + 16));
-    const tx = mid.x - tw / 2;
-    const ty = mid.y - 11;
 
     if (!labelG) {
         const container = svg.querySelector('.fiber-scheme-link-labels');
         if (!container) return;
         labelG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        labelG.setAttribute('class', 'fiber-scheme-conn-label');
         labelG.setAttribute('data-connection-index', String(connIndex));
-        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('class', 'fiber-scheme-conn-label-bg');
-        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('class', 'fiber-scheme-conn-label-text');
-        text.setAttribute('text-anchor', 'middle');
-        text.setAttribute('style', 'font-size: 10px; font-weight: 600; fill: ' + colors.fill + '; pointer-events: none;');
-        labelG.appendChild(rect);
-        labelG.appendChild(text);
         container.appendChild(labelG);
     }
-    const rect = labelG.querySelector('.fiber-scheme-conn-label-bg');
-    const text = labelG.querySelector('.fiber-scheme-conn-label-text');
-    if (rect) {
-        rect.setAttribute('x', String(tx));
-        rect.setAttribute('y', String(ty));
-        rect.setAttribute('width', String(tw));
-        rect.setAttribute('height', '21');
-        rect.setAttribute('rx', '5');
-        rect.setAttribute('fill', colors.bg);
-        rect.setAttribute('stroke', colors.border);
-        rect.setAttribute('stroke-width', '0.75');
-    }
-    if (text) {
-        text.setAttribute('x', String(mid.x));
-        text.setAttribute('y', String(mid.y + 5));
-        text.textContent = trimmed;
-    }
+    applyFiberSchemeCalloutChipDom(labelG, mid, trimmed, 'fiber-scheme-conn-label');
     const linkHovered = link && link.classList.contains('fiber-scheme-link-hovered');
     if (selectedFiberConnectionIndex === connIndex || linkHovered || labelG.classList.contains('is-visible')) {
         labelG.classList.add('is-visible');
@@ -392,42 +442,14 @@ function refreshCrossPortLinkLabelDom(linkKey, labelText) {
         mid = fiberSchemePathMidpoint(pathD);
     }
     if (!mid) return;
-    var colors = getFiberSchemeLabelColors();
-    var tw = Math.min(148, Math.max(40, trimmed.length * 6.5 + 16));
-    var tx = mid.x - tw / 2;
     if (!labelG) {
         var container = svg.querySelector('.fiber-scheme-cross-link-labels');
         if (!container) return;
         labelG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        labelG.setAttribute('class', 'fiber-scheme-cross-link-label');
         labelG.setAttribute('data-link-key', linkKey);
-        var rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('class', 'fiber-scheme-cross-link-label-bg');
-        var text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('class', 'fiber-scheme-cross-link-label-text');
-        text.setAttribute('text-anchor', 'middle');
-        text.setAttribute('style', 'font-size: 10px; font-weight: 600; fill: ' + colors.fill + '; pointer-events: none;');
-        labelG.appendChild(rect);
-        labelG.appendChild(text);
         container.appendChild(labelG);
     }
-    var rect = labelG.querySelector('.fiber-scheme-cross-link-label-bg');
-    var text = labelG.querySelector('.fiber-scheme-cross-link-label-text');
-    if (rect) {
-        rect.setAttribute('x', String(tx));
-        rect.setAttribute('y', String(mid.y - 11));
-        rect.setAttribute('width', String(tw));
-        rect.setAttribute('height', '21');
-        rect.setAttribute('rx', '5');
-        rect.setAttribute('fill', colors.bg);
-        rect.setAttribute('stroke', colors.border);
-        rect.setAttribute('stroke-width', '0.75');
-    }
-    if (text) {
-        text.setAttribute('x', String(mid.x));
-        text.setAttribute('y', String(mid.y + 5));
-        text.textContent = trimmed;
-    }
+    applyFiberSchemeCalloutChipDom(labelG, mid, trimmed, 'fiber-scheme-cross-link-label');
     if (selectedCrossPortLink && selectedCrossPortLink.linkKey === linkKey) {
         labelG.classList.add('is-visible');
     }
@@ -632,9 +654,9 @@ function refreshSplitterLinkLabelDom(linkKey, labelText) {
     var linkHit = svg.querySelector('.fiber-scheme-splitter-link-hit[data-link-key="' + linkKey + '"]');
     if (link) {
         link.setAttribute('data-conn-label', trimmed);
-        setSvgTitle(link, trimmed);
+        setSvgTitle(link, '');
     }
-    setSvgTitle(linkHit, trimmed);
+    setSvgTitle(linkHit, '');
     var labelG = svg.querySelector('.fiber-scheme-splitter-conn-label[data-link-key="' + linkKey + '"]');
     if (!trimmed) {
         if (labelG) labelG.remove();
@@ -644,42 +666,14 @@ function refreshSplitterLinkLabelDom(linkKey, labelText) {
     var pathD = link.getAttribute('d');
     if (!pathD) return;
     var mid = fiberSchemePathMidpoint(pathD);
-    var colors = getFiberSchemeLabelColors();
-    var tw = Math.min(148, Math.max(40, trimmed.length * 6.5 + 16));
-    var tx = mid.x - tw / 2;
     if (!labelG) {
         var container = svg.querySelector('.fiber-scheme-splitter-link-labels');
         if (!container) return;
         labelG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        labelG.setAttribute('class', 'fiber-scheme-splitter-conn-label');
         labelG.setAttribute('data-link-key', linkKey);
-        var rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('class', 'fiber-scheme-splitter-conn-label-bg');
-        var text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('class', 'fiber-scheme-splitter-conn-label-text');
-        text.setAttribute('text-anchor', 'middle');
-        text.setAttribute('style', 'font-size: 10px; font-weight: 600; fill: ' + colors.fill + '; pointer-events: none;');
-        labelG.appendChild(rect);
-        labelG.appendChild(text);
         container.appendChild(labelG);
     }
-    var rect = labelG.querySelector('.fiber-scheme-splitter-conn-label-bg');
-    var text = labelG.querySelector('.fiber-scheme-splitter-conn-label-text');
-    if (rect) {
-        rect.setAttribute('x', String(tx));
-        rect.setAttribute('y', String(mid.y - 11));
-        rect.setAttribute('width', String(tw));
-        rect.setAttribute('height', '21');
-        rect.setAttribute('rx', '5');
-        rect.setAttribute('fill', colors.bg);
-        rect.setAttribute('stroke', colors.border);
-        rect.setAttribute('stroke-width', '0.75');
-    }
-    if (text) {
-        text.setAttribute('x', String(mid.x));
-        text.setAttribute('y', String(mid.y + 5));
-        text.textContent = trimmed;
-    }
+    applyFiberSchemeCalloutChipDom(labelG, mid, trimmed, 'fiber-scheme-splitter-conn-label');
     if (selectedSplitterLink && selectedSplitterLink.linkKey === linkKey) {
         labelG.classList.add('is-visible');
     }

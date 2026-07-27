@@ -450,6 +450,555 @@ function getFiberOltRealAssignment(hostObj, cableId, fiberNumber, skipSpliceInhe
     return resolveFiberOltUpstreamAtHost(hostObj, cableId, fiberNumber, !!skipNetworkWalk, !!skipSpliceInherit);
 }
 
+/** Имя хоста жил по умолчанию (кросс / муфта / кассета). */
+function getFiberHostDefaultName(hostType) {
+    if (hostType === 'sleeve') return 'Муфта';
+    if (hostType === 'spliceCassette') return 'Сплайс-кассета';
+    if (hostType === 'cross') return 'Кросс';
+    if (hostType === 'olt') return 'OLT';
+    return 'Хост';
+}
+
+function getFiberHostMeta(hostObj) {
+    if (!hostObj || !hostObj.properties) return { hostId: '', hostName: 'Хост', hostType: '' };
+    var hostType = hostObj.properties.get('type') || '';
+    return {
+        hostId: getObjectUniqueId(hostObj) || '',
+        hostName: hostObj.properties.get('name') || getFiberHostDefaultName(hostType),
+        hostType: hostType
+    };
+}
+
+function attachFiberSignalSourceHost(source, hostObj, extra) {
+    if (!source) return null;
+    var meta = getFiberHostMeta(hostObj);
+    var out = Object.assign({}, source, meta);
+    if (extra) Object.assign(out, extra);
+    return out;
+}
+
+/**
+ * Локальный источник сигнала на хосте (без обхода сети).
+ * Приоритет: node → crossPort → olt → splitter → onu → mc → rb.
+ * opts.skipSpliceInherit — только прямая жила, без группы сращивания.
+ */
+function resolveFiberSignalSourceAtHost(hostObj, cableId, fiberNumber, opts) {
+    if (!hostObj || !hostObj.properties || !cableId || fiberNumber == null) return null;
+    opts = opts || {};
+    var skipSplice = !!opts.skipSpliceInherit;
+    var hostType = hostObj.properties.get('type');
+
+    if (hostType === 'olt') {
+        var oltUid = getObjectUniqueId(hostObj);
+        var oltName = hostObj.properties.get('name') || 'OLT';
+        var keyOlt = fiberConnKey(cableId, fiberNumber);
+        var incomingOlt = hostObj.properties.get('incomingFiber');
+        if (incomingOlt && fiberConnKey(incomingOlt.cableId, incomingOlt.fiberNumber) === keyOlt) {
+            return attachFiberSignalSourceHost({
+                kind: 'olt',
+                oltId: oltUid,
+                oltName: oltName,
+                incoming: true
+            }, hostObj, {});
+        }
+        var paOlt = hostObj.properties.get('portAssignments') || {};
+        for (var pkO in paOlt) {
+            if (!Object.prototype.hasOwnProperty.call(paOlt, pkO)) continue;
+            var aO = paOlt[pkO];
+            if (aO && fiberConnKey(aO.cableId, aO.fiberNumber) === keyOlt) {
+                return attachFiberSignalSourceHost({
+                    kind: 'olt',
+                    oltId: oltUid,
+                    oltName: oltName,
+                    portNumber: parseInt(pkO, 10),
+                    incoming: false
+                }, hostObj, {});
+            }
+        }
+        return attachFiberSignalSourceHost({
+            kind: 'olt',
+            oltId: oltUid,
+            oltName: oltName,
+            physicalCableOnly: true
+        }, hostObj, { viaPhysicalCable: true });
+    }
+
+    function mapEntry(propName) {
+        return skipSplice
+            ? getHostFiberMapEntry(hostObj, propName, cableId, fiberNumber)
+            : getHostAssignment(hostObj, propName, cableId, fiberNumber);
+    }
+    function viaSpliceFlag(propName) {
+        if (skipSplice) return false;
+        if (getHostFiberMapEntry(hostObj, propName, cableId, fiberNumber)) return false;
+        return !!getHostAssignment(hostObj, propName, cableId, fiberNumber);
+    }
+
+    var nodeAss = mapEntry('nodeConnections');
+    if (nodeAss && nodeAss.nodeId) {
+        return attachFiberSignalSourceHost({
+            kind: 'node',
+            nodeId: nodeAss.nodeId,
+            nodeName: nodeAss.nodeName || 'Узел',
+            switchId: nodeAss.switchId || null,
+            switchPort: nodeAss.switchPort != null ? nodeAss.switchPort : null,
+            switchPortType: nodeAss.switchPortType || null
+        }, hostObj, { viaSplice: viaSpliceFlag('nodeConnections') });
+    }
+
+    if (isCrossLikeHostType(hostType) && typeof getCrossPortForFiber === 'function') {
+        var splicedHere = typeof isFiberSplicedAtHost === 'function' && isFiberSplicedAtHost(hostObj, cableId, fiberNumber);
+        if (!splicedHere) {
+            var portNum = getCrossPortForFiber(hostObj, cableId, fiberNumber);
+            if (portNum != null) {
+                return attachFiberSignalSourceHost({
+                    kind: 'crossPort',
+                    port: portNum
+                }, hostObj, { viaSplice: false });
+            }
+        }
+    }
+
+    var oltAss = mapEntry('oltConnections');
+    if (oltAss && oltAss.oltId) {
+        return attachFiberSignalSourceHost({
+            kind: 'olt',
+            oltId: oltAss.oltId,
+            oltName: oltAss.oltName || 'OLT',
+            portNumber: oltAss.portNumber != null ? oltAss.portNumber : null,
+            incoming: !!oltAss.incoming,
+            physicalCableOnly: !!oltAss.physicalCableOnly
+        }, hostObj, { viaSplice: viaSpliceFlag('oltConnections') });
+    }
+
+    var key = fiberConnKey(cableId, fiberNumber);
+    var fibersToCheck = skipSplice
+        ? [{ cableId: cableId, fiberNumber: fiberNumber }]
+        : getSplicedFiberGroup(hostObj, cableId, fiberNumber);
+    for (var fi = 0; fi < fibersToCheck.length; fi++) {
+        var fk = fiberConnKey(fibersToCheck[fi].cableId, fibersToCheck[fi].fiberNumber);
+        for (var oi = 0; oi < objects.length; oi++) {
+            var oltObj = objects[oi];
+            if (!oltObj.properties || oltObj.properties.get('type') !== 'olt') continue;
+            var oltUid2 = getObjectUniqueId(oltObj);
+            var incoming = oltObj.properties.get('incomingFiber');
+            if (incoming && fiberConnKey(incoming.cableId, incoming.fiberNumber) === fk) {
+                return attachFiberSignalSourceHost({
+                    kind: 'olt',
+                    oltId: oltUid2,
+                    oltName: oltObj.properties.get('name') || 'OLT',
+                    incoming: true
+                }, hostObj, { viaSplice: fk !== key });
+            }
+            var pa = oltObj.properties.get('portAssignments') || {};
+            for (var pk in pa) {
+                if (!Object.prototype.hasOwnProperty.call(pa, pk)) continue;
+                var a = pa[pk];
+                if (a && fiberConnKey(a.cableId, a.fiberNumber) === fk) {
+                    return attachFiberSignalSourceHost({
+                        kind: 'olt',
+                        oltId: oltUid2,
+                        oltName: oltObj.properties.get('name') || 'OLT',
+                        portNumber: parseInt(pk, 10),
+                        incoming: false
+                    }, hostObj, { viaSplice: fk !== key });
+                }
+            }
+        }
+    }
+
+    if (!skipSplice) {
+        var physical = getFiberOltPhysicalAtHost(hostObj, cableId, fiberNumber);
+        if (physical) {
+            return attachFiberSignalSourceHost({
+                kind: 'olt',
+                oltId: physical.oltId,
+                oltName: physical.oltName || 'OLT',
+                physicalCableOnly: true,
+                incoming: false
+            }, hostObj, { viaSplice: !!physical.viaSplice, viaPhysicalCable: true });
+        }
+    } else {
+        var physicalDirect = getOltAtHostCableEnd(hostObj, cableId);
+        if (physicalDirect) {
+            return attachFiberSignalSourceHost({
+                kind: 'olt',
+                oltId: physicalDirect.oltId,
+                oltName: physicalDirect.oltName || 'OLT',
+                physicalCableOnly: true,
+                incoming: false
+            }, hostObj, { viaPhysicalCable: true });
+        }
+    }
+
+    var spAss = mapEntry('splitterConnections');
+    if (spAss && spAss.splitterId) {
+        var spName = 'Сплиттер';
+        if (typeof resolveSplitterObject === 'function') {
+            var spObj = resolveSplitterObject(spAss.splitterId);
+            if (spObj) spName = spObj.properties.get('name') || spName;
+        }
+        return attachFiberSignalSourceHost({
+            kind: 'splitter',
+            splitterId: spAss.splitterId,
+            splitterName: spName,
+            role: 'input'
+        }, hostObj, { viaSplice: viaSpliceFlag('splitterConnections') });
+    }
+
+    if (typeof findSplitterOutputAtHost === 'function') {
+        var outHit = null;
+        if (skipSplice) {
+            outHit = findSplitterOutputAtHost(hostObj, cableId, fiberNumber);
+        } else {
+            for (var si = 0; si < fibersToCheck.length; si++) {
+                outHit = findSplitterOutputAtHost(hostObj, fibersToCheck[si].cableId, fibersToCheck[si].fiberNumber);
+                if (outHit) break;
+            }
+        }
+        if (outHit && outHit.splitterObj) {
+            return attachFiberSignalSourceHost({
+                kind: 'splitter',
+                splitterId: outHit.splitterId,
+                splitterName: outHit.splitterObj.properties.get('name') || 'Сплиттер',
+                role: 'output',
+                outputIndex: outHit.outputIndex
+            }, hostObj, {
+                viaSplice: !skipSplice && !(outHit.conn && outHit.conn.cableId === cableId && outHit.conn.fiberNumber === fiberNumber)
+            });
+        }
+    }
+
+    var onuAss = mapEntry('onuConnections');
+    if (onuAss && onuAss.onuId) {
+        return attachFiberSignalSourceHost({
+            kind: 'onu',
+            onuId: onuAss.onuId,
+            onuName: onuAss.onuName || 'ONU'
+        }, hostObj, { viaSplice: viaSpliceFlag('onuConnections') });
+    }
+
+    var mcAss = mapEntry('mediaConverterConnections');
+    if (mcAss && mcAss.mediaConverterId) {
+        return attachFiberSignalSourceHost({
+            kind: 'mc',
+            mediaConverterId: mcAss.mediaConverterId,
+            mediaConverterName: mcAss.mediaConverterName || 'Медиаконвертер'
+        }, hostObj, { viaSplice: viaSpliceFlag('mediaConverterConnections') });
+    }
+
+    var rbAss = mapEntry('radioBridgeConnections');
+    if (rbAss && rbAss.radioBridgeId) {
+        return attachFiberSignalSourceHost({
+            kind: 'rb',
+            radioBridgeId: rbAss.radioBridgeId,
+            radioBridgeName: rbAss.radioBridgeName || 'Радиомост'
+        }, hostObj, { viaSplice: viaSpliceFlag('radioBridgeConnections') });
+    }
+
+    return null;
+}
+
+function enqueueFiberSignalSourceWalkState(queue, visited, state) {
+    var stateKey = (state.host ? getObjectUniqueId(state.host) : '_') + '|' + fiberConnKey(state.cableId, state.fiberNumber);
+    if (visited.has(stateKey)) return;
+    visited.add(stateKey);
+    queue.push(state);
+}
+
+function expandFiberSignalSourceFromHost(queue, visited, host, cableId, fiberNumber) {
+    if (!host) return;
+    getSplicedFiberGroup(host, cableId, fiberNumber).forEach(function(g) {
+        enqueueFiberSignalSourceWalkState(queue, visited, { host: host, cableId: g.cableId, fiberNumber: g.fiberNumber });
+    });
+    var viaSp = getSplitterOutputUpstreamFiber(host, cableId, fiberNumber);
+    if (viaSp) {
+        enqueueFiberSignalSourceWalkState(queue, visited, {
+            host: viaSp.hostObj,
+            cableId: viaSp.cableId,
+            fiberNumber: viaSp.fiberNumber
+        });
+    }
+    if (isCrossLikeHostType(host.properties.get('type')) && typeof getCrossPortForFiber === 'function' &&
+        typeof getCrossPortPatch === 'function' && typeof resolveCrossPortPatchHost === 'function') {
+        var portNum = getCrossPortForFiber(host, cableId, fiberNumber);
+        if (portNum != null) {
+            var patch = getCrossPortPatch(host, portNum);
+            if (patch) {
+                var mate = resolveCrossPortPatchHost(patch.crossId);
+                if (mate) {
+                    var mateKeys = typeof getCrossPortFiberKeys === 'function' ? getCrossPortFiberKeys(mate, patch.port) : [];
+                    if (mateKeys.length) {
+                        for (var mi = 0; mi < mateKeys.length; mi++) {
+                            var parsed = typeof parseFiberPortKey === 'function' ? parseFiberPortKey(mateKeys[mi]) : parseFiberConnectionKey(mateKeys[mi]);
+                            if (!parsed) continue;
+                            enqueueFiberSignalSourceWalkState(queue, visited, {
+                                host: mate,
+                                cableId: parsed.cableId,
+                                fiberNumber: parsed.fiberNumber
+                            });
+                        }
+                    } else {
+                        enqueueFiberSignalSourceWalkState(queue, visited, {
+                            host: mate,
+                            cableId: cableId,
+                            fiberNumber: fiberNumber
+                        });
+                    }
+                }
+            }
+        }
+    }
+}
+
+function expandFiberSignalSourceNetworkState(queue, visited, state) {
+    if (state.host) {
+        expandFiberSignalSourceFromHost(queue, visited, state.host, state.cableId, state.fiberNumber);
+    }
+    var cable = objects.find(function(c) {
+        return c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === state.cableId;
+    });
+    if (!cable) return;
+    var fromObj = cable.properties.get('from');
+    var toObj = cable.properties.get('to');
+    var endpoints = [];
+    if (fromObj) endpoints.push(fromObj);
+    if (toObj) endpoints.push(toObj);
+    var routePts = typeof getCableRoutePointsForTrace === 'function' ? getCableRoutePointsForTrace(cable) : null;
+    if (routePts && routePts.length) {
+        routePts.forEach(function(pt) {
+            if (pt && pt.properties) {
+                var ptType = pt.properties.get('type');
+                if (isFiberHostType(ptType) || ptType === 'olt' || ptType === 'cabinet') {
+                    endpoints.push(pt);
+                }
+            }
+        });
+    }
+    endpoints.forEach(function(ep) {
+        enqueueFiberHostWalkTargetForSignalSource(queue, visited, ep, state.cableId, state.fiberNumber, state.host);
+    });
+}
+
+function enqueueFiberHostWalkTargetForSignalSource(queue, visited, host, cableId, fiberNumber, skipHost) {
+    if (!host || !host.properties) return;
+    var skipId = skipHost ? getObjectUniqueId(skipHost) : null;
+    function pushHost(h) {
+        if (!h || !h.properties) return;
+        if (skipId && getObjectUniqueId(h) === skipId) return;
+        var t = h.properties.get('type');
+        if (isFiberHostType(t) || t === 'olt') {
+            enqueueFiberSignalSourceWalkState(queue, visited, { host: h, cableId: cableId, fiberNumber: fiberNumber });
+        }
+    }
+    if (host.properties.get('type') === 'cabinet' && typeof getCabinetCableEndpointMembers === 'function') {
+        getCabinetCableEndpointMembers(host, {}).forEach(pushHost);
+        return;
+    }
+    var asOlt = cableEndpointRepresentsOlt(host);
+    if (asOlt) {
+        pushHost(asOlt);
+        if (asOlt !== host && host.properties.get('type') === 'cabinet') return;
+    }
+    pushHost(host);
+}
+
+/** Обход: только последнее место (один hop — предыдущий кросс/муфта/кассета/OLT). */
+function findFiberSignalSourceViaNetwork(startHost, startCableId, startFiberNumber) {
+    if (!startHost || !startCableId || startFiberNumber == null) return null;
+    var startId = getObjectUniqueId(startHost) || '';
+    var candidates = [];
+    var seenHost = new Set();
+
+    function considerRemoteHost(host, cableId, fiberNumber) {
+        if (!host || !host.properties) return;
+        var hid = getObjectUniqueId(host) || '';
+        if (!hid || hid === startId) return;
+        var t = host.properties.get('type');
+        if (t === 'cabinet' && typeof getCabinetCableEndpointMembers === 'function') {
+            getCabinetCableEndpointMembers(host, {}).forEach(function(m) {
+                considerRemoteHost(m, cableId, fiberNumber);
+            });
+            return;
+        }
+        var asOlt = cableEndpointRepresentsOlt(host);
+        if (asOlt) {
+            considerRemoteHost(asOlt, cableId, fiberNumber);
+            if (host.properties.get('type') === 'cabinet') return;
+        }
+        if (!isFiberHostType(t) && t !== 'olt') return;
+        var key = hid + '|' + fiberConnKey(cableId, fiberNumber);
+        if (seenHost.has(key)) return;
+        seenHost.add(key);
+        candidates.push({ host: host, cableId: cableId, fiberNumber: fiberNumber, hostType: t });
+    }
+
+    function considerCableOtherEnd(host, cableId, fiberNumber) {
+        var cable = objects.find(function(c) {
+            return c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === cableId;
+        });
+        if (!cable || typeof getOtherEndOfCable !== 'function') return;
+        var other = getOtherEndOfCable(cable, host);
+        considerRemoteHost(other, cableId, fiberNumber);
+        var routePts = typeof getCableRoutePointsForTrace === 'function' ? getCableRoutePointsForTrace(cable) : null;
+        if (routePts && routePts.length) {
+            routePts.forEach(function(pt) {
+                if (!pt || !pt.properties) return;
+                var ptType = pt.properties.get('type');
+                if (isFiberHostType(ptType) || ptType === 'olt' || ptType === 'cabinet') {
+                    var ptId = getObjectUniqueId(pt);
+                    if (ptId && ptId !== startId) considerRemoteHost(pt, cableId, fiberNumber);
+                }
+            });
+        }
+    }
+
+    // Прямой кабель + жилы через локальное сращивание (всё ещё один hop с текущего хоста).
+    getSplicedFiberGroup(startHost, startCableId, startFiberNumber).forEach(function(g) {
+        considerCableOtherEnd(startHost, g.cableId, g.fiberNumber);
+    });
+
+    // Кроссировка портов — соседний кросс тоже «последнее место».
+    if (isCrossLikeHostType(startHost.properties.get('type')) && typeof getCrossPortForFiber === 'function' &&
+        typeof getCrossPortPatch === 'function' && typeof resolveCrossPortPatchHost === 'function') {
+        var portNum = getCrossPortForFiber(startHost, startCableId, startFiberNumber);
+        if (portNum != null) {
+            var patch = getCrossPortPatch(startHost, portNum);
+            if (patch) {
+                var mate = resolveCrossPortPatchHost(patch.crossId);
+                if (mate) {
+                    var mateKeys = typeof getCrossPortFiberKeys === 'function' ? getCrossPortFiberKeys(mate, patch.port) : [];
+                    if (mateKeys.length) {
+                        for (var mi = 0; mi < mateKeys.length; mi++) {
+                            var parsed = typeof parseFiberPortKey === 'function'
+                                ? parseFiberPortKey(mateKeys[mi])
+                                : parseFiberConnectionKey(mateKeys[mi]);
+                            if (!parsed) continue;
+                            considerRemoteHost(mate, parsed.cableId, parsed.fiberNumber);
+                        }
+                    } else {
+                        considerRemoteHost(mate, startCableId, startFiberNumber);
+                    }
+                }
+            }
+        }
+    }
+
+    if (!candidates.length) return null;
+
+    // Сначала кросс/муфта/кассета, потом OLT.
+    candidates.sort(function(a, b) {
+        var aFiber = isFiberHostType(a.hostType) ? 0 : 1;
+        var bFiber = isFiberHostType(b.hostType) ? 0 : 1;
+        return aFiber - bFiber;
+    });
+
+    for (var i = 0; i < candidates.length; i++) {
+        var cand = candidates[i];
+        var found = resolveFiberSignalSourceAtHost(cand.host, cand.cableId, cand.fiberNumber, {});
+        if (found) {
+            return Object.assign({}, found, {
+                inheritedFromNetwork: true,
+                lastPlace: true,
+                placeHostId: found.hostId,
+                placeHostName: found.hostName,
+                placeHostType: found.hostType
+            });
+        }
+    }
+
+    // На предыдущем месте нет назначения — показываем само место.
+    var placeCand = candidates[0];
+    return Object.assign(getFiberHostMeta(placeCand.host), {
+        kind: 'place',
+        inheritedFromNetwork: true,
+        lastPlace: true,
+        placeHostId: getObjectUniqueId(placeCand.host),
+        placeHostName: placeCand.host.properties.get('name') || getFiberHostDefaultName(placeCand.hostType),
+        placeHostType: placeCand.hostType
+    });
+}
+
+/**
+ * Источник сигнала жилы: последнее место по пути (предыдущий хост), не дальний корень.
+ */
+function getFiberSignalSource(hostObj, cableId, fiberNumber) {
+    if (!hostObj || !cableId || fiberNumber == null) return null;
+    return findFiberSignalSourceViaNetwork(hostObj, cableId, fiberNumber);
+}
+
+/** Короткая метка типа хоста для подписи. */
+function getFiberSignalPlaceTypeLabel(hostType) {
+    if (hostType === 'cross') return 'Кросс';
+    if (hostType === 'sleeve') return 'Муфта';
+    if (hostType === 'spliceCassette') return 'Кассета';
+    if (hostType === 'olt') return 'OLT';
+    return 'Хост';
+}
+
+/** Деталь назначения без имени хоста (для двухстрочной подписи). */
+function formatFiberSignalSourceDetail(source, escapeFn) {
+    if (!source || !source.kind || source.kind === 'place') return '';
+    var esc = typeof escapeFn === 'function' ? escapeFn : function(s) { return s == null ? '' : String(s); };
+    if (source.kind === 'node') {
+        var n = 'Узел ' + esc(source.nodeName || 'Узел');
+        if (source.switchPort != null && source.switchPort !== '') n += ' · SFP ' + esc(String(source.switchPort));
+        return n;
+    }
+    if (source.kind === 'crossPort') return 'порт ' + esc(String(source.port));
+    if (source.kind === 'olt') {
+        var oltName = esc(source.oltName || 'OLT');
+        if (source.physicalCableOnly) return 'OLT ' + oltName;
+        if (source.incoming) return 'приход OLT ' + oltName;
+        if (source.portNumber != null) return 'OLT ' + oltName + ' · п.' + esc(String(source.portNumber));
+        return 'OLT ' + oltName;
+    }
+    if (source.kind === 'splitter') {
+        var sp = '«' + esc(source.splitterName || 'Сплиттер') + '»';
+        if (source.role === 'output' && source.outputIndex != null) sp += ' вых.' + (source.outputIndex + 1);
+        return sp;
+    }
+    if (source.kind === 'onu') return 'ONU ' + esc(source.onuName || 'ONU');
+    if (source.kind === 'mc') return 'МК ' + esc(source.mediaConverterName || 'Медиаконвертер');
+    if (source.kind === 'rb') return 'РМ ' + esc(source.radioBridgeName || 'Радиомост');
+    return '';
+}
+
+/** Текст статуса: место первым, затем деталь назначения. */
+function formatFiberSignalSourceText(source, escapeFn) {
+    if (!source || !source.kind) return '';
+    var esc = typeof escapeFn === 'function' ? escapeFn : function(s) { return s == null ? '' : String(s); };
+    var placeName = esc(source.placeHostName || source.hostName || getFiberHostDefaultName(source.placeHostType || source.hostType));
+    var place = '«' + placeName + '»';
+    var detail = formatFiberSignalSourceDetail(source, escapeFn);
+    if (source.kind === 'place') {
+        return '← ' + place;
+    }
+    if (source.kind === 'crossPort') {
+        return '← ' + place + ' · порт ' + esc(String(source.port));
+    }
+    if (detail) return '← ' + place + ' · ' + detail;
+    return '← ' + place;
+}
+
+/** Части для двухстрочной подписи на схеме. */
+function formatFiberSignalSourceSchemeLines(source, escapeFn) {
+    if (!source || !source.kind) return null;
+    var esc = typeof escapeFn === 'function' ? escapeFn : function(s) { return s == null ? '' : String(s); };
+    var placeName = esc(source.placeHostName || source.hostName || getFiberHostDefaultName(source.placeHostType || source.hostType));
+    var placeType = getFiberSignalPlaceTypeLabel(source.placeHostType || source.hostType);
+    var detail = formatFiberSignalSourceDetail(source, escapeFn);
+    if (source.kind === 'crossPort') {
+        detail = 'порт ' + esc(String(source.port));
+    }
+    return {
+        place: placeName,
+        placeType: placeType,
+        detail: detail || '',
+        full: formatFiberSignalSourceText(source, escapeFn)
+    };
+}
+
 /** OLT на жиле: явное назначение в муфте/кроссе или через сращённую жилу / кабель от OLT. */
 function getFiberOltAssignment(hostObj, cableId, fiberNumber) {
     if (!hostObj) return null;

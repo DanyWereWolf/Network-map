@@ -735,12 +735,8 @@
         var linkKey = linkKind === 'input' ? ('in:' + rec.id) : ('out:' + rec.id + ':' + attrs.outputIndex);
         var label = attrs.label ? String(attrs.label).trim() : '';
         buf += '<path class="fiber-scheme-splitter-link-shadow" d="' + pathD + '" stroke="' + shadow + '" stroke-width="6" stroke-linecap="round" opacity="0.35" pointer-events="none"/>';
-        buf += '<path class="fiber-scheme-splitter-link" d="' + pathD + '" data-link-key="' + linkKey + '" data-splitter-id="' + attrs.id + '" data-link-kind="' + linkKind + '"' + attrs.extra + ' data-conn-label="' + esc(label) + '" stroke="' + color + '" stroke-width="4.5" stroke-linecap="round" pointer-events="none">';
-        if (label) buf += '<title>' + esc(label) + '</title>';
-        buf += '</path>';
-        buf += '<path class="fiber-scheme-splitter-link-hit" d="' + pathD + '" stroke="transparent" stroke-width="14" data-link-key="' + linkKey + '" data-splitter-id="' + attrs.id + '" data-link-kind="' + linkKind + '"' + attrs.extra + ' style="cursor:' + (renderOpts.isEditMode ? 'pointer' : 'default') + '">';
-        if (label) buf += '<title>' + esc(label) + '</title>';
-        buf += '</path>';
+        buf += '<path class="fiber-scheme-splitter-link" d="' + pathD + '" data-link-key="' + linkKey + '" data-splitter-id="' + attrs.id + '" data-link-kind="' + linkKind + '"' + attrs.extra + ' data-conn-label="' + esc(label) + '" stroke="' + color + '" stroke-width="4.5" stroke-linecap="round" pointer-events="none"></path>';
+        buf += '<path class="fiber-scheme-splitter-link-hit" d="' + pathD + '" stroke="transparent" stroke-width="14" data-link-key="' + linkKey + '" data-splitter-id="' + attrs.id + '" data-link-kind="' + linkKind + '"' + attrs.extra + ' style="cursor:' + (renderOpts.isEditMode ? 'pointer' : 'default') + '"></path>';
         if (label && renderOpts.pathMidpoint) {
             var mid = renderOpts.pathMidpoint(pathD);
             renderOpts._linkLabels = renderOpts._linkLabels || [];
@@ -1889,12 +1885,16 @@
             labelsHtml += '<g class="fiber-scheme-splitter-link-labels">';
             renderOpts._linkLabels.forEach(function (item) {
                 var mid = item.mid || { x: 0, y: 0 };
-                var tw = Math.min(148, Math.max(40, item.label.length * 6.5 + 16));
-                var tx = mid.x - tw / 2;
-                labelsHtml += '<g class="fiber-scheme-splitter-conn-label" data-link-key="' + item.linkKey + '">';
-                labelsHtml += '<rect class="fiber-scheme-splitter-conn-label-bg" x="' + tx + '" y="' + (mid.y - 11) + '" width="' + tw + '" height="21" rx="5" fill="' + connLabelBg + '" stroke="' + connLabelBorder + '" stroke-width="0.75"/>';
-                labelsHtml += '<text class="fiber-scheme-splitter-conn-label-text" x="' + mid.x + '" y="' + (mid.y + 5) + '" text-anchor="middle" style="font-size:10px;font-weight:600;fill:' + connLabelFill + ';pointer-events:none;">' + esc(item.label) + '</text>';
-                labelsHtml += '</g>';
+                if (typeof global.buildFiberSchemeCalloutChipSvg === 'function') {
+                    labelsHtml += global.buildFiberSchemeCalloutChipSvg({
+                        className: 'fiber-scheme-splitter-conn-label',
+                        dataAttrs: 'data-link-key="' + item.linkKey + '"',
+                        text: item.label,
+                        x: mid.x,
+                        y: mid.y,
+                        isDark: isDark
+                    });
+                }
             });
             labelsHtml += '</g>';
         }

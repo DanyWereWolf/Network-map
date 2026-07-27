@@ -34,7 +34,8 @@ function emptyStore() {
     };
 }
 
-async function hydrateStoreFromMysql() {
+async function hydrateStoreFromMysql(opts) {
+    opts = opts || {};
     await getPool();
     const store = emptyStore();
 
@@ -99,23 +100,40 @@ async function hydrateStoreFromMysql() {
 
     // Map: prefer relational assemble, else blob
     store.mapDataByOrg = {};
-    for (var oi = 0; oi < store.organizations.length; oi++) {
-        var orgId = store.organizations[oi].id;
-        var assembled = await withTransaction(async function (conn) {
-            return mapAssemble.assembleMapData(conn, orgId);
+    var rawMapBlobsByOrg = Object.create(null);
+    var lazyMaps = !!(opts && opts.lazyMaps);
+
+    if (lazyMaps) {
+        // Keep raw blobs only — parse on first getMapData (avoids assembling every org at boot).
+        const [blobs] = await query('SELECT org_id, map_json FROM org_map_blobs');
+        (blobs || []).forEach(function (row) {
+            if (row && row.org_id != null) {
+                rawMapBlobsByOrg[row.org_id] = row.map_json;
+            }
         });
-        if (assembled && assembled.length) {
-            store.mapDataByOrg[orgId] = assembled;
-        } else {
-            const [blobs] = await query('SELECT map_json FROM org_map_blobs WHERE org_id = ?', [orgId]);
-            if (blobs && blobs[0] && blobs[0].map_json) {
-                try {
-                    store.mapDataByOrg[orgId] = JSON.parse(blobs[0].map_json);
-                } catch (e) {
+    } else {
+        for (var oi = 0; oi < store.organizations.length; oi++) {
+            var orgId = store.organizations[oi].id;
+            var assembled = await withTransaction(async function (conn) {
+                return mapAssemble.assembleMapData(conn, orgId);
+            });
+            if (assembled && assembled.length) {
+                store.mapDataByOrg[orgId] = assembled;
+                rawMapBlobsByOrg[orgId] = JSON.stringify(assembled);
+            } else {
+                const [blobs] = await query('SELECT map_json FROM org_map_blobs WHERE org_id = ?', [orgId]);
+                if (blobs && blobs[0] && blobs[0].map_json) {
+                    try {
+                        store.mapDataByOrg[orgId] = JSON.parse(blobs[0].map_json);
+                        rawMapBlobsByOrg[orgId] = typeof blobs[0].map_json === 'string'
+                            ? blobs[0].map_json
+                            : JSON.stringify(blobs[0].map_json);
+                    } catch (e) {
+                        store.mapDataByOrg[orgId] = [];
+                    }
+                } else {
                     store.mapDataByOrg[orgId] = [];
                 }
-            } else {
-                store.mapDataByOrg[orgId] = [];
             }
         }
     }
@@ -243,7 +261,30 @@ async function hydrateStoreFromMysql() {
         store.settings.userThemes = JSON.stringify(themes);
     } catch (e2) {}
 
+    if (opts.lazyMaps) {
+        return { store: store, rawMapBlobsByOrg: rawMapBlobsByOrg };
+    }
     return store;
+}
+
+async function loadOrgMap(orgId) {
+    if (!orgId) return [];
+    var assembled = await withTransaction(async function (conn) {
+        return mapAssemble.assembleMapData(conn, orgId);
+    });
+    if (assembled && assembled.length) return assembled;
+    const [blobs] = await query('SELECT map_json FROM org_map_blobs WHERE org_id = ?', [orgId]);
+    if (blobs && blobs[0] && blobs[0].map_json) {
+        try {
+            var parsed = typeof blobs[0].map_json === 'string'
+                ? JSON.parse(blobs[0].map_json)
+                : blobs[0].map_json;
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+            return [];
+        }
+    }
+    return [];
 }
 
 async function persistStoreToMysql(store, opts) {
@@ -267,7 +308,9 @@ async function persistStoreToMysql(store, opts) {
         await conn.query('DELETE FROM platform_settings');
         await conn.query('DELETE FROM sessions');
         await conn.query('DELETE FROM users');
-        await conn.query('DELETE FROM org_map_blobs');
+        if (!opts.skipMaps) {
+            await conn.query('DELETE FROM org_map_blobs');
+        }
         // map relational cleared per-org below
         const [existingOrgs] = await conn.query('SELECT id FROM organizations');
         var keepOrg = {};
@@ -359,16 +402,22 @@ async function persistStoreToMysql(store, opts) {
             }
         }
 
-        // Maps
-        var mapByOrg = store.mapDataByOrg || {};
-        for (var mk of Object.keys(mapByOrg)) {
-            var items = Array.isArray(mapByOrg[mk]) ? mapByOrg[mk] : [];
-            await conn.query(
-                'INSERT INTO org_map_blobs (org_id, map_json, updated_at) VALUES (?,?,?) ON DUPLICATE KEY UPDATE map_json=VALUES(map_json), updated_at=VALUES(updated_at)',
-                [mk, JSON.stringify(items), toMysqlDate(new Date())]
-            );
-            if (!opts.skipRelationalMap) {
-                await mapAssemble.disassembleMapData(conn, mk, items);
+        // Maps (optional — dirty orgs are persisted via persistOrgMap)
+        if (!opts.skipMaps) {
+            var mapByOrg = store.mapDataByOrg || {};
+            var dirtyOnly = opts.dirtyOrgIds && opts.dirtyOrgIds.length
+                ? opts.dirtyOrgIds.map(String)
+                : null;
+            for (var mk of Object.keys(mapByOrg)) {
+                if (dirtyOnly && dirtyOnly.indexOf(String(mk)) === -1) continue;
+                var items = Array.isArray(mapByOrg[mk]) ? mapByOrg[mk] : [];
+                await conn.query(
+                    'INSERT INTO org_map_blobs (org_id, map_json, updated_at) VALUES (?,?,?) ON DUPLICATE KEY UPDATE map_json=VALUES(map_json), updated_at=VALUES(updated_at)',
+                    [mk, JSON.stringify(items), toMysqlDate(new Date())]
+                );
+                if (!opts.skipRelationalMap) {
+                    await mapAssemble.disassembleMapData(conn, mk, items);
+                }
             }
         }
 
@@ -524,6 +573,7 @@ module.exports = {
     hydrateStoreFromMysql,
     persistStoreToMysql,
     persistOrgMap,
+    loadOrgMap,
     emptyStore,
     toMysqlDate
 };

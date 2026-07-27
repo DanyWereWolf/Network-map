@@ -419,10 +419,12 @@ function updateCrossDisplay(scope) {
     }, []) : objects.filter(function(obj) {
         return obj.properties && obj.properties.get('type') === 'cross';
     });
-    crossesForCables.forEach(function(cross) {
-        updateConnectedCables(cross);
-    });
+    // Full rebuild does not move endpoints — scanning every cable per cross is O(n²) and kills INP at 10k+.
+    // Only sync cables for scoped group updates (actual moves).
     if (keysOnly) {
+        crossesForCables.forEach(function(cross) {
+            updateConnectedCables(cross);
+        });
         if (typeof applyMapFilterForObject === 'function') {
             crossesForCables.forEach(function(cross) { applyMapFilterForObject(cross); });
         }
@@ -432,7 +434,7 @@ function updateCrossDisplay(scope) {
                 typeof getExpertZoomFlags === 'function' ? getExpertZoomFlags() : null
             );
         }
-    } else if (typeof applyMapFilter === 'function') {
+    } else if (typeof applyMapFilter === 'function' && !(typeof isMapBulkImportActive === 'function' && isMapBulkImportActive())) {
         applyMapFilter();
     }
 }
@@ -655,10 +657,11 @@ function updateNodeDisplay(scope) {
     }, []) : objects.filter(function(obj) {
         return obj.properties && obj.properties.get('type') === 'node';
     });
-    nodesForCables.forEach(function(node) {
-        updateConnectedCables(node);
-    });
+    // Same as crosses: full rebuild must not call updateConnectedCables for every node.
     if (keysOnly) {
+        nodesForCables.forEach(function(node) {
+            updateConnectedCables(node);
+        });
         if (typeof applyMapFilterForObject === 'function') {
             nodesForCables.forEach(function(node) { applyMapFilterForObject(node); });
         }
@@ -668,7 +671,7 @@ function updateNodeDisplay(scope) {
                 typeof getExpertZoomFlags === 'function' ? getExpertZoomFlags() : null
             );
         }
-    } else if (typeof applyMapFilter === 'function') {
+    } else if (typeof applyMapFilter === 'function' && !(typeof isMapBulkImportActive === 'function' && isMapBulkImportActive())) {
         applyMapFilter();
     }
 }

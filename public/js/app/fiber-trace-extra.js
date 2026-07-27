@@ -139,39 +139,44 @@ function traceFromNodeSplitter(nodeObj, splitterId, outputIndex) {
     }
     var nodeUid = getObjectUniqueId(nodeObj);
     var nodeName = nodeObj.properties.get('name') || 'Узел';
-    var res = traceAllFiberPathsFromObject(hostIn.hostObj, hostIn.cableId, hostIn.fiberNumber);
-    if (res.error) {
-        showError('Ошибка трассировки: ' + res.error, 'Трассировка');
-        return;
-    }
-    if (!res.paths.length) {
-        showWarning('Путь не найден', 'Трассировка');
-        return;
-    }
-    var paths = res.paths.filter(function(p) { return pathReachesNodeViaSplitter(p, nodeUid, splitterId); });
-    if (!paths.length) paths = res.paths;
     var spName = sp.properties.get('name') || 'Сплиттер';
-    var bodyHtml = '<p class="trace-intro">Узел «' + escapeHtml(nodeName) + '» · сплиттер «' + escapeHtml(spName) + '», выход ' + (outputIndex + 1) + '</p>';
-    if (paths.length > 1 && window.FiberTrace && FiberTrace.renderPathsOverviewHtml) {
-        bodyHtml += FiberTrace.renderPathsOverviewHtml(paths);
-    }
-    var stepNum = 1;
-    for (var pi = 0; pi < paths.length; pi++) {
-        if (paths.length > 1 && pi > 0) {
-            bodyHtml += '<div class="trace-branch-separator" data-branch-index="' + pi + '">' + escapeHtml(FiberTrace.getPathEndpointLabel(paths[pi])) + '</div>';
-        }
-        var pathHtml = renderOnePathToTraceHtml(paths[pi], stepNum);
-        bodyHtml += '<div class="trace-branch-block" data-branch-index="' + pi + '">' + pathHtml.html + '</div>';
-        stepNum = pathHtml.nextStepNumber;
-    }
-    bodyHtml = (typeof appendFiberTraceExtrasHtml === 'function')
-        ? appendFiberTraceExtrasHtml(bodyHtml, paths)
-        : bodyHtml + ((window.FiberTrace && FiberTrace.buildTraceActionsHtml) ? FiberTrace.buildTraceActionsHtml() : '');
-    openFiberTraceModal({
+    runFiberTraceWithLoading({
         title: 'Трассировка к узлу',
-        subtitle: nodeName + ' · выход сплиттера ' + (outputIndex + 1),
-        bodyHtml: bodyHtml,
-        paths: paths
+        subtitle: nodeName + ' · выход сплиттера ' + (outputIndex + 1)
+    }, function() {
+        var res = traceAllFiberPathsFromObject(hostIn.hostObj, hostIn.cableId, hostIn.fiberNumber);
+        if (res.error) {
+            failFiberTraceLoading('Ошибка трассировки: ' + res.error, false);
+            return;
+        }
+        if (!res.paths.length) {
+            failFiberTraceLoading('Путь не найден', true);
+            return;
+        }
+        var paths = res.paths.filter(function(p) { return pathReachesNodeViaSplitter(p, nodeUid, splitterId); });
+        if (!paths.length) paths = res.paths;
+        var bodyHtml = '<p class="trace-intro">Узел «' + escapeHtml(nodeName) + '» · сплиттер «' + escapeHtml(spName) + '», выход ' + (outputIndex + 1) + '</p>';
+        if (paths.length > 1 && window.FiberTrace && FiberTrace.renderPathsOverviewHtml) {
+            bodyHtml += FiberTrace.renderPathsOverviewHtml(paths);
+        }
+        var stepNum = 1;
+        for (var pi = 0; pi < paths.length; pi++) {
+            if (paths.length > 1 && pi > 0) {
+                bodyHtml += '<div class="trace-branch-separator" data-branch-index="' + pi + '">' + escapeHtml(FiberTrace.getPathEndpointLabel(paths[pi])) + '</div>';
+            }
+            var pathHtml = renderOnePathToTraceHtml(paths[pi], stepNum);
+            bodyHtml += '<div class="trace-branch-block" data-branch-index="' + pi + '">' + pathHtml.html + '</div>';
+            stepNum = pathHtml.nextStepNumber;
+        }
+        bodyHtml = (typeof appendFiberTraceExtrasHtml === 'function')
+            ? appendFiberTraceExtrasHtml(bodyHtml, paths)
+            : bodyHtml + ((window.FiberTrace && FiberTrace.buildTraceActionsHtml) ? FiberTrace.buildTraceActionsHtml() : '');
+        openFiberTraceModal({
+            title: 'Трассировка к узлу',
+            subtitle: nodeName + ' · выход сплиттера ' + (outputIndex + 1),
+            bodyHtml: bodyHtml,
+            paths: paths
+        });
     });
 }
 
@@ -558,6 +563,11 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
             var mcConnObjId = item.mediaConverter ? getObjectUniqueId(item.mediaConverter) : null;
             var mcConnShowBtn = mcConnObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(mcConnObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
             html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">⇄</span><div class="trace-path-block trace-path-object"><span>⇄ Вывод на медиаконвертер: Жила ' + item.fiberNumber + ' → ' + escapeHtml(item.mediaConverterName || 'Медиаконвертер') + '</span>' + mcConnShowBtn + '</div></div>';
+            stepNumber++;
+        } else if (item.type === 'radioBridgeConnection') {
+            var rbConnObjId = item.radioBridge ? getObjectUniqueId(item.radioBridge) : null;
+            var rbConnShowBtn = rbConnObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(rbConnObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">◎</span><div class="trace-path-block trace-path-object"><span>◎ Вывод на радиомост: Жила ' + item.fiberNumber + ' → ' + escapeHtml(item.radioBridgeName || 'Радиомост') + '</span>' + rbConnShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'cable') {
             var cableObjId = item.cable ? getObjectUniqueId(item.cable) : null;
@@ -1269,65 +1279,74 @@ function prependOltPrefixToPath(path, oltObj, portNumber, startObj, cableId, fib
 }
 
 function showFiberTraceFromOLTPort(oltObj, oltName, portNumber, startObj, cableId, fiberNumber, traceOptions, targetOnu) {
-    traceOptions = traceOptions || {};
-    if (targetOnu && targetOnu.properties) {
-        traceOptions.targetOnuId = getObjectUniqueId(targetOnu);
-        traceOptions.traceTowardOnu = true;
-    }
-    var biasPrev = findOltTraceBiasPrevious(startObj, cableId, fiberNumber, oltObj);
-    if (biasPrev) {
-        traceOptions = Object.assign({}, traceOptions, { initialPreviousObject: biasPrev });
-    }
-    const res = traceAllFiberPathsFromObject(startObj, cableId, fiberNumber, traceOptions);
-    if (res.error) {
-        showError('Ошибка трассировки: ' + res.error, 'Трассировка');
-        return;
-    }
-    var displayPaths = res.paths.length
-        ? res.paths.map(function(p) {
-            return prependOltPrefixToPath(p, oltObj, portNumber, startObj, cableId, fiberNumber);
-        })
-        : [];
-    if (traceOptions.targetOnuId) {
-        displayPaths = filterPathsToTargetOnu(displayPaths, traceOptions.targetOnuId);
-        displayPaths = preferOnuTracePaths(displayPaths, traceOptions.targetOnuId);
-        if (!displayPaths.some(function(p) { return pathReachesOnu(p, traceOptions.targetOnuId); })) {
-            var fallbackPath = tryCompleteOltTraceToOnu(
-                oltObj, portNumber, startObj, cableId, fiberNumber, traceOptions.targetOnuId, displayPaths, traceOptions
-            );
-            if (fallbackPath) {
-                displayPaths = [fallbackPath];
-            } else if (displayPaths.length) {
-                showWarning('Путь до ONU не найден — показан ближайший участок сети', 'Трассировка');
+    var portLabelEarly = getOltPortLabel(oltObj, portNumber);
+    var loadingSubtitle = formatOltPortDisplay(portNumber, portLabelEarly, true) + ' · ' + (oltName || 'OLT');
+    runFiberTraceWithLoading({
+        title: 'Трассировка от OLT',
+        subtitle: loadingSubtitle
+    }, function() {
+        var opts = traceOptions ? Object.assign({}, traceOptions) : {};
+        if (targetOnu && targetOnu.properties) {
+            opts.targetOnuId = getObjectUniqueId(targetOnu);
+            opts.traceTowardOnu = true;
+        }
+        var biasPrev = findOltTraceBiasPrevious(startObj, cableId, fiberNumber, oltObj);
+        if (biasPrev) {
+            opts = Object.assign({}, opts, { initialPreviousObject: biasPrev });
+        }
+        const res = traceAllFiberPathsFromObject(startObj, cableId, fiberNumber, opts);
+        if (res.error) {
+            failFiberTraceLoading('Ошибка трассировки: ' + res.error, false);
+            return;
+        }
+        var displayPaths = res.paths.length
+            ? res.paths.map(function(p) {
+                return prependOltPrefixToPath(p, oltObj, portNumber, startObj, cableId, fiberNumber);
+            })
+            : [];
+        if (opts.targetOnuId) {
+            displayPaths = filterPathsToTargetOnu(displayPaths, opts.targetOnuId);
+            displayPaths = preferOnuTracePaths(displayPaths, opts.targetOnuId);
+            if (!displayPaths.some(function(p) { return pathReachesOnu(p, opts.targetOnuId); })) {
+                var fallbackPath = tryCompleteOltTraceToOnu(
+                    oltObj, portNumber, startObj, cableId, fiberNumber, opts.targetOnuId, displayPaths, opts
+                );
+                if (fallbackPath) {
+                    displayPaths = [fallbackPath];
+                } else if (displayPaths.length) {
+                    if (typeof showWarning === 'function') {
+                        showWarning('Путь до ONU не найден — показан ближайший участок сети', 'Трассировка');
+                    }
+                }
             }
         }
-    }
-    if (!displayPaths.length) {
-        showWarning('Путь не найден', 'Трассировка');
-        return;
-    }
-    var portLabel = getOltPortLabel(oltObj, portNumber);
-    var bodyHtml = '<p class="trace-intro">OLT «' + escapeHtml(oltName) + '», ' + escapeHtml(formatOltPortDisplay(portNumber, portLabel)) + '</p>';
-    if (displayPaths.length > 1 && window.FiberTrace && FiberTrace.renderPathsOverviewHtml) {
-        bodyHtml += FiberTrace.renderPathsOverviewHtml(displayPaths);
-    }
-    var stepNum = 1;
-    for (var pi = 0; pi < displayPaths.length; pi++) {
-        if (displayPaths.length > 1 && pi > 0) {
-            bodyHtml += '<div class="trace-branch-separator" data-branch-index="' + pi + '">' + escapeHtml(FiberTrace.getPathEndpointLabel(displayPaths[pi])) + '</div>';
+        if (!displayPaths.length) {
+            failFiberTraceLoading('Путь не найден', true);
+            return;
         }
-        var pathHtml = renderOnePathToTraceHtml(displayPaths[pi], stepNum);
-        bodyHtml += '<div class="trace-branch-block" data-branch-index="' + pi + '">' + pathHtml.html + '</div>';
-        stepNum = pathHtml.nextStepNumber;
-    }
-    bodyHtml = (typeof appendFiberTraceExtrasHtml === 'function')
-        ? appendFiberTraceExtrasHtml(bodyHtml, displayPaths)
-        : bodyHtml + ((window.FiberTrace && FiberTrace.buildTraceActionsHtml) ? FiberTrace.buildTraceActionsHtml() : '');
-    openFiberTraceModal({
-        title: 'Трассировка от OLT',
-        subtitle: formatOltPortDisplay(portNumber, portLabel, true) + ' · ' + oltName,
-        bodyHtml: bodyHtml,
-        paths: displayPaths
+        var portLabel = getOltPortLabel(oltObj, portNumber);
+        var bodyHtml = '<p class="trace-intro">OLT «' + escapeHtml(oltName) + '», ' + escapeHtml(formatOltPortDisplay(portNumber, portLabel)) + '</p>';
+        if (displayPaths.length > 1 && window.FiberTrace && FiberTrace.renderPathsOverviewHtml) {
+            bodyHtml += FiberTrace.renderPathsOverviewHtml(displayPaths);
+        }
+        var stepNum = 1;
+        for (var pi = 0; pi < displayPaths.length; pi++) {
+            if (displayPaths.length > 1 && pi > 0) {
+                bodyHtml += '<div class="trace-branch-separator" data-branch-index="' + pi + '">' + escapeHtml(FiberTrace.getPathEndpointLabel(displayPaths[pi])) + '</div>';
+            }
+            var pathHtml = renderOnePathToTraceHtml(displayPaths[pi], stepNum);
+            bodyHtml += '<div class="trace-branch-block" data-branch-index="' + pi + '">' + pathHtml.html + '</div>';
+            stepNum = pathHtml.nextStepNumber;
+        }
+        bodyHtml = (typeof appendFiberTraceExtrasHtml === 'function')
+            ? appendFiberTraceExtrasHtml(bodyHtml, displayPaths)
+            : bodyHtml + ((window.FiberTrace && FiberTrace.buildTraceActionsHtml) ? FiberTrace.buildTraceActionsHtml() : '');
+        openFiberTraceModal({
+            title: 'Трассировка от OLT',
+            subtitle: formatOltPortDisplay(portNumber, portLabel, true) + ' · ' + oltName,
+            bodyHtml: bodyHtml,
+            paths: displayPaths
+        });
     });
 }
 
@@ -1391,67 +1410,124 @@ function preferNodeTracePaths(paths, startNodeObj) {
     });
 }
 
+/** Приоритет веток при старте с кросса/муфты: завершённые и локальные выводы выше. */
+function preferHostWorkspaceTracePaths(paths) {
+    if (!paths || paths.length <= 1) return paths;
+    function hostPathScore(path) {
+        if (!path || !path.length) return 0;
+        var score = 0;
+        var st = (window.FiberTrace && FiberTrace.analyzePathStatus)
+            ? FiberTrace.analyzePathStatus(path)
+            : null;
+        if (st && st.status === 'complete') score += 1000;
+        var hasCable = false;
+        for (var i = 0; i < path.length; i++) {
+            var t = path[i].type;
+            if (t === 'cable' || t === 'connection' || t === 'crossPortPatch') hasCable = true;
+            if (t === 'onuConnection' || t === 'mediaConverterConnection' || t === 'radioBridgeConnection' ||
+                t === 'nodeConnection' || t === 'oltPortConnection') {
+                score += 200;
+            }
+        }
+        // Короткий локальный вывод без ухода в кабель — показать первым
+        if (!hasCable && score >= 200) score += 500;
+        score += Math.min(path.length, 40);
+        return score;
+    }
+    return paths.slice().sort(function(a, b) {
+        return hostPathScore(b) - hostPathScore(a);
+    });
+}
+
+function resolveFiberDisplayNameForTrace(cableId, fiberNumber) {
+    if (!cableId || fiberNumber == null) return '';
+    var cable = objects.find(function(o) {
+        return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === cableId;
+    });
+    if (!cable || typeof getFiberColors !== 'function') return '';
+    var fibers = getFiberColors(cable);
+    var fiber = fibers && fibers.find ? fibers.find(function(f) { return f.number === fiberNumber; }) : null;
+    return fiber && fiber.name ? String(fiber.name) : '';
+}
+
 function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeObj = null, nodeConnMeta = null, traceOptions = null) {
-    var res = traceAllFiberPathsFromObject(startCrossObj, cableId, fiberNumber, traceOptions);
-    
-    if (res.error) {
-        showError('Ошибка трассировки: ' + res.error, 'Трассировка');
-        return;
-    }
-
-    var paths = res.paths ? res.paths.slice() : [];
-    if (traceOptions && traceOptions.originNodeId && startCrossObj) {
-        var peerPaths = tracePeerNodePathsOnSharedCable(startCrossObj, cableId, fiberNumber, traceOptions.originNodeId);
-        if (peerPaths.length) {
-            // Два узла на одной жиле — один прямой маршрут по кабелю, без лишних веток обхода
-            paths = peerPaths;
-        }
-    }
-    
-    if (!paths.length) {
-        showWarning('Путь не найден', 'Трассировка');
-        return;
-    }
-
-    var nodePaths = startNodeObj ? filterPathsToPeerNodes(paths, startNodeObj) : paths;
-    var sortedPaths = startNodeObj ? preferNodeTracePaths(nodePaths, startNodeObj) : nodePaths;
-    var displayPaths = sortedPaths;
-    var highlightPaths = sortedPaths;
-    if (startNodeObj && window.FiberTrace && FiberTrace.prependNodePrefixToPath) {
-        displayPaths = sortedPaths.map(function(p) {
-            return FiberTrace.prependNodePrefixToPath(p, startNodeObj, startCrossObj, cableId, fiberNumber, nodeConnMeta);
-        });
-        highlightPaths = displayPaths;
-    }
-
-    var traceSubtitle = 'Жила ' + fiberNumber;
+    var hostTypeTitle = startCrossObj && startCrossObj.properties ? startCrossObj.properties.get('type') : '';
+    var titleHost = isCrossLikeHostType(hostTypeTitle) ? 'кросса' : (isSleeveLikeHostType(hostTypeTitle) ? 'муфты' : 'объекта');
+    var fiberColorName = resolveFiberDisplayNameForTrace(cableId, fiberNumber);
+    var fiberLabel = 'жила ' + fiberNumber + (fiberColorName ? ' («' + fiberColorName + '»)' : '');
+    var loadingSubtitle = fiberLabel.charAt(0).toUpperCase() + fiberLabel.slice(1);
     if (startNodeObj) {
-        traceSubtitle = 'От узла «' + (startNodeObj.properties.get('name') || 'Узел') + '» · жила ' + fiberNumber;
+        loadingSubtitle = 'От узла «' + (startNodeObj.properties.get('name') || 'Узел') + '» · ' + fiberLabel;
+    } else if (startCrossObj && startCrossObj.properties) {
+        var hostLabelLoad = startCrossObj.properties.get('name') ||
+            (typeof getObjectTypeName === 'function' ? getObjectTypeName(hostTypeTitle) : 'Объект');
+        loadingSubtitle = 'От «' + hostLabelLoad + '» · ' + fiberLabel;
     }
 
-    var bodyHtml = '';
-    if (displayPaths.length > 1 && window.FiberTrace && FiberTrace.renderPathsOverviewHtml) {
-        bodyHtml += FiberTrace.renderPathsOverviewHtml(displayPaths);
-    }
-    if (displayPaths.length > 1) {
-        var stepNum = 1;
-        for (var pi = 0; pi < displayPaths.length; pi++) {
-            if (pi > 0) bodyHtml += '<div class="trace-branch-separator" data-branch-index="' + pi + '">' + escapeHtml(FiberTrace.getPathEndpointLabel(displayPaths[pi])) + '</div>';
-            var pathHtml = renderOnePathToTraceHtml(displayPaths[pi], stepNum);
-            bodyHtml += '<div class="trace-branch-block" data-branch-index="' + pi + '">' + pathHtml.html + '</div>';
-            stepNum = pathHtml.nextStepNumber;
+    runFiberTraceWithLoading({
+        title: 'Трассировка с ' + titleHost,
+        subtitle: loadingSubtitle
+    }, function() {
+        var res = traceAllFiberPathsFromObject(startCrossObj, cableId, fiberNumber, traceOptions);
+
+        if (res.error) {
+            failFiberTraceLoading('Ошибка трассировки: ' + res.error, false);
+            return;
         }
-    } else {
-        var pathHtmlSingle = renderOnePathToTraceHtml(displayPaths[0], 1);
-        bodyHtml += pathHtmlSingle.html;
-    }
-    bodyHtml = (typeof appendFiberTraceExtrasHtml === 'function')
-        ? appendFiberTraceExtrasHtml(bodyHtml, highlightPaths)
-        : bodyHtml + ((window.FiberTrace && FiberTrace.buildTraceActionsHtml) ? FiberTrace.buildTraceActionsHtml() : '');
-    openFiberTraceModal({
-        title: 'Трассировка',
-        subtitle: traceSubtitle,
-        bodyHtml: bodyHtml,
-        paths: highlightPaths
+
+        var paths = res.paths ? res.paths.slice() : [];
+        if (traceOptions && traceOptions.originNodeId && startCrossObj) {
+            var peerPaths = tracePeerNodePathsOnSharedCable(startCrossObj, cableId, fiberNumber, traceOptions.originNodeId);
+            if (peerPaths.length) {
+                // Два узла на одной жиле — один прямой маршрут по кабелю, без лишних веток обхода
+                paths = peerPaths;
+            }
+        }
+
+        if (!paths.length) {
+            failFiberTraceLoading('Путь не найден', true);
+            return;
+        }
+
+        var nodePaths = startNodeObj ? filterPathsToPeerNodes(paths, startNodeObj) : paths;
+        var sortedPaths = startNodeObj
+            ? preferNodeTracePaths(nodePaths, startNodeObj)
+            : preferHostWorkspaceTracePaths(nodePaths);
+        var displayPaths = sortedPaths;
+        var highlightPaths = sortedPaths;
+        if (startNodeObj && window.FiberTrace && FiberTrace.prependNodePrefixToPath) {
+            displayPaths = sortedPaths.map(function(p) {
+                return FiberTrace.prependNodePrefixToPath(p, startNodeObj, startCrossObj, cableId, fiberNumber, nodeConnMeta);
+            });
+            highlightPaths = displayPaths;
+        }
+
+        var traceSubtitle = loadingSubtitle;
+        var bodyHtml = '';
+        if (displayPaths.length > 1 && window.FiberTrace && FiberTrace.renderPathsOverviewHtml) {
+            bodyHtml += FiberTrace.renderPathsOverviewHtml(displayPaths);
+        }
+        if (displayPaths.length > 1) {
+            var stepNum = 1;
+            for (var pi = 0; pi < displayPaths.length; pi++) {
+                if (pi > 0) bodyHtml += '<div class="trace-branch-separator" data-branch-index="' + pi + '">' + escapeHtml(FiberTrace.getPathEndpointLabel(displayPaths[pi])) + '</div>';
+                var pathHtml = renderOnePathToTraceHtml(displayPaths[pi], stepNum);
+                bodyHtml += '<div class="trace-branch-block" data-branch-index="' + pi + '">' + pathHtml.html + '</div>';
+                stepNum = pathHtml.nextStepNumber;
+            }
+        } else {
+            var pathHtmlSingle = renderOnePathToTraceHtml(displayPaths[0], 1);
+            bodyHtml += pathHtmlSingle.html;
+        }
+        bodyHtml = (typeof appendFiberTraceExtrasHtml === 'function')
+            ? appendFiberTraceExtrasHtml(bodyHtml, highlightPaths)
+            : bodyHtml + ((window.FiberTrace && FiberTrace.buildTraceActionsHtml) ? FiberTrace.buildTraceActionsHtml() : '');
+
+        openFiberTraceModal({
+            title: 'Трассировка с ' + titleHost,
+            subtitle: traceSubtitle,
+            bodyHtml: bodyHtml,
+            paths: highlightPaths
+        });
     });
 }

@@ -23,12 +23,34 @@ function coordsInSameObjectGroup(coordsA, coordsB) {
 function clusterPlacemarksByProximity(placemarks, itemsKey) {
     itemsKey = itemsKey || 'items';
     var groups = [];
+    if (!placemarks || !placemarks.length) return groups;
+    // Spatial hash: O(n) instead of O(n²) pairwise proximity checks.
+    var cell = GROUP_MERGE_EPS;
+    var buckets = Object.create(null);
+    function cellKey(coords) {
+        return Math.round(coords[0] / cell) + ':' + Math.round(coords[1] / cell);
+    }
     placemarks.forEach(function(obj) {
+        if (!obj || !obj.geometry) return;
         var coords = obj.geometry.getCoordinates();
+        if (!coords || coords.length < 2) return;
+        var ck = cellKey(coords);
+        var candidates = [];
+        var latCell = Math.round(coords[0] / cell);
+        var lonCell = Math.round(coords[1] / cell);
+        for (var dLat = -1; dLat <= 1; dLat++) {
+            for (var dLon = -1; dLon <= 1; dLon++) {
+                var nk = (latCell + dLat) + ':' + (lonCell + dLon);
+                var list = buckets[nk];
+                if (list) {
+                    for (var li = 0; li < list.length; li++) candidates.push(list[li]);
+                }
+            }
+        }
         var found = null;
-        for (var i = 0; i < groups.length; i++) {
-            if (coordsWithinGroupMergeDistance(coords, groups[i].coords)) {
-                found = groups[i];
+        for (var i = 0; i < candidates.length; i++) {
+            if (coordsWithinGroupMergeDistance(coords, candidates[i].coords)) {
+                found = candidates[i];
                 break;
             }
         }
@@ -38,6 +60,8 @@ function clusterPlacemarksByProximity(placemarks, itemsKey) {
             var g = { coords: coords.slice() };
             g[itemsKey] = [obj];
             groups.push(g);
+            if (!buckets[ck]) buckets[ck] = [];
+            buckets[ck].push(g);
         }
     });
     return groups;

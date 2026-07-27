@@ -388,6 +388,28 @@ function saveLinkedMapObjects(objectsToSave) {
 function pushSaveDataToSync(opts) {
     opts = opts || {};
     if (opts.syncFull) {
+        if (opts.persistHttp && Array.isArray(opts.state) && typeof getApiBase === 'function' && getApiBase()) {
+            var token = typeof getAuthToken === 'function' ? getAuthToken() : '';
+            var payload = JSON.stringify({
+                data: opts.state,
+                allowShrink: !!opts.allowShrink
+            });
+            fetch(getApiBase() + '/api/map', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': token ? ('Bearer ' + token) : ''
+                },
+                body: payload
+            }).catch(function(e) {
+                console.warn('[Save] HTTP map persist failed, falling back to WS state', e);
+                if (typeof window.syncSendState === 'function') {
+                    window.syncSendState(opts.state);
+                }
+            });
+            // Peers get map_refresh from the POST handler; avoid blasting full WS state.
+            return;
+        }
         if (typeof window.syncSendState === 'function') {
             window.syncSendState(opts.state || getSerializedData());
         }

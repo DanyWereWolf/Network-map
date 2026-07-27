@@ -123,13 +123,30 @@ function buildCrossPortTableRowHtml(crossObj, crossPorts, cableId, fiberNumber, 
         : getCrossPortVisualMeta(crossObj, null);
     var rowState = portNum && !isNaN(portNum) ? meta.state : 'none';
     var rowClass = 'fiber-port-row fiber-port-row--' + rowState;
+    var signalTitle = '';
+    if (typeof getFiberSignalSource === 'function' && typeof formatFiberSignalSourceText === 'function' &&
+        cableId && fiberNumber != null) {
+        var rowSrc = getFiberSignalSource(crossObj, cableId, fiberNumber);
+        if (rowSrc) {
+            var rowSrcText = formatFiberSignalSourceText(rowSrc);
+            if (rowSrcText) signalTitle = rowSrcText;
+        }
+    }
     if (!isEditMode) {
-        var viewBadge = portNum ? '<span class="fiber-port-badge fiber-port-badge--' + meta.state + '">' + portNum + '</span>' : '<span class="fiber-port-row__val">—</span>';
+        var viewBadgeTitle = [meta.stateLabel || '', signalTitle].filter(Boolean).join(' · ');
+        var viewBadge = portNum
+            ? '<span class="fiber-port-badge fiber-port-badge--' + meta.state + '"' +
+                (viewBadgeTitle ? ' title="' + escapeHtml(viewBadgeTitle) + '"' : '') + '>' + portNum + '</span>'
+            : '<span class="fiber-port-row__val">—</span>';
         var viewState = portNum && meta.stateLabel
             ? '<span class="fiber-port-state fiber-port-state--' + meta.state + '">' + escapeHtml(meta.stateLabel) + '</span>'
             : '';
-        return '<div class="' + rowClass + ' fiber-port-row--view">' +
-            '<span class="fiber-port-row__lbl">Порт</span>' + viewBadge + viewState + '</div>';
+        var viewHint = signalTitle
+            ? '<span class="fiber-port-row__hint" title="' + escapeHtml(signalTitle) + '">' + escapeHtml(signalTitle) + '</span>'
+            : '';
+        return '<div class="' + rowClass + ' fiber-port-row--view"' +
+            (signalTitle ? ' title="' + escapeHtml(signalTitle) + '"' : '') + '>' +
+            '<span class="fiber-port-row__lbl">Порт</span>' + viewBadge + viewState + viewHint + '</div>';
     }
     var options = '<option value="">—</option>';
     for (var p = 1; p <= crossPorts; p++) {
@@ -139,8 +156,9 @@ function buildCrossPortTableRowHtml(crossObj, crossPorts, cableId, fiberNumber, 
         var suffix = pm.optionSuffix ? ' ' + pm.optionSuffix : '';
         options += '<option value="' + p + '"' + sel + dis + '>Порт ' + p + suffix + '</option>';
     }
+    var badgeTitle = [meta.stateLabel || '', signalTitle].filter(Boolean).join(' · ');
     var badgeHtml = portNum && !isNaN(portNum)
-        ? '<span class="fiber-port-badge fiber-port-badge--' + meta.state + '" title="' + escapeHtml(meta.stateLabel || '') + '">' + portNum + '</span>'
+        ? '<span class="fiber-port-badge fiber-port-badge--' + meta.state + '" title="' + escapeHtml(badgeTitle || '') + '">' + portNum + '</span>'
         : '';
     var stateHtml = portNum && meta.stateLabel
         ? '<span class="fiber-port-state fiber-port-state--' + meta.state + '">' + escapeHtml(meta.stateLabel) + '</span>'
@@ -148,10 +166,11 @@ function buildCrossPortTableRowHtml(crossObj, crossPorts, cableId, fiberNumber, 
     var portDisc = (isEditMode && portNum && !isNaN(portNum))
         ? '<button type="button" class="fiber-port-row__disconnect btn-disconnect-fiber-port" data-cable-id="' + escapeHtml(cableId) + '" data-fiber-number="' + fiberNumber + '" title="Снять жилу с порта">✕</button>'
         : '';
-    return '<div class="' + rowClass + '">' +
+    var selectTitle = signalTitle ? ('Порт кросса · ' + signalTitle) : 'Порт кросса';
+    return '<div class="' + rowClass + '"' + (signalTitle ? ' title="' + escapeHtml(signalTitle) + '"' : '') + '>' +
         '<span class="fiber-port-row__lbl">Порт</span>' +
         '<div class="fiber-port-row__controls">' + badgeHtml +
-        '<select class="fiber-port-select form-select" data-cable-id="' + escapeHtml(cableId) + '" data-fiber-number="' + fiberNumber + '" title="Порт кросса">' + options + '</select>' +
+        '<select class="fiber-port-select form-select" data-cable-id="' + escapeHtml(cableId) + '" data-fiber-number="' + fiberNumber + '" title="' + escapeHtml(selectTitle) + '">' + options + '</select>' +
         stateHtml + portDisc + '</div></div>';
 }
 
@@ -304,7 +323,14 @@ function updateSchemeCrossPortLinkUI() {
         });
     }
     var bar = document.getElementById('fiber-scheme-wire-bar');
-    if (!bar || !schemeCrossPortLinkMode) return;
+    if (!bar) return;
+    if (!schemeCrossPortLinkMode) {
+        if (!schemeSplitterWirePick && !schemeSplitterOutputPick && !schemeCrossPortPick) {
+            bar.style.display = 'none';
+            bar.innerHTML = '';
+        }
+        return;
+    }
     bar.style.display = 'flex';
     if (schemeCrossPortLinkSource && schemeCrossPortLinkSource.hostObj) {
         bar.innerHTML = '<span class="fiber-selection-text fiber-scheme-wire-bar-text">Порт <strong>' + schemeCrossPortLinkSource.portNumber +

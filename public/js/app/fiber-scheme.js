@@ -630,6 +630,11 @@ function updateSchemeCrossPortPickUI() {
         });
         return;
     }
+    var linkModeOn = typeof schemeCrossPortLinkMode !== 'undefined' && schemeCrossPortLinkMode;
+    if (!schemeSplitterWirePick && !schemeSplitterOutputPick && !linkModeOn && bar) {
+        bar.style.display = 'none';
+        bar.innerHTML = '';
+    }
     if (crossObj && selectedFiberForConnection && !schemeSplitterWirePick && !schemeSplitterOutputPick) {
         var sel = selectedFiberForConnection;
         if (typeof isFiberSplicedAtHost !== 'function' || !isFiberSplicedAtHost(crossObj, sel.cableId, sel.fiberNumber)) {
@@ -2019,6 +2024,7 @@ function refreshSplitterCrossPortLinkLabelDom(splitterId, outputIndex, label) {
     var trimmed = label ? String(label).trim() : '';
     var group = svg.querySelector('.fiber-scheme-splitter-cross-link-group[data-splitter-id="' + splitterId + '"][data-output-index="' + outputIndex + '"]');
     if (!group) return;
+    var linkKey = 'out-cross:' + splitterId + ':' + outputIndex;
     var labelG = group.querySelector('.fiber-scheme-splitter-cross-link-label');
     if (!trimmed) {
         if (labelG) labelG.remove();
@@ -2029,39 +2035,13 @@ function refreshSplitterCrossPortLinkLabelDom(splitterId, outputIndex, label) {
     var pathD = path.getAttribute('d');
     if (!pathD || typeof fiberSchemePathMidpoint !== 'function') return;
     var mid = fiberSchemePathMidpoint(pathD);
-    var colors = typeof getFiberSchemeLabelColors === 'function' ? getFiberSchemeLabelColors() : { bg: '#fff', border: '#cbd5e1', fill: '#0f172a' };
-    var tw = Math.min(148, Math.max(40, trimmed.length * 6.5 + 16));
-    var tx = mid.x - tw / 2;
     if (!labelG) {
         labelG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        labelG.setAttribute('class', 'fiber-scheme-splitter-cross-link-label');
-        labelG.setAttribute('data-link-key', 'out-cross:' + splitterId + ':' + outputIndex);
-        var rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('class', 'fiber-scheme-splitter-cross-link-label-bg');
-        var text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('class', 'fiber-scheme-splitter-cross-link-label-text');
-        text.setAttribute('text-anchor', 'middle');
-        text.setAttribute('style', 'font-size: 10px; font-weight: 600; fill: ' + colors.fill + '; pointer-events: none;');
-        labelG.appendChild(rect);
-        labelG.appendChild(text);
+        labelG.setAttribute('data-link-key', linkKey);
         group.appendChild(labelG);
     }
-    var rect = labelG.querySelector('.fiber-scheme-splitter-cross-link-label-bg');
-    var text = labelG.querySelector('.fiber-scheme-splitter-cross-link-label-text');
-    if (rect) {
-        rect.setAttribute('x', String(tx));
-        rect.setAttribute('y', String(mid.y - 11));
-        rect.setAttribute('width', String(tw));
-        rect.setAttribute('height', '21');
-        rect.setAttribute('rx', '5');
-        rect.setAttribute('fill', colors.bg);
-        rect.setAttribute('stroke', colors.border);
-        rect.setAttribute('stroke-width', '0.75');
-    }
-    if (text) {
-        text.setAttribute('x', String(mid.x));
-        text.setAttribute('y', String(mid.y + 5));
-        text.textContent = trimmed;
+    if (typeof applyFiberSchemeCalloutChipDom === 'function') {
+        applyFiberSchemeCalloutChipDom(labelG, mid, trimmed, 'fiber-scheme-splitter-cross-link-label');
     }
     if (typeof selectedSplitterLink !== 'undefined' && selectedSplitterLink &&
         selectedSplitterLink.kind === 'output-cross' &&

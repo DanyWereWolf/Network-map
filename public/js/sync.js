@@ -360,6 +360,10 @@
                         String(msg.organizationId) !== String(currentUser.organizationId)) {
                         return;
                     }
+                    // Skip echo after local large import / HTTP persist (we already have the map).
+                    if (window._suppressMapRefreshUntil && Date.now() < window._suppressMapRefreshUntil) {
+                        return;
+                    }
                     if (msg.groupNames && typeof window.applyGroupNames === 'function') {
                         try { window.applyGroupNames(msg.groupNames); } catch (e) {}
                     }

@@ -1,6 +1,25 @@
 /**
  * Линии GPON-связей на карте.
  */
+function forEachMapObjectsOfType(type, fn) {
+    if (typeof getMapObjectsByType === 'function') {
+        var list = getMapObjectsByType(type);
+        for (var i = 0; i < list.length; i++) fn(list[i], i);
+        return;
+    }
+    if (!Array.isArray(objects)) return;
+    objects.forEach(function(obj) {
+        if (obj && obj.properties && obj.properties.get('type') === type) fn(obj);
+    });
+}
+
+function forEachFiberHostObject(fn) {
+    var hostTypes = ['cross', 'sleeve', 'spliceCassette', 'cabinet'];
+    for (var hi = 0; hi < hostTypes.length; hi++) {
+        forEachMapObjectsOfType(hostTypes[hi], fn);
+    }
+}
+
 function getNodeConnFiberUsageExclude(hostObj) {
     var uid = getObjectUniqueId(hostObj);
     if (hostObj.properties.get('type') === 'sleeve' || hostObj.properties.get('type') === 'spliceCassette') {
@@ -817,8 +836,7 @@ function createSplitterOutputConnectionLine(sourceObj, targetObj, outIdx, routeI
 }
 
 function syncSplitterOutputDeviceFibers() {
-    objects.forEach(function(obj) {
-        if (!obj.properties || obj.properties.get('type') !== 'splitter') return;
+    forEachMapObjectsOfType('splitter', function(obj) {
         var rootInput = getSplitterRootInputFiber(obj);
         if (!rootInput || !rootInput.cableId || rootInput.fiberNumber == null) return;
         var outputs = obj.properties.get('outputConnections') || [];
@@ -844,8 +862,7 @@ function syncSplitterOutputDeviceFibers() {
 }
 
 function syncOltPortEndpointIncomingFibers() {
-    objects.forEach(function(obj) {
-        if (!obj.properties || obj.properties.get('type') !== 'olt') return;
+    forEachMapObjectsOfType('olt', function(obj) {
         var incoming = typeof getDisplayOltIncomingFiber === 'function'
             ? getDisplayOltIncomingFiber(obj)
             : (obj.properties.get('incomingFiber') || null);
@@ -939,25 +956,21 @@ function updateSplitterOutputConnectionLines() {
     if (typeof syncOltPortOnuIncomingFibers === 'function') syncOltPortOnuIncomingFibers();
     splitterOutputConnectionLines.forEach(function(line) { myMap.geoObjects.remove(line); });
     splitterOutputConnectionLines = [];
-    objects.forEach(function(obj) {
-        if (!obj.properties) return;
-        var t = obj.properties.get('type');
-        if (t === 'splitter') {
-            var outputs = obj.properties.get('outputConnections') || [];
-            for (var oi = 0; oi < outputs.length; oi++) {
-                var out = outputs[oi];
-                if (!out) continue;
-                var target = null;
-                if (out.onuId) target = getMapObjectByUid(out.onuId, 'onu');
-                else if (out.mediaConverterId) target = getMapObjectByUid(out.mediaConverterId, 'mediaConverter');
-                else if (out.nodeId) target = getMapObjectByUid(out.nodeId, 'node');
-                else if (out.splitterId) target = getMapObjectByUid(out.splitterId, 'splitter');
-                else if (out.hostId) target = getFiberHostByUid(out.hostId);
-                if (target) createSplitterOutputConnectionLine(obj, target, oi, out.routeIds || out.route || []);
-            }
-            return;
+    forEachMapObjectsOfType('splitter', function(obj) {
+        var outputs = obj.properties.get('outputConnections') || [];
+        for (var oi = 0; oi < outputs.length; oi++) {
+            var out = outputs[oi];
+            if (!out) continue;
+            var target = null;
+            if (out.onuId) target = getMapObjectByUid(out.onuId, 'onu');
+            else if (out.mediaConverterId) target = getMapObjectByUid(out.mediaConverterId, 'mediaConverter');
+            else if (out.nodeId) target = getMapObjectByUid(out.nodeId, 'node');
+            else if (out.splitterId) target = getMapObjectByUid(out.splitterId, 'splitter');
+            else if (out.hostId) target = getFiberHostByUid(out.hostId);
+            if (target) createSplitterOutputConnectionLine(obj, target, oi, out.routeIds || out.route || []);
         }
-        if (!isFiberHostType(t)) return;
+    });
+    forEachFiberHostObject(function(obj) {
         if (!window.EmbeddedSplitters) return;
         var hostUid = getObjectUniqueId(obj);
         var embedded = EmbeddedSplitters.getList(obj) || [];
@@ -980,8 +993,7 @@ function updateSplitterOutputConnectionLines() {
             }
         });
     });
-    objects.forEach(function(obj) {
-        if (!obj.properties || obj.properties.get('type') !== 'olt') return;
+    forEachMapObjectsOfType('olt', function(obj) {
         var pa = obj.properties.get('portAssignments') || {};
         Object.keys(pa).forEach(function(pk) {
             var a = pa[pk];
@@ -1003,10 +1015,7 @@ function updateSplitterOutputConnectionLines() {
 function updateOnuConnectionLines() {
     onuConnectionLines.forEach(function(line) { myMap.geoObjects.remove(line); });
     onuConnectionLines = [];
-    objects.forEach(function(obj) {
-        if (!obj.properties) return;
-        const type = obj.properties.get('type');
-        if (!isFiberHostType(type)) return;
+    forEachFiberHostObject(function(obj) {
         const onuConnections = obj.properties.get('onuConnections');
         if (onuConnections) {
             Object.keys(onuConnections).forEach(function(key) {
@@ -1131,10 +1140,7 @@ function updateSplitterConnectionLines() {
     syncAllSplitterInputsFromHosts();
     splitterConnectionLines.forEach(function(line) { myMap.geoObjects.remove(line); });
     splitterConnectionLines = [];
-    objects.forEach(function(obj) {
-        if (!obj.properties) return;
-        const type = obj.properties.get('type');
-        if (!isFiberHostType(type)) return;
+    forEachFiberHostObject(function(obj) {
         const splitterConnections = obj.properties.get('splitterConnections');
         if (!splitterConnections) return;
         Object.keys(splitterConnections).forEach(function(key) {
@@ -1157,10 +1163,7 @@ function updateAllNodeConnectionLines() {
     });
     nodeConnectionLines = [];
 
-    objects.forEach(obj => {
-        if (!obj.properties) return;
-        const ht = obj.properties.get('type');
-        if (!isFiberHostType(ht)) return;
+    forEachFiberHostObject(obj => {
         const nodeConnections = obj.properties.get('nodeConnections');
         if (!nodeConnections) return;
         Object.keys(nodeConnections).forEach(key => {

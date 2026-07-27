@@ -29,6 +29,7 @@
             case 'olt': return '📶';
             case 'onu': return '📟';
             case 'mediaConverter': return '⇄';
+            case 'radioBridge': return '◎';
             case 'splitter': return '🔀';
             case 'support': return '📡';
             case 'attachment': return '📎';
@@ -278,6 +279,30 @@
                     cssClass: 'trace-path-status--complete'
                 };
             }
+            if (item.type === 'mediaConverterConnection') {
+                return {
+                    status: 'complete',
+                    endpoint: 'mediaConverter',
+                    label: 'Вывод на медиаконвертер «' + (item.mediaConverterName || 'Медиаконвертер') + '»',
+                    cssClass: 'trace-path-status--complete'
+                };
+            }
+            if (item.type === 'object' && item.objectType === 'radioBridge') {
+                return {
+                    status: 'complete',
+                    endpoint: 'radioBridge',
+                    label: 'Доходит до радиомоста «' + (item.objectName || 'Радиомост') + '»',
+                    cssClass: 'trace-path-status--complete'
+                };
+            }
+            if (item.type === 'radioBridgeConnection') {
+                return {
+                    status: 'complete',
+                    endpoint: 'radioBridge',
+                    label: 'Вывод на радиомост «' + (item.radioBridgeName || 'Радиомост') + '»',
+                    cssClass: 'trace-path-status--complete'
+                };
+            }
             if (item.type === 'nodeConnection') {
                 if (item.fromNode) continue;
                 return {
@@ -375,6 +400,15 @@
             }
             if (item.type === 'object' && item.objectType === 'mediaConverter') {
                 return item.objectName || 'Медиаконвертер';
+            }
+            if (item.type === 'mediaConverterConnection') {
+                return item.mediaConverterName || 'Медиаконвертер';
+            }
+            if (item.type === 'object' && item.objectType === 'radioBridge') {
+                return item.objectName || 'Радиомост';
+            }
+            if (item.type === 'radioBridgeConnection') {
+                return item.radioBridgeName || 'Радиомост';
             }
             if (item.type === 'nodeConnection') {
                 if (item.fromNode) continue;
@@ -819,15 +853,17 @@
                 }
             } else if (item.type === 'onuConnection' ||
                 item.type === 'oltPortConnection' || item.type === 'mediaConverterConnection' ||
+                item.type === 'radioBridgeConnection' ||
                 item.type === 'splitterConnection' || item.type === 'splitterOutputToOnu' ||
                 item.type === 'splitterOutputToNode' || item.type === 'splitterOutputToHost' ||
                 item.type === 'splitterOutputToSplitter' || item.type === 'splitterOutputToMediaConverter' ||
                 item.type === 'splitterOutputToCrossPort') {
-                var endObj = item.node || item.onu || item.olt || item.mediaConverter ||
+                var endObj = item.node || item.onu || item.olt || item.mediaConverter || item.radioBridge ||
                     item.splitter || item.onuObj || item.nodeObj || item.host || item.toSplitter || item.toCross;
                 var endType = item.node ? 'node' : (item.onu || item.onuObj ? 'onu' : (item.olt ? 'olt' :
                     (item.mediaConverter || item.mediaConverterObj ? 'mediaConverter' :
-                        (item.splitter || item.toSplitter ? 'splitter' : (item.toCross ? 'cross' : 'object')))));
+                        (item.radioBridge ? 'radioBridge' :
+                            (item.splitter || item.toSplitter ? 'splitter' : (item.toCross ? 'cross' : 'object'))))));
                 var endName = item.nodeName || item.onuName || item.oltName || item.mediaConverterName ||
                     (endObj && endObj.properties ? endObj.properties.get('name') : null) || getTypeName(endType);
                 if (endObj) {
@@ -1177,7 +1213,13 @@
         var metrics = summarizePathMetrics(enrichPathWithLengths(path));
         var html = '<div class="trace-schematic">';
         html += '<div class="trace-schematic-head">';
+        html += '<div class="trace-schematic-title-row">';
         html += '<div class="trace-schematic-title">Схема жил</div>';
+        if (opts.totalBranches > 1) {
+            html += '<div class="trace-schematic-branch-hint" title="Схема по основной ветке; остальные — в списке маршрутов выше">основная · ещё ' +
+                (opts.totalBranches - 1) + '</div>';
+        }
+        html += '</div>';
         html += buildTraceSchematicToolbarHtml();
         html += '</div>';
         html += '<div class="trace-sch-export-root">';
@@ -1209,18 +1251,9 @@
 
     function buildTraceSchematicsHtml(paths) {
         if (!paths || !paths.length) return '';
-        if (paths.length === 1) return buildTraceSchematicHtml(paths[0]);
-        var html = '';
-        paths.forEach(function (path, i) {
-            var label = getPathEndpointLabel(path);
-            html += '<div class="trace-schematic-branch" data-branch-index="' + i + '">';
-            if (paths.length > 1) {
-                html += '<div class="trace-schematic-branch-title">Ветка: ' + esc(label) + '</div>';
-            }
-            html += buildTraceSchematicHtml(path);
-            html += '</div>';
-        });
-        return html;
+        // Одна схема по основной (первой) ветке — иначе при двунаправленной
+        // трассировке с кросса/муфты получается куча одинаковых «Схема жил».
+        return buildTraceSchematicHtml(paths[0], { totalBranches: paths.length });
     }
 
     function traceCoordsDiffer(a, b) {
@@ -1306,6 +1339,8 @@
                 try { points.push({ coords: item.onu.geometry.getCoordinates(), type: 'onu' }); } catch (e4) {}
             } else if (item.type === 'mediaConverterConnection' && item.mediaConverter && item.mediaConverter.geometry) {
                 try { points.push({ coords: item.mediaConverter.geometry.getCoordinates(), type: 'mediaConverter' }); } catch (e5) {}
+            } else if (item.type === 'radioBridgeConnection' && item.radioBridge && item.radioBridge.geometry) {
+                try { points.push({ coords: item.radioBridge.geometry.getCoordinates(), type: 'radioBridge' }); } catch (e5rb) {}
             } else if (item.type === 'oltPortConnection' && item.olt) {
                 var oltCoords = getTraceObjectCoords(item.olt);
                 if (oltCoords) {
@@ -1377,6 +1412,9 @@
         }
         if (item.type === 'mediaConverterConnection') {
             return '  ⇄ Медиаконвертер «' + (item.mediaConverterName || 'МК') + '», жила ' + item.fiberNumber;
+        }
+        if (item.type === 'radioBridgeConnection') {
+            return '  ◎ Радиомост «' + (item.radioBridgeName || 'РМ') + '», жила ' + item.fiberNumber;
         }
         if (item.type === 'splitterConnection') {
             var spN = item.splitter && item.splitter.properties ? (item.splitter.properties.get('name') || 'Сплиттер') : 'Сплиттер';
@@ -1463,17 +1501,63 @@
             }
             if (item.type === 'oltPortConnection') return 'OLT:' + (item.olt ? getUid(item.olt) : item.oltName) + ':' + item.portNumber;
             if (item.type === 'nodeConnection') return 'N:' + (item.node ? getUid(item.node) : item.nodeName);
+            if (item.type === 'onuConnection') return 'ONU:' + (item.onu ? getUid(item.onu) : item.onuName);
+            if (item.type === 'mediaConverterConnection') return 'MC:' + (item.mediaConverter ? getUid(item.mediaConverter) : item.mediaConverterName);
+            if (item.type === 'radioBridgeConnection') return 'RB:' + (item.radioBridge ? getUid(item.radioBridge) : item.radioBridgeName);
+            if (item.type === 'crossPortPatch') {
+                return 'P:' + (item.fromCross ? getUid(item.fromCross) : '') + ':' + item.fromPort + '>' +
+                    (item.toCross ? getUid(item.toCross) : '') + ':' + item.toPort;
+            }
             return item.type;
         }).join('|');
+    }
+
+    /** Цепочка кабелей — для отсечения зеркального «реверса» той же трассы. */
+    function cableChainSignature(path) {
+        if (!path || !path.length) return '';
+        return path.filter(function (item) { return item.type === 'cable'; })
+            .map(function (item) { return item.cableId + ':' + item.fiberNumber; })
+            .join('>');
+    }
+
+    function pathEndpointUids(path) {
+        var first = null;
+        var last = null;
+        if (!path) return { first: null, last: null };
+        path.forEach(function (item) {
+            var uid = null;
+            if ((item.type === 'start' || item.type === 'object') && item.object) uid = getUid(item.object);
+            else if (item.type === 'onuConnection' && item.onu) uid = getUid(item.onu);
+            else if (item.type === 'mediaConverterConnection' && item.mediaConverter) uid = getUid(item.mediaConverter);
+            else if (item.type === 'radioBridgeConnection' && item.radioBridge) uid = getUid(item.radioBridge);
+            else if (item.type === 'nodeConnection' && item.node && !item.fromNode) uid = getUid(item.node);
+            else if (item.type === 'oltPortConnection' && item.olt) uid = getUid(item.olt);
+            if (uid) {
+                if (!first) first = uid;
+                last = uid;
+            }
+        });
+        return { first: first, last: last };
     }
 
     function dedupePaths(paths) {
         if (!Array.isArray(paths) || paths.length < 2) return paths || [];
         var seen = new Set();
+        var seenRoutes = [];
         var out = [];
         paths.forEach(function (path) {
             var sig = pathSignature(path);
             if (seen.has(sig)) return;
+            var chain = cableChainSignature(path);
+            var ends = pathEndpointUids(path);
+            if (chain && ends.first && ends.last) {
+                var revChain = chain.split('>').reverse().join('>');
+                var isMirror = seenRoutes.some(function (r) {
+                    return r.chain === revChain && r.first === ends.last && r.last === ends.first;
+                });
+                if (isMirror) return;
+                seenRoutes.push({ chain: chain, first: ends.first, last: ends.last });
+            }
             seen.add(sig);
             out.push(path);
         });
@@ -1633,6 +1717,11 @@
                     '<span class="trace-item-glyph trace-item-glyph--muted" aria-hidden="true">⇄</span>' +
                     '<div class="trace-item-main"><span>МК «' + esc(item.mediaConverterName || 'МК') + '» · ж' + item.fiberNumber + '</span></div>' +
                     mapPinBtn(item.mediaConverter ? getUid(item.mediaConverter) : null) + '</div>';
+            } else if (item.type === 'radioBridgeConnection') {
+                html += '<div class="trace-item trace-item--meta">' +
+                    '<span class="trace-item-glyph trace-item-glyph--muted" aria-hidden="true">◎</span>' +
+                    '<div class="trace-item-main"><span>РМ «' + esc(item.radioBridgeName || 'РМ') + '» · ж' + item.fiberNumber + '</span></div>' +
+                    mapPinBtn(item.radioBridge ? getUid(item.radioBridge) : null) + '</div>';
             } else if (item.type === 'splitterConnection') {
                 var spName = item.splitter && item.splitter.properties ? (item.splitter.properties.get('name') || 'Сплиттер') : 'Сплиттер';
                 html += '<div class="trace-item trace-item--meta">' +
