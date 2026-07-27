@@ -1197,7 +1197,15 @@ function applyRemoteState(data, meta) {
             applyFinished = true;
             _mapApplyInProgress = false;
             lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
-            updateStats();
+            var runStats = function() {
+                try { updateStats(); } catch (eStats) {}
+            };
+            if (_mapInitialLoadPending) {
+                if (typeof requestIdleCallback === 'function') requestIdleCallback(runStats, { timeout: 1200 });
+                else setTimeout(runStats, 0);
+            } else {
+                runStats();
+            }
             markMapDataReady();
             if (typeof OfflineMapCache !== 'undefined' && OfflineMapCache.scheduleSave) {
                 OfflineMapCache.scheduleSave();
@@ -1947,8 +1955,14 @@ function importDataPostProcess(opts, onDone) {
             },
             function() {
                 updateCableVisualization();
+            },
+            function() {
                 updateCrossDisplay();
+            },
+            function() {
                 updateNodeDisplay();
+            },
+            function() {
                 if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
             },
             function() {
@@ -1975,14 +1989,20 @@ function importDataPostProcess(opts, onDone) {
                 if (window.MapRegions && MapRegions.sendAllRegionsToMapBack && myMap) {
                     MapRegions.sendAllRegionsToMapBack(myMap, objects);
                 }
+            },
+            function() {
                 if (window.MapRegions && MapRegions.rebuildAllRegionLabels && myMap) {
                     MapRegions.rebuildAllRegionLabels(myMap, objects);
                 } else if (window.MapRegions && MapRegions.syncAllRegionLabels && myMap) {
                     MapRegions.syncAllRegionLabels(myMap, objects);
                 }
+            },
+            function() {
                 objects.forEach(function(obj) {
                     if (obj && obj.properties && obj.properties.get('type') === 'cable') ensureCableMapZIndex(obj);
                 });
+            },
+            function() {
                 if (typeof applyMapFilter === 'function') applyMapFilter();
             }
         ];
