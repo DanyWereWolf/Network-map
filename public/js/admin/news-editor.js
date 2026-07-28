@@ -4,6 +4,7 @@
 (function() {
     var quillInstance = null;
     var uploadInProgress = false;
+    var htmlModalEl = null;
 
     function getApiRoot() {
         var base = '';
@@ -122,13 +123,179 @@
             .catch(function(err) { if (err && err.message !== 'cancel') alert(err.message || err); });
     }
 
+    function decodeBasicEntities(text) {
+        return String(text || '')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/&amp;/g, '&');
+    }
+
+    /** Текст похож на HTML-разметку (а не на обычный абзац). */
+    function looksLikeHtmlSource(text) {
+        var t = String(text || '').trim();
+        if (!t) return false;
+        if (/^<!DOCTYPE/i.test(t) || /^<html[\s>]/i.test(t)) return true;
+        if (/^<(p|div|h[1-6]|ul|ol|li|br|strong|em|b|i|blockquote|figure|img|video|span|a|hr)\b/i.test(t)) {
+            return true;
+        }
+        var openTags = t.match(/<(p|div|h[1-6]|ul|ol|li|strong|em|blockquote|img|video|a|span)\b[^>]*>/gi);
+        return !!(openTags && openTags.length >= 2);
+    }
+
+    /**
+     * Если в Quill уже лежит экранированный HTML (&lt;h3&gt;…),
+     * достаём исходную разметку для повторной вставки.
+     */
+    function extractEscapedHtmlFromQuillHtml(quillHtml) {
+        var raw = String(quillHtml || '').trim();
+        if (!raw) return '';
+        if (!/&lt;\/?(?:p|h[1-6]|ul|ol|li|div|strong|em|b|i)\b/i.test(raw)) return '';
+        try {
+            var tmp = document.createElement('div');
+            tmp.innerHTML = raw;
+            var plain = (tmp.textContent || tmp.innerText || '').trim();
+            if (looksLikeHtmlSource(plain)) return plain;
+            if (looksLikeHtmlSource(decodeBasicEntities(plain))) return decodeBasicEntities(plain);
+        } catch (e) {}
+        return '';
+    }
+
     function plainTextToHtml(text) {
         var trimmed = String(text || '').trim();
         if (!trimmed) return '';
+        if (looksLikeHtmlSource(trimmed)) return trimmed;
+        if (trimmed.indexOf('&lt;') >= 0 && looksLikeHtmlSource(decodeBasicEntities(trimmed))) {
+            return decodeBasicEntities(trimmed);
+        }
         if (trimmed.indexOf('<') >= 0) return trimmed;
         return trimmed.split(/\n\n+/).map(function(block) {
             return '<p>' + block.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>') + '</p>';
         }).join('');
+    }
+
+    function setEditorHtml(html, source) {
+        if (!quillInstance) return;
+        var content = plainTextToHtml(html || '');
+        var escaped = extractEscapedHtmlFromQuillHtml(content);
+        if (escaped) content = escaped;
+        if (quillInstance.clipboard && quillInstance.clipboard.dangerouslyPasteHTML) {
+            quillInstance.setText('');
+            if (content) {
+                quillInstance.clipboard.dangerouslyPasteHTML(0, content, source || 'silent');
+            }
+        } else {
+            quillInstance.root.innerHTML = content || '';
+        }
+    }
+
+    function insertHtmlAtCursor(html) {
+        if (!quillInstance) return;
+        var content = plainTextToHtml(html || '');
+        if (!content) return;
+        var range = quillInstance.getSelection(true) || { index: quillInstance.getLength(), length: 0 };
+        quillInstance.clipboard.dangerouslyPasteHTML(range.index, content, 'user');
+        quillInstance.setSelection(Math.min(quillInstance.getLength(), range.index + 1));
+    }
+
+    function ensureHtmlModal() {
+        if (htmlModalEl) return htmlModalEl;
+        var overlay = document.createElement('div');
+        overlay.id = 'newsHtmlSourceModal';
+        overlay.className = 'news-html-modal';
+        overlay.hidden = true;
+        overlay.innerHTML =
+            '<div class="news-html-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="newsHtmlModalTitle">' +
+                '<div class="news-html-modal__head">' +
+                    '<h3 id="newsHtmlModalTitle" class="news-html-modal__title">Вставить HTML</h3>' +
+                    '<button type="button" class="news-html-modal__close" data-html-modal-close aria-label="Закрыть">×</button>' +
+                '</div>' +
+                '<p class="news-html-modal__hint">Вставьте разметку поста (&lt;p&gt;, &lt;h3&gt;, &lt;ul&gt;…). Она будет распознана как форматирование, а не как текст.</p>' +
+                '<textarea id="newsHtmlSourceInput" class="news-html-modal__textarea" rows="14" spellcheck="false" placeholder="<p>Текст…</p>&#10;<h3>Раздел</h3>&#10;<ul><li>Пункт</li></ul>"></textarea>' +
+                '<div class="news-html-modal__actions">' +
+                    '<button type="button" class="btn-sm" data-html-modal-close>Отмена</button>' +
+                    '<button type="button" class="btn-sm" id="newsHtmlInsertBtn">Вставить в позицию курсора</button>' +
+                    '<button type="button" class="btn-sm-primary" id="newsHtmlReplaceBtn">Заменить весь текст</button>' +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(overlay);
+
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay || (e.target && e.target.getAttribute('data-html-modal-close') != null)) {
+                closeHtmlModal();
+            }
+        });
+        var insertBtn = overlay.querySelector('#newsHtmlInsertBtn');
+        var replaceBtn = overlay.querySelector('#newsHtmlReplaceBtn');
+        if (insertBtn) {
+            insertBtn.addEventListener('click', function() {
+                var val = (overlay.querySelector('#newsHtmlSourceInput') || {}).value || '';
+                insertHtmlAtCursor(val);
+                closeHtmlModal();
+            });
+        }
+        if (replaceBtn) {
+            replaceBtn.addEventListener('click', function() {
+                var val = (overlay.querySelector('#newsHtmlSourceInput') || {}).value || '';
+                setEditorHtml(val, 'user');
+                closeHtmlModal();
+            });
+        }
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && htmlModalEl && !htmlModalEl.hidden) closeHtmlModal();
+        });
+
+        htmlModalEl = overlay;
+        return overlay;
+    }
+
+    function openHtmlModal(prefill) {
+        var modal = ensureHtmlModal();
+        var input = modal.querySelector('#newsHtmlSourceInput');
+        if (input) {
+            var current = '';
+            try { current = quillInstance ? String(quillInstance.root.innerHTML || '').trim() : ''; } catch (e) {}
+            var recovered = extractEscapedHtmlFromQuillHtml(current);
+            input.value = prefill != null ? String(prefill) : (recovered || '');
+        }
+        modal.hidden = false;
+        if (input) {
+            setTimeout(function() {
+                input.focus();
+                input.select();
+            }, 0);
+        }
+    }
+
+    function closeHtmlModal() {
+        if (!htmlModalEl) return;
+        htmlModalEl.hidden = true;
+    }
+
+    function bindHtmlPasteSupport(quill) {
+        if (!quill || !quill.root) return;
+        quill.root.addEventListener('paste', function(e) {
+            try {
+                var cd = e.clipboardData;
+                if (!cd) return;
+                var htmlClip = cd.getData('text/html');
+                var textClip = cd.getData('text/plain');
+                // Копирование из браузера/Word даёт text/html — оставляем стандартный paste Quill.
+                if (htmlClip && /<[a-z][\s\S]*>/i.test(htmlClip)) return;
+                var candidate = String(textClip || '').trim();
+                if (!candidate) return;
+                if (candidate.indexOf('&lt;') >= 0 && looksLikeHtmlSource(decodeBasicEntities(candidate))) {
+                    candidate = decodeBasicEntities(candidate);
+                }
+                if (!looksLikeHtmlSource(candidate)) return;
+                e.preventDefault();
+                e.stopPropagation();
+                var range = quill.getSelection(true) || { index: quill.getLength(), length: 0 };
+                if (range.length) quill.deleteText(range.index, range.length, 'user');
+                quill.clipboard.dangerouslyPasteHTML(range.index, candidate, 'user');
+            } catch (err) {}
+        }, true);
     }
 
     function initQuill() {
@@ -149,7 +316,7 @@
 
         quillInstance = new Quill(container, {
             theme: 'snow',
-            placeholder: 'Текст новости: форматирование, картинки, видео, файлы…',
+            placeholder: 'Текст новости: форматирование, картинки, видео, файлы… Или кнопка «HTML».',
             modules: {
                 toolbar: {
                     container: toolbarOptions,
@@ -167,10 +334,14 @@
             }
         });
 
+        bindHtmlPasteSupport(quillInstance);
+
         var videoBtn = document.getElementById('newsEditorUploadVideoBtn');
         var fileBtn = document.getElementById('newsEditorUploadFileBtn');
+        var htmlBtn = document.getElementById('newsEditorHtmlBtn');
         if (videoBtn) videoBtn.addEventListener('click', videoFileHandler);
         if (fileBtn) fileBtn.addEventListener('click', fileHandler);
+        if (htmlBtn) htmlBtn.addEventListener('click', function() { openHtmlModal(); });
 
         return quillInstance;
     }
@@ -185,7 +356,15 @@
                 var legacy = document.getElementById('productUpdateBody');
                 return legacy ? legacy.value.trim() : '';
             }
-            return String(quillInstance.root.innerHTML || '').trim();
+            var html = String(quillInstance.root.innerHTML || '').trim();
+            var recovered = extractEscapedHtmlFromQuillHtml(html);
+            // Если пользователь вставил HTML как текст — при сохранении
+            // автоматически превращаем в настоящую разметку.
+            if (recovered) {
+                setEditorHtml(recovered, 'silent');
+                html = String(quillInstance.root.innerHTML || '').trim();
+            }
+            return html;
         },
         setHtml: function(html) {
             if (!quillInstance) {
@@ -193,13 +372,11 @@
                 if (legacy) legacy.value = html || '';
                 return;
             }
-            var content = plainTextToHtml(html || '');
-            if (quillInstance.clipboard && quillInstance.clipboard.dangerouslyPasteHTML) {
-                quillInstance.setText('');
-                quillInstance.clipboard.dangerouslyPasteHTML(0, content, 'silent');
-            } else {
-                quillInstance.root.innerHTML = content;
-            }
+            setEditorHtml(html, 'silent');
+        },
+        openHtmlSource: function(prefill) {
+            if (!quillInstance) this.init();
+            openHtmlModal(prefill);
         },
         clear: function() {
             this.setHtml('');

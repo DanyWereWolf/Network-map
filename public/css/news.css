@@ -347,6 +347,91 @@
     gap: 8px;
     margin-bottom: 8px;
 }
+
+.news-html-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(15, 23, 42, 0.55);
+    box-sizing: border-box;
+}
+.news-html-modal[hidden] {
+    display: none !important;
+}
+.news-html-modal__dialog {
+    width: min(720px, 100%);
+    max-height: min(90vh, 820px);
+    overflow: auto;
+    border-radius: 14px;
+    background: #fff;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+    padding: 18px 18px 16px;
+    box-sizing: border-box;
+}
+[data-theme="dark"] .news-html-modal__dialog {
+    background: #1e293b;
+    border-color: rgba(71, 85, 105, 0.6);
+    color: #e2e8f0;
+}
+.news-html-modal__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+.news-html-modal__title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+}
+.news-html-modal__close {
+    border: none;
+    background: transparent;
+    color: inherit;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 4px;
+    opacity: 0.7;
+}
+.news-html-modal__close:hover { opacity: 1; }
+.news-html-modal__hint {
+    margin: 0 0 10px;
+    font-size: 0.85rem;
+    line-height: 1.45;
+    color: #64748b;
+}
+[data-theme="dark"] .news-html-modal__hint { color: #94a3b8; }
+.news-html-modal__textarea {
+    width: 100%;
+    min-height: 260px;
+    resize: vertical;
+    box-sizing: border-box;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.5);
+    background: #f8fafc;
+    color: #0f172a;
+    font: 0.82rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    padding: 12px;
+    margin: 0 0 12px;
+}
+[data-theme="dark"] .news-html-modal__textarea {
+    background: #0f172a;
+    color: #e2e8f0;
+    border-color: rgba(71, 85, 105, 0.7);
+}
+.news-html-modal__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+}
 .updates-admin-list-wrap,
 .updates-admin-editor {
     border-radius: 14px;
