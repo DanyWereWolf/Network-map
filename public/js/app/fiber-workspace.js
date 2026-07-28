@@ -56,13 +56,51 @@ function updateCableVisualization(opts) {
             objects.push(label);
             mapPerfRegister(label);
             mapGeoAdd(label);
-            if (opts && opts.skipFilter && typeof applyMapFilterForObject === 'function') {
-                try { applyMapFilterForObject(label); } catch (eLbl) {}
-            }
         }
     });
     if (!(opts && opts.skipFilter) && typeof applyMapFilter === 'function') applyMapFilter();
 }
+
+/** Лёгкое обновление подписей «N каб.» после удаления — без полной пересборки и applyMapFilter. */
+function pruneCableLabelsAfterCableRemoval() {
+    if (!objects || !objects.length) return;
+    var toRemove = [];
+    for (var i = 0; i < objects.length; i++) {
+        var label = objects[i];
+        if (!label || !label.properties || label.properties.get('type') !== 'cableLabel') continue;
+        var cables = label.properties.get('cables');
+        if (!Array.isArray(cables)) {
+            toRemove.push(label);
+            continue;
+        }
+        var alive = [];
+        for (var c = 0; c < cables.length; c++) {
+            var cable = cables[c];
+            if (!cable || !cable.properties) continue;
+            if (cable.properties.get('type') !== 'cable') continue;
+            if (objects.indexOf(cable) === -1) continue;
+            alive.push(cable);
+        }
+        if (alive.length <= 1) {
+            toRemove.push(label);
+            continue;
+        }
+        label.properties.set('cables', alive);
+        try {
+            label.properties.set('iconContent',
+                '<div style="background: rgba(255, 255, 255, 0.95); border: 2px solid #3b82f6; border-radius: 12px; padding: 4px 8px; font-size: 11px; font-weight: bold; color: #1e40af; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.2); white-space: nowrap;">' +
+                alive.length + ' каб.</div>');
+        } catch (eIcon) {}
+    }
+    if (!toRemove.length) return;
+    for (var r = 0; r < toRemove.length; r++) {
+        try { mapGeoRemove(toRemove[r]); } catch (eRem) {}
+        try { mapPerfUnregister(toRemove[r]); } catch (eUn) {}
+    }
+    var drop = new Set(toRemove);
+    objects = objects.filter(function(o) { return !drop.has(o); });
+}
+window.pruneCableLabelsAfterCableRemoval = pruneCableLabelsAfterCableRemoval;
 
 function getUsedFibers(obj, cableUniqueId) {
     

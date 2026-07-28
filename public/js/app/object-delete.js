@@ -122,29 +122,17 @@ function deleteObject(obj, opts) {
         releaseAllCabinetMembers(objUniqueId);
     }
 
-    if (!(opts && opts.remoteApply) && window.ObjectGallery && ObjectGallery.canHaveGallery(obj)) {
+    if (window.ObjectGallery && ObjectGallery.canHaveGallery(obj)) {
         ObjectGallery.cleanupObjectPhotos(obj);
     }
 
-    var gponImpact = null;
-    var oltGponImpact = null;
-    // Remote apply: не считаем GPON-impact (дорого) — линии снимаются точечно, граф почистит idle.
-    if (!(opts && opts.remoteApply)) {
-        gponImpact = isFiberHostType(objType) ? collectGponImpactFromHost(obj) : null;
-        if (!gponImpact && opts && opts.gponImpact) gponImpact = opts.gponImpact;
-        oltGponImpact = (objType === 'olt') ? collectGponImpactFromOlt(obj) : null;
-        if (!oltGponImpact && opts && opts.oltGponImpact) oltGponImpact = opts.oltGponImpact;
-    } else if (opts && opts.gponImpact) {
-        gponImpact = opts.gponImpact;
-    } else if (opts && opts.oltGponImpact) {
-        oltGponImpact = opts.oltGponImpact;
-    }
+    var gponImpact = isFiberHostType(objType) ? collectGponImpactFromHost(obj) : null;
+    if (!gponImpact && opts && opts.gponImpact) gponImpact = opts.gponImpact;
+    var oltGponImpact = (objType === 'olt') ? collectGponImpactFromOlt(obj) : null;
+    if (!oltGponImpact && opts && opts.oltGponImpact) oltGponImpact = opts.oltGponImpact;
 
     if (currentModalObject === obj || (objUniqueId && currentModalObject && getObjectUniqueId(currentModalObject) === objUniqueId)) {
         currentModalObject = null;
-        if (objUniqueId && myHeldObjectLockId === objUniqueId && typeof clearHeldObjectLockLocal === 'function') {
-            clearHeldObjectLockLocal();
-        }
         closeInfoModal({ force: true });
     }
 
@@ -354,12 +342,7 @@ function deleteObject(obj, opts) {
     cablesToRemove.forEach(cable => {
         var cableUniqueId = cable.properties.get('uniqueId');
         if (cableUniqueId) {
-            deleteCableByUniqueId(cableUniqueId, {
-                skipSync: true,
-                skipRefreshModal: true,
-                deferMapRefresh: true,
-                remoteApply: !!(opts && opts.remoteApply)
-            });
+            deleteCableByUniqueId(cableUniqueId, { skipSync: true, skipRefreshModal: true, deferMapRefresh: true });
         } else {
             mapPerfUnregister(cable);
             myMap.geoObjects.remove(cable);
@@ -391,12 +374,12 @@ function deleteObject(obj, opts) {
         }
     }
 
-    var pendingGponImpact = null;
+    var gponRefreshOpts = { deferLineRefresh: true };
     if (isFiberHostType(objType) && gponImpact && gponImpact.hasGpon) {
-        pendingGponImpact = gponImpact;
+        forcePurgeGponAfterHostRemoval(gponImpact, gponRefreshOpts);
         gponPurged = true;
     } else if (objType === 'olt' && oltGponImpact && oltGponImpact.hasGpon) {
-        pendingGponImpact = oltGponImpact;
+        forcePurgeGponAfterHostRemoval(oltGponImpact, gponRefreshOpts);
         gponPurged = true;
     }
 
@@ -411,330 +394,41 @@ function deleteObject(obj, opts) {
             objectType: objType,
             name: objName
         });
-    } else if (removedUniqueIds.length && typeof patchLastSavedStateRemoveUniqueIds === 'function') {
-        // Remote delete: обновить снимок undo без полной сериализации карты.
-        try { patchLastSavedStateRemoveUniqueIds(removedUniqueIds); } catch (ePatch) {}
     }
-
-    // GPON-purge (обход графа) — после кадра. На remoteApply не запускаем: иначе другие клиенты зависают.
-    if (pendingGponImpact && !(opts && opts.remoteApply) && typeof forcePurgeGponAfterHostRemoval === 'function') {
-        var impactToPurge = pendingGponImpact;
-        var runGponPurge = function() {
-            try {
-                forcePurgeGponAfterHostRemoval(impactToPurge, { deferLineRefresh: true });
-            } catch (eGpon) {}
-            if (!(opts && opts.deferMapRefresh)) {
-                scheduleConnectionLinesUpdate('full');
-            }
-        };
-        if (typeof requestAnimationFrame === 'function') {
-            requestAnimationFrame(function() { setTimeout(runGponPurge, 0); });
-        } else {
-            setTimeout(runGponPurge, 0);
-        }
-    } else if (pendingGponImpact && opts && opts.remoteApply) {
-        // Лёгкая отложенная зачистка свойств без rebuild всех линий.
-        var remoteImpact = pendingGponImpact;
-        var runRemoteGponIdle = function() {
-            try {
-                forcePurgeGponAfterHostRemoval(remoteImpact, { deferLineRefresh: true });
-            } catch (eRemoteGpon) {}
-        };
-        if (typeof requestIdleCallback === 'function') {
-            requestIdleCallback(runRemoteGponIdle, { timeout: 2500 });
-        } else {
-            setTimeout(runRemoteGponIdle, 500);
-        }
-    }
-
     if (!(opts && opts.deferMapRefresh)) {
         var refreshPlan = {};
         if (cablesToRemove.length > 0 || cableRoutesUpdated) refreshPlan.cableVisualization = true;
         if (objType === 'node' && objGroupKey) refreshPlan.nodeGroupKey = objGroupKey;
         else if (objType === 'cross' && objGroupKey) refreshPlan.crossGroupKey = objGroupKey;
         else if (objType === 'cabinet' && typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
-        // Линии уже сняты выше (removeHostConnectionLines). Не вызывать полный rebuild.
-        if (!gponPurged && !(opts && opts.remoteApply) && (cablesToRemove.length > 0 || cableRoutesUpdated)) {
+        if (gponPurged) {
             refreshPlan.connectionLines = 'full';
-        } else if (!gponPurged && !(opts && opts.remoteApply) && objUniqueId && (
+        } else if (objUniqueId && (
             (typeof isFiberHostType === 'function' && isFiberHostType(objType)) ||
             objType === 'olt' || objType === 'onu' || objType === 'splitter' ||
             objType === 'mediaConverter' || objType === 'radioBridge' || objType === 'node' ||
             objType === 'support' || objType === 'attachment'
         )) {
             refreshPlan.connectionLines = objUniqueId;
+        } else if ((cablesToRemove.length > 0 || cableRoutesUpdated) && objUniqueId) {
+            refreshPlan.connectionLines = objUniqueId;
         }
+        if (objType === 'region') refreshPlan.renderRegions = true;
         scheduleObjectDeleteVisualRefresh(refreshPlan);
-    }
-    // Сайдбар регионов: collectObjectsInRegion = O(regions×objects) — только при удалении региона.
-    if (objType === 'region' && typeof renderRegionsSidebarList === 'function') {
-        var renderRegions = function() { renderRegionsSidebarList(); };
+    } else if (!(opts && opts.skipStats)) {
         if (typeof requestIdleCallback === 'function') {
-            requestIdleCallback(renderRegions, { timeout: 400 });
+            requestIdleCallback(function() { try { updateStats(); } catch (e) {} }, { timeout: 250 });
         } else {
-            setTimeout(renderRegions, 0);
+            setTimeout(function() { try { updateStats(); } catch (e2) {} }, 0);
+        }
+    }
+    if (objType === 'region' && typeof renderRegionsSidebarList === 'function' && (opts && opts.deferMapRefresh)) {
+        if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(function() { try { renderRegionsSidebarList(); } catch (eR) {} }, { timeout: 300 });
+        } else {
+            setTimeout(function() { try { renderRegionsSidebarList(); } catch (eR2) {} }, 0);
         }
     }
     
     closeInfoModalForDeletedHost((opts && opts.deletedModalUid) || objUniqueId);
 }
-
-/**
- * Remote delete обычного объекта: сначала только снять с карты (и endpoint-кабели),
- * тяжёлую зачистку свойств/waypoints/GPON — в idle. Иначе другие клиенты зависают после исчезновения.
- */
-function applyRemoteDeleteObjectLite(uniqueId) {
-    if (uniqueId == null || uniqueId === '') return false;
-    var toDel = null;
-    for (var i = 0; i < objects.length; i++) {
-        var o = objects[i];
-        if (!o || !o.properties) continue;
-        var t = o.properties.get('type');
-        if (!t || t === 'cable' || t === 'cableLabel') continue;
-        if (o.properties.get('uniqueId') === uniqueId) {
-            toDel = o;
-            break;
-        }
-    }
-    if (!toDel) {
-        if (typeof patchLastSavedStateRemoveUniqueIds === 'function') {
-            try { patchLastSavedStateRemoveUniqueIds([uniqueId]); } catch (eMiss) {}
-        }
-        return false;
-    }
-
-    var objType = toDel.properties.get('type');
-    var objUniqueId = uniqueId;
-    var delGroupKey = null;
-    try {
-        if ((objType === 'cross' || objType === 'node') && toDel.geometry && typeof groupKey === 'function') {
-            delGroupKey = groupKey(toDel.geometry.getCoordinates());
-        }
-    } catch (eGk) {}
-
-    if (objType === 'cabinet' && objUniqueId && typeof releaseAllCabinetMembers === 'function') {
-        try { releaseAllCabinetMembers(objUniqueId); } catch (eCab) {}
-    }
-
-    if (currentModalObject === toDel || (currentModalObject && getObjectUniqueId(currentModalObject) === objUniqueId)) {
-        currentModalObject = null;
-        if (typeof closeInfoModal === 'function') closeInfoModal({ force: true });
-    }
-
-    var cablesToRemove = [];
-    for (var ci = 0; ci < objects.length; ci++) {
-        var cable = objects[ci];
-        if (!cable || !cable.properties || cable.properties.get('type') !== 'cable') continue;
-        if (cable.properties.get('from') === toDel || cable.properties.get('to') === toDel) {
-            cablesToRemove.push(cable);
-        }
-    }
-
-    var removedUniqueIds = [objUniqueId];
-    for (var cj = 0; cj < cablesToRemove.length; cj++) {
-        var cuid = cablesToRemove[cj].properties.get('uniqueId');
-        if (cuid) removedUniqueIds.push(cuid);
-    }
-
-    try {
-        var lbl = toDel.properties.get('label');
-        if (lbl) myMap.geoObjects.remove(lbl);
-    } catch (eLbl) {}
-    if (typeof removeObjectLockMapBadge === 'function') {
-        try { removeObjectLockMapBadge(toDel); } catch (eBadge) {}
-    }
-    if (objUniqueId) {
-        if (typeof isFiberHostType === 'function' && isFiberHostType(objType)) {
-            try { removeHostConnectionLines(objUniqueId); } catch (eH) {}
-            try { removeNodeLinesForCross(objUniqueId); } catch (eN) {}
-        } else if (objType === 'splitter' && typeof removeSplitterOutputLinesForSplitter === 'function') {
-            try { removeSplitterOutputLinesForSplitter(objUniqueId); } catch (eS) {}
-        }
-        if (typeof purgeConnectionLinesForMissingUid === 'function') {
-            try { purgeConnectionLinesForMissingUid(objUniqueId); } catch (eP) {}
-        }
-    }
-
-    // Endpoint-кабели: только с карты, без sync scrub свойств.
-    for (var ck = 0; ck < cablesToRemove.length; ck++) {
-        var cab = cablesToRemove[ck];
-        try {
-            if (window.CableUnderground) CableUnderground.removeAllCableRouteOverlays(cab);
-        } catch (eUg) {}
-        try { myMap.geoObjects.remove(cab); } catch (eRmC) {}
-        try { mapPerfUnregister(cab); } catch (eUnC) {}
-    }
-
-    try { myMap.geoObjects.remove(toDel); } catch (eRm) {}
-    if (objType === 'region' && window.MapRegions && MapRegions.removeRegionLabel) {
-        try { MapRegions.removeRegionLabel(toDel, myMap); } catch (eReg) {}
-    }
-    try { mapPerfUnregister(toDel); } catch (eUn) {}
-
-    var removeSet = typeof Set !== 'undefined' ? new Set(cablesToRemove.concat([toDel])) : null;
-    objects = objects.filter(function(x) {
-        if (removeSet) return !removeSet.has(x);
-        if (x === toDel) return false;
-        for (var r = 0; r < cablesToRemove.length; r++) {
-            if (x === cablesToRemove[r]) return false;
-        }
-        return true;
-    });
-
-    if (typeof patchLastSavedStateRemoveUniqueIds === 'function') {
-        try { patchLastSavedStateRemoveUniqueIds(removedUniqueIds); } catch (ePatch) {}
-    }
-
-    // Минимум визуала: без idle scrub всей карты (waypoints/fiber) — это и подвешивало remote после delete.
-    var refreshPlan = { statsIdle: true };
-    if (objType === 'cross' && delGroupKey) {
-        refreshPlan.crossGroupKey = { full: false, keys: [delGroupKey], skipCableUpdate: true, skipFilter: true };
-    } else if (objType === 'node' && delGroupKey) {
-        refreshPlan.nodeGroupKey = { full: false, keys: [delGroupKey], skipCableUpdate: true, skipFilter: true };
-    }
-    if (typeof scheduleObjectDeleteVisualRefresh === 'function') {
-        scheduleObjectDeleteVisualRefresh(refreshPlan);
-    }
-
-    if (objType === 'region' && typeof renderRegionsSidebarList === 'function') {
-        var renderRegions = function() { renderRegionsSidebarList(); };
-        if (typeof requestIdleCallback === 'function') requestIdleCallback(renderRegions, { timeout: 600 });
-        else setTimeout(renderRegions, 0);
-    }
-
-    return true;
-}
-
-function scrubRemoteDeletedCableRefs(cableUniqueId) {
-    if (!cableUniqueId || !objects) return;
-    objects.forEach(function(slot) {
-        if (!slot || !slot.properties) return;
-        var t = slot.properties.get('type');
-        if (typeof isFiberHostType === 'function' && isFiberHostType(t)) {
-            ['oltConnections', 'onuConnections', 'mediaConverterConnections', 'radioBridgeConnections',
-                'splitterConnections', 'nodeConnections'].forEach(function(prop) {
-                var map = slot.properties.get(prop);
-                if (!map) return;
-                var changed = false;
-                Object.keys(map).forEach(function(key) {
-                    if (key.indexOf(cableUniqueId + '-') === 0) {
-                        delete map[key];
-                        changed = true;
-                    }
-                });
-                if (changed) slot.properties.set(prop, map);
-            });
-            var fiberConn = slot.properties.get('fiberConnections');
-            if (fiberConn && Array.isArray(fiberConn)) {
-                var next = fiberConn.filter(function(conn) {
-                    if (!conn) return false;
-                    if (conn.from && conn.from.cableId === cableUniqueId) return false;
-                    if (conn.to && conn.to.cableId === cableUniqueId) return false;
-                    return true;
-                });
-                if (next.length !== fiberConn.length) slot.properties.set('fiberConnections', next);
-            }
-            try { removeCableFromUsedFibers(slot, cableUniqueId); } catch (eUf) {}
-        }
-        if (t === 'olt') {
-            var portAssignments = slot.properties.get('portAssignments') || {};
-            var paChanged = false;
-            Object.keys(portAssignments).forEach(function(portKey) {
-                if (portAssignments[portKey] && portAssignments[portKey].cableId === cableUniqueId) {
-                    delete portAssignments[portKey];
-                    paChanged = true;
-                }
-            });
-            if (paChanged) slot.properties.set('portAssignments', portAssignments);
-            var incomingFiber = slot.properties.get('incomingFiber');
-            if (incomingFiber && incomingFiber.cableId === cableUniqueId) slot.properties.set('incomingFiber', null);
-        }
-        if (t === 'splitter') {
-            var inputFiber = slot.properties.get('inputFiber');
-            if (inputFiber && inputFiber.cableId === cableUniqueId) slot.properties.set('inputFiber', null);
-        }
-        if (t === 'onu' || t === 'mediaConverter' || t === 'radioBridge') {
-            var inc = slot.properties.get('incomingFiber');
-            if (inc && inc.cableId === cableUniqueId) slot.properties.set('incomingFiber', null);
-        }
-    });
-}
-
-function scrubRemoteDeletedObjectRefs(objUniqueId, objType) {
-    if (!objUniqueId || !objects) return;
-    // Убрать waypoint из маршрутов кабелей (без sync geometry storm — батчем).
-    if (objType === 'support' || objType === 'attachment' ||
-        (typeof isFiberHostType === 'function' && isFiberHostType(objType))) {
-        for (var ci = 0; ci < objects.length; ci++) {
-            var cable = objects[ci];
-            if (!cable || !cable.properties || cable.properties.get('type') !== 'cable') continue;
-            var points = cable.properties.get('points');
-            if (!Array.isArray(points) || points.length <= 2) continue;
-            var objIdx = -1;
-            for (var pi = 0; pi < points.length; pi++) {
-                var pt = points[pi];
-                if (pt && getObjectUniqueId(pt) === objUniqueId) {
-                    objIdx = pi;
-                    break;
-                }
-            }
-            if (objIdx <= 0 || objIdx >= points.length - 1) continue;
-            var newPoints = points.filter(function(_p, idx) { return idx !== objIdx; });
-            cable.properties.set('points', newPoints);
-            var newGeometry = [];
-            for (var gi = 0; gi < newPoints.length; gi++) {
-                var np = newPoints[gi];
-                if (np && np.geometry) {
-                    var c = np.geometry.getCoordinates();
-                    if (c) newGeometry.push(c);
-                }
-            }
-            if (newGeometry.length >= 2 && cable.geometry) {
-                try { cable.geometry.setCoordinates(newGeometry); } catch (eGeo) {}
-            }
-        }
-    }
-    if (objType === 'node') {
-        objects.forEach(function(host) {
-            if (!host.properties || !isFiberHostType(host.properties.get('type'))) return;
-            var nc = host.properties.get('nodeConnections');
-            if (!nc) return;
-            var changed = false;
-            Object.keys(nc).forEach(function(key) {
-                if (nc[key] && nc[key].nodeId === objUniqueId) {
-                    delete nc[key];
-                    changed = true;
-                }
-            });
-            if (changed) host.properties.set('nodeConnections', nc);
-        });
-    }
-    if (objType === 'olt' || objType === 'onu' || objType === 'splitter' ||
-        objType === 'mediaConverter' || objType === 'radioBridge') {
-        var propMap = {
-            olt: 'oltConnections',
-            onu: 'onuConnections',
-            splitter: 'splitterConnections',
-            mediaConverter: 'mediaConverterConnections',
-            radioBridge: 'radioBridgeConnections'
-        };
-        var prop = propMap[objType];
-        var idField = objType === 'mediaConverter' ? 'mediaConverterId'
-            : (objType === 'radioBridge' ? 'radioBridgeId' : (objType + 'Id'));
-        objects.forEach(function(host) {
-            if (!host.properties || !isFiberHostType(host.properties.get('type'))) return;
-            var map = host.properties.get(prop);
-            if (!map) return;
-            var changed = false;
-            Object.keys(map).forEach(function(key) {
-                if (map[key] && map[key][idField] === objUniqueId) {
-                    delete map[key];
-                    changed = true;
-                }
-            });
-            if (changed) host.properties.set(prop, map);
-        });
-    }
-}
-
-window.applyRemoteDeleteObjectLite = applyRemoteDeleteObjectLite;

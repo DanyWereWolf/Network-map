@@ -204,7 +204,10 @@ function setupRectSelection() {
                         }
                     });
                     if (toDelete.length) {
-                        if (needCableViz && typeof updateCableVisualization === 'function') updateCableVisualization();
+                        if (needCableViz) {
+                            if (typeof pruneCableLabelsAfterCableRemoval === 'function') pruneCableLabelsAfterCableRemoval();
+                            else if (typeof updateCableVisualization === 'function') updateCableVisualization({ skipFilter: true });
+                        }
                         var crossKeyList = Object.keys(crossKeys);
                         var nodeKeyList = Object.keys(nodeKeys);
                         if (crossKeyList.length && typeof updateCrossDisplay === 'function') {
@@ -215,7 +218,8 @@ function setupRectSelection() {
                         }
                         if (typeof scheduleConnectionLinesUpdate === 'function') scheduleConnectionLinesUpdate('full');
                         if (typeof updateStats === 'function') updateStats();
-                        saveData({ syncFull: true });
+                        // Не syncFull: каждый deleteObject уже отправил delete_object —
+                        // полный state у других = тяжёлый map_refresh.
                         if (typeof showInfo === 'function') showInfo('Удалено объектов: ' + toDelete.length, 'Удаление');
                     }
                     panel.style.display = 'none';

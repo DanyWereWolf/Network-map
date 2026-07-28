@@ -33,47 +33,48 @@ function mapHasOltObjects() {
 
 function finishObjectDeleteVisualRefresh(plan) {
     plan = plan || {};
-    // Без полного applyMapFilter: объекты уже сняты с карты; фильтр подвешивает UI на больших картах.
-    if (plan.cableVisualization && typeof updateCableVisualization === 'function') {
-        updateCableVisualization({ skipFilter: true });
-    }
-    if (plan.crossGroupKey != null && typeof updateCrossDisplay === 'function') {
-        var crossScope = plan.crossGroupKey;
-        if (typeof crossScope === 'string') {
-            crossScope = { keys: [crossScope], skipCableUpdate: true, skipFilter: true, full: false };
+    // Как при добавлении: без полного applyMapFilter / пересборки всех cableLabel.
+    if (plan.cableVisualization) {
+        if (typeof pruneCableLabelsAfterCableRemoval === 'function') {
+            pruneCableLabelsAfterCableRemoval();
+        } else {
+            updateCableVisualization({ skipFilter: true });
         }
-        updateCrossDisplay(crossScope);
     }
-    if (plan.nodeGroupKey != null && typeof updateNodeDisplay === 'function') {
-        var nodeScope = plan.nodeGroupKey;
-        if (typeof nodeScope === 'string') {
-            nodeScope = { keys: [nodeScope], skipCableUpdate: true, skipFilter: true, full: false };
-        }
-        updateNodeDisplay(nodeScope);
-    }
+    if (plan.crossGroupKey != null) updateCrossDisplay(plan.crossGroupKey);
+    if (plan.nodeGroupKey != null) updateNodeDisplay(plan.nodeGroupKey);
     if (plan.connectionLines === 'full') scheduleConnectionLinesUpdate('full');
     else if (plan.connectionLines) scheduleConnectionLinesUpdate(plan.connectionLines);
 }
 
 function scheduleObjectDeleteVisualRefresh(plan) {
     plan = plan || {};
-    var runVisual = function() { finishObjectDeleteVisualRefresh(plan); };
-    var runStats = function() {
-        if (typeof updateStats === 'function') updateStats();
+    var runCritical = function() {
+        finishObjectDeleteVisualRefresh(plan);
+    };
+    var runDeferred = function() {
+        try { updateStats(); } catch (eStats) {}
+        if (plan.renderRegions && typeof renderRegionsSidebarList === 'function') {
+            try { renderRegionsSidebarList(); } catch (eReg) {}
+        }
+    };
+    var afterCritical = function() {
+        if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(runDeferred, { timeout: 220 });
+        } else {
+            setTimeout(runDeferred, 0);
+        }
     };
     if (typeof requestAnimationFrame === 'function') {
         requestAnimationFrame(function() {
-            runVisual();
-            if (plan.statsIdle) {
-                if (typeof requestIdleCallback === 'function') requestIdleCallback(runStats, { timeout: 800 });
-                else setTimeout(runStats, 50);
-            } else {
-                requestAnimationFrame(runStats);
-            }
+            runCritical();
+            afterCritical();
         });
     } else {
-        setTimeout(runVisual, 0);
-        setTimeout(runStats, plan.statsIdle ? 50 : 32);
+        setTimeout(function() {
+            runCritical();
+            afterCritical();
+        }, 0);
     }
 }
 

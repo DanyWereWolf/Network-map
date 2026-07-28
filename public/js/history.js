@@ -118,25 +118,12 @@ function getHistory() {
     return _historyMemory.slice ? _historyMemory.slice() : [];
 }
 
-var _historyPostTimer = null;
-var _historyPostPending = null;
-
 function saveHistory(history) {
     if (history.length > MAX_HISTORY_ENTRIES) {
         history = history.slice(-MAX_HISTORY_ENTRIES);
     }
     _historyMemory = history;
-    // Debounce POST + JSON.stringify — иначе каждое удаление подвешивает UI на большой истории.
-    if (typeof window.postHistoryToApi === 'function') {
-        _historyPostPending = history;
-        if (_historyPostTimer) clearTimeout(_historyPostTimer);
-        _historyPostTimer = setTimeout(function() {
-            _historyPostTimer = null;
-            var payload = _historyPostPending;
-            _historyPostPending = null;
-            if (payload) window.postHistoryToApi(payload);
-        }, 250);
-    }
+    if (typeof window.postHistoryToApi === 'function') window.postHistoryToApi(history);
     updateHistoryBadge();
 }
 

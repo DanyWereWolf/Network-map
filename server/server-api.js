@@ -3561,23 +3561,11 @@ wss.on('connection', (ws, req) => {
                 state.data = nextData;
                 state.clientId = msg.clientId || clientId;
                 scheduleMapDbSave(orgId);
-                // Снять lock удалённого объекта на сервере — иначе клиентский unlock
-                // шлёт object_locks и раньше вызывал полный проход по карте у всех.
-                var locksChanged = false;
-                if ((msg.op.type === 'delete_object' || msg.op.type === 'delete_cable') && msg.op.uniqueId != null) {
-                    var delLockUid = String(msg.op.uniqueId);
-                    var orgLocks = getOrgObjectLocks(orgId);
-                    if (orgLocks && orgLocks[delLockUid]) {
-                        delete orgLocks[delLockUid];
-                        locksChanged = true;
-                    }
-                }
                 wss.clients.forEach(function(client) {
                     if (client !== ws && client.readyState === WebSocket.OPEN && syncOrgIdsEqual(client.orgId, orgId)) {
                         try { client.send(JSON.stringify({ type: 'op', op: msg.op })); } catch (e) {}
                     }
                 });
-                if (locksChanged) broadcastObjectLocks(orgId);
                 return;
             }
             var justConnected = (Date.now() - (ws.connectedAt || 0)) < 4000;

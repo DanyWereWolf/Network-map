@@ -29,12 +29,6 @@ function releaseHeldObjectLock() {
     myHeldObjectLockId = null;
 }
 
-/** Сбросить локальный lock без WS (сервер снимет lock на delete_object). */
-function clearHeldObjectLockLocal() {
-    myHeldObjectLockId = null;
-    dragHeldLockId = null;
-}
-
 function getActiveObjectLockId() {
     return dragHeldLockId || myHeldObjectLockId || null;
 }
@@ -216,66 +210,32 @@ function updateObjectLockMapBadge(obj, locked, lockInfo) {
     }
 }
 
-var _appliedRemoteLockByUid = Object.create(null);
-
 function applyObjectLocksToMapDraggable() {
     var locks = window.syncRemoteObjectLocks || {};
-    var myId = window.syncMyClientId;
-    var nextLocked = Object.create(null);
-    var uid;
-    var lockUids = Object.keys(locks);
-    for (var li = 0; li < lockUids.length; li++) {
-        uid = lockUids[li];
-        var lk = locks[uid];
-        if (lk && lk.clientId && (!myId || lk.clientId !== myId)) {
-            nextLocked[uid] = lk;
-        }
-    }
-
-    // Только изменившиеся uniqueId — раньше forEach по всей карте + options.set подвешивал UI при unlock после delete.
-    var changed = [];
-    var prevUids = Object.keys(_appliedRemoteLockByUid);
-    for (var pi = 0; pi < prevUids.length; pi++) {
-        uid = prevUids[pi];
-        if (!nextLocked[uid]) changed.push(uid);
-    }
-    var nextUids = Object.keys(nextLocked);
-    for (var ni = 0; ni < nextUids.length; ni++) {
-        uid = nextUids[ni];
-        var prev = _appliedRemoteLockByUid[uid];
-        var cur = nextLocked[uid];
-        if (!prev || prev.clientId !== cur.clientId) changed.push(uid);
-    }
-
-    for (var ci = 0; ci < changed.length; ci++) {
-        uid = changed[ci];
-        var obj = typeof getMapObjectByUid === 'function' ? getMapObjectByUid(uid) : null;
-        if (!obj || !obj.properties) continue;
-        var t = obj.properties.get('type');
+    objects.forEach(function(o) {
+        if (!o || !o.properties || !o.options) return;
+        var t = o.properties.get('type');
         if (t === 'cable' || t === 'cableLabel' || t === 'crossGroup' || t === 'nodeGroup' || t === 'region') {
-            continue;
+            if (t === 'region') try { o.options.set('draggable', false); } catch (eR) {}
+            removeObjectLockMapBadge(o);
+            return;
         }
-        var locked = !!nextLocked[uid];
-        if (typeof updateObjectLockMapBadge === 'function') {
-            updateObjectLockMapBadge(obj, locked, locked ? nextLocked[uid] : null);
-        }
+        var uid = getObjectUniqueId(o);
+        var locked = !!(uid && isObjectLockedByOther(uid));
+        updateObjectLockMapBadge(o, locked, uid ? locks[uid] : null);
         if (!isEditMode) {
             try {
-                if (obj.options) obj.options.set('iconImageOpacity', 1);
-                obj.properties.set('_lockedByOther', false);
+                o.options.set('iconImageOpacity', 1);
+                o.properties.set('_lockedByOther', false);
             } catch (eView) {}
-            continue;
+            return;
         }
         try {
-            if (obj.options) {
-                obj.options.set('draggable', !locked);
-                obj.options.set('iconImageOpacity', locked ? 0.45 : 1);
-            }
-            obj.properties.set('_lockedByOther', locked);
+            o.options.set('draggable', !locked);
+            o.options.set('iconImageOpacity', locked ? 0.45 : 1);
+            o.properties.set('_lockedByOther', locked);
         } catch (e) {}
-    }
-
-    _appliedRemoteLockByUid = nextLocked;
+    });
 }
 
 window.onSyncObjectLocks = function() {

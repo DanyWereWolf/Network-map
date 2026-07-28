@@ -80,7 +80,6 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
     if (toObj) {
         removeCableFromUsedFibers(toObj, cableUniqueId);
     }
-    var scrubFiberHostsForCable = function() {
     objects.forEach(function(slot) {
         if (!slot.properties) return;
         var t = slot.properties.get('type');
@@ -213,17 +212,6 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
             }
         }
     });
-    };
-
-    if (opts && opts.remoteApply) {
-        if (typeof requestIdleCallback === 'function') {
-            requestIdleCallback(scrubFiberHostsForCable, { timeout: 2000 });
-        } else {
-            setTimeout(scrubFiberHostsForCable, 0);
-        }
-    } else {
-        scrubFiberHostsForCable();
-    }
 
     if (window.CableUnderground) CableUnderground.removeAllCableRouteOverlays(cable);
     myMap.geoObjects.remove(cable);
@@ -244,12 +232,34 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
     }
 
     if (!(opts && opts.deferMapRefresh)) {
-        updateCableVisualization({ skipFilter: true });
-        scheduleConnectionLinesUpdate();
-        cleanupGponAssignmentsWithoutOlt({ deferLineRefresh: true });
-        if (typeof updateStats === 'function') {
-            setTimeout(function() { updateStats(); }, 0);
+        if (opts && opts.remoteOp) {
+            if (typeof scheduleObjectDeleteVisualRefresh === 'function') {
+                scheduleObjectDeleteVisualRefresh({ cableVisualization: true });
+            } else if (typeof pruneCableLabelsAfterCableRemoval === 'function') {
+                pruneCableLabelsAfterCableRemoval();
+            } else {
+                updateCableVisualization({ skipFilter: true });
+            }
+            if (typeof scheduleConnectionLinesUpdate === 'function') {
+                scheduleConnectionLinesUpdate(cableUniqueId || undefined);
+            }
+        } else {
+            if (typeof pruneCableLabelsAfterCableRemoval === 'function') {
+                pruneCableLabelsAfterCableRemoval();
+            } else {
+                updateCableVisualization({ skipFilter: true });
+            }
+            scheduleConnectionLinesUpdate();
+            cleanupGponAssignmentsWithoutOlt();
+            updateStats();
         }
+    } else if (opts && opts.remoteOp && typeof pruneCableLabelsAfterCableRemoval === 'function') {
+        // Кабель уже снят с карты — подчистить подписи в idle.
+        var prune = function() {
+            try { pruneCableLabelsAfterCableRemoval(); } catch (eP) {}
+        };
+        if (typeof requestIdleCallback === 'function') requestIdleCallback(prune, { timeout: 200 });
+        else setTimeout(prune, 0);
     }
 
     const modal = document.getElementById('infoModal');
