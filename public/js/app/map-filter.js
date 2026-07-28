@@ -4,7 +4,7 @@
 var MAP_FILTER_INPUT_IDS = [
     'mapFilterNode', 'mapFilterNodeAggregationOnly', 'mapFilterCross', 'mapFilterSleeve',
     'mapFilterSupport', 'mapFilterAttachment', 'mapFilterManhole', 'mapFilterSignalPost', 'mapFilterCabinet', 'mapFilterOlt', 'mapFilterSplitter',
-    'mapFilterOnu', 'mapFilterCamera', 'mapFilterMediaConverter'
+    'mapFilterOnu', 'mapFilterCamera', 'mapFilterMediaConverter', 'mapFilterRadioBridge'
 ];
 var MAP_FILTER_MAIN_KEYS = ['node', 'cross', 'sleeve', 'support', 'attachment', 'manhole', 'signalPost', 'cabinet', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter', 'radioBridge'];
 var MAP_FILTER_STORAGE_KEY = 'networkMap_mapFilter';
@@ -407,6 +407,9 @@ function applyLowZoomMapUpdate() {
     try { applyExpertZoomVisibility(); } catch (eLow) {}
     try { applyCrossNodeLabelVisibility(filter, zoomFlags); } catch (eLowLbl) {}
     try { applyRegionZoomVisibility(zoomFlags.zoom); } catch (eLowReg) {}
+    if (typeof applyRadioBridgeCoverageVisibility === 'function') {
+        applyRadioBridgeCoverageVisibility();
+    }
 }
 
 function regionZoomLabelRebuildNeeded(oldZoom, newZoom) {
@@ -443,6 +446,9 @@ function applyMapViewportUpdate() {
     }
     if (window.MapRegions && MapRegions.purgeOrphanRegionLabelDom) {
         MapRegions.purgeOrphanRegionLabelDom();
+    }
+    if (typeof applyRadioBridgeCoverageVisibility === 'function') {
+        applyRadioBridgeCoverageVisibility();
     }
 }
 
@@ -502,6 +508,9 @@ function applyMapFilterForObject(obj) {
             if (cnLabel && cnLabel.options) cnLabel.options.set('visible', visible && !hideLabels);
         }
     } catch (e) {}
+    if (type === 'radioBridge' && typeof applyRadioBridgeCoverageVisibility === 'function') {
+        applyRadioBridgeCoverageVisibility(obj);
+    }
 }
 
 function ensureObjectLabelOnMap(obj) {
@@ -643,6 +652,9 @@ function applyMapFilter() {
     }
     if (window.MapRegions && MapRegions.purgeOrphanRegionLabelDom) {
         MapRegions.purgeOrphanRegionLabelDom();
+    }
+    if (typeof applyRadioBridgeCoverageVisibility === 'function') {
+        applyRadioBridgeCoverageVisibility();
     }
 }
 

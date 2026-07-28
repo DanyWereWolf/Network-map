@@ -338,78 +338,109 @@ function buildFiberWorkspaceSidebarHtml(sleeveObj, isCross, cablesData, fiberCon
     const name = sleeveObj.properties.get('name') || '';
     const hostType = sleeveObj.properties.get('type');
     const isCassette = hostType === 'spliceCassette';
-    const typeBadgeClass = isCross ? 'fiber-ws-type-badge--cross' : (isCassette ? 'fiber-ws-type-badge--cassette' : 'fiber-ws-type-badge--sleeve');
-    const typeLabel = isCross ? 'Оптический кросс' : (isCassette ? 'Сплайс-кассета' : 'Кабельная муфта');
     const objType = isCross ? 'cross' : (isCassette ? 'spliceCassette' : 'sleeve');
-    let iconBlock = '';
-    if (window.MapIcons) {
-        const nodeKind = !isCross && sleeveObj.properties ? (sleeveObj.properties.get('nodeKind') || 'network') : 'network';
-        iconBlock = '<div class="fiber-ws-head-icon">' + MapIcons.buildIconSvg(objType, { variant: 'normal', nodeKind: nodeKind }) + '</div>';
+    const typeLabel = isCross ? 'Оптический кросс' : (isCassette ? 'Сплайс-кассета' : 'Кабельная муфта');
+    const defaultTitle = isCross ? 'Кросс' : (isCassette ? 'Сплайс-кассета' : 'Муфта');
+    const hostToneClass = isCross ? 'host-card--cross' : (isCassette ? 'host-card--cassette' : 'host-card--sleeve');
+    const pillClass = isCross ? 'host-kind-pill--cross' : (isCassette ? 'host-kind-pill--cassette' : 'host-kind-pill--sleeve');
+
+    var typeDisplay = 'Не указан';
+    if (isCross) {
+        var storedCrossType = sleeveObj.properties.get('crossType');
+        typeDisplay = storedCrossType && typeof getCrossTypeLabel === 'function'
+            ? getCrossTypeLabel(storedCrossType)
+            : (storedCrossType ? String(storedCrossType) : 'Не указан');
+    } else if (isCassette) {
+        var storedCassetteType = sleeveObj.properties.get('cassetteType') || sleeveObj.properties.get('sleeveType');
+        typeDisplay = storedCassetteType && typeof getSpliceCassetteTypeLabel === 'function'
+            ? getSpliceCassetteTypeLabel(storedCassetteType)
+            : (storedCassetteType ? String(storedCassetteType) : 'Не указан');
+    } else {
+        var storedSleeveType = sleeveObj.properties.get('sleeveType');
+        typeDisplay = storedSleeveType && typeof findSleeveTypeById === 'function'
+            ? (findSleeveTypeById(storedSleeveType) ? findSleeveTypeById(storedSleeveType).label : String(storedSleeveType))
+            : (storedSleeveType ? String(storedSleeveType) : 'Не указан');
     }
 
-    var mainHtml = '<div class="fiber-ws-card fiber-ws-card-head fiber-ws-card-head--' + objType + '">';
-    mainHtml += '<div class="fiber-ws-card-head-row">';
-    if (iconBlock) mainHtml += iconBlock;
-    mainHtml += '<div class="fiber-ws-card-head-text">';
-    mainHtml += '<span class="fiber-ws-type-badge ' + typeBadgeClass + '">' + typeLabel + '</span>';
-    const defaultTitle = isCross ? 'Кросс' : (isCassette ? 'Сплайс-кассета' : 'Муфта');
-    mainHtml += '<div class="fiber-ws-side-title">' + escapeHtml(name || defaultTitle) + '</div>';
+    var mainHtml = '<div class="fiber-ws-card fiber-ws-card-head host-card-hero ' + hostToneClass + '">';
+    mainHtml += '<div class="host-card-hero-row fiber-ws-card-head-row">';
+    if (window.MapIcons) {
+        mainHtml += '<div class="host-card-hero-icon fiber-ws-head-icon" aria-hidden="true">' +
+            MapIcons.buildIconSvg(objType, { variant: 'normal' }) + '</div>';
+    }
+    mainHtml += '<div class="host-card-hero-text fiber-ws-card-head-text">';
+    mainHtml += '<span class="host-kind-pill ' + pillClass + '">' + typeLabel + '</span>';
+    mainHtml += '<div class="host-card-view-name fiber-ws-side-title">' + escapeHtml(name || defaultTitle) + '</div>';
+    if (typeDisplay && typeDisplay !== 'Не указан') {
+        mainHtml += '<div class="host-card-type-inline">' + escapeHtml(typeDisplay) + '</div>';
+    }
     mainHtml += '</div></div>';
+
     var coordsStatsHtml = buildObjectCoordsInlineHtml(sleeveObj, { compact: true });
-    if (coordsStatsHtml) {
-        mainHtml += coordsStatsHtml;
+    if (coordsStatsHtml) mainHtml += coordsStatsHtml;
+
+    mainHtml += '<dl class="host-card-stats fiber-ws-host-stats">';
+    mainHtml += '<div class="host-card-stat"><dt>Каб.</dt><dd>' + cablesData.length + '</dd></div>';
+    mainHtml += '<div class="host-card-stat"><dt>Сращ.</dt><dd>' + fiberConnections.length + '</dd></div>';
+    if (window.EmbeddedSplitters) {
+        mainHtml += '<div class="host-card-stat"><dt>Спл.</dt><dd>' + EmbeddedSplitters.getList(sleeveObj).length + '</dd></div>';
+    }
+    if (isCross) {
+        var crossPorts = Math.max(1, parseInt(sleeveObj.properties.get('crossPorts'), 10) || 24);
+        var usedPorts = getTotalUsedPortsInCross(sleeveObj);
+        var portPct = crossPorts > 0 ? Math.round((usedPorts / crossPorts) * 100) : 0;
+        var portTone = usedPorts > crossPorts ? 'over' : (portPct >= 80 ? 'high' : 'ok');
+        mainHtml += '<div class="host-card-stat"><dt>Порты</dt><dd>' + usedPorts + '/' + crossPorts + '</dd></div>';
+        mainHtml += '</dl>';
+        if (typeof buildHostCardUsageBarHtml === 'function') {
+            mainHtml += buildHostCardUsageBarHtml('Порты', usedPorts, crossPorts, portTone, portPct);
+        }
+    } else {
+        var usedFibers = getTotalUsedFibersInSleeve(sleeveObj);
+        var maxFibers = parseInt(sleeveObj.properties.get('maxFibers'), 10) || 0;
+        mainHtml += '<div class="host-card-stat"><dt>Волок.</dt><dd>' + usedFibers + (maxFibers ? '/' + maxFibers : '') + '</dd></div>';
+        mainHtml += '</dl>';
+        if (maxFibers > 0 && typeof buildHostCardUsageBarHtml === 'function') {
+            var fiberPct = Math.round((usedFibers / maxFibers) * 100);
+            var fiberTone = usedFibers > maxFibers ? 'over' : (fiberPct >= 80 ? 'high' : 'ok');
+            mainHtml += buildHostCardUsageBarHtml('Волокна', usedFibers, maxFibers, fiberTone, fiberPct);
+        }
+    }
+    var reserveMStat = sleeveObj.properties.get('reserveM');
+    if (reserveMStat != null && reserveMStat !== '' && !isNaN(Number(reserveMStat)) && Number(reserveMStat) > 0) {
+        mainHtml += '<div class="fiber-ws-reserve-chip">Запас ' + Number(reserveMStat) + ' м</div>';
     }
     mainHtml += '</div>';
 
     if (isEditMode) {
         mainHtml += buildFiberWorkspaceActionsHtml();
-        mainHtml += '<div class="fiber-ws-card fiber-ws-card--edit"><div class="fiber-ws-side-edit">';
+        mainHtml += '<div class="fiber-ws-card fiber-ws-card--edit object-card-section">';
+        mainHtml += '<h4 class="object-card-section-title fiber-ws-section-title">Параметры</h4>';
+        mainHtml += '<div class="fiber-ws-side-edit">';
         if (isCross) {
-            const storedCrossType = sleeveObj.properties.get('crossType');
-            mainHtml += '<div class="form-group"><label class="fiber-ws-label" for="editCrossName">Название</label>';
+            var editCrossType = sleeveObj.properties.get('crossType');
+            mainHtml += '<div class="form-group"><label class="fiber-ws-label object-card-label" for="editCrossName">Название</label>';
             mainHtml += '<input type="text" id="editCrossName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Название кросса"></div>';
-            mainHtml += '<div class="form-group"><label class="fiber-ws-label" for="editCrossType">Тип</label>';
-            mainHtml += '<select id="editCrossType" class="form-select">' + getCrossTypeSelectOptionsHtml(storedCrossType ? String(storedCrossType) : '') + '</select></div>';
+            mainHtml += '<div class="form-group"><label class="fiber-ws-label object-card-label" for="editCrossType">Тип</label>';
+            mainHtml += '<select id="editCrossType" class="form-select">' + getCrossTypeSelectOptionsHtml(editCrossType ? String(editCrossType) : '') + '</select></div>';
             if (typeof buildHostReserveMFieldHtml === 'function') mainHtml += buildHostReserveMFieldHtml(sleeveObj, true);
         } else if (isCassette) {
-            const storedCassetteType = sleeveObj.properties.get('cassetteType') || sleeveObj.properties.get('sleeveType');
-            mainHtml += '<div class="form-group"><label class="fiber-ws-label" for="editCassetteName">Название</label>';
+            var editCassetteType = sleeveObj.properties.get('cassetteType') || sleeveObj.properties.get('sleeveType');
+            mainHtml += '<div class="form-group"><label class="fiber-ws-label object-card-label" for="editCassetteName">Название</label>';
             mainHtml += '<input type="text" id="editCassetteName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Название сплайс-кассеты"></div>';
-            mainHtml += '<div class="form-group"><label class="fiber-ws-label" for="editCassetteType">Тип</label>';
-            mainHtml += '<select id="editCassetteType" class="form-select">' + (typeof getSpliceCassetteTypeSelectOptionsHtml === 'function' ? getSpliceCassetteTypeSelectOptionsHtml(storedCassetteType ? String(storedCassetteType) : '') : '') + '</select></div>';
+            mainHtml += '<div class="form-group"><label class="fiber-ws-label object-card-label" for="editCassetteType">Тип</label>';
+            mainHtml += '<select id="editCassetteType" class="form-select">' + (typeof getSpliceCassetteTypeSelectOptionsHtml === 'function' ? getSpliceCassetteTypeSelectOptionsHtml(editCassetteType ? String(editCassetteType) : '') : '') + '</select></div>';
             if (typeof buildHostReserveMFieldHtml === 'function') mainHtml += buildHostReserveMFieldHtml(sleeveObj, true);
         } else {
-            const storedSleeveType = sleeveObj.properties.get('sleeveType');
-            mainHtml += '<div class="form-group"><label class="fiber-ws-label" for="editSleeveName">Название</label>';
+            var editSleeveType = sleeveObj.properties.get('sleeveType');
+            mainHtml += '<div class="form-group"><label class="fiber-ws-label object-card-label" for="editSleeveName">Название</label>';
             mainHtml += '<input type="text" id="editSleeveName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Название муфты"></div>';
-            mainHtml += '<div class="form-group"><label class="fiber-ws-label" for="editSleeveType">Тип</label>';
-            mainHtml += '<select id="editSleeveType" class="form-select">' + getSleeveTypeSelectOptionsHtml(storedSleeveType ? String(storedSleeveType) : '') + '</select></div>';
+            mainHtml += '<div class="form-group"><label class="fiber-ws-label object-card-label" for="editSleeveType">Тип</label>';
+            mainHtml += '<select id="editSleeveType" class="form-select">' + getSleeveTypeSelectOptionsHtml(editSleeveType ? String(editSleeveType) : '') + '</select></div>';
             if (typeof buildHostReserveMFieldHtml === 'function') mainHtml += buildHostReserveMFieldHtml(sleeveObj, true);
         }
         mainHtml += '</div></div>';
     }
-
-    mainHtml += '<div class="fiber-ws-card fiber-ws-card--stats"><div class="fiber-ws-stats">';
-    mainHtml += '<div class="fiber-ws-stat"><span class="fiber-ws-stat-val">' + cablesData.length + '</span><span class="fiber-ws-stat-lbl">каб.</span></div>';
-    mainHtml += '<div class="fiber-ws-stat"><span class="fiber-ws-stat-val">' + fiberConnections.length + '</span><span class="fiber-ws-stat-lbl">сращ.</span></div>';
-    if (window.EmbeddedSplitters) {
-        var spCount = EmbeddedSplitters.getList(sleeveObj).length;
-        mainHtml += '<div class="fiber-ws-stat"><span class="fiber-ws-stat-val">' + spCount + '</span><span class="fiber-ws-stat-lbl">спл.</span></div>';
-    }
-    if (isCross) {
-        const crossPorts = Math.max(1, parseInt(sleeveObj.properties.get('crossPorts'), 10) || 24);
-        const usedPorts = getTotalUsedPortsInCross(sleeveObj);
-        const pct = crossPorts > 0 ? Math.round((usedPorts / crossPorts) * 100) : 0;
-        mainHtml += '<div class="fiber-ws-stat"><span class="fiber-ws-stat-val">' + usedPorts + '/' + crossPorts + '</span><span class="fiber-ws-stat-lbl">порт. ' + pct + '%</span></div>';
-    } else {
-        const usedFibers = getTotalUsedFibersInSleeve(sleeveObj);
-        mainHtml += '<div class="fiber-ws-stat"><span class="fiber-ws-stat-val">' + usedFibers + '</span><span class="fiber-ws-stat-lbl">волок.</span></div>';
-    }
-    var reserveMStat = sleeveObj.properties.get('reserveM');
-    if (reserveMStat != null && reserveMStat !== '' && !isNaN(Number(reserveMStat)) && Number(reserveMStat) > 0) {
-        mainHtml += '<div class="fiber-ws-stat"><span class="fiber-ws-stat-val">' + Number(reserveMStat) + '</span><span class="fiber-ws-stat-lbl">запас м</span></div>';
-    }
-    mainHtml += '</div></div>';
 
     var toolsHtml = buildFiberWorkspaceSidebarToolsHtml(sleeveObj, isEditMode, schemeSize, cablesData, crossLayout);
     var helpHtml = buildFiberWorkspaceSidebarHelpHtml(isEditMode);
@@ -502,7 +533,7 @@ function buildFiberWorkspaceActionsHtml() {
     var saveSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>';
     var dupSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
     var delSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
-    return '<div class="fiber-ws-card fiber-ws-sidebar-actions object-actions-section">' +
+    return '<div class="fiber-ws-sidebar-actions object-actions-section">' +
         '<div class="fiber-ws-sidebar-actions-grid">' +
         '<button type="button" id="saveChangesBtn" class="btn-primary fiber-ws-action-btn fiber-ws-action-btn--save" title="Сохранить">' + saveSvg + '<span>Сохранить</span></button>' +
         '<button type="button" id="duplicateCurrentObject" class="btn-secondary fiber-ws-action-btn" title="Дублировать">' + dupSvg + '<span>Дубль</span></button>' +

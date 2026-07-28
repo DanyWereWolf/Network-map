@@ -433,7 +433,7 @@ function createObject(type, name, coords, options = {}) {
             finalizeMapObjectDragEnd(placemark);
         } else {
             updateConnectedCables(placemark);
-            saveData({ object: placemark, syncImmediate: true });
+            saveData({ object: placemark, syncImmediate: true, undoLabel: 'перемещение' });
             if (typeof resumeMapPanAfterPlacementObjectDrag === 'function') resumeMapPanAfterPlacementObjectDrag();
         }
     });
@@ -498,7 +498,7 @@ function createObject(type, name, coords, options = {}) {
             if (typeof bumpMapRevisionAfterSyncAdd === 'function') bumpMapRevisionAfterSyncAdd(placemark);
         }
     }
-    saveData({ skipSync: true, addObject: placemark });
+    saveData({ skipSync: true, addObject: placemark, undoLabel: 'добавление' });
 
     var deferCreateSideEffects = function() {
         if (type === 'cabinet' && typeof updateCabinetLabel === 'function') {

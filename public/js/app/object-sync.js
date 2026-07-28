@@ -305,6 +305,10 @@ function finalizeMapObjectDragEnd(placemark) {
         onMemberObjectDragEnd(placemark);
     }
 
+    if ((type === 'support' || type === 'attachment') && typeof tryAttachWaypointToNearbyCables === 'function') {
+        tryAttachWaypointToNearbyCables(placemark, { snap: false, persist: false });
+    }
+
     if (typeof updateConnectedCables === 'function') updateConnectedCables(placemark);
     if (typeof MapPerf !== 'undefined' && MapPerf.updateSpatialPosition) MapPerf.updateSpatialPosition(placemark);
     var label = placemark.properties.get('label');
@@ -315,7 +319,7 @@ function finalizeMapObjectDragEnd(placemark) {
     if (typeof updateSelectionPulsePosition === 'function') updateSelectionPulsePosition(placemark);
 
     if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(placemark);
-    else saveData({ object: placemark, syncImmediate: true });
+    else saveData({ object: placemark, syncImmediate: true, undoLabel: 'перемещение' });
 
     if (type === 'cross' && typeof updateCrossDisplay === 'function') {
         updateCrossDisplay(groupScope);
@@ -382,7 +386,7 @@ function saveLinkedMapObjects(objectsToSave) {
         seen[uid] = true;
         list.push(o);
     }
-    saveData(list.length ? { objects: list, syncImmediate: true } : {});
+    saveData(list.length ? { objects: list, syncImmediate: true, undoLabel: 'перемещение' } : {});
 }
 
 function pushSaveDataToSync(opts) {

@@ -34,6 +34,21 @@ html {
         box-shadow: none;
     }
 
+    body.edit-mode-active .map {
+        box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--edit-mode-accent) 55%, transparent);
+    }
+
+    .map-edit-mode-badge {
+        top: max(10px, env(safe-area-inset-top, 0px));
+        padding: 6px 12px;
+        font-size: 0.6875rem;
+    }
+
+    body.edit-mode-active:not(.underground-draw-active) .map-area-wrapper::after {
+        inset: 0;
+        border-radius: 0;
+    }
+
     .sidebar {
         display: none !important;
     }
@@ -395,8 +410,48 @@ html {
     }
 
     .fiber-management-modal-open--edit .fiber-ws-side-tab {
-        padding: 8px 4px;
-        font-size: 0.625rem;
+        padding: 8px 6px;
+        font-size: 0.6875rem;
+        text-transform: none;
+        letter-spacing: 0;
+    }
+
+    .fiber-ws-panel-scheme .fiber-scheme-viewport {
+        margin: 6px;
+        padding: 8px 6px;
+    }
+
+    .host-card {
+        gap: 12px;
+    }
+
+    .host-card-hero-icon {
+        width: 48px;
+        height: 48px;
+    }
+
+    .host-card-hero-icon svg {
+        width: 32px;
+        height: 32px;
+    }
+
+    .host-card-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .host-card-view-name {
+        font-size: 1.0625rem;
+    }
+
+    .fiber-ws-tabs {
+        width: 100%;
+        grid-auto-columns: minmax(0, 1fr);
+    }
+
+    .fiber-ws-tab {
+        padding: 8px 10px;
+        font-size: 0.75rem;
+        text-align: center;
     }
 
     .fiber-scheme-wrap,

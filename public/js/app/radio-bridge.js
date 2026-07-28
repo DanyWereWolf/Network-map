@@ -942,6 +942,56 @@ function removeRadioBridgeCoverage(rb) {
     }
 }
 
+function isRadioBridgeCoverageOwnerVisible(rb) {
+    if (!rb || !rb.properties || rb.properties.get('type') !== 'radioBridge') return false;
+    if (!rb.properties.get('showCoverage')) return false;
+    if (rb.properties.get('_mapFilterVisible') === false) return false;
+    if (typeof getObjectCabinetId === 'function' && getObjectCabinetId(rb)) return false;
+    if (typeof getExpertZoomFlags === 'function') {
+        var zf = getExpertZoomFlags();
+        if (zf && zf.hideObjects) return false;
+    }
+    try {
+        if (rb.options && rb.options.get('visible') === false) return false;
+    } catch (eVis) {}
+    if (window.MapRegions && MapRegions.isObjectInAnyHiddenRegion &&
+        MapRegions.isObjectInAnyHiddenRegion(rb, typeof objects !== 'undefined' ? objects : null)) {
+        return false;
+    }
+    return true;
+}
+
+function setRadioBridgeCoverageOverlaysVisible(rb, visible) {
+    if (!rb || !rb.properties) return;
+    var overlay = rb.properties.get('coverageOverlay');
+    if (overlay && overlay.options) {
+        try { overlay.options.set('visible', !!visible); } catch (e) {}
+    }
+    var pulses = rb.properties.get('coveragePulseOverlays');
+    if (Array.isArray(pulses)) {
+        pulses.forEach(function(pulse) {
+            if (pulse && pulse.options) {
+                try { pulse.options.set('visible', !!visible); } catch (e2) {}
+            }
+        });
+    }
+}
+
+function applyRadioBridgeCoverageVisibility(rbOrNull) {
+    if (window._mapPdfExportCaptureActive) return;
+    function syncOne(rb) {
+        if (!rb || !rb.properties || rb.properties.get('type') !== 'radioBridge') return;
+        if (!rb.properties.get('coverageOverlay') && !rb.properties.get('coveragePulseOverlays')) return;
+        setRadioBridgeCoverageOverlaysVisible(rb, isRadioBridgeCoverageOwnerVisible(rb));
+    }
+    if (rbOrNull) {
+        syncOne(rbOrNull);
+        return;
+    }
+    if (!Array.isArray(objects)) return;
+    objects.forEach(syncOne);
+}
+
 function updateRadioBridgeCoverage(rb) {
     removeRadioBridgeCoverage(rb);
     if (!rb || !rb.properties || rb.properties.get('type') !== 'radioBridge') return;
@@ -976,6 +1026,7 @@ function updateRadioBridgeCoverage(rb) {
     radioBridgeCoverageOverlays.push(overlay);
     myMap.geoObjects.add(overlay);
     addRadioBridgeCoveragePulse(rb);
+    applyRadioBridgeCoverageVisibility(rb);
 }
 
 function updateAllRadioBridgeCoverages() {
@@ -991,6 +1042,7 @@ function updateAllRadioBridgeCoverages() {
             updateRadioBridgeCoverage(o);
         }
     });
+    applyRadioBridgeCoverageVisibility();
 }
 
 function isRadioBridgeLinkedOnHost(rbId) {

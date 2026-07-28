@@ -171,17 +171,31 @@ function setupRectSelection() {
                         var ok = await showConfirm(bulkMsg, 'Удаление', { confirmText: 'Удалить', cancelText: 'Отмена' });
                         if (!ok) return;
                     }
+                    var crossKeys = {};
+                    var nodeKeys = {};
+                    var needCableViz = false;
                     toDelete.forEach(function(obj) {
                         var t = obj.properties ? obj.properties.get('type') : null;
                         if (t === 'cable') {
                             var uid = obj.properties.get('uniqueId');
-                            if (uid) deleteCableByUniqueId(uid);
+                            needCableViz = true;
+                            if (uid) deleteCableByUniqueId(uid, { deferMapRefresh: true });
                             else {
                                 myMap.geoObjects.remove(obj);
                                 objects = objects.filter(function(o) { return o !== obj; });
                             }
                         } else {
-                            var delOpts = { skipConfirmGpon: true };
+                            if ((t === 'cross' || t === 'node') && obj.geometry) {
+                                try {
+                                    var c = obj.geometry.getCoordinates();
+                                    if (c && c.length >= 2 && typeof c[0] === 'number' && typeof groupKey === 'function') {
+                                        var gk = groupKey(c);
+                                        if (t === 'cross') crossKeys[gk] = true;
+                                        else nodeKeys[gk] = true;
+                                    }
+                                } catch (eKey) {}
+                            }
+                            var delOpts = { skipConfirmGpon: true, deferMapRefresh: true };
                             if (isFiberHostType(t)) {
                                 var imp = collectGponImpactFromHost(obj);
                                 if (imp && imp.hasGpon) delOpts.gponImpact = imp;
@@ -190,6 +204,17 @@ function setupRectSelection() {
                         }
                     });
                     if (toDelete.length) {
+                        if (needCableViz && typeof updateCableVisualization === 'function') updateCableVisualization();
+                        var crossKeyList = Object.keys(crossKeys);
+                        var nodeKeyList = Object.keys(nodeKeys);
+                        if (crossKeyList.length && typeof updateCrossDisplay === 'function') {
+                            updateCrossDisplay(crossKeyList.length === 1 ? crossKeyList[0] : crossKeyList);
+                        }
+                        if (nodeKeyList.length && typeof updateNodeDisplay === 'function') {
+                            updateNodeDisplay(nodeKeyList.length === 1 ? nodeKeyList[0] : nodeKeyList);
+                        }
+                        if (typeof scheduleConnectionLinesUpdate === 'function') scheduleConnectionLinesUpdate('full');
+                        if (typeof updateStats === 'function') updateStats();
                         saveData({ syncFull: true });
                         if (typeof showInfo === 'function') showInfo('Удалено объектов: ' + toDelete.length, 'Удаление');
                     }

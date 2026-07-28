@@ -1,6 +1,6 @@
 /** ВОЛС: единый вид на карте, настраиваемые жилы. */
 (function(global) {
-    var MAP_FIBER_COLOR = '#00AA00';
+    var MAP_FIBER_COLOR = '#16a34a';
     var MAP_FIBER_WIDTH = 3;
     var MAX_FIBERS = 96;
     var LAY_FIBER_COUNT_KEY = 'networkMap_layFiberCount';
@@ -183,7 +183,7 @@
     function applyOpticalMapStyle(cable) {
         if (!cable || !cable.options) return;
         if (!isOpticalCableType(cable.properties.get('cableType'))) return;
-        cable.options.set({ strokeColor: MAP_FIBER_COLOR, strokeWidth: MAP_FIBER_WIDTH, strokeOpacity: 0.8 });
+        cable.options.set({ strokeColor: MAP_FIBER_COLOR, strokeWidth: MAP_FIBER_WIDTH, strokeOpacity: 0.72 });
     }
 
     function applyCableFiberSettings(cable, fiberCount, fiberPalette) {

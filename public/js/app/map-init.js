@@ -95,6 +95,7 @@ function setupEventListeners() {
             return;
         }
         if (!isEditMode) {
+            if (typeof showInfo === 'function') showInfo('Включите режим «Редактирование»', 'Режим');
             return;
         }
 
@@ -218,11 +219,13 @@ function setupEventListeners() {
     document.addEventListener('keydown', function(e) {
         var tag = e.target && e.target.tagName ? e.target.tagName.toUpperCase() : '';
         if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-        if (e.ctrlKey && e.key === 'z') {
+        if (e.ctrlKey && (e.key === 'z' || e.key === 'Z')) {
             e.preventDefault();
-            performUndo();
+            if (e.shiftKey) performRedo();
+            else performUndo();
+            return;
         }
-        if (e.ctrlKey && e.key === 'y') {
+        if (e.ctrlKey && (e.key === 'y' || e.key === 'Y')) {
             e.preventDefault();
             performRedo();
         }

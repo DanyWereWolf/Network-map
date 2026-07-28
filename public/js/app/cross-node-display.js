@@ -77,6 +77,7 @@ function collectViewportTypedObjects(type) {
     if (!Array.isArray(candidates)) return null;
     return candidates.filter(function(obj) {
         if (!obj || !obj.properties || obj.properties.get('type') !== type) return false;
+        if (!Array.isArray(objects) || objects.indexOf(obj) === -1) return false;
         return !(typeof getObjectCabinetId === 'function' && getObjectCabinetId(obj));
     });
 }
@@ -112,6 +113,8 @@ function collectTypedObjectsNearGroupKeys(type, keys) {
     for (var ki = 0; ki < keys.length; ki++) keySet[keys[ki]] = true;
     function consider(obj) {
         if (!obj || !obj.properties || obj.properties.get('type') !== type) return;
+        // Spatial может ещё держать ссылку на уже удалённый объект — не возвращать его.
+        if (!Array.isArray(objects) || objects.indexOf(obj) === -1) return;
         if (typeof getObjectCabinetId === 'function' && getObjectCabinetId(obj)) return;
         var uid = obj.properties.get('uniqueId');
         if (seen) {

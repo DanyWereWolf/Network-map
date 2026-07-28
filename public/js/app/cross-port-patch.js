@@ -269,7 +269,10 @@ function removeCrossPortPatchesReferencingCross(deletedCrossUid) {
     if (!deletedCrossUid) return;
     objects.forEach(function(obj) {
         if (!obj || !obj.properties || !isCrossLikeHostType(obj.properties.get('type'))) return;
-        if (getObjectUniqueId(obj) === deletedCrossUid) return;
+        // Не вызывать getObjectUniqueId: после mapPerfUnregister это снова
+        // регистрирует уже удалённый кросс в spatial-индексе → «призрак» на карте.
+        var objUid = obj.properties.get('uniqueId');
+        if (objUid != null && String(objUid) === String(deletedCrossUid)) return;
         var patches = getCrossPortPatches(obj);
         var keys = Object.keys(patches);
         if (!keys.length) return;

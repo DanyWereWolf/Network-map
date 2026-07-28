@@ -610,8 +610,12 @@
     }
 
     function isMapObjectShown(obj) {
-        if (!obj || !obj.options) return true;
-        try { return obj.options.get('visible') !== false; } catch (e) { return true; }
+        if (!obj) return true;
+        try {
+            if (obj.properties && obj.properties.get('_mapFilterVisible') === false) return false;
+            if (!obj.options) return true;
+            return obj.options.get('visible') !== false;
+        } catch (e) { return true; }
     }
 
     function findObjectByUid(objects, uid) {
@@ -630,7 +634,8 @@
             lineGroups.oltConnectionLines,
             lineGroups.splitterConnectionLines,
             lineGroups.splitterOutputConnectionLines,
-            lineGroups.nodeConnectionLines
+            lineGroups.nodeConnectionLines,
+            lineGroups.radioBridgeConnectionLines
         ];
         groups.forEach(function (arr) {
             if (!Array.isArray(arr)) return;
@@ -651,6 +656,21 @@
                 if (visible && sleeveId) {
                     var src = findObjectByUid(objects, sleeveId);
                     if (src && (!isMapObjectShown(src) || isObjectInAnyHiddenRegion(src, objects))) visible = false;
+                }
+                var sourceId = line.properties.get('sourceId');
+                if (visible && sourceId) {
+                    var sourceObj = findObjectByUid(objects, sourceId);
+                    if (sourceObj && (!isMapObjectShown(sourceObj) || isObjectInAnyHiddenRegion(sourceObj, objects))) visible = false;
+                }
+                var targetId = line.properties.get('targetId');
+                if (visible && targetId) {
+                    var targetObj = findObjectByUid(objects, targetId);
+                    if (targetObj && (!isMapObjectShown(targetObj) || isObjectInAnyHiddenRegion(targetObj, objects))) visible = false;
+                }
+                var radioBridgeId = line.properties.get('radioBridgeId');
+                if (visible && radioBridgeId) {
+                    var rbObj = findObjectByUid(objects, radioBridgeId);
+                    if (rbObj && (!isMapObjectShown(rbObj) || isObjectInAnyHiddenRegion(rbObj, objects))) visible = false;
                 }
                 if (visible && line.geometry) {
                     try {

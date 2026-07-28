@@ -191,16 +191,44 @@ function switchToEditMode() {
 function updateUIForMode() {
     const viewBtn = document.getElementById('viewMode');
     const editBtn = document.getElementById('editMode');
+    const badge = document.getElementById('mapEditModeBadge');
     
     if (viewBtn) viewBtn.classList.toggle('active', !isEditMode);
     if (editBtn) editBtn.classList.toggle('active', isEditMode);
+
+    document.body.classList.toggle('edit-mode-active', !!isEditMode);
+    if (badge) {
+        if (isEditMode) badge.removeAttribute('hidden');
+        else badge.setAttribute('hidden', '');
+    }
+
+    if (myMap && myMap.container) {
+        const mapEl = myMap.container.getElement();
+        if (mapEl) {
+            mapEl.classList.toggle('map-edit-mode', !!isEditMode);
+            if (!isEditMode) {
+                mapEl.classList.remove('map-crosshair-active');
+                mapEl.style.cursor = '';
+            }
+        }
+    }
 }
 
 function updateEditControls() {
     const editControls = document.querySelectorAll('#addObject, #addCable, #drawRegionBtn');
+    const hint = 'Включите режим «Редактирование»';
     editControls.forEach(control => {
-        control.style.opacity = isEditMode ? '1' : '0.5';
-        control.style.pointerEvents = isEditMode ? 'all' : 'none';
+        const locked = !isEditMode;
+        control.classList.toggle('is-edit-locked', locked);
+        control.style.opacity = '';
+        control.style.pointerEvents = '';
+        if (locked) {
+            control.setAttribute('title', hint);
+            control.setAttribute('aria-disabled', 'true');
+        } else {
+            control.removeAttribute('aria-disabled');
+            if (control.getAttribute('title') === hint) control.removeAttribute('title');
+        }
     });
 }
 
@@ -227,7 +255,10 @@ function makeObjectsNonDraggable() {
 }
 
 function getNodeColorByKind(nodeKind) {
-    return nodeKind === 'aggregation' ? '#ef4444' : '#22c55e';
+    if (window.MapIcons && typeof MapIcons.getNodeColor === 'function') {
+        return MapIcons.getNodeColor(nodeKind);
+    }
+    return nodeKind === 'aggregation' ? '#e85d5d' : '#2fbf66';
 }
 
 function buildMapPlacemarkIcon(type, variant, source) {

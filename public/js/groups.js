@@ -138,7 +138,12 @@ window.applyGroupNames = function(gn) {
     try {
         if (gn.cross && typeof gn.cross === 'object') Object.keys(gn.cross).forEach(function(k) { crossGroupNames.set(k, gn.cross[k]); });
         if (gn.node && typeof gn.node === 'object') Object.keys(gn.node).forEach(function(k) { nodeGroupNames.set(k, gn.node[k]); });
-        if (typeof updateCrossDisplay === 'function') updateCrossDisplay();
-        if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
+        var skipDisplay = (typeof isMapBulkImportActive === 'function' && isMapBulkImportActive()) ||
+            (typeof _mapInitialLoadPending !== 'undefined' && _mapInitialLoadPending) ||
+            (typeof _mapApplyInProgress !== 'undefined' && _mapApplyInProgress);
+        if (!skipDisplay) {
+            if (typeof updateCrossDisplay === 'function') updateCrossDisplay();
+            if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
+        }
     } catch (e) {}
 };

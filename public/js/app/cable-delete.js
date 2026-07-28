@@ -221,7 +221,7 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
         if (typeof window.syncSendOp === 'function') {
             window.syncSendOp({ type: 'delete_cable', uniqueId: cableUniqueId });
         }
-        saveData();
+        saveData({ undoLabel: 'удаление кабеля', coalesce: false });
         logAction(ActionTypes.DELETE_CABLE, {
             cableType: cableType,
             from: fromName,

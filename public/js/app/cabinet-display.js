@@ -1754,6 +1754,7 @@ function bindCabinetCardControls(root, cabinet) {
 }
 
 function showCabinetInfo(cabinet) {
+    if (typeof objectPlacementMode !== 'undefined' && objectPlacementMode) return;
     if (!cabinet || !cabinet.properties || cabinet.properties.get('type') !== 'cabinet') return;
     applyModalEditModeForObject(cabinet, function() {
         currentModalObject = cabinet;

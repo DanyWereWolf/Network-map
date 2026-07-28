@@ -805,21 +805,139 @@ function getSplittableFiberCablesAtWaypoint(waypointObj) {
     });
 }
 
-function findFiberCablesNearPoint(coords, maxDistance) {
+function findCablesNearPoint(coords, maxDistance, options) {
+    options = options || {};
     maxDistance = maxDistance != null ? maxDistance : 0.0004;
     var found = [];
+    if (!coords || coords.length < 2 || !objects) return found;
     objects.forEach(function(cable) {
         if (!cable.properties || cable.properties.get('type') !== 'cable') return;
-        if (isCopperCableType(cable.properties.get('cableType'))) return;
+        if (options.fiberOnly && isCopperCableType(cable.properties.get('cableType'))) return;
         var geom = cable.geometry && cable.geometry.getCoordinates();
         if (!geom || geom.length < 2) return;
         var proj = projectPointOntoPolyline(coords, geom);
         if (!proj || proj.distance > maxDistance) return;
         if (proj.fraction < 0.03 || proj.fraction > 0.97) return;
-        found.push({ cable: cable, distance: proj.distance });
+        found.push({ cable: cable, distance: proj.distance, proj: proj });
     });
     found.sort(function(a, b) { return a.distance - b.distance; });
-    return found.map(function(x) { return x.cable; });
+    return found;
+}
+
+function findFiberCablesNearPoint(coords, maxDistance) {
+    return findCablesNearPoint(coords, maxDistance, { fiberOnly: true }).map(function(x) { return x.cable; });
+}
+
+/** Нельзя вставлять опору/крепление внутрь подземного участка (колодец → колодец). */
+function isCableSegmentUnderground(cable, afterIndex) {
+    var points = getCableRoutePoints(cable);
+    if (!points || afterIndex < 0 || afterIndex >= points.length - 1) return false;
+    var a = points[afterIndex];
+    var b = points[afterIndex + 1];
+    if (!a || !b || !a.properties || !b.properties) return false;
+    if (a.properties.get('type') !== 'manhole' || b.properties.get('type') !== 'manhole') return false;
+    var spans = cable.properties.get('undergroundSpans') || [];
+    if (!spans.length) return false;
+    if (window.CableUnderground && typeof CableUnderground.findSpanBetweenManholes === 'function') {
+        return !!CableUnderground.findSpanBetweenManholes(spans, getObjectUniqueId(a), getObjectUniqueId(b));
+    }
+    return true;
+}
+
+/**
+ * Вставить опору/крепление в маршрут кабеля по проекции на линию.
+ * @returns {boolean}
+ */
+function insertWaypointIntoCableRoute(cable, waypointObj, proj) {
+    if (!cable || !cable.properties || !waypointObj || !proj) return false;
+    var points = getCableRoutePoints(cable);
+    if (!points || points.length < 2) return false;
+    if (getPointIndexOnCableRoute(points, waypointObj) >= 0) return false;
+
+    var splitAfter = resolveSplitAfterIndex(points, proj.fraction);
+    if (splitAfter < 0 || splitAfter >= points.length - 1) return false;
+    if (isCableSegmentUnderground(cable, splitAfter)) return false;
+
+    var newPoints = points.slice();
+    newPoints.splice(splitAfter + 1, 0, waypointObj);
+    newPoints = dedupeSupportAttachmentInCablePoints(newPoints);
+    if (getPointIndexOnCableRoute(newPoints, waypointObj) < 0) return false;
+
+    cable.properties.set('points', newPoints);
+    cable.properties.set('from', newPoints[0]);
+    cable.properties.set('to', newPoints[newPoints.length - 1]);
+    syncCableGeometryFromRoutePoints(cable);
+    return true;
+}
+
+/**
+ * При размещении/перемещении опоры или крепления на кабель — закрепить кабель за этой точкой.
+ * @returns {number} сколько кабелей привязано
+ */
+function tryAttachWaypointToNearbyCables(waypointObj, options) {
+    options = options || {};
+    if (!waypointObj || !waypointObj.properties || !waypointObj.geometry) return 0;
+    var type = waypointObj.properties.get('type');
+    if (type !== 'support' && type !== 'attachment') return 0;
+
+    var coords;
+    try {
+        coords = waypointObj.geometry.getCoordinates();
+    } catch (eCoords) {
+        return 0;
+    }
+    if (!coords || coords.length < 2) return 0;
+
+    // Жёсткий радиус: нужно почти на линии (не как у разреза кабеля ~0.0004).
+    var maxDist = options.maxDistance;
+    if (maxDist == null) {
+        var zoom = (typeof myMap !== 'undefined' && myMap && myMap.getZoom) ? myMap.getZoom() : 15;
+        if (zoom < 12) maxDist = 0.0001;
+        else if (zoom < 15) maxDist = 0.00006;
+        else maxDist = 0.000035;
+    }
+    var near = findCablesNearPoint(coords, maxDist);
+    if (!near.length) return 0;
+
+    var attached = 0;
+    var snapPoint = null;
+    for (var i = 0; i < near.length; i++) {
+        var item = near[i];
+        if (!item || !item.cable || !item.proj) continue;
+        if (insertWaypointIntoCableRoute(item.cable, waypointObj, item.proj)) {
+            attached++;
+            if (!snapPoint && item.proj.point) snapPoint = item.proj.point;
+        }
+    }
+
+    if (!attached) return 0;
+
+    if (options.snap !== false && snapPoint) {
+        try {
+            waypointObj.geometry.setCoordinates(snapPoint);
+            var label = waypointObj.properties.get('label');
+            if (label && label.geometry) label.geometry.setCoordinates(snapPoint);
+            if (typeof MapPerf !== 'undefined' && MapPerf.updateSpatialPosition) {
+                MapPerf.updateSpatialPosition(waypointObj);
+            }
+            if (typeof updateConnectedCables === 'function') updateConnectedCables(waypointObj);
+        } catch (eSnap) {}
+    }
+
+    if (options.persist) {
+        if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(waypointObj);
+        else if (typeof saveData === 'function') saveData({ object: waypointObj, syncImmediate: true });
+    }
+
+    if (options.notify !== false && typeof showSuccess === 'function') {
+        var isAtt = type === 'attachment';
+        var msg = attached === 1
+            ? (isAtt ? 'Кабель закреплён за креплением' : 'Кабель закреплён за опорой')
+            : (isAtt ? 'Кабели закреплены за креплением' : 'Кабели закреплены за опорой');
+        showSuccess(msg, isAtt ? 'Крепление' : 'Опора');
+    }
+
+    return attached;
 }
 
 function getCableSplitPreviewStroke() {

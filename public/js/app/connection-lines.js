@@ -294,6 +294,7 @@ function createRadioBridgeFiberConnectionLine(sleeveObj, rbObj, cableId, fiberNu
     line.properties.set('sleeveId', sleeveUniqueId);
     line.properties.set('cableId', cableId);
     line.properties.set('fiberNumber', fiberNumber);
+    line.properties.set('radioBridgeId', getObjectUniqueId(rbObj));
     line.properties.set('radioBridgeName', rbName);
     line.properties.set('routeIds', routeIds);
     onuConnectionLines.push(line);

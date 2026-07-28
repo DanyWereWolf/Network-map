@@ -349,10 +349,12 @@ function deleteObject(obj, opts) {
         if (hadLabel) try { myMap.geoObjects.remove(hadLabel); } catch (e) {}
     }
     mapPerfUnregister(obj);
+    objects = objects.filter(o => o !== obj);
+    // После исключения из objects — иначе итерация по objects + getObjectUniqueId
+    // могла снова зарегистрировать кросс в MapPerf и вернуть его на карту.
     if (objType === 'cross' && objUniqueId && typeof removeCrossPortPatchesReferencingCross === 'function') {
         removeCrossPortPatchesReferencingCross(objUniqueId);
     }
-    objects = objects.filter(o => o !== obj);
 
     if (objUniqueId) {
         if (typeof isFiberHostType === 'function' && isFiberHostType(objType)) {
@@ -376,7 +378,7 @@ function deleteObject(obj, opts) {
         if (typeof window.syncSendOp === 'function' && objUniqueId) {
             window.syncSendOp({ type: 'delete_object', uniqueId: objUniqueId });
         }
-        saveData({ skipSync: true });
+        saveData({ skipSync: true, undoLabel: 'удаление', coalesce: false });
         logAction(ActionTypes.DELETE_OBJECT, {
             objectType: objType,
             name: objName

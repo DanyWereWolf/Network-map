@@ -77,6 +77,9 @@
                     if (typeof window.applyOperationToMap === 'function') window.applyOperationToMap(queue[i]);
                 } catch (eOp) {}
             }
+            if (typeof window.invalidateUndoAfterRemoteChange === 'function') {
+                try { window.invalidateUndoAfterRemoteChange(); } catch (eInv) {}
+            }
             updateSyncUIStatus(true);
         };
         if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(run);
@@ -363,6 +366,10 @@
                     if (msg.groupNames && typeof window.applyGroupNames === 'function') {
                         try { window.applyGroupNames(msg.groupNames); } catch (e) {}
                     }
+                    if (typeof window.shouldSkipSyncMapRefresh === 'function' &&
+                        window.shouldSkipSyncMapRefresh(msg.organizationId)) {
+                        return;
+                    }
                     if (typeof window.reloadMapFromApi === 'function') {
                         window.reloadMapFromApi({ organizationId: msg.organizationId, immediate: true });
                     }
@@ -375,6 +382,10 @@
                     if (applyStateTimer) { clearTimeout(applyStateTimer); applyStateTimer = null; }
                     if (msg.groupNames && typeof window.applyGroupNames === 'function') {
                         try { window.applyGroupNames(msg.groupNames); } catch (e) {}
+                    }
+                    if (typeof window.shouldSkipSyncMapRefresh === 'function' &&
+                        window.shouldSkipSyncMapRefresh(msg.organizationId)) {
+                        return;
                     }
                     if (typeof window.reloadMapFromApi === 'function') {
                         window.reloadMapFromApi({ organizationId: msg.organizationId });

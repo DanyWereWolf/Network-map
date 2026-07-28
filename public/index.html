@@ -178,7 +178,7 @@
                             <polyline points="3 10 8 5 3 10 8 15 3 10"></polyline>
                         </svg>
                     </button>
-                    <button id="redoBtn" class="user-menu-btn" title="Повторить (Ctrl+Y)" disabled>
+                    <button id="redoBtn" class="user-menu-btn" title="Повторить (Ctrl+Y / Ctrl+Shift+Z)" disabled>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M21 10H11a5 5 0 0 0-5 5v2"></path>
                             <polyline points="21 10 16 5 21 10 16 15 21 10"></polyline>
@@ -1277,6 +1277,13 @@
                     <p class="map-loading-text">Загрузка карты…</p>
                 </div>
             </div>
+            <div id="mapEditModeBadge" class="map-edit-mode-badge" hidden aria-live="polite">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+                <span>Редактирование</span>
+            </div>
             <div id="map" class="map"></div>
             <div id="undergroundEditBar" class="underground-draw-card" hidden aria-live="polite" role="region" aria-labelledby="undergroundEditBarTitle">
                 <div class="underground-draw-card__accent" aria-hidden="true"></div>
@@ -1977,7 +1984,7 @@
                     </div>
                     <div class="help-modal-header-text">
                         <h2 id="helpModalTitle">Справка по программе</h2>
-                        <p class="help-modal-header-sub">Руководство по карте, объектам и настройкам · <span id="helpModalVersion">—</span></p>
+                        <p class="help-modal-header-sub">Полное руководство Volsmap · <span id="helpModalVersion">—</span></p>
                     </div>
                 </div>
                 <span class="close close-help" title="Закрыть" role="button" tabindex="0">&times;</span>

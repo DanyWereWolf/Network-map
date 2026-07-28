@@ -280,7 +280,7 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
 
     if (!skipSync) {
         syncCableRoutePlacemarkUids(points);
-        saveData();
+        saveData({ undoLabel: 'прокладка кабеля', coalesce: false });
         if (typeof window.syncSendOp === 'function') {
             var addCableOp = buildAddCableSyncOp(polyline, points);
             if (addCableOp) window.syncSendOp(addCableOp);

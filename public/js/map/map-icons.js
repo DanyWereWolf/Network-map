@@ -3,27 +3,29 @@
  */
 (function (global) {
     var COLORS = {
-        support: '#3b82f6',
-        sleeve: '#f43f5e',
-        spliceCassette: '#f59e0b',
-        cross: '#8b5cf6',
-        node: '#22c55e',
-        nodeAggregation: '#ef4444',
-        attachment: '#64748b',
-        manhole: '#92400e',
-        signalPost: '#f59e0b',
-        olt: '#0ea5e9',
-        splitter: '#a855f7',
-        onu: '#06b6d4',
-        camera: '#475569',
-        mediaConverter: '#14b8a6',
-        radioBridge: '#06b6d4',
-        switch: '#f97316',
-        cabinet: '#78716c',
+        support: '#4b8af0',
+        sleeve: '#e2556f',
+        spliceCassette: '#e0a23a',
+        cross: '#8f75e8',
+        node: '#2fbf66',
+        nodeAggregation: '#e85d5d',
+        attachment: '#6b7c93',
+        manhole: '#8b5e3c',
+        signalPost: '#e0a23a',
+        olt: '#2ea8d8',
+        splitter: '#9b6fd4',
+        onu: '#2aabb8',
+        camera: '#5b6b7c',
+        mediaConverter: '#2fafa0',
+        radioBridge: '#2aabb8',
+        switch: '#e8893a',
+        cabinet: '#7a736c',
         default: '#94a3b8'
     };
 
-    var STROKE_SELECTED = '#fef08a';
+    var STROKE_SELECTED = '#fde68a';
+    var STROKE_HOVER_LIGHT = '#64748b';
+    var STROKE_HOVER_DARK = '#93c5fd';
 
     function getMapTheme() {
         if (typeof document !== 'undefined' && document.documentElement) {
@@ -43,24 +45,31 @@
         if (variant === 'hover') {
             return dark ? '#e0f2fe' : '#1e293b';
         }
-        return dark ? '#ffffff' : '#0f172a';
+        if (variant === 'selected') {
+            return dark ? '#fff7ed' : '#0f172a';
+        }
+        return dark ? '#f8fafc' : '#1e293b';
     }
 
     function fillOpacity(variant) {
-        return variant === 'phantom' ? 0.58 : 1;
+        if (variant === 'phantom') return 0.55;
+        if (variant === 'selected') return 1;
+        if (variant === 'hover') return 0.94;
+        return 0.86;
     }
 
     function strokeWidth(variant) {
-        var extra = isDarkMapTheme() ? 0 : 0.35;
-        if (variant === 'selected') return 2.4 + extra;
-        if (variant === 'hover') return 2.1 + extra;
-        return 1.9 + extra;
+        var extra = isDarkMapTheme() ? 0.15 : 0.45;
+        if (variant === 'selected') return 2.55 + extra;
+        if (variant === 'hover') return 2.2 + extra;
+        return 2.05 + extra;
     }
 
     function detailOpacity(variant) {
-        if (variant === 'phantom') return 0.65;
+        if (variant === 'phantom') return 0.62;
         if (variant === 'hover') return 0.95;
-        return 1;
+        if (variant === 'selected') return 1;
+        return 0.92;
     }
 
     function getNodeColor(nodeKind) {
@@ -72,9 +81,16 @@
         return COLORS[type] || COLORS.default;
     }
 
-    function selectionRing(variant) {
-        if (variant !== 'selected') return '';
-        return '<circle cx="16" cy="16" r="15.2" fill="none" stroke="' + STROKE_SELECTED + '" stroke-width="2.2" opacity="0.95"/>';
+    function selectionRing(variant, fill) {
+        if (variant === 'selected') {
+            return '<circle cx="16" cy="16" r="15.5" fill="none" stroke="' + (fill || STROKE_SELECTED) + '" stroke-width="3" opacity="0.32"/>' +
+                '<circle cx="16" cy="16" r="14.5" fill="none" stroke="' + STROKE_SELECTED + '" stroke-width="2.1" opacity="0.95"/>';
+        }
+        if (variant === 'hover') {
+            var hoverStroke = isDarkMapTheme() ? STROKE_HOVER_DARK : STROKE_HOVER_LIGHT;
+            return '<circle cx="16" cy="16" r="15.1" fill="none" stroke="' + hoverStroke + '" stroke-width="1.7" opacity="0.5"/>';
+        }
+        return '';
     }
 
     function drawSupport(fill, sw, w, fo, wo) {
@@ -272,7 +288,7 @@
             default:
                 body = '<circle cx="16" cy="16" r="10" fill="' + COLORS.default + '" stroke="' + sw + '" stroke-width="' + w + '"/>';
         }
-        return selectionRing(variant) + body;
+        return selectionRing(variant, fill) + body;
     }
 
     function getIconMetrics(type, variant) {

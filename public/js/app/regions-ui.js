@@ -181,7 +181,10 @@ function startRegionGeometryEdit(regionObj) {
 }
 
 function startRegionDraw() {
-    if (!isEditMode || !canEdit()) return;
+    if (!isEditMode || !canEdit()) {
+        if (typeof showInfo === 'function') showInfo('Включите режим «Редактирование»', 'Режим');
+        return;
+    }
     if (objectPlacementMode && typeof cancelObjectPlacement === 'function') cancelObjectPlacement();
     if (currentCableTool) {
         currentCableTool = false;

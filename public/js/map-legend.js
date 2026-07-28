@@ -2,7 +2,7 @@
  * Типы кабелей и цвета маршрутов жил — единый источник для карты, сайдбара и легенды.
  */
 (function(global) {
-    var FIBER_MAP_COLOR = '#00aa00';
+    var FIBER_MAP_COLOR = '#16a34a';
     var FIBER_MAP_WIDTH = 3;
 
     var CABLE_TYPES = [

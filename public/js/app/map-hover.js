@@ -182,6 +182,27 @@ function resolveCableFromMapTarget(target) {
 }
 
 function handleCableMapClickEvent(cable, e) {
+    if (objectPlacementMode) {
+        var placeCoords = e && e.get ? e.get('coords') : null;
+        if (!placeCoords && typeof window.lastMapClickCoords !== 'undefined') {
+            placeCoords = window.lastMapClickCoords;
+        }
+        try {
+            if (e && e.originalEvent && typeof e.originalEvent.stopPropagation === 'function') {
+                e.originalEvent.stopPropagation();
+            }
+            if (e && e.stopPropagation && typeof e.stopPropagation === 'function') {
+                e.stopPropagation();
+            }
+        } catch (eStop) {}
+        if (placeCoords && Date.now() >= placementPanBlockClickUntil && typeof placeObjectAtCoords === 'function') {
+            if (placeObjectAtCoords(placeCoords)) {
+                // не дать handleMapClick поставить второй объект на тот же клик
+                placementPanBlockClickUntil = Date.now() + 120;
+            }
+        }
+        return false;
+    }
     if (radioBridgeRoutingMode && radioBridgeRoutingData) {
         var rbCoords = e && e.get ? e.get('coords') : null;
         if (rbCoords && typeof handleRadioBridgeRoutingClick === 'function') {
@@ -218,14 +239,11 @@ function bindCableAerialOverlayEvents(overlay, cable) {
         return handleCableMapClickEvent(cable, e);
     });
     function onEnter(e) {
+        if (objectPlacementMode) return;
         var domEvent = e.get && e.get('domEvent');
         if (domEvent) {
             window.lastMouseX = domEvent.clientX || 0;
             window.lastMouseY = domEvent.clientY || 0;
-        }
-        if (objectPlacementMode && phantomPlacemark) {
-            myMap.geoObjects.remove(phantomPlacemark);
-            phantomPlacemark = null;
         }
         if (hoveredObject && hoveredObject !== cable) clearHoverHighlight();
         highlightObjectOnHover(cable, e);
@@ -261,6 +279,8 @@ function attachHoverEventsToObject(obj) {
             window.lastMouseX = domEvent.clientX || 0;
             window.lastMouseY = domEvent.clientY || 0;
         }
+        // При размещении объектов кабель не подсвечиваем и фантом не убираем
+        if (objectPlacementMode && objType === 'cable') return;
         if (objectPlacementMode && phantomPlacemark) {
             myMap.geoObjects.remove(phantomPlacemark);
             phantomPlacemark = null;
@@ -285,10 +305,13 @@ function highlightObjectOnHover(obj, e) {
     if (selectedObjects.includes(obj)) {
         return;
     }
+
+    const type = obj.properties.get('type');
+    if (objectPlacementMode && (type === 'cable' || type === 'cableLabel')) {
+        return;
+    }
     
     hoveredObject = obj;
-    
-    const type = obj.properties.get('type');
 
     const objCoord = (type === 'cable' || type === 'cableLabel') ? (e && e.get('coords') ? e.get('coords') : null) : (obj.geometry ? obj.geometry.getCoordinates() : null);
     updateCursorIndicator(e, type, objCoord);

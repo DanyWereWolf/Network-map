@@ -320,6 +320,7 @@ function validateAndFixCableGeometryOnLoad() {
 function getCablesTouchingObject(obj) {
     if (!obj) return [];
     var out = [];
+    var uid = typeof getObjectUniqueId === 'function' ? getObjectUniqueId(obj) : null;
     var scan = objects;
     if (typeof MapPerf !== 'undefined' && MapPerf.getObjectsByType) {
         var typed = MapPerf.getObjectsByType('cable');
@@ -334,8 +335,24 @@ function getCablesTouchingObject(obj) {
             out.push(cable);
             continue;
         }
+        if (uid && ((from && getObjectUniqueId(from) === uid) || (to && getObjectUniqueId(to) === uid))) {
+            out.push(cable);
+            continue;
+        }
         var points = cable.properties.get('points');
-        if (Array.isArray(points) && points.indexOf(obj) !== -1) out.push(cable);
+        if (!Array.isArray(points)) continue;
+        if (points.indexOf(obj) !== -1) {
+            out.push(cable);
+            continue;
+        }
+        if (uid) {
+            for (var pi = 0; pi < points.length; pi++) {
+                if (points[pi] && getObjectUniqueId(points[pi]) === uid) {
+                    out.push(cable);
+                    break;
+                }
+            }
+        }
     }
     return out;
 }

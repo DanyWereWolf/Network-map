@@ -329,12 +329,13 @@ function placeObjectAtCoords(coords) {
         var crossCopperPortsPl = ccpElPl ? (parseInt(ccpElPl.value, 10) || 0) : 0;
         if (!createObject(type, name || '', coords, { crossType: crossType, crossPorts: crossPorts, crossCopperPorts: crossCopperPortsPl })) return false;
         currentPlacementName = name || '';
-    } else if (type === 'support') {
+    } else if (type === 'support' || type === 'attachment') {
         const name = document.getElementById('objectName').value.trim();
-        if (!createObject(type, name || '', coords)) return false;
-    } else if (type === 'attachment') {
-        const name = document.getElementById('objectName').value.trim();
-        if (!createObject(type, name || '', coords)) return false;
+        var waypointPm = createObject(type, name || '', coords);
+        if (!waypointPm) return false;
+        if (typeof tryAttachWaypointToNearbyCables === 'function') {
+            tryAttachWaypointToNearbyCables(waypointPm, { snap: true, persist: true });
+        }
     } else if (type === 'manhole') {
         const name = document.getElementById('objectName').value.trim();
         if (!createObject(type, name || '', coords)) return false;
@@ -456,6 +457,7 @@ function handleAddObject() {
         return;
     }
     if (!isEditMode) {
+        if (typeof showInfo === 'function') showInfo('Включите режим «Редактирование»', 'Режим');
         return;
     }
     clearShowOnMapHighlight();

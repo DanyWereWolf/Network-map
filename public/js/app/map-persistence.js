@@ -309,7 +309,11 @@ function indexMapSnapshot(state) {
 
 function snapshotItemEquals(a, b) {
     if (!a || !b) return false;
-    if (a.revision != null && b.revision != null) return Number(a.revision) === Number(b.revision);
+    // Разная revision — точно разные. Одинаковая revision НЕ гарантирует равенство:
+    // перемещение патчит geometry в lastSavedState до (или без) bump revision в снимке.
+    if (a.revision != null && b.revision != null && Number(a.revision) !== Number(b.revision)) {
+        return false;
+    }
     return JSON.stringify(a) === JSON.stringify(b);
 }
 
@@ -357,6 +361,7 @@ function diffMapSnapshots(fromState, toState) {
             trackItem(toItem);
         } else if (!snapshotItemEquals(from.objectsByUid[uid], toItem)) {
             diff.updated.push(toItem);
+            trackItem(from.objectsByUid[uid]);
             trackItem(toItem);
         }
     }
@@ -474,8 +479,8 @@ function restoreMapStateFull(stateToRestore, message, title) {
     });
 }
 
-function patchLastSavedStateItems(serializedItems) {
-    if (!Array.isArray(lastSavedState) || !serializedItems || !serializedItems.length) return null;
+function patchSnapshotItems(snapshot, serializedItems) {
+    if (!Array.isArray(snapshot) || !serializedItems || !serializedItems.length) return null;
     var byUid = Object.create(null);
     var pending = 0;
     for (var i = 0; i < serializedItems.length; i++) {
@@ -484,10 +489,10 @@ function patchLastSavedStateItems(serializedItems) {
         byUid[String(it.uniqueId)] = it;
         pending++;
     }
-    var next = new Array(lastSavedState.length);
+    var next = new Array(snapshot.length);
     var patched = 0;
-    for (var j = 0; j < lastSavedState.length; j++) {
-        var cur = lastSavedState[j];
+    for (var j = 0; j < snapshot.length; j++) {
+        var cur = snapshot[j];
         var uid = cur && cur.uniqueId != null && cur.uniqueId !== '' ? String(cur.uniqueId) : '';
         if (uid && byUid[uid]) {
             next[j] = cloneMapSnapshot(byUid[uid]);
@@ -502,6 +507,10 @@ function patchLastSavedStateItems(serializedItems) {
     }
     if (patched !== pending) return null;
     return next;
+}
+
+function patchLastSavedStateItems(serializedItems) {
+    return patchSnapshotItems(lastSavedState, serializedItems);
 }
 
 function collectSerializedPatchItems(opts) {
@@ -528,6 +537,132 @@ function collectSerializedPatchItems(opts) {
     return out.length ? out : null;
 }
 
+function makeUndoEntry(state, label) {
+    return { state: state, label: label || 'изменение' };
+}
+
+function unwrapUndoEntry(entry) {
+    if (entry && Object.prototype.hasOwnProperty.call(entry, 'state')) {
+        return { state: entry.state, label: entry.label || 'изменение' };
+    }
+    return { state: entry, label: 'изменение' };
+}
+
+function uidFromMapObject(obj) {
+    if (!obj || !obj.properties || typeof obj.properties.get !== 'function') return '';
+    var u = obj.properties.get('uniqueId');
+    return u != null && u !== '' ? String(u) : '';
+}
+
+function resolveUndoLabel(opts) {
+    if (opts && opts.undoLabel) return String(opts.undoLabel);
+    if (opts && opts.addObject) return 'добавление';
+    if (opts && (opts.removeUniqueIds || opts.removeObject)) return 'удаление';
+    if (opts && (opts.object || opts.cable || (opts.objects && opts.objects.length) || (opts.cables && opts.cables.length))) {
+        return 'правка';
+    }
+    return 'изменение';
+}
+
+function resolveUndoCoalesceKey(opts) {
+    opts = opts || {};
+    if (opts.coalesce === false) return null;
+    if (opts.coalesceKey != null && opts.coalesceKey !== '') return String(opts.coalesceKey);
+    if (opts.addObject || opts.removeUniqueIds || opts.removeObject || opts.syncFull) return null;
+    var uids = [];
+    function pushUid(obj) {
+        var u = uidFromMapObject(obj);
+        if (u && uids.indexOf(u) === -1) uids.push(u);
+    }
+    if (opts.object) pushUid(opts.object);
+    if (opts.cable) pushUid(opts.cable);
+    if (opts.objects && opts.objects.length) {
+        for (var i = 0; i < opts.objects.length; i++) pushUid(opts.objects[i]);
+    }
+    if (opts.cables && opts.cables.length) {
+        for (var j = 0; j < opts.cables.length; j++) pushUid(opts.cables[j]);
+    }
+    if (!uids.length && typeof currentModalObject !== 'undefined' && currentModalObject) {
+        var modal = document.getElementById('infoModal');
+        if (typeof isInfoModalVisible === 'function' ? isInfoModalVisible(modal) : (modal && !modal.hidden)) {
+            pushUid(currentModalObject);
+        }
+    }
+    if (!uids.length) return null;
+    uids.sort();
+    return 'edit:' + uids.join(',');
+}
+
+function pushUndoSnapshot(prevState, opts) {
+    opts = opts || {};
+    if (inUndoRedo || prevState == null) return false;
+    var label = resolveUndoLabel(opts);
+    var coalesceKey = resolveUndoCoalesceKey(opts);
+    var now = Date.now();
+    if (coalesceKey && _undoCoalesceKey === coalesceKey &&
+        (now - _undoCoalesceAt) < UNDO_COALESCE_MS && undoStack.length > 0) {
+        _undoCoalesceAt = now;
+        return false;
+    }
+    undoStack.push(makeUndoEntry(prevState, label));
+    if (undoStack.length > UNDO_MAX) undoStack.shift();
+    redoStack = [];
+    _undoCoalesceKey = coalesceKey;
+    _undoCoalesceAt = now;
+    return true;
+}
+
+function clearUndoRedoStacks() {
+    undoStack = [];
+    redoStack = [];
+    _undoCoalesceKey = null;
+    _undoCoalesceAt = 0;
+    if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
+}
+
+function invalidateUndoAfterRemoteChange() {
+    clearUndoRedoStacks();
+    if (_remoteUndoInvalidateTimer) clearTimeout(_remoteUndoInvalidateTimer);
+    _remoteUndoInvalidateTimer = setTimeout(function() {
+        _remoteUndoInvalidateTimer = null;
+        if (inUndoRedo) return;
+        try {
+            lastSavedState = cloneMapSnapshot(getSerializedData());
+        } catch (eInv) {}
+        if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
+    }, 0);
+}
+window.invalidateUndoAfterRemoteChange = invalidateUndoAfterRemoteChange;
+
+function filterSnapshotByRemovedUids(snapshot, removeUniqueIds) {
+    if (!Array.isArray(snapshot) || !removeUniqueIds || !removeUniqueIds.length) return null;
+    var rem = Object.create(null);
+    var expected = 0;
+    for (var i = 0; i < removeUniqueIds.length; i++) {
+        var id = removeUniqueIds[i];
+        if (id == null || id === '') continue;
+        var key = String(id);
+        if (!rem[key]) {
+            rem[key] = true;
+            expected++;
+        }
+    }
+    if (!expected) return null;
+    var next = [];
+    var removed = 0;
+    for (var j = 0; j < snapshot.length; j++) {
+        var cur = snapshot[j];
+        var uid = cur && cur.uniqueId != null && cur.uniqueId !== '' ? String(cur.uniqueId) : '';
+        if (uid && rem[uid]) {
+            removed++;
+            continue;
+        }
+        next.push(cur);
+    }
+    if (removed !== expected) return null;
+    return next;
+}
+
 function saveData(opts) {
     opts = opts || {};
     if (currentModalObject && infoModalEditModeSession && !infoModalEditMode && !opts.fiberSchemeViewOnly) return;
@@ -536,13 +671,29 @@ function saveData(opts) {
         lastSavedState.length === objects.length - 1) {
         var addItem = serializeMapItemFromObject(opts.addObject);
         if (addItem) {
-            undoStack.push(lastSavedState);
-            if (undoStack.length > UNDO_MAX) undoStack.shift();
-            redoStack = [];
+            pushUndoSnapshot(lastSavedState, opts);
             lastSavedState = lastSavedState.concat([cloneMapSnapshot(addItem)]);
             if (!opts.skipSync) pushSaveDataToSync(opts);
             if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
             return;
+        }
+    }
+    // Инкрементальное удаление по uniqueId (+ опциональный патч затронутых объектов).
+    if (!inUndoRedo && Array.isArray(lastSavedState) && opts.removeUniqueIds && opts.removeUniqueIds.length) {
+        var filteredState = filterSnapshotByRemovedUids(lastSavedState, opts.removeUniqueIds);
+        if (filteredState) {
+            var afterRemove = filteredState;
+            if (opts.object || opts.cable || (opts.objects && opts.objects.length) || (opts.cables && opts.cables.length)) {
+                var patchAfterRemove = collectSerializedPatchItems(opts);
+                afterRemove = patchAfterRemove ? patchSnapshotItems(filteredState, patchAfterRemove) : null;
+            }
+            if (afterRemove) {
+                pushUndoSnapshot(lastSavedState, opts);
+                lastSavedState = afterRemove;
+                if (!opts.skipSync) pushSaveDataToSync(opts);
+                if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
+                return;
+            }
         }
     }
     // Инкрементальный update (перемещение / правка): патч только затронутых uniqueId.
@@ -551,9 +702,7 @@ function saveData(opts) {
         var patchItems = collectSerializedPatchItems(opts);
         var patchedState = patchItems ? patchLastSavedStateItems(patchItems) : null;
         if (patchedState) {
-            undoStack.push(lastSavedState);
-            if (undoStack.length > UNDO_MAX) undoStack.shift();
-            redoStack = [];
+            pushUndoSnapshot(lastSavedState, opts);
             lastSavedState = patchedState;
             if (!opts.skipSync) pushSaveDataToSync(opts);
             if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
@@ -561,9 +710,7 @@ function saveData(opts) {
         }
     }
     if (!inUndoRedo && lastSavedState !== null) {
-        undoStack.push(lastSavedState);
-        if (undoStack.length > UNDO_MAX) undoStack.shift();
-        redoStack = [];
+        pushUndoSnapshot(lastSavedState, opts);
     }
     var data = getSerializedData();
     lastSavedState = cloneMapSnapshot(data);
@@ -573,32 +720,44 @@ function saveData(opts) {
 
 function performUndo() {
     if (!canEdit() || undoStack.length === 0 || inUndoRedo) return;
-    var stateToRestore = undoStack.pop();
+    var entry = unwrapUndoEntry(undoStack.pop());
+    var stateToRestore = entry.state;
     var currentState = lastSavedState != null ? lastSavedState : getSerializedData();
-    redoStack.push(cloneMapSnapshot(currentState));
+    redoStack.push(makeUndoEntry(cloneMapSnapshot(currentState), entry.label));
+    _undoCoalesceKey = null;
+    _undoCoalesceAt = 0;
     inUndoRedo = true;
     updateUndoRedoButtons();
+    var msg = entry.label && entry.label !== 'изменение'
+        ? ('Отменено: ' + entry.label)
+        : 'Действие отменено';
     if (tryApplyMapStateIncrementally(currentState, stateToRestore, function() {
-        finalizeUndoRedoRestoredState(stateToRestore, 'Действие отменено', 'Отмена');
+        finalizeUndoRedoRestoredState(stateToRestore, msg, 'Отмена');
     })) {
         return;
     }
-    restoreMapStateFull(stateToRestore, 'Действие отменено', 'Отмена');
+    restoreMapStateFull(stateToRestore, msg, 'Отмена');
 }
 
 function performRedo() {
     if (!canEdit() || redoStack.length === 0 || inUndoRedo) return;
-    var stateToRestore = redoStack.pop();
+    var entry = unwrapUndoEntry(redoStack.pop());
+    var stateToRestore = entry.state;
     var currentState = lastSavedState != null ? lastSavedState : getSerializedData();
-    undoStack.push(cloneMapSnapshot(currentState));
+    undoStack.push(makeUndoEntry(cloneMapSnapshot(currentState), entry.label));
+    _undoCoalesceKey = null;
+    _undoCoalesceAt = 0;
     inUndoRedo = true;
     updateUndoRedoButtons();
+    var msg = entry.label && entry.label !== 'изменение'
+        ? ('Повторено: ' + entry.label)
+        : 'Действие повторено';
     if (tryApplyMapStateIncrementally(currentState, stateToRestore, function() {
-        finalizeUndoRedoRestoredState(stateToRestore, 'Действие повторено', 'Повтор');
+        finalizeUndoRedoRestoredState(stateToRestore, msg, 'Повтор');
     })) {
         return;
     }
-    restoreMapStateFull(stateToRestore, 'Действие повторено', 'Повтор');
+    restoreMapStateFull(stateToRestore, msg, 'Повтор');
 }
 
 function updateUndoRedoButtons() {
@@ -607,11 +766,25 @@ function updateUndoRedoButtons() {
     var busy = !!inUndoRedo;
     if (undoBtn) {
         undoBtn.disabled = busy || undoStack.length === 0;
-        undoBtn.title = busy ? 'Подождите…' : (undoStack.length === 0 ? 'Отмена (Ctrl+Z)' : 'Отменить (Ctrl+Z)');
+        if (busy) {
+            undoBtn.title = 'Подождите…';
+        } else if (undoStack.length === 0) {
+            undoBtn.title = 'Отмена (Ctrl+Z)';
+        } else {
+            var uLabel = unwrapUndoEntry(undoStack[undoStack.length - 1]).label;
+            undoBtn.title = 'Отменить: ' + uLabel + ' (Ctrl+Z)';
+        }
     }
     if (redoBtn) {
         redoBtn.disabled = busy || redoStack.length === 0;
-        redoBtn.title = busy ? 'Подождите…' : (redoStack.length === 0 ? 'Повтор (Ctrl+Y)' : 'Повторить (Ctrl+Y)');
+        if (busy) {
+            redoBtn.title = 'Подождите…';
+        } else if (redoStack.length === 0) {
+            redoBtn.title = 'Повтор (Ctrl+Y)';
+        } else {
+            var rLabel = unwrapUndoEntry(redoStack[redoStack.length - 1]).label;
+            redoBtn.title = 'Повторить: ' + rLabel + ' (Ctrl+Y / Ctrl+Shift+Z)';
+        }
     }
 }
 
@@ -652,15 +825,12 @@ function loadData() {
     } else if (typeof ensureDeviceCatalogsNonEmpty === 'function') {
         ensureDeviceCatalogsNonEmpty();
     }
-    if (typeof updateCrossDisplay === 'function') updateCrossDisplay();
-    if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
-    if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
     if (!getApiBase()) {
         showNoApiMessage();
         markMapDataReady();
         return;
     }
-    
+
     (function() {
         if (typeof AuthSystem !== 'undefined' && AuthSystem.refreshUsersFromApi) AuthSystem.refreshUsersFromApi();
         if (!token) return;
@@ -707,8 +877,11 @@ function loadData() {
                 try {
                     if (s.groupNames.cross && typeof s.groupNames.cross === 'object') Object.keys(s.groupNames.cross).forEach(function(k) { crossGroupNames.set(k, s.groupNames.cross[k]); });
                     if (s.groupNames.node && typeof s.groupNames.node === 'object') Object.keys(s.groupNames.node).forEach(function(k) { nodeGroupNames.set(k, s.groupNames.node[k]); });
-                    if (typeof updateCrossDisplay === 'function') updateCrossDisplay();
-                    if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
+                    // Не пересобирать display во время первичной загрузки — importDataPostProcess сделает это сам.
+                    if (!_mapInitialLoadPending && !_mapApplyInProgress) {
+                        if (typeof updateCrossDisplay === 'function') updateCrossDisplay();
+                        if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
+                    }
                 } catch (e) {}
             }
             if (typeof withDeviceCatalogHydration === 'function') {
@@ -1128,15 +1301,38 @@ function shouldApplyRemoteMapState(organizationId) {
 
 var _mapApiReloadTimer = null;
 var _mapApplyInProgress = false;
+/** Анти-дубль: sync hello шлёт map_refresh сразу после /api/map → карта грузилась дважды. */
+var _lastMapLoadedFromApiAt = 0;
+var _lastMapLoadedOrgId = null;
+var MAP_SYNC_RELOAD_DEDUP_MS = 2500;
+
+function shouldSkipSyncMapRefresh(organizationId) {
+    // Пока идёт первичная/текущая apply из /api/map — hello map_refresh не нужен.
+    if (_mapInitialLoadPending || _mapApplyInProgress) return true;
+    if (!_lastMapLoadedFromApiAt) return false;
+    if ((Date.now() - _lastMapLoadedFromApiAt) > MAP_SYNC_RELOAD_DEDUP_MS) return false;
+    var myOrg = (typeof currentUser !== 'undefined' && currentUser && currentUser.organizationId != null)
+        ? String(currentUser.organizationId)
+        : (window._mapOrgIdLoaded != null ? String(window._mapOrgIdLoaded) : null);
+    var refreshOrg = organizationId != null && organizationId !== ''
+        ? String(organizationId)
+        : (_lastMapLoadedOrgId != null ? String(_lastMapLoadedOrgId) : null);
+    if (myOrg && refreshOrg && myOrg !== refreshOrg) return false;
+    if (_lastMapLoadedOrgId != null && refreshOrg && String(_lastMapLoadedOrgId) !== refreshOrg) return false;
+    return true;
+}
+window.shouldSkipSyncMapRefresh = shouldSkipSyncMapRefresh;
 
 function reloadMapFromApi(meta) {
     meta = meta || {};
     if (meta.organizationId != null && !shouldApplyRemoteMapState(meta.organizationId)) return;
     if (!getApiBase() || !getAuthToken()) return;
+    if (shouldSkipSyncMapRefresh(meta.organizationId)) return;
     if (_mapApiReloadTimer) clearTimeout(_mapApiReloadTimer);
     var delay = meta.immediate ? 0 : 100;
     _mapApiReloadTimer = setTimeout(function() {
         _mapApiReloadTimer = null;
+        if (shouldSkipSyncMapRefresh(meta.organizationId)) return;
         fetch(getApiBase() + '/api/map', {
             headers: { 'Authorization': 'Bearer ' + getAuthToken() },
             cache: 'no-store'
@@ -1164,6 +1360,9 @@ function applyRemoteState(data, meta) {
     }
     if (_mapApplyInProgress) return;
     _mapStateReceived = true;
+    if (_mapDataReady && !_mapInitialLoadPending) {
+        clearUndoRedoStacks();
+    }
     if (_mapDataReady && !_mapInitialLoadPending && objects && objects.length > 0 && meta.merge === true) {
         try {
             if (data.length === 0) {
@@ -1213,6 +1412,12 @@ function applyRemoteState(data, meta) {
             if (meta && meta.fromApi && typeof OfflineMapCache !== 'undefined' && OfflineMapCache.hideOfflineBanner) {
                 OfflineMapCache.hideOfflineBanner();
                 window._volsmapOfflineMapActive = false;
+            }
+            if (meta && meta.fromApi) {
+                _lastMapLoadedFromApiAt = Date.now();
+                _lastMapLoadedOrgId = (meta.organizationId != null && meta.organizationId !== '')
+                    ? String(meta.organizationId)
+                    : (window._mapOrgIdLoaded != null ? String(window._mapOrgIdLoaded) : null);
             }
             flushPendingCollaboratorCursors();
         }
@@ -2181,10 +2386,19 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         return;
     }
     if (data.geometry && placemark.geometry) {
+        var forceUndoGeom = typeof inUndoRedo !== 'undefined' && inUndoRedo;
         var incomingRev = data.revision != null && !isNaN(Number(data.revision)) ? Number(data.revision) : null;
         var localRev = typeof getMapRevision === 'function' ? getMapRevision(placemark) : 0;
-        if (incomingRev == null || incomingRev >= localRev) {
+        // Undo/redo намеренно откатывает к меньшей revision — иначе объект остаётся на новом месте.
+        if (forceUndoGeom || incomingRev == null || incomingRev >= localRev) {
             placemark.geometry.setCoordinates(data.geometry);
+            var geomLabel = placemark.properties.get('label');
+            if (geomLabel && geomLabel.geometry) {
+                try { geomLabel.geometry.setCoordinates(data.geometry); } catch (eLblGeom) {}
+            }
+            if (typeof MapPerf !== 'undefined' && MapPerf.updateSpatialPosition) {
+                try { MapPerf.updateSpatialPosition(placemark); } catch (eSp) {}
+            }
         }
     }
     if (type) placemark.properties.set('type', type);
@@ -2194,7 +2408,8 @@ function populatePlacemarkFromSerializedData(placemark, data) {
     }
     if (data.revision != null) {
         var revIncoming = Number(data.revision);
-        if (!isNaN(revIncoming) && revIncoming >= (typeof getMapRevision === 'function' ? getMapRevision(placemark) : 0)) {
+        var forceUndoRev = typeof inUndoRedo !== 'undefined' && inUndoRedo;
+        if (!isNaN(revIncoming) && (forceUndoRev || revIncoming >= (typeof getMapRevision === 'function' ? getMapRevision(placemark) : 0))) {
             setMapRevision(placemark, revIncoming);
         }
     }
@@ -2769,7 +2984,7 @@ function createObjectFromData(data, opts, createOpts) {
                 onMemberObjectDragEnd(placemark);
             }
             if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(placemark);
-            else saveData({ object: placemark, syncImmediate: true });
+            else saveData({ object: placemark, syncImmediate: true, undoLabel: 'перемещение' });
             if (type === 'cross' && typeof updateCrossDisplay === 'function') updateCrossDisplay();
             if (type === 'node' && typeof updateNodeDisplay === 'function') updateNodeDisplay();
             if (type === 'cabinet' && typeof onCabinetDragEnd === 'function') onCabinetDragEnd(placemark);
@@ -2886,82 +3101,6 @@ async function ensurePdfUnicodeFont(doc) {
     } catch (eFont) {
         return false;
     }
-}
-
-function buildZabbixExportPayload(data) {
-    var mapItems = Array.isArray(data) ? data : [];
-    var nodes = [];
-    var links = [];
-    var nodeByIndex = Object.create(null);
-    mapItems.forEach(function(item, index) {
-        if (!item || !item.type) return;
-        if (item.type === 'cable' || item.type === 'cableLabel' || item.type === 'region' || item.type === 'regionLabel') return;
-        var geometry = Array.isArray(item.geometry) ? item.geometry : [null, null];
-        var lat = Number(geometry[0]);
-        var lon = Number(geometry[1]);
-        var node = {
-            id: item.uniqueId || ('idx-' + index),
-            name: item.name || (item.type + '-' + index),
-            type: item.type,
-            lat: Number.isFinite(lat) ? lat : null,
-            lon: Number.isFinite(lon) ? lon : null
-        };
-        nodeByIndex[index] = node;
-        nodes.push(node);
-    });
-
-    mapItems.forEach(function(item, index) {
-        if (!item || item.type !== 'cable') return;
-        var fromNode = nodeByIndex[item.from];
-        var toNode = nodeByIndex[item.to];
-        if (!fromNode || !toNode) return;
-        links.push({
-            id: item.uniqueId || ('cable-' + index),
-            name: item.cableName || ('Cable ' + (index + 1)),
-            cableType: item.cableType || 'fiber',
-            from: fromNode.id,
-            to: toNode.id,
-            fromName: fromNode.name,
-            toName: toNode.name,
-            distance: item.distance != null ? item.distance : null
-        });
-    });
-
-    return {
-        generatedAt: new Date().toISOString(),
-        version: 1,
-        source: 'network-map',
-        stats: {
-            itemsTotal: mapItems.length,
-            nodesTotal: nodes.length,
-            linksTotal: links.length
-        },
-        zabbix: {
-            // LLD для автообнаружения узлов.
-            hosts_discovery: nodes.map(function(node) {
-                return {
-                    '{#ID}': node.id,
-                    '{#NAME}': node.name,
-                    '{#TYPE}': node.type,
-                    '{#LAT}': node.lat,
-                    '{#LON}': node.lon
-                };
-            }),
-            links_discovery: links.map(function(link) {
-                return {
-                    '{#ID}': link.id,
-                    '{#NAME}': link.name,
-                    '{#TYPE}': link.cableType,
-                    '{#FROM}': link.from,
-                    '{#TO}': link.to
-                };
-            })
-        },
-        // Полный снимок схемы для восстановления/доп. интеграций.
-        full_map: mapItems,
-        nodes: nodes,
-        links: links
-    };
 }
 
 function resolveMapExportObjectName(item) {

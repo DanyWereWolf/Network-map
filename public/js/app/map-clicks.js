@@ -164,6 +164,18 @@ function handleMapClick(e) {
         handleCableSplitMapClick(coords, resolveCableFromMapTarget(target));
         return;
     }
+
+    // Размещение объекта важнее открытия карточки кабеля
+    if (objectPlacementMode) {
+        if (Date.now() < placementPanBlockClickUntil) {
+            return;
+        }
+        if (placeObjectAtCoords(coords)) {
+            /* saveData и syncSendOp выполняются в createObject */
+        }
+        return;
+    }
+
     const zoom = myMap.getZoom();
     const clickedCable = findCableAtCoords(coords, zoom);
 
@@ -233,19 +245,6 @@ function handleMapClick(e) {
             }
             updateUndergroundEditPreview(editCoords);
             updateUndergroundEditBarText();
-        }
-        return;
-    }
-
-    if (objectPlacementMode) {
-        const coords = e.get('coords');
-
-        if (Date.now() < placementPanBlockClickUntil) {
-            return;
-        }
-
-        if (placeObjectAtCoords(coords)) {
-            /* saveData и syncSendOp выполняются в createObject */
         }
         return;
     }

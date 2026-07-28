@@ -25,13 +25,13 @@ let mysqlPersistTimer = null;
 let mysqlPersistChain = Promise.resolve();
 let mysqlPersistDirty = false;
 
-/** Сравнение id организации без учёта типа (строка/число), чтобы лимиты и данные не «терялись». */
+/** РЎСЂР°РІРЅРµРЅРёРµ id РѕСЂРіР°РЅРёР·Р°С†РёРё Р±РµР· СѓС‡С‘С‚Р° С‚РёРїР° (СЃС‚СЂРѕРєР°/С‡РёСЃР»Рѕ), С‡С‚РѕР±С‹ Р»РёРјРёС‚С‹ Рё РґР°РЅРЅС‹Рµ РЅРµ В«С‚РµСЂСЏР»РёСЃСЊВ». */
 function organizationIdsMatch(a, b) {
     if (a == null || b == null) return false;
     return String(a) === String(b);
 }
 
-/** Активна ли сессия по expires_at (строка ISO, число ms/s, без поля = нет). */
+/** РђРєС‚РёРІРЅР° Р»Рё СЃРµСЃСЃРёСЏ РїРѕ expires_at (СЃС‚СЂРѕРєР° ISO, С‡РёСЃР»Рѕ ms/s, Р±РµР· РїРѕР»СЏ = РЅРµС‚). */
 function sessionIsActive(ses) {
     if (!ses || ses.expires_at == null || ses.expires_at === '') return false;
     var raw = ses.expires_at;
@@ -159,7 +159,7 @@ function findLastKnownGoodStore() {
             (parsed.users && parsed.users.length) ||
             countMapDataByOrgItems(parsed.mapDataByOrg) > 0;
         if (hasData) {
-            console.warn('[DB] Восстановлен last-known-good из:', candidates[i].path);
+            console.warn('[DB] Р’РѕСЃСЃС‚Р°РЅРѕРІР»РµРЅ last-known-good РёР·:', candidates[i].path);
             return parsed;
         }
     }
@@ -170,7 +170,7 @@ function loadStore() {
     if (store) return store;
     if (isMysqlEnabled()) {
         if (!mysqlInitialized) {
-            throw new Error('MySQL storage not initialized — await db.initStorage() before use');
+            throw new Error('MySQL storage not initialized вЂ” await db.initStorage() before use');
         }
         return store;
     }
@@ -184,7 +184,6 @@ function loadStore() {
             saveStore();
             allowDangerousSaveOnce = false;
             migrateToOrganizations();
-            stripNetboxFromStore(store);
             return store;
         }
         store = emptyStoreSkeleton();
@@ -199,9 +198,9 @@ function loadStore() {
         var corruptPath = STORE_PATH + '.corrupt-' + Date.now();
         try {
             fs.copyFileSync(STORE_PATH, corruptPath);
-            console.error('[DB] Не удалось прочитать store.json, копия:', corruptPath, e.message);
+            console.error('[DB] РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕС‡РёС‚Р°С‚СЊ store.json, РєРѕРїРёСЏ:', corruptPath, e.message);
         } catch (copyErr) {
-            console.error('[DB] Не удалось прочитать store.json:', e.message);
+            console.error('[DB] РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕС‡РёС‚Р°С‚СЊ store.json:', e.message);
         }
         var recoveredAfterCorrupt = findLastKnownGoodStore();
         if (recoveredAfterCorrupt) {
@@ -210,13 +209,12 @@ function loadStore() {
             saveStore();
             allowDangerousSaveOnce = false;
         } else {
-            // Не затираем битый файл пустым store — поднимаем in-memory пустой только для аварийного старта
+            // РќРµ Р·Р°С‚РёСЂР°РµРј Р±РёС‚С‹Р№ С„Р°Р№Р» РїСѓСЃС‚С‹Рј store вЂ” РїРѕРґРЅРёРјР°РµРј in-memory РїСѓСЃС‚РѕР№ С‚РѕР»СЊРєРѕ РґР»СЏ Р°РІР°СЂРёР№РЅРѕРіРѕ СЃС‚Р°СЂС‚Р°
             store = emptyStoreSkeleton();
-            console.error('[DB] ВАЖНО: store.json повреждён и last-known-good не найден. Пустой store в памяти, диск не перезаписан.');
+            console.error('[DB] Р’РђР–РќРћ: store.json РїРѕРІСЂРµР¶РґС‘РЅ Рё last-known-good РЅРµ РЅР°Р№РґРµРЅ. РџСѓСЃС‚РѕР№ store РІ РїР°РјСЏС‚Рё, РґРёСЃРє РЅРµ РїРµСЂРµР·Р°РїРёСЃР°РЅ.');
         }
     }
     migrateToOrganizations();
-    stripNetboxFromStore(store);
     return store;
 }
 
@@ -231,7 +229,6 @@ async function initStorage() {
         await runMigrations();
         store = normalizeStoreShape(await mysqlPersist.hydrateStoreFromMysql());
         migrateToOrganizations();
-        stripNetboxFromStore(store);
         mysqlInitialized = true;
         initSchema();
         console.log('[DB] Storage: MySQL (' +
@@ -285,7 +282,7 @@ function writeJsonStoreFile(json, existingRaw) {
         try { fs.writeFileSync(rejectedPath, json, 'utf8'); } catch (e2) {}
         console.error('[DB] REFUSED dangerous save (shrink). Rejected payload:', rejectedPath,
             'existingBytes=', existingRaw.length, 'newBytes=', json.length);
-        var err = new Error('Отказ записи: попытка затереть большую базу уменьшенными данными');
+        var err = new Error('РћС‚РєР°Р· Р·Р°РїРёСЃРё: РїРѕРїС‹С‚РєР° Р·Р°С‚РµСЂРµС‚СЊ Р±РѕР»СЊС€СѓСЋ Р±Р°Р·Сѓ СѓРјРµРЅСЊС€РµРЅРЅС‹РјРё РґР°РЅРЅС‹РјРё');
         err.code = 'DB_DANGEROUS_SAVE';
         throw err;
     }
@@ -311,50 +308,6 @@ function exportLogicalStoreSnapshot(label) {
     return { filename: name, path: outPath };
 }
 
-function stripNetboxFromStore(s) {
-    if (!s) return;
-    var dirty = false;
-    if (s.settings && s.settings.netboxConfig !== undefined) {
-        delete s.settings.netboxConfig;
-        dirty = true;
-    }
-    if (s.settingsByOrg && typeof s.settingsByOrg === 'object') {
-        Object.keys(s.settingsByOrg).forEach(function(orgId) {
-            var o = s.settingsByOrg[orgId];
-            if (o && o.netboxConfig !== undefined) {
-                delete o.netboxConfig;
-                dirty = true;
-            }
-        });
-    }
-    function stripMapObject(obj) {
-        if (!obj || typeof obj !== 'object') return false;
-        var changed = false;
-        ['netboxId', 'netboxUrl', 'netboxDeviceType', 'netboxSite'].forEach(function(k) {
-            if (obj[k] !== undefined) {
-                delete obj[k];
-                changed = true;
-            }
-        });
-        return changed;
-    }
-    function stripMapList(list) {
-        if (!Array.isArray(list)) return false;
-        var c = false;
-        list.forEach(function(item) {
-            if (stripMapObject(item)) c = true;
-        });
-        return c;
-    }
-    if (stripMapList(s.mapData)) dirty = true;
-    if (s.mapDataByOrg && typeof s.mapDataByOrg === 'object') {
-        Object.keys(s.mapDataByOrg).forEach(function(orgId) {
-            if (stripMapList(s.mapDataByOrg[orgId])) dirty = true;
-        });
-    }
-    if (dirty) saveStore();
-}
-
 function migrateToOrganizations() {
     const s = store;
     if (s.organizations && s.organizations.length > 0) return;
@@ -364,7 +317,7 @@ function migrateToOrganizations() {
     const existingSettingsByOrg = (s.settingsByOrg && typeof s.settingsByOrg === 'object') ? s.settingsByOrg : {};
     const hasOrgMaps = countMapDataByOrgItems(existingMapByOrg) > 0 || Object.keys(existingMapByOrg).length > 0;
 
-    // Если mapDataByOrg уже есть — не затираем его, только создаём org-записи при необходимости
+    // Р•СЃР»Рё mapDataByOrg СѓР¶Рµ РµСЃС‚СЊ вЂ” РЅРµ Р·Р°С‚РёСЂР°РµРј РµРіРѕ, С‚РѕР»СЊРєРѕ СЃРѕР·РґР°С‘Рј org-Р·Р°РїРёСЃРё РїСЂРё РЅРµРѕР±С…РѕРґРёРјРѕСЃС‚Рё
     if (hasOrgMaps) {
         s.organizations = s.organizations || [];
         Object.keys(existingMapByOrg).forEach(function (orgId) {
@@ -372,7 +325,7 @@ function migrateToOrganizations() {
             if (!exists) {
                 s.organizations.push({
                     id: orgId,
-                    name: 'Организация ' + String(orgId).slice(-8),
+                    name: 'РћСЂРіР°РЅРёР·Р°С†РёСЏ ' + String(orgId).slice(-8),
                     mapObjectLimitUnlocked: false,
                     status: 'active',
                     createdAt: new Date().toISOString()
@@ -390,12 +343,12 @@ function migrateToOrganizations() {
     const defaultOrgId = 'org_default_' + Date.now();
     s.organizations = [{
         id: defaultOrgId,
-        name: 'По умолчанию',
+        name: 'РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋ',
         mapObjectLimitUnlocked: false,
         status: 'active',
         createdAt: new Date().toISOString()
     }];
-    // Не обнуляем существующие ключи без нужды — только если пусто
+    // РќРµ РѕР±РЅСѓР»СЏРµРј СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёРµ РєР»СЋС‡Рё Р±РµР· РЅСѓР¶РґС‹ вЂ” С‚РѕР»СЊРєРѕ РµСЃР»Рё РїСѓСЃС‚Рѕ
     if (!s.mapDataByOrg || typeof s.mapDataByOrg !== 'object') s.mapDataByOrg = {};
     if (!s.historyByOrg || typeof s.historyByOrg !== 'object') s.historyByOrg = {};
     s.settingsByOrg = s.settingsByOrg || {};
@@ -423,7 +376,7 @@ function isDangerousStoreShrink(existingRaw, newJson, newStoreObj) {
     if (allowDangerousSaveOnce) return false;
     if (!existingRaw || existingRaw.length < DANGEROUS_SAVE_MIN_EXISTING_BYTES) return false;
     if (newJson.length >= Math.floor(existingRaw.length * DANGEROUS_SAVE_RATIO)) {
-        // size ok — still check structural wipe
+        // size ok вЂ” still check structural wipe
     } else {
         return true;
     }
@@ -519,7 +472,7 @@ function saveStore() {
 }
 
 /**
- * Проверка опасного сжатия карты организации.
+ * РџСЂРѕРІРµСЂРєР° РѕРїР°СЃРЅРѕРіРѕ СЃР¶Р°С‚РёСЏ РєР°СЂС‚С‹ РѕСЂРіР°РЅРёР·Р°С†РёРё.
  * @returns {{ ok: boolean, error?: string, previous?: number, next?: number }}
  */
 function assertMapDataNotDangerousShrink(orgId, data, opts) {
@@ -539,7 +492,7 @@ function assertMapDataNotDangerousShrink(orgId, data, opts) {
         if (nextLen === 0 || nextLen < Math.floor(prevLen * MAP_SHRINK_RATIO)) {
             return {
                 ok: false,
-                error: 'Отказ: нельзя заменить карту из ' + prevLen + ' объектов на ' + nextLen + ' без явного подтверждения',
+                error: 'РћС‚РєР°Р·: РЅРµР»СЊР·СЏ Р·Р°РјРµРЅРёС‚СЊ РєР°СЂС‚Сѓ РёР· ' + prevLen + ' РѕР±СЉРµРєС‚РѕРІ РЅР° ' + nextLen + ' Р±РµР· СЏРІРЅРѕРіРѕ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ',
                 previous: prevLen,
                 next: nextLen
             };
@@ -657,7 +610,7 @@ function initSchema() {
     if (!isMysqlEnabled()) saveStore();
 }
 
-/** Убирает объекты, чей uniqueId есть в данных другой организации. */
+/** РЈР±РёСЂР°РµС‚ РѕР±СЉРµРєС‚С‹, С‡РµР№ uniqueId РµСЃС‚СЊ РІ РґР°РЅРЅС‹С… РґСЂСѓРіРѕР№ РѕСЂРіР°РЅРёР·Р°С†РёРё. */
 function stripMapItemsFromOtherOrganizations(orgId, data) {
     if (!orgId || !Array.isArray(data) || !data.length) return Array.isArray(data) ? data : [];
     const s = loadStore();
@@ -720,7 +673,7 @@ function setMapData(orgId, data, opts) {
     opts = opts || {};
     var shrink = assertMapDataNotDangerousShrink(orgId, data, opts);
     if (!shrink.ok) {
-        var err = new Error(shrink.error || 'Отказ записи карты');
+        var err = new Error(shrink.error || 'РћС‚РєР°Р· Р·Р°РїРёСЃРё РєР°СЂС‚С‹');
         err.code = 'MAP_DANGEROUS_SHRINK';
         err.previous = shrink.previous;
         err.next = shrink.next;
@@ -966,15 +919,15 @@ function getOrganization(orgId) {
     return orgs.find(function(o) { return organizationIdsMatch(o.id, orgId); }) || null;
 }
 
-/** Кабели и служебные подписи не считаются объектами на карте. */
+/** РљР°Р±РµР»Рё Рё СЃР»СѓР¶РµР±РЅС‹Рµ РїРѕРґРїРёСЃРё РЅРµ СЃС‡РёС‚Р°СЋС‚СЃСЏ РѕР±СЉРµРєС‚Р°РјРё РЅР° РєР°СЂС‚Рµ. */
 function isMapInfrastructureObject(item) {
     if (!item || !item.type) return false;
     return item.type !== 'cable' && item.type !== 'cableLabel';
 }
 
 /**
- * Реальное число объектов на одной карте: узлы, кроссы, муфты, опоры и т.д.
- * Без кабелей, без дублей по uniqueId; коммутаторы внутри узла — как в статистике приложения.
+ * Р РµР°Р»СЊРЅРѕРµ С‡РёСЃР»Рѕ РѕР±СЉРµРєС‚РѕРІ РЅР° РѕРґРЅРѕР№ РєР°СЂС‚Рµ: СѓР·Р»С‹, РєСЂРѕСЃСЃС‹, РјСѓС„С‚С‹, РѕРїРѕСЂС‹ Рё С‚.Рґ.
+ * Р‘РµР· РєР°Р±РµР»РµР№, Р±РµР· РґСѓР±Р»РµР№ РїРѕ uniqueId; РєРѕРјРјСѓС‚Р°С‚РѕСЂС‹ РІРЅСѓС‚СЂРё СѓР·Р»Р° вЂ” РєР°Рє РІ СЃС‚Р°С‚РёСЃС‚РёРєРµ РїСЂРёР»РѕР¶РµРЅРёСЏ.
  */
 function countActualMapObjectsInArray(arr) {
     if (!Array.isArray(arr) || !arr.length) return 0;
@@ -1004,12 +957,12 @@ function countActualMapObjectsInArray(arr) {
     return count;
 }
 
-/** Число объектов на карте одной организации (узлы, кроссы, муфты и т.д., без кабелей). */
+/** Р§РёСЃР»Рѕ РѕР±СЉРµРєС‚РѕРІ РЅР° РєР°СЂС‚Рµ РѕРґРЅРѕР№ РѕСЂРіР°РЅРёР·Р°С†РёРё (СѓР·Р»С‹, РєСЂРѕСЃСЃС‹, РјСѓС„С‚С‹ Рё С‚.Рґ., Р±РµР· РєР°Р±РµР»РµР№). */
 function countMapObjectsForOrganization(orgId) {
     return countActualMapObjectsInArray(getMapData(orgId));
 }
 
-/** Агрегаты для публичного лендинга (без авторизации). */
+/** РђРіСЂРµРіР°С‚С‹ РґР»СЏ РїСѓР±Р»РёС‡РЅРѕРіРѕ Р»РµРЅРґРёРЅРіР° (Р±РµР· Р°РІС‚РѕСЂРёР·Р°С†РёРё). */
 function getPublicStats() {
     const s = loadStore();
     const orgs = Array.isArray(s.organizations) ? s.organizations : [];
@@ -1039,7 +992,7 @@ function addOrganization(org) {
     const id = org.id || ('org_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9));
     s.organizations.push({
         id: id,
-        name: org.name || 'Организация',
+        name: org.name || 'РћСЂРіР°РЅРёР·Р°С†РёСЏ',
         mapObjectLimitUnlocked: !!org.mapObjectLimitUnlocked,
         customMapObjectLimit: org.customMapObjectLimit != null && org.customMapObjectLimit !== '' ? org.customMapObjectLimit : null,
         maxConcurrentUsers: org.maxConcurrentUsers != null && org.maxConcurrentUsers !== '' ? org.maxConcurrentUsers : null,
@@ -1123,15 +1076,15 @@ function deleteOrganization(orgId) {
             if (organizationIdsMatch(k, orgId)) delete s.chatMediaByOrg[k];
         });
     }
-    // Удаляем всех пользователей этой организации (кроме глобального админа без organizationId)
+    // РЈРґР°Р»СЏРµРј РІСЃРµС… РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№ СЌС‚РѕР№ РѕСЂРіР°РЅРёР·Р°С†РёРё (РєСЂРѕРјРµ РіР»РѕР±Р°Р»СЊРЅРѕРіРѕ Р°РґРјРёРЅР° Р±РµР· organizationId)
     if (Array.isArray(s.users)) {
         s.users = s.users.filter(function(u) {
-            // Пользователь относится к удаляемой организации?
+            // РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РѕС‚РЅРѕСЃРёС‚СЃСЏ Рє СѓРґР°Р»СЏРµРјРѕР№ РѕСЂРіР°РЅРёР·Р°С†РёРё?
             if (organizationIdsMatch(u.organizationId, orgId)) return false;
             return true;
         });
     }
-    // Удаляем все сессии этой организации
+    // РЈРґР°Р»СЏРµРј РІСЃРµ СЃРµСЃСЃРёРё СЌС‚РѕР№ РѕСЂРіР°РЅРёР·Р°С†РёРё
     if (Array.isArray(s.sessions)) {
         s.sessions = s.sessions.filter(function(ses) { return !organizationIdsMatch(ses.organization_id, orgId); });
     }
@@ -1146,18 +1099,18 @@ function getSessions() {
 function getPricingPlans() {
     const s = loadStore();
     if (!Array.isArray(s.pricingPlans) || !s.pricingPlans.length) {
-        // Карточка «снять лимит» на лендинге — кнопка ведёт в контакты
+        // РљР°СЂС‚РѕС‡РєР° В«СЃРЅСЏС‚СЊ Р»РёРјРёС‚В» РЅР° Р»РµРЅРґРёРЅРіРµ вЂ” РєРЅРѕРїРєР° РІРµРґС‘С‚ РІ РєРѕРЅС‚Р°РєС‚С‹
         s.pricingPlans = [
             {
                 id: 'unlock',
-                title: 'Безлимит объектов',
-                short: 'Снимите лимит для вашей организации — навсегда',
-                price: 'по договорённости',
+                title: 'Р‘РµР·Р»РёРјРёС‚ РѕР±СЉРµРєС‚РѕРІ',
+                short: 'РЎРЅРёРјРёС‚Рµ Р»РёРјРёС‚ РґР»СЏ РІР°С€РµР№ РѕСЂРіР°РЅРёР·Р°С†РёРё вЂ” РЅР°РІСЃРµРіРґР°',
+                price: 'РїРѕ РґРѕРіРѕРІРѕСЂС‘РЅРЅРѕСЃС‚Рё',
                 period: '',
-                maxUsersText: 'Неограниченное число узлов, кроссов, муфт и др. на карте',
+                maxUsersText: 'РќРµРѕРіСЂР°РЅРёС‡РµРЅРЅРѕРµ С‡РёСЃР»Рѕ СѓР·Р»РѕРІ, РєСЂРѕСЃСЃРѕРІ, РјСѓС„С‚ Рё РґСЂ. РЅР° РєР°СЂС‚Рµ',
                 order: 0,
                 highlighted: true,
-                ctaText: 'Связаться с владельцем',
+                ctaText: 'РЎРІСЏР·Р°С‚СЊСЃСЏ СЃ РІР»Р°РґРµР»СЊС†РµРј',
                 kind: 'contact'
             }
         ];
@@ -1193,7 +1146,7 @@ function countActiveSessionsForUser(userId) {
     }).length;
 }
 
-/** Удаляет только просроченные сессии пользователя (активные не трогает). */
+/** РЈРґР°Р»СЏРµС‚ С‚РѕР»СЊРєРѕ РїСЂРѕСЃСЂРѕС‡РµРЅРЅС‹Рµ СЃРµСЃСЃРёРё РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ (Р°РєС‚РёРІРЅС‹Рµ РЅРµ С‚СЂРѕРіР°РµС‚). */
 function deleteExpiredSessionsForUser(userId) {
     if (userId == null) return;
     const s = loadStore();
@@ -1216,7 +1169,7 @@ function deleteSessionsForOrganization(orgId) {
     saveStore();
 }
 
-/** Удаляет все сессии пользователя (перед новым входом или при принудительном сбросе). */
+/** РЈРґР°Р»СЏРµС‚ РІСЃРµ СЃРµСЃСЃРёРё РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ (РїРµСЂРµРґ РЅРѕРІС‹Рј РІС…РѕРґРѕРј РёР»Рё РїСЂРё РїСЂРёРЅСѓРґРёС‚РµР»СЊРЅРѕРј СЃР±СЂРѕСЃРµ). */
 function deleteSessionsForUser(userId) {
     if (userId == null) return;
     const s = loadStore();
@@ -1293,7 +1246,6 @@ function setSettings(obj, orgId) {
         if (obj.groupNames !== undefined) o.groupNames = typeof obj.groupNames === 'string' ? obj.groupNames : JSON.stringify(obj.groupNames);
         if (obj.customDeviceOptions !== undefined) o.customDeviceOptions = typeof obj.customDeviceOptions === 'string' ? obj.customDeviceOptions : JSON.stringify(obj.customDeviceOptions);
         if (obj.collaboratorCursorStyle !== undefined) o.collaboratorCursorStyle = normalizeCollaboratorCursorStyle(obj.collaboratorCursorStyle);
-        delete o.netboxConfig;
         saveStore();
         return;
     }
@@ -1429,24 +1381,24 @@ function createDailyBackup() {
                 history: getHistory(orgId),
                 settings: getSettings(orgId)
             };
-            // Не затираем сегодняшний непустой бэкап пустым
+            // РќРµ Р·Р°С‚РёСЂР°РµРј СЃРµРіРѕРґРЅСЏС€РЅРёР№ РЅРµРїСѓСЃС‚РѕР№ Р±СЌРєР°Рї РїСѓСЃС‚С‹Рј
             if (fs.existsSync(backupPath)) {
                 try {
                     var prev = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
                     var prevN = Array.isArray(prev.mapData) ? prev.mapData.length : 0;
                     var nextN = Array.isArray(payload.mapData) ? payload.mapData.length : 0;
                     if (prevN >= MAP_SHRINK_MIN_EXISTING && nextN < Math.floor(prevN * MAP_SHRINK_RATIO)) {
-                        console.warn('[Backup] Пропуск перезаписи пустым/урезанным:', orgId + '/backup-' + dateStr + '.json');
+                        console.warn('[Backup] РџСЂРѕРїСѓСЃРє РїРµСЂРµР·Р°РїРёСЃРё РїСѓСЃС‚С‹Рј/СѓСЂРµР·Р°РЅРЅС‹Рј:', orgId + '/backup-' + dateStr + '.json');
                         return;
                     }
                 } catch (ePrev) {}
             }
             fs.writeFileSync(backupPath, JSON.stringify(payload), 'utf8');
             pruneBackupsKeepDays(orgId, BACKUP_RETENTION_DAYS);
-            console.log('[Backup] Сохранён: ' + orgId + '/backup-' + dateStr + '.json');
+            console.log('[Backup] РЎРѕС…СЂР°РЅС‘РЅ: ' + orgId + '/backup-' + dateStr + '.json');
         });
 
-        // Полный логический снимок (JSON export) — работает и для MySQL, и для store.json
+        // РџРѕР»РЅС‹Р№ Р»РѕРіРёС‡РµСЃРєРёР№ СЃРЅРёРјРѕРє (JSON export) вЂ” СЂР°Р±РѕС‚Р°РµС‚ Рё РґР»СЏ MySQL, Рё РґР»СЏ store.json
         ensureFullBackupsDir();
         var fullDaily = path.join(FULL_BACKUPS_DIR, 'store-' + dateStr + '.json');
         var json = JSON.stringify(s, null, 0);
@@ -1455,21 +1407,21 @@ function createDailyBackup() {
                 var existingFull = fs.statSync(fullDaily);
                 if (existingFull.size >= DANGEROUS_SAVE_MIN_EXISTING_BYTES &&
                     Buffer.byteLength(json, 'utf8') < Math.floor(existingFull.size * DANGEROUS_SAVE_RATIO)) {
-                    console.warn('[Backup] Пропуск полного дневного снимка: новый store заметно меньше');
+                    console.warn('[Backup] РџСЂРѕРїСѓСЃРє РїРѕР»РЅРѕРіРѕ РґРЅРµРІРЅРѕРіРѕ СЃРЅРёРјРєР°: РЅРѕРІС‹Р№ store Р·Р°РјРµС‚РЅРѕ РјРµРЅСЊС€Рµ');
                 } else {
                     fs.writeFileSync(fullDaily, json, 'utf8');
-                    console.log('[Backup] Полный снимок:', path.basename(fullDaily));
+                    console.log('[Backup] РџРѕР»РЅС‹Р№ СЃРЅРёРјРѕРє:', path.basename(fullDaily));
                 }
             } catch (eFull) {
                 fs.writeFileSync(fullDaily, json, 'utf8');
             }
         } else {
             fs.writeFileSync(fullDaily, json, 'utf8');
-            console.log('[Backup] Полный снимок:', path.basename(fullDaily));
+            console.log('[Backup] РџРѕР»РЅС‹Р№ СЃРЅРёРјРѕРє:', path.basename(fullDaily));
         }
         pruneFullSnapshots(FULL_SNAPSHOT_KEEP);
     } catch (e) {
-        console.error('[Backup] Ошибка:', e.message);
+        console.error('[Backup] РћС€РёР±РєР°:', e.message);
     }
 }
 
@@ -1487,7 +1439,7 @@ function listBackups(orgId) {
             .sort((a, b) => b.date.localeCompare(a.date));
         return files;
     } catch (e) {
-        console.error('[Backup] Ошибка списка:', e.message);
+        console.error('[Backup] РћС€РёР±РєР° СЃРїРёСЃРєР°:', e.message);
         return [];
     }
 }
@@ -1496,24 +1448,24 @@ function restoreFromBackup(orgId, filename, opts) {
     if (!orgId) throw new Error('orgId required');
     opts = opts || {};
     const trimmed = typeof filename === 'string' ? filename.trim() : '';
-    if (!/^backup-\d{4}-\d{2}-\d{2}\.json$/.test(trimmed)) throw new Error('Недопустимое имя файла');
+    if (!/^backup-\d{4}-\d{2}-\d{2}\.json$/.test(trimmed)) throw new Error('РќРµРґРѕРїСѓСЃС‚РёРјРѕРµ РёРјСЏ С„Р°Р№Р»Р°');
     const backupPath = path.join(getOrgBackupsDir(orgId), trimmed);
-    if (!fs.existsSync(backupPath)) throw new Error('Файл бэкапа не найден');
+    if (!fs.existsSync(backupPath)) throw new Error('Р¤Р°Р№Р» Р±СЌРєР°РїР° РЅРµ РЅР°Р№РґРµРЅ');
     let raw, parsed;
     try {
         raw = fs.readFileSync(backupPath, 'utf8');
         parsed = JSON.parse(raw);
     } catch (e) {
-        if (e instanceof SyntaxError) throw new Error('Неверный формат JSON в бэкапе');
+        if (e instanceof SyntaxError) throw new Error('РќРµРІРµСЂРЅС‹Р№ С„РѕСЂРјР°С‚ JSON РІ Р±СЌРєР°РїРµ');
         throw e;
     }
-    if (!parsed || typeof parsed !== 'object') throw new Error('Неверный формат бэкапа');
+    if (!parsed || typeof parsed !== 'object') throw new Error('РќРµРІРµСЂРЅС‹Р№ С„РѕСЂРјР°С‚ Р±СЌРєР°РїР°');
     const payloadOrgId = parsed.organizationId || orgId;
-    if (!organizationIdsMatch(payloadOrgId, orgId)) throw new Error('Бэкап принадлежит другой организации');
+    if (!organizationIdsMatch(payloadOrgId, orgId)) throw new Error('Р‘СЌРєР°Рї РїСЂРёРЅР°РґР»РµР¶РёС‚ РґСЂСѓРіРѕР№ РѕСЂРіР°РЅРёР·Р°С†РёРё');
     const incomingMap = Array.isArray(parsed.mapData) ? parsed.mapData : [];
     var shrink = assertMapDataNotDangerousShrink(orgId, incomingMap, { allowShrink: !!opts.force });
     if (!shrink.ok) {
-        throw new Error(shrink.error + '. Для принудительного восстановления передайте force: true (только главный admin).');
+        throw new Error(shrink.error + '. Р”Р»СЏ РїСЂРёРЅСѓРґРёС‚РµР»СЊРЅРѕРіРѕ РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ РїРµСЂРµРґР°Р№С‚Рµ force: true (С‚РѕР»СЊРєРѕ РіР»Р°РІРЅС‹Р№ admin).');
     }
     const s = loadStore();
     if (!s.mapDataByOrg || typeof s.mapDataByOrg !== 'object') s.mapDataByOrg = {};
@@ -1525,7 +1477,6 @@ function restoreFromBackup(orgId, filename, opts) {
     s.mapDataByOrg[key] = incomingMap;
     s.historyByOrg[key] = Array.isArray(parsed.history) ? parsed.history : [];
     var restoredSettings = (parsed.settings && typeof parsed.settings === 'object') ? parsed.settings : {};
-    delete restoredSettings.netboxConfig;
     s.settingsByOrg[key] = restoredSettings;
 
     if (opts.force) allowDangerousSaveOnce = true;
@@ -1535,7 +1486,7 @@ function restoreFromBackup(orgId, filename, opts) {
         if (opts.force) allowDangerousSaveOnce = false;
     }
     deleteSessionsForOrganization(orgId);
-    console.log('[Backup] Восстановлено из:', orgId + '/' + trimmed);
+    console.log('[Backup] Р’РѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРѕ РёР·:', orgId + '/' + trimmed);
 }
 
 function listFullStoreBackups() {
@@ -1563,12 +1514,12 @@ function listFullStoreBackups() {
 function restoreFullStoreBackup(filename) {
     const trimmed = typeof filename === 'string' ? filename.trim() : '';
     if (!/^store-[\w.-]+\.json$/i.test(trimmed) || trimmed.includes('..') || trimmed.includes('/') || trimmed.includes('\\')) {
-        throw new Error('Недопустимое имя файла');
+        throw new Error('РќРµРґРѕРїСѓСЃС‚РёРјРѕРµ РёРјСЏ С„Р°Р№Р»Р°');
     }
     const backupPath = path.join(FULL_BACKUPS_DIR, trimmed);
-    if (!fs.existsSync(backupPath)) throw new Error('Файл снимка не найден');
+    if (!fs.existsSync(backupPath)) throw new Error('Р¤Р°Р№Р» СЃРЅРёРјРєР° РЅРµ РЅР°Р№РґРµРЅ');
     const parsed = tryParseStoreFile(backupPath);
-    if (!parsed) throw new Error('Неверный формат снимка');
+    if (!parsed) throw new Error('РќРµРІРµСЂРЅС‹Р№ С„РѕСЂРјР°С‚ СЃРЅРёРјРєР°');
     // Safety: copy current store aside (JSON mode) or logical export (MySQL)
     if (!isMysqlEnabled() && fs.existsSync(STORE_PATH)) {
         try {
@@ -1591,16 +1542,16 @@ function restoreFullStoreBackup(filename) {
             console.error('[DB] MySQL flush after full restore failed:', e && e.message ? e.message : e);
         });
     }
-    console.log('[DB] Полный store восстановлен из:', trimmed);
+    console.log('[DB] РџРѕР»РЅС‹Р№ store РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅ РёР·:', trimmed);
     return { ok: true, organizations: (parsed.organizations || []).length, users: (parsed.users || []).length };
 }
 
-/** Сброс in-memory store (после полного restore извне). */
+/** РЎР±СЂРѕСЃ in-memory store (РїРѕСЃР»Рµ РїРѕР»РЅРѕРіРѕ restore РёР·РІРЅРµ). */
 function reloadStoreFromDisk() {
     store = null;
     if (isMysqlEnabled()) {
         mysqlInitialized = false;
-        throw new Error('reloadStoreFromDisk: в режиме MySQL используйте await reloadStoreFromMysql()');
+        throw new Error('reloadStoreFromDisk: РІ СЂРµР¶РёРјРµ MySQL РёСЃРїРѕР»СЊР·СѓР№С‚Рµ await reloadStoreFromMysql()');
     }
     return loadStore();
 }
@@ -1611,7 +1562,6 @@ async function reloadStoreFromMysql() {
     const mysqlPersist = require('./db/mysql-persist');
     store = normalizeStoreShape(await mysqlPersist.hydrateStoreFromMysql());
     migrateToOrganizations();
-    stripNetboxFromStore(store);
     mysqlInitialized = true;
     return store;
 }
@@ -1635,10 +1585,10 @@ function pruneBackupsKeepDays(orgId, keepDays) {
         if (files.length <= keepDays) return;
         for (let i = keepDays; i < files.length; i++) {
             const filePath = path.join(dir, files[i].name);
-            try { fs.unlinkSync(filePath); console.log('[Backup] Удалён старый:', files[i].name); } catch (e) {}
+            try { fs.unlinkSync(filePath); console.log('[Backup] РЈРґР°Р»С‘РЅ СЃС‚Р°СЂС‹Р№:', files[i].name); } catch (e) {}
         }
     } catch (e) {
-        console.error('[Backup] Ошибка очистки:', e.message);
+        console.error('[Backup] РћС€РёР±РєР° РѕС‡РёСЃС‚РєРё:', e.message);
     }
 }
 
@@ -1650,13 +1600,13 @@ async function initDefaultAdmin() {
             id: 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
             username: 'admin',
             password: await hashPassword('admin123'),
-            fullName: 'Администратор',
+            fullName: 'РђРґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂ',
             role: 'admin',
             status: 'approved',
             createdAt: new Date().toISOString()
         }];
         setUsers(users);
-        console.log('Создан администратор по умолчанию: admin / admin123');
+        console.log('РЎРѕР·РґР°РЅ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ: admin / admin123');
     }
 }
 
@@ -1733,7 +1683,7 @@ function addVisitLog(entry) {
         userAgent: entry && entry.userAgent ? String(entry.userAgent) : ''
     };
     s.visitLogs.push(item);
-    // Ограничиваем размер журнала, чтобы store.json не разрастался бесконечно.
+    // РћРіСЂР°РЅРёС‡РёРІР°РµРј СЂР°Р·РјРµСЂ Р¶СѓСЂРЅР°Р»Р°, С‡С‚РѕР±С‹ store.json РЅРµ СЂР°Р·СЂР°СЃС‚Р°Р»СЃСЏ Р±РµСЃРєРѕРЅРµС‡РЅРѕ.
     var MAX_VISIT_LOGS = 5000;
     if (s.visitLogs.length > MAX_VISIT_LOGS) {
         s.visitLogs = s.visitLogs.slice(s.visitLogs.length - MAX_VISIT_LOGS);
@@ -1906,7 +1856,7 @@ function countUnreadSupportThreads() {
 
 const MAINTENANCE_NOTICE_DEFAULTS = {
     enabled: false,
-    title: 'Технические работы',
+    title: 'РўРµС…РЅРёС‡РµСЃРєРёРµ СЂР°Р±РѕС‚С‹',
     message: '',
     startsAt: null,
     endsAt: null,
@@ -2027,11 +1977,11 @@ function setPlatformLimitsConfig(patch) {
 }
 
 var DEFAULT_FREE_CARD = {
-    title: 'Бесплатно',
-    short: 'Полный функционал карты в пределах лимита объектов',
-    price: '0 ₽',
-    period: 'навсегда',
-    ctaText: 'Создать организацию',
+    title: 'Р‘РµСЃРїР»Р°С‚РЅРѕ',
+    short: 'РџРѕР»РЅС‹Р№ С„СѓРЅРєС†РёРѕРЅР°Р» РєР°СЂС‚С‹ РІ РїСЂРµРґРµР»Р°С… Р»РёРјРёС‚Р° РѕР±СЉРµРєС‚РѕРІ',
+    price: '0 в‚Ѕ',
+    period: 'РЅР°РІСЃРµРіРґР°',
+    ctaText: 'РЎРѕР·РґР°С‚СЊ РѕСЂРіР°РЅРёР·Р°С†РёСЋ',
     metaLine: ''
 };
 
@@ -2099,20 +2049,20 @@ function setShowcaseConfig(patch) {
 var DEFAULT_PRODUCT_UPDATES = [
     {
         id: 'upd_20260529_collab',
-        title: 'Совместная работа над картой',
+        title: 'РЎРѕРІРјРµСЃС‚РЅР°СЏ СЂР°Р±РѕС‚Р° РЅР°Рґ РєР°СЂС‚РѕР№',
         date: '2026-05-29',
-        summary: 'Блокировка объектов при редактировании, инкрементальная синхронизация и персональные темы.',
-        body: 'При открытии карточки объект блокируется для остальных участников до закрытия или по таймауту.\n\nСохранение на карте передаётся по операциям, а не целым снимком — меньше трафика и меньше конфликтов при одновременной работе.\n\nТема оформления (светлая/тёмная) сохраняется отдельно для каждого пользователя; при первом входе подставляется системная.',
-        tags: ['карта', 'синхронизация', 'интерфейс'],
+        summary: 'Р‘Р»РѕРєРёСЂРѕРІРєР° РѕР±СЉРµРєС‚РѕРІ РїСЂРё СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёРё, РёРЅРєСЂРµРјРµРЅС‚Р°Р»СЊРЅР°СЏ СЃРёРЅС…СЂРѕРЅРёР·Р°С†РёСЏ Рё РїРµСЂСЃРѕРЅР°Р»СЊРЅС‹Рµ С‚РµРјС‹.',
+        body: 'РџСЂРё РѕС‚РєСЂС‹С‚РёРё РєР°СЂС‚РѕС‡РєРё РѕР±СЉРµРєС‚ Р±Р»РѕРєРёСЂСѓРµС‚СЃСЏ РґР»СЏ РѕСЃС‚Р°Р»СЊРЅС‹С… СѓС‡Р°СЃС‚РЅРёРєРѕРІ РґРѕ Р·Р°РєСЂС‹С‚РёСЏ РёР»Рё РїРѕ С‚Р°Р№РјР°СѓС‚Сѓ.\n\nРЎРѕС…СЂР°РЅРµРЅРёРµ РЅР° РєР°СЂС‚Рµ РїРµСЂРµРґР°С‘С‚СЃСЏ РїРѕ РѕРїРµСЂР°С†РёСЏРј, Р° РЅРµ С†РµР»С‹Рј СЃРЅРёРјРєРѕРј вЂ” РјРµРЅСЊС€Рµ С‚СЂР°С„РёРєР° Рё РјРµРЅСЊС€Рµ РєРѕРЅС„Р»РёРєС‚РѕРІ РїСЂРё РѕРґРЅРѕРІСЂРµРјРµРЅРЅРѕР№ СЂР°Р±РѕС‚Рµ.\n\nРўРµРјР° РѕС„РѕСЂРјР»РµРЅРёСЏ (СЃРІРµС‚Р»Р°СЏ/С‚С‘РјРЅР°СЏ) СЃРѕС…СЂР°РЅСЏРµС‚СЃСЏ РѕС‚РґРµР»СЊРЅРѕ РґР»СЏ РєР°Р¶РґРѕРіРѕ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ; РїСЂРё РїРµСЂРІРѕРј РІС…РѕРґРµ РїРѕРґСЃС‚Р°РІР»СЏРµС‚СЃСЏ СЃРёСЃС‚РµРјРЅР°СЏ.',
+        tags: ['РєР°СЂС‚Р°', 'СЃРёРЅС…СЂРѕРЅРёР·Р°С†РёСЏ', 'РёРЅС‚РµСЂС„РµР№СЃ'],
         published: true
     },
     {
         id: 'upd_20260501_release',
-        title: 'Версия 1.2',
+        title: 'Р’РµСЂСЃРёСЏ 1.2',
         date: '2026-05-01',
-        summary: 'Карта ВОЛС: GPON, схемы жил, организации и резервные копии.',
-        body: 'Учёт кроссов и муфт со схемой оптических жил, GPON, резервное копирование данных организации.\n\nНа главной странице — актуальные условия и тарифы.',
-        tags: ['релиз'],
+        summary: 'РљР°СЂС‚Р° Р’РћР›РЎ: GPON, СЃС…РµРјС‹ Р¶РёР», РѕСЂРіР°РЅРёР·Р°С†РёРё Рё СЂРµР·РµСЂРІРЅС‹Рµ РєРѕРїРёРё.',
+        body: 'РЈС‡С‘С‚ РєСЂРѕСЃСЃРѕРІ Рё РјСѓС„С‚ СЃРѕ СЃС…РµРјРѕР№ РѕРїС‚РёС‡РµСЃРєРёС… Р¶РёР», GPON, СЂРµР·РµСЂРІРЅРѕРµ РєРѕРїРёСЂРѕРІР°РЅРёРµ РґР°РЅРЅС‹С… РѕСЂРіР°РЅРёР·Р°С†РёРё.\n\nРќР° РіР»Р°РІРЅРѕР№ СЃС‚СЂР°РЅРёС†Рµ вЂ” Р°РєС‚СѓР°Р»СЊРЅС‹Рµ СѓСЃР»РѕРІРёСЏ Рё С‚Р°СЂРёС„С‹.',
+        tags: ['СЂРµР»РёР·'],
         published: true
     }
 ];
@@ -2142,7 +2092,7 @@ function normalizeProductUpdate(post, idx) {
     }
     return {
         id: String(src.id || ('upd_' + Date.now() + '_' + (idx || 0))).trim(),
-        title: String(src.title || 'Без названия').trim().slice(0, 200),
+        title: String(src.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ').trim().slice(0, 200),
         date: dateStr,
         summary: String(src.summary || '').trim().slice(0, 500),
         body: sanitizeNewsBody(String(src.body || '')).slice(0, 150000),

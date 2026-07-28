@@ -2068,7 +2068,8 @@ var INFO_MODAL_DEVICE_SUBTITLES = {
     cabinet: 'Контейнер оборудования · документация и состав',
     spliceCassette: 'Сращивания волокон · в ящике',
     support: 'Промежуточная точка маршрута ВОЛС',
-    attachment: 'Крепление кабеля на маршруте'
+    attachment: 'Крепление на линии · разрез кабеля',
+    manhole: 'Колодец · подземный участок трассы'
 };
 
 function updateInfoModalChrome(type, name, opts) {
@@ -2243,6 +2244,9 @@ function buildCableInfoUndergroundHtml(cable, uniqueId) {
 
 function showCableInfo(cable) {
     resetInfoModalFiberLayout();
+    if (objectPlacementMode) {
+        return;
+    }
     if (cableSplitSuppressInfoUntil && Date.now() < cableSplitSuppressInfoUntil) {
         return;
     }
@@ -2723,7 +2727,7 @@ function buildHostReserveMFieldHtml(obj, isEditMode) {
     if (isEditMode) {
         html += '<div class="form-group"><label class="fiber-ws-label object-card-label" for="editHostReserveM">Запас кабеля в узле, м</label>';
         html += '<input type="number" id="editHostReserveM" class="form-input" min="0" step="0.1" value="' + escapeHtml(reserveStr) + '" placeholder="0">';
-        html += '<p class="form-hint" style="margin-top:6px;">Учитывается в трассе волокна (как в Fiberbase).</p></div>';
+        html += '<p class="form-hint" style="margin-top:6px;">Учитывается в трассе волокна.</p></div>';
     } else if (reserveStr) {
         html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Запас в узле:</strong> ' + escapeHtml(reserveStr) + ' м</div>';
     }
@@ -3000,6 +3004,7 @@ function deferHeavyModalWork(fn) {
 }
 
 function showObjectInfo(obj) {
+    if (objectPlacementMode) return;
     if (obj && obj._embedded && obj._host && obj.properties && obj.properties.get('type') === 'splitter') {
         showObjectInfo(obj._host);
         return;
@@ -3385,36 +3390,7 @@ function showObjectInfoBody(obj) {
     }
 
     if (type === 'sleeve' && !fiberUsesWorkspace) {
-        const storedSleeveType = obj.properties.get('sleeveType');
-        const sleeveTypeLabel = storedSleeveType ? (typeof getSleeveTypeSelectOptionsHtml === 'function' ? storedSleeveType : String(storedSleeveType)) : 'Не указан';
-        const sleeveTypeDisplay = storedSleeveType && typeof findSleeveTypeById === 'function'
-            ? (findSleeveTypeById(storedSleeveType) ? findSleeveTypeById(storedSleeveType).label : String(storedSleeveType))
-            : 'Не указан';
-        const usedFibers = getTotalUsedFibersInSleeve(obj);
-        const maxFibers = parseInt(obj.properties.get('maxFibers'), 10) || 0;
-
-        html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Информация о муфте</h4>';
-        if (name) html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Название:</strong> ${escapeHtml(name)}</div>`;
-        html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Тип муфты:</strong> ${escapeHtml(sleeveTypeDisplay)}</div>`;
-        html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Использовано волокон:</strong> ${usedFibers}${maxFibers ? (' / ' + maxFibers) : ''}</div>`;
-        if (typeof buildHostReserveMFieldHtml === 'function') html += buildHostReserveMFieldHtml(obj, false);
-        html += buildObjectCoordsInlineHtml(obj);
-        html += '</div>';
-        if (modalIsEditMode()) {
-            html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-            html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Редактирование муфты</h4>';
-            html += '<div class="form-group" style="margin-bottom: 12px;">';
-            html += '<label for="editSleeveName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название муфты</label>';
-            html += `<input type="text" id="editSleeveName" class="form-input" value="${escapeHtml(name)}" placeholder="Введите название муфты">`;
-            html += '</div>';
-            html += '<div class="form-group" style="margin-bottom: 12px;">';
-            html += '<label for="editSleeveType" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Тип муфты</label>';
-            html += '<select id="editSleeveType" class="form-select">' + getSleeveTypeSelectOptionsHtml(storedSleeveType ? String(storedSleeveType) : '') + '</select>';
-            html += '</div>';
-            html += typeof buildHostReserveMFieldHtml === 'function' ? buildHostReserveMFieldHtml(obj, true) : '';
-            html += '</div>';
-        }
+        html += buildSleeveCardContent(obj, modalIsEditMode(), name);
     }
 
     if (type === 'spliceCassette' && !fiberUsesWorkspace) {
@@ -3426,37 +3402,7 @@ function showObjectInfoBody(obj) {
     }
 
     if (type === 'cross' && !fiberUsesWorkspace) {
-        const storedCrossType = obj.properties.get('crossType');
-        const crossTypeLabel = storedCrossType ? getCrossTypeLabel(storedCrossType) : 'Не указан';
-        const crossPorts = Math.max(1, parseInt(obj.properties.get('crossPorts'), 10) || 24);
-        const usedPorts = getTotalUsedPortsInCross(obj);
-        const usagePercent = crossPorts > 0 ? Math.round((usedPorts / crossPorts) * 100) : 0;
-        const statusColor = usedPorts > crossPorts ? '#dc2626' : (usagePercent >= 80 ? '#f59e0b' : '#22c55e');
-
-        html += '<div class="info-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-        html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Информация о кроссе</h4>';
-        if (name) html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Название:</strong> ${escapeHtml(name)}</div>`;
-        html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Тип кросса:</strong> ${escapeHtml(crossTypeLabel)}</div>`;
-        html += `<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;"><strong>Количество портов:</strong> ${crossPorts}</div>`;
-        html += `<div style="color: var(--text-secondary); font-size: 0.875rem;"><strong>Использовано:</strong> <span style="color: ${statusColor}; font-weight: 600;">${usedPorts}/${crossPorts} портов</span> (${usagePercent}%)</div>`;
-        if (typeof buildHostReserveMFieldHtml === 'function') html += buildHostReserveMFieldHtml(obj, false);
-        html += buildObjectCoordsInlineHtml(obj);
-        html += '</div>';
-
-        if (modalIsEditMode()) {
-            html += '<div class="edit-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">';
-            html += '<h4 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 0.9375rem; font-weight: 600;">Редактирование кросса</h4>';
-            html += '<div class="form-group" style="margin-bottom: 12px;">';
-            html += '<label for="editCrossName" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Название кросса</label>';
-            html += `<input type="text" id="editCrossName" class="form-input" value="${escapeHtml(name)}" placeholder="Введите название кросса">`;
-            html += '</div>';
-            html += '<div class="form-group" style="margin-bottom: 12px;">';
-            html += '<label for="editCrossType" style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Тип кросса</label>';
-            html += '<select id="editCrossType" class="form-select">' + getCrossTypeSelectOptionsHtml(storedCrossType ? String(storedCrossType) : '') + '</select>';
-            html += '</div>';
-            html += typeof buildHostReserveMFieldHtml === 'function' ? buildHostReserveMFieldHtml(obj, true) : '';
-            html += '</div>';
-        }
+        html += buildCrossCardContent(obj, modalIsEditMode(), name);
     }
 
     if (type !== 'node' && type !== 'olt' && type !== 'camera' && type !== 'radioBridge') {
@@ -3478,7 +3424,9 @@ function showObjectInfoBody(obj) {
     }
 
     if (type !== 'camera' && type !== 'olt' && type !== 'node' && type !== 'radioBridge' && !(type === 'splitter' && obj._embedded) &&
-        !(type === 'spliceCassette' && !fiberUsesWorkspace)) {
+        !(type === 'spliceCassette' && !fiberUsesWorkspace) &&
+        !(type === 'sleeve' && !fiberUsesWorkspace) &&
+        !(type === 'cross' && !fiberUsesWorkspace)) {
     if (connectedCables.length === 0) {
         const noCablesText = 'К этому объекту не подключено кабелей';
         html += '<div class="no-cables" style="padding: 15px; text-align: center; color: var(--text-muted); font-size: 0.875rem;">' + noCablesText + '</div>';
@@ -3597,6 +3545,164 @@ function applySignalPostNameChange(newName) {
         try { myMap.geoObjects.remove(lbl); } catch (e) {}
     }
     saveData();
+}
+
+function buildHostCardUsageBarHtml(label, used, max, usageTone, usagePct) {
+    if (!(max > 0)) return '';
+    var pct = Math.min(100, usagePct != null ? usagePct : 0);
+    var html = '<div class="host-card-usage host-card-usage--' + usageTone + '">';
+    html += '<div class="host-card-usage-head">';
+    html += '<span class="host-card-usage-label">' + escapeHtml(label) + '</span>';
+    html += '<span class="host-card-usage-val">' + used + ' / ' + max + '</span>';
+    html += '</div>';
+    html += '<div class="host-card-usage-bar" role="progressbar" aria-valuenow="' + pct + '" aria-valuemin="0" aria-valuemax="100" aria-label="' + escapeHtml(label) + '">';
+    html += '<div class="host-card-usage-fill" style="width:' + pct + '%"></div>';
+    html += '</div></div>';
+    return html;
+}
+
+function buildSleeveCardContent(obj, isEditMode, name) {
+    var storedSleeveType = obj.properties.get('sleeveType');
+    var sleeveTypeDisplay = storedSleeveType && typeof findSleeveTypeById === 'function'
+        ? (findSleeveTypeById(storedSleeveType) ? findSleeveTypeById(storedSleeveType).label : String(storedSleeveType))
+        : (storedSleeveType ? String(storedSleeveType) : 'Не указан');
+    var usedFibers = getTotalUsedFibersInSleeve(obj);
+    var maxFibers = parseInt(obj.properties.get('maxFibers'), 10) || 0;
+    var usagePct = maxFibers > 0 ? Math.round((usedFibers / maxFibers) * 100) : 0;
+    var usageTone = (maxFibers > 0 && usedFibers > maxFibers) ? 'over' : (usagePct >= 80 ? 'high' : 'ok');
+    var reserveM = obj.properties.get('reserveM');
+    var hasReserve = reserveM != null && reserveM !== '' && !isNaN(Number(reserveM)) && Number(reserveM) > 0;
+
+    var html = '<div class="host-card host-card--sleeve">';
+
+    html += '<section class="object-card-section host-card-hero">';
+    html += '<div class="host-card-hero-row">';
+    if (window.MapIcons) {
+        html += '<div class="host-card-hero-icon" aria-hidden="true">' + MapIcons.buildIconSvg('sleeve', { variant: 'normal' }) + '</div>';
+    }
+    html += '<div class="host-card-hero-text">';
+    html += '<div class="host-card-view-name">' + escapeHtml(name || 'Муфта') + '</div>';
+    html += '<div class="host-card-view-meta">';
+    html += '<span class="host-kind-pill host-kind-pill--sleeve">Кабельная муфта</span>';
+    if (sleeveTypeDisplay && sleeveTypeDisplay !== 'Не указан') {
+        html += '<span class="host-card-type-inline">' + escapeHtml(sleeveTypeDisplay) + '</span>';
+    }
+    html += '</div>';
+    if (isEditMode) {
+        html += '<p class="object-card-hint host-card-hero-hint">После прокладки ВОЛС откроется схема жил, таблица сращиваний и сплиттеры.</p>';
+    }
+    html += '</div></div>';
+
+    html += '<dl class="host-card-stats">';
+    html += '<div class="host-card-stat"><dt>Тип</dt><dd title="' + escapeHtml(sleeveTypeDisplay) + '">' + escapeHtml(sleeveTypeDisplay) + '</dd></div>';
+    html += '<div class="host-card-stat"><dt>Ёмкость</dt><dd>' + (maxFibers > 0 ? maxFibers : '—') + '</dd></div>';
+    html += '<div class="host-card-stat"><dt>Кабелей</dt><dd>0</dd></div>';
+    if (hasReserve) {
+        html += '<div class="host-card-stat"><dt>Запас</dt><dd>' + Number(reserveM) + ' м</dd></div>';
+    }
+    html += '</dl>';
+
+    html += buildHostCardUsageBarHtml('Волокна', usedFibers, maxFibers, usageTone, usagePct);
+    html += '</section>';
+
+    html += buildObjectCoordsSectionHtml(obj);
+
+    if (isEditMode) {
+        html += '<section class="object-card-section">';
+        html += '<h4 class="object-card-section-title">Параметры</h4>';
+        html += '<div class="form-group"><label for="editSleeveName" class="object-card-label">Название</label>';
+        html += '<input type="text" id="editSleeveName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Например: Муфта М-12">';
+        html += '</div>';
+        html += '<div class="form-group" style="margin-bottom:0;"><label for="editSleeveType" class="object-card-label">Тип муфты</label>';
+        html += '<select id="editSleeveType" class="form-select">' + getSleeveTypeSelectOptionsHtml(storedSleeveType ? String(storedSleeveType) : '') + '</select>';
+        html += '</div>';
+        html += typeof buildHostReserveMFieldHtml === 'function' ? buildHostReserveMFieldHtml(obj, true) : '';
+        html += '</section>';
+    }
+
+    html += '<section class="object-card-section object-card-section--fibers">';
+    html += '<div class="object-card-section-head">';
+    html += '<h4 class="object-card-section-title">Подключения</h4>';
+    html += '<span class="object-card-badge object-card-badge--sleeve">0 каб.</span>';
+    html += '</div>';
+    html += '<div class="object-card-callout object-card-callout--info">';
+    html += '<p>Кабели не подключены. После прокладки ВОЛС откроется рабочее место со схемой и таблицей сращиваний.</p>';
+    html += '</div></section>';
+
+    html += '</div>';
+    return html;
+}
+
+function buildCrossCardContent(obj, isEditMode, name) {
+    var storedCrossType = obj.properties.get('crossType');
+    var crossTypeLabel = storedCrossType && typeof getCrossTypeLabel === 'function'
+        ? getCrossTypeLabel(storedCrossType)
+        : (storedCrossType ? String(storedCrossType) : 'Не указан');
+    var crossPorts = Math.max(1, parseInt(obj.properties.get('crossPorts'), 10) || 24);
+    var usedPorts = getTotalUsedPortsInCross(obj);
+    var usagePct = crossPorts > 0 ? Math.round((usedPorts / crossPorts) * 100) : 0;
+    var usageTone = usedPorts > crossPorts ? 'over' : (usagePct >= 80 ? 'high' : 'ok');
+    var reserveM = obj.properties.get('reserveM');
+    var hasReserve = reserveM != null && reserveM !== '' && !isNaN(Number(reserveM)) && Number(reserveM) > 0;
+
+    var html = '<div class="host-card host-card--cross">';
+
+    html += '<section class="object-card-section host-card-hero">';
+    html += '<div class="host-card-hero-row">';
+    if (window.MapIcons) {
+        html += '<div class="host-card-hero-icon" aria-hidden="true">' + MapIcons.buildIconSvg('cross', { variant: 'normal' }) + '</div>';
+    }
+    html += '<div class="host-card-hero-text">';
+    html += '<div class="host-card-view-name">' + escapeHtml(name || 'Кросс') + '</div>';
+    html += '<div class="host-card-view-meta">';
+    html += '<span class="host-kind-pill host-kind-pill--cross">Оптический кросс</span>';
+    if (crossTypeLabel && crossTypeLabel !== 'Не указан') {
+        html += '<span class="host-card-type-inline">' + escapeHtml(crossTypeLabel) + '</span>';
+    }
+    html += '</div>';
+    if (isEditMode) {
+        html += '<p class="object-card-hint host-card-hero-hint">После прокладки ВОЛС откроется схема портов, кроссировка и таблица жил.</p>';
+    }
+    html += '</div></div>';
+
+    html += '<dl class="host-card-stats">';
+    html += '<div class="host-card-stat"><dt>Тип</dt><dd title="' + escapeHtml(crossTypeLabel) + '">' + escapeHtml(crossTypeLabel) + '</dd></div>';
+    html += '<div class="host-card-stat"><dt>Порты</dt><dd>' + crossPorts + '</dd></div>';
+    html += '<div class="host-card-stat"><dt>Кабелей</dt><dd>0</dd></div>';
+    if (hasReserve) {
+        html += '<div class="host-card-stat"><dt>Запас</dt><dd>' + Number(reserveM) + ' м</dd></div>';
+    }
+    html += '</dl>';
+
+    html += buildHostCardUsageBarHtml('Порты', usedPorts, crossPorts, usageTone, usagePct);
+    html += '</section>';
+
+    html += buildObjectCoordsSectionHtml(obj);
+
+    if (isEditMode) {
+        html += '<section class="object-card-section">';
+        html += '<h4 class="object-card-section-title">Параметры</h4>';
+        html += '<div class="form-group"><label for="editCrossName" class="object-card-label">Название</label>';
+        html += '<input type="text" id="editCrossName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Например: Кросс КР-1">';
+        html += '</div>';
+        html += '<div class="form-group" style="margin-bottom:0;"><label for="editCrossType" class="object-card-label">Тип кросса</label>';
+        html += '<select id="editCrossType" class="form-select">' + getCrossTypeSelectOptionsHtml(storedCrossType ? String(storedCrossType) : '') + '</select>';
+        html += '</div>';
+        html += typeof buildHostReserveMFieldHtml === 'function' ? buildHostReserveMFieldHtml(obj, true) : '';
+        html += '</section>';
+    }
+
+    html += '<section class="object-card-section object-card-section--fibers">';
+    html += '<div class="object-card-section-head">';
+    html += '<h4 class="object-card-section-title">Подключения</h4>';
+    html += '<span class="object-card-badge object-card-badge--cross">0 каб.</span>';
+    html += '</div>';
+    html += '<div class="object-card-callout object-card-callout--info">';
+    html += '<p>Кабели не подключены. После прокладки ВОЛС откроется рабочее место со схемой портов и таблицей жил.</p>';
+    html += '</div></section>';
+
+    html += '</div>';
+    return html;
 }
 
 function buildSpliceCassetteCardContent(obj, isEditMode, name, connectedCables) {
@@ -3749,6 +3855,7 @@ function buildSignalPostCardContent(obj, isEditMode) {
 }
 
 function showSignalPostInfo(obj) {
+    if (objectPlacementMode) return;
     applyModalEditModeForObject(obj, function() {
         showSignalPostInfoBody(obj);
     });
@@ -3792,8 +3899,8 @@ function getSupportWaypointCopy(isAttachment, waypointType) {
     return {
         typeLabel: isAttachment ? 'Крепление узлов' : 'Опора связи',
         heroHint: isAttachment
-            ? 'Точка крепления на линии кабеля. Можно разрезать ВОЛС и установить муфту.'
-            : 'Промежуточная точка линии ВОЛС. Можно разрезать кабель и установить муфту на маршруте.',
+            ? 'Точка крепления на линии кабеля. При размещении или переносе на кабель он закрепляется автоматически. Можно разрезать ВОЛС и установить муфту.'
+            : 'Промежуточная точка линии ВОЛС. При размещении или переносе на кабель он закрепляется автоматически. Можно разрезать кабель и установить муфту на маршруте.',
         nameLabel: isAttachment ? 'Название' : 'Подпись',
         editPlaceholder: isAttachment ? 'Например: стена А' : 'Например: № 15',
         noCablesMsg: isAttachment ? 'Через это крепление не проходит ни один кабель' : 'Через эту опору не проходит ни один кабель',
@@ -3809,6 +3916,13 @@ function buildSupportCardContent(supportObj, isEditMode) {
     var isManhole = waypointType === 'manhole';
     var copy = getSupportWaypointCopy(isAttachment, waypointType);
     var mapType = isManhole ? 'manhole' : (isAttachment ? 'attachment' : 'support');
+    var fiberCount = 0;
+    var copperCount = 0;
+    connectedCables.forEach(function(cable) {
+        if (cable.properties.get('cableType') === 'copper') copperCount++;
+        else fiberCount++;
+    });
+
     var html = '<div class="support-card support-card--' + mapType + '">';
 
     html += '<section class="object-card-section support-card-hero">';
@@ -3817,19 +3931,24 @@ function buildSupportCardContent(supportObj, isEditMode) {
         html += '<div class="support-card-hero-icon" aria-hidden="true">' + MapIcons.buildIconSvg(mapType, { variant: 'normal' }) + '</div>';
     }
     html += '<div class="support-card-hero-text">';
+    html += '<div class="support-card-view-meta">';
+    html += '<span class="support-kind-pill support-kind-pill--' + mapType + '">' + escapeHtml(copy.typeLabel) + '</span>';
+    html += '</div>';
     html += '<div class="support-card-view-name">' + escapeHtml(supportName || (isManhole || isAttachment ? 'Без названия' : 'Без подписи')) + '</div>';
-    html += '<div class="support-card-view-meta">' + escapeHtml(copy.typeLabel) + '</div>';
     html += '<p class="object-card-hint support-card-hero-hint">' + copy.heroHint + '</p>';
     html += '</div></div>';
+
     html += '<dl class="support-card-stats">';
     html += '<div class="support-card-stat"><dt>Кабелей</dt><dd>' + connectedCables.length + '</dd></div>';
+    html += '<div class="support-card-stat"><dt>ВОЛС</dt><dd>' + fiberCount + '</dd></div>';
+    html += '<div class="support-card-stat"><dt>Медь</dt><dd>' + copperCount + '</dd></div>';
     html += '</dl>';
     html += buildObjectCoordsInlineHtml(supportObj);
     html += '</section>';
 
     if (isEditMode) {
-        html += '<section class="object-card-section">';
-        html += '<h4 class="object-card-section-title">' + (isManhole ? 'Название' : (isAttachment ? 'Редактирование' : 'Подпись опоры')) + '</h4>';
+        html += '<section class="object-card-section support-card-params">';
+        html += '<h4 class="object-card-section-title">Параметры</h4>';
         html += '<div class="form-group"><label for="editSupportName" class="object-card-label">' + copy.nameLabel + '</label>';
         html += '<input type="text" id="editSupportName" class="form-input" value="' + escapeHtml(supportName) + '" placeholder="' + escapeHtml(copy.editPlaceholder) + '">';
         html += '</div>';
@@ -3841,25 +3960,34 @@ function buildSupportCardContent(supportObj, isEditMode) {
         var ugRel = findUndergroundRelayoutForManhole(supportObj);
         if (ugRel && ugRel.cable) {
             var relCableId = ugRel.cable.properties.get('uniqueId');
-            html += '<section class="object-card-section">';
+            html += '<section class="object-card-section support-card-underground">';
+            html += '<div class="object-card-section-head">';
             html += '<h4 class="object-card-section-title">Подземный участок</h4>';
+            html += '</div>';
             html += '<p class="object-card-hint">Проложить трассу между колодцами заново (без правки старых точек).</p>';
-            html += '<button type="button" id="manholeRelayoutUnderground" class="btn-secondary" data-cable-id="' + escapeHtml(relCableId) + '" data-span-index="' + ugRel.spanIndex + '">Проложить заново</button>';
+            html += '<button type="button" id="manholeRelayoutUnderground" class="btn-secondary support-underground-btn" data-cable-id="' + escapeHtml(relCableId) + '" data-span-index="' + ugRel.spanIndex + '">Проложить заново</button>';
             html += '</section>';
         }
     }
 
     var splittableAtSupport = isEditMode ? getSplittableFiberCablesAtWaypoint(supportObj) : [];
     if (splittableAtSupport.length) {
-        html += '<section class="object-card-section object-card-section--split cable-split-section">';
+        html += '<section class="object-card-section object-card-section--split cable-split-section support-split-card">';
+        html += '<div class="support-split-head">';
+        html += '<div class="support-split-icon" aria-hidden="true">';
+        html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg>';
+        html += '</div>';
+        html += '<div class="support-split-titles">';
         html += '<h4 class="object-card-section-title cable-split-section__title">Муфта на маршруте</h4>';
-        html += '<p class="object-card-hint cable-split-section__desc">Выберите тип муфты и кабель для разделения. ' + copy.splitWaypoint + ' останется в маршруте обоих сегментов.</p>';
+        html += '<p class="object-card-hint cable-split-section__desc">Выберите тип муфты и кабель. ' + copy.splitWaypoint + ' останется в обоих сегментах.</p>';
+        html += '</div></div>';
         html += buildCableSplitSleeveFieldsHtml();
         html += '<div class="cable-split-pick-list">';
         splittableAtSupport.forEach(function(cable) {
             var cid = cable.properties.get('uniqueId');
             html += '<button type="button" class="btn-secondary btn-cable-split-pick btn-split-cable-at-waypoint" data-cable-id="' + escapeHtml(cid) + '">';
-            html += 'Разделить: ' + escapeHtml(getCableSplitLabel(cable));
+            html += '<span class="support-split-pick-label">Разделить</span>';
+            html += '<span class="support-split-pick-cable">' + escapeHtml(getCableSplitLabel(cable)) + '</span>';
             html += '</button>';
         });
         html += '</div></section>';
@@ -3868,11 +3996,13 @@ function buildSupportCardContent(supportObj, isEditMode) {
     html += '<section class="object-card-section object-card-section--cables">';
     html += '<div class="object-card-section-head">';
     html += '<h4 class="object-card-section-title">Проходящие кабели</h4>';
-    html += '<span class="object-card-badge">' + connectedCables.length + '</span>';
+    html += '<span class="object-card-badge object-card-badge--' + mapType + '">' + connectedCables.length + '</span>';
     html += '</div>';
 
     if (connectedCables.length === 0) {
-        html += '<p class="object-card-hint object-card-hint--warn">' + copy.noCablesMsg + '</p>';
+        html += '<div class="object-card-callout object-card-callout--info">';
+        html += '<p>' + copy.noCablesMsg + '</p>';
+        html += '</div>';
     } else {
         html += '<div class="support-cable-list">';
         connectedCables.forEach(function(cable, index) {
@@ -3887,18 +4017,23 @@ function buildSupportCardContent(supportObj, isEditMode) {
             var toObj = cable.properties.get('to');
             var fromName = fromObj ? (fromObj.properties.get('name') || getObjectTypeName(fromObj.properties.get('type'))) : '—';
             var toName = toObj ? (toObj.properties.get('name') || getObjectTypeName(toObj.properties.get('type'))) : '—';
-            var title = (cableName ? escapeHtml(cableName) : ('Кабель ' + (index + 1))) + ': ' + escapeHtml(cableDescription);
+            var title = cableName ? escapeHtml(cableName) : ('Кабель ' + (index + 1));
 
             html += '<article class="support-cable-item" style="--cable-accent:' + escapeHtml(cableColor) + '">';
-            html += '<div class="support-cable-item-head"><h5 class="support-cable-item-title">' + title + '</h5></div>';
-            html += '<div class="support-cable-route"><span class="support-cable-route-label">Маршрут</span> ';
-            html += '<span class="support-cable-route-path">' + escapeHtml(fromName) + ' → ' + escapeHtml(toName);
-            if (distance) html += ' <span class="support-cable-route-dist">(' + distance + ' м)</span>';
-            html += '</span></div>';
+            html += '<div class="support-cable-item-head">';
+            html += '<h5 class="support-cable-item-title">' + title + '</h5>';
+            html += '<span class="support-cable-type-pill' + (isCopper ? ' support-cable-type-pill--copper' : ' support-cable-type-pill--fiber') + '">' + escapeHtml(cableDescription) + '</span>';
+            html += '</div>';
+            html += '<div class="support-cable-route">';
+            html += '<span class="support-cable-route-from">' + escapeHtml(fromName) + '</span>';
+            html += '<span class="support-cable-route-arrow" aria-hidden="true">→</span>';
+            html += '<span class="support-cable-route-to">' + escapeHtml(toName) + '</span>';
+            if (distance) html += '<span class="support-cable-route-dist">' + distance + ' м</span>';
+            html += '</div>';
             if (isCopper) {
                 html += '<p class="support-cable-copper-note">Медный кабель · жилы не отображаются</p>';
             } else if (fibers.length) {
-                html += '<div class="support-fiber-chips">';
+                html += '<div class="support-fiber-chips" title="Жилы кабеля">';
                 fibers.forEach(function(fiber) {
                     var chipClass = 'support-fiber-chip';
                     if (fiber.color === '#FFFFFF' || fiber.color === '#FFFACD' || fiber.color === '#FFFF00' || fiber.color === '#FFC0CB') {
@@ -3935,6 +4070,7 @@ function buildSupportCardContent(supportObj, isEditMode) {
 }
 
 function showSupportInfo(supportObj) {
+    if (objectPlacementMode) return;
     if (radioBridgeRoutingMode && radioBridgeRoutingData && supportObj) {
         var rbType = supportObj.properties ? supportObj.properties.get('type') : null;
         if (typeof handleRadioBridgeRoutingPlacemarkClick === 'function' &&
