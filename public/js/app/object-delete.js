@@ -142,6 +142,9 @@ function deleteObject(obj, opts) {
 
     if (currentModalObject === obj || (objUniqueId && currentModalObject && getObjectUniqueId(currentModalObject) === objUniqueId)) {
         currentModalObject = null;
+        if (objUniqueId && myHeldObjectLockId === objUniqueId && typeof clearHeldObjectLockLocal === 'function') {
+            clearHeldObjectLockLocal();
+        }
         closeInfoModal({ force: true });
     }
 
@@ -528,13 +531,9 @@ function applyRemoteDeleteObjectLite(uniqueId) {
     }
 
     var removedUniqueIds = [objUniqueId];
-    var cableUids = [];
     for (var cj = 0; cj < cablesToRemove.length; cj++) {
         var cuid = cablesToRemove[cj].properties.get('uniqueId');
-        if (cuid) {
-            removedUniqueIds.push(cuid);
-            cableUids.push(cuid);
-        }
+        if (cuid) removedUniqueIds.push(cuid);
     }
 
     try {
@@ -586,15 +585,8 @@ function applyRemoteDeleteObjectLite(uniqueId) {
         try { patchLastSavedStateRemoveUniqueIds(removedUniqueIds); } catch (ePatch) {}
     }
 
+    // Минимум визуала: без idle scrub всей карты (waypoints/fiber) — это и подвешивало remote после delete.
     var refreshPlan = { statsIdle: true };
-    // Подписи «N каб.» — в idle: getCableGroups на большой карте подвешивает UI сразу после delete.
-    if (cablesToRemove.length > 0 && typeof updateCableVisualization === 'function') {
-        var runCableViz = function() {
-            try { updateCableVisualization({ skipFilter: true }); } catch (eViz) {}
-        };
-        if (typeof requestIdleCallback === 'function') requestIdleCallback(runCableViz, { timeout: 1200 });
-        else setTimeout(runCableViz, 80);
-    }
     if (objType === 'cross' && delGroupKey) {
         refreshPlan.crossGroupKey = { full: false, keys: [delGroupKey], skipCableUpdate: true, skipFilter: true };
     } else if (objType === 'node' && delGroupKey) {
@@ -608,19 +600,6 @@ function applyRemoteDeleteObjectLite(uniqueId) {
         var renderRegions = function() { renderRegionsSidebarList(); };
         if (typeof requestIdleCallback === 'function') requestIdleCallback(renderRegions, { timeout: 600 });
         else setTimeout(renderRegions, 0);
-    }
-
-    // Тяжёлая зачистка свойств (waypoints / fiber refs) — после кадра, в idle.
-    var idleCleanup = function() {
-        for (var u = 0; u < cableUids.length; u++) {
-            try { scrubRemoteDeletedCableRefs(cableUids[u]); } catch (eScrub) {}
-        }
-        try { scrubRemoteDeletedObjectRefs(objUniqueId, objType); } catch (eObj) {}
-    };
-    if (typeof requestIdleCallback === 'function') {
-        requestIdleCallback(idleCleanup, { timeout: 2500 });
-    } else {
-        setTimeout(idleCleanup, 200);
     }
 
     return true;
