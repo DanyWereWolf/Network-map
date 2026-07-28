@@ -232,10 +232,12 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
     }
 
     if (!(opts && opts.deferMapRefresh)) {
-        updateCableVisualization();
+        updateCableVisualization({ skipFilter: true });
         scheduleConnectionLinesUpdate();
-        cleanupGponAssignmentsWithoutOlt();
-        updateStats();
+        cleanupGponAssignmentsWithoutOlt({ deferLineRefresh: true });
+        if (typeof updateStats === 'function') {
+            setTimeout(function() { updateStats(); }, 0);
+        }
     }
 
     const modal = document.getElementById('infoModal');

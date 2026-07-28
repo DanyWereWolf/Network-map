@@ -56,6 +56,9 @@ function updateCableVisualization(opts) {
             objects.push(label);
             mapPerfRegister(label);
             mapGeoAdd(label);
+            if (opts && opts.skipFilter && typeof applyMapFilterForObject === 'function') {
+                try { applyMapFilterForObject(label); } catch (eLbl) {}
+            }
         }
     });
     if (!(opts && opts.skipFilter) && typeof applyMapFilter === 'function') applyMapFilter();

@@ -33,18 +33,36 @@ function mapHasOltObjects() {
 
 function finishObjectDeleteVisualRefresh(plan) {
     plan = plan || {};
-    if (plan.cableVisualization) updateCableVisualization();
-    if (plan.crossGroupKey != null) updateCrossDisplay(plan.crossGroupKey);
-    if (plan.nodeGroupKey != null) updateNodeDisplay(plan.nodeGroupKey);
+    // Без полного applyMapFilter: объекты уже сняты с карты; фильтр подвешивает UI на больших картах.
+    if (plan.cableVisualization && typeof updateCableVisualization === 'function') {
+        updateCableVisualization({ skipFilter: true });
+    }
+    if (plan.crossGroupKey != null && typeof updateCrossDisplay === 'function') {
+        updateCrossDisplay(plan.crossGroupKey);
+    }
+    if (plan.nodeGroupKey != null && typeof updateNodeDisplay === 'function') {
+        updateNodeDisplay(plan.nodeGroupKey);
+    }
     if (plan.connectionLines === 'full') scheduleConnectionLinesUpdate('full');
     else if (plan.connectionLines) scheduleConnectionLinesUpdate(plan.connectionLines);
-    updateStats();
 }
 
 function scheduleObjectDeleteVisualRefresh(plan) {
-    var run = function() { finishObjectDeleteVisualRefresh(plan); };
-    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
-    else setTimeout(run, 0);
+    plan = plan || {};
+    var runVisual = function() { finishObjectDeleteVisualRefresh(plan); };
+    var runStats = function() {
+        if (typeof updateStats === 'function') updateStats();
+    };
+    // Разнести тяжёлую работу по кадрам: сначала визуал, потом счётчики.
+    if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(function() {
+            runVisual();
+            requestAnimationFrame(runStats);
+        });
+    } else {
+        setTimeout(runVisual, 0);
+        setTimeout(runStats, 32);
+    }
 }
 
 function isAppEntranceActive() {

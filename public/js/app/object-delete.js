@@ -374,12 +374,12 @@ function deleteObject(obj, opts) {
         }
     }
 
-    var gponRefreshOpts = { deferLineRefresh: true };
+    var pendingGponImpact = null;
     if (isFiberHostType(objType) && gponImpact && gponImpact.hasGpon) {
-        forcePurgeGponAfterHostRemoval(gponImpact, gponRefreshOpts);
+        pendingGponImpact = gponImpact;
         gponPurged = true;
     } else if (objType === 'olt' && oltGponImpact && oltGponImpact.hasGpon) {
-        forcePurgeGponAfterHostRemoval(oltGponImpact, gponRefreshOpts);
+        pendingGponImpact = oltGponImpact;
         gponPurged = true;
     }
 
@@ -398,27 +398,55 @@ function deleteObject(obj, opts) {
         // Remote delete: обновить снимок undo без полной сериализации карты.
         try { patchLastSavedStateRemoveUniqueIds(removedUniqueIds); } catch (ePatch) {}
     }
+
+    // GPON-purge (обход графа) — после кадра, иначе UI зависает сразу после исчезновения объекта.
+    if (pendingGponImpact && typeof forcePurgeGponAfterHostRemoval === 'function') {
+        var impactToPurge = pendingGponImpact;
+        var runGponPurge = function() {
+            try {
+                forcePurgeGponAfterHostRemoval(impactToPurge, { deferLineRefresh: true });
+            } catch (eGpon) {}
+            if (!(opts && opts.deferMapRefresh)) {
+                scheduleConnectionLinesUpdate('full');
+            } else {
+                scheduleConnectionLinesUpdate(objUniqueId || 'full');
+            }
+        };
+        if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(function() { setTimeout(runGponPurge, 0); });
+        } else {
+            setTimeout(runGponPurge, 0);
+        }
+    }
+
     if (!(opts && opts.deferMapRefresh)) {
         var refreshPlan = {};
         if (cablesToRemove.length > 0 || cableRoutesUpdated) refreshPlan.cableVisualization = true;
         if (objType === 'node' && objGroupKey) refreshPlan.nodeGroupKey = objGroupKey;
         else if (objType === 'cross' && objGroupKey) refreshPlan.crossGroupKey = objGroupKey;
         else if (objType === 'cabinet' && typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
-        if (gponPurged) {
-            refreshPlan.connectionLines = 'full';
-        } else if (objUniqueId && (
+        // Линии GPON обновит отложенный purge; здесь — точечно или по затронутым кабелям.
+        if (!gponPurged && objUniqueId && (
             (typeof isFiberHostType === 'function' && isFiberHostType(objType)) ||
             objType === 'olt' || objType === 'onu' || objType === 'splitter' ||
             objType === 'mediaConverter' || objType === 'radioBridge' || objType === 'node' ||
             objType === 'support' || objType === 'attachment'
         )) {
             refreshPlan.connectionLines = objUniqueId;
-        } else if (cablesToRemove.length > 0 || cableRoutesUpdated) {
+        } else if (!gponPurged && (cablesToRemove.length > 0 || cableRoutesUpdated)) {
             refreshPlan.connectionLines = 'full';
         }
         scheduleObjectDeleteVisualRefresh(refreshPlan);
     }
-    if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
+    // Сайдбар регионов: collectObjectsInRegion = O(regions×objects) — только при удалении региона.
+    if (objType === 'region' && typeof renderRegionsSidebarList === 'function') {
+        var renderRegions = function() { renderRegionsSidebarList(); };
+        if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(renderRegions, { timeout: 400 });
+        } else {
+            setTimeout(renderRegions, 0);
+        }
+    }
     
     closeInfoModalForDeletedHost((opts && opts.deletedModalUid) || objUniqueId);
 }
