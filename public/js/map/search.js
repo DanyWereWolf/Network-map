@@ -130,7 +130,11 @@ function searchObjects(query) {
 function renderSearchResults(results, query) {
     const searchResults = document.getElementById('searchResults');
     if (results.length === 0) {
-        searchResults.innerHTML = '<div class="search-no-results"><div style="font-size: 24px; margin-bottom: 8px;">🔍</div>Ничего не найдено по запросу "' + escapeHtml(query) + '"</div>';
+        var emptyAvatar = window.AssistantAvatars
+            ? AssistantAvatars.imgHtml('question', 'search-no-results-avatar')
+            : '<img class="search-no-results-avatar" src="icons/assistant/vola-question.png" alt="" aria-hidden="true" decoding="async">';
+        searchResults.innerHTML = '<div class="search-no-results">' + emptyAvatar +
+            '<p>Ничего не найдено по запросу «' + escapeHtml(query) + '»</p></div>';
         searchResults.style.display = 'block';
         return;
     }

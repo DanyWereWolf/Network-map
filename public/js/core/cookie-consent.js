@@ -54,10 +54,15 @@
 
         wrap.innerHTML =
             '<div class="cookie-consent-inner">' +
-                '<div class="cookie-consent-text">' +
-                    '<strong id="cookieConsentTitle">Файлы cookie и локальные данные</strong>' +
-                    '<p>Мы используем cookie и локальное хранилище браузера для входа, сессии, настроек темы и запоминания вашего выбора. ' +
-                    'Дополнительные инструменты аналитики могут подключаться только после согласия на все cookie.</p>' +
+                '<div class="cookie-consent-main">' +
+                    (window.AssistantAvatars
+                        ? AssistantAvatars.imgHtml('shy', 'cookie-consent-avatar')
+                        : '<img class="cookie-consent-avatar" src="icons/assistant/vola-shy.png" alt="" aria-hidden="true" decoding="async">') +
+                    '<div class="cookie-consent-text">' +
+                        '<strong id="cookieConsentTitle">Файлы cookie и локальные данные</strong>' +
+                        '<p>Мы используем cookie и локальное хранилище браузера для входа, сессии, настроек темы и запоминания вашего выбора. ' +
+                        'Дополнительные инструменты аналитики могут подключаться только после согласия на все cookie.</p>' +
+                    '</div>' +
                 '</div>' +
                 '<div class="cookie-consent-actions">' +
                     '<button type="button" class="cookie-consent-btn cookie-consent-btn-ghost" id="cookieConsentNecessary">Только необходимые</button>' +

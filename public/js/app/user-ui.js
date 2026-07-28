@@ -387,7 +387,12 @@ function onMapObjectLimitError(message, limits) {
     if (limits) applyMapLimitsCache(limits);
     var text = message || 'Достигнут лимит объектов на карте. Чтобы снять ограничение, напишите владельцу программы.';
     if (typeof showWarning === 'function') {
-        showWarning(text + ' <a href="' + OWNER_CONTACT_MAILTO + '" style="color:inherit;text-decoration:underline;">Написать владельцу</a>', 'Лимит объектов', true);
+        showWarning(
+            text + ' <a href="' + OWNER_CONTACT_MAILTO + '" style="color:inherit;text-decoration:underline;">Написать владельцу</a>',
+            'Лимит объектов',
+            true,
+            'angry'
+        );
     } else {
         alert(text);
     }

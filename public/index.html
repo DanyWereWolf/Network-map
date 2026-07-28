@@ -282,6 +282,7 @@
         </div>
     </header>
     <div id="mapLimitBanner" class="map-limit-banner map-limit-banner--hidden" role="status" aria-live="polite">
+        <img class="map-limit-banner__avatar" src="icons/assistant/vola-surprise.png" alt="" width="36" height="36" decoding="async" aria-hidden="true">
         <p class="map-limit-banner__message"></p>
         <button type="button" class="map-limit-banner__close" aria-label="Закрыть напоминание" title="Закрыть">&times;</button>
     </div>
@@ -1413,7 +1414,7 @@
             </div>
             <div class="modal-body welcome-modal-body">
                 <section class="welcome-assistant-greeting" aria-label="Приветствие помощника Volsmap">
-                    <img class="welcome-assistant-avatar" src="icons/assistant/volsmap-girl.png" width="112" height="140" alt="Вола, ассистент Volsmap" decoding="async">
+                    <img class="welcome-assistant-avatar" src="icons/assistant/vola-wave.png" width="120" height="120" alt="Вола, ассистент Volsmap" decoding="async">
                     <div class="welcome-assistant-bubble">
                         <p class="welcome-assistant-name">Вола · Volsmap</p>
                         <p class="welcome-assistant-text">Привет! Пройдите короткое обучение — покажу, где что находится на карте.</p>
@@ -2411,7 +2412,7 @@
         </header>
         <div id="orgChatMessages" class="org-chat-messages" role="log" aria-live="polite" aria-relevant="additions">
             <div class="org-chat-empty">
-                <img class="org-chat-empty-image" src="icons/assistant/volsmap-girl.png" alt="" loading="lazy">
+                <img class="org-chat-empty-image" src="icons/assistant/vola-giggle.png" alt="" loading="lazy">
                 <p class="org-chat-empty-title">Пока нет сообщений</p>
                 <p class="org-chat-empty-hint">Начните переписку — команда увидит ваше сообщение сразу.</p>
             </div>
@@ -2520,7 +2521,10 @@
                 <span class="close-confirm-modal">&times;</span>
             </div>
             <div class="modal-body">
-                <p id="confirmModalMessage" class="confirm-modal-message"></p>
+                <div class="confirm-modal-body-row">
+                    <img id="confirmModalAvatar" class="confirm-modal-avatar" src="icons/assistant/vola-question.png" alt="" width="72" height="72" decoding="async" aria-hidden="true">
+                    <p id="confirmModalMessage" class="confirm-modal-message"></p>
+                </div>
                 <div class="confirm-modal-actions">
                     <button type="button" id="confirmModalCancel" class="btn-secondary">Отмена</button>
                     <button type="button" id="confirmModalConfirm" class="btn-primary">Удалить</button>
@@ -2549,6 +2553,7 @@
     </script>
     <script src="js/core/state.js"></script>
     <script src="js/core/utils.js"></script>
+    <script src="js/ui/assistant-avatars.js"></script>
     <script src="js/core/script-loader.js"></script>
     <script src="js/core/notifications.js"></script>
     <script src="js/core/confirm-dialog.js"></script>

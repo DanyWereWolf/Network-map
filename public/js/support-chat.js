@@ -4,7 +4,13 @@
 (function() {
     var ASSISTANT_NAME = 'Вола';
     var ASSISTANT_TAGLINE = 'ассистент Volsmap';
-    var ASSISTANT_AVATAR = 'icons/assistant/volsmap-girl.png';
+    function assistantAvatarSrc(emotion) {
+        if (window.AssistantAvatars && typeof AssistantAvatars.getSrc === 'function') {
+            return AssistantAvatars.getSrc(emotion || 'wave');
+        }
+        return 'icons/assistant/vola-wave.png';
+    }
+    var ASSISTANT_AVATAR = assistantAvatarSrc('wave');
     var VISITOR_KEY = 'networkMap_supportVisitorId';
     var CONTACT_KEY = 'networkMap_supportContact';
     var POLL_BOT_MS = 20000;
@@ -135,7 +141,7 @@
             .replace(/"/g, '&quot;');
     }
 
-    function appendMessage(from, text, at, msgId) {
+    function appendMessage(from, text, at, msgId, emotion) {
         if (!messagesEl) return null;
         if (msgId && messagesEl.querySelector('[data-msg-id="' + msgId + '"]')) {
             return messagesEl.querySelector('[data-msg-id="' + msgId + '"]');
@@ -152,7 +158,7 @@
             row.className = 'support-chat-msg-row support-chat-msg-row--bot';
             var avatar = document.createElement('img');
             avatar.className = 'support-chat-msg-avatar';
-            avatar.src = ASSISTANT_AVATAR;
+            avatar.src = assistantAvatarSrc(emotion || 'wave');
             avatar.alt = '';
             avatar.setAttribute('aria-hidden', 'true');
             row.appendChild(avatar);
@@ -313,6 +319,7 @@
         if (ta) ta.value = '';
         var sendBtn = document.getElementById('supportChatSend');
         if (sendBtn) sendBtn.disabled = true;
+        appendMessage('bot', 'Секунду, думаю…', new Date().toISOString(), 'bot_thinking', 'think');
         fetch(getApiBase() + '/api/support/bot', {
             method: 'POST',
             credentials: 'include',
@@ -321,15 +328,17 @@
         })
             .then(function(r) { return r.json().then(function(b) { return { ok: r.ok, body: b }; }); })
             .then(function(res) {
+                removeMessageById('bot_thinking');
                 if (res.ok && res.body && res.body.reply) {
-                    appendMessage('bot', res.body.reply, new Date().toISOString());
+                    appendMessage('bot', res.body.reply, new Date().toISOString(), null, 'smile');
                     if (res.body.quickReplies) renderQuickReplies(res.body.quickReplies);
                 } else {
-                    appendMessage('bot', (res.body && res.body.error) || 'Не получилось ответить — попробуйте ещё раз.', new Date().toISOString());
+                    appendMessage('bot', (res.body && res.body.error) || 'Не получилось ответить — попробуйте ещё раз.', new Date().toISOString(), null, 'nervous');
                 }
             })
             .catch(function() {
-                appendMessage('bot', 'Сейчас не могу связаться с сервером. Попробуйте чуть позже или напишите владельцу на вкладке «Владельцу».', new Date().toISOString());
+                removeMessageById('bot_thinking');
+                appendMessage('bot', 'Сейчас не могу связаться с сервером. Попробуйте чуть позже или напишите владельцу на вкладке «Владельцу».', new Date().toISOString(), null, 'sad');
             })
             .finally(function() {
                 if (sendBtn) sendBtn.disabled = false;
@@ -349,7 +358,7 @@
         var name = nameEl ? nameEl.value.trim() : '';
         var email = emailEl ? emailEl.value.trim() : '';
         if (!isValidEmail(email)) {
-            showSystemMessage('Проверьте e-mail или оставьте поле пустым.');
+            appendMessage('bot', 'Проверьте e-mail или оставьте поле пустым.', new Date().toISOString(), null, 'shy');
             if (emailEl) emailEl.focus();
             return;
         }
@@ -376,17 +385,18 @@
                 if (res.ok && res.body && res.body.message) {
                     var el = messagesEl.querySelector('[data-msg-id="' + tempId + '"]');
                     if (el) el.setAttribute('data-msg-id', res.body.message.id);
-                    showSystemMessage(adminOnline
-                        ? 'Отправлено. Владелец в сети — ответ появится здесь.'
-                        : 'Отправлено. Ответ появится в этом чате, когда владелец будет в сети.');
+                    appendMessage('bot', adminOnline
+                        ? 'Спасибо! Владелец в сети — ответ появится здесь.'
+                        : 'Спасибо! Ответ появится в этом чате, когда владелец будет в сети.',
+                        new Date().toISOString(), null, 'thanks');
                 } else {
                     removeMessageById(tempId);
-                    showSystemMessage((res.body && res.body.error) || 'Не удалось отправить сообщение.');
+                    appendMessage('bot', (res.body && res.body.error) || 'Не удалось отправить сообщение.', new Date().toISOString(), null, 'nervous');
                 }
             })
             .catch(function() {
                 removeMessageById(tempId);
-                showSystemMessage('Ошибка отправки. Проверьте подключение к интернету.');
+                appendMessage('bot', 'Ошибка отправки. Проверьте подключение к интернету.', new Date().toISOString(), null, 'sad');
             })
             .finally(function() {
                 if (sendBtn) sendBtn.disabled = false;
@@ -606,7 +616,9 @@
                 ownerModeEnabled
                     ? 'Здравствуйте! Я ' + ASSISTANT_NAME + ', ассистент Volsmap — с радостью подскажу про регистрацию, лимиты, объекты на карте и совместную работу. Если нужен личный ответ от разработчика — вкладка «Владельцу».'
                     : 'Здравствуйте! Я ' + ASSISTANT_NAME + ', ассистент Volsmap — расскажу про регистрацию, лимиты и возможности карты.',
-                new Date().toISOString()
+                new Date().toISOString(),
+                null,
+                'wave'
             );
             botWelcomeShown = true;
         }

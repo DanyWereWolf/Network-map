@@ -15,19 +15,34 @@ function trimToastStack(container) {
     }
 }
 
-function showToast(message, type, title, duration, allowHtml) {
+function getToastAvatarEmotion(type) {
+    if (type === 'success') return 'thumbs';
+    if (type === 'error') return 'panic';
+    if (type === 'warning') return 'surprise';
+    return 'think';
+}
+
+function getToastAvatarHtml(emotion) {
+    if (window.AssistantAvatars && typeof AssistantAvatars.imgHtml === 'function') {
+        return AssistantAvatars.imgHtml(emotion, 'toast-avatar');
+    }
+    var file = 'vola-' + emotion + '.png';
+    return '<img class="toast-avatar" src="icons/assistant/' + file + '" alt="" aria-hidden="true" decoding="async">';
+}
+
+function showToast(message, type, title, duration, allowHtml, emotion) {
     type = type || 'info';
     duration = duration !== undefined ? duration : TOAST_DEFAULT_MS;
     const container = document.getElementById('toastContainer');
     if (!container) return;
     const msg = (message == null || message === '') ? 'Произошла ошибка' : String(message);
-    const icons = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
     const titles = { success: 'Успешно', error: 'Ошибка', warning: 'Внимание', info: 'Информация' };
     const titleText = title || titles[type] || titles.info;
+    var avatarEmotion = emotion || getToastAvatarEmotion(type);
 
     const toast = document.createElement('div');
     toast.className = 'toast toast-' + type;
-    toast.innerHTML = '<div class="toast-icon">' + (icons[type] || icons.info) + '</div>' +
+    toast.innerHTML = '<div class="toast-icon toast-icon--avatar">' + getToastAvatarHtml(avatarEmotion) + '</div>' +
         '<div class="toast-content">' +
         '<div class="toast-title"></div>' +
         '<div class="toast-message"></div>' +
@@ -57,7 +72,7 @@ function showToast(message, type, title, duration, allowHtml) {
 
 function showSuccess(message, title) { showToast(message, 'success', title || null); }
 function showError(message, title) { showToast(message, 'error', title || null, 2400); }
-function showWarning(message, title, allowHtml) {
-    showToast(message, 'warning', title || null, allowHtml ? 12000 : 2000, !!allowHtml);
+function showWarning(message, title, allowHtml, emotion) {
+    showToast(message, 'warning', title || null, allowHtml ? 12000 : 2000, !!allowHtml, emotion || null);
 }
 function showInfo(message, title) { showToast(message, 'info', title || null); }

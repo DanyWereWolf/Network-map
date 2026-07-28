@@ -494,7 +494,9 @@
 
     function buildChatEmptyHtml() {
         return '<div class="org-chat-empty">' +
-            '<img class="org-chat-empty-image" src="icons/assistant/volsmap-girl.png" alt="" loading="lazy">' +
+            '<img class="org-chat-empty-image" src="' +
+                (window.AssistantAvatars ? AssistantAvatars.getSrc('giggle') : 'icons/assistant/vola-giggle.png') +
+                '" alt="" loading="lazy">' +
             '<p class="org-chat-empty-title">Пока нет сообщений</p>' +
             '<p class="org-chat-empty-hint">Начните переписку — команда увидит ваше сообщение сразу.</p>' +
         '</div>';

@@ -77,9 +77,18 @@
         inner.className = 'maintenance-notice-inner';
 
         var icon = document.createElement('div');
-        icon.className = 'maintenance-notice-icon';
+        icon.className = 'maintenance-notice-icon maintenance-notice-icon--avatar';
         icon.setAttribute('aria-hidden', 'true');
-        icon.textContent = '!';
+        var avatar = document.createElement('img');
+        avatar.className = 'maintenance-notice-avatar';
+        avatar.alt = '';
+        avatar.decoding = 'async';
+        if (window.AssistantAvatars) {
+            AssistantAvatars.applyTo(avatar, 'surprise');
+        } else {
+            avatar.src = 'icons/assistant/vola-surprise.png';
+        }
+        icon.appendChild(avatar);
 
         var textWrap = document.createElement('div');
         textWrap.className = 'maintenance-notice-text';

@@ -477,8 +477,12 @@ function renderHistoryList(filter) {
         var emptyMsg = allHistory.length === 0
             ? 'Здесь появятся действия на карте и в учётных записях'
             : 'Нет записей по выбранным фильтрам';
+        var emptyEmotion = allHistory.length === 0 ? 'think' : 'question';
+        var emptyAvatar = window.AssistantAvatars
+            ? AssistantAvatars.imgHtml(emptyEmotion, 'history-empty-avatar')
+            : '<img class="history-empty-avatar" src="icons/assistant/vola-' + emptyEmotion + '.png" alt="" aria-hidden="true" decoding="async">';
         container.innerHTML = '<div class="history-empty">' +
-            '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>' +
+            emptyAvatar +
             '<p class="history-empty-title">' + (allHistory.length === 0 ? 'Журнал пуст' : 'Ничего не найдено') + '</p>' +
             '<p>' + escapeHtml(emptyMsg) + '</p></div>';
         return;

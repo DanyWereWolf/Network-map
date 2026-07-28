@@ -97,6 +97,15 @@
 
         if (titleEl) titleEl.textContent = title || 'Подтверждение';
         if (msgEl) msgEl.textContent = message || 'Продолжить?';
+        var avatarEl = document.getElementById('confirmModalAvatar');
+        if (avatarEl) {
+            var emotion = options.avatarEmotion || 'question';
+            if (window.AssistantAvatars) {
+                AssistantAvatars.applyTo(avatarEl, emotion);
+            } else {
+                avatarEl.src = 'icons/assistant/vola-question.png';
+            }
+        }
         if (confirmBtn) confirmBtn.textContent = options.confirmText || 'Удалить';
         if (cancelBtn) cancelBtn.textContent = options.cancelText || 'Отмена';
         if (closeBtn) {

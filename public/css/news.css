@@ -39,6 +39,21 @@
     color: #64748b;
     background: rgba(248, 250, 252, 0.6);
 }
+
+.updates-empty-avatar {
+    display: block;
+    width: 96px;
+    height: 96px;
+    margin: 0 auto 12px;
+    object-fit: contain;
+    filter: drop-shadow(0 6px 14px rgba(15, 23, 42, 0.14));
+}
+
+.updates-empty p,
+.updates-loading p,
+.updates-error p {
+    margin: 0;
+}
 [data-theme="dark"] .updates-empty,
 [data-theme="dark"] .updates-loading,
 [data-theme="dark"] .updates-error {

@@ -164,7 +164,11 @@
         if (!feed) return;
         feed.innerHTML = '';
         if (!posts || !posts.length) {
-            feed.innerHTML = '<p class="updates-empty" role="status">Пока нет опубликованных новостей. Загляните позже.</p>';
+            var emptyAvatar = window.AssistantAvatars
+                ? AssistantAvatars.imgHtml('shy', 'updates-empty-avatar')
+                : '<img class="updates-empty-avatar" src="icons/assistant/vola-shy.png" alt="" aria-hidden="true" decoding="async">';
+            feed.innerHTML = '<div class="updates-empty" role="status">' + emptyAvatar +
+                '<p>Пока нет опубликованных новостей. Загляните позже.</p></div>';
             return;
         }
         posts.forEach(function(post) {
@@ -173,14 +177,21 @@
         scrollToPostFromHash();
     }
 
-    function showState(className, message) {
+    function showState(className, message, emotion) {
         var feed = document.getElementById('updatesFeed');
         if (!feed) return;
-        feed.innerHTML = '<p class="' + className + '" role="status">' + escapeHtml(message) + '</p>';
+        var avatar = '';
+        if (emotion) {
+            avatar = window.AssistantAvatars
+                ? AssistantAvatars.imgHtml(emotion, 'updates-empty-avatar')
+                : '<img class="updates-empty-avatar" src="icons/assistant/vola-' + emotion + '.png" alt="" aria-hidden="true" decoding="async">';
+        }
+        feed.innerHTML = '<div class="' + className + '" role="status">' + avatar +
+            '<p>' + escapeHtml(message) + '</p></div>';
     }
 
     function loadUpdates() {
-        showState('updates-loading', 'Загрузка новостей…');
+        showState('updates-loading', 'Загрузка новостей…', 'think');
         var base = '';
         try {
             if (typeof getApiBase === 'function') base = getApiBase();
@@ -198,7 +209,7 @@
                 renderFeed((data && data.posts) ? data.posts : []);
             })
             .catch(function() {
-                showState('updates-error', 'Не удалось загрузить новости. Обновите страницу позже.');
+                showState('updates-error', 'Не удалось загрузить новости. Обновите страницу позже.', 'surprise');
             });
     }
 

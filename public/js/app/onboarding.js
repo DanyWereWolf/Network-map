@@ -546,6 +546,14 @@ function renderOnboardingStep() {
     onboardingState.nextBtn.textContent = onboardingState.index === onboardingState.steps.length - 1 ? 'Завершить' : 'Далее';
     onboardingState.statusEl.textContent = step.requireAction ? 'Ожидание действия…' : 'Можно нажать «Далее»';
     onboardingState.statusEl.classList.remove('onboarding-status--done');
+    if (onboardingState.avatarEl) {
+        var stepEmotion = step.requireAction ? 'think' : (step.hint ? 'question' : 'cheer');
+        if (window.AssistantAvatars) {
+            AssistantAvatars.applyTo(onboardingState.avatarEl, stepEmotion);
+        } else {
+            onboardingState.avatarEl.src = 'icons/assistant/vola-' + stepEmotion + '.png';
+        }
+    }
 
     if (typeof step.setup === 'function') {
         try {
@@ -585,6 +593,14 @@ function evaluateOnboardingStepCompletion() {
     onboardingState.nextBtn.disabled = !done;
     onboardingState.statusEl.classList.toggle('onboarding-status--done', done);
     onboardingState.statusEl.textContent = done ? '✓ Готово — нажмите «Далее»' : 'Ожидание действия…';
+    if (onboardingState.avatarEl) {
+        var emotion = done ? 'thumbs' : 'think';
+        if (window.AssistantAvatars) {
+            AssistantAvatars.applyTo(onboardingState.avatarEl, emotion);
+        } else {
+            onboardingState.avatarEl.src = 'icons/assistant/vola-' + emotion + '.png';
+        }
+    }
 }
 
 function showOnboardingCompletionAndFinish() {
@@ -603,6 +619,13 @@ function showOnboardingCompletionAndFinish() {
     onboardingState.card.style.left = '50%';
     onboardingState.card.style.top = '50%';
     onboardingState.card.style.transform = 'translate(-50%, -50%)';
+    if (onboardingState.avatarEl) {
+        if (window.AssistantAvatars) {
+            AssistantAvatars.applyTo(onboardingState.avatarEl, 'sparkle');
+        } else {
+            onboardingState.avatarEl.src = 'icons/assistant/vola-sparkle.png';
+        }
+    }
     onboardingState.stepEl.textContent = 'Обучение завершено';
     onboardingState.titleEl.textContent = 'Отлично!';
     onboardingState.textEl.textContent = 'Вы прошли основы работы с картой. Подробные инструкции — в справке в шапке, обучение можно повторить оттуда же.';
@@ -641,7 +664,9 @@ function startOnboardingTour(options) {
     header.className = 'onboarding-header';
     var avatar = document.createElement('img');
     avatar.className = 'onboarding-avatar';
-    avatar.src = 'icons/assistant/volsmap-girl.png';
+    avatar.src = window.AssistantAvatars
+        ? AssistantAvatars.getSrc('cheer')
+        : 'icons/assistant/vola-cheer.png';
     avatar.alt = '';
     avatar.setAttribute('aria-hidden', 'true');
     var headerText = document.createElement('div');
@@ -720,6 +745,7 @@ function startOnboardingTour(options) {
         steps: steps,
         overlay: overlay,
         card: card,
+        avatarEl: avatar,
         spotlightEl: spotlight,
         progressBar: progressBar,
         progressFill: progressFill,

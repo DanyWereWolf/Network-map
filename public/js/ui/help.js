@@ -44,7 +44,9 @@ function getHelpContentHtml() {
 
     html +=
         '<section class="help-assistant-hero" aria-label="Помощник Volsmap">' +
-            '<img class="help-assistant-hero-image" src="icons/assistant/volsmap-girl.png" alt="Вола, ассистент Volsmap">' +
+            '<img class="help-assistant-hero-image" src="' +
+                (window.AssistantAvatars ? AssistantAvatars.getSrc('glasses') : 'icons/assistant/vola-glasses.png') +
+                '" alt="Вола, ассистент Volsmap">' +
             '<div class="help-assistant-hero-text">' +
                 '<h3>Привет! Я Вола, ассистент Volsmap</h3>' +
                 '<p>Ниже — полное руководство: от первого объекта на карте до рабочего места жил, радиомостов и совместной работы. Выберите раздел в оглавлении или пролистайте по порядку.</p>' +

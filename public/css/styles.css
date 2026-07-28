@@ -301,7 +301,7 @@ body {
     height: var(--header-height);
     flex-shrink: 0;
     box-shadow: 0 4px 20px rgba(15, 23, 42, 0.18);
-    z-index: 1001;
+    z-index: 1200;
     border-bottom: 1px solid var(--header-border);
     backdrop-filter: blur(12px) saturate(1.1);
     transition: background var(--transition-normal);
@@ -597,6 +597,19 @@ body {
     text-align: center;
     color: var(--text-muted);
     font-size: 0.875rem;
+}
+
+.search-no-results-avatar {
+    display: block;
+    width: 72px;
+    height: 72px;
+    margin: 0 auto 10px;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 10px rgba(15, 23, 42, 0.14));
+}
+
+.search-no-results p {
+    margin: 0;
 }
 
 .container {
@@ -1241,6 +1254,17 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     flex-shrink: 0;
 }
 
+.map-limit-banner__avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    object-position: top center;
+    flex-shrink: 0;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    background: rgba(255, 255, 255, 0.55);
+}
+
 .map-limit-banner--hidden {
     visibility: hidden;
     min-height: 0;
@@ -1730,6 +1754,15 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     text-align: center;
     padding: 36px 16px;
     color: var(--text-muted);
+}
+
+.history-empty-avatar {
+    display: block;
+    width: 88px;
+    height: 88px;
+    margin: 0 auto 10px;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 10px rgba(15, 23, 42, 0.14));
 }
 
 .history-empty svg {
@@ -2406,10 +2439,11 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
 }
 
 .welcome-assistant-avatar {
-    width: 112px;
-    height: 140px;
-    aspect-ratio: 112 / 140;
+    width: 120px;
+    height: 120px;
+    aspect-ratio: 1;
     object-fit: contain;
+    object-position: bottom center;
     flex-shrink: 0;
     filter: drop-shadow(0 4px 10px rgba(15, 23, 42, 0.16));
 }
@@ -9470,8 +9504,27 @@ html[data-theme="light"] .app-entrance__status {
     background: rgba(96, 165, 250, 0.08);
 }
 
-.confirm-modal-message {
+.confirm-modal-body-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
     margin: 0 0 16px;
+}
+
+.confirm-modal-avatar {
+    width: 72px;
+    height: 72px;
+    object-fit: contain;
+    object-position: bottom center;
+    flex-shrink: 0;
+    filter: drop-shadow(0 4px 10px rgba(15, 23, 42, 0.14));
+}
+
+.confirm-modal-message {
+    margin: 0;
+    flex: 1;
+    min-width: 0;
+    padding-top: 8px;
 }
 
 .confirm-modal-actions {
@@ -11282,14 +11335,28 @@ html[data-theme="light"] .app-entrance__status {
 }
 
 .toast-icon {
-    width: 24px;
-    height: 24px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
     font-size: 14px;
+    overflow: hidden;
+}
+
+.toast-icon--avatar {
+    background: transparent !important;
+    color: inherit;
+}
+
+.toast-avatar {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top center;
+    display: block;
 }
 
 .toast-success .toast-icon {
