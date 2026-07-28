@@ -3775,10 +3775,10 @@ function setupAccordions() {
         });
     });
 
-    const firstAccordion = document.querySelector('.accordion-section:not([data-accordion-initial="closed"])');
-    if (firstAccordion) {
-        firstAccordion.classList.add('active');
-    }
+    // При запуске все секции свёрнуты (открываются только по клику / онбордингу).
+    document.querySelectorAll('.accordion-section.active').forEach(function(section) {
+        section.classList.remove('active');
+    });
 
     setupDeviceCatalogHandlers();
 }

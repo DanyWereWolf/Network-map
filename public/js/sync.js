@@ -7,8 +7,8 @@
     var pendingState = null;
     var reconnectTimer = null;
     var reconnectAttempts = 0;
-    var maxReconnectAttempts = 10;
-    var reconnectDelayMs = 2000;
+    var reconnectDelayBaseMs = 2000;
+    var reconnectDelayMaxMs = 30000;
     var userRequestedDisconnect = false;
     var CURSOR_THROTTLE_MS = 120;
     var lastCursorSend = 0;
@@ -29,6 +29,8 @@
     var REMOTE_OP_BATCH_MS = 48;
     var pendingLockRequests = {};
     var remoteObjectLocks = {};
+    var lockHeartbeatTimer = null;
+    var LOCK_HEARTBEAT_MS = 45000;
 
     function getDefaultSyncUrl() {
         if (typeof window !== 'undefined' && window.location && window.location.host) {
@@ -38,33 +40,139 @@
         return 'ws://localhost:3000/sync';
     }
 
+    function escapeSyncHtml(str) {
+        return String(str == null ? '' : str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function getAvatarInitials(name) {
+        var raw = String(name || 'У').trim();
+        if (!raw) return 'У';
+        var parts = raw.split(/\s+/).filter(Boolean);
+        if (parts.length >= 2) {
+            return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+        }
+        return raw.slice(0, 2).toUpperCase();
+    }
+
     function updateSyncUIStatus(connected, errorText) {
         var statusEl = document.getElementById('syncStatus');
         var btn = document.getElementById('syncConnectBtn');
+        var btnLabel = btn ? btn.querySelector('.sidebar-sync-reconnect-label') : null;
+        var card = document.getElementById('syncPresenceCard');
+        var connecting = !connected && errorText === 'Подключение…';
+        var label = connected ? 'Подключено' : (errorText || 'Отключено');
         if (statusEl) {
-            statusEl.textContent = connected ? 'Подключено' : (errorText || 'Отключено');
-            statusEl.className = 'sync-status ' + (connected ? 'sync-connected' : 'sync-disconnected');
+            statusEl.className = 'sync-status ' + (connected ? 'sync-connected' : (connecting ? 'sync-connecting' : 'sync-disconnected'));
+            var textNode = statusEl.querySelector('.sync-status-text');
+            var dot = statusEl.querySelector('.sync-status-dot');
+            if (!textNode || !dot) {
+                statusEl.innerHTML = '<span class="sync-status-dot" aria-hidden="true"></span>' +
+                    '<span class="sync-status-text">' + escapeSyncHtml(label) + '</span>';
+            } else {
+                textNode.textContent = label;
+            }
         }
+        if (card) {
+            card.classList.toggle('sync-presence--online', !!connected);
+            card.classList.toggle('sync-presence--connecting', !!connecting);
+            card.classList.toggle('sync-presence--offline', !connected && !connecting);
+        }
+        if (btnLabel) btnLabel.textContent = connected ? 'Обновить' : 'Подключить';
         if (btn) {
-            btn.textContent = connected ? 'Отключиться' : 'Подключиться';
             btn.disabled = false;
+            btn.title = connected ? 'Переподключить синхронизацию' : 'Подключить синхронизацию';
         }
+    }
+
+    var lastSyncClients = [];
+
+    function getClientEditingLabel(clientId) {
+        if (!clientId) return null;
+        var locks = remoteObjectLocks || {};
+        var uids = Object.keys(locks);
+        for (var i = 0; i < uids.length; i++) {
+            var lock = locks[uids[i]];
+            if (!lock || lock.clientId !== clientId) continue;
+            if (typeof window.describeObjectForCollab === 'function') {
+                var desc = window.describeObjectForCollab(uids[i]);
+                if (desc) return desc;
+            }
+            return 'объект';
+        }
+        return null;
+    }
+
+    function resolveClientAvatarUrl(client) {
+        if (!client) return '';
+        var url = client.avatarUrl;
+        if (!url && client.id === myClientId && typeof currentUser !== 'undefined' && currentUser && currentUser.avatarUrl) {
+            url = currentUser.avatarUrl;
+        }
+        if (!url) return '';
+        if (typeof getAvatarImageSrc === 'function') return getAvatarImageSrc(url) || '';
+        return url;
+    }
+
+    function renderSyncPersonAvatarHtml(name, client) {
+        var src = resolveClientAvatarUrl(client);
+        if (src) {
+            return '<span class="sidebar-sync-avatar has-image" aria-hidden="true">' +
+                '<img class="sidebar-sync-avatar-img" src="' + escapeSyncHtml(src) + '" alt="">' +
+                '<span class="sidebar-sync-avatar-fallback">' + escapeSyncHtml(getAvatarInitials(name)) + '</span>' +
+                '</span>';
+        }
+        return '<span class="sidebar-sync-avatar" aria-hidden="true">' + escapeSyncHtml(getAvatarInitials(name)) + '</span>';
     }
 
     function updateSyncOnlineList(clients) {
         var el = document.getElementById('syncOnlineList');
         if (!el) return;
+        if (clients) lastSyncClients = clients;
+        else clients = lastSyncClients;
         if (!clients || clients.length === 0) {
-            el.style.display = 'none';
-            el.textContent = '';
+            el.hidden = true;
+            el.innerHTML = '';
             return;
         }
-        var parts = clients.map(function(c) {
-            return c.id === myClientId ? 'вы' : (c.displayName || 'Участник');
+        var rows = clients.map(function(c) {
+            var isSelf = c.id === myClientId;
+            var name = isSelf ? 'Вы' : (c.displayName || 'Участник');
+            var editing = getClientEditingLabel(c.id);
+            var classes = 'sidebar-sync-person' + (isSelf ? ' is-self' : '') + (editing ? ' is-editing' : '');
+            var editingHtml = editing
+                ? ('<span class="sidebar-sync-person-editing" title="' + escapeSyncHtml(editing) + '">' +
+                    '<span class="sidebar-sync-person-editing-dot" aria-hidden="true"></span>' +
+                    '<span class="sidebar-sync-person-editing-text">' + escapeSyncHtml(editing) + '</span></span>')
+                : '';
+            return '<li class="' + classes + '">' +
+                renderSyncPersonAvatarHtml(name, c) +
+                '<span class="sidebar-sync-person-body">' +
+                '<span class="sidebar-sync-person-name">' + escapeSyncHtml(name) + '</span>' +
+                editingHtml +
+                '</span></li>';
+        }).join('');
+        el.innerHTML =
+            '<div class="sidebar-sync-online-head">' +
+            '<span class="sidebar-sync-online-title">Сейчас на карте</span>' +
+            '<span class="sidebar-sync-online-count">' + clients.length + '</span></div>' +
+            '<ul class="sidebar-sync-people">' + rows + '</ul>';
+        el.hidden = false;
+        Array.prototype.forEach.call(el.querySelectorAll('.sidebar-sync-avatar-img'), function(img) {
+            if (img._syncAvatarBound) return;
+            img._syncAvatarBound = true;
+            img.addEventListener('error', function() {
+                var wrap = img.closest('.sidebar-sync-avatar');
+                if (wrap) wrap.classList.remove('has-image');
+            });
         });
-        el.textContent = 'В сети: ' + parts.length + ' — ' + parts.join(', ');
-        el.style.display = 'block';
     }
+    window.refreshSyncOnlineListPresence = function() {
+        updateSyncOnlineList(null);
+    };
 
     function flushRemoteOpQueue() {
         remoteOpFlushTimer = null;
@@ -181,11 +289,83 @@
         } catch (e) {}
     }
 
+    function touchObjectLock(uniqueId) {
+        if (!uniqueId || !ws || ws.readyState !== WebSocket.OPEN) return;
+        try {
+            ws.send(JSON.stringify({ type: 'lock_touch', uniqueId: uniqueId }));
+        } catch (e) {}
+    }
+
+    function lockHeartbeatTick() {
+        var uid = typeof window.getActiveObjectLockId === 'function'
+            ? window.getActiveObjectLockId()
+            : null;
+        if (uid) touchObjectLock(uid);
+    }
+
+    function startLockHeartbeat() {
+        if (lockHeartbeatTimer) return;
+        lockHeartbeatTimer = setInterval(lockHeartbeatTick, LOCK_HEARTBEAT_MS);
+    }
+
+    function stopLockHeartbeat() {
+        if (!lockHeartbeatTimer) return;
+        clearInterval(lockHeartbeatTimer);
+        lockHeartbeatTimer = null;
+    }
+
+    function getReconnectDelayMs() {
+        var exp = Math.min(reconnectAttempts, 4);
+        var base = Math.min(reconnectDelayMaxMs, reconnectDelayBaseMs * Math.pow(2, exp));
+        var jitter = Math.floor(Math.random() * 400);
+        return base + jitter;
+    }
+
+    function scheduleReconnect() {
+        if (reconnectTimer || userRequestedDisconnect) return;
+        reconnectAttempts++;
+        var delay = getReconnectDelayMs();
+        reconnectTimer = setTimeout(function() {
+            reconnectTimer = null;
+            if (userRequestedDisconnect) return;
+            connect();
+        }, delay);
+    }
+
+    function clearReconnectTimer() {
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+    }
+
+    function forceReconnect() {
+        userRequestedDisconnect = false;
+        reconnectAttempts = 0;
+        clearReconnectTimer();
+        var btn = document.getElementById('syncConnectBtn');
+        if (btn) btn.disabled = true;
+        updateSyncUIStatus(false, 'Подключение…');
+        if (ws) {
+            var old = ws;
+            ws = null;
+            try {
+                old.onclose = null;
+                old.onerror = null;
+                old.onmessage = null;
+                old.close();
+            } catch (eClose) {}
+        }
+        window.syncIsConnected = false;
+        stopLockHeartbeat();
+        connect();
+    }
+
     function connect() {
         var url = getSyncUrl();
         if (ws && ws.readyState === WebSocket.CONNECTING) return;
         if (ws && ws.readyState === WebSocket.OPEN) {
-            disconnect();
+            forceReconnect();
             return;
         }
         userRequestedDisconnect = false;
@@ -197,6 +377,7 @@
         } catch (e) {
             updateSyncUIStatus(false, 'Ошибка: ' + (e.message || e));
             if (btn) btn.disabled = false;
+            if (!userRequestedDisconnect) scheduleReconnect();
             return;
         }
         ws.onopen = function() {
@@ -207,6 +388,7 @@
             if (!cursorFlushIntervalId) {
                 cursorFlushIntervalId = setInterval(flushCursorIfPending, CURSOR_THROTTLE_MS);
             }
+            startLockHeartbeat();
             updateSyncUIStatus(true);
             if (typeof window.hideSyncRequiredOverlay === 'function') window.hideSyncRequiredOverlay();
             var displayName = 'Участник';
@@ -220,10 +402,12 @@
                 ws.send(JSON.stringify({ type: 'hello', displayName: displayName, userId: userId, token: token }));
             } catch (e) {}
             if (btn) btn.disabled = false;
+            lockHeartbeatTick();
         };
         ws.onclose = function() {
             ws = null;
             window.syncIsConnected = false;
+            stopLockHeartbeat();
             if (remoteOpFlushTimer) { clearTimeout(remoteOpFlushTimer); remoteOpFlushTimer = null; }
             remoteOpQueue = [];
             if (applyStateTimer) { clearTimeout(applyStateTimer); applyStateTimer = null; }
@@ -245,11 +429,16 @@
             if (typeof window.updateCollaboratorCursors === 'function') window.updateCollaboratorCursors([]);
             updateSyncUIStatus(false);
             updateSyncOnlineList([]);
+            lastSyncClients = [];
             if (btn) btn.disabled = false;
             if (typeof window.showSyncRequiredOverlay === 'function') window.showSyncRequiredOverlay();
             if (!userRequestedDisconnect) {
                 setTimeout(function() {
-                    if (typeof window.showNetworkError === 'function') window.showNetworkError('Нет связи с сервером');
+                    if (typeof window.showNetworkError === 'function') {
+                        window.showNetworkError('Нет связи с сервером', function() {
+                            forceReconnect();
+                        });
+                    }
                 }, 600);
                 scheduleReconnect();
             }
@@ -281,6 +470,7 @@
                     });
                     window.syncRemoteObjectLocks = remoteObjectLocks;
                     if (typeof window.onSyncObjectLocks === 'function') window.onSyncObjectLocks(remoteObjectLocks);
+                    updateSyncOnlineList(null);
                     return;
                 }
                 if (msg.type === 'lock_result' && msg.uniqueId != null) {
@@ -322,6 +512,12 @@
                         window.onMapObjectLimitError(msg.error, msg.mapLimits);
                     } else if (typeof window.showWarning === 'function') {
                         window.showWarning(msg.error || 'Достигнут лимит объектов на карте', 'Лимит');
+                    }
+                    return;
+                }
+                if (msg.type === 'sync_error') {
+                    if (typeof window.showWarning === 'function') {
+                        window.showWarning(msg.error || 'Ошибка синхронизации карты', 'Синхронизация');
                     }
                     return;
                 }
@@ -397,37 +593,21 @@
         };
     }
 
-    function scheduleReconnect() {
-        if (reconnectTimer || !sessionStorage.getItem(SYNC_URL_KEY)) return;
-        if (reconnectAttempts >= maxReconnectAttempts) return;
-        reconnectAttempts++;
-        reconnectTimer = setTimeout(function() {
-            reconnectTimer = null;
-            connect();
-        }, reconnectDelayMs);
-    }
-
     function disconnect() {
         userRequestedDisconnect = true;
-        if (reconnectTimer) {
-            clearTimeout(reconnectTimer);
-            reconnectTimer = null;
-        }
-        reconnectAttempts = maxReconnectAttempts;
+        clearReconnectTimer();
+        stopLockHeartbeat();
         if (ws) {
             ws.close();
             ws = null;
         }
+        window.syncIsConnected = false;
         updateSyncUIStatus(false);
     }
 
     function stopReconnect() {
         userRequestedDisconnect = true;
-        if (reconnectTimer) {
-            clearTimeout(reconnectTimer);
-            reconnectTimer = null;
-        }
-        reconnectAttempts = maxReconnectAttempts;
+        clearReconnectTimer();
     }
 
     function sendState(data) {
@@ -474,13 +654,24 @@
         connect();
     }
 
+    function bindSyncConnectButton() {
+        var btn = document.getElementById('syncConnectBtn');
+        if (!btn || btn._syncBound) return;
+        btn._syncBound = true;
+        btn.addEventListener('click', function() {
+            forceReconnect();
+        });
+    }
+
     if (typeof document !== 'undefined' && document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function() {
             loadSavedSyncUrl();
+            bindSyncConnectButton();
             autoConnectOnMapPage();
         });
     } else {
         loadSavedSyncUrl();
+        bindSyncConnectButton();
         autoConnectOnMapPage();
     }
 
@@ -595,9 +786,11 @@
     window.syncSendCursor = sendCursorPosition;
     window.syncRequestObjectLock = requestObjectLock;
     window.syncReleaseObjectLock = releaseObjectLock;
+    window.syncTouchObjectLock = touchObjectLock;
     window.syncRemoteObjectLocks = remoteObjectLocks;
     window.syncMyClientId = myClientId;
-    window.syncConnect = connect;
+    window.syncConnect = forceReconnect;
     window.syncStopReconnect = stopReconnect;
+    window.syncDisconnect = disconnect;
     window.syncApplyPendingState = applyPendingStateAfterDrag;
 })();

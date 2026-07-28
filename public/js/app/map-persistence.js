@@ -659,7 +659,7 @@ function filterSnapshotByRemovedUids(snapshot, removeUniqueIds) {
         }
         next.push(cur);
     }
-    if (removed !== expected) return null;
+    if (removed === 0) return null;
     return next;
 }
 
@@ -928,14 +928,34 @@ function showSyncRequiredOverlay() {
     if (_mapInitialLoadPending) return;
     if (window.syncIsConnected) return;
     var el = document.getElementById('syncRequiredOverlay');
-    if (el) { el.style.display = 'flex'; return; }
+    if (el) {
+        el.style.display = 'flex';
+        var existingBtn = document.getElementById('syncRequiredReconnectBtn');
+        if (existingBtn && !existingBtn._syncBound) {
+            existingBtn._syncBound = true;
+            existingBtn.addEventListener('click', function() {
+                if (typeof window.syncConnect === 'function') window.syncConnect();
+            });
+        }
+        return;
+    }
     var wrapper = document.getElementById('mapAreaWrapper');
     if (!wrapper) return;
     el = document.createElement('div');
     el.id = 'syncRequiredOverlay';
     el.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.75);color:#fff;display:flex;align-items:center;justify-content:center;z-index:99998;font-family:sans-serif;text-align:center;padding:24px;box-sizing:border-box;';
-    el.innerHTML = '<div><h2 style="margin:0 0 12px;">Общая карта</h2><p style="margin:0 0 8px;">Подключение к совместной карте организации…</p><p style="margin:0;font-size:14px;opacity:0.9;">Подождите несколько секунд или обновите страницу.</p></div>';
+    el.innerHTML = '<div><h2 style="margin:0 0 12px;">Общая карта</h2>' +
+        '<p style="margin:0 0 8px;">Подключение к совместной карте организации…</p>' +
+        '<p style="margin:0 0 16px;font-size:14px;opacity:0.9;">Подождите несколько секунд или нажмите «Переподключить».</p>' +
+        '<button type="button" id="syncRequiredReconnectBtn" style="padding:8px 16px;border-radius:8px;border:1px solid rgba(255,255,255,0.35);background:rgba(255,255,255,0.12);color:#fff;font-weight:600;cursor:pointer;">Переподключить</button></div>';
     wrapper.appendChild(el);
+    var reconnectBtn = document.getElementById('syncRequiredReconnectBtn');
+    if (reconnectBtn && !reconnectBtn._syncBound) {
+        reconnectBtn._syncBound = true;
+        reconnectBtn.addEventListener('click', function() {
+            if (typeof window.syncConnect === 'function') window.syncConnect();
+        });
+    }
 }
 function hideSyncRequiredOverlay() {
     var el = document.getElementById('syncRequiredOverlay');
@@ -1363,7 +1383,10 @@ function applyRemoteState(data, meta) {
     if (_mapDataReady && !_mapInitialLoadPending) {
         clearUndoRedoStacks();
     }
-    if (_mapDataReady && !_mapInitialLoadPending && objects && objects.length > 0 && meta.merge === true) {
+    // После первичной загрузки всегда merge: иначе map_refresh = clearMap+importData
+    // (ощущение «перезагрузки страницы» при чужом удалении/full state).
+    var preferMerge = meta.merge === true || (_mapDataReady && !_mapInitialLoadPending && objects && objects.length > 0);
+    if (preferMerge) {
         try {
             if (data.length === 0) {
                 clearMap({ skipSave: true, skipHistory: true });
@@ -1376,6 +1399,12 @@ function applyRemoteState(data, meta) {
             lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
             updateStats();
             markMapDataReady();
+            if (meta && meta.fromApi) {
+                _lastMapLoadedFromApiAt = Date.now();
+                _lastMapLoadedOrgId = (meta.organizationId != null && meta.organizationId !== '')
+                    ? String(meta.organizationId)
+                    : (window._mapOrgIdLoaded != null ? String(window._mapOrgIdLoaded) : null);
+            }
             return;
         } catch (eMerge) {}
     }
@@ -1635,9 +1664,6 @@ function applyRemoteStateMerged(data) {
     }
     updateStats();
     if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
-    if (window.MapRegions && MapRegions.sendAllRegionsToMapBack && myMap) {
-        MapRegions.sendAllRegionsToMapBack(myMap, objects);
-    }
     if (window.MapRegions && MapRegions.purgeOrphanRegionLabelDom) {
         MapRegions.purgeOrphanRegionLabelDom();
     }
@@ -1693,6 +1719,12 @@ function refreshRemoteObjectVisuals(obj) {
         updateCabinetAfterMemberChange(obj);
     } else if (typeof canBeCabinetMember === 'function' && canBeCabinetMember(type) && typeof updateCabinetDisplay === 'function') {
         updateCabinetDisplay();
+    } else if (typeof applyMapFilterForObject === 'function') {
+        applyMapFilterForObject(obj);
+        if (typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization && MapPerf.shouldUseVirtualization() &&
+            typeof MapPerf.syncViewportMounts === 'function' && typeof buildMapMountContext === 'function') {
+            try { MapPerf.syncViewportMounts(buildMapMountContext()); } catch (eVirt) {}
+        }
     } else if (typeof applyMapFilter === 'function') {
         applyMapFilter();
     }
@@ -1703,6 +1735,12 @@ function refreshRemoteObjectVisuals(obj) {
         try {
             if (myMap.geoObjects.indexOf(label) === -1) myMap.geoObjects.add(label);
         } catch (e) {}
+    }
+    var lockUid = typeof getObjectUniqueId === 'function' ? getObjectUniqueId(obj) : null;
+    if (lockUid && typeof isObjectLockedByOther === 'function' && isObjectLockedByOther(lockUid) &&
+        typeof updateObjectLockMapBadge === 'function') {
+        var lockInfo = (window.syncRemoteObjectLocks || {})[lockUid];
+        updateObjectLockMapBadge(obj, true, lockInfo);
     }
     scheduleConnectionLinesUpdate(getObjectUniqueId(obj));
 }

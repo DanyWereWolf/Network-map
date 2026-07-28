@@ -3080,6 +3080,16 @@ function tryReleaseObjectLock(orgId, clientId, uniqueId) {
     return true;
 }
 
+function tryTouchObjectLock(orgId, clientId, uniqueId) {
+    if (!orgId || !clientId || !uniqueId) return false;
+    pruneStaleObjectLocks(orgId);
+    var locks = getOrgObjectLocks(orgId);
+    var existing = locks[uniqueId];
+    if (!existing || existing.clientId !== clientId) return false;
+    existing.at = Date.now();
+    return true;
+}
+
 function isSyncClientAdmin(clientId) {
     const userId = syncClientUserIds.get(clientId);
     if (!userId) return false;
@@ -3374,10 +3384,12 @@ function broadcastSyncClients(onlyOrgId) {
         var list = [];
         wss.clients.forEach(function(c) {
             if (c.readyState === WebSocket.OPEN && c.clientId && syncOrgIdsEqual(c.orgId, targetOrg)) {
+                var uid = syncClientUserIds.get(c.clientId) || null;
                 list.push({
                     id: c.clientId,
                     displayName: syncClientNames.get(c.clientId) || 'Участник',
-                    userId: syncClientUserIds.get(c.clientId) || null
+                    userId: uid,
+                    avatarUrl: uid != null ? resolveSenderAvatarUrl({ userId: uid }) : null
                 });
             }
         });
@@ -3514,6 +3526,13 @@ wss.on('connection', (ws, req) => {
                 var unlockUid = String(msg.uniqueId).trim();
                 if (!unlockUid) return;
                 if (tryReleaseObjectLock(orgId, clientId, unlockUid)) broadcastObjectLocks(orgId);
+                return;
+            }
+            if (msg.type === 'lock_touch' && msg.uniqueId && orgId) {
+                if (!isSyncClientAdmin(clientId)) return;
+                var touchUid = String(msg.uniqueId).trim();
+                if (!touchUid) return;
+                tryTouchObjectLock(orgId, clientId, touchUid);
                 return;
             }
             if (msg.type === 'op' && msg.op && orgId) {

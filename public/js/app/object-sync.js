@@ -2,6 +2,7 @@
  * Блокировки объектов при совместном редактировании и инкрементальная синхронизация.
  */
 var myHeldObjectLockId = null;
+var dragHeldLockId = null;
 var infoModalEditMode = true;
 var infoModalEditModeSession = false;
 
@@ -27,6 +28,11 @@ function releaseHeldObjectLock() {
     }
     myHeldObjectLockId = null;
 }
+
+function getActiveObjectLockId() {
+    return dragHeldLockId || myHeldObjectLockId || null;
+}
+window.getActiveObjectLockId = getActiveObjectLockId;
 
 function shouldSkipRemoteModalRefresh(obj) {
     if (!obj || !currentModalObject || currentModalObject !== obj) return false;
@@ -65,6 +71,7 @@ function applyModalEditModeForObject(obj, callback) {
         if (ok && isEditMode) {
             myHeldObjectLockId = uid;
             infoModalEditMode = true;
+            if (typeof window.syncTouchObjectLock === 'function') window.syncTouchObjectLock(uid);
         } else {
             infoModalEditMode = false;
             if (!ok && myHeldObjectLockId === uid) releaseHeldObjectLock();
@@ -104,23 +111,138 @@ function updateModalLockBanner(uniqueId) {
     el.textContent = '';
 }
 
+function describeObjectForCollab(uniqueId) {
+    if (!uniqueId) return '';
+    var obj = typeof getMapObjectByUid === 'function' ? getMapObjectByUid(uniqueId) : null;
+    if (!obj && typeof objects !== 'undefined' && Array.isArray(objects)) {
+        obj = objects.find(function(o) {
+            return o && o.properties && o.properties.get('uniqueId') === uniqueId;
+        }) || null;
+    }
+    if (!obj || !obj.properties) return 'объект';
+    var type = obj.properties.get('type');
+    if (type === 'cable' || type === 'cableLabel') return 'кабель';
+    var typeLabel = '';
+    if (typeof resolveMapExportObjectTypeLabel === 'function') {
+        typeLabel = resolveMapExportObjectTypeLabel(type, false) || '';
+    } else if (typeof getObjectTypeLabel === 'function') {
+        typeLabel = getObjectTypeLabel(type) || '';
+    } else if (typeof getObjectDefaultName === 'function') {
+        typeLabel = getObjectDefaultName(type) || '';
+    }
+    if (!typeLabel) typeLabel = type || 'объект';
+    var name = (obj.properties.get('name') || '').toString().trim();
+    if (name) {
+        if (name.length > 28) name = name.slice(0, 26) + '…';
+        return typeLabel + ' «' + name + '»';
+    }
+    return typeLabel;
+}
+window.describeObjectForCollab = describeObjectForCollab;
+
+var LOCK_BADGE_TRANSPARENT_PIXEL = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==';
+
+function removeObjectLockMapBadge(obj) {
+    if (!obj || !obj.properties) return;
+    var badge = obj.properties.get('_lockBadge');
+    if (!badge) return;
+    try {
+        if (myMap && myMap.geoObjects) myMap.geoObjects.remove(badge);
+    } catch (eRem) {}
+    try { obj.properties.set('_lockBadge', null); } catch (eClr) {}
+}
+
+function updateObjectLockMapBadge(obj, locked, lockInfo) {
+    if (!obj || !obj.properties || !obj.geometry || typeof ymaps === 'undefined') return;
+    var type = obj.properties.get('type');
+    if (type === 'cable' || type === 'cableLabel' || type === 'region') {
+        removeObjectLockMapBadge(obj);
+        return;
+    }
+    if (!locked) {
+        removeObjectLockMapBadge(obj);
+        return;
+    }
+    if (!myMap || !myMap.geoObjects) return;
+    var coords;
+    try { coords = obj.geometry.getCoordinates(); } catch (eC) { return; }
+    if (!coords || coords.length < 2) return;
+    var who = (lockInfo && lockInfo.displayName) ? String(lockInfo.displayName).trim() : '';
+    if (who.length > 14) who = who.slice(0, 12) + '…';
+    var safeWho = (typeof escapeHtml === 'function') ? escapeHtml(who) : who;
+    var html = '<span class="map-object-lock-badge">' +
+        '<span class="map-object-lock-badge__dot" aria-hidden="true"></span>' +
+        '<span class="map-object-lock-badge__label">занято</span>' +
+        (safeWho ? ('<span class="map-object-lock-badge__who">' + safeWho + '</span>') : '') +
+        '</span>';
+    var badge = obj.properties.get('_lockBadge');
+    if (!badge) {
+        badge = new ymaps.Placemark(coords, {
+            iconContent: html,
+            hintContent: who ? ('Редактирует: ' + who) : 'Объект занят'
+        }, {
+            iconLayout: 'default#imageWithContent',
+            iconImageHref: LOCK_BADGE_TRANSPARENT_PIXEL,
+            iconImageSize: [1, 1],
+            iconImageOffset: [0, 0],
+            iconContentOffset: [-34, -38],
+            zIndex: 7000,
+            zIndexHover: 7001,
+            cursor: 'default',
+            hasBalloon: false,
+            hasHint: true,
+            interactiveZIndex: true
+        });
+        try {
+            if (badge.options && typeof badge.options.unset === 'function') {
+                badge.options.unset('iconContent');
+            }
+        } catch (eUnset) {}
+        obj.properties.set('_lockBadge', badge);
+        try { myMap.geoObjects.add(badge); } catch (eAdd) {}
+    } else {
+        try {
+            badge.geometry.setCoordinates(coords);
+            badge.properties.set('iconContent', html);
+            badge.properties.set('hintContent', who ? ('Редактирует: ' + who) : 'Объект занят');
+            if (myMap.geoObjects.indexOf(badge) === -1) myMap.geoObjects.add(badge);
+        } catch (eUp) {}
+    }
+}
+
 function applyObjectLocksToMapDraggable() {
-    if (!isEditMode) return;
+    var locks = window.syncRemoteObjectLocks || {};
     objects.forEach(function(o) {
         if (!o || !o.properties || !o.options) return;
         var t = o.properties.get('type');
         if (t === 'cable' || t === 'cableLabel' || t === 'crossGroup' || t === 'nodeGroup' || t === 'region') {
             if (t === 'region') try { o.options.set('draggable', false); } catch (eR) {}
+            removeObjectLockMapBadge(o);
             return;
         }
         var uid = getObjectUniqueId(o);
-        var locked = uid && isObjectLockedByOther(uid);
-        try { o.options.set('draggable', !locked); } catch (e) {}
+        var locked = !!(uid && isObjectLockedByOther(uid));
+        updateObjectLockMapBadge(o, locked, uid ? locks[uid] : null);
+        if (!isEditMode) {
+            try {
+                o.options.set('iconImageOpacity', 1);
+                o.properties.set('_lockedByOther', false);
+            } catch (eView) {}
+            return;
+        }
+        try {
+            o.options.set('draggable', !locked);
+            o.options.set('iconImageOpacity', locked ? 0.45 : 1);
+            o.properties.set('_lockedByOther', locked);
+        } catch (e) {}
     });
 }
 
 window.onSyncObjectLocks = function() {
     applyObjectLocksToMapDraggable();
+    if (typeof window.refreshSyncOnlineListPresence === 'function') {
+        try { window.refreshSyncOnlineListPresence(); } catch (eList) {}
+    }
     if (currentModalObject) {
         var uid = getObjectUniqueId(currentModalObject);
         updateModalLockBanner(uid);
@@ -130,8 +252,6 @@ window.onSyncObjectLocks = function() {
         }
     }
 };
-
-var dragHeldLockId = null;
 
 function getMapRevision(obj) {
     if (!obj || !obj.properties) return 0;
@@ -391,6 +511,10 @@ function saveLinkedMapObjects(objectsToSave) {
 
 function pushSaveDataToSync(opts) {
     opts = opts || {};
+    // add/remove уже ушли как op — не слать полный state (у других map_refresh = пересборка карты).
+    if (opts.addObject || (opts.removeUniqueIds && opts.removeUniqueIds.length) || opts.removeObject) {
+        return;
+    }
     if (opts.syncFull) {
         if (typeof window.syncSendState === 'function') {
             window.syncSendState(opts.state || getSerializedData());
@@ -439,20 +563,80 @@ function pushSaveDataToSync(opts) {
     }
 }
 
+function revertObjectDragToPreStart(obj, lockedBy) {
+    if (!obj || !obj.properties) return;
+    var pre = obj.properties.get('_preDragCoords');
+    if (pre && obj.geometry) {
+        try {
+            obj.geometry.setCoordinates(pre);
+            var label = obj.properties.get('label');
+            if (label && label.geometry) label.geometry.setCoordinates(pre);
+            if (typeof MapPerf !== 'undefined' && MapPerf.updateSpatialPosition) {
+                MapPerf.updateSpatialPosition(obj);
+            }
+            if (typeof updateSelectionPulsePosition === 'function') updateSelectionPulsePosition(obj);
+            if (typeof updateConnectedCables === 'function') updateConnectedCables(obj);
+        } catch (eRev) {}
+    }
+    var uid = getObjectUniqueId(obj);
+    if (uid) releaseDragObjectLock(uid);
+    clearObjectDragStartState(obj);
+    if (typeof MapPerf !== 'undefined' && MapPerf.unpinObject) {
+        try { MapPerf.unpinObject(obj); } catch (eUnpin) {}
+    }
+    if (typeof resumeMapPanAfterPlacementObjectDrag === 'function') {
+        try { resumeMapPanAfterPlacementObjectDrag(); } catch (ePan) {}
+    }
+    window.syncDragInProgress = false;
+    if (typeof showWarning === 'function') {
+        showWarning(
+            lockedBy ? ('Редактирует: ' + lockedBy) : 'Объект сейчас занят другим участником',
+            'Объект занят'
+        );
+    }
+}
+
 function acquireDragObjectLock(obj) {
     if (!obj || !window.syncIsConnected || typeof window.syncRequestObjectLock !== 'function') return;
     var uid = getObjectUniqueId(obj);
-    if (!uid || isObjectLockedByOther(uid)) return;
-    if (myHeldObjectLockId === uid) {
-        dragHeldLockId = uid;
+    if (!uid) return;
+    if (isObjectLockedByOther(uid)) {
+        var locksNow = window.syncRemoteObjectLocks || {};
+        revertObjectDragToPreStart(obj, (locksNow[uid] || {}).displayName);
         return;
     }
-    window.syncRequestObjectLock(uid, function(ok) {
+    if (myHeldObjectLockId === uid) {
+        dragHeldLockId = uid;
+        if (typeof window.syncTouchObjectLock === 'function') window.syncTouchObjectLock(uid);
+        return;
+    }
+    var settled = false;
+    var stillDragging = true;
+    window.syncRequestObjectLock(uid, function(ok, lockedBy) {
+        if (settled) return;
+        settled = true;
         if (ok) {
             dragHeldLockId = uid;
             if (!myHeldObjectLockId) myHeldObjectLockId = uid;
+            if (typeof window.syncTouchObjectLock === 'function') window.syncTouchObjectLock(uid);
+            return;
+        }
+        if (stillDragging || (obj.properties && obj.properties.get('_preDragCoords'))) {
+            revertObjectDragToPreStart(obj, lockedBy);
         }
     });
+    // Drag не блокируется: при позднем ok:false координаты откатятся.
+    obj.properties.set('_dragLockPending', true);
+    var clearPending = function() {
+        stillDragging = false;
+        try { obj.properties.set('_dragLockPending', false); } catch (e) {}
+        try { obj.events.remove('dragend', clearPending); } catch (eRem) {}
+    };
+    try {
+        obj.events.add('dragend', clearPending);
+    } catch (eOnce) {
+        setTimeout(clearPending, 3000);
+    }
 }
 
 function releaseDragObjectLock(uid) {
@@ -470,25 +654,39 @@ window.onSyncOpConflict = function(payload) {
     if (!payload || !payload.uniqueId) return;
     var isOtherEditor = !!(payload.editorClientId && window.syncMyClientId &&
         payload.editorClientId !== window.syncMyClientId);
-    if (payload.data) {
-        var conflictObj = objects.find(function(o) {
-            return o.properties && o.properties.get('uniqueId') === payload.uniqueId;
-        });
-        if (conflictObj) {
-            if (!isOtherEditor) {
-                if (payload.revision != null) setMapRevision(conflictObj, payload.revision);
-            } else {
-                var t = conflictObj.properties.get('type');
-                if (t === 'cable') applySerializedCableToMap(conflictObj, payload.data);
-                else populatePlacemarkFromSerializedData(conflictObj, payload.data);
-            }
+    var conflictObj = objects.find(function(o) {
+        return o.properties && o.properties.get('uniqueId') === payload.uniqueId;
+    });
+    if (conflictObj) {
+        if (payload.revision != null) setMapRevision(conflictObj, payload.revision);
+        if (payload.data) {
+            var t = conflictObj.properties.get('type');
+            if (t === 'cable') applySerializedCableToMap(conflictObj, payload.data);
+            else populatePlacemarkFromSerializedData(conflictObj, payload.data);
         }
     }
-    if (!isOtherEditor) return;
-    if (currentModalObject && getObjectUniqueId(currentModalObject) === payload.uniqueId) {
+    if (isOtherEditor) {
+        var who = (payload.data && payload.data._syncEditorName) || null;
+        var locks = window.syncRemoteObjectLocks || {};
+        var lock = locks[payload.uniqueId];
+        if (!who && lock) who = lock.displayName;
         if (typeof showWarning === 'function') {
-            showWarning('Пока вы редактировали, объект изменил другой участник. Карточка обновлена.', 'Обновление с сервера');
+            showWarning(
+                who
+                    ? ('Объект изменил: ' + who + '. Показана актуальная версия.')
+                    : 'Пока вы редактировали, объект изменил другой участник. Карта обновлена.',
+                'Обновление с сервера'
+            );
         }
+        if (currentModalObject && getObjectUniqueId(currentModalObject) === payload.uniqueId) {
+            refreshObjectModal(currentModalObject);
+        }
+        return;
+    }
+    if (typeof showWarning === 'function') {
+        showWarning('Не удалось сохранить: карта обновлена с сервера.', 'Синхронизация');
+    }
+    if (currentModalObject && getObjectUniqueId(currentModalObject) === payload.uniqueId) {
         refreshObjectModal(currentModalObject);
     }
 };

@@ -504,10 +504,8 @@ function createObject(type, name, coords, options = {}) {
         if (type === 'cabinet' && typeof updateCabinetLabel === 'function') {
             try { updateCabinetLabel(placemark); } catch (eCab) {}
         }
+        // Не remount все регионы (remove+add) — это дергает всю карту при каждом клике.
         if (type !== 'cross' && type !== 'node' && type !== 'cabinet' && !placemarkProperties.cabinetId) {
-            if (window.MapRegions && MapRegions.sendAllRegionsToMapBack) {
-                try { MapRegions.sendAllRegionsToMapBack(myMap, objects); } catch (eReg) {}
-            }
             if (window.MapRegions && MapRegions.removeErrantRegionObjectLabels) {
                 try { MapRegions.removeErrantRegionObjectLabels(myMap, objects); } catch (eReg2) {}
             }

@@ -290,6 +290,9 @@ function deleteObject(obj, opts) {
     if (label) {
         myMap.geoObjects.remove(label);
     }
+    if (typeof removeObjectLockMapBadge === 'function') {
+        try { removeObjectLockMapBadge(obj); } catch (eBadge) {}
+    }
     
     if (objType === 'support' || objType === 'attachment' || isFiberHostType(objType)) {
         var waypointUid = getObjectUniqueId(obj);
@@ -328,6 +331,12 @@ function deleteObject(obj, opts) {
         if (!cable.properties || cable.properties.get('type') !== 'cable') return false;
         if (cable.properties.get('from') === obj || cable.properties.get('to') === obj) return true;
         return false;
+    });
+    var removedUniqueIds = [];
+    if (objUniqueId) removedUniqueIds.push(objUniqueId);
+    cablesToRemove.forEach(function(cable) {
+        var cuid = cable.properties && cable.properties.get('uniqueId');
+        if (cuid) removedUniqueIds.push(cuid);
     });
     
     cablesToRemove.forEach(cable => {
@@ -378,7 +387,9 @@ function deleteObject(obj, opts) {
         if (typeof window.syncSendOp === 'function' && objUniqueId) {
             window.syncSendOp({ type: 'delete_object', uniqueId: objUniqueId });
         }
-        saveData({ skipSync: true, undoLabel: 'удаление', coalesce: false });
+        var saveOpts = { skipSync: true, undoLabel: 'удаление', coalesce: false };
+        if (removedUniqueIds.length) saveOpts.removeUniqueIds = removedUniqueIds;
+        saveData(saveOpts);
         logAction(ActionTypes.DELETE_OBJECT, {
             objectType: objType,
             name: objName
