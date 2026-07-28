@@ -1835,29 +1835,26 @@ function applyOperationToMap(op) {
         return;
     }
     if (op.type === 'delete_object' && op.uniqueId != null) {
-        var toDel = objects.find(function(o) {
-            var t = o.properties && o.properties.get('type');
-            return t && t !== 'cable' && t !== 'cableLabel' && o.properties.get('uniqueId') === op.uniqueId;
-        });
-        if (toDel) {
-            var delType = toDel.properties.get('type');
-            var delGroupKey = null;
-            try {
-                if ((delType === 'cross' || delType === 'node') && toDel.geometry && typeof groupKey === 'function') {
-                    delGroupKey = groupKey(toDel.geometry.getCoordinates());
+        if (typeof applyRemoteDeleteObjectLite === 'function') {
+            applyRemoteDeleteObjectLite(op.uniqueId);
+        } else {
+            var toDel = objects.find(function(o) {
+                var t = o.properties && o.properties.get('type');
+                return t && t !== 'cable' && t !== 'cableLabel' && o.properties.get('uniqueId') === op.uniqueId;
+            });
+            if (toDel) {
+                deleteObject(toDel, {
+                    skipSync: true,
+                    deferMapRefresh: true,
+                    skipConfirmGpon: true,
+                    remoteApply: true
+                });
+                if (typeof scheduleObjectDeleteVisualRefresh === 'function') {
+                    scheduleObjectDeleteVisualRefresh({ statsIdle: true });
                 }
-            } catch (eGk) {}
-            deleteObject(toDel, { skipSync: true, deferMapRefresh: true, skipConfirmGpon: true });
-            var remoteDelPlan = { connectionLines: op.uniqueId };
-            if (delType === 'cross' && delGroupKey) remoteDelPlan.crossGroupKey = delGroupKey;
-            if (delType === 'node' && delGroupKey) remoteDelPlan.nodeGroupKey = delGroupKey;
-            if (typeof scheduleObjectDeleteVisualRefresh === 'function') {
-                scheduleObjectDeleteVisualRefresh(remoteDelPlan);
-            } else {
-                updateStats();
+            } else if (typeof patchLastSavedStateRemoveUniqueIds === 'function') {
+                try { patchLastSavedStateRemoveUniqueIds([op.uniqueId]); } catch (eDelSnap) {}
             }
-        } else if (typeof patchLastSavedStateRemoveUniqueIds === 'function') {
-            try { patchLastSavedStateRemoveUniqueIds([op.uniqueId]); } catch (eDelSnap) {}
         }
         return;
     }
@@ -1956,7 +1953,14 @@ function applyOperationToMap(op) {
         return;
     }
     if (op.type === 'delete_cable' && op.uniqueId != null) {
-        deleteCableByUniqueId(op.uniqueId, { skipSync: true });
+        deleteCableByUniqueId(op.uniqueId, { skipSync: true, deferMapRefresh: true, remoteApply: true });
+        if (typeof purgeConnectionLinesForMissingUid === 'function') {
+            try { purgeConnectionLinesForMissingUid(op.uniqueId); } catch (ePurge) {}
+        }
+        if (typeof scheduleObjectDeleteVisualRefresh === 'function') {
+            scheduleObjectDeleteVisualRefresh({ cableVisualization: true });
+        }
+        return;
     }
 }
 window.applyOperationToMap = applyOperationToMap;

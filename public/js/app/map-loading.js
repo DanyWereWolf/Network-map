@@ -38,10 +38,18 @@ function finishObjectDeleteVisualRefresh(plan) {
         updateCableVisualization({ skipFilter: true });
     }
     if (plan.crossGroupKey != null && typeof updateCrossDisplay === 'function') {
-        updateCrossDisplay(plan.crossGroupKey);
+        var crossScope = plan.crossGroupKey;
+        if (typeof crossScope === 'string') {
+            crossScope = { keys: [crossScope], skipCableUpdate: true, skipFilter: true, full: false };
+        }
+        updateCrossDisplay(crossScope);
     }
     if (plan.nodeGroupKey != null && typeof updateNodeDisplay === 'function') {
-        updateNodeDisplay(plan.nodeGroupKey);
+        var nodeScope = plan.nodeGroupKey;
+        if (typeof nodeScope === 'string') {
+            nodeScope = { keys: [nodeScope], skipCableUpdate: true, skipFilter: true, full: false };
+        }
+        updateNodeDisplay(nodeScope);
     }
     if (plan.connectionLines === 'full') scheduleConnectionLinesUpdate('full');
     else if (plan.connectionLines) scheduleConnectionLinesUpdate(plan.connectionLines);
@@ -53,15 +61,19 @@ function scheduleObjectDeleteVisualRefresh(plan) {
     var runStats = function() {
         if (typeof updateStats === 'function') updateStats();
     };
-    // Разнести тяжёлую работу по кадрам: сначала визуал, потом счётчики.
     if (typeof requestAnimationFrame === 'function') {
         requestAnimationFrame(function() {
             runVisual();
-            requestAnimationFrame(runStats);
+            if (plan.statsIdle) {
+                if (typeof requestIdleCallback === 'function') requestIdleCallback(runStats, { timeout: 800 });
+                else setTimeout(runStats, 50);
+            } else {
+                requestAnimationFrame(runStats);
+            }
         });
     } else {
         setTimeout(runVisual, 0);
-        setTimeout(runStats, 32);
+        setTimeout(runStats, plan.statsIdle ? 50 : 32);
     }
 }
 

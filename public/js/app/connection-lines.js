@@ -758,12 +758,9 @@ function purgeConnectionLinesForMissingUid(uid) {
 
 function rebuildConnectionLinesAfterEndpointDeleted(uid) {
     if (!uid) return;
+    // Только снять линии удалённого endpoint. Полный rebuild (splitter outputs + retarget)
+    // подвешивал карту у других клиентов сразу после remote-delete.
     purgeConnectionLinesForMissingUid(uid);
-    ['onu', 'olt', 'mediaConverter', 'splitter', 'node'].forEach(function(endpointType) {
-        rebuildLinesTargetingEndpoint(uid, endpointType);
-    });
-    rebuildLinesThroughWaypoint(uid);
-    updateSplitterOutputConnectionLines();
 }
 
 window.flushMapConnectionLines = function(pendingUids) {

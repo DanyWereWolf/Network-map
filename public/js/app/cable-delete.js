@@ -80,6 +80,7 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
     if (toObj) {
         removeCableFromUsedFibers(toObj, cableUniqueId);
     }
+    var scrubFiberHostsForCable = function() {
     objects.forEach(function(slot) {
         if (!slot.properties) return;
         var t = slot.properties.get('type');
@@ -212,6 +213,17 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
             }
         }
     });
+    };
+
+    if (opts && opts.remoteApply) {
+        if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(scrubFiberHostsForCable, { timeout: 2000 });
+        } else {
+            setTimeout(scrubFiberHostsForCable, 0);
+        }
+    } else {
+        scrubFiberHostsForCable();
+    }
 
     if (window.CableUnderground) CableUnderground.removeAllCableRouteOverlays(cable);
     myMap.geoObjects.remove(cable);
