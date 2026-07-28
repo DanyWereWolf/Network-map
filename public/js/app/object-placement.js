@@ -73,7 +73,7 @@ function showPlacementCoordsOnMap(coords) {
     var zoom = myMap.getZoom();
     if (typeof zoom !== 'number' || zoom < 17) zoom = 17;
     if (zoom > 19) zoom = 19;
-    try { myMap.setCenter(coords, zoom, { duration: 300 }); } catch (e) {}
+    try { myMap.setCenter(coords, zoom, { duration: typeof mapMotionDuration === 'function' ? mapMotionDuration(300) : 300 }); } catch (e) {}
 }
 
 function previewObjectPlacementCoordsOnMap() {
@@ -528,7 +528,7 @@ function handleAddObject() {
             if (placeObjectAtCoords(formCoords)) {
                 clearObjectPlacementCoordsForm();
                 if (myMap) {
-                    try { myMap.setCenter(formCoords, myMap.getZoom(), { duration: 200 }); } catch (e) {}
+                    try { myMap.setCenter(formCoords, myMap.getZoom(), { duration: typeof mapMotionDuration === 'function' ? mapMotionDuration(200) : 200 }); } catch (e) {}
                 }
             }
             return;
@@ -554,7 +554,7 @@ function handleAddObject() {
             if (placeObjectAtCoords(formCoordsOther)) {
                 clearObjectPlacementCoordsForm();
                 if (myMap) {
-                    try { myMap.setCenter(formCoordsOther, myMap.getZoom(), { duration: 200 }); } catch (e) {}
+                    try { myMap.setCenter(formCoordsOther, myMap.getZoom(), { duration: typeof mapMotionDuration === 'function' ? mapMotionDuration(200) : 200 }); } catch (e) {}
                 }
             }
             return;

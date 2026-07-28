@@ -832,6 +832,12 @@ function resumeRadioBridgeCoveragePulseAnimation() {
     startRadioBridgeCoveragePulseAnimation();
 }
 
+function freezeRadioBridgeCoveragePulses() {
+    radioBridgeCoveragePulseEntries.forEach(function(entry) {
+        applyRadioBridgeCoveragePulseFrame(entry, 0.35);
+    });
+}
+
 function applyRadioBridgeCoveragePulseFrame(entry, phase) {
     if (!entry || !entry.pulseOverlay) return;
     var params = getRadioBridgeCoveragePulseParams(entry.ownerRb);
@@ -857,6 +863,10 @@ function applyRadioBridgeCoveragePulseFrame(entry, phase) {
 function startRadioBridgeCoveragePulseAnimation() {
     stopRadioBridgeCoveragePulseAnimation();
     if (!radioBridgeCoveragePulseEntries.length) return;
+    if (typeof areMapAnimationsEnabled === 'function' && !areMapAnimationsEnabled()) {
+        freezeRadioBridgeCoveragePulses();
+        return;
+    }
     var startedAt = performance.now();
     radioBridgeCoveragePulseAnim = { rafId: null };
 

@@ -184,8 +184,8 @@ function goToSearchResult(result) {
         if (ring.length >= 3) {
             var lats = ring.map(function(c) { return c[0]; });
             var lons = ring.map(function(c) { return c[1]; });
-            myMap.setBounds([[Math.min.apply(null, lats), Math.min.apply(null, lons)], [Math.max.apply(null, lats), Math.max.apply(null, lons)]], { checkZoomRange: true, duration: 500 });
-            setTimeout(function() { focusRegionOnMap(obj); }, 600);
+            myMap.setBounds([[Math.min.apply(null, lats), Math.min.apply(null, lons)], [Math.max.apply(null, lats), Math.max.apply(null, lons)]], { checkZoomRange: true, duration: typeof mapMotionDuration === 'function' ? mapMotionDuration(500) : 500 });
+            setTimeout(function() { focusRegionOnMap(obj); }, typeof mapMotionDuration === 'function' && mapMotionDuration(500) === 0 ? 0 : 600);
             searchInput.value = '';
             var clearElR = document.getElementById('clearSearch');
             if (clearElR) clearElR.style.display = 'none';
@@ -203,7 +203,7 @@ function goToSearchResult(result) {
     }
     if (!coords) return;
     if (typeof mapGeoPin === 'function') mapGeoPin(obj);
-    myMap.setCenter(coords, 21, { duration: 500 });
+    myMap.setCenter(coords, 21, { duration: typeof mapMotionDuration === 'function' ? mapMotionDuration(500) : 500 });
     setTimeout(function() {
         if (result.type === 'cable') showCableInfo(obj);
         else if (result.type === 'support' || result.type === 'attachment' || result.type === 'manhole') showSupportInfo(obj);

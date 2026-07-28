@@ -494,7 +494,7 @@ function showObjectOnMap(uniqueId) {
         showWarning('Не удалось получить координаты объекта', 'Навигация');
         return;
     }
-    myMap.setCenter(coords, 21, { duration: 300 });
+    myMap.setCenter(coords, 21, { duration: typeof mapMotionDuration === 'function' ? mapMotionDuration(300) : 300 });
     if (objType !== 'cable') {
         var originalPreset = obj.options.get('preset');
         obj.options.set('preset', 'islands#redCircleDotIcon');

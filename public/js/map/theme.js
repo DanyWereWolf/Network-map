@@ -52,6 +52,73 @@ function prefersReducedMotion() {
     return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 }
 
+var MAP_ANIMATIONS_STORAGE_KEY = 'networkMap_mapAnimations';
+
+function readMapAnimationsPreference() {
+    try {
+        var saved = localStorage.getItem(MAP_ANIMATIONS_STORAGE_KEY);
+        if (saved === '0' || saved === 'false') return false;
+        if (saved === '1' || saved === 'true') return true;
+    } catch (e) {}
+    return null;
+}
+
+/** Анимации на карте: пульсации, плавный pan/zoom. Без явной настройки — как prefers-reduced-motion. */
+function areMapAnimationsEnabled() {
+    var pref = readMapAnimationsPreference();
+    if (pref !== null) return pref;
+    return !prefersReducedMotion();
+}
+
+function mapMotionDuration(ms) {
+    var n = typeof ms === 'number' && ms > 0 ? ms : 0;
+    return areMapAnimationsEnabled() ? n : 0;
+}
+
+function applyMapAnimationsPreference(enabled) {
+    document.documentElement.classList.toggle('map-animations-off', !enabled);
+    if (enabled) {
+        if (typeof startRadioBridgeCoveragePulseAnimation === 'function') {
+            startRadioBridgeCoveragePulseAnimation();
+        }
+        if (typeof restartGponRoutingPulseAnimationIfNeeded === 'function') {
+            restartGponRoutingPulseAnimationIfNeeded();
+        }
+    } else {
+        if (typeof pauseRadioBridgeCoveragePulseAnimation === 'function') {
+            pauseRadioBridgeCoveragePulseAnimation();
+        }
+        if (typeof freezeRadioBridgeCoveragePulses === 'function') {
+            freezeRadioBridgeCoveragePulses();
+        }
+        if (typeof freezeGponRoutingPulseAnimation === 'function') {
+            freezeGponRoutingPulseAnimation();
+        }
+    }
+}
+
+function setMapAnimationsEnabled(enabled) {
+    enabled = !!enabled;
+    try { localStorage.setItem(MAP_ANIMATIONS_STORAGE_KEY, enabled ? '1' : '0'); } catch (e) {}
+    applyMapAnimationsPreference(enabled);
+    var el = document.getElementById('mapAnimationsToggle');
+    if (el && el.checked !== enabled) el.checked = enabled;
+    return enabled;
+}
+
+function initMapAnimationsToggle() {
+    var enabled = areMapAnimationsEnabled();
+    document.documentElement.classList.toggle('map-animations-off', !enabled);
+    var el = document.getElementById('mapAnimationsToggle');
+    if (!el) return;
+    el.checked = enabled;
+    if (el.dataset.bound === '1') return;
+    el.dataset.bound = '1';
+    el.addEventListener('change', function() {
+        setMapAnimationsEnabled(el.checked);
+    });
+}
+
 function runThemeTransition(applyFn) {
     if (prefersReducedMotion()) {
         applyFn();
@@ -70,6 +137,7 @@ function initTheme() {
     const themeToggle = document.getElementById('themeToggle');
     setTheme(resolveInitialTheme(), { syncServer: false });
     if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
+    initMapAnimationsToggle();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
         if (userHasExplicitThemePreference()) return;
         applyThemeToDocument(e.matches ? 'dark' : 'light');
@@ -132,3 +200,8 @@ function toggleTheme() {
 
 window.getThemeStorageKey = getThemeStorageKey;
 window.resolveInitialTheme = resolveInitialTheme;
+window.prefersReducedMotion = prefersReducedMotion;
+window.areMapAnimationsEnabled = areMapAnimationsEnabled;
+window.mapMotionDuration = mapMotionDuration;
+window.setMapAnimationsEnabled = setMapAnimationsEnabled;
+window.initMapAnimationsToggle = initMapAnimationsToggle;

@@ -336,7 +336,7 @@ function focusRegionOnMap(regionObj) {
     var lons = ring.map(function(c) { return c[1]; });
     myMap.setBounds(
         [[Math.min.apply(null, lats), Math.min.apply(null, lons)], [Math.max.apply(null, lats), Math.max.apply(null, lons)]],
-        { checkZoomRange: true, duration: 300 }
+        { checkZoomRange: true, duration: typeof mapMotionDuration === 'function' ? mapMotionDuration(300) : 300 }
     );
 }
 

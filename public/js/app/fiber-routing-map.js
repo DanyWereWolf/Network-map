@@ -62,6 +62,33 @@ function stopGponRoutingPulseAnimation() {
     gponRoutingHighlightAnimState = null;
 }
 
+var gponRoutingPulseEntriesCached = null;
+
+function freezeGponRoutingPulseAnimation() {
+    var pulses = (gponRoutingHighlightAnimState && gponRoutingHighlightAnimState.pulses) || gponRoutingPulseEntriesCached;
+    if (gponRoutingHighlightAnimState && gponRoutingHighlightAnimState.rafId) {
+        cancelAnimationFrame(gponRoutingHighlightAnimState.rafId);
+    }
+    gponRoutingHighlightAnimState = null;
+    if (!pulses || !pulses.length) return;
+    gponRoutingPulseEntriesCached = pulses;
+    pulses.forEach(function(entry) {
+        if (!entry || !entry.pulseCircle || !entry.pulseCircle.geometry) return;
+        try {
+            entry.pulseCircle.geometry.setRadius(entry.baseRadius);
+            entry.pulseCircle.options.set({
+                fillOpacity: 0.2,
+                strokeOpacity: 0.55
+            });
+        } catch (ePulse) {}
+    });
+}
+
+function restartGponRoutingPulseAnimationIfNeeded() {
+    if (!gponRoutingPulseEntriesCached || !gponRoutingPulseEntriesCached.length) return;
+    startGponRoutingPulseAnimation(gponRoutingPulseEntriesCached);
+}
+
 function routingHighlightColorRgb(hex) {
     var h = String(hex || '#3b82f6').replace('#', '');
     if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
@@ -73,6 +100,11 @@ function routingHighlightColorRgb(hex) {
 function startGponRoutingPulseAnimation(pulseEntries) {
     stopGponRoutingPulseAnimation();
     if (!pulseEntries || !pulseEntries.length) return;
+    gponRoutingPulseEntriesCached = pulseEntries;
+    if (typeof areMapAnimationsEnabled === 'function' && !areMapAnimationsEnabled()) {
+        freezeGponRoutingPulseAnimation();
+        return;
+    }
     var startedAt = performance.now();
     gponRoutingHighlightAnimState = { pulses: pulseEntries, rafId: null };
 
@@ -99,6 +131,7 @@ function startGponRoutingPulseAnimation(pulseEntries) {
 
 function clearGponRoutingMapHighlight() {
     stopGponRoutingPulseAnimation();
+    gponRoutingPulseEntriesCached = null;
     if (Array.isArray(gponRoutingHighlightMarkers)) {
         gponRoutingHighlightMarkers.forEach(function(m) {
             try { if (myMap) myMap.geoObjects.remove(m); } catch (e) {}
@@ -184,15 +217,15 @@ function applyGponRoutingMapHighlight(sourceObj, targetObj) {
             myMap.setBounds(ymaps.util.bounds.fromPoints(points), {
                 checkZoomRange: true,
                 zoomMargin: [70, 70, 70, 70],
-                duration: 350
+                duration: typeof mapMotionDuration === 'function' ? mapMotionDuration(350) : 350
             });
         } catch (eB) {
-            if (cTarget) myMap.setCenter(cTarget, Math.max(myMap.getZoom(), 17), { duration: 300 });
+            if (cTarget) myMap.setCenter(cTarget, Math.max(myMap.getZoom(), 17), { duration: typeof mapMotionDuration === 'function' ? mapMotionDuration(300) : 300 });
         }
     } else if (cTarget) {
-        myMap.setCenter(cTarget, Math.max(myMap.getZoom(), 17), { duration: 300 });
+        myMap.setCenter(cTarget, Math.max(myMap.getZoom(), 17), { duration: typeof mapMotionDuration === 'function' ? mapMotionDuration(300) : 300 });
     } else if (cSource) {
-        myMap.setCenter(cSource, Math.max(myMap.getZoom(), 17), { duration: 300 });
+        myMap.setCenter(cSource, Math.max(myMap.getZoom(), 17), { duration: typeof mapMotionDuration === 'function' ? mapMotionDuration(300) : 300 });
     }
 }
 
