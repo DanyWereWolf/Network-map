@@ -394,6 +394,9 @@ function deleteObject(obj, opts) {
             objectType: objType,
             name: objName
         });
+    } else if (removedUniqueIds.length && typeof patchLastSavedStateRemoveUniqueIds === 'function') {
+        // Remote delete: обновить снимок undo без полной сериализации карты.
+        try { patchLastSavedStateRemoveUniqueIds(removedUniqueIds); } catch (ePatch) {}
     }
     if (!(opts && opts.deferMapRefresh)) {
         var refreshPlan = {};

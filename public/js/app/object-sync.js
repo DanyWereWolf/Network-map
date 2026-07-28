@@ -212,17 +212,29 @@ function updateObjectLockMapBadge(obj, locked, lockInfo) {
 
 function applyObjectLocksToMapDraggable() {
     var locks = window.syncRemoteObjectLocks || {};
+    var lockUids = Object.keys(locks);
+    var myId = window.syncMyClientId;
+    var hasRemoteLocks = false;
+    for (var li = 0; li < lockUids.length; li++) {
+        var lk = locks[lockUids[li]];
+        if (lk && lk.clientId && (!myId || lk.clientId !== myId)) {
+            hasRemoteLocks = true;
+            break;
+        }
+    }
     objects.forEach(function(o) {
         if (!o || !o.properties || !o.options) return;
         var t = o.properties.get('type');
         if (t === 'cable' || t === 'cableLabel' || t === 'crossGroup' || t === 'nodeGroup' || t === 'region') {
             if (t === 'region') try { o.options.set('draggable', false); } catch (eR) {}
-            removeObjectLockMapBadge(o);
+            if (!hasRemoteLocks) removeObjectLockMapBadge(o);
             return;
         }
         var uid = getObjectUniqueId(o);
         var locked = !!(uid && isObjectLockedByOther(uid));
-        updateObjectLockMapBadge(o, locked, uid ? locks[uid] : null);
+        if (locked || o.properties.get('_lockBadge') || o.properties.get('_lockedByOther')) {
+            updateObjectLockMapBadge(o, locked, uid ? locks[uid] : null);
+        }
         if (!isEditMode) {
             try {
                 o.options.set('iconImageOpacity', 1);

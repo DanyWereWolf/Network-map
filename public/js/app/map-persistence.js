@@ -622,17 +622,46 @@ function clearUndoRedoStacks() {
 
 function invalidateUndoAfterRemoteChange() {
     clearUndoRedoStacks();
+    // Не сериализовать всю карту на каждый op — это подвешивает UI на больших картах.
+    // lastSavedState патчится точечно в applyOperationToMap / deleteObject(skipSync).
     if (_remoteUndoInvalidateTimer) clearTimeout(_remoteUndoInvalidateTimer);
     _remoteUndoInvalidateTimer = setTimeout(function() {
         _remoteUndoInvalidateTimer = null;
-        if (inUndoRedo) return;
-        try {
-            lastSavedState = cloneMapSnapshot(getSerializedData());
-        } catch (eInv) {}
         if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
     }, 0);
 }
 window.invalidateUndoAfterRemoteChange = invalidateUndoAfterRemoteChange;
+
+function patchLastSavedStateRemoveUniqueIds(removeUniqueIds) {
+    if (!Array.isArray(lastSavedState) || !removeUniqueIds || !removeUniqueIds.length) return false;
+    var filtered = filterSnapshotByRemovedUids(lastSavedState, removeUniqueIds);
+    if (!filtered) return false;
+    lastSavedState = filtered;
+    return true;
+}
+
+function patchLastSavedStateAddItem(item) {
+    if (!item || item.uniqueId == null || item.uniqueId === '') return false;
+    if (!Array.isArray(lastSavedState)) return false;
+    var uid = String(item.uniqueId);
+    for (var i = 0; i < lastSavedState.length; i++) {
+        if (lastSavedState[i] && String(lastSavedState[i].uniqueId) === uid) {
+            lastSavedState[i] = cloneMapSnapshot(item);
+            return true;
+        }
+    }
+    lastSavedState = lastSavedState.concat([cloneMapSnapshot(item)]);
+    return true;
+}
+
+function patchLastSavedStateUpdateItem(item) {
+    if (!item || item.uniqueId == null || item.uniqueId === '') return false;
+    if (!Array.isArray(lastSavedState)) return false;
+    var patched = patchSnapshotItems(lastSavedState, [item]);
+    if (!patched) return false;
+    lastSavedState = patched;
+    return true;
+}
 
 function filterSnapshotByRemovedUids(snapshot, removeUniqueIds) {
     if (!Array.isArray(snapshot) || !removeUniqueIds || !removeUniqueIds.length) return null;
@@ -1776,6 +1805,12 @@ function applyOperationToMap(op) {
         mapPerfRegister(newObj);
         if (newObj.properties.get('type') !== 'cross' && newObj.properties.get('type') !== 'node') mapGeoAdd(newObj);
         refreshRemoteObjectVisuals(newObj);
+        if (typeof patchLastSavedStateAddItem === 'function') {
+            try {
+                var addSer = typeof serializeMapItemFromObject === 'function' ? serializeMapItemFromObject(newObj) : op.data;
+                if (addSer) patchLastSavedStateAddItem(addSer);
+            } catch (eAddSnap) {}
+        }
         updateStats();
         return;
     }
@@ -1785,6 +1820,12 @@ function applyOperationToMap(op) {
             populatePlacemarkFromSerializedData(objUp, op.data);
             if (op.data.type !== 'region') updateConnectedCables(objUp);
             refreshRemoteObjectVisuals(objUp);
+            if (typeof patchLastSavedStateUpdateItem === 'function') {
+                try {
+                    var upSer = typeof serializeMapItemFromObject === 'function' ? serializeMapItemFromObject(objUp) : op.data;
+                    if (upSer) patchLastSavedStateUpdateItem(upSer);
+                } catch (eUpSnap) {}
+            }
             updateStats();
             if (currentModalObject === objUp && typeof refreshObjectModal === 'function' &&
                 !(typeof shouldSkipRemoteModalRefresh === 'function' && shouldSkipRemoteModalRefresh(objUp))) {
@@ -1798,7 +1839,26 @@ function applyOperationToMap(op) {
             var t = o.properties && o.properties.get('type');
             return t && t !== 'cable' && t !== 'cableLabel' && o.properties.get('uniqueId') === op.uniqueId;
         });
-        if (toDel) deleteObject(toDel, { skipSync: true });
+        if (toDel) {
+            var delType = toDel.properties.get('type');
+            var delGroupKey = null;
+            try {
+                if ((delType === 'cross' || delType === 'node') && toDel.geometry && typeof groupKey === 'function') {
+                    delGroupKey = groupKey(toDel.geometry.getCoordinates());
+                }
+            } catch (eGk) {}
+            deleteObject(toDel, { skipSync: true, deferMapRefresh: true, skipConfirmGpon: true });
+            var remoteDelPlan = { connectionLines: op.uniqueId };
+            if (delType === 'cross' && delGroupKey) remoteDelPlan.crossGroupKey = delGroupKey;
+            if (delType === 'node' && delGroupKey) remoteDelPlan.nodeGroupKey = delGroupKey;
+            if (typeof scheduleObjectDeleteVisualRefresh === 'function') {
+                scheduleObjectDeleteVisualRefresh(remoteDelPlan);
+            } else {
+                updateStats();
+            }
+        } else if (typeof patchLastSavedStateRemoveUniqueIds === 'function') {
+            try { patchLastSavedStateRemoveUniqueIds([op.uniqueId]); } catch (eDelSnap) {}
+        }
         return;
     }
     if (op.type === 'add_cable' && op.data) {
