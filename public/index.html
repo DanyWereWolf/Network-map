@@ -86,6 +86,25 @@
     <link rel="stylesheet" href="css/android-app.css">
     <link rel="stylesheet" href="css/cookie-consent.css">
     <link rel="stylesheet" href="css/maintenance-notice.css">
+    <style>
+        /* Мгновенный полноэкранный вход до загрузки CSS */
+        .app-entrance {
+            position: fixed;
+            inset: 0;
+            z-index: 2000000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #0b1220;
+        }
+        html[data-theme="light"] .app-entrance { background: #f1f5f9; }
+        .app-entrance[hidden],
+        .app-entrance.is-hidden { display: none !important; }
+        html.app-entrance-active,
+        html.app-entrance-active body {
+            overflow: hidden !important;
+        }
+    </style>
     <!-- Защита от копирования -->
     <script>
         // Контекстное меню не блокируем
@@ -123,6 +142,30 @@
     </style>
 </head>
 <body>
+    <!-- Полноэкранный вход после логина / при открытии карты -->
+    <div id="appEntranceOverlay" class="app-entrance" role="status" aria-live="polite" aria-busy="true" aria-label="Загрузка приложения">
+        <div class="app-entrance__bg" aria-hidden="true">
+            <div class="app-entrance__orb app-entrance__orb--a"></div>
+            <div class="app-entrance__orb app-entrance__orb--b"></div>
+            <div class="app-entrance__mesh"></div>
+        </div>
+        <div class="app-entrance__stage">
+            <div class="app-entrance__mark" aria-hidden="true">
+                <svg class="app-entrance__mark-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path class="app-entrance__pin" d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                    <circle class="app-entrance__dot" cx="12" cy="10" r="3"></circle>
+                </svg>
+            </div>
+            <p class="app-entrance__greet" id="appEntranceGreet" hidden></p>
+            <h1 class="app-entrance__brand">Volsmap</h1>
+            <p class="app-entrance__tagline">Карта оптической сети</p>
+            <div class="app-entrance__bar" aria-hidden="true">
+                <span class="app-entrance__bar-fill"></span>
+            </div>
+            <p class="app-entrance__status map-loading-text">Загрузка карты…</p>
+        </div>
+    </div>
+    <script>document.documentElement.classList.add('app-entrance-active');</script>
     <!-- Верхняя панель на всю ширину -->
     <header class="top-header">
         <div class="top-header-content">
@@ -1271,7 +1314,7 @@
         </button>
 
         <div class="map-area-wrapper" id="mapAreaWrapper">
-            <div id="mapLoadingOverlay" class="map-loading-overlay" aria-live="polite" aria-busy="true">
+            <div id="mapLoadingOverlay" class="map-loading-overlay is-hidden" hidden aria-live="polite" aria-busy="false">
                 <div class="map-loading-content">
                     <span class="map-loading-spinner" aria-hidden="true"></span>
                     <p class="map-loading-text">Загрузка карты…</p>

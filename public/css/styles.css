@@ -5315,6 +5315,309 @@ body.edit-mode-active:not(.underground-draw-active) .map-area-wrapper::after {
     to { transform: rotate(360deg); }
 }
 
+/* ==================== Полноэкранный вход (после логина) ==================== */
+.app-entrance {
+    position: fixed;
+    inset: 0;
+    z-index: 2000000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: #0b1220;
+    color: #e2e8f0;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+html[data-theme="light"] .app-entrance {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+.app-entrance[hidden],
+.app-entrance.is-hidden {
+    display: none !important;
+}
+
+.app-entrance__bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.app-entrance__orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(64px);
+    opacity: 0.55;
+    animation: appEntranceOrb 8s ease-in-out infinite alternate;
+}
+
+.app-entrance__orb--a {
+    width: min(52vw, 420px);
+    height: min(52vw, 420px);
+    top: -8%;
+    left: -6%;
+    background: radial-gradient(circle, rgba(37, 99, 235, 0.55) 0%, transparent 70%);
+}
+
+.app-entrance__orb--b {
+    width: min(48vw, 380px);
+    height: min(48vw, 380px);
+    right: -8%;
+    bottom: -10%;
+    background: radial-gradient(circle, rgba(5, 150, 105, 0.42) 0%, transparent 70%);
+    animation-delay: -2.5s;
+}
+
+.app-entrance__mesh {
+    position: absolute;
+    inset: 0;
+    opacity: 0.22;
+    background-image:
+        linear-gradient(rgba(148, 163, 184, 0.18) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.18) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, #000 20%, transparent 75%);
+}
+
+.app-entrance__stage {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 32px 24px;
+    max-width: 420px;
+}
+
+.app-entrance__mark {
+    width: 88px;
+    height: 88px;
+    border-radius: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    background: linear-gradient(145deg, #3b82f6 0%, #2563eb 48%, #1d4ed8 100%);
+    box-shadow:
+        0 18px 40px rgba(29, 78, 216, 0.35),
+        0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+    margin-bottom: 22px;
+    opacity: 0;
+    transform: scale(0.72) translateY(12px);
+    animation: appEntranceMarkIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.08s forwards;
+}
+
+.app-entrance__mark-svg {
+    width: 44px;
+    height: 44px;
+}
+
+.app-entrance__pin {
+    stroke-dasharray: 72;
+    stroke-dashoffset: 72;
+    animation: appEntranceDraw 0.85s ease 0.35s forwards;
+}
+
+.app-entrance__dot {
+    opacity: 0;
+    transform-origin: 12px 10px;
+    animation: appEntranceDot 0.4s ease 0.95s forwards;
+}
+
+.app-entrance__greet {
+    margin: 0 0 8px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    color: #93c5fd;
+    opacity: 0;
+    transform: translateY(8px);
+    animation: appEntranceFadeUp 0.55s ease 0.35s forwards;
+}
+
+html[data-theme="light"] .app-entrance__greet {
+    color: #1d4ed8;
+}
+
+.app-entrance__brand {
+    margin: 0;
+    font-size: clamp(1.85rem, 4.5vw, 2.35rem);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    opacity: 0;
+    transform: translateY(10px);
+    animation: appEntranceFadeUp 0.6s ease 0.28s forwards;
+}
+
+.app-entrance__tagline {
+    margin: 10px 0 0;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #94a3b8;
+    opacity: 0;
+    transform: translateY(8px);
+    animation: appEntranceFadeUp 0.55s ease 0.42s forwards;
+}
+
+html[data-theme="light"] .app-entrance__tagline {
+    color: #64748b;
+}
+
+.app-entrance__bar {
+    width: min(220px, 56vw);
+    height: 3px;
+    margin-top: 28px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(148, 163, 184, 0.22);
+    opacity: 0;
+    animation: appEntranceFadeUp 0.45s ease 0.55s forwards;
+}
+
+.app-entrance__bar-fill {
+    display: block;
+    height: 100%;
+    width: 35%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #2563eb, #059669);
+    animation: appEntranceBar 1.35s ease-in-out infinite;
+}
+
+.app-entrance__status {
+    margin: 14px 0 0;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #94a3b8;
+    min-height: 1.25em;
+    opacity: 0;
+    animation: appEntranceFadeUp 0.45s ease 0.65s forwards;
+}
+
+html[data-theme="light"] .app-entrance__status {
+    color: #64748b;
+}
+
+.app-entrance.is-leaving {
+    pointer-events: none;
+    animation: appEntranceLeave 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.app-entrance.is-leaving .app-entrance__stage {
+    animation: appEntranceStageLeave 0.55s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.app-entrance--reduced .app-entrance__mark,
+.app-entrance--reduced .app-entrance__greet,
+.app-entrance--reduced .app-entrance__brand,
+.app-entrance--reduced .app-entrance__tagline,
+.app-entrance--reduced .app-entrance__bar,
+.app-entrance--reduced .app-entrance__status,
+.app-entrance--reduced .app-entrance__pin,
+.app-entrance--reduced .app-entrance__dot,
+.app-entrance--reduced .app-entrance__orb {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+}
+
+.app-entrance--reduced .app-entrance__pin {
+    stroke-dashoffset: 0;
+}
+
+.app-entrance--reduced .app-entrance__bar-fill {
+    animation: none;
+    width: 70%;
+}
+
+@keyframes appEntranceMarkIn {
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+@keyframes appEntranceFadeUp {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes appEntranceDraw {
+    to { stroke-dashoffset: 0; }
+}
+
+@keyframes appEntranceDot {
+    from {
+        opacity: 0;
+        transform: scale(0.4);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes appEntranceBar {
+    0% { transform: translateX(-120%); }
+    100% { transform: translateX(320%); }
+}
+
+@keyframes appEntranceOrb {
+    from { transform: translate(0, 0) scale(1); }
+    to { transform: translate(18px, 12px) scale(1.08); }
+}
+
+@keyframes appEntranceLeave {
+    to {
+        opacity: 0;
+        visibility: hidden;
+    }
+}
+
+@keyframes appEntranceStageLeave {
+    to {
+        opacity: 0;
+        transform: scale(1.04) translateY(-8px);
+        filter: blur(6px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .app-entrance__mark,
+    .app-entrance__greet,
+    .app-entrance__brand,
+    .app-entrance__tagline,
+    .app-entrance__bar,
+    .app-entrance__status,
+    .app-entrance__pin,
+    .app-entrance__dot,
+    .app-entrance__orb,
+    .app-entrance__bar-fill,
+    .app-entrance.is-leaving,
+    .app-entrance.is-leaving .app-entrance__stage {
+        animation: none !important;
+        opacity: 1;
+        transform: none;
+        filter: none;
+    }
+
+    .app-entrance__pin {
+        stroke-dashoffset: 0;
+    }
+
+    .app-entrance.is-leaving {
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.12s ease;
+    }
+}
+
 /* ==================== РЎРєСЂРѕР»Р»Р±Р°СЂ ==================== */
 .sidebar-content::-webkit-scrollbar {
     width: 8px;

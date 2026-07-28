@@ -1,5 +1,5 @@
 /**
- * Индикатор загрузки карты и отложенная подгрузка скриптов.
+ * Индикатор загрузки карты, экран входа и отложенная подгрузка скриптов.
  */
 var _mapInitialLoadPending = true;
 var _mapTilesReady = false;
@@ -13,6 +13,11 @@ var MAP_BULK_IMPORT_CABLE_BATCH_SIZE = 40;
 var MAP_UNDO_REDO_BATCH_MIN = 1;
 var MAP_UNDO_REDO_BATCH_SIZE = 50;
 var INCREMENTAL_UNDO_MAX_CHANGES = 50;
+
+var _entranceStartedAt = 0;
+var _entranceExitStarted = false;
+var APP_ENTRANCE_MIN_MS = 2000;
+var APP_ENTRANCE_EXIT_MS = 620;
 
 function isMapBulkImportActive() {
     return !!_mapBulkImportActive;
@@ -40,6 +45,72 @@ function scheduleObjectDeleteVisualRefresh(plan) {
     var run = function() { finishObjectDeleteVisualRefresh(plan); };
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
     else setTimeout(run, 0);
+}
+
+function isAppEntranceActive() {
+    var el = document.getElementById('appEntranceOverlay');
+    return !!(el && !el.hasAttribute('hidden') && !el.classList.contains('is-hidden') && !el.classList.contains('is-leaving'));
+}
+
+function initAppEntrance() {
+    var el = document.getElementById('appEntranceOverlay');
+    if (!el) return;
+    _entranceStartedAt = Date.now();
+    document.documentElement.classList.add('app-entrance-active');
+    el.removeAttribute('hidden');
+    el.classList.remove('is-hidden', 'is-leaving');
+    el.setAttribute('aria-busy', 'true');
+
+    var justLoggedIn = false;
+    try {
+        justLoggedIn = sessionStorage.getItem('networkMap_justLoggedIn') === '1';
+        if (justLoggedIn) sessionStorage.removeItem('networkMap_justLoggedIn');
+    } catch (eFlag) {}
+
+    if (justLoggedIn) {
+        el.classList.add('app-entrance--welcome');
+        APP_ENTRANCE_MIN_MS = 2200;
+        var greet = document.getElementById('appEntranceGreet');
+        var name = '';
+        try {
+            var session = (typeof getStoredSession === 'function')
+                ? getStoredSession()
+                : (typeof AuthSystem !== 'undefined' && AuthSystem.getCurrentSession
+                    ? AuthSystem.getCurrentSession()
+                    : null);
+            if (session) name = String(session.fullName || session.username || '').trim();
+        } catch (eName) {}
+        if (greet) {
+            greet.hidden = false;
+            greet.textContent = name ? ('Добро пожаловать, ' + name) : 'Добро пожаловать';
+        }
+    } else {
+        APP_ENTRANCE_MIN_MS = 1100;
+    }
+
+    var reduceMotion = false;
+    try {
+        reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    } catch (eMotion) {}
+    if (reduceMotion) {
+        APP_ENTRANCE_MIN_MS = Math.min(APP_ENTRANCE_MIN_MS, 400);
+        APP_ENTRANCE_EXIT_MS = 120;
+        el.classList.add('app-entrance--reduced');
+    }
+}
+
+function hideAppEntranceOverlay() {
+    var el = document.getElementById('appEntranceOverlay');
+    if (!el || _entranceExitStarted) return;
+    _entranceExitStarted = true;
+    el.classList.add('is-leaving');
+    el.setAttribute('aria-busy', 'false');
+    setTimeout(function() {
+        el.setAttribute('hidden', '');
+        el.classList.add('is-hidden');
+        el.classList.remove('is-leaving');
+        document.documentElement.classList.remove('app-entrance-active');
+    }, APP_ENTRANCE_EXIT_MS);
 }
 
 function hideMapLoadingOverlay() {
@@ -72,8 +143,11 @@ function resetMapConnectionLineCaches() {
 }
 
 function setMapLoadingOverlayText(text) {
-    var el = document.querySelector('#mapLoadingOverlay .map-loading-text');
-    if (el && text) el.textContent = text;
+    if (!text) return;
+    var mapText = document.querySelector('#mapLoadingOverlay .map-loading-text');
+    if (mapText) mapText.textContent = text;
+    var entranceText = document.querySelector('#appEntranceOverlay .map-loading-text');
+    if (entranceText && isAppEntranceActive()) entranceText.textContent = text;
 }
 window.setMapLoadingOverlayText = setMapLoadingOverlayText;
 
@@ -105,17 +179,13 @@ function scheduleBackgroundAppScripts() {
     }
 }
 
-function tryCompleteMapInitialLoad() {
-    if (!_mapInitialLoadPending) return;
-    if (!_mapTilesReady || !_mapDataReady) return;
-    _mapInitialLoadPending = false;
-    if (_mapLoadSafetyTimer) {
-        clearTimeout(_mapLoadSafetyTimer);
-        _mapLoadSafetyTimer = null;
-    }
+function finishMapInitialReveal() {
     scheduleBackgroundAppScripts();
     requestAnimationFrame(function() {
         requestAnimationFrame(function() {
+            var status = document.querySelector('#appEntranceOverlay .map-loading-text');
+            if (status) status.textContent = 'Готово';
+            hideAppEntranceOverlay();
             hideMapLoadingOverlay();
             if (typeof isNetworkMapMobileViewOnly === 'function' && isNetworkMapMobileViewOnly()) {
                 if (myMap && myMap.container) {
@@ -128,6 +198,20 @@ function tryCompleteMapInitialLoad() {
             }
         });
     });
+}
+
+function tryCompleteMapInitialLoad() {
+    if (!_mapInitialLoadPending) return;
+    if (!_mapTilesReady || !_mapDataReady) return;
+    _mapInitialLoadPending = false;
+    if (_mapLoadSafetyTimer) {
+        clearTimeout(_mapLoadSafetyTimer);
+        _mapLoadSafetyTimer = null;
+    }
+    var started = _entranceStartedAt || Date.now();
+    var elapsed = Date.now() - started;
+    var wait = Math.max(0, APP_ENTRANCE_MIN_MS - elapsed);
+    setTimeout(finishMapInitialReveal, wait);
 }
 
 function startMapLoadSafetyTimeout() {
@@ -168,3 +252,5 @@ function hidePanoramaLayerMenuItem() {
         }
     }
 }
+
+initAppEntrance();

@@ -829,9 +829,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 showMessage('Введите 6-значный код', 'error');
                 return;
             }
-            Promise.resolve(verifyLoginTotp(pendingLoginId, code, pendingLoginRememberMe)).then(function(result) {
+                    Promise.resolve(verifyLoginTotp(pendingLoginId, code, pendingLoginRememberMe)).then(function(result) {
                 if (result.success) {
                     syncNativeAndroidSession();
+                    try { sessionStorage.setItem('networkMap_justLoggedIn', '1'); } catch (eFlag) {}
                     showMessage('Вход выполнен успешно! Перенаправление...', 'success');
                     setTimeout(function() {
                         var u = result.user || {};
@@ -840,7 +841,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         } else {
                             window.location.href = 'index.html';
                         }
-                    }, 1000);
+                    }, 600);
                 } else {
                     showMessage(result.error, 'error');
                 }
@@ -858,6 +859,7 @@ document.addEventListener('DOMContentLoaded', function() {
             Promise.resolve(loginUser(username, password, rememberMe)).then(function(result) {
                 if (result.success) {
                     syncNativeAndroidSession();
+                    try { sessionStorage.setItem('networkMap_justLoggedIn', '1'); } catch (eFlag) {}
                     showMessage('Вход выполнен успешно! Перенаправление...', 'success');
                     setTimeout(function() {
                         var u = result.user || {};
@@ -866,7 +868,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         } else {
                             window.location.href = 'index.html';
                         }
-                    }, 1000);
+                    }, 600);
                 } else if (result.requiresTotp && result.pendingLoginId) {
                     pendingLoginId = result.pendingLoginId;
                     pendingLoginRememberMe = rememberMe;
