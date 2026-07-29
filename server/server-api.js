@@ -18,6 +18,7 @@ const supportBot = require('./lib/support-bot');
 const mail = require('./lib/mail');
 const passwordReset = require('./lib/password-reset');
 const passwords = require('./lib/password');
+const cpuPool = require('./lib/cpu-pool');
 
 const SERVER_CONFIG_PATH = path.join(ROOT_DIR, 'server-config.json');
 
@@ -3011,7 +3012,7 @@ function getSyncStateForOrg(orgId, options) {
     if (options.forceFromDb || !syncCurrentStateByOrg[key]) {
         syncCurrentStateByOrg[key] = {
             clientId: 'server',
-            data: JSON.parse(JSON.stringify(db.getMapData(key) || []))
+            data: cpuPool.deepCloneSync(db.getMapData(key) || [])
         };
         try {
             var sett = db.getSettings(key);
@@ -3870,13 +3871,21 @@ db.initStorage().then(function () {
 });
 
 function flushAndExit(code) {
-    var done = function () { process.exit(code); };
-    if (db.flushMysqlPersist) {
-        db.flushMysqlPersist().then(done).catch(done);
-        setTimeout(done, 5000);
-    } else {
+    var done = function () {
+        try { cpuPool.destroy(); } catch (e) {}
+        process.exit(code);
+    };
+    var tasks = [];
+    if (db.flushMysqlPersist) tasks.push(db.flushMysqlPersist());
+    if (db.flushJsonPersist) tasks.push(db.flushJsonPersist());
+    if (!tasks.length) {
         done();
+        return;
     }
+    Promise.all(tasks.map(function (p) {
+        return Promise.resolve(p).catch(function () {});
+    })).then(done).catch(done);
+    setTimeout(done, 8000);
 }
 process.on('SIGINT', function () { flushAndExit(0); });
 process.on('SIGTERM', function () { flushAndExit(0); });

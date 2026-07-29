@@ -2,6 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const { sanitizeNewsBody } = require('./news-sanitize');
 const { isMysqlEnabled, closePool } = require('./db/mysql');
+const cpuPool = require('./lib/cpu-pool');
 
 const ROOT_DIR = path.join(__dirname, '..');
 const STORE_PATH = process.env.DB_PATH ? process.env.DB_PATH.replace(/\.db$/i, '-store.json') : path.join(ROOT_DIR, 'data', 'store.json');
@@ -15,6 +16,9 @@ const DANGEROUS_SAVE_RATIO = 0.15;
 const MAP_SHRINK_MIN_EXISTING = 20;
 const MAP_SHRINK_RATIO = 0.2;
 const MYSQL_PERSIST_DEBOUNCE_MS = 400;
+const JSON_SAVE_DEBOUNCE_MS = 120;
+/** При большем числе объектов карты stringify уходит в worker_threads. */
+const JSON_SAVE_OFFLOAD_MIN_OBJECTS = 80;
 const MIRROR_JSON = String(process.env.MYSQL_MIRROR_JSON || '').trim() === '1';
 
 let store = null;
@@ -24,6 +28,10 @@ let mysqlInitialized = false;
 let mysqlPersistTimer = null;
 let mysqlPersistChain = Promise.resolve();
 let mysqlPersistDirty = false;
+let jsonSaveTimer = null;
+let jsonSaveDirty = false;
+let jsonSaveChain = Promise.resolve();
+let jsonSaveSyncFallback = false;
 
 /** РЎСЂР°РІРЅРµРЅРёРµ id РѕСЂРіР°РЅРёР·Р°С†РёРё Р±РµР· СѓС‡С‘С‚Р° С‚РёРїР° (СЃС‚СЂРѕРєР°/С‡РёСЃР»Рѕ), С‡С‚РѕР±С‹ Р»РёРјРёС‚С‹ Рё РґР°РЅРЅС‹Рµ РЅРµ В«С‚РµСЂСЏР»РёСЃСЊВ». */
 function organizationIdsMatch(a, b) {
@@ -274,15 +282,15 @@ async function flushMysqlPersist() {
     await mysqlPersistChain;
 }
 
-function writeJsonStoreFile(json, existingRaw) {
+function writeJsonStoreFile(json, existingRaw, storeObj) {
     const dir = path.dirname(STORE_PATH);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    if (existingRaw && isDangerousStoreShrink(existingRaw, json, store)) {
+    if (existingRaw && isDangerousStoreShrink(existingRaw, json, storeObj || store)) {
         var rejectedPath = STORE_PATH + '.rejected-' + Date.now();
         try { fs.writeFileSync(rejectedPath, json, 'utf8'); } catch (e2) {}
         console.error('[DB] REFUSED dangerous save (shrink). Rejected payload:', rejectedPath,
             'existingBytes=', existingRaw.length, 'newBytes=', json.length);
-        var err = new Error('РћС‚РєР°Р· Р·Р°РїРёСЃРё: РїРѕРїС‹С‚РєР° Р·Р°С‚РµСЂРµС‚СЊ Р±РѕР»СЊС€СѓСЋ Р±Р°Р·Сѓ СѓРјРµРЅСЊС€РµРЅРЅС‹РјРё РґР°РЅРЅС‹РјРё');
+        var err = new Error('Отказ записи: попытка затереть большую базу уменьшенными данными');
         err.code = 'DB_DANGEROUS_SAVE';
         throw err;
     }
@@ -446,6 +454,76 @@ function maybeWriteRotatingFullSnapshot(sourcePathOrBuffer) {
     }
 }
 
+function countStoreMapObjects(s) {
+    if (!s) return 0;
+    var n = 0;
+    if (s.mapDataByOrg && typeof s.mapDataByOrg === 'object') {
+        Object.keys(s.mapDataByOrg).forEach(function (orgId) {
+            var arr = s.mapDataByOrg[orgId];
+            if (Array.isArray(arr)) n += arr.length;
+        });
+    }
+    if (Array.isArray(s.mapData)) n += s.mapData.length;
+    return n;
+}
+
+function shouldOffloadJsonSave(s) {
+    if (!cpuPool.isEnabled()) return false;
+    if (jsonSaveSyncFallback) return false;
+    return countStoreMapObjects(s) >= JSON_SAVE_OFFLOAD_MIN_OBJECTS;
+}
+
+function writeStoreJsonSync(snapshot) {
+    const json = JSON.stringify(snapshot, null, 0);
+    var existingRawJson = null;
+    if (fs.existsSync(STORE_PATH)) {
+        try { existingRawJson = fs.readFileSync(STORE_PATH, 'utf8'); } catch (e) { existingRawJson = null; }
+    }
+    writeJsonStoreFile(json, existingRawJson, snapshot);
+}
+
+function scheduleJsonSave() {
+    jsonSaveDirty = true;
+    if (jsonSaveTimer) return;
+    jsonSaveTimer = setTimeout(function () {
+        jsonSaveTimer = null;
+        flushJsonPersist().catch(function (e) {
+            console.error('[DB] JSON persist failed:', e && e.message ? e.message : e);
+        });
+    }, JSON_SAVE_DEBOUNCE_MS);
+}
+
+async function flushJsonPersist() {
+    if (jsonSaveTimer) {
+        clearTimeout(jsonSaveTimer);
+        jsonSaveTimer = null;
+    }
+    if (!jsonSaveDirty || !store) return;
+    jsonSaveDirty = false;
+    const snapshot = store;
+    jsonSaveChain = jsonSaveChain.then(async function () {
+        if (!snapshot) return;
+        if (shouldOffloadJsonSave(snapshot)) {
+            var json = await cpuPool.stringify(snapshot, 0);
+            var existingRawJson = null;
+            if (fs.existsSync(STORE_PATH)) {
+                try { existingRawJson = fs.readFileSync(STORE_PATH, 'utf8'); } catch (e) { existingRawJson = null; }
+            }
+            writeJsonStoreFile(json, existingRawJson, snapshot);
+            return;
+        }
+        writeStoreJsonSync(snapshot);
+    }).catch(function (e) {
+        jsonSaveDirty = true;
+        console.error('[DB] JSON persist error:', e && e.message ? e.message : e);
+        // Если worker недоступен — дальше пишем синхронно, чтобы не терять данные.
+        if (e && /CPU pool|worker/i.test(String(e.message || e))) {
+            jsonSaveSyncFallback = true;
+        }
+    });
+    await jsonSaveChain;
+}
+
 function saveStore() {
     if (!store) return;
     if (isMysqlEnabled()) {
@@ -454,21 +532,19 @@ function saveStore() {
         }
         scheduleMysqlPersist();
         if (MIRROR_JSON) {
-            const json = JSON.stringify(store, null, 0);
-            var existingRaw = null;
-            if (fs.existsSync(STORE_PATH)) {
-                try { existingRaw = fs.readFileSync(STORE_PATH, 'utf8'); } catch (e) { existingRaw = null; }
+            if (shouldOffloadJsonSave(store)) {
+                scheduleJsonSave();
+            } else {
+                writeStoreJsonSync(store);
             }
-            writeJsonStoreFile(json, existingRaw);
         }
         return;
     }
-    const json = JSON.stringify(store, null, 0);
-    var existingRawJson = null;
-    if (fs.existsSync(STORE_PATH)) {
-        try { existingRawJson = fs.readFileSync(STORE_PATH, 'utf8'); } catch (e) { existingRawJson = null; }
+    if (shouldOffloadJsonSave(store)) {
+        scheduleJsonSave();
+        return;
     }
-    writeJsonStoreFile(json, existingRawJson);
+    writeStoreJsonSync(store);
 }
 
 /**
@@ -1471,71 +1547,80 @@ function setLodThresholdsForUser(userId, lod) {
 }
 
 function createDailyBackup() {
-    try {
-        const s = loadStore();
-        const orgs = Array.isArray(s.organizations) ? s.organizations : [];
-        if (!orgs.length) return;
-        if (!fs.existsSync(BACKUPS_DIR)) fs.mkdirSync(BACKUPS_DIR, { recursive: true });
-        const now = new Date();
-        const dateStr = now.getFullYear() + '-' +
-            String(now.getMonth() + 1).padStart(2, '0') + '-' +
-            String(now.getDate()).padStart(2, '0');
+    createDailyBackupAsync().catch(function (e) {
+        console.error('[Backup] Ошибка:', e && e.message ? e.message : e);
+    });
+}
 
-        orgs.forEach(function(org) {
-            if (!org || !org.id) return;
-            const orgId = org.id;
-            const dir = ensureOrgBackupsDir(orgId);
-            const backupPath = path.join(dir, 'backup-' + dateStr + '.json');
-            const payload = {
-                version: 1,
-                organizationId: orgId,
-                createdAt: new Date().toISOString(),
-                mapData: getMapData(orgId),
-                history: getHistory(orgId),
-                settings: getSettings(orgId)
-            };
-            // РќРµ Р·Р°С‚РёСЂР°РµРј СЃРµРіРѕРґРЅСЏС€РЅРёР№ РЅРµРїСѓСЃС‚РѕР№ Р±СЌРєР°Рї РїСѓСЃС‚С‹Рј
-            if (fs.existsSync(backupPath)) {
-                try {
-                    var prev = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
-                    var prevN = Array.isArray(prev.mapData) ? prev.mapData.length : 0;
-                    var nextN = Array.isArray(payload.mapData) ? payload.mapData.length : 0;
-                    if (prevN >= MAP_SHRINK_MIN_EXISTING && nextN < Math.floor(prevN * MAP_SHRINK_RATIO)) {
-                        console.warn('[Backup] РџСЂРѕРїСѓСЃРє РїРµСЂРµР·Р°РїРёСЃРё РїСѓСЃС‚С‹Рј/СѓСЂРµР·Р°РЅРЅС‹Рј:', orgId + '/backup-' + dateStr + '.json');
-                        return;
-                    }
-                } catch (ePrev) {}
-            }
-            fs.writeFileSync(backupPath, JSON.stringify(payload), 'utf8');
-            pruneBackupsKeepDays(orgId, BACKUP_RETENTION_DAYS);
-            console.log('[Backup] РЎРѕС…СЂР°РЅС‘РЅ: ' + orgId + '/backup-' + dateStr + '.json');
-        });
+async function createDailyBackupAsync() {
+    const s = loadStore();
+    const orgs = Array.isArray(s.organizations) ? s.organizations : [];
+    if (!orgs.length) return;
+    if (!fs.existsSync(BACKUPS_DIR)) fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+    const now = new Date();
+    const dateStr = now.getFullYear() + '-' +
+        String(now.getMonth() + 1).padStart(2, '0') + '-' +
+        String(now.getDate()).padStart(2, '0');
 
-        // РџРѕР»РЅС‹Р№ Р»РѕРіРёС‡РµСЃРєРёР№ СЃРЅРёРјРѕРє (JSON export) вЂ” СЂР°Р±РѕС‚Р°РµС‚ Рё РґР»СЏ MySQL, Рё РґР»СЏ store.json
-        ensureFullBackupsDir();
-        var fullDaily = path.join(FULL_BACKUPS_DIR, 'store-' + dateStr + '.json');
-        var json = JSON.stringify(s, null, 0);
-        if (fs.existsSync(fullDaily)) {
+    for (var i = 0; i < orgs.length; i++) {
+        var org = orgs[i];
+        if (!org || !org.id) continue;
+        var orgId = org.id;
+        var dir = ensureOrgBackupsDir(orgId);
+        var backupPath = path.join(dir, 'backup-' + dateStr + '.json');
+        var payload = {
+            version: 1,
+            organizationId: orgId,
+            createdAt: new Date().toISOString(),
+            mapData: getMapData(orgId),
+            history: getHistory(orgId),
+            settings: getSettings(orgId)
+        };
+        // Не затираем сегодняшний непустой бэкап пустым
+        if (fs.existsSync(backupPath)) {
             try {
-                var existingFull = fs.statSync(fullDaily);
-                if (existingFull.size >= DANGEROUS_SAVE_MIN_EXISTING_BYTES &&
-                    Buffer.byteLength(json, 'utf8') < Math.floor(existingFull.size * DANGEROUS_SAVE_RATIO)) {
-                    console.warn('[Backup] РџСЂРѕРїСѓСЃРє РїРѕР»РЅРѕРіРѕ РґРЅРµРІРЅРѕРіРѕ СЃРЅРёРјРєР°: РЅРѕРІС‹Р№ store Р·Р°РјРµС‚РЅРѕ РјРµРЅСЊС€Рµ');
-                } else {
-                    fs.writeFileSync(fullDaily, json, 'utf8');
-                    console.log('[Backup] РџРѕР»РЅС‹Р№ СЃРЅРёРјРѕРє:', path.basename(fullDaily));
+                var prev = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
+                var prevN = Array.isArray(prev.mapData) ? prev.mapData.length : 0;
+                var nextN = Array.isArray(payload.mapData) ? payload.mapData.length : 0;
+                if (prevN >= MAP_SHRINK_MIN_EXISTING && nextN < Math.floor(prevN * MAP_SHRINK_RATIO)) {
+                    console.warn('[Backup] Пропуск перезаписи пустым/урезанным:', orgId + '/backup-' + dateStr + '.json');
+                    continue;
                 }
-            } catch (eFull) {
-                fs.writeFileSync(fullDaily, json, 'utf8');
-            }
-        } else {
-            fs.writeFileSync(fullDaily, json, 'utf8');
-            console.log('[Backup] РџРѕР»РЅС‹Р№ СЃРЅРёРјРѕРє:', path.basename(fullDaily));
+            } catch (ePrev) {}
         }
-        pruneFullSnapshots(FULL_SNAPSHOT_KEEP);
-    } catch (e) {
-        console.error('[Backup] РћС€РёР±РєР°:', e.message);
+        if (cpuPool.isEnabled()) {
+            await cpuPool.stringifyWrite(payload, backupPath, 0);
+        } else {
+            fs.writeFileSync(backupPath, JSON.stringify(payload), 'utf8');
+        }
+        pruneBackupsKeepDays(orgId, BACKUP_RETENTION_DAYS);
+        console.log('[Backup] Сохранён: ' + orgId + '/backup-' + dateStr + '.json');
     }
+
+    // Полный логический снимок (JSON export) — работает и для MySQL, и для store.json
+    ensureFullBackupsDir();
+    var fullDaily = path.join(FULL_BACKUPS_DIR, 'store-' + dateStr + '.json');
+    var json = cpuPool.isEnabled()
+        ? await cpuPool.stringify(s, 0)
+        : JSON.stringify(s, null, 0);
+    if (fs.existsSync(fullDaily)) {
+        try {
+            var existingFull = fs.statSync(fullDaily);
+            if (existingFull.size >= DANGEROUS_SAVE_MIN_EXISTING_BYTES &&
+                Buffer.byteLength(json, 'utf8') < Math.floor(existingFull.size * DANGEROUS_SAVE_RATIO)) {
+                console.warn('[Backup] Пропуск полного дневного снимка: новый store заметно меньше');
+            } else {
+                fs.writeFileSync(fullDaily, json, 'utf8');
+                console.log('[Backup] Полный снимок:', path.basename(fullDaily));
+            }
+        } catch (eFull) {
+            fs.writeFileSync(fullDaily, json, 'utf8');
+        }
+    } else {
+        fs.writeFileSync(fullDaily, json, 'utf8');
+        console.log('[Backup] Полный снимок:', path.basename(fullDaily));
+    }
+    pruneFullSnapshots(FULL_SNAPSHOT_KEEP);
 }
 
 function listBackups(orgId) {
@@ -2265,6 +2350,7 @@ module.exports = {
     getDb,
     initStorage,
     flushMysqlPersist,
+    flushJsonPersist,
     getStorageMode,
     isMysqlEnabled,
     exportLogicalStoreSnapshot,
