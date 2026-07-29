@@ -257,14 +257,42 @@ function generateToken() {
     return 'tk_' + Date.now() + '_' + require('crypto').randomBytes(16).toString('hex');
 }
 
+/** Кэш проверки токена для WS (курсоры бьют десятки раз/сек). */
+var sessionTokenCache = new Map();
+var SESSION_TOKEN_CACHE_MS = 3000;
+var cursorAvatarCache = new Map();
+var syncStateFingerprintByOrg = Object.create(null);
+
 function getSessionByToken(token) {
     if (!token) return null;
+    var now = Date.now();
+    var cached = sessionTokenCache.get(token);
+    if (cached && (now - cached.at) < SESSION_TOKEN_CACHE_MS) {
+        return cached.value;
+    }
     var sessions = db.getSessions();
     var ses = sessions.find(function(s) { return s.token === token && db.sessionIsActive(s); });
-    if (!ses) return null;
+    if (!ses) {
+        sessionTokenCache.set(token, { at: now, value: null });
+        return null;
+    }
     var users = db.getUsers();
     var user = users.find(function(u) { return String(u.id) === String(ses.user_id); });
-    return user ? { userId: user.id, organizationId: user.organizationId != null ? user.organizationId : (ses.organization_id || null) } : null;
+    var value = user
+        ? { userId: user.id, organizationId: user.organizationId != null ? user.organizationId : (ses.organization_id || null) }
+        : null;
+    sessionTokenCache.set(token, { at: now, value: value });
+    if (sessionTokenCache.size > 2000) {
+        sessionTokenCache.forEach(function (entry, key) {
+            if ((now - entry.at) >= SESSION_TOKEN_CACHE_MS) sessionTokenCache.delete(key);
+        });
+    }
+    return value;
+}
+
+function invalidateSessionTokenCache(token) {
+    if (token) sessionTokenCache.delete(token);
+    else sessionTokenCache.clear();
 }
 
 function getSessionUserFromToken(token) {
@@ -3095,7 +3123,12 @@ function notifySessionRevokedForUser(userId, exceptToken) {
 
 function closeWsIfTokenRevoked(ws) {
     if (!ws || !ws.authToken) return false;
-    if (getSessionByToken(ws.authToken)) return false;
+    var now = Date.now();
+    if (ws._sessionOkUntil && now < ws._sessionOkUntil) return false;
+    if (getSessionByToken(ws.authToken)) {
+        ws._sessionOkUntil = now + SESSION_TOKEN_CACHE_MS;
+        return false;
+    }
     try {
         ws.send(JSON.stringify({
             type: 'session_revoked',
@@ -3347,9 +3380,12 @@ function getItemRevision(item) {
 
 function applyOperationToState(state, op) {
     if (!Array.isArray(state)) return { state: state, conflict: null };
-    var objCount = state.filter(function(i) { return i.type !== 'cable'; }).length;
     var i, idx, fromIdx, toIdx, fromUid, toUid, c, cur, baseRev, merged;
     if (op.type === 'add_object' && op.data) {
+        var objCount = 0;
+        for (i = 0; i < state.length; i++) {
+            if (state[i] && state[i].type !== 'cable') objCount++;
+        }
         var addUid = op.data.uniqueId;
         if (addUid != null && addUid !== '') {
             idx = state.findIndex(function(i) { return i.type !== 'cable' && i.uniqueId === addUid; });
@@ -3524,6 +3560,19 @@ wss.on('connection', (ws, req) => {
         setImmediate(function() {
         try {
             const msg = JSON.parse(str);
+            if (msg.type === 'cursor') {
+                // Курсоры частые — не гоняем проверку сессии на каждое сообщение.
+                var pos = msg.position;
+                if (Array.isArray(pos) && pos.length >= 2 && typeof pos[0] === 'number' && typeof pos[1] === 'number') {
+                    ws.cursor = {
+                        position: [Number(pos[0]), Number(pos[1])],
+                        displayName: syncClientNames.get(clientId) || 'Участник',
+                        userId: syncClientUserIds.get(clientId) || null
+                    };
+                    scheduleCursorsBroadcast();
+                }
+                return;
+            }
             if (closeWsIfTokenRevoked(ws)) return;
             if (msg.type === 'hello') {
                 const name = (msg.displayName && String(msg.displayName).trim()) || 'Участник';
@@ -3553,7 +3602,8 @@ wss.on('connection', (ws, req) => {
                     if (orgId) syncClientOrgIds.set(clientId, orgId);
                 }
                 if (orgId) {
-                    var state = getSyncStateForOrg(orgId, { forceFromDb: true });
+                    // Не клонируем всю карту на каждый hello — берём кэш, если уже есть.
+                    var state = getSyncStateForOrg(orgId, { forceFromDb: false });
                     if (state) {
                         var groupNames = syncGroupNamesByOrg[orgId] || syncGroupNames;
                         var helloPayload = { type: 'map_refresh', organizationId: orgId };
@@ -3586,18 +3636,6 @@ wss.on('connection', (ws, req) => {
                     mediaId: msg.mediaId,
                     mentionUserIds: msg.mentionUserIds
                 });
-                return;
-            }
-            if (msg.type === 'cursor') {
-                var pos = msg.position;
-                if (Array.isArray(pos) && pos.length >= 2 && typeof pos[0] === 'number' && typeof pos[1] === 'number') {
-                    ws.cursor = {
-                        position: [Number(pos[0]), Number(pos[1])],
-                        displayName: syncClientNames.get(clientId) || 'Участник',
-                        userId: syncClientUserIds.get(clientId) || null
-                    };
-                    scheduleCursorsBroadcast();
-                }
                 return;
             }
             var orgId = ws.orgId ? normalizeSyncOrgId(ws.orgId) : null;
@@ -3684,6 +3722,11 @@ wss.on('connection', (ws, req) => {
             if (!justConnected && msg.type === 'state' && Array.isArray(msg.data) && isSyncClientAdmin(clientId) && orgId) {
                 var state = getSyncStateForOrg(orgId);
                 if (!state) return;
+                var fp = fingerprintMapData(msg.data);
+                if (fp && syncStateFingerprintByOrg[orgId] === fp &&
+                    Array.isArray(state.data) && state.data.length === msg.data.length) {
+                    return;
+                }
                 var nextData = db.stripMapItemsFromOtherOrganizations(orgId, msg.data);
                 var shrinkCheck = db.assertMapDataNotDangerousShrink
                     ? db.assertMapDataNotDangerousShrink(orgId, nextData, { allowShrink: !!msg.allowShrink })
@@ -3714,6 +3757,7 @@ wss.on('connection', (ws, req) => {
                 }
                 state.data = nextData;
                 state.clientId = msg.clientId || clientId;
+                syncStateFingerprintByOrg[orgId] = fingerprintMapData(nextData);
                 if (msg.groupNames && typeof msg.groupNames === 'object') {
                     syncGroupNamesByOrg[orgId] = msg.groupNames;
                     try { db.setSettings({ groupNames: msg.groupNames }, orgId); } catch (e) {}
@@ -3750,7 +3794,7 @@ wss.on('connection', (ws, req) => {
 
 var lastCursorsBroadcast = 0;
 var cursorsBroadcastTimer = null;
-var CURSORS_BROADCAST_THROTTLE_MS = 100;
+var CURSORS_BROADCAST_THROTTLE_MS = 200;
 
 function scheduleCursorsBroadcast() {
     if (cursorsBroadcastTimer) return;
@@ -3769,10 +3813,14 @@ function scheduleCursorsBroadcast() {
 
 function resolveCursorAvatarUrl(userId) {
     if (userId == null) return null;
+    var key = String(userId);
+    if (cursorAvatarCache.has(key)) return cursorAvatarCache.get(key);
     var users = db.getUsers();
     var u = users.find(function(x) { return String(x.id) === String(userId); });
-    if (!u) return null;
-    return avatars.getAvatarApiPath(u.id, u.avatarUpdatedAt);
+    var url = u ? avatars.getAvatarApiPath(u.id, u.avatarUpdatedAt) : null;
+    cursorAvatarCache.set(key, url);
+    if (cursorAvatarCache.size > 500) cursorAvatarCache.clear();
+    return url;
 }
 
 function broadcastOrgSettings(orgId, settings) {
@@ -3788,6 +3836,7 @@ function broadcastOrgSettings(orgId, settings) {
 function broadcastCursors() {
     // Формируем курсоры отдельно по организациям и отправляем только соответствующим клиентам.
     const byOrg = {};
+    const payloadByOrg = {};
     wss.clients.forEach(client => {
         if (client.readyState !== WebSocket.OPEN) return;
         if (!client.clientId || !client.cursor || !client.cursor.position) return;
@@ -3803,14 +3852,47 @@ function broadcastCursors() {
         });
     });
 
+    Object.keys(byOrg).forEach(function (key) {
+        payloadByOrg[key] = JSON.stringify({ type: 'cursors', cursors: byOrg[key] });
+    });
+    var emptyPayload = JSON.stringify({ type: 'cursors', cursors: [] });
+
     wss.clients.forEach(client => {
         if (client.readyState !== WebSocket.OPEN) return;
         const orgId = client.orgId != null ? client.orgId : null;
         const key = orgId == null ? '__null' : String(orgId);
-        const list = byOrg[key] || [];
-        const payload = JSON.stringify({ type: 'cursors', cursors: list });
+        const payload = payloadByOrg[key] || emptyPayload;
         try { client.send(payload); } catch (e) {}
     });
+}
+
+function fingerprintMapData(data) {
+    if (!Array.isArray(data)) return '0';
+    var n = data.length;
+    var revSum = 0;
+    var uidHash = 0;
+    var geoSum = 0;
+    for (var i = 0; i < n; i++) {
+        var it = data[i];
+        if (!it) continue;
+        revSum = (revSum + (Number(it.revision) || 0)) | 0;
+        if (it.uniqueId != null) {
+            var s = String(it.uniqueId);
+            for (var j = 0; j < s.length; j++) {
+                uidHash = ((uidHash << 5) - uidHash + s.charCodeAt(j)) | 0;
+            }
+        }
+        var coords = it.coords || it.coordinates || it.geometry;
+        if (Array.isArray(coords) && typeof coords[0] === 'number') {
+            geoSum = (geoSum + Math.round(coords[0] * 1e4) + Math.round((coords[1] || 0) * 1e4)) | 0;
+        } else if (coords && Array.isArray(coords.coordinates)) {
+            var c0 = coords.coordinates[0];
+            if (Array.isArray(c0) && typeof c0[0] === 'number') {
+                geoSum = (geoSum + Math.round(c0[0] * 1e4) + Math.round((c0[1] || 0) * 1e4)) | 0;
+            }
+        }
+    }
+    return n + ':' + revSum + ':' + uidHash + ':' + geoSum;
 }
 
 function getLocalIPs() {

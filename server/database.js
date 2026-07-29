@@ -692,16 +692,24 @@ function stripMapItemsFromOtherOrganizations(orgId, data) {
     const s = loadStore();
     const byOrg = s.mapDataByOrg || {};
 
+    // Один проход по чужим картам → Set uid (раньше на каждый объект был полный scan).
+    var foreignUids = new Set();
+    Object.keys(byOrg).forEach(function (k) {
+        if (organizationIdsMatch(k, orgId)) return;
+        var arr = byOrg[k];
+        if (!Array.isArray(arr)) return;
+        for (var fi = 0; fi < arr.length; fi++) {
+            var it = arr[fi];
+            if (it && it.uniqueId != null && it.uniqueId !== '') {
+                foreignUids.add(String(it.uniqueId));
+            }
+        }
+    });
+
     function isForeignUid(uid) {
         if (uid == null || uid === '') return false;
-        var u = String(uid);
-        return Object.keys(byOrg).some(function(k) {
-            if (organizationIdsMatch(k, orgId)) return false;
-            var arr = byOrg[k];
-            return Array.isArray(arr) && arr.some(function(i) {
-                return i && i.uniqueId != null && i.uniqueId !== '' && String(i.uniqueId) === u;
-            });
-        });
+        if (!foreignUids.size) return false;
+        return foreignUids.has(String(uid));
     }
 
     const filtered = [];
