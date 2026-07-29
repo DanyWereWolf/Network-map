@@ -954,6 +954,7 @@ function removeRadioBridgeCoverage(rb) {
 
 function isRadioBridgeCoverageOwnerVisible(rb) {
     if (!rb || !rb.properties || rb.properties.get('type') !== 'radioBridge') return false;
+    if (typeof isRadioCoverageEnabled === 'function' && !isRadioCoverageEnabled()) return false;
     if (!rb.properties.get('showCoverage')) return false;
     if (rb.properties.get('_mapFilterVisible') === false) return false;
     if (typeof getObjectCabinetId === 'function' && getObjectCabinetId(rb)) return false;
@@ -1005,6 +1006,7 @@ function applyRadioBridgeCoverageVisibility(rbOrNull) {
 function updateRadioBridgeCoverage(rb) {
     removeRadioBridgeCoverage(rb);
     if (!rb || !rb.properties || rb.properties.get('type') !== 'radioBridge') return;
+    if (typeof isRadioCoverageEnabled === 'function' && !isRadioCoverageEnabled()) return;
     if (!rb.properties.get('showCoverage') || !rb.geometry || !myMap) return;
     var center = rb.geometry.getCoordinates();
     if (!center || center.length < 2) return;

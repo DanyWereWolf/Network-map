@@ -272,16 +272,4 @@ function setupMapTilesReady() {
     setTimeout(mark, 350);
 }
 
-function hidePanoramaLayerMenuItem() {
-    var mapEl = document.getElementById('map');
-    if (!mapEl) return;
-    var items = mapEl.querySelectorAll('[class*="listbox__list-item"]');
-    for (var i = 0; i < items.length; i++) {
-        var text = (items[i].textContent || '').trim();
-        if (text === 'Панорамы' || text === 'Panoramas') {
-            items[i].style.display = 'none';
-        }
-    }
-}
-
 initAppEntrance();

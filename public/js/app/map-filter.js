@@ -170,16 +170,145 @@ function getMapFilterState() {
     };
 }
 
-// «Vols expert» style: при сильном отдалении скрываются и подписи, и сами объекты.
-// Подписи скрываются вместе с объектами (раньше порог был 17 — при зуме 16 по умолчанию имена не были видны).
-const EXPERT_ZOOM_HIDE_LABELS_BELOW = 16;
-const EXPERT_ZOOM_HIDE_OBJECTS_BELOW = 16;
-/** Регионы скрываются только при сильном отдалении (отдельно от сетевых объектов). */
-const EXPERT_ZOOM_HIDE_REGIONS_BELOW = 10;
+// «Vols expert» style: при сильном отдалении скрываются подписи и объекты.
+// Пороги настраиваются во вкладке «Настройки» → «Масштаб».
+var LOD_DEFAULT_LABELS = 16;
+var LOD_DEFAULT_OBJECTS = 16;
+var LOD_DEFAULT_REGIONS = 10;
+var LOD_STORAGE_PREFIX = 'networkMap_lodThresholds';
+var _lodServerSyncTimer = null;
+
+var _lodThresholds = {
+    labels: LOD_DEFAULT_LABELS,
+    objects: LOD_DEFAULT_OBJECTS,
+    regions: LOD_DEFAULT_REGIONS
+};
+
+function getLodUserId() {
+    try {
+        var raw = localStorage.getItem('networkMap_session') || sessionStorage.getItem('networkMap_session');
+        if (!raw) return null;
+        var u = JSON.parse(raw);
+        if (u && u.userId != null && String(u.userId).trim() !== '') return String(u.userId).trim();
+        if (u && u.id != null && String(u.id).trim() !== '') return String(u.id).trim();
+    } catch (e) {}
+    return null;
+}
+
+function getLodStorageKey() {
+    var uid = getLodUserId();
+    return uid ? LOD_STORAGE_PREFIX + '_' + uid : LOD_STORAGE_PREFIX;
+}
+
+function clampLodValue(value, min, max, fallback) {
+    var n = parseInt(value, 10);
+    if (isNaN(n)) n = fallback;
+    return Math.max(min, Math.min(max, n));
+}
+
+function normalizeLodThresholds(raw) {
+    var objects = clampLodValue(raw && raw.objects, 8, 20, LOD_DEFAULT_OBJECTS);
+    var labels = clampLodValue(raw && raw.labels, 8, 20, LOD_DEFAULT_LABELS);
+    var regions = clampLodValue(raw && raw.regions, 5, 16, LOD_DEFAULT_REGIONS);
+    // Подписи не раньше объектов: иначе подпись висела бы без объекта.
+    if (labels < objects) labels = objects;
+    return { labels: labels, objects: objects, regions: regions };
+}
+
+function readLodThresholdsFromStorage() {
+    var key = getLodStorageKey();
+    try {
+        var raw = localStorage.getItem(key);
+        if (!raw && key !== LOD_STORAGE_PREFIX) raw = localStorage.getItem(LOD_STORAGE_PREFIX);
+        if (!raw) return null;
+        return normalizeLodThresholds(JSON.parse(raw));
+    } catch (e) {}
+    return null;
+}
+
+function syncLodThresholdsToServer(thresholds) {
+    if (typeof getApiBase !== 'function' || typeof getAuthToken !== 'function') return;
+    var base = getApiBase();
+    var token = getAuthToken();
+    if (!base || !token) return;
+    try {
+        fetch(base + '/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ lodThresholds: thresholds })
+        }).catch(function () {});
+    } catch (e) {}
+}
+
+function persistLodThresholds(thresholds, options) {
+    options = options || {};
+    try {
+        localStorage.setItem(getLodStorageKey(), JSON.stringify(thresholds));
+    } catch (e) {}
+    if (options.syncServer) {
+        if (_lodServerSyncTimer) clearTimeout(_lodServerSyncTimer);
+        _lodServerSyncTimer = setTimeout(function () {
+            _lodServerSyncTimer = null;
+            syncLodThresholdsToServer(thresholds);
+        }, 300);
+    }
+}
+
+function getLodThresholds() {
+    return {
+        labels: _lodThresholds.labels,
+        objects: _lodThresholds.objects,
+        regions: _lodThresholds.regions
+    };
+}
+
+function setLodThresholds(partial, options) {
+    options = options || {};
+    var next = normalizeLodThresholds({
+        labels: partial && partial.labels != null ? partial.labels : _lodThresholds.labels,
+        objects: partial && partial.objects != null ? partial.objects : _lodThresholds.objects,
+        regions: partial && partial.regions != null ? partial.regions : _lodThresholds.regions
+    });
+    _lodThresholds = next;
+    if (options.persist !== false) persistLodThresholds(next, { syncServer: !!options.syncServer });
+    // Обратная совместимость для кода, читающего константы как переменные.
+    EXPERT_ZOOM_HIDE_LABELS_BELOW = next.labels;
+    EXPERT_ZOOM_HIDE_OBJECTS_BELOW = next.objects;
+    EXPERT_ZOOM_HIDE_REGIONS_BELOW = next.regions;
+    return getLodThresholds();
+}
+
+function resetLodThresholds(options) {
+    return setLodThresholds({
+        labels: LOD_DEFAULT_LABELS,
+        objects: LOD_DEFAULT_OBJECTS,
+        regions: LOD_DEFAULT_REGIONS
+    }, options);
+}
+
+function applyLodThresholdsFromServer(raw, options) {
+    options = options || {};
+    if (!raw || typeof raw !== 'object') return getLodThresholds();
+    return setLodThresholds(raw, {
+        persist: options.persist !== false,
+        syncServer: false
+    });
+}
+
+(function initLodThresholdsFromStorage() {
+    var saved = readLodThresholdsFromStorage();
+    if (saved) setLodThresholds(saved, { persist: false });
+    else setLodThresholds(_lodThresholds, { persist: false });
+})();
+
+/** @deprecated use getLodThresholds().labels — оставляем как var для совместимости */
+var EXPERT_ZOOM_HIDE_LABELS_BELOW = _lodThresholds.labels;
+var EXPERT_ZOOM_HIDE_OBJECTS_BELOW = _lodThresholds.objects;
+var EXPERT_ZOOM_HIDE_REGIONS_BELOW = _lodThresholds.regions;
 
 function applyRegionZoomVisibility(zoom) {
     if (!Array.isArray(objects)) return;
-    var hideRegions = typeof zoom === 'number' && zoom < EXPERT_ZOOM_HIDE_REGIONS_BELOW;
+    var hideRegions = typeof zoom === 'number' && zoom < getLodThresholds().regions;
     objects.forEach(function(obj) {
         if (!obj || !obj.properties || obj.properties.get('type') !== 'region') return;
         var visible = true;
@@ -209,6 +338,7 @@ function setAllConnectionLinesVisible(visible) {
         try { line.options.set('visible', !!visible); } catch (e) {}
     });
 }
+window.setAllConnectionLinesVisible = setAllConnectionLinesVisible;
 
 function applyConnectionLinesMapStyle() {
     forEachConnectionLine(function(line) {
@@ -230,8 +360,9 @@ function applyExpertZoomVisibility() {
     const zoom = myMap.getZoom();
     if (typeof zoom !== 'number') return;
 
-    const hideLabels = zoom < EXPERT_ZOOM_HIDE_LABELS_BELOW;
-    var hideObjects = zoom < EXPERT_ZOOM_HIDE_OBJECTS_BELOW;
+    var thr = getLodThresholds();
+    const hideLabels = zoom < thr.labels;
+    var hideObjects = zoom < thr.objects;
     if (!hideLabels && !hideObjects) return;
 
     var useVirtual = typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization && MapPerf.shouldUseVirtualization();
@@ -312,10 +443,11 @@ function applyExpertZoomVisibility() {
 
 function getExpertZoomFlags() {
     var zoom = (myMap && typeof myMap.getZoom === 'function') ? myMap.getZoom() : 16;
+    var thr = getLodThresholds();
     return {
         zoom: zoom,
-        hideLabels: typeof zoom === 'number' && zoom < EXPERT_ZOOM_HIDE_LABELS_BELOW,
-        hideObjects: typeof zoom === 'number' && zoom < EXPERT_ZOOM_HIDE_OBJECTS_BELOW
+        hideLabels: typeof zoom === 'number' && zoom < thr.labels,
+        hideObjects: typeof zoom === 'number' && zoom < thr.objects
     };
 }
 
@@ -381,15 +513,16 @@ function applyCrossNodeLabelVisibility(filter, zoomFlags) {
 
 function buildMapMountContext() {
     var zoomFlags = getExpertZoomFlags();
+    var thr = getLodThresholds();
     var bounds = (typeof MapPerf !== 'undefined' && MapPerf.getExpandedBounds) ? MapPerf.getExpandedBounds(myMap) : null;
     return {
         bounds: bounds,
         zoom: zoomFlags.zoom,
         hideLabels: zoomFlags.hideLabels,
         hideObjects: zoomFlags.hideObjects,
-        hideRegions: typeof zoomFlags.zoom === 'number' && zoomFlags.zoom < EXPERT_ZOOM_HIDE_REGIONS_BELOW,
+        hideRegions: typeof zoomFlags.zoom === 'number' && zoomFlags.zoom < thr.regions,
         showConnectionLines: typeof MapPerf !== 'undefined' && MapPerf.connectionLinesVisibleAtZoom
-            ? MapPerf.connectionLinesVisibleAtZoom(zoomFlags.zoom) : (typeof zoomFlags.zoom !== 'number' || zoomFlags.zoom >= EXPERT_ZOOM_HIDE_OBJECTS_BELOW)
+            ? MapPerf.connectionLinesVisibleAtZoom(zoomFlags.zoom) : (typeof zoomFlags.zoom !== 'number' || zoomFlags.zoom >= thr.objects)
     };
 }
 
@@ -414,8 +547,38 @@ function applyLowZoomMapUpdate() {
 
 function regionZoomLabelRebuildNeeded(oldZoom, newZoom) {
     if (typeof oldZoom !== 'number' || typeof newZoom !== 'number') return false;
-    return (oldZoom >= EXPERT_ZOOM_HIDE_REGIONS_BELOW && newZoom < EXPERT_ZOOM_HIDE_REGIONS_BELOW) ||
-        (oldZoom < EXPERT_ZOOM_HIDE_REGIONS_BELOW && newZoom >= EXPERT_ZOOM_HIDE_REGIONS_BELOW);
+    var regionsBelow = getLodThresholds().regions;
+    return (oldZoom >= regionsBelow && newZoom < regionsBelow) ||
+        (oldZoom < regionsBelow && newZoom >= regionsBelow);
+}
+
+/** Вернуть visible у кроссов/узлов после expert-zoom hide (опция переживает remove/add). */
+function restoreExternallyManagedObjectVisibility(filter, zoomFlags) {
+    if (!myMap || !Array.isArray(objects)) return;
+    zoomFlags = zoomFlags || getExpertZoomFlags();
+    if (zoomFlags.hideObjects) return;
+    filter = filter || (typeof mapFilter !== 'undefined' && mapFilter ? mapFilter : getMapFilterState());
+    var hideLabels = !!zoomFlags.hideLabels;
+    objects.forEach(function(obj) {
+        if (!obj || !obj.properties || !obj.options) return;
+        var type = obj.properties.get('type');
+        if (type !== 'cross' && type !== 'node') return;
+        try {
+            if (myMap.geoObjects.indexOf(obj) === -1) return;
+        } catch (eIdx) { return; }
+        var show = obj.properties.get('_mapFilterVisible') !== false;
+        if (type === 'cross' && filter.cross === false) show = false;
+        if (type === 'node') {
+            if (filter.node === false) show = false;
+            else if (filter.nodeAggregationOnly && obj.properties.get('nodeKind') !== 'aggregation') show = false;
+        }
+        if (typeof getObjectCabinetId === 'function' && getObjectCabinetId(obj)) show = false;
+        try { obj.options.set('visible', show); } catch (eVis) {}
+        var label = obj.properties.get('label');
+        if (label && label.options) {
+            try { label.options.set('visible', show && !hideLabels); } catch (eLbl) {}
+        }
+    });
 }
 
 function applyMapViewportUpdate() {
@@ -429,15 +592,20 @@ function applyMapViewportUpdate() {
         }
         return;
     }
+    var filter = typeof mapFilter !== 'undefined' && mapFilter ? mapFilter : getMapFilterState();
     if (typeof refreshCrossNodeViewportDisplay === 'function') {
         try { refreshCrossNodeViewportDisplay(); } catch (eCrossNode) {}
     }
+    // На больших картах zoom-in идёт через viewport-update без полного applyMapFilter —
+    // нужно явно снять visible:false, выставленный при expert-zoom hide.
+    try { restoreExternallyManagedObjectVisibility(filter, zoomFlags); } catch (eRest) {}
+    try { applyGroupPlacemarkFilterVisibility(filter, zoomFlags); } catch (eGrp) {}
     applyConnectionLinesVisibility();
     if (typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization()) {
         MapPerf.syncViewportMounts(buildMapMountContext());
         try { applyExpertZoomVisibility(); } catch (eExpVirt) {}
         try {
-            applyCrossNodeLabelVisibility(typeof mapFilter !== 'undefined' ? mapFilter : getMapFilterState(), getExpertZoomFlags());
+            applyCrossNodeLabelVisibility(filter, getExpertZoomFlags());
         } catch (eCnLbl) {}
         try { applyRegionZoomVisibility(myMap.getZoom()); } catch (eReg) {}
     } else {
@@ -701,3 +869,10 @@ function applyViewportCullToMap() {
         } catch (e3) {}
     });
 }
+
+window.getLodThresholds = getLodThresholds;
+window.setLodThresholds = setLodThresholds;
+window.resetLodThresholds = resetLodThresholds;
+window.applyLodThresholdsFromServer = applyLodThresholdsFromServer;
+window.getExpertZoomFlags = getExpertZoomFlags;
+window.buildMapMountContext = buildMapMountContext;

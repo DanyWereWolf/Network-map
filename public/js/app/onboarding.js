@@ -104,6 +104,12 @@ function openOnboardingAccordion(name) {
         s.classList.remove('active');
     });
     section.classList.add('active');
+    var cat = section.closest('.sidebar-category');
+    if (cat) {
+        cat.classList.add('is-open');
+        var catBtn = cat.querySelector('.sidebar-category-header');
+        if (catBtn) catBtn.setAttribute('aria-expanded', 'true');
+    }
 }
 
 function ensureSidebarVisibleForOnboarding() {

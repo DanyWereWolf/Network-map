@@ -11,7 +11,7 @@ function init() {
     myMap = new ymaps.Map('map', {
         center: initialCenter,
         zoom: initialZoom,
-        controls: ['zoomControl']
+        controls: []
     });
     if (window._pendingMapStart) {
         window._mapStartApplied = true;
@@ -24,18 +24,7 @@ function init() {
     try { myMap.controls.remove('rulerControl'); } catch (e) {}
     try { myMap.controls.remove('fullscreenControl'); } catch (e) {}
     try { myMap.controls.remove('typeSelector'); } catch (e) {}
-    try {
-        var mapLayerSelector = new ymaps.control.TypeSelector(
-            ['yandex#map', 'yandex#satellite', 'yandex#hybrid'],
-            {
-                panoramas: 'off',
-                panoramasItemMode: 'off'
-            }
-        );
-        myMap.controls.add(mapLayerSelector, { float: 'right' });
-        // panoramas: 'off' above; DOM-патч только при первом рендере (частые правки ломают дерево TypeSelector → isLeaf).
-        setTimeout(hidePanoramaLayerMenuItem, 300);
-    } catch (e) {}
+    setupMapLayerSelector();
     try { myMap.behaviors.disable('rightMouseButtonMagnifier'); } catch (e) {}
 
     createCursorIndicator();
@@ -71,6 +60,68 @@ function init() {
     })();
 
     setupMapTilesReady();
+}
+
+function setupMapLayerSelector() {
+    var root = document.getElementById('mapLayerSelector');
+    var btn = document.getElementById('mapLayerSelectorBtn');
+    var menu = document.getElementById('mapLayerSelectorMenu');
+    if (!root || !btn || !menu || !myMap) return;
+
+    var items = menu.querySelectorAll('.map-layer-selector__item');
+
+    function setOpen(open) {
+        root.classList.toggle('is-open', open);
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) menu.removeAttribute('hidden');
+        else menu.setAttribute('hidden', '');
+    }
+
+    function syncActive(type) {
+        var key = type || (myMap.getType && myMap.getType()) || 'yandex#map';
+        for (var i = 0; i < items.length; i++) {
+            var item = items[i];
+            var active = item.getAttribute('data-map-type') === key;
+            item.classList.toggle('is-active', active);
+            item.setAttribute('aria-selected', active ? 'true' : 'false');
+        }
+    }
+
+    btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        setOpen(!root.classList.contains('is-open'));
+    });
+
+    menu.addEventListener('click', function(e) {
+        var item = e.target && e.target.closest ? e.target.closest('.map-layer-selector__item') : null;
+        if (!item) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var type = item.getAttribute('data-map-type');
+        if (!type) return;
+        try { myMap.setType(type); } catch (err) {}
+        syncActive(type);
+        setOpen(false);
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!root.classList.contains('is-open')) return;
+        if (root.contains(e.target)) return;
+        setOpen(false);
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && root.classList.contains('is-open')) setOpen(false);
+    });
+
+    try {
+        myMap.events.add('typechange', function() {
+            syncActive(myMap.getType && myMap.getType());
+        });
+    } catch (err) {}
+
+    syncActive();
 }
 
 function setupEventListeners() {
@@ -488,7 +539,8 @@ function setupEventListeners() {
         mapBoundsChangeZoomPending = false;
         try {
             var currentZoom = (typeof myMap.getZoom === 'function') ? myMap.getZoom() : null;
-            var lowZoom = typeof currentZoom === 'number' && currentZoom < 16;
+            var objectsBelow = (typeof getLodThresholds === 'function') ? getLodThresholds().objects : 16;
+            var lowZoom = typeof currentZoom === 'number' && currentZoom < objectsBelow;
             var useVirtual = typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization && MapPerf.shouldUseVirtualization();
             if (zoomPending && lowZoom && typeof applyLowZoomMapUpdate === 'function') {
                 applyLowZoomMapUpdate();
@@ -550,6 +602,10 @@ function setupEventListeners() {
             const z = myMap.getZoom();
             if (typeof z !== 'number') return;
 
+            if (typeof updateSettingsCurrentZoom === 'function') {
+                updateSettingsCurrentZoom(z);
+            }
+
             var newZoom = e && typeof e.get === 'function' ? e.get('newZoom') : z;
             var oldZoom = e && typeof e.get === 'function' ? e.get('oldZoom') : expertLastZoom;
             var zoomChanged = typeof newZoom === 'number' && typeof oldZoom === 'number' && newZoom !== oldZoom;
@@ -568,6 +624,10 @@ function setupEventListeners() {
             scheduleMapBoundsChangeUpdate(null, zoomChanged);
         } catch (e) {}
     });
+
+    if (typeof updateSettingsCurrentZoom === 'function') {
+        try { updateSettingsCurrentZoom(myMap.getZoom()); } catch (e) {}
+    }
 
     document.addEventListener('mousemove', function(e) {
         window.lastMouseX = e.clientX;

@@ -130,12 +130,14 @@
 
     function updateSyncOnlineList(clients) {
         var el = document.getElementById('syncOnlineList');
+        var emptyHint = document.getElementById('syncTeamEmptyHint');
         if (!el) return;
         if (clients) lastSyncClients = clients;
         else clients = lastSyncClients;
         if (!clients || clients.length === 0) {
             el.hidden = true;
             el.innerHTML = '';
+            if (emptyHint) emptyHint.hidden = false;
             return;
         }
         var rows = clients.map(function(c) {
@@ -161,6 +163,7 @@
             '<span class="sidebar-sync-online-count">' + clients.length + '</span></div>' +
             '<ul class="sidebar-sync-people">' + rows + '</ul>';
         el.hidden = false;
+        if (emptyHint) emptyHint.hidden = true;
         Array.prototype.forEach.call(el.querySelectorAll('.sidebar-sync-avatar-img'), function(img) {
             if (img._syncAvatarBound) return;
             img._syncAvatarBound = true;

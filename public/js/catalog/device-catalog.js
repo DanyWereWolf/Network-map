@@ -875,13 +875,47 @@ var DEVICE_CATALOG_TAB_TONE = {
     onu: '#06b6d4',
     camera: '#64748b',
     node: '#14b8a6',
-    radioBridge: '#06b6d4',
+    radioBridge: '#6366f1',
     sleeve: '#22c55e',
     cross: '#a855f7',
-    spliceCassette: '#f59e0b',
-    cabinet: '#64748b',
+    spliceCassette: '#ea580c',
+    cabinet: '#e11d48',
     cable: '#f59e0b'
 };
+
+var DEVICE_CATALOG_ALLOWED_TABS = { node: 1, olt: 1, onu: 1, camera: 1, radioBridge: 1, switch: 1, sleeve: 1, cross: 1, spliceCassette: 1, cabinet: 1, cable: 1 };
+var DEVICE_CATALOG_TAB_STORAGE_KEY = 'networkmap_deviceCatalogActiveTab';
+var DEVICE_CATALOG_TYPE_TABS = { sleeve: 1, cross: 1, spliceCassette: 1 };
+
+function isDeviceCatalogTypeTab(tab) {
+    return !!DEVICE_CATALOG_TYPE_TABS[tab];
+}
+
+function getStoredDeviceCatalogTab() {
+    try {
+        var t = sessionStorage.getItem(DEVICE_CATALOG_TAB_STORAGE_KEY);
+        if (t && DEVICE_CATALOG_ALLOWED_TABS[t]) return t;
+    } catch (e) { /* ignore */ }
+    return 'switch';
+}
+
+function storeDeviceCatalogTab(tab) {
+    try {
+        if (tab && DEVICE_CATALOG_ALLOWED_TABS[tab]) {
+            sessionStorage.setItem(DEVICE_CATALOG_TAB_STORAGE_KEY, tab);
+        }
+    } catch (e) { /* ignore */ }
+}
+
+function expandDeviceCatalogTabGroupForTab(tab) {
+    var activeBtn = document.querySelector('.device-catalog-tab[data-tab="' + tab + '"]');
+    if (!activeBtn) return;
+    var group = activeBtn.closest('.device-catalog-tab-group');
+    if (!group) return;
+    group.classList.add('is-open');
+    var hdr = group.querySelector('.device-catalog-tab-group-header');
+    if (hdr) hdr.setAttribute('aria-expanded', 'true');
+}
 
 function syncDeviceCatalogTabButtons() {
     var tab = window.deviceCatalogActiveTab || 'switch';
@@ -891,13 +925,12 @@ function syncDeviceCatalogTabButtons() {
         btn.classList.toggle('device-catalog-tab-active', on);
         btn.setAttribute('aria-selected', on ? 'true' : 'false');
     });
+    expandDeviceCatalogTabGroupForTab(tab);
     var main = document.getElementById('deviceCatalogMain');
     if (main && DEVICE_CATALOG_TAB_TONE[tab]) {
         main.style.setProperty('--catalog-tone', DEVICE_CATALOG_TAB_TONE[tab]);
     }
 }
-
-var DEVICE_CATALOG_ALLOWED_TABS = { node: 1, olt: 1, onu: 1, camera: 1, radioBridge: 1, switch: 1, sleeve: 1, cross: 1, spliceCassette: 1, cabinet: 1, cable: 1 };
 
 function getDeviceCatalogStats(kind) {
     if (kind === 'sleeve' || kind === 'cross' || kind === 'spliceCassette') {
@@ -940,6 +973,7 @@ function updateDeviceCatalogChrome() {
     if (!DEVICE_CATALOG_ALLOWED_TABS[tab]) tab = 'switch';
     var meta = DEVICE_CATALOG_TAB_META[tab] || DEVICE_CATALOG_TAB_META.switch;
     var stats = getDeviceCatalogStats(tab);
+    var isTypeTab = isDeviceCatalogTypeTab(tab);
 
     var descEl = document.getElementById('deviceCatalogTabDesc');
     if (descEl) descEl.textContent = meta.desc;
@@ -949,34 +983,45 @@ function updateDeviceCatalogChrome() {
 
     var tabStatsEl = document.getElementById('deviceCatalogTabStats');
     if (tabStatsEl) {
-        if (tab === 'sleeve' || tab === 'cross' || tab === 'spliceCassette') {
-            tabStatsEl.textContent = stats.manufacturers + ' / ' + stats.models;
+        if (isTypeTab) {
+            tabStatsEl.textContent = stats.manufacturers + ' встр. · ' + stats.models + ' своих';
             tabStatsEl.title = stats.manufacturers + ' встроенных типов, ' + stats.models + ' добавленных вами';
         } else {
-            tabStatsEl.textContent = stats.manufacturers + ' / ' + stats.models;
+            tabStatsEl.textContent = stats.manufacturers + ' произв. · ' + stats.models + ' мод.';
             tabStatsEl.title = stats.manufacturers + ' производителей, ' + stats.models + ' моделей в разделе';
         }
     }
 
     var searchInp = document.getElementById('deviceCatalogSearch');
     if (searchInp) {
-        searchInp.placeholder = (tab === 'sleeve' || tab === 'cross' || tab === 'spliceCassette')
+        searchInp.placeholder = isTypeTab
             ? (tab === 'cross' ? 'Поиск типа кросса…' : (tab === 'spliceCassette' ? 'Поиск типа сплайс-кассеты…' : 'Поиск типа муфты…'))
             : 'Поиск производителя или модели…';
     }
 
     var globalEl = document.getElementById('deviceCatalogGlobalStats');
     if (globalEl) {
-        var totalM = 0;
-        var totalMod = 0;
+        var totalMfr = 0;
+        var totalModels = 0;
+        var totalBuiltin = 0;
+        var totalCustom = 0;
+        var sections = 0;
         Object.keys(DEVICE_CATALOG_TAB_META).forEach(function(k) {
             var s = getDeviceCatalogStats(k);
-            totalM += s.manufacturers;
-            totalMod += s.models;
+            sections++;
+            if (isDeviceCatalogTypeTab(k)) {
+                totalBuiltin += s.manufacturers;
+                totalCustom += s.models;
+            } else {
+                totalMfr += s.manufacturers;
+                totalModels += s.models;
+            }
         });
         globalEl.innerHTML =
-            '<span class="device-catalog-hero-stat"><strong>' + totalM + '</strong> произв.</span>' +
-            '<span class="device-catalog-hero-stat"><strong>' + totalMod + '</strong> мод.</span>';
+            '<span class="device-catalog-hero-stat" title="Разделов справочника"><strong>' + sections + '</strong> разд.</span>' +
+            '<span class="device-catalog-hero-stat" title="Производители в каталогах устройств"><strong>' + totalMfr + '</strong> произв.</span>' +
+            '<span class="device-catalog-hero-stat" title="Модели устройств"><strong>' + totalModels + '</strong> мод.</span>' +
+            '<span class="device-catalog-hero-stat" title="Типы муфт, кроссов и кассет (встроенные и свои)"><strong>' + (totalBuiltin + totalCustom) + '</strong> типов</span>';
     }
 
     syncDeviceCatalogTabButtons();
@@ -985,11 +1030,28 @@ function updateDeviceCatalogChrome() {
         var k = badge.getAttribute('data-stat-tab');
         if (!k || !DEVICE_CATALOG_ALLOWED_TABS[k]) return;
         var s = getDeviceCatalogStats(k);
-        badge.textContent = s.manufacturers + ' / ' + s.models;
-        badge.title = (k === 'sleeve' || k === 'cross' || k === 'spliceCassette')
+        badge.textContent = s.manufacturers + '/' + s.models;
+        badge.title = isDeviceCatalogTypeTab(k)
             ? (s.manufacturers + ' встроенных, ' + s.models + ' своих')
             : (s.manufacturers + ' производителей, ' + s.models + ' моделей');
     });
+}
+
+function updateDeviceCatalogSearchMeta(visible, total) {
+    var metaEl = document.getElementById('deviceCatalogSearchMeta');
+    if (!metaEl) return;
+    var q = getDeviceCatalogSearchQuery();
+    if (!total) {
+        metaEl.textContent = '';
+        return;
+    }
+    if (q) {
+        metaEl.textContent = visible + ' из ' + total;
+        metaEl.title = 'Найдено записей: ' + visible + ' из ' + total;
+    } else {
+        metaEl.textContent = total + (total === 1 ? ' запись' : (total >= 2 && total <= 4 ? ' записи' : ' записей'));
+        metaEl.title = '';
+    }
 }
 
 function applyDeviceCatalogSearchFilter() {
@@ -1010,6 +1072,7 @@ function applyDeviceCatalogSearchFilter() {
         card.classList.toggle('is-hidden-by-search', !show);
         if (show) visible++;
     });
+    updateDeviceCatalogSearchMeta(visible, cards.length);
     var noRes = list.querySelector('.device-catalog-no-results');
     if (cards.length > 0 && q && visible === 0) {
         if (!noRes) {
@@ -2927,6 +2990,7 @@ function renderSleeveCatalogList(container, searchQ) {
         html += '<p class="device-catalog-no-results">Ничего не найдено по запросу «' + escapeHtml(searchQ) + '».</p>';
     }
     container.innerHTML = html;
+    updateDeviceCatalogSearchMeta(visibleCount, types.length);
     container.querySelectorAll('.device-catalog-remove-sleeve').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var sid = btn.getAttribute('data-sleeve-id');
@@ -2973,6 +3037,7 @@ function renderCrossCatalogList(container, searchQ) {
         html += '<p class="device-catalog-no-results">Ничего не найдено по запросу «' + escapeHtml(searchQ) + '».</p>';
     }
     container.innerHTML = html;
+    updateDeviceCatalogSearchMeta(visibleCount, types.length);
     container.querySelectorAll('.device-catalog-remove-cross').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var cid = btn.getAttribute('data-cross-id');
@@ -3019,6 +3084,7 @@ function renderSpliceCassetteCatalogList(container, searchQ) {
         html += '<p class="device-catalog-no-results">Ничего не найдено по запросу «' + escapeHtml(searchQ) + '».</p>';
     }
     container.innerHTML = html;
+    updateDeviceCatalogSearchMeta(visibleCount, types.length);
     container.querySelectorAll('.device-catalog-remove-cassette').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var cid = btn.getAttribute('data-cassette-id');
@@ -3046,6 +3112,7 @@ function renderDeviceCatalogList() {
 
     var searchQ = getDeviceCatalogSearchQuery();
     updateDeviceCatalogChrome();
+    container.classList.toggle('device-catalog-list--types', isDeviceCatalogTypeTab(tab));
 
     if (tab === 'sleeve') {
         renderSleeveCatalogList(container, searchQ);
@@ -3064,13 +3131,26 @@ function renderDeviceCatalogList() {
 
     var catalog = getCatalogObjectRef(tab);
     var mfrs = Object.keys(catalog).sort();
+    var richModels = tab === 'switch' || tab === 'olt' || tab === 'cable';
 
     if (mfrs.length === 0) {
         container.innerHTML =
             '<div class="device-catalog-empty">' +
+            '<div class="device-catalog-empty-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></div>' +
             '<p class="device-catalog-empty-title">Раздел пуст</p>' +
-            '<p>Нажмите «Добавить» слева или восстановите заводские значения кнопкой «Сбросить раздел».</p>' +
-            '</div>';
+            '<p>Добавьте производителя или восстановите заводской набор.</p>' +
+            '<div class="device-catalog-empty-actions">' +
+            '<button type="button" class="btn-primary device-catalog-empty-add">Добавить</button>' +
+            '<button type="button" class="btn-secondary device-catalog-empty-reset">Сбросить раздел</button>' +
+            '</div></div>';
+        updateDeviceCatalogSearchMeta(0, 0);
+        var emptyAdd = container.querySelector('.device-catalog-empty-add');
+        var emptyReset = container.querySelector('.device-catalog-empty-reset');
+        if (emptyAdd) emptyAdd.addEventListener('click', function() { openDeviceCatalogEntryModal('manufacturer'); });
+        if (emptyReset) emptyReset.addEventListener('click', function() {
+            var resetBtn = document.getElementById('deviceCatalogReset');
+            if (resetBtn) resetBtn.click();
+        });
         return;
     }
 
@@ -3091,13 +3171,14 @@ function renderDeviceCatalogList() {
         html += '<button type="button" class="device-catalog-add-model-card device-catalog-btn-add-model" data-mfr="' + escapeHtml(mfr) + '" title="Добавить модель">+ модель</button>';
         html += '<button type="button" class="device-catalog-remove-mfr device-catalog-btn-remove-mfr" data-mfr="' + escapeHtml(mfr) + '" title="Удалить производителя и все модели">Удалить</button>';
         html += '</div></header>';
-        html += '<div class="device-catalog-models">';
+        html += '<div class="device-catalog-models' + (richModels ? '' : ' device-catalog-models--chips') + '">';
         if (models.length === 0) {
-            html += '<span class="device-catalog-mfr-count">Нет моделей — нажмите «+ Добавить»</span>';
+            html += '<span class="device-catalog-mfr-count">Нет моделей — нажмите «+ модель»</span>';
         }
         models.forEach(function(mod) {
-            html += '<span class="device-catalog-model-tag' + (tab === 'cable' ? ' device-catalog-model-tag--cable' : '') + (tab === 'switch' || tab === 'olt' ? ' device-catalog-model-tag--switch' : '') + (tab === 'radioBridge' ? ' device-catalog-model-tag--switch' : '') + '">';
+            html += '<span class="device-catalog-model-tag' + (tab === 'cable' ? ' device-catalog-model-tag--cable' : '') + (tab === 'switch' || tab === 'olt' ? ' device-catalog-model-tag--switch' : '') + '">';
             html += '<span class="device-catalog-model-name">' + escapeHtml(mod) + '</span>';
+            html += '<span class="device-catalog-model-meta">';
             if (tab === 'switch') {
                 var defN = getSwitchModelDefaultPortCount(mfr, mod);
                 var customPorts = switchModelHasCustomPortTypes(mfr, mod);
@@ -3123,7 +3204,7 @@ function renderDeviceCatalogList() {
                 );
             }
             html += '<button type="button" class="device-catalog-remove-model" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" title="Удалить модель" aria-label="Удалить модель">×</button>';
-            html += '</span>';
+            html += '</span></span>';
         });
         html += '</div></article>';
     });
@@ -3131,6 +3212,7 @@ function renderDeviceCatalogList() {
         html += '<p class="device-catalog-no-results">Ничего не найдено по запросу «' + escapeHtml(searchQ) + '». Измените поиск или выберите другой раздел.</p>';
     }
     container.innerHTML = html;
+    updateDeviceCatalogSearchMeta(visibleCount, mfrs.length);
 
     container.querySelectorAll('.device-catalog-add-model-card').forEach(function(btn) {
         btn.addEventListener('click', function() {
@@ -3704,11 +3786,21 @@ function setupDeviceCatalogHandlers() {
     if (catModal && !catModal._deviceCatalogTabBound) {
         catModal._deviceCatalogTabBound = true;
         catModal.addEventListener('click', function(e) {
+            var groupHdr = e.target.closest('.device-catalog-tab-group-header');
+            if (groupHdr && catModal.contains(groupHdr)) {
+                e.preventDefault();
+                var group = groupHdr.closest('.device-catalog-tab-group');
+                if (!group) return;
+                var open = group.classList.toggle('is-open');
+                groupHdr.setAttribute('aria-expanded', open ? 'true' : 'false');
+                return;
+            }
             var b = e.target.closest('.device-catalog-tab');
             if (!b || !catModal.contains(b)) return;
             var t = b.getAttribute('data-tab');
             if (!t || !DEVICE_CATALOG_ALLOWED_TABS[t]) return;
             window.deviceCatalogActiveTab = t;
+            storeDeviceCatalogTab(t);
             syncDeviceCatalogTabButtons();
             renderDeviceCatalogList();
         });
@@ -3771,6 +3863,12 @@ function setupAccordions() {
 
             if (!isActive) {
                 accordionSection.classList.add('active');
+                var cat = accordionSection.closest('.sidebar-category');
+                if (cat) {
+                    cat.classList.add('is-open');
+                    var catBtn = cat.querySelector('.sidebar-category-header');
+                    if (catBtn) catBtn.setAttribute('aria-expanded', 'true');
+                }
             }
         });
     });
@@ -3780,6 +3878,15 @@ function setupAccordions() {
         section.classList.remove('active');
     });
 
+    document.querySelectorAll('.sidebar-category-header').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var cat = btn.closest('.sidebar-category');
+            if (!cat) return;
+            var open = cat.classList.toggle('is-open');
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+    });
+
     setupDeviceCatalogHandlers();
 }
 
@@ -3787,7 +3894,7 @@ function openDeviceCatalogModal() {
     if (typeof requireAdmin === 'function' && !requireAdmin()) return;
     var modal = document.getElementById('deviceCatalogModal');
     if (modal) {
-        window.deviceCatalogActiveTab = 'switch';
+        window.deviceCatalogActiveTab = getStoredDeviceCatalogTab();
         syncDeviceCatalogTabButtons();
         var searchInp = document.getElementById('deviceCatalogSearch');
         if (searchInp) searchInp.value = '';
@@ -3798,6 +3905,9 @@ function openDeviceCatalogModal() {
         requestAnimationFrame(function () {
             if (typeof window.initPanelPlexusCanvases === 'function') {
                 window.initPanelPlexusCanvases(modal);
+            }
+            if (searchInp) {
+                try { searchInp.focus(); } catch (e) { /* ignore */ }
             }
         });
     }

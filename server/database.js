@@ -1357,6 +1357,119 @@ function setThemeForUser(userId, theme) {
     saveStore();
 }
 
+function getUserJsonSettingMap(settingKey) {
+    const raw = getSetting(settingKey);
+    if (!raw) return {};
+    try {
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function setUserJsonSettingMap(settingKey, map) {
+    const s = loadStore();
+    if (!s.settings) s.settings = {};
+    s.settings[settingKey] = JSON.stringify(map && typeof map === 'object' ? map : {});
+    saveStore();
+}
+
+function clampPerfInt(value, min, max, fallback) {
+    const n = parseInt(value, 10);
+    if (isNaN(n)) return fallback;
+    return Math.max(min, Math.min(max, n));
+}
+
+function readPerfBool(raw, key, fallback) {
+    if (!raw || raw[key] === undefined || raw[key] === null) return fallback;
+    if (raw[key] === false || raw[key] === 0 || raw[key] === '0') return false;
+    if (raw[key] === true || raw[key] === 1 || raw[key] === '1') return true;
+    return fallback;
+}
+
+function normalizePerfSettingsForUser(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    let mode = typeof raw.mode === 'string' ? raw.mode : 'auto';
+    if (mode !== 'auto' && mode !== 'economy' && mode !== 'max' && mode !== 'custom') mode = 'auto';
+    return {
+        mode: mode,
+        animations: readPerfBool(raw, 'animations', true),
+        lofi: readPerfBool(raw, 'lofi', true),
+        connectionLines: readPerfBool(raw, 'connectionLines', true),
+        radioCoverage: readPerfBool(raw, 'radioCoverage', true),
+        plexus: readPerfBool(raw, 'plexus', true),
+        virtMin: clampPerfInt(raw.virtMin, 50, 2000, 400),
+        cullMin: clampPerfInt(raw.cullMin, 20, 1000, 120)
+    };
+}
+
+function getPerfSettingsForUser(userId) {
+    if (userId == null) return null;
+    const map = getUserJsonSettingMap('userPerfSettings');
+    return normalizePerfSettingsForUser(map[String(userId)]);
+}
+
+function setPerfSettingsForUser(userId, perf) {
+    if (userId == null) return;
+    const map = getUserJsonSettingMap('userPerfSettings');
+    const id = String(userId);
+    const normalized = normalizePerfSettingsForUser(perf);
+    if (normalized) map[id] = normalized;
+    else delete map[id];
+    setUserJsonSettingMap('userPerfSettings', map);
+}
+
+function normalizeThemeAccentForUser(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    let color = typeof raw.color === 'string' ? raw.color.trim().toLowerCase() : '';
+    if (!/^#[0-9a-f]{6}$/.test(color)) return null;
+    let id = typeof raw.id === 'string' ? raw.id : 'custom';
+    if (!id) id = 'custom';
+    return { id: id, color: color };
+}
+
+function getThemeAccentForUser(userId) {
+    if (userId == null) return null;
+    const map = getUserJsonSettingMap('userThemeAccents');
+    return normalizeThemeAccentForUser(map[String(userId)]);
+}
+
+function setThemeAccentForUser(userId, accent) {
+    if (userId == null) return;
+    const map = getUserJsonSettingMap('userThemeAccents');
+    const id = String(userId);
+    const normalized = normalizeThemeAccentForUser(accent);
+    if (normalized) map[id] = normalized;
+    else delete map[id];
+    setUserJsonSettingMap('userThemeAccents', map);
+}
+
+function normalizeLodThresholdsForUser(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    let objects = clampPerfInt(raw.objects, 8, 20, 16);
+    let labels = clampPerfInt(raw.labels, 8, 20, 16);
+    let regions = clampPerfInt(raw.regions, 5, 16, 10);
+    if (labels < objects) labels = objects;
+    return { objects: objects, labels: labels, regions: regions };
+}
+
+function getLodThresholdsForUser(userId) {
+    if (userId == null) return null;
+    const map = getUserJsonSettingMap('userLodThresholds');
+    return normalizeLodThresholdsForUser(map[String(userId)]);
+}
+
+function setLodThresholdsForUser(userId, lod) {
+    if (userId == null) return;
+    const map = getUserJsonSettingMap('userLodThresholds');
+    const id = String(userId);
+    const normalized = normalizeLodThresholdsForUser(lod);
+    if (normalized) map[id] = normalized;
+    else delete map[id];
+    setUserJsonSettingMap('userLodThresholds', map);
+}
+
 function createDailyBackup() {
     try {
         const s = loadStore();
@@ -2186,6 +2299,12 @@ module.exports = {
     getMapStartForUserOrOrg,
     getThemeForUser,
     setThemeForUser,
+    getPerfSettingsForUser,
+    setPerfSettingsForUser,
+    getThemeAccentForUser,
+    setThemeAccentForUser,
+    getLodThresholdsForUser,
+    setLodThresholdsForUser,
     createDailyBackup,
     listBackups,
     restoreFromBackup,

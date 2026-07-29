@@ -269,12 +269,15 @@ function updateCrossDisplay(scope) {
                 }
                 return;
             }
+            // options.visible переживает remove/add — после expert-zoom hide нужно явно вернуть
+            var crossFilterOk = cross.properties.get('_mapFilterVisible') !== false;
+            try { if (cross.options) cross.options.set('visible', crossFilterOk); } catch (eVis) {}
             myMap.geoObjects.add(cross);
             const label = cross.properties.get('label');
             if (label) {
                 myMap.geoObjects.add(label);
-                if (hideLabelsByZoom && label.options) {
-                    try { label.options.set('visible', false); } catch (eLblZ) {}
+                if (label.options) {
+                    try { label.options.set('visible', crossFilterOk && !hideLabelsByZoom); } catch (eLblZ) {}
                 }
             }
             return;
@@ -567,12 +570,15 @@ function updateNodeDisplay(scope) {
                 }
                 return;
             }
+            // options.visible переживает remove/add — после expert-zoom hide нужно явно вернуть
+            var nodeFilterOk = node.properties.get('_mapFilterVisible') !== false;
+            try { if (node.options) node.options.set('visible', nodeFilterOk); } catch (eVis) {}
             myMap.geoObjects.add(node);
             const label = node.properties.get('label');
             if (label) {
                 myMap.geoObjects.add(label);
-                if (hideLabelsByZoom && label.options) {
-                    try { label.options.set('visible', false); } catch (eLblZ) {}
+                if (label.options) {
+                    try { label.options.set('visible', nodeFilterOk && !hideLabelsByZoom); } catch (eLblZ) {}
                 }
             }
             return;

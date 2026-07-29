@@ -873,6 +873,18 @@ function loadData() {
             if (s.theme === 'dark' || s.theme === 'light') {
                 try { setTheme(s.theme, { syncServer: false }); } catch (e) {}
             }
+            if (s.themeAccent && typeof setThemeAccent === 'function') {
+                try { setThemeAccent(s.themeAccent, { persist: true, syncServer: false }); } catch (eAccent) {}
+            }
+            if (s.perfSettings && typeof applyPerfSettingsFromServer === 'function') {
+                try { applyPerfSettingsFromServer(s.perfSettings, { persist: true, apply: true }); } catch (ePerf) {}
+            }
+            if (s.lodThresholds && typeof applyLodThresholdsFromServer === 'function') {
+                try {
+                    applyLodThresholdsFromServer(s.lodThresholds, { persist: true });
+                    if (typeof syncLodControlsUi === 'function') syncLodControlsUi(s.lodThresholds);
+                } catch (eLod) {}
+            }
             if (s.groupNames && typeof crossGroupNames !== 'undefined' && typeof nodeGroupNames !== 'undefined') {
                 try {
                     if (s.groupNames.cross && typeof s.groupNames.cross === 'object') Object.keys(s.groupNames.cross).forEach(function(k) { crossGroupNames.set(k, s.groupNames.cross[k]); });
@@ -1903,7 +1915,8 @@ window.applyOperationToMap = applyOperationToMap;
 
 function ensureNodeLabelsVisible() {
     var zoom = (myMap && typeof myMap.getZoom === 'function') ? myMap.getZoom() : 16;
-    var hideLabels = typeof zoom === 'number' && zoom < 16;
+    var thr = (typeof getLodThresholds === 'function') ? getLodThresholds() : { labels: 16 };
+    var hideLabels = typeof zoom === 'number' && zoom < thr.labels;
     objects.forEach(obj => {
         if (obj.properties) {
             const type = obj.properties.get('type');

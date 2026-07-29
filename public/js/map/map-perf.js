@@ -100,13 +100,27 @@
     }
 
     function shouldUseViewportCull() {
+        var min = VIEWPORT_CULL_MIN_OBJECTS;
+        if (typeof global.getPerfVirtualizationThresholds === 'function') {
+            try {
+                var thr = global.getPerfVirtualizationThresholds();
+                if (thr && typeof thr.cullMin === 'number') min = thr.cullMin;
+            } catch (e) {}
+        }
         return typeof objects !== 'undefined' && Array.isArray(objects) &&
-            objects.length >= VIEWPORT_CULL_MIN_OBJECTS;
+            objects.length >= min;
     }
 
     function shouldUseVirtualization() {
+        var min = VIRTUALIZATION_MIN_OBJECTS;
+        if (typeof global.getPerfVirtualizationThresholds === 'function') {
+            try {
+                var thr = global.getPerfVirtualizationThresholds();
+                if (thr && typeof thr.virtMin === 'number') min = thr.virtMin;
+            } catch (e) {}
+        }
         return typeof objects !== 'undefined' && Array.isArray(objects) &&
-            objects.length >= VIRTUALIZATION_MIN_OBJECTS;
+            objects.length >= min;
     }
 
     function spatialCellKey(lat, lon) {
@@ -324,11 +338,21 @@
         return geometryIntersectsBounds(obj, bounds);
     }
 
+    function getObjectsZoomThreshold() {
+        if (typeof global.getLodThresholds === 'function') {
+            return global.getLodThresholds().objects;
+        }
+        return ZOOM_SHOW_CONNECTION_LINES;
+    }
+
     function connectionLinesVisibleAtZoom(zoom) {
+        if (typeof global.areConnectionLinesEnabled === 'function' && !global.areConnectionLinesEnabled()) {
+            return false;
+        }
         if (typeof global.mapObjectsVisibleAtZoom === 'function') {
             return global.mapObjectsVisibleAtZoom(zoom);
         }
-        return typeof zoom !== 'number' || zoom >= ZOOM_SHOW_CONNECTION_LINES;
+        return typeof zoom !== 'number' || zoom >= getObjectsZoomThreshold();
     }
 
     function isBulkImportActive() {
@@ -341,11 +365,27 @@
 
     function buildDefaultMountContext() {
         var zoom = (global.myMap && typeof global.myMap.getZoom === 'function') ? global.myMap.getZoom() : 16;
+        if (typeof global.buildMapMountContext === 'function') {
+            try { return global.buildMapMountContext(); } catch (eCtx) {}
+        }
+        if (typeof global.getExpertZoomFlags === 'function') {
+            var flags = global.getExpertZoomFlags();
+            var thr = typeof global.getLodThresholds === 'function' ? global.getLodThresholds() : { objects: 16, labels: 16, regions: 10 };
+            return {
+                bounds: getExpandedBounds(global.myMap),
+                zoom: flags.zoom,
+                hideLabels: !!flags.hideLabels,
+                hideObjects: !!flags.hideObjects,
+                hideRegions: typeof flags.zoom === 'number' && flags.zoom < thr.regions,
+                showConnectionLines: connectionLinesVisibleAtZoom(flags.zoom)
+            };
+        }
+        var objectsBelow = getObjectsZoomThreshold();
         return {
             bounds: getExpandedBounds(global.myMap),
             zoom: zoom,
-            hideLabels: typeof zoom === 'number' && zoom < 16,
-            hideObjects: typeof zoom === 'number' && zoom < 16,
+            hideLabels: typeof zoom === 'number' && zoom < objectsBelow,
+            hideObjects: typeof zoom === 'number' && zoom < objectsBelow,
             hideRegions: typeof zoom === 'number' && zoom < 10,
             showConnectionLines: connectionLinesVisibleAtZoom(zoom)
         };
@@ -507,7 +547,7 @@
         var bounds = ctx.bounds;
         if (!bounds) return;
 
-        if (mountedUids.size === 0 && global.objects.length >= VIRTUALIZATION_MIN_OBJECTS) {
+        if (mountedUids.size === 0 && shouldUseVirtualization()) {
             adoptExistingGeoObjects(global.objects);
         }
 

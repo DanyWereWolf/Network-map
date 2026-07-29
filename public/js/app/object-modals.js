@@ -1878,7 +1878,9 @@ function getConnectionLinePolylineOptions(strokeColor) {
 
 function mapObjectsVisibleAtZoom(zoom) {
     if (typeof zoom !== 'number') return true;
-    return zoom >= EXPERT_ZOOM_HIDE_OBJECTS_BELOW;
+    var thr = (typeof getLodThresholds === 'function') ? getLodThresholds() : null;
+    var below = thr ? thr.objects : (typeof EXPERT_ZOOM_HIDE_OBJECTS_BELOW === 'number' ? EXPERT_ZOOM_HIDE_OBJECTS_BELOW : 16);
+    return zoom >= below;
 }
 
 function getCableClickTolerance(zoom) {

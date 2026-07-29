@@ -2349,6 +2349,18 @@ app.get('/api/settings', (req, res) => {
         if (user && db.getThemeForUser) {
             settings.theme = db.getThemeForUser(user.userId) || '';
         }
+        if (user && db.getPerfSettingsForUser) {
+            var perf = db.getPerfSettingsForUser(user.userId);
+            if (perf) settings.perfSettings = perf;
+        }
+        if (user && db.getThemeAccentForUser) {
+            var accent = db.getThemeAccentForUser(user.userId);
+            if (accent) settings.themeAccent = accent;
+        }
+        if (user && db.getLodThresholdsForUser) {
+            var lod = db.getLodThresholdsForUser(user.userId);
+            if (lod) settings.lodThresholds = lod;
+        }
         res.json(settings);
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
@@ -2373,6 +2385,15 @@ app.post('/api/settings', (req, res) => {
             const t = body.theme === 'dark' || body.theme === 'light' ? body.theme : null;
             db.setThemeForUser(user.userId, t);
         }
+        if (body.perfSettings !== undefined && db.setPerfSettingsForUser) {
+            db.setPerfSettingsForUser(user.userId, body.perfSettings);
+        }
+        if (body.themeAccent !== undefined && db.setThemeAccentForUser) {
+            db.setThemeAccentForUser(user.userId, body.themeAccent);
+        }
+        if (body.lodThresholds !== undefined && db.setLodThresholdsForUser) {
+            db.setLodThresholdsForUser(user.userId, body.lodThresholds);
+        }
         var toSave = {};
         if (user.role === 'admin') {
             if (body.groupNames !== undefined && typeof body.groupNames === 'object') {
@@ -2381,6 +2402,9 @@ app.post('/api/settings', (req, res) => {
             toSave = Object.assign({}, body);
             delete toSave.theme;
             delete toSave.mapStart;
+            delete toSave.perfSettings;
+            delete toSave.themeAccent;
+            delete toSave.lodThresholds;
         }
         if (Object.keys(toSave).length > 0) db.setSettings(toSave, orgId || undefined);
         if (toSave.collaboratorCursorStyle !== undefined && orgId) {
@@ -2813,6 +2837,93 @@ app.get('/api/static-map-image', async (req, res) => {
         console.error('[PDF] static-map-image proxy failed:', eMap && eMap.message ? eMap.message : eMap, { ll, size, zoom });
         res.status(502).json({ error: 'Static map proxy failed' });
     }
+});
+
+/** Lo-fi radio: proxy for https://lofiradio.ru/ (Icecast live.lofiradio.ru). */
+var LOFI_RADIO_STATIONS = {
+    lofi: [
+        'https://live.lofiradio.ru/lofi_mp3_128'
+    ]
+};
+
+function proxyLofiRadioStream(res, urls, index, redirectsLeft) {
+    if (!urls || index >= urls.length) {
+        if (!res.headersSent) res.status(502).json({ error: 'Stream unavailable' });
+        return;
+    }
+    var left = redirectsLeft == null ? 4 : redirectsLeft;
+    var target;
+    try {
+        target = new URL(urls[index]);
+    } catch (eUrl) {
+        return proxyLofiRadioStream(res, urls, index + 1, left);
+    }
+    if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+        return proxyLofiRadioStream(res, urls, index + 1, left);
+    }
+    var lib = target.protocol === 'https:' ? https : http;
+    var upstreamReq = lib.request({
+        protocol: target.protocol,
+        hostname: target.hostname,
+        port: target.port || (target.protocol === 'https:' ? 443 : 80),
+        path: target.pathname + target.search,
+        method: 'GET',
+        headers: {
+            'User-Agent': 'VolsmapLofiRadio/1.0',
+            'Accept': '*/*',
+            'Icy-MetaData': '0',
+            'Connection': 'keep-alive'
+        },
+        timeout: 20000
+    }, function(upstream) {
+        var code = upstream.statusCode || 0;
+        if (code >= 300 && code < 400 && upstream.headers.location && left > 0) {
+            upstream.resume();
+            var nextUrl;
+            try {
+                nextUrl = new URL(upstream.headers.location, target).href;
+            } catch (eLoc) {
+                return proxyLofiRadioStream(res, urls, index + 1, left);
+            }
+            return proxyLofiRadioStream(res, [nextUrl].concat(urls.slice(index + 1)), 0, left - 1);
+        }
+        if (code !== 200) {
+            upstream.resume();
+            return proxyLofiRadioStream(res, urls, index + 1, left);
+        }
+        if (res.headersSent) {
+            upstream.resume();
+            return;
+        }
+        res.status(200);
+        res.setHeader('Content-Type', upstream.headers['content-type'] || 'audio/mpeg');
+        res.setHeader('Cache-Control', 'no-store, no-cache');
+        res.setHeader('Accept-Ranges', 'none');
+        if (upstream.headers['icy-name']) res.setHeader('X-Lofi-Name', String(upstream.headers['icy-name']).slice(0, 120));
+        upstream.pipe(res);
+        res.on('close', function() {
+            try { upstream.destroy(); } catch (eDestroy) {}
+            try { upstreamReq.destroy(); } catch (eReq) {}
+        });
+    });
+    upstreamReq.on('timeout', function() {
+        try { upstreamReq.destroy(); } catch (eT) {}
+    });
+    upstreamReq.on('error', function() {
+        if (!res.headersSent) proxyLofiRadioStream(res, urls, index + 1, left);
+    });
+    upstreamReq.end();
+}
+
+app.get('/api/lofi-radio/:station', function(req, res) {
+    var station = String(req.params.station || '').trim().toLowerCase();
+    var urls = LOFI_RADIO_STATIONS[station];
+    if (!urls || !urls.length) {
+        return res.status(404).json({ error: 'Unknown station' });
+    }
+    req.setTimeout(0);
+    res.setTimeout(0);
+    proxyLofiRadioStream(res, urls, 0, 4);
 });
 
 // Лицевая страница по умолчанию — условия (pricing.html)

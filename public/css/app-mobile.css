@@ -44,6 +44,11 @@ html {
         font-size: 0.6875rem;
     }
 
+    .map-layer-selector {
+        top: max(10px, env(safe-area-inset-top, 0px));
+        right: max(10px, env(safe-area-inset-right, 0px));
+    }
+
     body.edit-mode-active:not(.underground-draw-active) .map-area-wrapper::after {
         inset: 0;
         border-radius: 0;
@@ -54,7 +59,9 @@ html {
     }
 
     .sidebar-toggle,
-    #sidebarToggle {
+    #sidebarToggle,
+    .lofi-radio-dock,
+    #lofiRadioCard {
         display: none !important;
     }
 
@@ -121,27 +128,33 @@ html {
         border-left: none;
         padding-left: 0;
         justify-self: end;
-        gap: 10px;
+        gap: 8px;
         min-width: 0;
+    }
+
+    .user-info {
+        padding: 3px 8px 3px 3px;
     }
 
     /* На телефоне только просмотр: без отмены/повтора, справочника, обновлений и истории */
     #undoBtn,
     #redoBtn,
     #deviceCatalogBtn,
-    #historyBtn {
+    #historyBtn,
+    .user-menu-group {
         display: none !important;
     }
 
     .user-menu {
         flex-wrap: nowrap;
-        gap: 6px;
+        gap: 4px;
         overflow-x: auto;
         overflow-y: hidden;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: none;
         max-width: calc(100vw - 56px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
-        padding-bottom: 2px;
+        padding: 3px;
+        border-radius: 12px;
     }
 
     .user-menu::-webkit-scrollbar {
@@ -591,14 +604,47 @@ html {
 
     .sidebar-controls-card {
         margin-bottom: 10px;
+        border-radius: 12px;
     }
 
     .sidebar-controls-head {
-        padding: 10px;
+        padding: 11px 12px 10px 14px;
     }
 
     .sidebar-controls-mode {
-        padding: 8px 10px 10px;
+        padding: 8px 10px 10px 12px;
+    }
+
+    .theme-accent-swatch {
+        width: 30px;
+        height: 30px;
+    }
+
+    .settings-choice-card {
+        min-height: 72px;
+        padding: 9px;
+    }
+
+    .settings-choice-title {
+        font-size: 0.72rem;
+    }
+
+    .settings-choice-hint {
+        font-size: 0.6rem;
+    }
+
+    .sidebar-category {
+        border-radius: 12px;
+    }
+
+    .sidebar-category-header {
+        padding: 11px 11px 11px 13px;
+        min-height: 48px;
+    }
+
+    .sidebar-category-header-icon {
+        width: 34px;
+        height: 34px;
     }
 
     .accordion-section--mapfilter.active .accordion-content {

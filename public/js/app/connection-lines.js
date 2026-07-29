@@ -423,6 +423,10 @@ function scheduleConnectionLinesUpdate(uidOrList) {
 function applyConnectionLinesVisibility() {
     if (window._mapPdfExportCaptureActive) return;
     if (!myMap || typeof myMap.getZoom !== 'function') return;
+    if (typeof areConnectionLinesEnabled === 'function' && !areConnectionLinesEnabled()) {
+        setAllConnectionLinesVisible(false);
+        return;
+    }
     var zoom = myMap.getZoom();
     if (!mapObjectsVisibleAtZoom(zoom)) {
         setAllConnectionLinesVisible(false);

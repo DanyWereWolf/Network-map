@@ -64,10 +64,11 @@
         (function() {
             try {
                 var key = 'networkMap_theme';
+                var uid = null;
                 var sess = localStorage.getItem('networkMap_session') || sessionStorage.getItem('networkMap_session');
                 if (sess) {
                     var u = JSON.parse(sess);
-                    var uid = (u && u.userId != null) ? u.userId : (u && u.id != null ? u.id : null);
+                    uid = (u && u.userId != null) ? u.userId : (u && u.id != null ? u.id : null);
                     if (uid != null && String(uid).trim() !== '') key = 'networkMap_theme_' + String(uid).trim();
                 }
                 var saved = localStorage.getItem(key);
@@ -78,6 +79,23 @@
                 var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
                 var theme = (saved === 'dark' || saved === 'light') ? saved : (prefersDark ? 'dark' : 'light');
                 document.documentElement.setAttribute('data-theme', theme);
+                try {
+                    var accentKey = 'networkMap_themeAccent';
+                    if (uid != null && String(uid).trim() !== '') accentKey = 'networkMap_themeAccent_' + String(uid).trim();
+                    var accentRaw = localStorage.getItem(accentKey) || localStorage.getItem('networkMap_themeAccent');
+                    if (accentRaw) {
+                        var accent = JSON.parse(accentRaw);
+                        var color = accent && typeof accent.color === 'string' ? accent.color.trim() : '';
+                        if (/^#[0-9a-fA-F]{6}$/.test(color)) {
+                            var r = parseInt(color.slice(1, 3), 16);
+                            var g = parseInt(color.slice(3, 5), 16);
+                            var b = parseInt(color.slice(5, 7), 16);
+                            var root = document.documentElement.style;
+                            root.setProperty('--accent-primary', color.toLowerCase());
+                            root.setProperty('--accent-primary-soft', 'rgba(' + r + ', ' + g + ', ' + b + ', ' + (theme === 'dark' ? '0.18' : '0.12') + ')');
+                        }
+                    }
+                } catch (eAccent) {}
             } catch (e) {}
         })();
     </script>
@@ -215,6 +233,7 @@
                             <circle cx="12" cy="16" r="1.5" fill="currentColor" stroke="none"></circle>
                         </svg>
                     </button>
+                    <span class="user-menu-group" role="group" aria-label="История правок">
                     <button id="undoBtn" class="user-menu-btn" title="Отменить (Ctrl+Z)" disabled>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M3 10h10a5 5 0 0 1 5 5v2"></path>
@@ -227,6 +246,7 @@
                             <polyline points="21 10 16 5 21 10 16 15 21 10"></polyline>
                         </svg>
                     </button>
+                    </span>
                     <button id="themeToggle" class="user-menu-btn theme-toggle" title="Сменить тему">
                         <svg class="theme-icon-light" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <circle cx="12" cy="12" r="5"></circle>
@@ -270,7 +290,7 @@
                             <path d="M2 17l10 5 10-5"></path>
                         </svg>
                     </button>
-                    <button id="logoutBtn" class="user-menu-btn" title="Выйти">
+                    <button id="logoutBtn" class="user-menu-btn user-menu-btn--logout" title="Выйти">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
                             <polyline points="16 17 21 12 16 7"></polyline>
@@ -300,7 +320,7 @@
                 <section class="sidebar-controls-card" aria-label="Управление картой">
                     <header class="sidebar-controls-head">
                         <div class="sidebar-controls-head-icon" aria-hidden="true">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polygon points="1 6 1 22 8 18 16 22 23 18 23 6 16 10 8 6 1 6"></polygon>
                                 <line x1="8" y1="3" x2="8" y2="6"></line>
                                 <line x1="16" y1="3" x2="16" y2="6"></line>
@@ -308,7 +328,7 @@
                         </div>
                         <div class="sidebar-controls-head-text">
                             <h3 class="sidebar-controls-title">Управление картой</h3>
-                            <p class="sidebar-controls-desc">Режим работы, анимации и видимость объектов</p>
+                            <p class="sidebar-controls-desc">Режим и видимость объектов</p>
                         </div>
                     </header>
 
@@ -329,45 +349,6 @@
                                 <span>Редактирование</span>
                             </button>
                         </div>
-                        <label class="map-animations-toggle" title="Пульсации зон и подсветок, плавное перемещение карты">
-                            <input type="checkbox" id="mapAnimationsToggle" checked>
-                            <span class="map-animations-toggle-ui" aria-hidden="true"></span>
-                            <span class="map-animations-toggle-text">
-                                <span class="map-animations-toggle-label">Анимации на карте</span>
-                                <span class="map-animations-toggle-hint">Пульсации и плавный переход</span>
-                            </span>
-                        </label>
-                    </div>
-
-                    <div class="sidebar-sync-presence sync-presence--offline" id="syncPresenceCard" aria-label="Совместная работа">
-                        <div class="sidebar-sync-presence-top">
-                            <div class="sidebar-sync-presence-identity">
-                                <span class="sidebar-sync-presence-icon" aria-hidden="true">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                                        <circle cx="9" cy="7" r="4"></circle>
-                                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                                    </svg>
-                                </span>
-                                <div class="sidebar-sync-presence-copy">
-                                    <span class="sidebar-sync-presence-label">Совместная карта</span>
-                                    <span id="syncStatus" class="sync-status sync-disconnected">
-                                        <span class="sync-status-dot" aria-hidden="true"></span>
-                                        <span class="sync-status-text">Отключено</span>
-                                    </span>
-                                </div>
-                            </div>
-                            <button type="button" id="syncConnectBtn" class="sidebar-sync-reconnect-btn" title="Переподключить синхронизацию">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                    <polyline points="23 4 23 10 17 10"></polyline>
-                                    <polyline points="1 20 1 14 7 14"></polyline>
-                                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                                </svg>
-                                <span class="sidebar-sync-reconnect-label">Подключить</span>
-                            </button>
-                        </div>
-                        <div id="syncOnlineList" class="sidebar-sync-online-list" hidden></div>
                     </div>
 
                     <div class="accordion-section accordion-section--mapfilter accordion-section--embedded" data-accordion-initial="closed">
@@ -513,6 +494,221 @@
                 </section>
 
                 <div class="sidebar-panels">
+                <div class="sidebar-category sidebar-category--settings" data-category-initial="closed">
+                    <button type="button" class="sidebar-category-header" aria-expanded="false">
+                        <span class="sidebar-category-header-icon" aria-hidden="true">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="3"></circle>
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                            </svg>
+                        </span>
+                        <span class="sidebar-category-text">
+                            <span class="sidebar-category-title">Настройки</span>
+                            <span class="sidebar-category-hint">Тема · масштаб · ПК</span>
+                        </span>
+                        <svg class="sidebar-category-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
+                    <div class="sidebar-category-body">
+                        <div class="accordion-section accordion-section--settings-theme" data-accordion-initial="closed">
+                            <div class="accordion-header" data-accordion="settings-theme">
+                                <span class="accordion-header-icon accordion-header-icon--settings-theme" aria-hidden="true">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="5"></circle>
+                                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                                    </svg>
+                                </span>
+                                <span class="accordion-header-title">Тема</span>
+                                <svg class="accordion-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            </div>
+                            <div class="accordion-content" id="settings-theme-content">
+                                <p class="app-settings-section-desc">Акцентный цвет интерфейса</p>
+                                <div class="theme-accent-presets" role="group" aria-label="Базовый акцент">
+                                    <button type="button" class="theme-accent-swatch" data-accent="blue" title="Синий" style="--swatch:#2563eb" aria-label="Синий акцент"></button>
+                                    <button type="button" class="theme-accent-swatch" data-accent="teal" title="Бирюзовый" style="--swatch:#0d9488" aria-label="Бирюзовый акцент"></button>
+                                    <button type="button" class="theme-accent-swatch" data-accent="violet" title="Фиолетовый" style="--swatch:#7c3aed" aria-label="Фиолетовый акцент"></button>
+                                    <button type="button" class="theme-accent-swatch" data-accent="rose" title="Розовый" style="--swatch:#e11d48" aria-label="Розовый акцент"></button>
+                                    <button type="button" class="theme-accent-swatch" data-accent="amber" title="Янтарный" style="--swatch:#d97706" aria-label="Янтарный акцент"></button>
+                                    <button type="button" class="theme-accent-swatch" data-accent="emerald" title="Изумрудный" style="--swatch:#059669" aria-label="Изумрудный акцент"></button>
+                                </div>
+                                <label class="theme-accent-custom">
+                                    <span class="theme-accent-custom-text">
+                                        <span class="theme-accent-custom-label">Свой цвет</span>
+                                        <span class="theme-accent-custom-hint">Произвольный акцент интерфейса</span>
+                                    </span>
+                                    <input type="color" id="themeAccentCustom" value="#2563eb" title="Выбрать свой цвет" aria-label="Свой акцентный цвет">
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="accordion-section accordion-section--settings-zoom" data-accordion-initial="closed">
+                            <div class="accordion-header" data-accordion="settings-zoom">
+                                <span class="accordion-header-icon accordion-header-icon--settings-zoom" aria-hidden="true">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="11" cy="11" r="8"></circle>
+                                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                        <line x1="11" y1="8" x2="11" y2="14"></line>
+                                        <line x1="8" y1="11" x2="14" y2="11"></line>
+                                    </svg>
+                                </span>
+                                <span class="accordion-header-title">Масштаб</span>
+                                <svg class="accordion-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            </div>
+                            <div class="accordion-content" id="settings-zoom-content">
+                                <p class="app-settings-section-desc">С какого зума показывать объекты и подписи. Сейчас: <strong id="appSettingsCurrentZoom">—</strong></p>
+                                <div class="lod-control">
+                                    <div class="lod-control-head">
+                                        <label class="lod-control-label" for="lodObjectsZoom">Объекты на карте</label>
+                                        <span class="lod-control-value" id="lodObjectsZoomValue">16</span>
+                                    </div>
+                                    <input type="range" id="lodObjectsZoom" class="lod-control-range" min="8" max="20" step="1" value="16" aria-valuemin="8" aria-valuemax="20">
+                                    <p class="lod-control-hint">Показывать объекты начиная с этого зума</p>
+                                </div>
+                                <div class="lod-control">
+                                    <div class="lod-control-head">
+                                        <label class="lod-control-label" for="lodLabelsZoom">Подписи объектов</label>
+                                        <span class="lod-control-value" id="lodLabelsZoomValue">16</span>
+                                    </div>
+                                    <input type="range" id="lodLabelsZoom" class="lod-control-range" min="8" max="20" step="1" value="16" aria-valuemin="8" aria-valuemax="20">
+                                    <p class="lod-control-hint">Показывать имена начиная с этого зума</p>
+                                </div>
+                                <div class="lod-control">
+                                    <div class="lod-control-head">
+                                        <label class="lod-control-label" for="lodRegionsZoom">Регионы</label>
+                                        <span class="lod-control-value" id="lodRegionsZoomValue">10</span>
+                                    </div>
+                                    <input type="range" id="lodRegionsZoom" class="lod-control-range" min="5" max="16" step="1" value="10" aria-valuemin="5" aria-valuemax="16">
+                                    <p class="lod-control-hint">Показывать регионы начиная с этого зума</p>
+                                </div>
+                                <button type="button" id="lodResetBtn" class="btn-secondary lod-reset-btn" title="Вернуть значения по умолчанию">Сбросить масштаб</button>
+                            </div>
+                        </div>
+
+                        <div class="accordion-section accordion-section--settings-perf" data-accordion-initial="closed">
+                            <div class="accordion-header" data-accordion="settings-perf">
+                                <span class="accordion-header-icon accordion-header-icon--settings-perf" aria-hidden="true">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+                                    </svg>
+                                </span>
+                                <span class="accordion-header-title">Производительность</span>
+                                <svg class="accordion-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            </div>
+                            <div class="accordion-content" id="settings-perf-content">
+                                <p class="app-settings-section-desc">Режим для слабого ПК и ограничения отрисовки</p>
+                                <div class="settings-choice-grid" role="group" aria-label="Режим производительности">
+                                    <button type="button" id="perfModeAuto" class="settings-choice-card" data-perf-mode="auto" title="Обычный режим">
+                                        <span class="settings-choice-icon" aria-hidden="true">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <circle cx="12" cy="12" r="3"></circle>
+                                                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path>
+                                            </svg>
+                                        </span>
+                                        <span class="settings-choice-text">
+                                            <span class="settings-choice-title">Авто</span>
+                                            <span class="settings-choice-hint">Баланс</span>
+                                        </span>
+                                    </button>
+                                    <button type="button" id="perfModeEconomy" class="settings-choice-card settings-choice-card--economy" data-perf-mode="economy" title="Экономия ресурсов">
+                                        <span class="settings-choice-icon" aria-hidden="true">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+                                            </svg>
+                                        </span>
+                                        <span class="settings-choice-text">
+                                            <span class="settings-choice-title">Экономия</span>
+                                            <span class="settings-choice-hint">Слабый ПК</span>
+                                        </span>
+                                    </button>
+                                    <button type="button" id="perfModeMax" class="settings-choice-card settings-choice-card--max" data-perf-mode="max" title="Максимум качества">
+                                        <span class="settings-choice-icon" aria-hidden="true">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <polygon points="12 2 15 9 22 9 17 14 19 21 12 17 5 21 7 14 2 9 9 9 12 2"></polygon>
+                                            </svg>
+                                        </span>
+                                        <span class="settings-choice-text">
+                                            <span class="settings-choice-title">Макс.</span>
+                                            <span class="settings-choice-hint">Качество</span>
+                                        </span>
+                                    </button>
+                                </div>
+                                <label class="map-animations-toggle" title="Пульсации зон и подсветок, плавное перемещение карты">
+                                    <input type="checkbox" id="mapAnimationsToggle" checked>
+                                    <span class="map-animations-toggle-ui" aria-hidden="true"></span>
+                                    <span class="map-animations-toggle-text">
+                                        <span class="map-animations-toggle-label">Анимации на карте</span>
+                                        <span class="map-animations-toggle-hint">Пульсации и плавный pan/zoom</span>
+                                    </span>
+                                </label>
+                                <label class="map-animations-toggle" title="Пунктирные линии между связанными объектами (ONU, OLT, сплиттеры, радиомосты)">
+                                    <input type="checkbox" id="perfConnectionLinesToggle" checked>
+                                    <span class="map-animations-toggle-ui" aria-hidden="true"></span>
+                                    <span class="map-animations-toggle-text">
+                                        <span class="map-animations-toggle-label">Линии связи</span>
+                                        <span class="map-animations-toggle-hint">Пунктиры между объектами</span>
+                                    </span>
+                                </label>
+                                <label class="map-animations-toggle" title="Круги и секторы покрытия Wi‑Fi радиомостов (пульсация — только при включённых анимациях)">
+                                    <input type="checkbox" id="perfRadioCoverageToggle" checked>
+                                    <span class="map-animations-toggle-ui" aria-hidden="true"></span>
+                                    <span class="map-animations-toggle-text">
+                                        <span class="map-animations-toggle-label">Зоны радиомостов</span>
+                                        <span class="map-animations-toggle-hint">Круги и секторы покрытия</span>
+                                    </span>
+                                </label>
+                                <label class="map-animations-toggle" title="Сетка точек на фоне боковой панели и модальных окон">
+                                    <input type="checkbox" id="perfPlexusToggle" checked>
+                                    <span class="map-animations-toggle-ui" aria-hidden="true"></span>
+                                    <span class="map-animations-toggle-text">
+                                        <span class="map-animations-toggle-label">Фон панелей</span>
+                                        <span class="map-animations-toggle-hint">Сетка точек в интерфейсе</span>
+                                    </span>
+                                </label>
+                                <label class="map-animations-toggle" title="Показывать кнопку lo-fi радио у края боковой панели">
+                                    <input type="checkbox" id="lofiRadioEnabledToggle" checked>
+                                    <span class="map-animations-toggle-ui" aria-hidden="true"></span>
+                                    <span class="map-animations-toggle-text">
+                                        <span class="map-animations-toggle-label">Lo-fi радио</span>
+                                        <span class="map-animations-toggle-hint">Кнопка у края панели</span>
+                                    </span>
+                                </label>
+                                <p class="app-settings-section-desc app-settings-section-desc--note">Пресет выставляет анимации, линии, зоны и фон. Lo-fi только своим переключателем. «Экономия» раньше включает виртуализацию.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar-category sidebar-category--edit" data-category-initial="closed">
+                    <button type="button" class="sidebar-category-header" aria-expanded="false">
+                        <span class="sidebar-category-header-icon" aria-hidden="true">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 20h9"></path>
+                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                            </svg>
+                        </span>
+                        <span class="sidebar-category-text">
+                            <span class="sidebar-category-title">Редактирование</span>
+                            <span class="sidebar-category-hint">Объекты · кабели · регионы</span>
+                        </span>
+                        <svg class="sidebar-category-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
+                    <div class="sidebar-category-body">
                 <!-- Аккордеон для объектов -->
                 <div class="accordion-section accordion-section--objects" data-accordion-initial="closed">
                     <div class="accordion-header" data-accordion="objects">
@@ -998,7 +1194,53 @@
                         </div>
                     </div>
                 </div>
+                    </div>
+                </div>
 
+                <div class="sidebar-category sidebar-category--team sync-presence--offline" id="syncPresenceCard" data-category-initial="closed" aria-label="Совместная работа">
+                    <button type="button" class="sidebar-category-header" aria-expanded="false">
+                        <span class="sidebar-category-header-icon" aria-hidden="true">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                            </svg>
+                        </span>
+                        <span class="sidebar-category-text">
+                            <span class="sidebar-category-title">Команда</span>
+                            <span class="sidebar-category-hint">Кто на карте</span>
+                        </span>
+                        <span id="syncStatus" class="sync-status sync-disconnected sidebar-category-sync-status">
+                            <span class="sync-status-dot" aria-hidden="true"></span>
+                            <span class="sync-status-text">Отключено</span>
+                        </span>
+                        <svg class="sidebar-category-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
+                    <div class="sidebar-category-body">
+                        <div id="syncOnlineList" class="sidebar-sync-online-list" hidden></div>
+                        <p class="sidebar-team-empty-hint" id="syncTeamEmptyHint">Список тех, кто сейчас на карте, появится после подключения.</p>
+                    </div>
+                </div>
+
+                <div class="sidebar-category sidebar-category--data admin-only" data-category-initial="closed">
+                    <button type="button" class="sidebar-category-header" aria-expanded="false">
+                        <span class="sidebar-category-header-icon" aria-hidden="true">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                        </span>
+                        <span class="sidebar-category-text">
+                            <span class="sidebar-category-title">Данные</span>
+                            <span class="sidebar-category-hint">Файлы · резервные копии</span>
+                        </span>
+                        <svg class="sidebar-category-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
+                    <div class="sidebar-category-body">
                 <!-- Импорт/экспорт карты (только администратор) -->
                 <div class="accordion-section accordion-section--files admin-only" id="filesAccordionSection" data-accordion-initial="closed">
                     <div class="accordion-header" data-accordion="files">
@@ -1101,7 +1343,27 @@
                         </div>
                     </div>
                 </div>
+                    </div>
+                </div>
 
+                <div class="sidebar-category sidebar-category--help" data-category-initial="closed">
+                    <button type="button" class="sidebar-category-header" aria-expanded="false">
+                        <span class="sidebar-category-header-icon" aria-hidden="true">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="16" x2="12" y2="12"></line>
+                                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                            </svg>
+                        </span>
+                        <span class="sidebar-category-text">
+                            <span class="sidebar-category-title">Справка</span>
+                            <span class="sidebar-category-hint">Легенда карты</span>
+                        </span>
+                        <svg class="sidebar-category-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
+                    <div class="sidebar-category-body">
                 <!-- Легенда -->
                 <div class="accordion-section accordion-section--legend" data-accordion-initial="closed">
                     <div class="accordion-header" data-accordion="legend">
@@ -1121,6 +1383,8 @@
                         <div class="accordion-content-inner">
                         <!-- Группы легенды — js/map-legend.js -->
                         </div>
+                    </div>
+                </div>
                     </div>
                 </div>
                 </div>
@@ -1353,6 +1617,84 @@
             </span>
         </button>
 
+        <div class="lofi-radio-dock" id="lofiRadioCard">
+            <button type="button" id="lofiRadioDockBtn" class="sidebar-edge-btn lofi-radio-dock-btn" aria-label="Lo-fi радио" title="Lo-fi радио" aria-expanded="false" aria-controls="lofiRadioPopover">
+                <svg class="sidebar-toggle-tab" viewBox="0 0 38 52" aria-hidden="true" focusable="false">
+                    <path class="sidebar-toggle-tab-path" d="M0 0h25L38 26 25 52H0V0z"></path>
+                </svg>
+                <span class="lofi-radio-dock-face">
+                    <svg class="lofi-radio-dock-note" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path d="M9 18V5l12-2v13"></path>
+                        <circle cx="6" cy="18" r="3"></circle>
+                        <circle cx="18" cy="16" r="3"></circle>
+                    </svg>
+                    <span class="lofi-eq" aria-hidden="true">
+                        <span class="lofi-eq-bar"></span>
+                        <span class="lofi-eq-bar"></span>
+                        <span class="lofi-eq-bar"></span>
+                    </span>
+                </span>
+            </button>
+            <div class="lofi-radio-popover" id="lofiRadioPopover" hidden>
+                <div class="lofi-radio-popover-shine" aria-hidden="true"></div>
+                <div class="lofi-radio-visual" aria-hidden="true">
+                    <div class="lofi-radio-visual-glow"></div>
+                    <div class="lofi-radio-platter">
+                        <div class="lofi-radio-disc">
+                            <span class="lofi-radio-disc-grooves"></span>
+                            <span class="lofi-radio-disc-label">
+                                <span class="lofi-radio-disc-label-text">lofi</span>
+                            </span>
+                            <span class="lofi-radio-disc-hole"></span>
+                            <span class="lofi-radio-disc-shine"></span>
+                        </div>
+                        <span class="lofi-radio-tonearm"></span>
+                    </div>
+                    <div class="lofi-radio-visual-stage">
+                        <div class="lofi-eq lofi-eq--lg">
+                            <span class="lofi-eq-bar" style="--eq-h: 35%; --eq-d: 0.85s; --eq-delay: 0s"></span>
+                            <span class="lofi-eq-bar" style="--eq-h: 70%; --eq-d: 0.7s; --eq-delay: 0.12s"></span>
+                            <span class="lofi-eq-bar" style="--eq-h: 45%; --eq-d: 0.95s; --eq-delay: 0.05s"></span>
+                            <span class="lofi-eq-bar" style="--eq-h: 90%; --eq-d: 0.75s; --eq-delay: 0.18s"></span>
+                            <span class="lofi-eq-bar" style="--eq-h: 55%; --eq-d: 0.9s; --eq-delay: 0.08s"></span>
+                            <span class="lofi-eq-bar" style="--eq-h: 75%; --eq-d: 0.8s; --eq-delay: 0.22s"></span>
+                            <span class="lofi-eq-bar" style="--eq-h: 40%; --eq-d: 1s; --eq-delay: 0.03s"></span>
+                            <span class="lofi-eq-bar" style="--eq-h: 65%; --eq-d: 0.72s; --eq-delay: 0.15s"></span>
+                        </div>
+                        <div class="lofi-radio-visual-caption">
+                            <span class="lofi-radio-visual-live"></span>
+                            <span class="lofi-radio-visual-caption-text">live stream</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="lofi-radio-popover-head">
+                    <div class="lofi-radio-popover-copy">
+                        <span class="lofi-radio-popover-eyebrow">Ambient</span>
+                        <span class="lofi-radio-popover-title">Lo-fi радио</span>
+                    </div>
+                    <span class="lofi-radio-popover-status" id="lofiRadioStatus">Выкл.</span>
+                </div>
+                <div class="lofi-radio-popover-controls">
+                    <div class="lofi-radio-transport" role="group" aria-label="Воспроизведение">
+                        <button type="button" class="sidebar-lofi-radio-play" id="lofiRadioPlayBtn" title="Включить" aria-label="Включить lo-fi радио">
+                            <svg class="lofi-icon-play" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
+                        </button>
+                        <button type="button" class="sidebar-lofi-radio-pause" id="lofiRadioPauseBtn" title="Пауза" aria-label="Пауза lo-fi радио" disabled>
+                            <svg class="lofi-icon-pause" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zm8 0h4v14h-4z"></path></svg>
+                        </button>
+                    </div>
+                    <label class="sidebar-lofi-radio-volume" title="Громкость">
+                        <svg class="lofi-volume-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                        </svg>
+                        <input type="range" id="lofiRadioVolume" min="0" max="100" value="35" aria-label="Громкость">
+                    </label>
+                </div>
+                <audio id="lofiRadioAudio" preload="none"></audio>
+            </div>
+        </div>
+
         <div class="map-area-wrapper" id="mapAreaWrapper">
             <div id="mapLoadingOverlay" class="map-loading-overlay is-hidden" hidden aria-live="polite" aria-busy="false">
                 <div class="map-loading-content">
@@ -1368,6 +1710,17 @@
                 <span>Редактирование</span>
             </div>
             <div id="map" class="map"></div>
+            <div class="map-layer-selector" id="mapLayerSelector">
+                <button type="button" class="map-layer-selector__btn" id="mapLayerSelectorBtn" aria-expanded="false" aria-haspopup="listbox" aria-controls="mapLayerSelectorMenu" title="Слои карты">
+                    <span class="map-layer-selector__label" id="mapLayerSelectorLabel">Слои</span>
+                    <svg class="map-layer-selector__chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </button>
+                <div class="map-layer-selector__menu" id="mapLayerSelectorMenu" role="listbox" hidden>
+                    <button type="button" class="map-layer-selector__item is-active" role="option" data-map-type="yandex#map" aria-selected="true">Схема</button>
+                    <button type="button" class="map-layer-selector__item" role="option" data-map-type="yandex#satellite" aria-selected="false">Спутник</button>
+                    <button type="button" class="map-layer-selector__item" role="option" data-map-type="yandex#hybrid" aria-selected="false">Гибрид</button>
+                </div>
+            </div>
             <div id="undergroundEditBar" class="underground-draw-card" hidden aria-live="polite" role="region" aria-labelledby="undergroundEditBarTitle">
                 <div class="underground-draw-card__accent" aria-hidden="true"></div>
                 <div class="underground-draw-card__inner">
@@ -1950,15 +2303,55 @@
 
     <!-- Личный кабинет -->
     <div id="profileModal" class="modal" role="dialog" aria-labelledby="profileModalTitle" aria-modal="true">
-        <div class="modal-content profile-modal-content">
-            <div class="modal-header">
-                <h2 id="profileModalTitle">Личный кабинет</h2>
-                <span class="close close-profile" title="Закрыть">&times;</span>
+        <div class="modal-content profile-modal-content panel-glass">
+            <div class="panel-glass-bg" aria-hidden="true">
+                <div class="panel-glass-gradient"></div>
+                <canvas class="panel-plexus-canvas"></canvas>
             </div>
+            <header class="profile-modal-header">
+                <div class="profile-modal-header-main">
+                    <div class="profile-modal-header-icon" aria-hidden="true">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                    </div>
+                    <div class="profile-modal-header-text">
+                        <h2 id="profileModalTitle">Личный кабинет</h2>
+                        <p class="profile-modal-header-sub">Профиль, организация и лимиты карты</p>
+                    </div>
+                </div>
+                <span class="close close-profile" title="Закрыть" role="button" tabindex="0">&times;</span>
+            </header>
             <div class="modal-body profile-modal-body">
-                <div class="profile-hero">
+                <section class="profile-user-card" aria-label="Профиль">
+                    <div class="profile-avatar-upload">
+                        <div class="profile-user-avatar" id="profileUserAvatar" aria-hidden="true">?</div>
+                        <div class="profile-user-main">
+                            <div class="profile-user-meta">
+                                <p class="profile-user-name" id="profileUserName">—</p>
+                                <p class="profile-user-role" id="profileUserRole">—</p>
+                            </div>
+                            <div class="profile-avatar-controls">
+                                <label class="profile-avatar-upload-btn">
+                                    <input type="file" id="profileAvatarInput" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="17 8 12 3 7 8"></polyline>
+                                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                                    </svg>
+                                    Загрузить фото
+                                </label>
+                                <button type="button" id="profileAvatarRemoveBtn" class="profile-avatar-remove-btn" style="display: none;">Удалить</button>
+                                <p class="profile-avatar-hint">JPG, PNG или WebP · до 2 МБ</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="profile-hero" aria-label="Организация">
                     <div class="profile-hero-icon" aria-hidden="true">
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M3 21h18"></path>
                             <path d="M5 21V7l8-4v18"></path>
                             <path d="M19 21V11l-6-4"></path>
@@ -1969,30 +2362,20 @@
                         <p class="profile-org-name" id="profileOrgName">—</p>
                         <span class="profile-status-badge" id="profileStatus">—</span>
                     </div>
-                </div>
-
-                <div class="profile-user-card">
-                    <div class="profile-avatar-upload">
-                        <div class="profile-user-avatar" id="profileUserAvatar" aria-hidden="true">?</div>
-                        <div class="profile-avatar-controls">
-                            <label class="profile-avatar-upload-btn">
-                                <input type="file" id="profileAvatarInput" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
-                                Загрузить фото
-                            </label>
-                            <button type="button" id="profileAvatarRemoveBtn" class="profile-avatar-remove-btn" style="display: none;">Удалить</button>
-                            <p class="profile-avatar-hint">JPG, PNG или WebP, до 2 МБ</p>
-                        </div>
-                    </div>
-                    <div class="profile-user-meta">
-                        <p class="profile-user-name" id="profileUserName">—</p>
-                        <p class="profile-user-role" id="profileUserRole">—</p>
-                    </div>
-                </div>
+                </section>
 
                 <div class="profile-metrics">
                     <div class="profile-metric profile-metric--objects">
                         <div class="profile-metric-top">
-                            <span class="profile-metric-label">Объекты на карте</span>
+                            <span class="profile-metric-label-wrap">
+                                <span class="profile-metric-icon" aria-hidden="true">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="3"></circle>
+                                        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path>
+                                    </svg>
+                                </span>
+                                <span class="profile-metric-label">Объекты на карте</span>
+                            </span>
                             <span class="profile-metric-numbers">
                                 <span class="profile-metric-value" id="profileMapObjects">—</span>
                                 <span class="profile-metric-limit" id="profileMapLimit">—</span>
@@ -2004,7 +2387,17 @@
                     </div>
                     <div class="profile-metric profile-metric--sessions">
                         <div class="profile-metric-top">
-                            <span class="profile-metric-label">Одновременно на карте</span>
+                            <span class="profile-metric-label-wrap">
+                                <span class="profile-metric-icon" aria-hidden="true">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                        <circle cx="9" cy="7" r="4"></circle>
+                                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                                    </svg>
+                                </span>
+                                <span class="profile-metric-label">Одновременно на карте</span>
+                            </span>
                             <span class="profile-metric-numbers">
                                 <span class="profile-metric-value" id="profileConcurrentUsers">—</span>
                                 <span class="profile-metric-limit" id="profileConcurrentLimit"></span>
@@ -2179,7 +2572,7 @@
                     </div>
                     <div class="device-catalog-hero-text">
                         <h2 id="deviceCatalogModalTitle">Справочник устройств</h2>
-                        <p id="deviceCatalogHeaderHint" class="device-catalog-header-hint">Производители и модели для выпадающих списков при добавлении объектов на карте</p>
+                        <p id="deviceCatalogHeaderHint" class="device-catalog-header-hint">Производители, модели и типы — подставляются в списки при создании объектов на карте</p>
                         <div id="deviceCatalogGlobalStats" class="device-catalog-hero-stats" aria-live="polite"></div>
                     </div>
                 </div>
@@ -2193,50 +2586,77 @@
                     </div>
                     <p class="device-catalog-sidebar-label">Разделы</p>
                     <nav class="device-catalog-tabs" role="tablist">
-                        <button type="button" class="device-catalog-tab device-catalog-tab--violet device-catalog-tab-active" data-tab="switch" role="tab" aria-selected="true">
-                            <span class="device-catalog-tab-label">Коммутаторы</span>
-                            <span class="device-catalog-tab-badge" data-stat-tab="switch"></span>
-                        </button>
-                        <button type="button" class="device-catalog-tab device-catalog-tab--sky" data-tab="olt" role="tab" aria-selected="false">
-                            <span class="device-catalog-tab-label">OLT</span>
-                            <span class="device-catalog-tab-badge" data-stat-tab="olt"></span>
-                        </button>
-                        <button type="button" class="device-catalog-tab device-catalog-tab--cyan" data-tab="onu" role="tab" aria-selected="false">
-                            <span class="device-catalog-tab-label">ONU</span>
-                            <span class="device-catalog-tab-badge" data-stat-tab="onu"></span>
-                        </button>
-                        <button type="button" class="device-catalog-tab device-catalog-tab--slate" data-tab="camera" role="tab" aria-selected="false">
-                            <span class="device-catalog-tab-label">Камеры</span>
-                            <span class="device-catalog-tab-badge" data-stat-tab="camera"></span>
-                        </button>
-                        <button type="button" class="device-catalog-tab device-catalog-tab--teal" data-tab="node" role="tab" aria-selected="false">
-                            <span class="device-catalog-tab-label">Медиаконвертер</span>
-                            <span class="device-catalog-tab-badge" data-stat-tab="node"></span>
-                        </button>
-                        <button type="button" class="device-catalog-tab device-catalog-tab--cyan" data-tab="radioBridge" role="tab" aria-selected="false">
-                            <span class="device-catalog-tab-label">Радиомосты</span>
-                            <span class="device-catalog-tab-badge" data-stat-tab="radioBridge"></span>
-                        </button>
-                        <button type="button" class="device-catalog-tab device-catalog-tab--green" data-tab="sleeve" role="tab" aria-selected="false">
-                            <span class="device-catalog-tab-label">Муфты</span>
-                            <span class="device-catalog-tab-badge" data-stat-tab="sleeve"></span>
-                        </button>
-                        <button type="button" class="device-catalog-tab device-catalog-tab--purple" data-tab="cross" role="tab" aria-selected="false">
-                            <span class="device-catalog-tab-label">Кроссы</span>
-                            <span class="device-catalog-tab-badge" data-stat-tab="cross"></span>
-                        </button>
-                        <button type="button" class="device-catalog-tab device-catalog-tab--amber" data-tab="spliceCassette" role="tab" aria-selected="false">
-                            <span class="device-catalog-tab-label">Сплайс-кассеты</span>
-                            <span class="device-catalog-tab-badge" data-stat-tab="spliceCassette"></span>
-                        </button>
-                        <button type="button" class="device-catalog-tab device-catalog-tab--slate" data-tab="cabinet" role="tab" aria-selected="false">
-                            <span class="device-catalog-tab-label">Ящики</span>
-                            <span class="device-catalog-tab-badge" data-stat-tab="cabinet"></span>
-                        </button>
-                        <button type="button" class="device-catalog-tab device-catalog-tab--amber" data-tab="cable" role="tab" aria-selected="false">
-                            <span class="device-catalog-tab-label">Кабели</span>
-                            <span class="device-catalog-tab-badge" data-stat-tab="cable"></span>
-                        </button>
+                        <div class="device-catalog-tab-group is-open" data-group="active">
+                            <button type="button" class="device-catalog-tab-group-header" aria-expanded="true">
+                                <span class="device-catalog-tab-group-title">Активное</span>
+                                <span class="device-catalog-tab-group-hint">Коммутаторы · GPON · камеры</span>
+                                <svg class="device-catalog-tab-group-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </button>
+                            <div class="device-catalog-tab-group-body">
+                                <button type="button" class="device-catalog-tab device-catalog-tab--violet device-catalog-tab-active" data-tab="switch" role="tab" aria-selected="true">
+                                    <span class="device-catalog-tab-label">Коммутаторы</span>
+                                    <span class="device-catalog-tab-badge" data-stat-tab="switch"></span>
+                                </button>
+                                <button type="button" class="device-catalog-tab device-catalog-tab--sky" data-tab="olt" role="tab" aria-selected="false">
+                                    <span class="device-catalog-tab-label">OLT</span>
+                                    <span class="device-catalog-tab-badge" data-stat-tab="olt"></span>
+                                </button>
+                                <button type="button" class="device-catalog-tab device-catalog-tab--cyan" data-tab="onu" role="tab" aria-selected="false">
+                                    <span class="device-catalog-tab-label">ONU</span>
+                                    <span class="device-catalog-tab-badge" data-stat-tab="onu"></span>
+                                </button>
+                                <button type="button" class="device-catalog-tab device-catalog-tab--slate" data-tab="camera" role="tab" aria-selected="false">
+                                    <span class="device-catalog-tab-label">Камеры</span>
+                                    <span class="device-catalog-tab-badge" data-stat-tab="camera"></span>
+                                </button>
+                                <button type="button" class="device-catalog-tab device-catalog-tab--teal" data-tab="node" role="tab" aria-selected="false">
+                                    <span class="device-catalog-tab-label">Медиаконвертер</span>
+                                    <span class="device-catalog-tab-badge" data-stat-tab="node"></span>
+                                </button>
+                                <button type="button" class="device-catalog-tab device-catalog-tab--indigo" data-tab="radioBridge" role="tab" aria-selected="false">
+                                    <span class="device-catalog-tab-label">Радиомосты</span>
+                                    <span class="device-catalog-tab-badge" data-stat-tab="radioBridge"></span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="device-catalog-tab-group" data-group="optics">
+                            <button type="button" class="device-catalog-tab-group-header" aria-expanded="false">
+                                <span class="device-catalog-tab-group-title">Оптика</span>
+                                <span class="device-catalog-tab-group-hint">Муфты · кроссы · кассеты</span>
+                                <svg class="device-catalog-tab-group-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </button>
+                            <div class="device-catalog-tab-group-body">
+                                <button type="button" class="device-catalog-tab device-catalog-tab--green" data-tab="sleeve" role="tab" aria-selected="false">
+                                    <span class="device-catalog-tab-label">Муфты</span>
+                                    <span class="device-catalog-tab-badge" data-stat-tab="sleeve"></span>
+                                </button>
+                                <button type="button" class="device-catalog-tab device-catalog-tab--purple" data-tab="cross" role="tab" aria-selected="false">
+                                    <span class="device-catalog-tab-label">Кроссы</span>
+                                    <span class="device-catalog-tab-badge" data-stat-tab="cross"></span>
+                                </button>
+                                <button type="button" class="device-catalog-tab device-catalog-tab--orange" data-tab="spliceCassette" role="tab" aria-selected="false">
+                                    <span class="device-catalog-tab-label">Сплайс-кассеты</span>
+                                    <span class="device-catalog-tab-badge" data-stat-tab="spliceCassette"></span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="device-catalog-tab-group" data-group="infra">
+                            <button type="button" class="device-catalog-tab-group-header" aria-expanded="false">
+                                <span class="device-catalog-tab-group-title">Инфраструктура</span>
+                                <span class="device-catalog-tab-group-hint">Ящики · кабели</span>
+                                <svg class="device-catalog-tab-group-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </button>
+                            <div class="device-catalog-tab-group-body">
+                                <button type="button" class="device-catalog-tab device-catalog-tab--rose" data-tab="cabinet" role="tab" aria-selected="false">
+                                    <span class="device-catalog-tab-label">Ящики</span>
+                                    <span class="device-catalog-tab-badge" data-stat-tab="cabinet"></span>
+                                </button>
+                                <button type="button" class="device-catalog-tab device-catalog-tab--amber" data-tab="cable" role="tab" aria-selected="false">
+                                    <span class="device-catalog-tab-label">Кабели</span>
+                                    <span class="device-catalog-tab-badge" data-stat-tab="cable"></span>
+                                </button>
+                            </div>
+                        </div>
                     </nav>
                     <div class="device-catalog-sidebar-actions">
                         <button type="button" id="deviceCatalogOpenAddBtn" class="btn-primary device-catalog-sidebar-add">
@@ -2264,6 +2684,7 @@
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                             <input type="search" id="deviceCatalogSearch" class="device-catalog-search-input" placeholder="Поиск производителя или модели…" autocomplete="off">
                         </label>
+                        <span id="deviceCatalogSearchMeta" class="device-catalog-search-meta" aria-live="polite"></span>
                     </div>
                     <div id="deviceCatalogList" class="device-catalog-list" role="region" aria-label="Список производителей и моделей"></div>
                 </div>
@@ -2597,6 +3018,7 @@
     <script src="js/map/embedded-splitters.js"></script>
     <script src="js/map/regions.js"></script>
     <script src="js/map/map-perf.js"></script>
+    <script src="js/map/map-perf-settings.js"></script>
     <script src="js/map/search.js"></script>
     <script src="js/fiber-cable-config.js"></script>
     <script src="js/map-legend.js"></script>
@@ -2643,4 +3065,5 @@
     <script src="js/app/fiber-workspace.js"></script>
     <script src="js/app/main.js"></script>
     <script src="js/sync.js"></script>
+    <script src="js/ui/lofi-radio.js"></script>
 </body></html>
