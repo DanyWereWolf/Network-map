@@ -12,6 +12,19 @@ const MAX_CTA_URL = 500;
 const MAX_BADGE = 60;
 const SEND_DELAY_MS = 350;
 
+/** Эмоции Волы, подходящие для письма об обновлении. */
+const VOLA_EMOTIONS = {
+    cheer: 'vola-cheer.png',
+    wave: 'vola-wave.png',
+    sparkle: 'vola-sparkle.png',
+    smile: 'vola-smile.png',
+    thumbs: 'vola-thumbs.png',
+    thanks: 'vola-thanks.png',
+    giggle: 'vola-giggle.png',
+    surprise: 'vola-surprise.png'
+};
+const DEFAULT_VOLA_EMOTION = 'cheer';
+
 function escapeHtml(str) {
     return String(str || '')
         .replace(/&/g, '&amp;')
@@ -99,6 +112,17 @@ function parseBodyLines(body) {
     return { paragraphs: paragraphs, bullets: bullets };
 }
 
+function resolveVolaEmotion(value) {
+    const key = String(value || '').trim().toLowerCase();
+    if (VOLA_EMOTIONS[key]) return key;
+    return DEFAULT_VOLA_EMOTION;
+}
+
+function volaImageUrl(siteUrl, emotion) {
+    const file = VOLA_EMOTIONS[resolveVolaEmotion(emotion)] || VOLA_EMOTIONS[DEFAULT_VOLA_EMOTION];
+    return absoluteUrl(siteUrl, '/icons/assistant/' + file);
+}
+
 function sanitizePayload(input) {
     const src = input || {};
     const subject = String(src.subject || '').trim().slice(0, MAX_SUBJECT);
@@ -108,6 +132,8 @@ function sanitizePayload(input) {
     const badge = String(src.badge || 'Обновление').trim().slice(0, MAX_BADGE) || 'Обновление';
     const ctaLabel = String(src.ctaLabel || 'Смотреть новости').trim().slice(0, MAX_CTA_LABEL) || 'Смотреть новости';
     let ctaUrl = String(src.ctaUrl || '/news.html').trim().slice(0, MAX_CTA_URL) || '/news.html';
+    const volaEmotion = resolveVolaEmotion(src.volaEmotion);
+    const showVola = src.showVola === undefined ? true : !!src.showVola;
     if (!subject) return { error: 'Укажите тему письма' };
     if (!title) return { error: 'Укажите заголовок' };
     if (!intro && !body) return { error: 'Добавьте текст обновления' };
@@ -118,7 +144,9 @@ function sanitizePayload(input) {
         body: body,
         badge: badge,
         ctaLabel: ctaLabel,
-        ctaUrl: ctaUrl
+        ctaUrl: ctaUrl,
+        volaEmotion: volaEmotion,
+        showVola: showVola
     };
 }
 
@@ -130,6 +158,7 @@ function buildUpdateEmail(siteUrl, payload) {
     const newsUrl = absoluteUrl(siteUrl, data.ctaUrl);
     const homeUrl = normalizeSiteUrl(siteUrl) || 'https://volsmap.ru';
     const year = new Date().getFullYear();
+    const volaUrl = volaImageUrl(siteUrl, data.volaEmotion);
 
     const bulletHtml = parsed.bullets.map(function(item) {
         return [
@@ -160,6 +189,31 @@ function buildUpdateEmail(siteUrl, payload) {
             escapeHtml(data.intro) + '</p>'
         : '';
 
+    const volaHeaderCell = data.showVola
+        ? [
+            '<td align="right" valign="bottom" width="150" style="padding-left:12px;">',
+            '<img src="' + escapeHtml(volaUrl) + '" width="132" height="132" alt="Вола" ',
+            'style="display:block;width:132px;height:auto;max-width:132px;border:0;outline:none;text-decoration:none;">',
+            '</td>'
+        ].join('')
+        : '';
+
+    const volaSignOff = data.showVola
+        ? [
+            '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:22px 0 0 0;">',
+            '<tr>',
+            '<td width="56" valign="middle" style="padding-right:12px;">',
+            '<img src="' + escapeHtml(volaUrl) + '" width="48" height="48" alt="Вола" ',
+            'style="display:block;width:48px;height:auto;border:0;border-radius:12px;">',
+            '</td>',
+            '<td valign="middle" style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.45;color:#64748b;">',
+            '<strong style="color:#0f172a;">Вола</strong><br>ассистент Volsmap',
+            '</td>',
+            '</tr>',
+            '</table>'
+        ].join('')
+        : '';
+
     const html = [
         '<!DOCTYPE html>',
         '<html lang="ru">',
@@ -172,28 +226,28 @@ function buildUpdateEmail(siteUrl, payload) {
         '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#eef2ff;padding:28px 12px;">',
         '<tr><td align="center">',
         '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:100%;max-width:600px;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 12px 40px rgba(15,23,42,0.08);">',
-        // header
-        '<tr><td style="background:linear-gradient(135deg,#1d4ed8 0%,#2563eb 55%,#0ea5e9 100%);padding:28px 32px 24px 32px;">',
+        // header with Vola
+        '<tr><td style="background:linear-gradient(135deg,#1d4ed8 0%,#2563eb 55%,#0ea5e9 100%);padding:24px 28px 0 28px;">',
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>',
-        '<td style="font-family:Segoe UI,Arial,sans-serif;color:#ffffff;">',
+        '<td valign="top" style="font-family:Segoe UI,Arial,sans-serif;color:#ffffff;padding-bottom:24px;">',
         '<div style="font-size:13px;letter-spacing:0.08em;text-transform:uppercase;opacity:0.85;margin-bottom:8px;">Volsmap</div>',
-        '<div style="font-size:22px;font-weight:700;line-height:1.25;">Карта оптической сети</div>',
-        '</td>',
-        '<td align="right" valign="top">',
+        '<div style="font-size:22px;font-weight:700;line-height:1.25;margin-bottom:14px;">Карта оптической сети</div>',
         '<span style="display:inline-block;background:rgba(255,255,255,0.18);color:#ffffff;font-family:Segoe UI,Arial,sans-serif;font-size:12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;padding:8px 12px;border-radius:999px;border:1px solid rgba(255,255,255,0.28);">',
         escapeHtml(data.badge),
         '</span>',
         '</td>',
+        volaHeaderCell,
         '</tr></table>',
         '</td></tr>',
         // body
-        '<tr><td style="padding:32px 32px 8px 32px;">',
+        '<tr><td style="padding:28px 32px 8px 32px;">',
         '<h1 style="margin:0 0 16px 0;font-family:Segoe UI,Arial,sans-serif;font-size:26px;line-height:1.25;color:#0f172a;font-weight:700;">',
         escapeHtml(data.title),
         '</h1>',
         introHtml,
         paragraphHtml,
         (bulletHtml ? '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:8px 0 8px 0;">' + bulletHtml + '</table>' : ''),
+        volaSignOff,
         '</td></tr>',
         // CTA
         '<tr><td style="padding:8px 32px 36px 32px;" align="left">',
@@ -232,6 +286,10 @@ function buildUpdateEmail(siteUrl, payload) {
         parsed.bullets.forEach(function(b) { textParts.push('• ' + b); });
         textParts.push('');
     }
+    if (data.showVola) {
+        textParts.push('— Вола, ассистент Volsmap');
+        textParts.push('');
+    }
     textParts.push(data.ctaLabel + ': ' + newsUrl);
     textParts.push('');
     textParts.push('— volsmap.ru');
@@ -244,6 +302,9 @@ function buildUpdateEmail(siteUrl, payload) {
         badge: data.badge,
         ctaLabel: data.ctaLabel,
         ctaUrl: data.ctaUrl,
+        volaEmotion: data.volaEmotion,
+        showVola: data.showVola,
+        volaUrl: volaUrl,
         html: html,
         text: textParts.join('\n'),
         newsUrl: newsUrl
@@ -256,10 +317,13 @@ module.exports = {
     MAX_INTRO: MAX_INTRO,
     MAX_BODY: MAX_BODY,
     SEND_DELAY_MS: SEND_DELAY_MS,
+    VOLA_EMOTIONS: VOLA_EMOTIONS,
+    DEFAULT_VOLA_EMOTION: DEFAULT_VOLA_EMOTION,
     collectRecipients: collectRecipients,
     sanitizePayload: sanitizePayload,
     buildUpdateEmail: buildUpdateEmail,
     escapeHtml: escapeHtml,
     sleep: sleep,
-    absoluteUrl: absoluteUrl
+    absoluteUrl: absoluteUrl,
+    volaImageUrl: volaImageUrl
 };

@@ -1687,14 +1687,35 @@
                             <div class="broadcast-form-card">
                                 <p class="broadcast-card-label">Письмо</p>
                                 <div class="field-row">
-                                    <div class="field-col">
+                                    <div class="field-col" style="flex:1 1 100%;">
                                         <label for="broadcastSubject">Тема</label>
                                         <input id="broadcastSubject" type="text" maxlength="180" placeholder="Обновление Volsmap — что нового">
                                     </div>
+                                </div>
+                                <div class="field-row">
                                     <div class="field-col">
                                         <label for="broadcastBadge">Бейдж в шапке</label>
                                         <input id="broadcastBadge" type="text" maxlength="60" value="Обновление" placeholder="Обновление">
                                     </div>
+                                    <div class="field-col">
+                                        <label for="broadcastVolaEmotion">Эмоция Волы</label>
+                                        <select id="broadcastVolaEmotion">
+                                            <option value="cheer" selected>Радость (cheer)</option>
+                                            <option value="wave">Приветствие (wave)</option>
+                                            <option value="sparkle">Блёстки (sparkle)</option>
+                                            <option value="smile">Улыбка (smile)</option>
+                                            <option value="thumbs">Класс (thumbs)</option>
+                                            <option value="thanks">Спасибо (thanks)</option>
+                                            <option value="giggle">Смех (giggle)</option>
+                                            <option value="surprise">Удивление (surprise)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="maintenance-toggle-row" style="margin-bottom:12px;">
+                                    <label>
+                                        <input type="checkbox" id="broadcastShowVola" checked>
+                                        <span>Показывать Волу в письме</span>
+                                    </label>
                                 </div>
                                 <div class="field-row">
                                     <div class="field-col" style="flex:1 1 100%;">
@@ -3529,6 +3550,7 @@
         }
 
         function readBroadcastPayload() {
+            var showEl = document.getElementById('broadcastShowVola');
             return {
                 subject: (document.getElementById('broadcastSubject') || {}).value || '',
                 badge: (document.getElementById('broadcastBadge') || {}).value || '',
@@ -3536,7 +3558,9 @@
                 intro: (document.getElementById('broadcastIntro') || {}).value || '',
                 body: (document.getElementById('broadcastBody') || {}).value || '',
                 ctaLabel: (document.getElementById('broadcastCtaLabel') || {}).value || '',
-                ctaUrl: (document.getElementById('broadcastCtaUrl') || {}).value || ''
+                ctaUrl: (document.getElementById('broadcastCtaUrl') || {}).value || '',
+                volaEmotion: (document.getElementById('broadcastVolaEmotion') || {}).value || 'cheer',
+                showVola: showEl ? !!showEl.checked : true
             };
         }
 
@@ -3685,6 +3709,10 @@
         if (broadcastTestBtn) broadcastTestBtn.addEventListener('click', function() { sendBroadcast({ testOnly: true }); });
         var broadcastSendBtn = document.getElementById('broadcastSendBtn');
         if (broadcastSendBtn) broadcastSendBtn.addEventListener('click', function() { sendBroadcast({ testOnly: false }); });
+        var broadcastVolaEmotion = document.getElementById('broadcastVolaEmotion');
+        if (broadcastVolaEmotion) broadcastVolaEmotion.addEventListener('change', refreshBroadcastPreview);
+        var broadcastShowVola = document.getElementById('broadcastShowVola');
+        if (broadcastShowVola) broadcastShowVola.addEventListener('change', refreshBroadcastPreview);
 
         var maintSaveBtnEl = document.getElementById('maintSaveBtn');
         if (maintSaveBtnEl) {
