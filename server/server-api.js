@@ -17,8 +17,12 @@ const security = require('./lib/security');
 const supportBot = require('./lib/support-bot');
 const mail = require('./lib/mail');
 const passwordReset = require('./lib/password-reset');
+const updateBroadcast = require('./lib/update-broadcast');
 const passwords = require('./lib/password');
 const cpuPool = require('./lib/cpu-pool');
+
+/** Блокировка параллельных массовых рассылок. */
+var updateBroadcastInFlight = false;
 
 const SERVER_CONFIG_PATH = path.join(ROOT_DIR, 'server-config.json');
 
@@ -1164,6 +1168,120 @@ app.put('/api/admin/maintenance-notice', (req, res) => {
         });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.get('/api/admin/update-broadcast/recipients', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    try {
+        const recipients = updateBroadcast.collectRecipients(serverConfig);
+        const preview = recipients.slice(0, 40).map(function(r) {
+            return {
+                email: passwordReset.maskEmail(r.email),
+                username: r.username || '',
+                organizationName: r.organizationName || ''
+            };
+        });
+        res.json({
+            count: recipients.length,
+            mailConfigured: mail.isMailConfigured(serverConfig),
+            busy: !!updateBroadcastInFlight,
+            preview: preview
+        });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/admin/update-broadcast/preview', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    try {
+        const siteUrl = serverConfig.publicSiteUrl || process.env.PUBLIC_SITE_URL || getSiteBaseUrl(req);
+        const built = updateBroadcast.buildUpdateEmail(siteUrl, req.body || {});
+        if (built.error) return res.status(400).json({ error: built.error });
+        res.json({
+            ok: true,
+            subject: built.subject,
+            html: built.html,
+            text: built.text,
+            newsUrl: built.newsUrl
+        });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/admin/update-broadcast/send', async (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    if (!mail.isMailConfigured(serverConfig)) {
+        return res.status(400).json({ error: 'SMTP не настроен. Проверьте server-config.json' });
+    }
+    if (updateBroadcastInFlight) {
+        return res.status(409).json({ error: 'Рассылка уже выполняется. Дождитесь завершения.' });
+    }
+
+    const body = req.body || {};
+    const testOnly = !!body.testOnly;
+    const testTo = String(body.testTo || '').trim();
+    const siteUrl = serverConfig.publicSiteUrl || process.env.PUBLIC_SITE_URL || getSiteBaseUrl(req);
+    const built = updateBroadcast.buildUpdateEmail(siteUrl, body);
+    if (built.error) return res.status(400).json({ error: built.error });
+
+    let recipients = [];
+    if (testOnly) {
+        if (!passwordReset.isValidEmail(testTo)) {
+            return res.status(400).json({ error: 'Укажите корректный e-mail для тестовой отправки' });
+        }
+        recipients = [{ email: testTo, username: 'test', fullName: '', organizationName: '' }];
+    } else {
+        if (!body.confirm) {
+            return res.status(400).json({ error: 'Подтвердите массовую рассылку (confirm: true)' });
+        }
+        recipients = updateBroadcast.collectRecipients(serverConfig);
+        if (!recipients.length) {
+            return res.status(400).json({ error: 'Нет получателей с указанной почтой' });
+        }
+    }
+
+    updateBroadcastInFlight = true;
+    const sent = [];
+    const failed = [];
+    try {
+        for (let i = 0; i < recipients.length; i++) {
+            const r = recipients[i];
+            const result = await mail.sendMail(serverConfig, {
+                to: r.email,
+                subject: built.subject,
+                text: built.text,
+                html: built.html
+            });
+            if (result && result.ok) {
+                sent.push(passwordReset.maskEmail(r.email));
+            } else {
+                failed.push({
+                    email: passwordReset.maskEmail(r.email),
+                    error: (result && result.error) || 'Ошибка отправки'
+                });
+            }
+            if (i < recipients.length - 1) {
+                await updateBroadcast.sleep(updateBroadcast.SEND_DELAY_MS);
+            }
+        }
+        res.json({
+            ok: failed.length === 0,
+            testOnly: testOnly,
+            total: recipients.length,
+            sent: sent.length,
+            failed: failed.length,
+            failures: failed.slice(0, 30)
+        });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message || e) });
+    } finally {
+        updateBroadcastInFlight = false;
     }
 });
 

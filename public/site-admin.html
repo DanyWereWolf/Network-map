@@ -349,6 +349,71 @@
             color: #94a3b8;
             border-color: #334155;
         }
+        .broadcast-admin-layout {
+            display: grid;
+            gap: 16px;
+        }
+        .broadcast-admin-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+            gap: 16px;
+            align-items: start;
+        }
+        @media (max-width: 980px) {
+            .broadcast-admin-grid { grid-template-columns: 1fr; }
+        }
+        .broadcast-form-card,
+        .broadcast-preview-card,
+        .broadcast-recipients-card {
+            background: var(--surface, #fff);
+            border: 1px solid var(--border, #e2e8f0);
+            border-radius: 14px;
+            padding: 16px;
+        }
+        .broadcast-card-label {
+            margin: 0 0 12px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--muted, #64748b);
+        }
+        .broadcast-preview-frame {
+            width: 100%;
+            min-height: 520px;
+            border: 1px solid var(--border, #e2e8f0);
+            border-radius: 12px;
+            background: #eef2ff;
+        }
+        .broadcast-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            margin-top: 12px;
+        }
+        .broadcast-recipients-list {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            max-height: 220px;
+            overflow: auto;
+            font-size: 13px;
+        }
+        .broadcast-recipients-list li {
+            padding: 6px 0;
+            border-bottom: 1px solid var(--border, #e2e8f0);
+        }
+        .broadcast-meta {
+            font-size: 13px;
+            color: var(--muted, #64748b);
+            margin: 0 0 10px;
+        }
+        [data-theme="dark"] .broadcast-form-card,
+        [data-theme="dark"] .broadcast-preview-card,
+        [data-theme="dark"] .broadcast-recipients-card {
+            background: rgba(255,255,255,0.03);
+        }
         .support-admin-layout {
             display: grid;
             grid-template-columns: minmax(220px, 320px) 1fr;
@@ -1046,6 +1111,10 @@
                                 <span class="admin-nav-label">Уведомления</span>
                                 <span class="admin-nav-badge" id="maintTabBadge" aria-hidden="true"></span>
                             </button>
+                            <button type="button" class="admin-nav-item" role="tab" data-tab="broadcast" id="nav-broadcast">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                                <span class="admin-nav-label">Рассылка</span>
+                            </button>
                             <button type="button" class="admin-nav-item" role="tab" data-tab="support" id="nav-support">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
                                 <span class="admin-nav-label">Обратная связь</span>
@@ -1599,6 +1668,96 @@
                     </div>
                 </section>
 
+                <!-- Email-рассылка об обновлениях -->
+                <section id="tab-broadcast" class="tab-content">
+                    <div class="broadcast-admin-layout">
+                        <div class="panel-head">
+                            <details class="panel-help">
+                                <summary>Справка по разделу</summary>
+                                <ul class="fact-list">
+                                    <li>Письмо уходит всем активным пользователям с указанной почтой (или contact email организации).</li>
+                                    <li>Адреса дедуплицируются — один e-mail получает одно письмо.</li>
+                                    <li>Пункты списка: строки вида <code>- новый фильтр на карте</code> (через пустую строку от обычных абзацев).</li>
+                                    <li>Сначала отправьте тест себе, затем — всем.</li>
+                                </ul>
+                            </details>
+                        </div>
+
+                        <div class="broadcast-admin-grid">
+                            <div class="broadcast-form-card">
+                                <p class="broadcast-card-label">Письмо</p>
+                                <div class="field-row">
+                                    <div class="field-col">
+                                        <label for="broadcastSubject">Тема</label>
+                                        <input id="broadcastSubject" type="text" maxlength="180" placeholder="Обновление Volsmap — что нового">
+                                    </div>
+                                    <div class="field-col">
+                                        <label for="broadcastBadge">Бейдж в шапке</label>
+                                        <input id="broadcastBadge" type="text" maxlength="60" value="Обновление" placeholder="Обновление">
+                                    </div>
+                                </div>
+                                <div class="field-row">
+                                    <div class="field-col" style="flex:1 1 100%;">
+                                        <label for="broadcastTitle">Заголовок</label>
+                                        <input id="broadcastTitle" type="text" maxlength="200" placeholder="Вышло обновление Volsmap">
+                                    </div>
+                                </div>
+                                <div class="field-row">
+                                    <div class="field-col" style="flex:1 1 100%;">
+                                        <label for="broadcastIntro">Вступление</label>
+                                        <textarea id="broadcastIntro" rows="3" maxlength="2000" placeholder="Коротко расскажите, зачем письмо и что изменилось."></textarea>
+                                    </div>
+                                </div>
+                                <div class="field-row">
+                                    <div class="field-col" style="flex:1 1 100%;">
+                                        <label for="broadcastBody">Текст / пункты обновления</label>
+                                        <textarea id="broadcastBody" rows="8" maxlength="8000" placeholder="Абзац обычным текстом.
+
+- Улучшили трассировку волокон
+- Исправили синхронизацию карты
+- Добавили новые подсказки в интерфейсе"></textarea>
+                                        <div class="hint">Пустая строка разделяет абзацы. Строки с «- » становятся карточками в письме.</div>
+                                    </div>
+                                </div>
+                                <div class="field-row">
+                                    <div class="field-col">
+                                        <label for="broadcastCtaLabel">Текст кнопки</label>
+                                        <input id="broadcastCtaLabel" type="text" maxlength="80" value="Смотреть новости" placeholder="Смотреть новости">
+                                    </div>
+                                    <div class="field-col">
+                                        <label for="broadcastCtaUrl">Ссылка кнопки</label>
+                                        <input id="broadcastCtaUrl" type="text" maxlength="500" value="/news.html" placeholder="/news.html">
+                                    </div>
+                                </div>
+                                <div class="field-row">
+                                    <div class="field-col">
+                                        <label for="broadcastTestTo">Тестовый e-mail</label>
+                                        <input id="broadcastTestTo" type="email" maxlength="200" placeholder="you@example.com">
+                                    </div>
+                                </div>
+                                <div class="broadcast-actions">
+                                    <button type="button" class="btn-sm" id="broadcastPreviewBtn">Обновить превью</button>
+                                    <button type="button" class="btn-sm" id="broadcastTestBtn">Отправить тест</button>
+                                    <button type="button" class="btn-sm-primary" id="broadcastSendBtn">Разослать всем</button>
+                                    <span class="hint" id="broadcastStatusHint"></span>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="broadcast-recipients-card" style="margin-bottom:16px;">
+                                    <p class="broadcast-card-label">Получатели</p>
+                                    <p class="broadcast-meta" id="broadcastRecipientsMeta">Загрузка…</p>
+                                    <ul class="broadcast-recipients-list" id="broadcastRecipientsList"></ul>
+                                </div>
+                                <div class="broadcast-preview-card">
+                                    <p class="broadcast-card-label">Превью письма</p>
+                                    <iframe id="broadcastPreviewFrame" class="broadcast-preview-frame" title="Превью письма" sandbox=""></iframe>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
                 <!-- Обратная связь от пользователей -->
                 <section id="tab-support" class="tab-content">
                     <div class="panel-head">
@@ -1760,6 +1919,7 @@
             database: 'База данных',
             showcase: 'Витрина',
             maintenance: 'Уведомления',
+            broadcast: 'Рассылка',
             support: 'Обратная связь',
             updates: 'Новости',
             account: 'Аккаунт'
@@ -1804,6 +1964,9 @@
             if (main) main.scrollIntoView({ behavior: 'smooth', block: 'start' });
             if (name === 'support' && typeof window.adminLoadSupportThreads === 'function') {
                 window.adminLoadSupportThreads();
+            }
+            if (name === 'broadcast' && typeof window.adminLoadBroadcast === 'function') {
+                window.adminLoadBroadcast();
             }
             if (name === 'database') {
                 if (typeof window.adminLoadStorageStatus === 'function') window.adminLoadStorageStatus();
@@ -2923,6 +3086,7 @@
                 loadShowcase();
                 loadMaintenanceNotice();
                 loadProductUpdates();
+                if (typeof window.adminLoadBroadcastRecipients === 'function') window.adminLoadBroadcastRecipients();
                 if (typeof window.adminLoadStoreBackups === 'function') window.adminLoadStoreBackups();
                 if (typeof window.adminLoadStorageStatus === 'function') window.adminLoadStorageStatus();
                 if (typeof window.adminLoadMysqlDumps === 'function') window.adminLoadMysqlDumps();
@@ -3358,6 +3522,169 @@
         if (productUpdatesDeleteBtn) productUpdatesDeleteBtn.addEventListener('click', deleteSelectedProductUpdate);
         var productUpdatesSaveBtn = document.getElementById('productUpdatesSaveBtn');
         if (productUpdatesSaveBtn) productUpdatesSaveBtn.addEventListener('click', saveProductUpdatesToServer);
+
+        function setBroadcastHint(text) {
+            var el = document.getElementById('broadcastStatusHint');
+            if (el) el.textContent = text || '';
+        }
+
+        function readBroadcastPayload() {
+            return {
+                subject: (document.getElementById('broadcastSubject') || {}).value || '',
+                badge: (document.getElementById('broadcastBadge') || {}).value || '',
+                title: (document.getElementById('broadcastTitle') || {}).value || '',
+                intro: (document.getElementById('broadcastIntro') || {}).value || '',
+                body: (document.getElementById('broadcastBody') || {}).value || '',
+                ctaLabel: (document.getElementById('broadcastCtaLabel') || {}).value || '',
+                ctaUrl: (document.getElementById('broadcastCtaUrl') || {}).value || ''
+            };
+        }
+
+        function authHeadersJson() {
+            var token = getAuthToken && getAuthToken();
+            var headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            return headers;
+        }
+
+        window.adminLoadBroadcastRecipients = function() {
+            var meta = document.getElementById('broadcastRecipientsMeta');
+            var list = document.getElementById('broadcastRecipientsList');
+            if (!meta && !list) return Promise.resolve();
+            return fetch('api/admin/update-broadcast/recipients', {
+                credentials: 'include',
+                headers: authHeadersJson()
+            }).then(function(r) {
+                return r.json().then(function(j) { return { ok: r.ok, j: j }; });
+            }).then(function(res) {
+                if (!res.ok) throw new Error((res.j && res.j.error) || 'Ошибка');
+                var count = res.j.count || 0;
+                var smtp = res.j.mailConfigured ? 'SMTP настроен' : 'SMTP не настроен';
+                if (meta) {
+                    meta.textContent = 'Получателей: ' + count + ' · ' + smtp +
+                        (res.j.busy ? ' · идёт рассылка' : '');
+                }
+                if (list) {
+                    var preview = Array.isArray(res.j.preview) ? res.j.preview : [];
+                    if (!preview.length) {
+                        list.innerHTML = '<li class="text-muted">Нет адресов</li>';
+                    } else {
+                        list.innerHTML = preview.map(function(r) {
+                            var org = r.organizationName ? (' · ' + escapeHtml(r.organizationName)) : '';
+                            var user = r.username ? escapeHtml(r.username) : '—';
+                            return '<li><strong>' + escapeHtml(r.email) + '</strong><br><span class="hint">' + user + org + '</span></li>';
+                        }).join('') + (count > preview.length
+                            ? '<li class="hint">…и ещё ' + (count - preview.length) + '</li>'
+                            : '');
+                    }
+                }
+                return res.j;
+            }).catch(function(err) {
+                if (meta) meta.textContent = 'Ошибка: ' + (err.message || err);
+            });
+        };
+
+        function refreshBroadcastPreview() {
+            var payload = readBroadcastPayload();
+            setBroadcastHint('Формируем превью…');
+            return fetch('api/admin/update-broadcast/preview', {
+                method: 'POST',
+                credentials: 'include',
+                headers: authHeadersJson(),
+                body: JSON.stringify(payload)
+            }).then(function(r) {
+                return r.json().then(function(j) { return { ok: r.ok, j: j }; });
+            }).then(function(res) {
+                if (!res.ok) throw new Error((res.j && res.j.error) || 'Ошибка превью');
+                var frame = document.getElementById('broadcastPreviewFrame');
+                if (frame) {
+                    frame.srcdoc = res.j.html || '';
+                }
+                setBroadcastHint('Превью обновлено · тема: ' + (res.j.subject || ''));
+            }).catch(function(err) {
+                setBroadcastHint('Ошибка превью: ' + (err.message || err));
+            });
+        }
+
+        function sendBroadcast(options) {
+            options = options || {};
+            var payload = readBroadcastPayload();
+            if (options.testOnly) {
+                payload.testOnly = true;
+                payload.testTo = ((document.getElementById('broadcastTestTo') || {}).value || '').trim();
+                if (!payload.testTo) {
+                    alert('Укажите тестовый e-mail.');
+                    return Promise.resolve();
+                }
+            } else {
+                payload.confirm = true;
+                if (!confirm('Отправить письмо всем получателям с указанной почтой? Это действие нельзя отменить.')) {
+                    return Promise.resolve();
+                }
+            }
+            setBroadcastHint(options.testOnly ? 'Отправка теста…' : 'Идёт рассылка… Это может занять время.');
+            var btnTest = document.getElementById('broadcastTestBtn');
+            var btnSend = document.getElementById('broadcastSendBtn');
+            if (btnTest) btnTest.disabled = true;
+            if (btnSend) btnSend.disabled = true;
+            return fetch('api/admin/update-broadcast/send', {
+                method: 'POST',
+                credentials: 'include',
+                headers: authHeadersJson(),
+                body: JSON.stringify(payload)
+            }).then(function(r) {
+                return r.json().then(function(j) { return { ok: r.ok, j: j }; });
+            }).then(function(res) {
+                if (!res.ok) throw new Error((res.j && res.j.error) || 'Ошибка отправки');
+                var j = res.j || {};
+                var msg = (j.testOnly ? 'Тест: ' : 'Рассылка: ') +
+                    'отправлено ' + (j.sent || 0) + ' из ' + (j.total || 0);
+                if (j.failed) msg += ', ошибок: ' + j.failed;
+                setBroadcastHint(msg);
+                if (j.failed && j.failures && j.failures.length) {
+                    console.warn('[Broadcast] failures', j.failures);
+                }
+                if (typeof window.adminLoadBroadcastRecipients === 'function') {
+                    window.adminLoadBroadcastRecipients();
+                }
+            }).catch(function(err) {
+                setBroadcastHint('Ошибка: ' + (err.message || err));
+                alert('Ошибка: ' + (err.message || err));
+            }).finally(function() {
+                if (btnTest) btnTest.disabled = false;
+                if (btnSend) btnSend.disabled = false;
+            });
+        }
+
+        window.adminLoadBroadcast = function() {
+            if (typeof window.adminLoadBroadcastRecipients === 'function') {
+                window.adminLoadBroadcastRecipients();
+            }
+            var subject = document.getElementById('broadcastSubject');
+            if (subject && !subject.value) {
+                subject.value = 'Обновление Volsmap — что нового';
+            }
+            var title = document.getElementById('broadcastTitle');
+            if (title && !title.value) {
+                title.value = 'Вышло обновление Volsmap';
+            }
+            var intro = document.getElementById('broadcastIntro');
+            if (intro && !intro.value) {
+                intro.value = 'Мы выпустили обновление сервиса. Кратко о главном — ниже.';
+            }
+            var body = document.getElementById('broadcastBody');
+            if (body && !body.value) {
+                body.value = 'Спасибо, что пользуетесь Volsmap.\n\n- Улучшения на карте и в трассировке\n- Исправления стабильности\n- Обновления интерфейса';
+            }
+            refreshBroadcastPreview();
+        };
+
+        var broadcastPreviewBtn = document.getElementById('broadcastPreviewBtn');
+        if (broadcastPreviewBtn) broadcastPreviewBtn.addEventListener('click', refreshBroadcastPreview);
+        var broadcastTestBtn = document.getElementById('broadcastTestBtn');
+        if (broadcastTestBtn) broadcastTestBtn.addEventListener('click', function() { sendBroadcast({ testOnly: true }); });
+        var broadcastSendBtn = document.getElementById('broadcastSendBtn');
+        if (broadcastSendBtn) broadcastSendBtn.addEventListener('click', function() { sendBroadcast({ testOnly: false }); });
 
         var maintSaveBtnEl = document.getElementById('maintSaveBtn');
         if (maintSaveBtnEl) {
