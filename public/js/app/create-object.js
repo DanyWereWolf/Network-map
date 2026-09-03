@@ -434,6 +434,7 @@ function createObject(type, name, coords, options = {}) {
             if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
             if (typeof resumeMapPanAfterPlacementObjectDrag === 'function') resumeMapPanAfterPlacementObjectDrag();
             clearObjectDragStartState(placemark);
+            if (typeof stopMapHoverCardDragFollow === 'function') stopMapHoverCardDragFollow(placemark);
             return;
         }
         if (typeof finalizeMapObjectDragEnd === 'function') {
@@ -442,6 +443,7 @@ function createObject(type, name, coords, options = {}) {
             updateConnectedCables(placemark);
             saveData({ object: placemark, syncImmediate: true, undoLabel: 'перемещение' });
             if (typeof resumeMapPanAfterPlacementObjectDrag === 'function') resumeMapPanAfterPlacementObjectDrag();
+            if (typeof stopMapHoverCardDragFollow === 'function') stopMapHoverCardDragFollow(placemark);
         }
     });
     

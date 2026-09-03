@@ -590,14 +590,37 @@ function hideAdminOnlyElements() {
 
 function openUsersModal() {
     if (!requireAdmin()) return;
-    
+
     const modal = document.getElementById('usersModal');
-    modal.style.display = 'block';
+    const content = modal && modal.querySelector('.users-modal-content');
+
+    // Сначала собираем разметку, потом показываем — без «вырастания» из пустого состояния
+    prepareUsersModalLayout();
     renderUsersList();
+
+    modal.classList.add('modal--centered');
+    if (content) {
+        content.style.animation = 'none';
+        content.style.transform = 'none';
+    }
+    modal.scrollTop = 0;
+    modal.scrollLeft = 0;
+    modal.style.display = 'flex';
+
     loadOrgDisplayPanel();
     loadOrgSecurityPanel();
     loadOrgEmbedPanel();
     loadOrgZabbixPanel();
+}
+
+function prepareUsersModalLayout() {
+    var ids = ['orgDisplaySection', 'orgSecuritySection', 'orgEmbedSection', 'orgZabbixSection'];
+    var show = isOrgMapAdmin() && !!getApiBase();
+    ids.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.style.display = show ? 'block' : 'none';
+    });
+    updateOrgAdminSettingsVisibility();
 }
 
 var orgSecurityPendingSecret = '';
@@ -699,6 +722,17 @@ function loadOrgSecurityPanel() {
     });
 }
 
+function setOrgSettingsSummaryMeta(id, text, isOn) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text || '';
+    el.className = 'org-settings-summary-meta' + (isOn ? ' is-on' : '');
+}
+
+function openOrgSettingsCard(sectionEl) {
+    if (sectionEl && sectionEl.tagName === 'DETAILS') sectionEl.open = true;
+}
+
 function renderOrgSecurityPanel(enabled) {
     var statusEl = document.getElementById('orgSecurityStatus');
     var setupBtn = document.getElementById('org2faSetupBtn');
@@ -714,6 +748,7 @@ function renderOrgSecurityPanel(enabled) {
             : '2FA выключена.';
         statusEl.className = 'org-security-status' + (enabled ? ' is-on' : '');
     }
+    setOrgSettingsSummaryMeta('orgSecuritySummaryMeta', enabled ? '2FA вкл.' : 'выкл.', !!enabled);
     if (setupBtn) setupBtn.style.display = enabled ? 'none' : 'inline-flex';
     if (disableBtn) disableBtn.style.display = enabled ? 'inline-flex' : 'none';
 }
@@ -731,6 +766,7 @@ function startOrg2faSetup() {
         var qr = document.getElementById('org2faQr');
         var secretEl = document.getElementById('org2faSecret');
         if (setupPanel) setupPanel.style.display = 'block';
+        openOrgSettingsCard(document.getElementById('orgSecuritySection'));
         if (qr) {
             qr.src = body.qrCodeUrl || '';
             qr.style.display = body.qrCodeUrl ? 'block' : 'none';
@@ -766,6 +802,7 @@ function enableOrg2fa() {
 function disableOrg2fa() {
     var panel = document.getElementById('org2faDisablePanel');
     if (panel) panel.style.display = 'block';
+    openOrgSettingsCard(document.getElementById('orgSecuritySection'));
     var codeEl = document.getElementById('org2faDisableCode');
     if (codeEl) { codeEl.value = ''; codeEl.focus(); }
 }
@@ -828,6 +865,7 @@ function renderOrgEmbedPanel(body) {
             : 'Ссылка не создана. После создания карта откроется во встраивании без входа.';
         statusEl.className = 'org-security-status' + (enabled ? ' is-on' : '');
     }
+    setOrgSettingsSummaryMeta('orgEmbedSummaryMeta', enabled ? 'активно' : 'выкл.', !!enabled);
     if (linkWrap) linkWrap.style.display = enabled ? 'block' : 'none';
     if (urlInput) urlInput.value = body.embedUrl || '';
     if (enableBtn) enableBtn.style.display = enabled ? 'none' : 'inline-flex';
@@ -914,18 +952,34 @@ function renderOrgZabbixPanel(body) {
     var statusEl = document.getElementById('orgZabbixStatus');
     var urlInput = document.getElementById('orgZabbixApiUrl');
     var tokenInput = document.getElementById('orgZabbixApiToken');
+    var pollSelect = document.getElementById('orgZabbixPollInterval');
     var disableBtn = document.getElementById('orgZabbixDisableBtn');
     if (urlInput) urlInput.value = body.apiUrl || '';
     if (tokenInput) {
         tokenInput.value = '';
         tokenInput.placeholder = body.hasToken ? 'Токен сохранён — введите новый, чтобы заменить' : 'API-токен Zabbix';
     }
+    if (pollSelect) {
+        var sec = body.pollIntervalSec != null ? String(body.pollIntervalSec) : '45';
+        if (!Array.prototype.some.call(pollSelect.options, function(o) { return o.value === sec; })) {
+            var opt = document.createElement('option');
+            opt.value = sec;
+            opt.textContent = sec + ' сек.';
+            pollSelect.appendChild(opt);
+        }
+        pollSelect.value = sec;
+    }
     if (statusEl) {
         statusEl.textContent = enabled
-            ? ('Подключено' + (body.hasToken ? '' : ' (нет токена)') + '. Объекты с IP/именем или полем «Хост Zabbix» подсвечиваются на карте.')
+            ? ('Подключено' + (body.hasToken ? '' : ' (нет токена)') + '. Опрос каждые ' + (body.pollIntervalSec || 45) + ' с.')
             : 'Отключено. Укажите URL и API-токен, затем сохраните.';
         statusEl.className = 'org-security-status' + (enabled ? ' is-on' : '');
     }
+    setOrgSettingsSummaryMeta(
+        'orgZabbixSummaryMeta',
+        enabled ? ('вкл. · ' + (body.pollIntervalSec || 45) + ' с') : 'выкл.',
+        !!enabled
+    );
     if (disableBtn) disableBtn.style.display = enabled ? 'inline-flex' : 'none';
     setLocalOrgZabbixEnabled(enabled && !!body.hasToken);
 }
@@ -934,11 +988,15 @@ function saveOrgZabbix(testOnly) {
     if (!getApiBase()) return;
     var urlInput = document.getElementById('orgZabbixApiUrl');
     var tokenInput = document.getElementById('orgZabbixApiToken');
+    var pollSelect = document.getElementById('orgZabbixPollInterval');
     var apiUrl = urlInput ? String(urlInput.value || '').trim() : '';
     var apiToken = tokenInput ? String(tokenInput.value || '').trim() : '';
+    var pollIntervalSec = pollSelect ? parseInt(pollSelect.value, 10) : 45;
+    if (isNaN(pollIntervalSec)) pollIntervalSec = 45;
     var payload = {
         enabled: true,
         apiUrl: apiUrl,
+        pollIntervalSec: pollIntervalSec,
         testOnly: !!testOnly
     };
     if (apiToken) payload.apiToken = apiToken;
@@ -957,6 +1015,9 @@ function saveOrgZabbix(testOnly) {
         renderOrgZabbixPanel(res.body);
         if (typeof showSuccess === 'function') showSuccess('Настройки Zabbix сохранены');
         setLocalOrgZabbixEnabled(!!(res.body && res.body.enabled));
+        if (window.ZabbixStatus && typeof ZabbixStatus.setPollIntervalSec === 'function' && res.body.pollIntervalSec) {
+            ZabbixStatus.setPollIntervalSec(res.body.pollIntervalSec);
+        }
         if (typeof window.refreshZabbixStatuses === 'function') window.refreshZabbixStatuses(true);
     }).catch(function(e) {
         if (typeof showError === 'function') showError(e.message || 'Не удалось сохранить Zabbix');
@@ -1167,7 +1228,7 @@ function renderUsersList() {
     }
 
     if (activeUsers.length === 0 && rejectedUsers.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">Нет пользователей</div>';
+        container.innerHTML = '<div class="users-list-empty">Нет пользователей</div>';
         return;
     }
     
@@ -1304,15 +1365,27 @@ function populateUserOrganizationSelect(orgSelect, options) {
     if (options.selectedId) orgSelect.value = options.selectedId;
 }
 
+function syncUserEditRoleVisual(role) {
+    var value = role === 'admin' ? 'admin' : 'user';
+    var roleSelect = document.getElementById('editRole');
+    if (roleSelect) roleSelect.value = value;
+    document.querySelectorAll('input[name="userEditRoleVisual"]').forEach(function(input) {
+        input.checked = input.value === value;
+    });
+}
+
 function openUserEditModal(userId = null) {
     const modal = document.getElementById('userEditModal');
     const title = document.getElementById('userEditTitle');
+    const subtitle = document.getElementById('userEditSubtitle');
     const userIdInput = document.getElementById('editUserId');
     const usernameInput = document.getElementById('editUsername');
     const fullNameInput = document.getElementById('editFullName');
     const passwordInput = document.getElementById('editPassword');
+    const passwordHint = document.getElementById('editPasswordHint');
     const roleSelect = document.getElementById('editRole');
     const orgSelect = document.getElementById('editOrganizationId');
+    const orgGroup = document.getElementById('editOrganizationGroup') || (orgSelect && orgSelect.closest('.form-group'));
     const deleteUserBtn = document.getElementById('deleteUserBtn');
     if (userId) {
         const users = AuthSystem.getUsers();
@@ -1321,7 +1394,6 @@ function openUserEditModal(userId = null) {
         var isMainAdminUser = user.username === 'admin';
         var showOrgField = isGlobalMapAdmin() && !isMainAdminUser;
         if (orgSelect) {
-            var orgGroup = orgSelect.closest('.form-group');
             if (orgGroup) orgGroup.style.display = showOrgField ? '' : 'none';
             if (showOrgField) {
                 populateUserOrganizationSelect(orgSelect, {
@@ -1331,12 +1403,15 @@ function openUserEditModal(userId = null) {
             }
         }
         title.textContent = 'Редактировать пользователя';
+        if (subtitle) subtitle.textContent = 'Изменение профиля, роли и доступа';
         userIdInput.value = user.id;
         usernameInput.value = user.username;
         usernameInput.disabled = true;
         fullNameInput.value = user.fullName || '';
         passwordInput.value = '';
-        roleSelect.value = user.role;
+        passwordInput.placeholder = 'Новый пароль (необязательно)';
+        if (passwordHint) passwordHint.style.display = '';
+        syncUserEditRoleVisual(user.role);
         if (deleteUserBtn) {
             var canDelete = user.id !== currentUser.userId && !isMainAdminUser;
             deleteUserBtn.style.display = canDelete ? '' : 'none';
@@ -1345,26 +1420,29 @@ function openUserEditModal(userId = null) {
     } else {
         if (deleteUserBtn) deleteUserBtn.style.display = 'none';
         title.textContent = 'Добавить пользователя';
+        if (subtitle) subtitle.textContent = 'Логин, роль и доступ к организации';
         userIdInput.value = '';
         usernameInput.value = '';
         usernameInput.disabled = false;
         fullNameInput.value = '';
         passwordInput.value = '';
-        roleSelect.value = 'user';
+        passwordInput.placeholder = 'Придумайте пароль';
+        if (passwordHint) passwordHint.style.display = 'none';
+        syncUserEditRoleVisual('user');
         if (orgSelect) {
-            var orgGroupAdd = orgSelect.closest('.form-group');
             if (currentUser && currentUser.organizationId != null) {
-                if (orgGroupAdd) orgGroupAdd.style.display = 'none';
+                if (orgGroup) orgGroup.style.display = 'none';
                 orgSelect.value = currentUser.organizationId;
             } else if (isGlobalMapAdmin()) {
-                if (orgGroupAdd) orgGroupAdd.style.display = '';
+                if (orgGroup) orgGroup.style.display = '';
                 populateUserOrganizationSelect(orgSelect, { placeholderText: 'Выберите организацию…' });
             } else {
-                if (orgGroupAdd) orgGroupAdd.style.display = 'none';
+                if (orgGroup) orgGroup.style.display = 'none';
             }
         }
     }
-    modal.style.display = 'block';
+    modal.classList.add('modal--centered');
+    modal.style.display = 'flex';
 }
 
 function closeUserEditModal() {
@@ -1556,6 +1634,12 @@ function setupUsersModalHandlers() {
         usersModal.addEventListener('click', function(e) {
             if (e.target === usersModal) closeUsersModal();
         });
+        usersModal.querySelectorAll('details.org-settings-card').forEach(function(card) {
+            card.addEventListener('toggle', function() {
+                usersModal.scrollTop = 0;
+                usersModal.scrollLeft = 0;
+            });
+        });
     }
 
     const addUserBtn = document.getElementById('addUserBtn');
@@ -1585,6 +1669,18 @@ function setupUsersModalHandlers() {
     const cancelUserEditBtn = document.getElementById('cancelUserEditBtn');
     if (cancelUserEditBtn) {
         cancelUserEditBtn.addEventListener('click', closeUserEditModal);
+    }
+
+    document.querySelectorAll('input[name="userEditRoleVisual"]').forEach(function(input) {
+        input.addEventListener('change', function() {
+            if (input.checked) syncUserEditRoleVisual(input.value);
+        });
+    });
+    var editRoleSelect = document.getElementById('editRole');
+    if (editRoleSelect) {
+        editRoleSelect.addEventListener('change', function() {
+            syncUserEditRoleVisual(editRoleSelect.value);
+        });
     }
 
     var org2faSetupBtn = document.getElementById('org2faSetupBtn');

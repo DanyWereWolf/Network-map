@@ -465,6 +465,8 @@ function finalizeMapObjectDragEnd(placemark) {
     // Подпись снимается на drag — вернуть сразу (в т.ч. при virtualization), не ждать pan/sync.
     if (typeof ensureObjectLabelOnMap === 'function') ensureObjectLabelOnMap(placemark);
 
+    if (typeof stopMapHoverCardDragFollow === 'function') stopMapHoverCardDragFollow(placemark);
+
     releaseDragObjectLock(uid);
     if (typeof MapPerf !== 'undefined' && MapPerf.unpinObject) MapPerf.unpinObject(placemark);
 

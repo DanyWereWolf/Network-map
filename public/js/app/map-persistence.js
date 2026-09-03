@@ -3039,6 +3039,7 @@ function createObjectFromData(data, opts, createOpts) {
                 if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
                 if (typeof resumeMapPanAfterPlacementObjectDrag === 'function') resumeMapPanAfterPlacementObjectDrag();
                 if (typeof clearObjectDragStartState === 'function') clearObjectDragStartState(placemark);
+                if (typeof stopMapHoverCardDragFollow === 'function') stopMapHoverCardDragFollow(placemark);
                 return;
             }
             if (typeof finalizeMapObjectDragEnd === 'function') {
@@ -3071,6 +3072,7 @@ function createObjectFromData(data, opts, createOpts) {
             releaseDragObjectLock(uid);
             if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
             if (typeof resumeMapPanAfterPlacementObjectDrag === 'function') resumeMapPanAfterPlacementObjectDrag();
+            if (typeof stopMapHoverCardDragFollow === 'function') stopMapHoverCardDragFollow(placemark);
         });
 
     placemark.events.add('drag', function() {
@@ -3595,7 +3597,10 @@ function isMapPdfDarkTheme() {
 function applyMapPdfLabelInlineStyles(labelEl) {
     if (!labelEl || !labelEl.style) return;
     var isDark = isMapPdfDarkTheme();
+    // Без CSS transform: html2canvas часто теряет/смещает элементы с transform.
     labelEl.style.display = 'inline-block';
+    labelEl.style.position = 'relative';
+    labelEl.style.left = '0';
     labelEl.style.color = isDark ? '#f1f5f9' : '#1e293b';
     labelEl.style.fontSize = '11px';
     labelEl.style.fontWeight = '600';
@@ -3604,8 +3609,9 @@ function applyMapPdfLabelInlineStyles(labelEl) {
     labelEl.style.whiteSpace = 'nowrap';
     labelEl.style.padding = '3px 8px';
     labelEl.style.marginTop = '0';
-    labelEl.style.marginLeft = '50%';
-    labelEl.style.transform = 'translateX(-50%)';
+    labelEl.style.marginLeft = '0';
+    labelEl.style.transform = 'none';
+    labelEl.style.webkitTransform = 'none';
     labelEl.style.background = isDark ? 'rgba(30, 41, 59, 0.92)' : 'rgba(255, 255, 255, 0.94)';
     labelEl.style.border = isDark ? '1px solid rgba(148, 163, 184, 0.35)' : '1px solid #e2e8f0';
     labelEl.style.borderRadius = '6px';
@@ -3613,6 +3619,8 @@ function applyMapPdfLabelInlineStyles(labelEl) {
         ? '0 2px 8px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08)'
         : '0 1px 3px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.8)';
     labelEl.style.letterSpacing = '0.01em';
+    labelEl.style.backdropFilter = 'none';
+    labelEl.style.webkitBackdropFilter = 'none';
 }
 
 function applyMapPdfLabelStylesInRoot(root) {
@@ -3634,22 +3642,51 @@ function prepareMapLabelsDomForPdfCapture(mapEl) {
     };
 }
 
+function ensurePdfPlacemarkOnMap(obj) {
+    if (!obj || !myMap) return;
+    try {
+        if (typeof MapPerf !== 'undefined' && MapPerf.mountObject) {
+            MapPerf.mountObject(obj, {
+                bounds: null,
+                zoom: 20,
+                hideLabels: false,
+                hideObjects: false,
+                hideRegions: false
+            });
+        }
+        if (myMap.geoObjects.indexOf(obj) === -1) {
+            myMap.geoObjects.add(obj);
+        }
+        if (obj.options) obj.options.set('visible', true);
+        var label = obj.properties && obj.properties.get('label');
+        if (label) {
+            try {
+                if (obj.geometry && label.geometry && typeof obj.geometry.getCoordinates === 'function') {
+                    label.geometry.setCoordinates(obj.geometry.getCoordinates());
+                }
+            } catch (eCoords) {}
+            if (myMap.geoObjects.indexOf(label) === -1) myMap.geoObjects.add(label);
+            if (label.options) label.options.set('visible', true);
+        }
+    } catch (eMount) {}
+}
+
 function refreshVisibleMapLabelsForPdfCapture(boundsRect, opts) {
     opts = opts || {};
     if (opts.hideObjects) return;
-    if (typeof updateObjectLabel === 'function') {
-        objects.forEach(function(obj) {
-            if (!obj || !obj.properties) return;
-            var type = obj.properties.get('type');
-            if (!isMapPdfObjectType(type)) return;
-            if (!opts.showAll && boundsRect && !isLiveObjectInPdfBounds(obj, boundsRect)) return;
-            try {
+    if (!Array.isArray(objects)) return;
+    objects.forEach(function(obj) {
+        if (!obj || !obj.properties) return;
+        var type = obj.properties.get('type');
+        if (!isMapPdfObjectType(type)) return;
+        if (!opts.showAll && boundsRect && !isLiveObjectInPdfBounds(obj, boundsRect)) return;
+        try {
+            if (typeof updateObjectLabel === 'function') {
                 updateObjectLabel(obj, obj.properties.get('name'));
-                var label = obj.properties.get('label');
-                if (label && label.options) label.options.set('visible', true);
-            } catch (eLabel) {}
-        });
-    }
+            }
+            ensurePdfPlacemarkOnMap(obj);
+        } catch (eLabel) {}
+    });
 }
 
 function isMapPdfObjectType(type) {
@@ -3751,7 +3788,10 @@ function isYmapsTileLikeNode(node) {
     if (!node || !node.className) return false;
     var cls = String(node.className);
     if (cls.indexOf('ymaps') === -1) return false;
-    return /tiles|ground|layer|pane/i.test(cls);
+    // Только подложка/тайлы. places/overlays panes содержат метки объектов —
+    // сброс их transform уводит иконки за кадр в html2canvas.
+    if (/places|overlay|copyright|control|hint|balloon|event/i.test(cls)) return false;
+    return /ground|tiles?|layer/i.test(cls);
 }
 
 function stabilizeYmapsDomForHtml2Canvas(rootEl) {
@@ -4007,11 +4047,7 @@ function prepareMapVisibilityForPdfCapture(boundsRect, opts) {
             return;
         }
         if (!showAll && !isLiveObjectInPdfBounds(obj, boundsRect)) return;
-        try {
-            obj.options.set('visible', true);
-            var label = obj.properties.get('label');
-            if (label && label.options) label.options.set('visible', true);
-        } catch (eObj) {}
+        ensurePdfPlacemarkOnMap(obj);
     });
     if (typeof crossGroupPlacemarks !== 'undefined' && Array.isArray(crossGroupPlacemarks)) {
         crossGroupPlacemarks.forEach(function(pm) {
@@ -4026,9 +4062,13 @@ function prepareMapVisibilityForPdfCapture(boundsRect, opts) {
             }
             if (!showAll && !isLiveObjectInPdfBounds(pm, boundsRect)) return;
             try {
+                if (myMap && myMap.geoObjects.indexOf(pm) === -1) myMap.geoObjects.add(pm);
                 pm.options.set('visible', true);
                 var lbl = pm.properties && pm.properties.get('crossGroupLabel');
-                if (lbl && lbl.options) lbl.options.set('visible', true);
+                if (lbl) {
+                    if (myMap && myMap.geoObjects.indexOf(lbl) === -1) myMap.geoObjects.add(lbl);
+                    if (lbl.options) lbl.options.set('visible', true);
+                }
             } catch (eCross) {}
         });
     }
@@ -4045,9 +4085,13 @@ function prepareMapVisibilityForPdfCapture(boundsRect, opts) {
             }
             if (!showAll && !isLiveObjectInPdfBounds(pm, boundsRect)) return;
             try {
+                if (myMap && myMap.geoObjects.indexOf(pm) === -1) myMap.geoObjects.add(pm);
                 pm.options.set('visible', true);
                 var lbl = pm.properties && pm.properties.get('nodeGroupLabel');
-                if (lbl && lbl.options) lbl.options.set('visible', true);
+                if (lbl) {
+                    if (myMap && myMap.geoObjects.indexOf(lbl) === -1) myMap.geoObjects.add(lbl);
+                    if (lbl.options) lbl.options.set('visible', true);
+                }
             } catch (eNode) {}
         });
     }
@@ -4057,9 +4101,7 @@ function prepareMapVisibilityForPdfCapture(boundsRect, opts) {
             if (typeof updateAllConnectionLines === 'function') updateAllConnectionLines();
         } catch (eLines) {}
     }
-    if (!opts.skipConnectionVisibilitySync && typeof applyConnectionLinesVisibility === 'function') {
-        applyConnectionLinesVisibility();
-    }
+    // Во время PDF-захвата applyConnectionLinesVisibility — no-op; не вызываем лишний раз.
     refreshVisibleMapLabelsForPdfCapture(boundsRect, opts);
     applyMapPdfLabelStylesInRoot(document.getElementById('map'));
 }
@@ -4335,13 +4377,15 @@ async function openPdfExportWindow(data, exportOptions) {
     beginMapPdfExportCapture();
     try {
         if (mode === 'viewport') {
-            await waitForMapViewChange({ renderDelay: 350 });
+            // Не меняем zoom: режим «Как на экране» должен совпадать с текущим видом.
+            await waitForMapViewChange({ renderDelay: 400 });
             await prepareMapFrameForPdfCapture(
                 viewportBounds,
-                16,
-                Object.assign({}, visibilityOpts, { renderDelay: 350 })
+                null,
+                Object.assign({}, visibilityOpts, { renderDelay: 450 })
             );
             prepareMapVisibilityForPdfCapture(viewportBounds, visibilityOpts);
+            await new Promise(function(resolve) { setTimeout(resolve, 200); });
             mapSnapshots.push({
                 canvas: await captureMapSnapshot(mapEl, captureScale),
                 caption: snapshotCaption

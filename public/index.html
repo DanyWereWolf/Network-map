@@ -2075,145 +2075,188 @@
     <!-- Модальное окно управления пользователями -->
     <div id="usersModal" class="modal">
         <div class="modal-content users-modal-content">
-            <div class="modal-header">
-                <h2>Управление пользователями</h2>
-                <span class="close-users">&times;</span>
+            <div class="modal-header users-modal-header">
+                <div class="users-modal-heading">
+                    <h2>Управление пользователями</h2>
+                    <p class="users-modal-subtitle">Команда, доступ и настройки организации</p>
+                </div>
+                <span class="close-users" role="button" tabindex="0" aria-label="Закрыть">&times;</span>
             </div>
-            <div class="modal-body">
+            <div class="modal-body users-modal-body">
                 <div id="orgAdminSettings" class="org-admin-settings" style="display: none;">
-                <div id="orgDisplaySection" class="org-settings-card org-display-section" style="display: none;">
-                    <h3 class="section-title">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                            <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"></path>
-                            <path d="M13 13l6 6"></path>
-                        </svg>
-                        Отображение на карте
-                    </h3>
-                    <p class="hint org-settings-hint">Как показывать курсоры коллег при совместной работе на карте.</p>
-                    <div class="org-cursor-style-options" role="radiogroup" aria-label="Курсоры участников">
-                        <label class="org-cursor-style-option">
-                            <input type="radio" name="orgCollaboratorCursorStyle" value="pointer" class="org-cursor-style-input" checked>
-                            <span class="org-cursor-style-card">
-                                <span class="org-cursor-style-preview" aria-hidden="true">
-                                    <svg class="org-cursor-preview-svg" viewBox="0 0 88 58" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M10 8v26l6.5-5 3.8 7 3-1.7-3.5-6.5h7.5z" fill="#3b82f6" stroke="#ffffff" stroke-width="1.3" stroke-linejoin="round"/>
-                                        <rect x="6" y="38" width="38" height="14" rx="3.5" fill="rgba(15,23,42,0.9)" stroke="#3b82f6" stroke-width="1.2"/>
-                                        <text x="25" y="48" text-anchor="middle" fill="#ffffff" font-size="7.5" font-weight="600" font-family="system-ui, sans-serif">Анна</text>
-                                    </svg>
-                                </span>
-                                <span class="org-cursor-style-text">
-                                    <span class="org-cursor-style-label">Стрелка с подписью</span>
-                                    <span class="org-cursor-style-desc">Классический курсор и имя под ним</span>
-                                </span>
-                            </span>
-                        </label>
-                        <label class="org-cursor-style-option">
-                            <input type="radio" name="orgCollaboratorCursorStyle" value="circle" class="org-cursor-style-input">
-                            <span class="org-cursor-style-card">
-                                <span class="org-cursor-style-preview" aria-hidden="true">
-                                    <svg class="org-cursor-preview-svg" viewBox="0 0 88 58" xmlns="http://www.w3.org/2000/svg">
-                                        <circle cx="22" cy="20" r="13" fill="#22c55e" stroke="#ffffff" stroke-width="1.6"/>
-                                        <text x="22" y="24.5" text-anchor="middle" fill="#ffffff" font-size="11" font-weight="700" font-family="system-ui, sans-serif">А</text>
-                                        <rect x="6" y="38" width="38" height="14" rx="3.5" fill="rgba(15,23,42,0.9)" stroke="#22c55e" stroke-width="1.2"/>
-                                        <text x="25" y="48" text-anchor="middle" fill="#ffffff" font-size="7.5" font-weight="600" font-family="system-ui, sans-serif">Анна</text>
-                                    </svg>
-                                </span>
-                                <span class="org-cursor-style-text">
-                                    <span class="org-cursor-style-label">Круг с подписью</span>
-                                    <span class="org-cursor-style-desc">Аватар или буква в круге и имя снизу</span>
-                                </span>
-                            </span>
-                        </label>
-                    </div>
-                    <div class="org-display-actions">
-                        <button type="button" id="orgCollaboratorCursorStyleSaveBtn" class="btn-primary btn-sm">Сохранить</button>
-                    </div>
+                <div class="org-admin-settings-head">
+                    <span class="org-admin-settings-label">Настройки организации</span>
                 </div>
+                <details id="orgDisplaySection" class="org-settings-card org-display-section" style="display: none;">
+                    <summary class="org-settings-summary">
+                        <span class="org-settings-icon org-settings-icon--display" aria-hidden="true">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"></path>
+                                <path d="M13 13l6 6"></path>
+                            </svg>
+                        </span>
+                        <span class="section-title">Отображение на карте</span>
+                    </summary>
+                    <div class="org-settings-body">
+                        <p class="hint org-settings-hint">Курсоры коллег при совместной работе.</p>
+                        <div class="org-cursor-style-options" role="radiogroup" aria-label="Курсоры участников">
+                            <label class="org-cursor-style-option">
+                                <input type="radio" name="orgCollaboratorCursorStyle" value="pointer" class="org-cursor-style-input" checked>
+                                <span class="org-cursor-style-card">
+                                    <span class="org-cursor-style-preview" aria-hidden="true">
+                                        <svg class="org-cursor-preview-svg" viewBox="0 0 88 58" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M10 8v26l6.5-5 3.8 7 3-1.7-3.5-6.5h7.5z" fill="#3b82f6" stroke="#ffffff" stroke-width="1.3" stroke-linejoin="round"/>
+                                            <rect x="6" y="38" width="38" height="14" rx="3.5" fill="rgba(15,23,42,0.9)" stroke="#3b82f6" stroke-width="1.2"/>
+                                            <text x="25" y="48" text-anchor="middle" fill="#ffffff" font-size="7.5" font-weight="600" font-family="system-ui, sans-serif">Анна</text>
+                                        </svg>
+                                    </span>
+                                    <span class="org-cursor-style-text">
+                                        <span class="org-cursor-style-label">Стрелка</span>
+                                        <span class="org-cursor-style-desc">Курсор и имя</span>
+                                    </span>
+                                </span>
+                            </label>
+                            <label class="org-cursor-style-option">
+                                <input type="radio" name="orgCollaboratorCursorStyle" value="circle" class="org-cursor-style-input">
+                                <span class="org-cursor-style-card">
+                                    <span class="org-cursor-style-preview" aria-hidden="true">
+                                        <svg class="org-cursor-preview-svg" viewBox="0 0 88 58" xmlns="http://www.w3.org/2000/svg">
+                                            <circle cx="22" cy="20" r="13" fill="#22c55e" stroke="#ffffff" stroke-width="1.6"/>
+                                            <text x="22" y="24.5" text-anchor="middle" fill="#ffffff" font-size="11" font-weight="700" font-family="system-ui, sans-serif">А</text>
+                                            <rect x="6" y="38" width="38" height="14" rx="3.5" fill="rgba(15,23,42,0.9)" stroke="#22c55e" stroke-width="1.2"/>
+                                            <text x="25" y="48" text-anchor="middle" fill="#ffffff" font-size="7.5" font-weight="600" font-family="system-ui, sans-serif">Анна</text>
+                                        </svg>
+                                    </span>
+                                    <span class="org-cursor-style-text">
+                                        <span class="org-cursor-style-label">Круг</span>
+                                        <span class="org-cursor-style-desc">Буква/аватар и имя</span>
+                                    </span>
+                                </span>
+                            </label>
+                        </div>
+                        <div class="org-display-actions">
+                            <button type="button" id="orgCollaboratorCursorStyleSaveBtn" class="btn-primary btn-sm">Сохранить</button>
+                        </div>
+                    </div>
+                </details>
 
-                <div id="orgSecuritySection" class="org-settings-card org-security-section" style="display: none;">
-                    <h3 class="section-title">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                        </svg>
-                        Безопасность организации
-                    </h3>
-                    <p class="hint org-settings-hint">Двухфакторная аутентификация (2FA) — общий код для всех пользователей организации при входе. Настройте в приложении-аутентификаторе (например, Яндекс.Ключ).</p>
-                    <div id="orgSecurityStatus" class="org-security-status">Загрузка…</div>
-                    <div id="orgSecuritySetup" class="org-security-setup" style="display: none;">
-                        <p class="hint">Отсканируйте QR-код или введите секрет вручную, затем введите 6-значный код для подтверждения.</p>
-                        <img id="org2faQr" class="org-2fa-qr" alt="QR-код 2FA" width="220" height="220">
-                        <div class="org-2fa-secret-wrap">
-                            <code id="org2faSecret" class="org-2fa-secret"></code>
-                            <button type="button" id="org2faCopySecretBtn" class="btn-secondary btn-sm">Копировать</button>
+                <details id="orgSecuritySection" class="org-settings-card org-security-section" style="display: none;">
+                    <summary class="org-settings-summary">
+                        <span class="org-settings-icon org-settings-icon--security" aria-hidden="true">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                            </svg>
+                        </span>
+                        <span class="section-title">Безопасность</span>
+                        <span id="orgSecuritySummaryMeta" class="org-settings-summary-meta"></span>
+                    </summary>
+                    <div class="org-settings-body">
+                        <p class="hint org-settings-hint">2FA для всех пользователей организации (Яндекс.Ключ и др.).</p>
+                        <div id="orgSecurityStatus" class="org-security-status">Загрузка…</div>
+                        <div id="orgSecuritySetup" class="org-security-setup" style="display: none;">
+                            <p class="hint">Отсканируйте QR или введите секрет, затем код из приложения.</p>
+                            <img id="org2faQr" class="org-2fa-qr" alt="QR-код 2FA" width="180" height="180">
+                            <div class="org-2fa-secret-wrap">
+                                <code id="org2faSecret" class="org-2fa-secret"></code>
+                                <button type="button" id="org2faCopySecretBtn" class="btn-secondary btn-sm">Копировать</button>
+                            </div>
+                            <div class="form-group">
+                                <label for="org2faEnableCode">Код из приложения</label>
+                                <input type="text" id="org2faEnableCode" class="form-input" inputmode="numeric" maxlength="8" placeholder="000000" autocomplete="one-time-code">
+                            </div>
+                            <div class="org-security-actions">
+                                <button type="button" id="org2faEnableBtn" class="btn-primary btn-sm">Включить 2FA</button>
+                                <button type="button" id="org2faCancelSetupBtn" class="btn-secondary btn-sm">Отмена</button>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label for="org2faEnableCode">Код из приложения</label>
-                            <input type="text" id="org2faEnableCode" class="form-input" inputmode="numeric" maxlength="8" placeholder="000000" autocomplete="one-time-code">
+                        <div id="orgSecurityActions" class="org-security-actions">
+                            <button type="button" id="org2faSetupBtn" class="btn-primary btn-sm">Настроить 2FA</button>
+                            <button type="button" id="org2faDisableBtn" class="btn-secondary btn-sm" style="display: none;">Отключить 2FA</button>
                         </div>
-                        <button type="button" id="org2faEnableBtn" class="btn-primary btn-sm">Включить 2FA</button>
-                        <button type="button" id="org2faCancelSetupBtn" class="btn-secondary btn-sm">Отмена</button>
-                    </div>
-                    <div id="orgSecurityActions" class="org-security-actions">
-                        <button type="button" id="org2faSetupBtn" class="btn-primary btn-sm">Настроить 2FA</button>
-                        <button type="button" id="org2faDisableBtn" class="btn-secondary btn-sm" style="display: none;">Отключить 2FA</button>
-                    </div>
-                    <div id="org2faDisablePanel" class="org-security-setup" style="display: none;">
-                        <div class="form-group">
-                            <label for="org2faDisableCode">Код для отключения</label>
-                            <input type="text" id="org2faDisableCode" class="form-input" inputmode="numeric" maxlength="8" placeholder="000000">
+                        <div id="org2faDisablePanel" class="org-security-setup" style="display: none;">
+                            <div class="form-group">
+                                <label for="org2faDisableCode">Код для отключения</label>
+                                <input type="text" id="org2faDisableCode" class="form-input" inputmode="numeric" maxlength="8" placeholder="000000">
+                            </div>
+                            <button type="button" id="org2faConfirmDisableBtn" class="btn-secondary btn-sm">Подтвердить отключение</button>
                         </div>
-                        <button type="button" id="org2faConfirmDisableBtn" class="btn-secondary btn-sm">Подтвердить отключение</button>
                     </div>
-                </div>
+                </details>
 
-                <div id="orgEmbedSection" class="org-settings-card org-embed-section" style="display: none;">
-                    <h3 class="section-title">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="2" y="3" width="20" height="14" rx="2"></rect>
-                            <line x1="8" y1="21" x2="16" y2="21"></line>
-                            <line x1="12" y1="17" x2="12" y2="21"></line>
-                        </svg>
-                        Встраивание (Zabbix)
-                    </h3>
-                    <p class="hint org-settings-hint">Ссылка для виджета URL в дашборде Zabbix: карта только для просмотра, без боковой панели. В Zabbix отключите iframe sandboxing (Administration → General → Other).</p>
-                    <div id="orgEmbedStatus" class="org-security-status">Загрузка…</div>
-                    <div id="orgEmbedLinkWrap" class="org-embed-link-wrap" style="display: none;">
-                        <label for="orgEmbedUrl">URL для виджета</label>
-                        <div class="org-2fa-secret-wrap">
-                            <input type="text" id="orgEmbedUrl" class="form-input org-embed-url" readonly>
-                            <button type="button" id="orgEmbedCopyBtn" class="btn-secondary btn-sm">Копировать</button>
+                <details id="orgEmbedSection" class="org-settings-card org-embed-section" style="display: none;">
+                    <summary class="org-settings-summary">
+                        <span class="org-settings-icon org-settings-icon--embed" aria-hidden="true">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="3" width="20" height="14" rx="2"></rect>
+                                <line x1="8" y1="21" x2="16" y2="21"></line>
+                                <line x1="12" y1="17" x2="12" y2="21"></line>
+                            </svg>
+                        </span>
+                        <span class="section-title">Встраивание</span>
+                        <span id="orgEmbedSummaryMeta" class="org-settings-summary-meta"></span>
+                    </summary>
+                    <div class="org-settings-body">
+                        <p class="hint org-settings-hint">URL-виджет для Zabbix (карта без панели). В Zabbix отключите iframe sandboxing.</p>
+                        <div id="orgEmbedStatus" class="org-security-status">Загрузка…</div>
+                        <div id="orgEmbedLinkWrap" class="org-embed-link-wrap" style="display: none;">
+                            <label for="orgEmbedUrl">URL для виджета</label>
+                            <div class="org-2fa-secret-wrap">
+                                <input type="text" id="orgEmbedUrl" class="form-input org-embed-url" readonly>
+                                <button type="button" id="orgEmbedCopyBtn" class="btn-secondary btn-sm">Копировать</button>
+                            </div>
+                        </div>
+                        <div id="orgEmbedActions" class="org-security-actions">
+                            <button type="button" id="orgEmbedEnableBtn" class="btn-primary btn-sm">Создать ссылку</button>
+                            <button type="button" id="orgEmbedRotateBtn" class="btn-secondary btn-sm" style="display: none;">Обновить токен</button>
+                            <button type="button" id="orgEmbedDisableBtn" class="btn-secondary btn-sm" style="display: none;">Отключить</button>
                         </div>
                     </div>
-                    <div id="orgEmbedActions" class="org-security-actions">
-                        <button type="button" id="orgEmbedEnableBtn" class="btn-primary btn-sm">Создать ссылку</button>
-                        <button type="button" id="orgEmbedRotateBtn" class="btn-secondary btn-sm" style="display: none;">Обновить токен</button>
-                        <button type="button" id="orgEmbedDisableBtn" class="btn-secondary btn-sm" style="display: none;">Отключить</button>
-                    </div>
-                </div>
+                </details>
 
-                <div id="orgZabbixSection" class="org-settings-card org-zabbix-section" style="display: none;">
-                    <h3 class="section-title">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
-                        </svg>
-                        Мониторинг Zabbix
-                    </h3>
-                    <p class="hint org-settings-hint">Подключение к API Zabbix для подсветки объектов на карте. Связь: поле «Хост Zabbix» у объекта, иначе IP, иначе имя. Нужен API-токен (Users → API tokens).</p>
-                    <div id="orgZabbixStatus" class="org-security-status">Загрузка…</div>
-                    <div class="form-group">
-                        <label for="orgZabbixApiUrl">URL Zabbix</label>
-                        <input type="url" id="orgZabbixApiUrl" class="form-input" placeholder="https://zabbix.example.com" autocomplete="off">
+                <details id="orgZabbixSection" class="org-settings-card org-zabbix-section" style="display: none;">
+                    <summary class="org-settings-summary">
+                        <span class="org-settings-icon org-settings-icon--zabbix" aria-hidden="true">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                            </svg>
+                        </span>
+                        <span class="section-title">Мониторинг Zabbix</span>
+                        <span id="orgZabbixSummaryMeta" class="org-settings-summary-meta"></span>
+                    </summary>
+                    <div class="org-settings-body">
+                        <p class="hint org-settings-hint">Подсветка объектов по API. Связь: «Хост Zabbix» → IP → имя.</p>
+                        <div id="orgZabbixStatus" class="org-security-status">Загрузка…</div>
+                        <div class="org-zabbix-fields">
+                            <div class="form-group">
+                                <label for="orgZabbixApiUrl">URL Zabbix</label>
+                                <input type="url" id="orgZabbixApiUrl" class="form-input" placeholder="https://zabbix.example.com" autocomplete="off">
+                            </div>
+                            <div class="form-group">
+                                <label for="orgZabbixApiToken">API-токен</label>
+                                <input type="password" id="orgZabbixApiToken" class="form-input" placeholder="Не менять — оставьте пустым" autocomplete="new-password">
+                            </div>
+                            <div class="form-group org-zabbix-poll">
+                                <label for="orgZabbixPollInterval">Опрос</label>
+                                <select id="orgZabbixPollInterval" class="form-select" title="Как часто карта запрашивает статусы у Zabbix">
+                                    <option value="15">15 сек</option>
+                                    <option value="30">30 сек</option>
+                                    <option value="45" selected>45 сек</option>
+                                    <option value="60">1 мин</option>
+                                    <option value="90">1,5 мин</option>
+                                    <option value="120">2 мин</option>
+                                    <option value="180">3 мин</option>
+                                    <option value="300">5 мин</option>
+                                    <option value="600">10 мин</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="orgZabbixActions" class="org-security-actions">
+                            <button type="button" id="orgZabbixSaveBtn" class="btn-primary btn-sm">Сохранить</button>
+                            <button type="button" id="orgZabbixTestBtn" class="btn-secondary btn-sm">Проверить</button>
+                            <button type="button" id="orgZabbixDisableBtn" class="btn-secondary btn-sm" style="display: none;">Отключить</button>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="orgZabbixApiToken">API-токен</label>
-                        <input type="password" id="orgZabbixApiToken" class="form-input" placeholder="Оставьте пустым, чтобы не менять" autocomplete="new-password">
-                    </div>
-                    <div id="orgZabbixActions" class="org-security-actions">
-                        <button type="button" id="orgZabbixSaveBtn" class="btn-primary btn-sm">Сохранить и проверить</button>
-                        <button type="button" id="orgZabbixTestBtn" class="btn-secondary btn-sm">Только проверить</button>
-                        <button type="button" id="orgZabbixDisableBtn" class="btn-secondary btn-sm" style="display: none;">Отключить</button>
-                    </div>
-                </div>
+                </details>
                 </div>
 
                 <!-- Заявки на регистрацию -->
@@ -2232,25 +2275,27 @@
                 </div>
                 
                 <!-- Активные пользователи -->
-                <h3 class="section-title users-list-section-title">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="9" cy="7" r="4"></circle>
-                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                    </svg>
-                    Пользователи
-                </h3>
-                <div class="users-actions">
-                    <button id="addUserBtn" class="btn-primary">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="8.5" cy="7" r="4"></circle>
-                            <line x1="20" y1="8" x2="20" y2="14"></line>
-                            <line x1="23" y1="11" x2="17" y2="11"></line>
+                <div class="users-section-head">
+                    <h3 class="section-title users-list-section-title">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                         </svg>
-                        Добавить пользователя
-                    </button>
+                        Пользователи
+                    </h3>
+                    <div class="users-actions">
+                        <button id="addUserBtn" class="btn-primary btn-sm users-add-btn">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="8.5" cy="7" r="4"></circle>
+                                <line x1="20" y1="8" x2="20" y2="14"></line>
+                                <line x1="23" y1="11" x2="17" y2="11"></line>
+                            </svg>
+                            Добавить
+                        </button>
+                    </div>
                 </div>
                 <div id="usersList" class="users-list">
                     <!-- Список пользователей будет генерироваться динамически -->
@@ -2313,40 +2358,77 @@
     <!-- Модальное окно добавления/редактирования пользователя -->
     <div id="userEditModal" class="modal">
         <div class="modal-content user-edit-modal-content">
-            <div class="modal-header">
-                <h2 id="userEditTitle">Добавить пользователя</h2>
-                <span class="close-user-edit">&times;</span>
+            <div class="modal-header user-edit-modal-header">
+                <div class="user-edit-modal-heading">
+                    <h2 id="userEditTitle">Добавить пользователя</h2>
+                    <p id="userEditSubtitle" class="user-edit-modal-subtitle">Логин, роль и доступ к организации</p>
+                </div>
+                <span class="close-user-edit" role="button" tabindex="0" aria-label="Закрыть">&times;</span>
             </div>
-            <div class="modal-body">
+            <div class="modal-body user-edit-modal-body">
                 <input type="hidden" id="editUserId">
-                <div class="form-group">
-                    <label for="editUsername">Имя пользователя</label>
-                    <input type="text" id="editUsername" class="form-input" placeholder="Введите имя пользователя" required>
+                <div class="user-edit-form">
+                    <div class="form-group user-edit-field">
+                        <label for="editUsername">Имя пользователя</label>
+                        <input type="text" id="editUsername" class="form-input" placeholder="login" required autocomplete="off">
+                    </div>
+                    <div class="form-group user-edit-field">
+                        <label for="editFullName">Полное имя</label>
+                        <input type="text" id="editFullName" class="form-input" placeholder="Иван Иванов" autocomplete="name">
+                    </div>
+                    <div class="form-group user-edit-field">
+                        <label for="editPassword">Пароль</label>
+                        <input type="password" id="editPassword" class="form-input" placeholder="••••••••" autocomplete="new-password">
+                        <small id="editPasswordHint" class="user-edit-field-hint">Оставьте пустым, чтобы не менять пароль</small>
+                    </div>
+                    <div class="form-group user-edit-field user-edit-role-field">
+                        <span class="user-edit-field-label" id="editRoleLabel">Роль</span>
+                        <select id="editRole" class="form-select user-edit-role-select" aria-labelledby="editRoleLabel">
+                            <option value="user">Пользователь</option>
+                            <option value="admin">Администратор</option>
+                        </select>
+                        <div class="user-edit-role-options" role="radiogroup" aria-labelledby="editRoleLabel">
+                            <label class="user-edit-role-option">
+                                <input type="radio" name="userEditRoleVisual" value="user" class="user-edit-role-input" checked>
+                                <span class="user-edit-role-card">
+                                    <span class="user-edit-role-icon user-edit-role-icon--user" aria-hidden="true">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                            <circle cx="12" cy="7" r="4"></circle>
+                                        </svg>
+                                    </span>
+                                    <span class="user-edit-role-text">
+                                        <span class="user-edit-role-title">Пользователь</span>
+                                        <span class="user-edit-role-desc">Просмотр и работа с картой</span>
+                                    </span>
+                                </span>
+                            </label>
+                            <label class="user-edit-role-option">
+                                <input type="radio" name="userEditRoleVisual" value="admin" class="user-edit-role-input">
+                                <span class="user-edit-role-card">
+                                    <span class="user-edit-role-icon user-edit-role-icon--admin" aria-hidden="true">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                                        </svg>
+                                    </span>
+                                    <span class="user-edit-role-text">
+                                        <span class="user-edit-role-title">Администратор</span>
+                                        <span class="user-edit-role-desc">Пользователи и настройки</span>
+                                    </span>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-group user-edit-field" id="editOrganizationGroup">
+                        <label for="editOrganizationId">Организация</label>
+                        <select id="editOrganizationId" class="form-select">
+                            <option value="">Выберите организацию…</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="editFullName">Полное имя</label>
-                    <input type="text" id="editFullName" class="form-input" placeholder="Введите полное имя">
-                </div>
-                <div class="form-group">
-                    <label for="editPassword">Пароль</label>
-                    <input type="password" id="editPassword" class="form-input" placeholder="Введите пароль">
-                    <small class="text-muted-inline" style="font-size: 11px;">Оставьте пустым, чтобы не менять пароль</small>
-                </div>
-                <div class="form-group">
-                    <label for="editRole">Роль</label>
-                    <select id="editRole" class="form-select">
-                        <option value="user">Пользователь</option>
-                        <option value="admin">Администратор</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="editOrganizationId">Организация</label>
-                    <select id="editOrganizationId" class="form-select">
-                        <option value="">Выберите организацию…</option>
-                    </select>
-                </div>
-                <div class="form-group user-edit-modal-actions">
+                <div class="user-edit-modal-actions">
                     <button id="saveUserBtn" class="btn-primary" type="button">Сохранить</button>
+                    <button id="cancelUserEditBtn" class="btn-secondary" type="button">Отмена</button>
                     <button id="deleteUserBtn" type="button" class="btn-danger" style="display: none;" aria-label="Удалить пользователя">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                             <polyline points="3 6 5 6 21 6"></polyline>
@@ -2354,7 +2436,6 @@
                         </svg>
                         Удалить
                     </button>
-                    <button id="cancelUserEditBtn" class="btn-secondary" type="button">Отмена</button>
                 </div>
             </div>
         </div>

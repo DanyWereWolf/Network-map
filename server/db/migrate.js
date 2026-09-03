@@ -115,7 +115,17 @@ async function runMigrations() {
         console.log('[MySQL] Migration applied:', zabbixMig);
     }
 
-    return { applied: applied.length > 0, ids: applied.length ? applied : [MIGRATION_ID, emailMig, embedMig, zabbixMig] };
+    var zabbixPollMig = '005_org_zabbix_poll';
+    if (!(await hasMigration(zabbixPollMig))) {
+        if (!(await columnExists('organizations', 'zabbix_poll_interval_sec'))) {
+            await query('ALTER TABLE organizations ADD COLUMN zabbix_poll_interval_sec INT NULL AFTER zabbix_updated_at');
+        }
+        await markMigration(zabbixPollMig);
+        applied.push(zabbixPollMig);
+        console.log('[MySQL] Migration applied:', zabbixPollMig);
+    }
+
+    return { applied: applied.length > 0, ids: applied.length ? applied : [MIGRATION_ID, emailMig, embedMig, zabbixMig, zabbixPollMig] };
 }
 
 if (require.main === module) {

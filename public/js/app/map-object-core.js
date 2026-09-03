@@ -36,17 +36,22 @@ function mapPerfRegister(obj) {
     disableNativePlacemarkBalloon(obj);
 }
 
-/** Нативные balloon Яндекс.Карт не используем — инфо через модалки/подписи. */
+/** Нативные balloon/hint Яндекс.Карт не используем — инфо через модалки и карточку наведения. */
 function disableNativePlacemarkBalloon(obj) {
     if (!obj || !obj.options) return;
     try {
-        obj.options.set({ hasBalloon: false, openBalloonOnClick: false });
+        obj.options.set({ hasBalloon: false, openBalloonOnClick: false, hasHint: false });
     } catch (e) {}
     if (obj.properties) {
         try {
             if (obj.properties.get('balloonContent') != null) obj.properties.unset('balloonContent');
         } catch (e2) {
             try { obj.properties.set('balloonContent', ''); } catch (e3) {}
+        }
+        try {
+            if (obj.properties.get('hintContent') != null) obj.properties.unset('hintContent');
+        } catch (e4) {
+            try { obj.properties.set('hintContent', ''); } catch (e5) {}
         }
     }
 }

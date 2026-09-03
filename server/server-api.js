@@ -898,6 +898,7 @@ app.get('/api/organizations', (req, res) => {
         var list = db.getOrganizations().map(function(o) {
             var activeSessions = db.countActiveSessionsForOrganization(o.id);
             var limits = getMapObjectLimitPayload(o.id);
+            var monitor = db.getOrganizationMonitorStats(o.id, { topLimit: 3 });
             return {
                 id: o.id,
                 name: o.name,
@@ -909,14 +910,21 @@ app.get('/api/organizations', (req, res) => {
                 contactEmail: o.contactEmail != null ? String(o.contactEmail) : '',
                 createdAt: o.createdAt,
                 activeSessions: activeSessions,
+                onlineUsers: activeSessions,
                 maxConcurrentUsers: o.maxConcurrentUsers != null ? o.maxConcurrentUsers : null,
-                effectiveMaxConcurrentUsers: getMaxConcurrentForOrg(o)
+                effectiveMaxConcurrentUsers: getMaxConcurrentForOrg(o),
+                createdCount: monitor.createdCount,
+                deletedCount: monitor.deletedCount,
+                topObjectTypes: monitor.topObjectTypes,
+                topSource: monitor.topSource,
+                userActivity: monitor.userActivity
             };
         });
         res.json({
             organizations: list,
             defaultFreeMapObjectLimit: getDefaultFreeMapObjectLimit(),
-            defaultMaxConcurrentUsers: getDefaultMaxConcurrentUsers()
+            defaultMaxConcurrentUsers: getDefaultMaxConcurrentUsers(),
+            platformTopObjectTypes: db.getPlatformTopObjectTypes(10)
         });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
@@ -2078,6 +2086,16 @@ function normalizeZabbixOrgUrl(raw) {
     return zabbixClient.normalizeApiUrl(raw).replace(/\/api_jsonrpc\.php$/i, '');
 }
 
+function normalizeZabbixPollIntervalSec(raw, fallback) {
+    var n = typeof raw === 'number' ? raw : parseInt(raw, 10);
+    if (isNaN(n)) n = fallback != null ? fallback : 45;
+    return Math.max(15, Math.min(600, Math.round(n)));
+}
+
+function getOrgZabbixPollIntervalSec(org) {
+    return normalizeZabbixPollIntervalSec(org && org.zabbixPollIntervalSec, 45);
+}
+
 app.get('/api/organizations/me/zabbix', (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
@@ -2088,6 +2106,7 @@ app.get('/api/organizations/me/zabbix', (req, res) => {
         enabled: !!org.zabbixEnabled,
         apiUrl: org.zabbixApiUrl || '',
         hasToken: !!(org.zabbixApiToken && String(org.zabbixApiToken).trim()),
+        pollIntervalSec: getOrgZabbixPollIntervalSec(org),
         updatedAt: org.zabbixUpdatedAt || null
     });
 });
@@ -2103,6 +2122,10 @@ app.post('/api/organizations/me/zabbix', async function(req, res) {
     var tokenRaw = body.apiToken != null ? String(body.apiToken).trim() : '';
     var enabled = body.enabled !== undefined ? !!body.enabled : true;
     var testOnly = !!body.testOnly;
+    var pollIntervalSec = normalizeZabbixPollIntervalSec(
+        body.pollIntervalSec != null ? body.pollIntervalSec : org.zabbixPollIntervalSec,
+        45
+    );
 
     var apiUrl = normalizeZabbixOrgUrl(apiUrlRaw);
     if (enabled && !apiUrl) {
@@ -2117,7 +2140,7 @@ app.post('/api/organizations/me/zabbix', async function(req, res) {
         try {
             var test = await zabbixClient.testConnection(apiUrl, token);
             if (testOnly) {
-                return res.json({ ok: true, tested: true, version: test.version || '' });
+                return res.json({ ok: true, tested: true, version: test.version || '', pollIntervalSec: pollIntervalSec });
             }
         } catch (e) {
             return res.status(400).json({
@@ -2128,14 +2151,15 @@ app.post('/api/organizations/me/zabbix', async function(req, res) {
     }
 
     if (testOnly) {
-        return res.json({ ok: true, tested: true });
+        return res.json({ ok: true, tested: true, pollIntervalSec: pollIntervalSec });
     }
 
     var updatedAt = new Date().toISOString();
     var updates = {
         zabbixEnabled: enabled,
         zabbixApiUrl: enabled ? apiUrl : (apiUrl || null),
-        zabbixUpdatedAt: updatedAt
+        zabbixUpdatedAt: updatedAt,
+        zabbixPollIntervalSec: pollIntervalSec
     };
     if (tokenRaw) updates.zabbixApiToken = tokenRaw;
     if (!enabled) {
@@ -2149,6 +2173,7 @@ app.post('/api/organizations/me/zabbix', async function(req, res) {
         enabled: enabled,
         apiUrl: enabled ? apiUrl : (apiUrl || ''),
         hasToken: !!(enabled && (tokenRaw || org.zabbixApiToken)),
+        pollIntervalSec: pollIntervalSec,
         updatedAt: updatedAt
     });
 });
@@ -2304,6 +2329,7 @@ async function buildZabbixStatusForOrg(org) {
     return {
         enabled: true,
         updatedAt: new Date().toISOString(),
+        pollIntervalSec: getOrgZabbixPollIntervalSec(org),
         items: items
     };
 }
@@ -2318,14 +2344,17 @@ app.get('/api/zabbix/status', async function(req, res) {
     if (!orgId) return res.status(403).json({ error: 'Нет организации' });
     var org = db.getOrganization(orgId);
     if (!org) return res.status(404).json({ error: 'Организация не найдена' });
+    var pollIntervalSec = getOrgZabbixPollIntervalSec(org);
     if (!org.zabbixEnabled || !org.zabbixApiUrl || !org.zabbixApiToken) {
-        return res.json({ enabled: false, updatedAt: null, items: [] });
+        return res.json({ enabled: false, updatedAt: null, pollIntervalSec: pollIntervalSec, items: [] });
     }
 
     var cacheKey = String(orgId);
     var cached = zabbixStatusCache[cacheKey];
     var now = Date.now();
-    if (cached && (now - cached.at) < ZABBIX_STATUS_CACHE_MS) {
+    // Кэш чуть короче клиентского опроса, чтобы карта чаще получала свежие данные.
+    var cacheMs = Math.max(10000, Math.min(ZABBIX_STATUS_CACHE_MS, pollIntervalSec * 1000 - 5000));
+    if (cached && (now - cached.at) < cacheMs) {
         return res.json(cached.payload);
     }
 
@@ -2338,6 +2367,7 @@ app.get('/api/zabbix/status', async function(req, res) {
             enabled: true,
             error: e && e.message ? String(e.message) : 'Ошибка Zabbix API',
             updatedAt: null,
+            pollIntervalSec: pollIntervalSec,
             items: []
         });
     }

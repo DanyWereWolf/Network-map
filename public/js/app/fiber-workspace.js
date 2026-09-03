@@ -4373,23 +4373,30 @@ function collectFiberSchemeExportSplices(hostObj) {
     if (!hostObj || !hostObj.properties) return [];
     var fiberConnections = hostObj.properties.get('fiberConnections') || [];
     var fiberLabels = hostObj.properties.get('fiberLabels') || {};
-    var lines = [];
+    var items = [];
     function cableNameById(id) {
         return resolveFiberExportCableName(id, hostObj);
     }
     fiberConnections.forEach(function(conn) {
         if (!conn || !conn.from || !conn.to) return;
-        var line = typeof formatFiberConnectionDesc === 'function'
-            ? formatFiberConnectionDesc(conn, cableNameById, { hostObj: hostObj, includeColorNames: true })
+        var parts = typeof buildFiberConnectionDescParts === 'function'
+            ? buildFiberConnectionDescParts(conn, cableNameById, { hostObj: hostObj })
+            : null;
+        var text = typeof formatFiberConnectionDesc === 'function'
+            ? formatFiberConnectionDesc(conn, cableNameById, { hostObj: hostObj })
             : (cableNameById(conn.from.cableId) + ' Ж' + conn.from.fiberNumber +
                 ' соединена с ' + cableNameById(conn.to.cableId) + ' Ж' + conn.to.fiberNumber);
         var label = typeof resolveFiberConnectionLabel === 'function'
             ? resolveFiberConnectionLabel(conn, fiberLabels)
             : '';
-        if (label) line += ' — ' + label;
-        lines.push(line);
+        if (label) text += ' — ' + label;
+        items.push({
+            text: text,
+            parts: parts,
+            label: label || ''
+        });
     });
-    return lines;
+    return items;
 }
 
 function formatFiberNumberRanges(numbers) {
@@ -4826,18 +4833,28 @@ async function exportFiberSchemeToPdf(hostObj) {
         function writeLine(text, size, gap) {
             doc.setFontSize(size || 9);
             ensureSpace((size || 9) + 4);
+            doc.setTextColor(30, 41, 59);
             doc.text(pdfText(text), margin, y);
             y += gap || 11;
         }
         function writeSectionTitle(text) {
-            if (y > margin + 4) y += 4;
-            writeLine(text, 10, 10);
+            if (y > margin + 4) y += 6;
+            doc.setDrawColor(203, 213, 225);
+            doc.setLineWidth(0.6);
+            ensureSpace(18);
+            doc.setFontSize(10);
+            doc.setTextColor(15, 23, 42);
+            doc.text(pdfText(text), margin, y);
+            y += 4;
+            doc.line(margin, y, pageW - margin, y);
+            y += 10;
         }
         function writeWrappedListItem(index, text, size, gap) {
             var lineSize = size || 8;
             var prefix = (index + 1) + '. ';
             var maxW = pageW - margin * 2;
             doc.setFontSize(lineSize);
+            doc.setTextColor(30, 41, 59);
             var lines = doc.splitTextToSize(pdfText(prefix + text), maxW);
             for (var li = 0; li < lines.length; li++) {
                 ensureSpace(lineSize + 3);
@@ -4845,10 +4862,151 @@ async function exportFiberSchemeToPdf(hostObj) {
                 y += gap || 10;
             }
         }
+        function parsePdfHexColor(hex) {
+            var raw = String(hex || '').trim();
+            if (!raw) return { r: 148, g: 163, b: 184 };
+            if (raw.charAt(0) === '#') raw = raw.slice(1);
+            if (raw.length === 3) {
+                raw = raw.charAt(0) + raw.charAt(0) + raw.charAt(1) + raw.charAt(1) + raw.charAt(2) + raw.charAt(2);
+            }
+            if (!/^[0-9a-fA-F]{6}$/.test(raw)) return { r: 148, g: 163, b: 184 };
+            return {
+                r: parseInt(raw.slice(0, 2), 16),
+                g: parseInt(raw.slice(2, 4), 16),
+                b: parseInt(raw.slice(4, 6), 16)
+            };
+        }
+        function isPdfLightFiberColor(rgb) {
+            // YIQ: светлые жилы (белый/жёлтый) — тёмная обводка и текст бейджа
+            return ((rgb.r * 299) + (rgb.g * 587) + (rgb.b * 114)) / 1000 >= 180;
+        }
+        function drawPdfFiberSwatch(cx, cy, colorHex, hasRing) {
+            var rgb = parsePdfHexColor(colorHex);
+            var radius = 4.2;
+            doc.setFillColor(rgb.r, rgb.g, rgb.b);
+            doc.setDrawColor(isPdfLightFiberColor(rgb) ? 71 : 15, isPdfLightFiberColor(rgb) ? 85 : 23, isPdfLightFiberColor(rgb) ? 105 : 42);
+            doc.setLineWidth(0.7);
+            doc.circle(cx, cy, radius, 'FD');
+            if (hasRing) {
+                doc.setDrawColor(0, 0, 0);
+                doc.setLineWidth(1.1);
+                doc.circle(cx, cy, radius - 1.5, 'S');
+            }
+        }
+        function drawPdfFiberBadge(x, cy, fiberNumber, colorHex) {
+            var rgb = parsePdfHexColor(colorHex);
+            var label = 'Ж' + fiberNumber;
+            var padX = 3.5;
+            var h = 11;
+            doc.setFontSize(7);
+            var tw = doc.getTextWidth(pdfText(label));
+            var w = tw + padX * 2;
+            var top = cy - h / 2;
+            doc.setFillColor(rgb.r, rgb.g, rgb.b);
+            doc.setDrawColor(isPdfLightFiberColor(rgb) ? 100 : 15, isPdfLightFiberColor(rgb) ? 116 : 23, isPdfLightFiberColor(rgb) ? 139 : 42);
+            doc.setLineWidth(0.5);
+            if (typeof doc.roundedRect === 'function') {
+                doc.roundedRect(x, top, w, h, 2.5, 2.5, 'FD');
+            } else {
+                doc.rect(x, top, w, h, 'FD');
+            }
+            doc.setTextColor(isPdfLightFiberColor(rgb) ? 15 : 255, isPdfLightFiberColor(rgb) ? 23 : 255, isPdfLightFiberColor(rgb) ? 42 : 255);
+            doc.text(pdfText(label), x + padX, cy + 2.4);
+            doc.setTextColor(30, 41, 59);
+            return w;
+        }
+        function writePdfTextChunk(text, x, maxX, size, colorRgb) {
+            doc.setFontSize(size);
+            if (colorRgb) doc.setTextColor(colorRgb[0], colorRgb[1], colorRgb[2]);
+            else doc.setTextColor(30, 41, 59);
+            var remaining = pdfText(text);
+            while (remaining) {
+                var avail = maxX - x;
+                if (avail < 18) {
+                    y += size + 5;
+                    ensureSpace(size + 6);
+                    x = margin + 14;
+                    avail = maxX - x;
+                }
+                var fit = remaining;
+                if (doc.getTextWidth(fit) > avail) {
+                    var words = remaining.split(/\s+/);
+                    fit = '';
+                    for (var wi = 0; wi < words.length; wi++) {
+                        var trial = fit ? (fit + ' ' + words[wi]) : words[wi];
+                        if (doc.getTextWidth(trial) <= avail) {
+                            fit = trial;
+                        } else {
+                            break;
+                        }
+                    }
+                    if (!fit) {
+                        // жёстко обрезаем по символам
+                        fit = '';
+                        for (var ci = 0; ci < remaining.length; ci++) {
+                            var t2 = fit + remaining.charAt(ci);
+                            if (doc.getTextWidth(t2) <= avail) fit = t2;
+                            else break;
+                        }
+                        if (!fit) fit = remaining.charAt(0);
+                    }
+                }
+                doc.text(fit, x, y);
+                x += doc.getTextWidth(fit) + 1;
+                remaining = remaining.slice(fit.length).replace(/^\s+/, '');
+                if (remaining) {
+                    y += size + 5;
+                    ensureSpace(size + 6);
+                    x = margin + 14;
+                }
+            }
+            return x;
+        }
+        function writeVisualSpliceItem(index, item) {
+            var parts = item && item.parts;
+            if (!parts) {
+                writeWrappedListItem(index, (item && item.text) || '', 8, 11);
+                return;
+            }
+            var lineSize = 8;
+            var rowGap = 13;
+            ensureSpace(rowGap + 4);
+            var x = margin;
+            var maxX = pageW - margin;
+            doc.setFontSize(lineSize);
+            doc.setTextColor(100, 116, 139);
+            var prefix = (index + 1) + '. ';
+            doc.text(prefix, x, y);
+            x += doc.getTextWidth(prefix) + 2;
+
+            function writeSide(side) {
+                drawPdfFiberSwatch(x + 4.2, y - 2.2, side.color, side.hasBlackRing);
+                x += 12;
+                x = writePdfTextChunk(side.cableName + ' ', x, maxX, lineSize, [15, 23, 42]);
+                if (maxX - x < 28) {
+                    y += lineSize + 5;
+                    ensureSpace(lineSize + 6);
+                    x = margin + 14;
+                }
+                var badgeW = drawPdfFiberBadge(x, y - 2.2, side.fiberNumber, side.color);
+                x += badgeW + 5;
+            }
+
+            writeSide(parts.from);
+            x = writePdfTextChunk(parts.join + ' ', x, maxX, lineSize, [100, 116, 139]);
+            writeSide(parts.to);
+
+            if (item.label) {
+                x = writePdfTextChunk(' — ' + item.label, x, maxX, lineSize, [71, 85, 105]);
+            }
+            y += rowGap;
+            doc.setTextColor(30, 41, 59);
+        }
 
         // Страница 1: схема на весь лист + краткая подпись снизу
         var schemeFooterH = 14;
         doc.setFontSize(8);
+        doc.setTextColor(30, 41, 59);
         doc.text(pdfText(hostName + ' · ' + typeLabel), schemeMargin, schemeMargin + 7);
         var schemeTop = schemeMargin + 10;
         var availW = pageW - schemeMargin * 2;
@@ -4863,13 +5021,17 @@ async function exportFiberSchemeToPdf(hostObj) {
         var imgY = schemeTop + (availH - imgH) / 2;
         doc.addImage(schemeImgData, 'PNG', imgX, imgY, imgW, imgH);
         doc.setFontSize(7);
+        doc.setTextColor(100, 116, 139);
         doc.text(pdfText(statsLine + ' · ' + exportDate), schemeMargin, pageH - schemeMargin);
 
         // Страница 2+ только если есть что перечислить; всё на одном потоке
         if (exportSplices.length || exportConnections.length || exportFreeFibers.lines.length) {
             startTextPage();
-            writeLine(hostName + ' · ' + typeLabel, 9, 10);
-            writeLine(statsLine + ' · ' + exportDate, 8, 12);
+            writeLine(hostName + ' · ' + typeLabel, 11, 12);
+            doc.setFontSize(8);
+            doc.setTextColor(100, 116, 139);
+            doc.text(pdfText(statsLine + ' · ' + exportDate), margin, y);
+            y += 14;
 
             if (exportFreeFibers.lines.length) {
                 writeSectionTitle('Свободные жилы');
@@ -4880,8 +5042,8 @@ async function exportFiberSchemeToPdf(hostObj) {
 
             if (exportSplices.length) {
                 writeSectionTitle('Сращения');
-                exportSplices.forEach(function(line, index) {
-                    writeWrappedListItem(index, line, 8, 10);
+                exportSplices.forEach(function(item, index) {
+                    writeVisualSpliceItem(index, item);
                 });
             }
 

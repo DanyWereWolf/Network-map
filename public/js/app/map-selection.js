@@ -29,6 +29,9 @@ function scheduleDragUpdate(pm) {
             updateSelectionPulsePosition(placemark);
             updateConnectedCables(placemark);
             syncConnectionLinesForObject(placemark);
+            if (typeof followMapHoverCardDuringDrag === 'function') {
+                followMapHoverCardDuringDrag(placemark);
+            }
         }
     });
 }

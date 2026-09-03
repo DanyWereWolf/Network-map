@@ -1048,6 +1048,179 @@ function countMapObjectsForOrganization(orgId) {
     return countActualMapObjectsInArray(getMapData(orgId));
 }
 
+function mapObjectTypeLabel(type) {
+    switch (String(type || '')) {
+        case 'support': return 'Опора';
+        case 'sleeve': return 'Муфта';
+        case 'spliceCassette': return 'Сплайс-кассета';
+        case 'cross': return 'Кросс';
+        case 'olt': return 'OLT';
+        case 'splitter': return 'Сплиттер';
+        case 'onu': return 'ONU';
+        case 'camera': return 'Камера';
+        case 'mediaConverter': return 'Медиаконвертер';
+        case 'radioBridge': return 'Радиомост';
+        case 'node': return 'Узел';
+        case 'switch': return 'Коммутатор';
+        case 'attachment': return 'Крепление';
+        case 'manhole': return 'Колодец';
+        case 'signalPost': return 'Сигнальный столб';
+        case 'cabinet': return 'Ящик';
+        case 'region': return 'Регион';
+        case 'cable': return 'Кабель';
+        default: return type ? String(type) : 'Объект';
+    }
+}
+
+function topCountsToList(counts, limit) {
+    var n = limit > 0 ? limit : 3;
+    return Object.keys(counts || {})
+        .map(function(type) {
+            return {
+                type: type,
+                label: mapObjectTypeLabel(type),
+                count: counts[type] || 0
+            };
+        })
+        .filter(function(item) { return item.count > 0; })
+        .sort(function(a, b) { return b.count - a.count || String(a.label).localeCompare(String(b.label), 'ru'); })
+        .slice(0, n);
+}
+
+/** Текущий состав карты по типам (без кабелей), с учётом коммутаторов в узле. */
+function getMapObjectTypeCounts(orgId) {
+    var arr = getMapData(orgId);
+    var counts = Object.create(null);
+    if (!Array.isArray(arr) || !arr.length) return counts;
+    var byUid = Object.create(null);
+    var withoutUid = [];
+    arr.forEach(function(item) {
+        if (!isMapInfrastructureObject(item)) return;
+        var uid = item.uniqueId;
+        if (uid != null && uid !== '') {
+            if (!byUid[uid]) byUid[uid] = item;
+        } else {
+            withoutUid.push(item);
+        }
+    });
+    var placemarks = withoutUid.concat(Object.keys(byUid).map(function(k) { return byUid[k]; }));
+    placemarks.forEach(function(item) {
+        var t = item && item.type ? String(item.type) : 'object';
+        counts[t] = (counts[t] || 0) + 1;
+        if (item.type !== 'node' || !Array.isArray(item.attachedSwitches)) return;
+        item.attachedSwitches.forEach(function(sw) {
+            if (!sw) return;
+            var swId = sw.uniqueId;
+            if (swId != null && swId !== '' && byUid[swId]) return;
+            counts.switch = (counts.switch || 0) + 1;
+        });
+    });
+    return counts;
+}
+
+/**
+ * Мониторинг организации: добавлено/удалено из истории,
+ * топ типов (из create_object, иначе с карты), активность пользователей.
+ */
+function getOrganizationMonitorStats(orgId, options) {
+    var topLimit = options && options.topLimit > 0 ? options.topLimit : 3;
+    var history = getHistory(orgId);
+    var createdCount = 0;
+    var deletedCount = 0;
+    var createdByType = Object.create(null);
+    var byUser = Object.create(null);
+
+    function touchUser(entry) {
+        var user = entry && entry.user ? entry.user : null;
+        var key = user && (user.id != null ? String(user.id) : (user.username || ''));
+        if (!key) key = '_system';
+        if (!byUser[key]) {
+            byUser[key] = {
+                userId: user && user.id != null ? user.id : null,
+                username: user && user.username ? String(user.username) : 'Система',
+                fullName: user && user.fullName ? String(user.fullName) : '',
+                created: 0,
+                deleted: 0
+            };
+        }
+        return byUser[key];
+    }
+
+    (Array.isArray(history) ? history : []).forEach(function(entry) {
+        if (!entry || !entry.actionType) return;
+        var action = String(entry.actionType);
+        var bucket = touchUser(entry);
+        if (action === 'create_object' || action === 'create_cable') {
+            createdCount++;
+            bucket.created++;
+            var type = action === 'create_cable'
+                ? 'cable'
+                : ((entry.details && entry.details.objectType) ? String(entry.details.objectType) : 'object');
+            createdByType[type] = (createdByType[type] || 0) + 1;
+        } else if (action === 'delete_object' || action === 'delete_cable') {
+            deletedCount++;
+            bucket.deleted++;
+        }
+    });
+
+    var topObjectTypes = topCountsToList(createdByType, topLimit);
+    var topSource = 'history';
+    if (!topObjectTypes.length) {
+        topObjectTypes = topCountsToList(getMapObjectTypeCounts(orgId), topLimit);
+        topSource = topObjectTypes.length ? 'map' : 'none';
+    }
+
+    var userActivity = Object.keys(byUser).map(function(k) { return byUser[k]; })
+        .filter(function(u) { return (u.created + u.deleted) > 0; })
+        .sort(function(a, b) {
+            return (b.created + b.deleted) - (a.created + a.deleted)
+                || String(a.fullName || a.username).localeCompare(String(b.fullName || b.username), 'ru');
+        });
+
+    return {
+        createdCount: createdCount,
+        deletedCount: deletedCount,
+        topObjectTypes: topObjectTypes,
+        topSource: topSource,
+        userActivity: userActivity
+    };
+}
+
+/**
+ * Топ типов объектов по всей платформе.
+ * Сначала по текущему составу карт (что реально используется),
+ * при пустых картах — по истории созданий.
+ */
+function getPlatformTopObjectTypes(limit) {
+    var n = limit > 0 ? limit : 10;
+    var mapCounts = Object.create(null);
+    var historyCounts = Object.create(null);
+    var orgs = getOrganizations();
+    orgs.forEach(function(o) {
+        if (!o || !o.id) return;
+        var mapPart = getMapObjectTypeCounts(o.id);
+        Object.keys(mapPart).forEach(function(type) {
+            mapCounts[type] = (mapCounts[type] || 0) + (mapPart[type] || 0);
+        });
+        var hist = getHistory(o.id);
+        (Array.isArray(hist) ? hist : []).forEach(function(entry) {
+            if (!entry || entry.actionType !== 'create_object') return;
+            var type = (entry.details && entry.details.objectType) ? String(entry.details.objectType) : 'object';
+            historyCounts[type] = (historyCounts[type] || 0) + 1;
+        });
+    });
+    var fromMap = topCountsToList(mapCounts, n);
+    if (fromMap.length) {
+        return { items: fromMap, source: 'map', total: fromMap.reduce(function(s, i) { return s + i.count; }, 0) };
+    }
+    var fromHistory = topCountsToList(historyCounts, n);
+    return {
+        items: fromHistory,
+        source: fromHistory.length ? 'history' : 'none',
+        total: fromHistory.reduce(function(s, i) { return s + i.count; }, 0)
+    };
+}
+
 /** РђРіСЂРµРіР°С‚С‹ РґР»СЏ РїСѓР±Р»РёС‡РЅРѕРіРѕ Р»РµРЅРґРёРЅРіР° (Р±РµР· Р°РІС‚РѕСЂРёР·Р°С†РёРё). */
 function getPublicStats() {
     const s = loadStore();
@@ -1146,6 +1319,16 @@ function updateOrganization(orgId, updates) {
     }
     if (updates.zabbixUpdatedAt !== undefined) {
         s.organizations[idx].zabbixUpdatedAt = updates.zabbixUpdatedAt ? String(updates.zabbixUpdatedAt) : null;
+    }
+    if (updates.zabbixPollIntervalSec !== undefined) {
+        var pis = typeof updates.zabbixPollIntervalSec === 'number'
+            ? updates.zabbixPollIntervalSec
+            : parseInt(updates.zabbixPollIntervalSec, 10);
+        if (isNaN(pis)) {
+            s.organizations[idx].zabbixPollIntervalSec = null;
+        } else {
+            s.organizations[idx].zabbixPollIntervalSec = Math.max(15, Math.min(600, Math.round(pis)));
+        }
     }
     saveStore();
     return true;
@@ -2514,6 +2697,9 @@ module.exports = {
     getPublicStats,
     countActualMapObjectsInArray,
     countMapObjectsForOrganization,
+    getMapObjectTypeCounts,
+    getOrganizationMonitorStats,
+    getPlatformTopObjectTypes,
     addVisitLog,
     purgeExpiredPasswordResetTokens,
     addPasswordResetToken,

@@ -361,25 +361,53 @@ function resolveFiberConnCableName(cableId, cableNameById, hostObj) {
 }
 
 /**
- * Текстовое описание сращивания (подсказки, PDF):
+ * Структурированное описание сращивания (UI / PDF):
+ * стороны с цветом жилы, без текстовых имён цвета.
+ */
+function buildFiberConnectionDescParts(conn, cableNameById, opts) {
+    opts = opts || {};
+    var ends = resolveFiberConnectionEnds(conn, opts);
+    if (!ends) return null;
+    var hostObj = opts.hostObj || null;
+    var fromMeta = getFiberMetaForDesc(ends.from.cableId, ends.from.fiberNumber);
+    var toMeta = getFiberMetaForDesc(ends.to.cableId, ends.to.fiberNumber);
+    return {
+        from: {
+            cableId: ends.from.cableId,
+            fiberNumber: ends.from.fiberNumber,
+            cableName: resolveFiberConnCableName(ends.from.cableId, cableNameById, hostObj),
+            color: (fromMeta && fromMeta.color) ? String(fromMeta.color) : '#94a3b8',
+            colorName: fiberColorNameForDesc(fromMeta, ends.from.fiberNumber),
+            hasBlackRing: !!(fromMeta && fromMeta.hasBlackRing)
+        },
+        to: {
+            cableId: ends.to.cableId,
+            fiberNumber: ends.to.fiberNumber,
+            cableName: resolveFiberConnCableName(ends.to.cableId, cableNameById, hostObj),
+            color: (toMeta && toMeta.color) ? String(toMeta.color) : '#94a3b8',
+            colorName: fiberColorNameForDesc(toMeta, ends.to.fiberNumber),
+            hasBlackRing: !!(toMeta && toMeta.hasBlackRing)
+        },
+        join: 'соединена с'
+    };
+}
+
+/**
+ * Текстовое описание сращивания (подсказки, plain):
  * «Кабель А Ж1 соединена с Кабель Б Ж4»
- * opts.includeColorNames — добавить «, цвет жил Ж1(синий) с Ж4(красный)» для PDF/plain.
+ * opts.includeColorNames — добавить «, цвет жил Ж1(синий) с Ж4(красный)» для plain-текста.
  */
 function formatFiberConnectionDesc(conn, cableNameById, opts) {
     opts = opts || {};
-    var ends = resolveFiberConnectionEnds(conn, opts);
-    if (!ends) return '';
-    var hostObj = opts.hostObj || null;
-    var fromName = resolveFiberConnCableName(ends.from.cableId, cableNameById, hostObj);
-    var toName = resolveFiberConnCableName(ends.to.cableId, cableNameById, hostObj);
-    var fromNum = ends.from.fiberNumber;
-    var toNum = ends.to.fiberNumber;
-    var line = fromName + ' Ж' + fromNum + ' соединена с ' + toName + ' Ж' + toNum;
+    var parts = buildFiberConnectionDescParts(conn, cableNameById, opts);
+    if (!parts) return '';
+    var fromNum = parts.from.fiberNumber;
+    var toNum = parts.to.fiberNumber;
+    var line = parts.from.cableName + ' Ж' + fromNum + ' ' + parts.join + ' ' +
+        parts.to.cableName + ' Ж' + toNum;
     if (opts.includeColorNames) {
-        var fromMeta = getFiberMetaForDesc(ends.from.cableId, fromNum);
-        var toMeta = getFiberMetaForDesc(ends.to.cableId, toNum);
-        var fromColor = fiberColorNameForDesc(fromMeta, fromNum);
-        var toColor = fiberColorNameForDesc(toMeta, toNum);
+        var fromColor = parts.from.colorName;
+        var toColor = parts.to.colorName;
         if (fromColor || toColor) {
             line += ', цвет жил Ж' + fromNum + '(' + fromColor + ') с Ж' + toNum + '(' + toColor + ')';
         }
@@ -414,21 +442,26 @@ function fiberDescSideHtml(cableName, fiberNumber, meta, esc) {
  */
 function buildFiberConnectionDescHtml(conn, cableNameById, opts) {
     opts = opts || {};
-    var ends = resolveFiberConnectionEnds(conn, opts);
-    if (!ends) return '';
+    var parts = buildFiberConnectionDescParts(conn, cableNameById, opts);
+    if (!parts) return '';
     var esc = typeof escapeHtml === 'function' ? escapeHtml : function(t) {
         return String(t == null ? '' : t)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     };
-    var hostObj = opts.hostObj || null;
-    var fromName = resolveFiberConnCableName(ends.from.cableId, cableNameById, hostObj);
-    var toName = resolveFiberConnCableName(ends.to.cableId, cableNameById, hostObj);
-    var fromMeta = getFiberMetaForDesc(ends.from.cableId, ends.from.fiberNumber);
-    var toMeta = getFiberMetaForDesc(ends.to.cableId, ends.to.fiberNumber);
+    var fromMeta = {
+        color: parts.from.color,
+        name: parts.from.colorName,
+        hasBlackRing: parts.from.hasBlackRing
+    };
+    var toMeta = {
+        color: parts.to.color,
+        name: parts.to.colorName,
+        hasBlackRing: parts.to.hasBlackRing
+    };
     return '<span class="fiber-conn-desc-visual">' +
-        fiberDescSideHtml(fromName, ends.from.fiberNumber, fromMeta, esc) +
-        '<span class="fiber-desc-join">соединена с</span>' +
-        fiberDescSideHtml(toName, ends.to.fiberNumber, toMeta, esc) +
+        fiberDescSideHtml(parts.from.cableName, parts.from.fiberNumber, fromMeta, esc) +
+        '<span class="fiber-desc-join">' + esc(parts.join) + '</span>' +
+        fiberDescSideHtml(parts.to.cableName, parts.to.fiberNumber, toMeta, esc) +
         '</span>';
 }
 

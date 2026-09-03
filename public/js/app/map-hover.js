@@ -18,108 +18,388 @@ function clearShowOnMapHighlight() {
     }
 }
 
+var MAP_HOVER_TYPE_LABELS = {
+    support: 'Опора связи',
+    sleeve: 'Кабельная муфта',
+    spliceCassette: 'Сплайс-кассета',
+    cross: 'Оптический кросс',
+    node: 'Узел сети',
+    attachment: 'Крепление узлов',
+    manhole: 'Колодец',
+    signalPost: 'Сигнальный столб',
+    cabinet: 'Ящик',
+    olt: 'OLT (GPON)',
+    splitter: 'Сплиттер',
+    onu: 'ONU',
+    camera: 'Камера',
+    mediaConverter: 'Медиаконвертер',
+    radioBridge: 'Wi‑Fi радиомост',
+    switch: 'Коммутатор',
+    cable: 'Кабель',
+    crossGroup: 'Группа кроссов',
+    nodeGroup: 'Группа узлов'
+};
+
+var ZABBIX_SEV_LABELS = {
+    0: 'Не классифицировано',
+    1: 'Информация',
+    2: 'Предупреждение',
+    3: 'Средняя',
+    4: 'Высокая',
+    5: 'Чрезвычайная'
+};
+
 function createCursorIndicator() {
     cursorIndicator = document.createElement('div');
     cursorIndicator.id = 'cursorIndicator';
-    cursorIndicator.style.cssText = `
-        position: fixed;
-        pointer-events: none;
-        z-index: 10000;
-        background: rgba(59, 130, 246, 0.9);
-        color: white;
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-size: 12px;
-        font-weight: 600;
-        white-space: nowrap;
-        display: none;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-    `;
+    cursorIndicator.className = 'map-hover-card';
+    cursorIndicator.setAttribute('aria-hidden', 'true');
+    cursorIndicator.style.display = 'none';
     document.body.appendChild(cursorIndicator);
 }
 
-function updateCursorIndicator(e, objectType, objectCoord) {
-    if (!cursorIndicator) return;
-    
-    if (objectType && e) {
-        let text = '';
-        switch(objectType) {
-            case 'support':
-                text = 'Опора связи';
-                break;
-            case 'sleeve':
-                text = 'Кабельная муфта';
-                break;
-            case 'cross':
-                text = 'Оптический кросс';
-                break;
-            case 'node':
-                text = 'Узел сети';
-                break;
-            case 'cross':
-                text = 'Оптический кросс';
-                break;
-            case 'attachment':
-                text = 'Крепление узлов';
-                break;
-            case 'manhole':
-                text = 'Колодец';
-                break;
-            case 'signalPost':
-                text = 'Сигнальный столб';
-                break;
-            case 'cabinet':
-                text = 'Ящик';
-                break;
-            case 'olt':
-                text = 'OLT (GPON)';
-                break;
-            case 'splitter':
-                text = 'Сплиттер';
-                break;
-            case 'onu':
-                text = 'ONU';
-                break;
-            case 'camera':
-                text = 'Камера';
-                break;
-            case 'mediaConverter':
-                text = 'Медиаконвертер';
-                break;
-            case 'cable':
-                text = 'Кабель';
-                break;
-            case 'crossGroup':
-                text = 'Группа кроссов';
-                break;
-            case 'nodeGroup':
-                text = 'Группа узлов';
-                break;
-            default:
-                text = 'Объект';
+function getMapHoverTypeLabel(type) {
+    return MAP_HOVER_TYPE_LABELS[type] || 'Объект';
+}
+
+function escHover(text) {
+    return typeof escapeHtml === 'function' ? escapeHtml(String(text == null ? '' : text)) : String(text == null ? '' : text);
+}
+
+function getMapHoverObjectName(obj, type) {
+    if (!obj || !obj.properties) return getMapHoverTypeLabel(type);
+    if (type === 'cable') {
+        var cableName = (obj.properties.get('cableName') || '').trim();
+        if (cableName) return cableName;
+        if (typeof buildCableRouteDisplayName === 'function') {
+            var route = buildCableRouteDisplayName(obj);
+            if (route) return route;
         }
-        cursorIndicator.textContent = text;
-        cursorIndicator.style.display = 'block';
-        
-        let clientX = window.lastMouseX || 0;
-        let clientY = window.lastMouseY || 0;
-        if (objectCoord && (objectCoord.length >= 2)) {
-            const pt = geoToClient(objectCoord);
-            if (pt) {
-                clientX = pt[0];
-                clientY = pt[1];
+        if (typeof getCableDescription === 'function') {
+            return getCableDescription(obj.properties.get('cableType'), obj);
+        }
+        return 'Кабель';
+    }
+    if (type === 'crossGroup' || type === 'nodeGroup') {
+        var gName = (obj.properties.get('name') || obj.properties.get('hintContent') || '').trim();
+        if (gName) return gName;
+    }
+    var name = (obj.properties.get('name') || '').trim();
+    return name || getMapHoverTypeLabel(type);
+}
+
+function buildMapHoverMetaRows(obj, type) {
+    if (!obj || !obj.properties) return '';
+    var rows = [];
+    var p = obj.properties;
+    function push(label, value) {
+        var v = (value == null ? '' : String(value)).trim();
+        if (!v) return;
+        rows.push('<div class="map-hover-card__meta-row"><span class="map-hover-card__meta-k">' +
+            escHover(label) + '</span><span class="map-hover-card__meta-v">' + escHover(v) + '</span></div>');
+    }
+    if (type === 'cable') {
+        if (typeof getCableDescription === 'function') {
+            push('Тип', getCableDescription(p.get('cableType'), obj));
+        }
+        var fibers = p.get('fiberCount') || p.get('fibers');
+        if (fibers) push('Жил', fibers);
+        return rows.join('');
+    }
+    var mfr = (p.get('manufacturer') || '').trim();
+    var model = (p.get('model') || '').trim();
+    if (mfr || model) push('Модель', [mfr, model].filter(Boolean).join(' · '));
+    push('IP', p.get('ipAddress'));
+    if (type === 'node') {
+        var nk = p.get('nodeKind') || 'network';
+        push('Вид', nk === 'aggregation' ? 'Агрегация' : 'Сеть');
+    }
+    if (type === 'camera' && window.CameraPlayer) {
+        push('Стрим', CameraPlayer.isCameraOnline(obj) ? 'Онлайн' : 'Офлайн');
+    }
+    if (type === 'olt') {
+        var pon = p.get('ponPorts');
+        if (pon) push('PON-порты', pon);
+    }
+    if (type === 'splitter') {
+        var ratio = p.get('splitRatio');
+        if (ratio) push('Деление', '1:' + ratio);
+    }
+    if (type === 'cabinet') {
+        push('Адрес', p.get('address'));
+        var units = p.get('cabinetUnits');
+        if (units) push('Unit', units + 'U');
+    }
+    if (type === 'cross') {
+        var ports = p.get('crossPorts');
+        if (ports) push('Порты', ports);
+    }
+    return rows.join('');
+}
+
+function buildMapHoverZabbixBlock(obj) {
+    if (!obj || !obj.properties) return '';
+    var orgOn = typeof isOrgZabbixMonitoringEnabled === 'function' && isOrgZabbixMonitoringEnabled();
+    var configuredHost = (obj.properties.get('zabbixHost') || '').trim();
+    var st = (window.ZabbixStatus && typeof ZabbixStatus.getForPlacemark === 'function')
+        ? ZabbixStatus.getForPlacemark(obj)
+        : null;
+
+    if (!orgOn && !st && !configuredHost) return '';
+
+    if (st && st.matched) {
+        var sev = st.ok ? 0 : Math.max(0, Math.min(5, Number(st.severity) || 0));
+        var sevCls = st.ok ? 'map-hover-zabbix--ok' : ('map-hover-zabbix--sev' + sev);
+        var statusText = st.ok ? 'OK' : (ZABBIX_SEV_LABELS[sev] || ('Severity ' + sev));
+        var hostLine = st.host || configuredHost || '';
+        var html = '<div class="map-hover-zabbix ' + sevCls + '">';
+        html += '<div class="map-hover-zabbix__head">';
+        html += '<span class="map-hover-zabbix__badge"><span class="map-hover-zabbix__dot" aria-hidden="true"></span>' +
+            escHover(st.ok ? 'OK' : ('S' + sev)) + '</span>';
+        html += '<div class="map-hover-zabbix__titles">';
+        html += '<div class="map-hover-zabbix__status">' + escHover(statusText) + '</div>';
+        if (hostLine) html += '<div class="map-hover-zabbix__host">' + escHover(hostLine) + '</div>';
+        html += '</div></div>';
+        if (!st.ok && Array.isArray(st.problems) && st.problems.length) {
+            html += '<ul class="map-hover-zabbix__problems">';
+            st.problems.slice(0, 4).forEach(function(pr) {
+                html += '<li>' + escHover(pr) + '</li>';
+            });
+            if (st.problems.length > 4) {
+                html += '<li class="map-hover-zabbix__more">ещё ' + (st.problems.length - 4) + '…</li>';
+            }
+            html += '</ul>';
+        } else if (st.ok) {
+            html += '<div class="map-hover-zabbix__ok-note">Проблем нет</div>';
+        }
+        html += '</div>';
+        return html;
+    }
+
+    if (configuredHost && orgOn) {
+        return '<div class="map-hover-zabbix map-hover-zabbix--pending">' +
+            '<div class="map-hover-zabbix__head">' +
+            '<span class="map-hover-zabbix__badge"><span class="map-hover-zabbix__dot" aria-hidden="true"></span>—</span>' +
+            '<div class="map-hover-zabbix__titles">' +
+            '<div class="map-hover-zabbix__status">Ожидание данных</div>' +
+            '<div class="map-hover-zabbix__host">' + escHover(configuredHost) + '</div>' +
+            '</div></div></div>';
+    }
+
+    if (configuredHost) {
+        return '<div class="map-hover-zabbix map-hover-zabbix--idle">' +
+            '<div class="map-hover-zabbix__host-only">Zabbix: ' + escHover(configuredHost) + '</div></div>';
+    }
+    return '';
+}
+
+function buildMapHoverCardHtml(obj, objectType) {
+    var type = objectType || (obj && obj.properties ? obj.properties.get('type') : null) || 'object';
+    var typeLabel = getMapHoverTypeLabel(type);
+    var isPlacement = !obj;
+    var name = isPlacement ? typeLabel : getMapHoverObjectName(obj, type);
+    var showNameAsTitle = !isPlacement && name && name !== typeLabel;
+
+    var iconHtml = '';
+    if (window.MapIcons && typeof MapIcons.buildIconSvg === 'function' && type !== 'cable') {
+        var iconOpts = { variant: 'normal' };
+        if (type === 'node' && obj && obj.properties) {
+            iconOpts.nodeKind = obj.properties.get('nodeKind') || 'network';
+        }
+        if (type === 'camera' && obj && window.CameraPlayer) {
+            iconOpts.cameraOnline = CameraPlayer.isCameraOnline(obj);
+        }
+        if (obj && window.ZabbixStatus && typeof ZabbixStatus.getForPlacemark === 'function') {
+            var zx = ZabbixStatus.getForPlacemark(obj);
+            if (zx && zx.matched) {
+                iconOpts.zabbixSeverity = zx.ok ? 0 : (zx.severity != null ? zx.severity : 0);
             }
         }
-        if (clientX > 0 || clientY > 0) {
-            cursorIndicator.style.left = clientX + 'px';
-            cursorIndicator.style.top = (clientY + 14) + 'px';
-            cursorIndicator.style.transform = 'translate(-50%, 0)';
+        try {
+            iconHtml = '<div class="map-hover-card__icon" aria-hidden="true">' +
+                MapIcons.buildIconSvg(type === 'crossGroup' || type === 'nodeGroup' ? (type === 'crossGroup' ? 'cross' : 'node') : type, iconOpts) +
+                '</div>';
+        } catch (eIcon) {
+            iconHtml = '';
         }
+    }
+
+    var html = '<div class="map-hover-card__inner' + (isPlacement ? ' map-hover-card__inner--placement' : '') + '">';
+    html += '<div class="map-hover-card__main">';
+    html += iconHtml;
+    html += '<div class="map-hover-card__text">';
+    if (showNameAsTitle) {
+        html += '<div class="map-hover-card__name">' + escHover(name) + '</div>';
+        html += '<div class="map-hover-card__type">' + escHover(typeLabel) + '</div>';
+    } else {
+        html += '<div class="map-hover-card__name">' + escHover(typeLabel) + '</div>';
+    }
+    html += '</div></div>';
+
+    if (!isPlacement) {
+        var meta = buildMapHoverMetaRows(obj, type);
+        if (meta) html += '<div class="map-hover-card__meta">' + meta + '</div>';
+        var zxBlock = buildMapHoverZabbixBlock(obj);
+        if (zxBlock) html += zxBlock;
+    }
+    html += '</div>';
+    return html;
+}
+
+function positionMapHoverCard(objectCoord) {
+    if (!cursorIndicator) return;
+    var clientX = window.lastMouseX || 0;
+    var clientY = window.lastMouseY || 0;
+    if (objectCoord && objectCoord.length >= 2 && typeof geoToClient === 'function') {
+        var pt = geoToClient(objectCoord);
+        if (pt) {
+            clientX = pt[0];
+            clientY = pt[1];
+        }
+    }
+    if (!(clientX > 0 || clientY > 0)) return;
+
+    cursorIndicator.style.left = clientX + 'px';
+    cursorIndicator.style.top = (clientY + 16) + 'px';
+    cursorIndicator.style.transform = 'translate(-50%, 0)';
+
+    // Не выходить за край экрана
+    requestAnimationFrame(function() {
+        if (!cursorIndicator || cursorIndicator.style.display === 'none') return;
+        var rect = cursorIndicator.getBoundingClientRect();
+        var pad = 8;
+        var dx = 0;
+        var dy = 0;
+        if (rect.right > window.innerWidth - pad) dx = window.innerWidth - pad - rect.right;
+        if (rect.left + dx < pad) dx = pad - rect.left;
+        if (rect.bottom > window.innerHeight - pad) {
+            dy = -(rect.height + 28);
+        }
+        if (dx || dy) {
+            cursorIndicator.style.transform = 'translate(calc(-50% + ' + dx + 'px), ' + dy + 'px)';
+        }
+    });
+}
+
+function updateCursorIndicator(e, objectType, objectCoord, obj, forceContent) {
+    if (!cursorIndicator) return;
+
+    if (objectType && (e || obj)) {
+        var targetObj = obj || (typeof hoveredObject !== 'undefined' ? hoveredObject : null);
+        if (targetObj && targetObj.properties && targetObj.properties.get('type') !== objectType) {
+            targetObj = null;
+        }
+        // Режим размещения — только тип, без привязки к hoveredObject
+        if (!obj && typeof objectPlacementMode !== 'undefined' && objectPlacementMode) {
+            targetObj = null;
+        }
+        var nextUid = targetObj && targetObj.properties
+            ? String(targetObj.properties.get('uniqueId') || '')
+            : '';
+        var placementKey = (!targetObj && objectType) ? ('place:' + objectType) : '';
+        var contentKey = nextUid || placementKey;
+        var sameContent = !!contentKey &&
+            cursorIndicator._hoverContentKey === contentKey &&
+            cursorIndicator.style.display !== 'none';
+
+        if (!sameContent || forceContent) {
+            cursorIndicator.className = 'map-hover-card' +
+                (targetObj ? ' map-hover-card--rich' : ' map-hover-card--placement') +
+                (sameContent && forceContent ? ' map-hover-card--quiet' : '');
+            cursorIndicator.innerHTML = buildMapHoverCardHtml(targetObj, objectType);
+        }
+
+        cursorIndicator.style.display = 'block';
+        cursorIndicator._hoverObjUid = nextUid;
+        cursorIndicator._hoverContentKey = contentKey;
+        positionMapHoverCard(objectCoord);
     } else {
         cursorIndicator.style.display = 'none';
         cursorIndicator.style.transform = '';
+        cursorIndicator.innerHTML = '';
+        cursorIndicator._hoverObjUid = '';
+        cursorIndicator._hoverContentKey = '';
+        cursorIndicator.className = 'map-hover-card';
     }
 }
+
+/** Объект, за которым карточка следует во время drag. */
+var mapHoverCardFollowObj = null;
+
+function followMapHoverCardDuringDrag(obj) {
+    if (!cursorIndicator || !obj || !obj.properties || !obj.geometry) return;
+    var type = obj.properties.get('type');
+    if (!type || type === 'cable' || type === 'cableLabel' || type === 'region') return;
+    mapHoverCardFollowObj = obj;
+    var coords = null;
+    try {
+        coords = obj.geometry.getCoordinates();
+    } catch (e) {
+        return;
+    }
+    if (!coords) return;
+    updateCursorIndicator({ fake: true }, type, coords, obj, false);
+}
+window.followMapHoverCardDuringDrag = followMapHoverCardDuringDrag;
+
+function stopMapHoverCardDragFollow(obj) {
+    if (obj && mapHoverCardFollowObj && mapHoverCardFollowObj !== obj) return;
+    var was = mapHoverCardFollowObj;
+    mapHoverCardFollowObj = null;
+    if (!was) return;
+
+    // Оставить карточку на финальной позиции объекта
+    try {
+        if (was.properties && was.geometry) {
+            var type = was.properties.get('type');
+            updateCursorIndicator({ fake: true }, type, was.geometry.getCoordinates(), was, false);
+        }
+    } catch (e) {}
+
+    // Скрыть при следующем движении мыши, если объект больше не под курсором
+    var dismiss = function() {
+        document.removeEventListener('mousemove', dismiss, true);
+        if (mapHoverCardFollowObj) return;
+        if (typeof hoveredObject !== 'undefined' && hoveredObject === was) return;
+        updateCursorIndicator(null, null);
+    };
+    document.addEventListener('mousemove', dismiss, true);
+}
+window.stopMapHoverCardDragFollow = stopMapHoverCardDragFollow;
+
+function isMapHoverCardDragFollowing(obj) {
+    return !!(mapHoverCardFollowObj && (!obj || mapHoverCardFollowObj === obj));
+}
+
+/** Скрыть описание при pan/zoom карты (в просмотре mouseleave часто не приходит). */
+function clearMapHoverOnMapGesture() {
+    if (mapHoverCardFollowObj || window.syncDragInProgress) return;
+    if (typeof hoveredObject !== 'undefined' && hoveredObject) {
+        clearHoverHighlight();
+        return;
+    }
+    if (cursorIndicator && cursorIndicator.style.display !== 'none') {
+        updateCursorIndicator(null, null);
+    }
+}
+window.clearMapHoverOnMapGesture = clearMapHoverOnMapGesture;
+
+/** Обновить карточку, если сейчас наведен тот же объект (после опроса Zabbix). */
+function refreshMapHoverCardIfNeeded(obj) {
+    if (!cursorIndicator || cursorIndicator.style.display === 'none') return;
+    if (!obj || !obj.properties) return;
+    var uid = String(obj.properties.get('uniqueId') || '');
+    if (!uid || cursorIndicator._hoverObjUid !== uid) return;
+    var type = obj.properties.get('type');
+    var coords = null;
+    try {
+        if (obj.geometry && typeof obj.geometry.getCoordinates === 'function') {
+            coords = obj.geometry.getCoordinates();
+        }
+    } catch (e) {}
+    updateCursorIndicator({ fake: true }, type, coords, obj, true);
+}
+window.refreshMapHoverCardIfNeeded = refreshMapHoverCardIfNeeded;
 
 function updatePhantomPlacemark(type, coords) {
     if (!type || !coords) {
@@ -289,6 +569,8 @@ function attachHoverEventsToObject(obj) {
         highlightObjectOnHover(obj, e);
     }
     function onMouseLeave() {
+        // Во время перетаскивания карточка остаётся и следует за объектом
+        if (isMapHoverCardDragFollowing(obj)) return;
         if (hoveredObject === obj) clearHoverHighlight();
     }
     obj.events.add('mouseenter', onMouseEnter);
@@ -314,7 +596,7 @@ function highlightObjectOnHover(obj, e) {
     hoveredObject = obj;
 
     const objCoord = (type === 'cable' || type === 'cableLabel') ? (e && e.get('coords') ? e.get('coords') : null) : (obj.geometry ? obj.geometry.getCoordinates() : null);
-    updateCursorIndicator(e, type, objCoord);
+    updateCursorIndicator(e, type, objCoord, obj);
 
     if (type === 'cable' || type === 'cableLabel') {
         
@@ -483,6 +765,9 @@ function clearCableHoverHighlight(cable) {
 }
 
 function clearHoverHighlight() {
+    var keepCard = isMapHoverCardDragFollowing(hoveredObject) ||
+        (mapHoverCardFollowObj && window.syncDragInProgress);
+
     if (hoveredObject) {
         const type = hoveredObject.properties ? hoveredObject.properties.get('type') : null;
         
@@ -502,5 +787,7 @@ function clearHoverHighlight() {
     hoveredObject = null;
     hoveredObjectOriginalIcon = null;
     removeHoverCircle();
-    updateCursorIndicator(null, null);
+    if (!keepCard) {
+        updateCursorIndicator(null, null);
+    }
 }

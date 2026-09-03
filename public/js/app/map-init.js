@@ -577,6 +577,9 @@ function setupEventListeners() {
 
     myMap.events.add('actionbegin', function() {
         window.mapUserGestureActive = true;
+        if (typeof clearMapHoverOnMapGesture === 'function') {
+            clearMapHoverOnMapGesture();
+        }
         if (mapBoundsChangeTimer) {
             clearTimeout(mapBoundsChangeTimer);
             mapBoundsChangeTimer = null;

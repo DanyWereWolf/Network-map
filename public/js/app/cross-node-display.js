@@ -448,9 +448,11 @@ function updateCrossDisplay(scope) {
             if (!window.syncDragInProgress) window.syncDragInProgress = true;
             const crossLbl = groupPlacemark.properties.get('crossGroupLabel');
             if (crossLbl && crossLbl.geometry) crossLbl.geometry.setCoordinates(groupPlacemark.geometry.getCoordinates());
+            if (typeof followMapHoverCardDuringDrag === 'function') followMapHoverCardDuringDrag(groupPlacemark);
         });
         groupPlacemark.events.add('dragend', function() {
             window.syncDragInProgress = false;
+            if (typeof stopMapHoverCardDragFollow === 'function') stopMapHoverCardDragFollow(groupPlacemark);
             if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
             const newCoords = groupPlacemark.geometry.getCoordinates();
             const crossLbl = groupPlacemark.properties.get('crossGroupLabel');
@@ -706,9 +708,11 @@ function updateNodeDisplay(scope) {
             if (!window.syncDragInProgress) window.syncDragInProgress = true;
             const nodeLbl = groupPlacemark.properties.get('nodeGroupLabel');
             if (nodeLbl && nodeLbl.geometry) nodeLbl.geometry.setCoordinates(groupPlacemark.geometry.getCoordinates());
+            if (typeof followMapHoverCardDuringDrag === 'function') followMapHoverCardDuringDrag(groupPlacemark);
         });
         groupPlacemark.events.add('dragend', function() {
             window.syncDragInProgress = false;
+            if (typeof stopMapHoverCardDragFollow === 'function') stopMapHoverCardDragFollow(groupPlacemark);
             if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
             const newCoords = groupPlacemark.geometry.getCoordinates();
             const nodeLbl = groupPlacemark.properties.get('nodeGroupLabel');
