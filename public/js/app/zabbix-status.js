@@ -57,6 +57,9 @@
             applyMapPlacemarkIcon(obj, type, variant, obj);
         }
         applyHint(obj, getForPlacemark(obj));
+        if (typeof updateObjectLabel === 'function') {
+            try { updateObjectLabel(obj, obj.properties.get('name')); } catch (eLbl) {}
+        }
     }
 
     function applyAllPresentations() {

@@ -288,7 +288,7 @@
             default:
                 body = '<circle cx="16" cy="16" r="10" fill="' + COLORS.default + '" stroke="' + sw + '" stroke-width="' + w + '"/>';
         }
-        return selectionRing(variant, fill) + body + zabbixStatusRing(options.zabbixSeverity);
+        return selectionRing(variant, fill) + body + zabbixStatusOverlay(options.zabbixSeverity);
     }
 
     function zabbixSeverityColor(severity) {
@@ -297,50 +297,110 @@
         if (s === 2) return '#eab308';
         if (s === 3) return '#f97316';
         if (s === 4) return '#ef4444';
-        if (s === 5) return '#a855f7';
-        return '#22c55e';
+        if (s === 5) return '#c026d3';
+        return '#16a34a';
     }
 
-    function zabbixStatusRing(severity) {
+    function zabbixSeveritySoft(severity) {
+        var s = parseInt(severity, 10);
+        if (s === 1) return 'rgba(59,130,246,0.28)';
+        if (s === 2) return 'rgba(234,179,8,0.30)';
+        if (s === 3) return 'rgba(249,115,22,0.32)';
+        if (s === 4) return 'rgba(239,68,68,0.34)';
+        if (s === 5) return 'rgba(192,38,211,0.36)';
+        return 'rgba(22,163,74,0.22)';
+    }
+
+    /** Кольцо + мягкое свечение + угловой индикатор статуса Zabbix. */
+    function zabbixStatusOverlay(severity) {
         if (severity == null || severity === '' || isNaN(Number(severity))) return '';
         var s = Math.max(0, Math.min(5, parseInt(severity, 10) || 0));
         var c = zabbixSeverityColor(s);
-        var pulse = s >= 5
-            ? '<animate attributeName="stroke-opacity" values="1;0.3;1" dur="1.1s" repeatCount="indefinite"/>'
-            : '';
-        return '<circle cx="16" cy="16" r="15.35" fill="none" stroke="' + c + '" stroke-width="2.5" stroke-opacity="0.95">' +
+        var soft = zabbixSeveritySoft(s);
+        var outline = isDarkMapTheme() ? 'rgba(15,23,42,0.85)' : 'rgba(255,255,255,0.92)';
+        var html = '';
+
+        // Мягкое свечение (halo)
+        html += '<circle cx="16" cy="16" r="14.2" fill="none" stroke="' + soft + '" stroke-width="' + (s === 0 ? '3.2' : '5.2') + '"/>';
+
+        // Контрастная обводка под кольцом — читаемость на схеме/спутнике
+        html += '<circle cx="16" cy="16" r="13.55" fill="none" stroke="' + outline + '" stroke-width="3.1" opacity="0.9"/>';
+
+        // Основное кольцо
+        var pulse = '';
+        if (s >= 4) {
+            pulse = '<animate attributeName="stroke-opacity" values="1;0.35;1" dur="' + (s >= 5 ? '0.85s' : '1.15s') + '" repeatCount="indefinite"/>';
+        } else if (s >= 2) {
+            pulse = '<animate attributeName="stroke-opacity" values="1;0.55;1" dur="1.8s" repeatCount="indefinite"/>';
+        }
+        html += '<circle cx="16" cy="16" r="13.55" fill="none" stroke="' + c + '" stroke-width="' + (s === 0 ? '1.9' : '2.45') + '" stroke-opacity="0.98">' +
             pulse + '</circle>';
+
+        // Угловой бейдж (как online у камеры) — быстрее считывается на мелком зуме
+        var badgeCx = 26.2;
+        var badgeCy = 5.8;
+        var badgeR = s === 0 ? 3.4 : 4.1;
+        html += '<circle cx="' + badgeCx + '" cy="' + badgeCy + '" r="' + (badgeR + 1.15) + '" fill="' + outline + '" opacity="0.95"/>';
+        html += '<circle cx="' + badgeCx + '" cy="' + badgeCy + '" r="' + badgeR + '" fill="' + c + '">';
+        if (s >= 4) {
+            html += '<animate attributeName="r" values="' + badgeR + ';' + (badgeR + 0.7) + ';' + badgeR + '" dur="' + (s >= 5 ? '0.85s' : '1.15s') + '" repeatCount="indefinite"/>';
+        }
+        html += '</circle>';
+        if (s === 0) {
+            // Точка «OK»
+            html += '<circle cx="' + badgeCx + '" cy="' + badgeCy + '" r="1.35" fill="#ffffff" opacity="0.9"/>';
+        } else if (s >= 3) {
+            // Восклицательный акцент для average+
+            html += '<rect x="' + (badgeCx - 0.55) + '" y="' + (badgeCy - 1.9) + '" width="1.1" height="2.4" rx="0.45" fill="#ffffff" opacity="0.95"/>';
+            html += '<circle cx="' + badgeCx + '" cy="' + (badgeCy + 1.55) + '" r="0.65" fill="#ffffff" opacity="0.95"/>';
+        } else {
+            html += '<circle cx="' + badgeCx + '" cy="' + badgeCy + '" r="1.5" fill="#ffffff" opacity="0.55"/>';
+        }
+
+        // Внешняя пульсирующая аура для disaster
+        if (s >= 5) {
+            html += '<circle cx="16" cy="16" r="15.1" fill="none" stroke="' + c + '" stroke-width="1.4" stroke-opacity="0.55">' +
+                '<animate attributeName="r" values="14.2;15.4;14.2" dur="0.85s" repeatCount="indefinite"/>' +
+                '<animate attributeName="stroke-opacity" values="0.55;0.12;0.55" dur="0.85s" repeatCount="indefinite"/>' +
+                '</circle>';
+        }
+
+        return html;
     }
 
-    function getIconMetrics(type, variant) {
+    function getIconMetrics(type, variant, options) {
         var large = { support: 1, sleeve: 1, spliceCassette: 1, cross: 1, node: 1, attachment: 1, manhole: 1, signalPost: 1, cabinet: 1, olt: 1, splitter: 1, onu: 1, camera: 1, mediaConverter: 1, radioBridge: 1, switch: 1, crossGroup: 1, nodeGroup: 1 };
         var isLarge = !!large[type];
+        var sev = options && options.zabbixSeverity != null && !isNaN(Number(options.zabbixSeverity))
+            ? Math.max(0, Math.min(5, parseInt(options.zabbixSeverity, 10) || 0))
+            : null;
+        var statusBoost = sev == null ? 0 : (sev >= 4 ? 6 : (sev >= 1 ? 4 : 2));
         if (variant === 'selected') {
             return {
-                clickableSize: 50,
-                iconSize: type === 'crossGroup' || type === 'nodeGroup' ? 40 : (type === 'node' || type === 'cross' || type === 'switch' ? 38 : (type === 'attachment' ? 24 : (type === 'support' ? 26 : 34)))
+                clickableSize: 50 + statusBoost,
+                iconSize: type === 'crossGroup' || type === 'nodeGroup' ? 40 : (type === 'node' || type === 'cross' || type === 'switch' ? 38 : (type === 'attachment' ? 24 : (type === 'support' ? 26 : 34))) + (statusBoost ? 2 : 0)
             };
         }
         if (variant === 'hover') {
             return {
-                clickableSize: 44,
-                iconSize: type === 'crossGroup' || type === 'nodeGroup' ? 36 : (type === 'attachment' ? 24 : (isLarge ? 32 : (type === 'support' ? 26 : 28)))
+                clickableSize: 44 + statusBoost,
+                iconSize: type === 'crossGroup' || type === 'nodeGroup' ? 36 : (type === 'attachment' ? 24 : (isLarge ? 32 : (type === 'support' ? 26 : 28))) + (statusBoost ? 2 : 0)
             };
         }
         return {
-            clickableSize: 44,
-            iconSize: type === 'attachment' ? 24 : (isLarge ? 32 : (type === 'support' ? 22 : 28))
+            clickableSize: 44 + statusBoost,
+            iconSize: (type === 'attachment' ? 24 : (isLarge ? 32 : (type === 'support' ? 22 : 28))) + (statusBoost ? 2 : 0)
         };
     }
 
     function buildIconSvg(type, options) {
-        var metrics = getIconMetrics(type, options && options.variant);
+        var metrics = getIconMetrics(type, options && options.variant, options);
         var inner = buildInnerMarkup(type, options);
         return '<svg width="' + metrics.iconSize + '" height="' + metrics.iconSize + '" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">' + inner + '</svg>';
     }
 
     function buildPlacemarkIcon(type, options) {
-        var metrics = getIconMetrics(type, options && options.variant);
+        var metrics = getIconMetrics(type, options && options.variant, options);
         var inner = buildInnerMarkup(type, options);
         var scale = metrics.iconSize / 32;
         var offset = (metrics.clickableSize - metrics.iconSize) / 2;

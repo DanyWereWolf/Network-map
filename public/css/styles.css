@@ -14426,7 +14426,8 @@ html[data-theme="light"] .app-entrance__status {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
-.map-label--camera {
+.map-label--camera,
+.map-label--with-zabbix {
     display: inline-flex;
     align-items: center;
     gap: 5px;
@@ -14446,6 +14447,59 @@ html[data-theme="light"] .app-entrance__status {
 
 .map-label-status--offline {
     background: #94a3b8;
+}
+
+/* Чип статуса Zabbix в подписи объекта */
+.map-label--with-zabbix,
+.map-label.map-label--camera {
+    gap: 5px;
+}
+
+.map-label-zabbix {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    line-height: 1;
+    padding: 2px 5px 2px 4px;
+    border-radius: 999px;
+    color: #fff;
+    background: #16a34a;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35), 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+.map-label-zabbix-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+.map-label-zabbix--ok { background: #16a34a; }
+.map-label-zabbix--sev1 { background: #2563eb; }
+.map-label-zabbix--sev2 { background: #ca8a04; color: #111827; }
+.map-label-zabbix--sev2 .map-label-zabbix-dot { background: #111827; }
+.map-label-zabbix--sev3 { background: #ea580c; }
+.map-label-zabbix--sev4 {
+    background: #dc2626;
+    animation: map-label-zabbix-pulse 1.15s ease-in-out infinite;
+}
+.map-label-zabbix--sev5 {
+    background: #c026d3;
+    animation: map-label-zabbix-pulse 0.85s ease-in-out infinite;
+}
+
+@keyframes map-label-zabbix-pulse {
+    0%, 100% { filter: brightness(1); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35), 0 1px 3px rgba(0, 0, 0, 0.18); }
+    50% { filter: brightness(1.18); box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.45), 0 0 10px rgba(192, 38, 211, 0.35); }
+}
+
+[data-theme="dark"] .map-label-zabbix {
+    box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.55), 0 1px 4px rgba(0, 0, 0, 0.45);
 }
 
 /* РљСѓСЂСЃРѕСЂ-РїСЂРёС†РµР» РЅР° РєР°СЂС‚Рµ: С…РѕСЂРѕС€Рѕ РІРёРґРµРЅ РІ СЃРІРµС‚Р»РѕР№ Рё С‚С‘РјРЅРѕР№ С‚РµРјРµ */

@@ -5096,13 +5096,39 @@ function getObjectDefaultName(type) {
 
 function getObjectLabelHtml(type, displayName, placemark) {
     if (type === 'camera' && window.CameraPlayer && placemark) {
-        return CameraPlayer.buildMapLabelHtml(
+        var camHtml = CameraPlayer.buildMapLabelHtml(
             displayName,
             CameraPlayer.isCameraOnline(placemark),
             CameraPlayer.getCameraStatusTitle(placemark)
         );
+        return appendZabbixStatusToMapLabel(camHtml, placemark);
     }
-    return '<div class="map-label">' + displayName + '</div>';
+    var base = '<div class="map-label">' + displayName + '</div>';
+    return appendZabbixStatusToMapLabel(base, placemark);
+}
+
+function appendZabbixStatusToMapLabel(html, placemark) {
+    if (!placemark || !window.ZabbixStatus || typeof ZabbixStatus.getForPlacemark !== 'function') return html;
+    var st = ZabbixStatus.getForPlacemark(placemark);
+    if (!st || !st.matched) return html;
+    var sev = st.severity != null ? Number(st.severity) : 0;
+    var cls = 'map-label-zabbix map-label-zabbix--sev' + Math.max(0, Math.min(5, sev || 0));
+    if (st.ok) cls += ' map-label-zabbix--ok';
+    var title = st.ok
+        ? ('Zabbix: OK' + (st.host ? (' · ' + st.host) : ''))
+        : (('Zabbix' + (st.host ? (' · ' + st.host) : '')) + (st.problems && st.problems[0] ? (': ' + st.problems[0]) : ''));
+    var label = st.ok ? 'OK' : ('S' + sev);
+    var chip = '<span class="' + cls + '" title="' + escapeHtml(title) + '"><span class="map-label-zabbix-dot" aria-hidden="true"></span>' + escapeHtml(label) + '</span>';
+    if (/class="map-label[^"]*"/.test(html)) {
+        return html
+            .replace(/class="(map-label[^"]*)"/, function(_, classes) {
+                return classes.indexOf('map-label--with-zabbix') >= 0
+                    ? 'class="' + classes + '"'
+                    : 'class="' + classes + ' map-label--with-zabbix"';
+            })
+            .replace(/(<div class="map-label[^"]*"[^>]*>)/, '$1' + chip);
+    }
+    return '<div class="map-label map-label--with-zabbix">' + chip + html + '</div>';
 }
 
 function refreshCameraMapPresentation(cameraObj) {
