@@ -297,18 +297,18 @@
         if (variant === 'selected') {
             return {
                 clickableSize: 50,
-                iconSize: type === 'crossGroup' || type === 'nodeGroup' ? 40 : (type === 'node' || type === 'cross' || type === 'switch' ? 38 : (type === 'support' ? 26 : 34))
+                iconSize: type === 'crossGroup' || type === 'nodeGroup' ? 40 : (type === 'node' || type === 'cross' || type === 'switch' ? 38 : (type === 'attachment' ? 24 : (type === 'support' ? 26 : 34)))
             };
         }
         if (variant === 'hover') {
             return {
                 clickableSize: 44,
-                iconSize: type === 'crossGroup' || type === 'nodeGroup' ? 36 : (isLarge ? 32 : (type === 'support' ? 26 : 28))
+                iconSize: type === 'crossGroup' || type === 'nodeGroup' ? 36 : (type === 'attachment' ? 24 : (isLarge ? 32 : (type === 'support' ? 26 : 28)))
             };
         }
         return {
             clickableSize: 44,
-            iconSize: isLarge ? 32 : (type === 'support' ? 22 : 28)
+            iconSize: type === 'attachment' ? 24 : (isLarge ? 32 : (type === 'support' ? 22 : 28))
         };
     }
 
@@ -321,10 +321,11 @@
     function buildPlacemarkIcon(type, options) {
         var metrics = getIconMetrics(type, options && options.variant);
         var inner = buildInnerMarkup(type, options);
+        var scale = metrics.iconSize / 32;
         var offset = (metrics.clickableSize - metrics.iconSize) / 2;
         var clickableSvg = '<svg width="' + metrics.clickableSize + '" height="' + metrics.clickableSize + '" viewBox="0 0 ' + metrics.clickableSize + ' ' + metrics.clickableSize + '" xmlns="http://www.w3.org/2000/svg">' +
             '<rect width="' + metrics.clickableSize + '" height="' + metrics.clickableSize + '" fill="transparent"/>' +
-            '<g transform="translate(' + offset + ',' + offset + ')">' + inner + '</g></svg>';
+            '<g transform="translate(' + offset + ',' + offset + ') scale(' + scale + ')">' + inner + '</g></svg>';
         var href = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(clickableSvg)));
         return {
             href: href,

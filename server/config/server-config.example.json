@@ -3,6 +3,7 @@
   "host": "0.0.0.0",
   "yandexMapsApiKey": "YOUR_YANDEX_MAPS_API_KEY",
   "publicSiteUrl": "https://volsmap.ru",
+  "embedFrameAncestors": ["*"],
   "serveObfuscatedClient": false,
   "freeMapObjectLimit": 20000,
   "maxConcurrentUsers": 4,

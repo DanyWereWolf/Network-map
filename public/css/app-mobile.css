@@ -836,8 +836,53 @@ html {
     }
 
     .welcome-modal .modal-content.welcome-modal-content {
-        max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px);
+        max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 20px);
         margin: 0;
+    }
+
+    .welcome-modal .modal-body.welcome-modal-body {
+        padding: 0 12px 10px 14px;
+        max-height: none;
+    }
+
+    .welcome-modal-actions {
+        padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px)) 14px;
+        gap: 8px;
+    }
+
+    .welcome-modal-actions .btn-primary,
+    .welcome-modal-actions .btn-secondary {
+        min-height: 44px;
+    }
+
+    .welcome-assistant-greeting {
+        grid-template-columns: minmax(108px, 36%) 1fr;
+        gap: 2px 8px;
+        margin-bottom: 10px;
+    }
+
+    .welcome-assistant-stage {
+        min-height: 124px;
+    }
+
+    .welcome-assistant-avatar {
+        width: 128px;
+        height: 128px;
+    }
+
+    .welcome-assistant-glow {
+        width: 98px;
+        height: 98px;
+        margin-left: -49px;
+    }
+
+    .welcome-assistant-text {
+        font-size: 0.84rem;
+    }
+
+    .home-intro-features li {
+        padding: 7px 8px;
+        font-size: 0.75rem;
     }
 
     #nodeSelectionModal .modal-content.node-selection-modal-content,

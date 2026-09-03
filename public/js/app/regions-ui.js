@@ -273,13 +273,15 @@ function createRegion(name, ringCoords, options) {
         type: 'region',
         name: name || '',
         regionVisible: options.regionVisible !== false,
+        regionFillVisible: options.regionFillVisible !== false,
         fillColor: fillColor,
         strokeColor: strokeColor,
         fillOpacity: fillOpacity,
         balloonContent: name ? ('Регион: ' + name) : 'Регион'
     };
     props.uniqueId = options.uniqueId || generateUniqueId('region');
-    var polygon = new ymaps.Polygon([ring], props, MapRegions.getPolygonOptions(fillColor, strokeColor, fillOpacity));
+    var effectiveOpacity = props.regionFillVisible ? fillOpacity : 0;
+    var polygon = new ymaps.Polygon([ring], props, MapRegions.getPolygonOptions(fillColor, strokeColor, effectiveOpacity));
     try { polygon.options.set('draggable', false); } catch (eDr) {}
     try { polygon.options.set('interactive', false); } catch (eInt) {}
     objects.push(polygon);
@@ -321,6 +323,7 @@ function createRegionFromData(data) {
         strokeColor: data.strokeColor,
         fillOpacity: data.fillOpacity,
         regionVisible: data.regionVisible !== false,
+        regionFillVisible: data.regionFillVisible !== false,
         skipSync: true,
         skipSave: true,
         skipLog: true,
@@ -352,6 +355,16 @@ function setRegionVisible(regionObj, visible, opts) {
     renderRegionsSidebarList();
 }
 
+function setRegionFillVisible(regionObj, visible, opts) {
+    if (!regionObj || !regionObj.properties) return;
+    regionObj.properties.set('regionFillVisible', !!visible);
+    if (window.MapRegions && MapRegions.applyRegionStyle) {
+        MapRegions.applyRegionStyle(regionObj);
+    }
+    if (!(opts && opts.skipSave)) saveData();
+    renderRegionsSidebarList();
+}
+
 function renderRegionsSidebarList() {
     var root = document.getElementById('regionsList');
     var badge = document.getElementById('regionsCountBadge');
@@ -371,8 +384,9 @@ function renderRegionsSidebarList() {
         var stats = MapRegions.collectObjectsInRegion(region, objects);
         var summary = stats.total + ' объект.' + (stats.total === 1 ? '' : (stats.total >= 2 && stats.total <= 4 ? 'а' : 'ов'));
         var hidden = !MapRegions.isRegionVisible(region);
-        html += '<div class="region-list-item' + (hidden ? ' region-list-item--hidden' : '') + '" style="border-left-color:' + escapeHtml(fill) + '" data-region-id="' + escapeHtml(uid) + '">';
-        html += '<span class="region-list-item__swatch" style="background:' + escapeHtml(fill) + '"></span>';
+        var fillHidden = !MapRegions.isRegionFillVisible(region);
+        html += '<div class="region-list-item' + (hidden ? ' region-list-item--hidden' : '') + (fillHidden && !hidden ? ' region-list-item--fill-hidden' : '') + '" style="border-left-color:' + escapeHtml(fill) + '" data-region-id="' + escapeHtml(uid) + '">';
+        html += '<span class="region-list-item__swatch' + (fillHidden ? ' region-list-item__swatch--hollow' : '') + '" style="background:' + (fillHidden ? 'transparent' : escapeHtml(fill)) + ';border-color:' + escapeHtml(fill) + '"></span>';
         html += '<div class="region-list-item__body">';
         html += '<button type="button" class="region-list-item__name" data-action="focus">' + escapeHtml(name) + '</button>';
         html += '<div class="region-list-item__meta">' + escapeHtml(summary) + '</div>';
@@ -419,6 +433,7 @@ function buildRegionEditCardContent(regionObj) {
     var fill = regionObj.properties.get('fillColor') || MapRegions.DEFAULT_FILL;
     var stroke = regionObj.properties.get('strokeColor') || MapRegions.DEFAULT_STROKE;
     var visible = MapRegions.isRegionVisible(regionObj);
+    var fillVisible = MapRegions.isRegionFillVisible(regionObj);
     var stats = MapRegions.collectObjectsInRegion(regionObj, objects);
     var html = '<div class="region-edit-card">';
     html += '<p class="region-edit-card__stats">' + escapeHtml(MapRegions.countSummaryText(stats.counts, stats.total)) + '</p>';
@@ -427,10 +442,11 @@ function buildRegionEditCardContent(regionObj) {
     html += '<label class="region-edit-card__color"><span>Заливка</span><input type="color" id="editRegionFillColor" value="' + escapeHtml(fill) + '"></label>';
     html += '<label class="region-edit-card__color"><span>Обводка</span><input type="color" id="editRegionStrokeColor" value="' + escapeHtml(stroke) + '"></label>';
     html += '</div>';
+    html += '<label class="region-edit-card__check"><input type="checkbox" id="editRegionFillVisible"' + (fillVisible ? ' checked' : '') + '><span>Показывать фон (заливку)</span></label>';
     html += buildObjectGallerySectionHtml(regionObj, true);
     html += '<div class="region-edit-card__actions">';
     html += '<button type="button" id="regionRedrawBtn" class="btn-secondary btn-compact">Перерисовать контур</button>';
-    html += '<button type="button" id="toggleRegionVisibleBtn" class="btn-secondary btn-compact">' + (visible ? 'Скрыть' : 'Показать') + '</button>';
+    html += '<button type="button" id="toggleRegionVisibleBtn" class="btn-secondary btn-compact">' + (visible ? 'Скрыть регион' : 'Показать регион') + '</button>';
     html += '<button type="button" id="deleteCurrentObject" class="btn-danger btn-compact">Удалить</button>';
     html += '</div></div>';
     return html;
@@ -476,6 +492,12 @@ function showRegionEditModalBody(regionObj) {
         toggleBtn.addEventListener('click', function() {
             setRegionVisible(regionObj, !MapRegions.isRegionVisible(regionObj));
             showRegionEditModalBody(regionObj);
+        });
+    }
+    var fillVisibleEl = document.getElementById('editRegionFillVisible');
+    if (fillVisibleEl) {
+        fillVisibleEl.addEventListener('change', function() {
+            setRegionFillVisible(regionObj, !!fillVisibleEl.checked);
         });
     }
     var redrawBtn = document.getElementById('regionRedrawBtn');

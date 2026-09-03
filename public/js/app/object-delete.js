@@ -227,6 +227,9 @@ function deleteObject(obj, opts) {
     if (objType === 'radioBridge' && objUniqueId && typeof purgeRadioBridgeReferences === 'function') {
         purgeRadioBridgeReferences(objUniqueId);
     }
+    if (objType === 'camera' && typeof removeCameraCoverage === 'function') {
+        removeCameraCoverage(obj);
+    }
     if (objType === 'radioBridge' && objUniqueId) {
         if (typeof removeRadioBridgeCoverage === 'function') removeRadioBridgeCoverage(obj);
         objects.forEach(function(slot) {

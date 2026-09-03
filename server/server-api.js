@@ -17,6 +17,7 @@ const security = require('./lib/security');
 const supportBot = require('./lib/support-bot');
 const mail = require('./lib/mail');
 const passwordReset = require('./lib/password-reset');
+const emailVerify = require('./lib/email-verify');
 const updateBroadcast = require('./lib/update-broadcast');
 const passwords = require('./lib/password');
 const cpuPool = require('./lib/cpu-pool');
@@ -257,8 +258,69 @@ app.use(cors({ origin: true, credentials: true }));
 // 50mb: карты 10k+ объектов / фото в payload; 10mb часто мало и провоцирует обрывы/ретраи.
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '50mb' }));
 
+/** Разрешить встраивание карты (Zabbix URL widget и др.). */
+app.use(function(req, res, next) {
+    var raw = serverConfig.embedFrameAncestors;
+    if (raw === false || raw === 'deny') {
+        res.setHeader('Content-Security-Policy', "frame-ancestors 'none'");
+        res.setHeader('X-Frame-Options', 'DENY');
+        return next();
+    }
+    var list = [];
+    if (Array.isArray(raw)) {
+        list = raw.map(function(v) { return String(v || '').trim(); }).filter(Boolean);
+    } else if (typeof raw === 'string' && raw.trim()) {
+        list = raw.split(/[\s,]+/).map(function(v) { return v.trim(); }).filter(Boolean);
+    }
+    if (!list.length) {
+        // По умолчанию разрешаем iframe (для Zabbix и аналогов).
+        list = ['*'];
+    }
+    res.setHeader('Content-Security-Policy', 'frame-ancestors ' + list.join(' '));
+    // CSP frame-ancestors перекрывает X-Frame-Options в современных браузерах.
+    res.removeHeader('X-Frame-Options');
+    next();
+});
+
 function generateToken() {
     return 'tk_' + Date.now() + '_' + require('crypto').randomBytes(16).toString('hex');
+}
+
+function generateEmbedLinkToken() {
+    return 'emb_' + require('crypto').randomBytes(24).toString('hex');
+}
+
+function resolveOrganizationByEmbedToken(token) {
+    if (!token || String(token).indexOf('emb_') !== 0) return null;
+    var orgs = db.getOrganizations() || [];
+    for (var i = 0; i < orgs.length; i++) {
+        var org = orgs[i];
+        if (!org || !org.embedEnabled || !org.embedToken) continue;
+        if (org.embedToken !== token) continue;
+        if (org.status && org.status !== 'active') return null;
+        return org;
+    }
+    return null;
+}
+
+function buildEmbedUserPayload(organization) {
+    var organizationId = organization.id;
+    return {
+        userId: null,
+        username: 'embed',
+        fullName: 'Встраивание',
+        role: 'user',
+        embed: true,
+        organizationId: organizationId,
+        avatarUrl: null,
+        organization: {
+            id: organization.id,
+            name: organization.name,
+            status: organization.status,
+            mapLimits: getMapObjectLimitPayload(organizationId),
+            concurrentUsers: getConcurrentUsersPayload(organizationId)
+        }
+    };
 }
 
 /** Кэш проверки токена для WS (курсоры бьют десятки раз/сек). */
@@ -273,6 +335,12 @@ function getSessionByToken(token) {
     var cached = sessionTokenCache.get(token);
     if (cached && (now - cached.at) < SESSION_TOKEN_CACHE_MS) {
         return cached.value;
+    }
+    var embedOrg = resolveOrganizationByEmbedToken(token);
+    if (embedOrg) {
+        var embedValue = { userId: null, organizationId: embedOrg.id, isEmbed: true };
+        sessionTokenCache.set(token, { at: now, value: embedValue });
+        return embedValue;
     }
     var sessions = db.getSessions();
     var ses = sessions.find(function(s) { return s.token === token && db.sessionIsActive(s); });
@@ -301,6 +369,8 @@ function invalidateSessionTokenCache(token) {
 
 function getSessionUserFromToken(token) {
     if (!token) return null;
+    var embedOrg = resolveOrganizationByEmbedToken(token);
+    if (embedOrg) return buildEmbedUserPayload(embedOrg);
     const sessions = db.getDb().prepare('SELECT user_id, organization_id FROM sessions WHERE token = ? AND expires_at > datetime(\'now\')').all(token);
     if (sessions.length === 0) return null;
     const users = db.getUsers();
@@ -507,6 +577,13 @@ async function validateCredentials(username, password) {
     const currentUser = users[userIndex];
     if (currentUser.status === 'pending') return { ok: false, error: 'Заявка ожидает одобрения' };
     if (currentUser.status === 'rejected') return { ok: false, error: 'Заявка отклонена' };
+    if (!emailVerify.isEmailVerified(currentUser)) {
+        return {
+            ok: false,
+            error: 'Подтвердите e-mail по ссылке из письма. Если письмо не пришло — запросите повторную отправку.',
+            code: 'email_not_verified'
+        };
+    }
     var organizationId = currentUser.organizationId || null;
     if (currentUser.role !== 'admin' && !organizationId) {
         return { ok: false, error: 'Учётная запись не привязана к организации. Обратитесь к администратору.' };
@@ -584,7 +661,9 @@ app.post('/api/auth/login', async function(req, res) {
     }
     if (!cred.ok) {
         if (cred.status === 400) return res.status(400).json({ success: false, error: cred.error });
-        return res.json({ success: false, error: cred.error });
+        var failPayload = { success: false, error: cred.error };
+        if (cred.code) failPayload.code = cred.code;
+        return res.json(failPayload);
     }
     var user = cred.user;
     var organizationId = cred.organizationId;
@@ -1460,19 +1539,39 @@ app.post('/api/auth/register', function(req, res) {
     });
 });
 
+function rollbackFailedRegistration(userId, organizationId) {
+    try {
+        if (db.deleteEmailVerificationTokensForUser) db.deleteEmailVerificationTokensForUser(userId);
+    } catch (e) { /* ignore */ }
+    try {
+        db.setUsers(db.getUsers().filter(function(u) { return String(u.id) !== String(userId); }));
+    } catch (e2) { /* ignore */ }
+    try {
+        if (organizationId && db.deleteOrganization) db.deleteOrganization(organizationId);
+    } catch (e3) { /* ignore */ }
+}
+
 async function handleAuthRegister(req, res, body) {
     const { username, password, fullName, organizationName, contactEmail, mapStart } = body || {};
     if (!username || username.length < 3) return res.status(400).json({ success: false, error: 'Имя не менее 3 символов' });
     if (!organizationName || String(organizationName).trim().length < 3) return res.status(400).json({ success: false, error: 'Укажите название организации (не менее 3 символов)' });
     if (!password || password.length < 6) return res.status(400).json({ success: false, error: 'Пароль не менее 6 символов' });
     if (!contactEmail || !isValidContactEmail(String(contactEmail))) return res.status(400).json({ success: false, error: 'Укажите корректный e-mail для связи' });
+    reloadServerConfig({ silent: true });
+    if (!mail.isMailConfigured(serverConfig)) {
+        return res.status(503).json({
+            success: false,
+            error: 'Регистрация временно недоступна: не настроена отправка писем для подтверждения e-mail.'
+        });
+    }
     const users = db.getUsers();
     if (users.find(u => u.username.toLowerCase() === username.toLowerCase())) return res.json({ success: false, error: 'Пользователь уже существует' });
+    var emailTrim = String(contactEmail).trim();
     var organizationId = db.addOrganization({
         name: String(organizationName).trim(),
         mapObjectLimitUnlocked: false,
         status: 'active',
-        contactEmail: String(contactEmail).trim()
+        contactEmail: emailTrim
     });
     const newUser = {
         id: 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
@@ -1480,7 +1579,8 @@ async function handleAuthRegister(req, res, body) {
         password: await passwords.hashPassword(password),
         fullName: fullName || username,
         full_name: fullName || username,
-        email: String(contactEmail).trim(),
+        email: emailTrim,
+        emailVerified: false,
         // Администратор карты для своей организации (но не глобальный админ панели)
         role: 'admin',
         status: organizationId ? 'approved' : 'pending',
@@ -1493,7 +1593,45 @@ async function handleAuthRegister(req, res, body) {
     if (parsedMapStart && db.setMapStartForUser) {
         db.setMapStartForUser(newUser.id, parsedMapStart);
     }
-    res.json({ success: true, pending: !organizationId, organizationId: organizationId });
+    var token = emailVerify.createVerifyToken(newUser.id);
+    var siteUrl = serverConfig.publicSiteUrl || process.env.PUBLIC_SITE_URL || getSiteBaseUrl(req);
+    var mailContent = emailVerify.buildVerifyEmail(siteUrl, token, newUser.username);
+    var emailHint = emailVerify.maskEmail(emailTrim);
+
+    function failRegister(message) {
+        rollbackFailedRegistration(newUser.id, organizationId);
+        return res.status(503).json({
+            success: false,
+            sent: false,
+            error: message || 'Не удалось отправить письмо с подтверждением. Регистрация не завершена — попробуйте позже.'
+        });
+    }
+
+    try {
+        var result = await mail.sendMail(serverConfig, {
+            to: emailTrim,
+            subject: mailContent.subject,
+            text: mailContent.text,
+            html: mailContent.html
+        });
+        if (!result.ok) {
+            console.error('[Auth] register verify-mail failed for user', newUser.id, 'to', emailTrim, '-', result.error || 'unknown');
+            return failRegister(result.error || 'Не удалось отправить письмо с подтверждением. Регистрация не завершена — попробуйте позже.');
+        }
+        console.log('[Auth] register verify-mail sent for user', newUser.id, 'to', emailTrim);
+        return res.json({
+            success: true,
+            pending: false,
+            organizationId: organizationId,
+            needsVerification: true,
+            sent: true,
+            emailHint: emailHint,
+            message: 'Мы отправили ссылку для подтверждения на ' + emailHint + '. Подтвердите e-mail, затем войдите. Без подтверждения вход недоступен.'
+        });
+    } catch (err) {
+        console.error('[Auth] register verify-mail error for user', newUser.id, '-', err && err.message ? err.message : err);
+        return failRegister();
+    }
 }
 
 var PASSWORD_RESET_GENERIC_MSG = 'Если указанный аккаунт существует и привязан к e-mail, на почту отправлена ссылка для сброса пароля. Проверьте входящие и папку «Спам».';
@@ -1596,6 +1734,145 @@ app.get('/api/auth/reset-token/:token', function(req, res) {
     var user = users.find(function(u) { return String(u.id) === String(entry.userId); });
     if (!user || !passwordReset.canResetPassword(user)) return res.json({ valid: false });
     res.json({ valid: true, username: user.username });
+});
+
+app.post('/api/auth/verify-email', function(req, res) {
+    var ip = getClientIp(req);
+    var rate = security.checkRateLimit('verify-email:' + ip, getAuthRateLimitOptions());
+    if (!rate.ok) {
+        return res.status(429).json({
+            success: false,
+            error: 'Слишком много попыток. Повторите через ' + rate.retryAfterSec + ' с.'
+        });
+    }
+    var body = req.body || {};
+    var token = body.token != null ? String(body.token).trim() : '';
+    if (!token) return res.status(400).json({ success: false, error: 'Недействительная ссылка подтверждения' });
+    db.purgeExpiredEmailVerificationTokens();
+    var peek = db.getEmailVerificationToken(token);
+    if (peek) {
+        var usersPeek = db.getUsers();
+        var peekUser = usersPeek.find(function(u) { return String(u.id) === String(peek.userId); });
+        if (peekUser && emailVerify.isEmailVerified(peekUser)) {
+            emailVerify.consumeVerifyToken(token);
+            return res.json({
+                success: true,
+                username: peekUser.username,
+                message: 'E-mail уже подтверждён. Можете войти.'
+            });
+        }
+    }
+    var entry = emailVerify.consumeVerifyToken(token);
+    if (!entry) {
+        return res.status(400).json({
+            success: false,
+            error: 'Ссылка подтверждения недействительна или истекла. Запросите новое письмо.'
+        });
+    }
+    var users = db.getUsers();
+    var i = users.findIndex(function(u) { return String(u.id) === String(entry.userId); });
+    if (i === -1) return res.status(400).json({ success: false, error: 'Пользователь не найден' });
+    if (users[i].status === 'rejected') {
+        return res.status(400).json({ success: false, error: 'Учётная запись отклонена' });
+    }
+    users[i].emailVerified = true;
+    db.setUsers(users);
+    console.log('[Auth] email verified for user', users[i].id, '(' + users[i].username + ')');
+    res.json({
+        success: true,
+        username: users[i].username,
+        message: 'E-mail подтверждён. Теперь вы можете войти.'
+    });
+});
+
+app.post('/api/auth/resend-verification', function(req, res) {
+    var ip = getClientIp(req);
+    var rate = security.checkRateLimit('resend-verify:' + ip, getPasswordResetIpLimitOptions());
+    if (!rate.ok) {
+        return res.status(429).json({
+            success: false,
+            sent: false,
+            error: 'Слишком много запросов. Повторите через ' + rate.retryAfterSec + ' с.'
+        });
+    }
+    reloadServerConfig({ silent: true });
+    if (!mail.isMailConfigured(serverConfig)) {
+        return res.status(503).json({
+            success: false,
+            sent: false,
+            error: 'Отправка писем временно недоступна. Обратитесь в поддержку.'
+        });
+    }
+    var body = req.body || {};
+    var input = body.usernameOrEmail != null ? String(body.usernameOrEmail).trim() : '';
+    if (!input) {
+        return res.status(400).json({ success: false, sent: false, error: 'Укажите имя пользователя или e-mail' });
+    }
+    var genericOk = {
+        success: true,
+        sent: false,
+        message: 'Если аккаунт найден и e-mail ещё не подтверждён, мы отправили новое письмо. Проверьте входящие и папку «Спам».'
+    };
+    var user = emailVerify.findUserForEmailVerify(input);
+    if (!user || !emailVerify.canResendVerification(user)) {
+        return res.json(genericOk);
+    }
+    var email = user.email && emailVerify.isValidEmail(user.email) ? String(user.email).trim() : '';
+    if (!email) {
+        return res.json(genericOk);
+    }
+    var emailLimitOpts = getPasswordResetEmailLimitOptions();
+    var mailPeek = security.peekRateLimit('verify-mail:' + String(email).toLowerCase(), emailLimitOpts);
+    if (!mailPeek.ok) {
+        return res.status(429).json({
+            success: false,
+            sent: false,
+            error: 'Письмо уже отправлялось. Повторите через ' + mailPeek.retryAfterSec + ' с.'
+        });
+    }
+    var userPeek = security.peekRateLimit('verify-user:' + String(user.id), emailLimitOpts);
+    if (!userPeek.ok) {
+        return res.status(429).json({
+            success: false,
+            sent: false,
+            error: 'Письмо уже отправлялось. Повторите через ' + userPeek.retryAfterSec + ' с.'
+        });
+    }
+    var token = emailVerify.createVerifyToken(user.id);
+    var siteUrl = serverConfig.publicSiteUrl || process.env.PUBLIC_SITE_URL || getSiteBaseUrl(req);
+    var mailContent = emailVerify.buildVerifyEmail(siteUrl, token, user.username);
+    var emailHint = emailVerify.maskEmail(email);
+    return mail.sendMail(serverConfig, {
+        to: email,
+        subject: mailContent.subject,
+        text: mailContent.text,
+        html: mailContent.html
+    }).then(function(result) {
+        if (!result.ok) {
+            console.error('[Auth] resend-verification mail failed for user', user.id, 'to', email, '-', result.error || 'unknown');
+            return res.status(503).json({
+                success: false,
+                sent: false,
+                error: result.error || 'Не удалось отправить письмо. Попробуйте позже.'
+            });
+        }
+        security.checkRateLimit('verify-mail:' + String(email).toLowerCase(), emailLimitOpts);
+        security.checkRateLimit('verify-user:' + String(user.id), emailLimitOpts);
+        console.log('[Auth] resend-verification mail sent for user', user.id, 'to', email);
+        return res.json({
+            success: true,
+            sent: true,
+            emailHint: emailHint,
+            message: 'Письмо со ссылкой отправлено на ' + emailHint + '. Проверьте входящие и папку «Спам».'
+        });
+    }).catch(function(err) {
+        console.error('[Auth] resend-verification error for user', user.id, '-', err && err.message ? err.message : err);
+        return res.status(503).json({
+            success: false,
+            sent: false,
+            error: 'Не удалось отправить письмо. Попробуйте позже.'
+        });
+    });
 });
 
 app.post('/api/auth/reset-password', async function(req, res) {
@@ -1702,6 +1979,94 @@ app.post('/api/organizations/me/security/2fa/disable', (req, res) => {
         twoFactorSecret: null
     });
     res.json({ ok: true, twoFactorEnabled: false });
+});
+
+function buildOrgEmbedUrl(req, embedToken) {
+    var base = serverConfig.publicSiteUrl || process.env.PUBLIC_SITE_URL || getSiteBaseUrl(req) || '';
+    base = String(base || '').trim().replace(/\/$/, '');
+    if (!base) base = '';
+    var pathUrl = (base || '') + '/index.html?embed=1&embedToken=' + encodeURIComponent(embedToken);
+    return pathUrl;
+}
+
+app.get('/api/organizations/me/embed', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+    var org = db.getOrganization(user.organizationId);
+    if (!org) return res.status(404).json({ error: 'Организация не найдена' });
+    var enabled = !!(org.embedEnabled && org.embedToken);
+    res.json({
+        enabled: enabled,
+        embedToken: enabled ? org.embedToken : null,
+        embedUrl: enabled ? buildOrgEmbedUrl(req, org.embedToken) : null,
+        createdAt: org.embedCreatedAt || null
+    });
+});
+
+app.post('/api/organizations/me/embed', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+    var org = db.getOrganization(user.organizationId);
+    if (!org) return res.status(404).json({ error: 'Организация не найдена' });
+    var rotate = !!(req.body && req.body.rotate);
+    var token = org.embedToken;
+    if (!token || rotate || !org.embedEnabled) {
+        token = generateEmbedLinkToken();
+    }
+    var createdAt = new Date().toISOString();
+    var ok = db.updateOrganization(user.organizationId, {
+        embedEnabled: true,
+        embedToken: token,
+        embedCreatedAt: createdAt
+    });
+    if (!ok) return res.status(404).json({ error: 'Организация не найдена' });
+    invalidateSessionTokenCache(token);
+    if (org.embedToken && org.embedToken !== token) invalidateSessionTokenCache(org.embedToken);
+    res.json({
+        ok: true,
+        enabled: true,
+        embedToken: token,
+        embedUrl: buildOrgEmbedUrl(req, token),
+        createdAt: createdAt
+    });
+});
+
+app.delete('/api/organizations/me/embed', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+    var org = db.getOrganization(user.organizationId);
+    if (!org) return res.status(404).json({ error: 'Организация не найдена' });
+    if (org.embedToken) invalidateSessionTokenCache(org.embedToken);
+    db.updateOrganization(user.organizationId, {
+        embedEnabled: false,
+        embedToken: null,
+        embedCreatedAt: null
+    });
+    res.json({ ok: true, enabled: false });
+});
+
+/** Обмен embed-токена на сессию просмотра (для Zabbix / iframe). */
+app.post('/api/auth/embed', (req, res) => {
+    var body = req.body || {};
+    var embedToken = String(body.embedToken || body.token || '').trim();
+    if (!embedToken) return res.status(400).json({ success: false, error: 'Не указан токен встраивания' });
+    var ip = getClientIp(req);
+    var rate = security.checkRateLimit('embed:' + ip, getAuthRateLimitOptions());
+    if (!rate.ok) {
+        return res.status(429).json({ success: false, error: 'Слишком много попыток. Подождите немного.' });
+    }
+    var org = resolveOrganizationByEmbedToken(embedToken);
+    if (!org) {
+        return res.status(401).json({ success: false, error: 'Ссылка встраивания недействительна или отключена' });
+    }
+    res.json({
+        success: true,
+        token: embedToken,
+        user: buildEmbedUserPayload(org)
+    });
 });
 
 app.get('/api/users', (req, res) => {
@@ -1915,6 +2280,7 @@ app.post('/api/users', async (req, res) => {
         full_name: fullName || username,
         role: role || 'user',
         status: 'approved',
+        emailVerified: true,
         organizationId: resolvedOrgId,
         createdAt: new Date().toISOString()
     };
@@ -2517,6 +2883,7 @@ app.get('/api/settings', (req, res) => {
 app.post('/api/settings', (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (user.embed) return res.status(403).json({ error: 'В режиме встраивания настройки недоступны' });
     const body = req.body || {};
     var orgId = user.organizationId || (user.role === 'admin' && body.organizationId ? body.organizationId : null);
     try {

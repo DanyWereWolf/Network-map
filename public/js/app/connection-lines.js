@@ -726,6 +726,8 @@ function syncConnectionLinesForObject(obj) {
         rebuildLinesTargetingEndpoint(uid, 'radioBridge');
         updateRadioBridgeConnectionLines();
         if (typeof updateRadioBridgeCoverage === 'function') updateRadioBridgeCoverage(obj);
+    } else if (type === 'camera') {
+        if (typeof updateCameraCoverage === 'function') updateCameraCoverage(obj);
     } else if (type === 'node') {
         objects.forEach(function(host) {
             var ht = host.properties ? host.properties.get('type') : null;
@@ -791,6 +793,7 @@ function updateAllConnectionLines() {
     updateSplitterOutputConnectionLines();
     updateRadioBridgeConnectionLines();
     if (typeof updateAllRadioBridgeCoverages === 'function') updateAllRadioBridgeCoverages();
+    if (typeof updateAllCameraCoverages === 'function') updateAllCameraCoverages();
     applyConnectionLinesVisibility();
 }
 

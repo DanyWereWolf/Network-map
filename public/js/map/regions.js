@@ -235,6 +235,11 @@
         return regionObj.properties.get('regionVisible') !== false;
     }
 
+    function isRegionFillVisible(regionObj) {
+        if (!regionObj || !regionObj.properties) return true;
+        return regionObj.properties.get('regionFillVisible') !== false;
+    }
+
     function invalidateHiddenRegionsCache() {
         _hiddenRegionsCache = null;
         _hiddenRegionsCacheToken = null;
@@ -369,6 +374,7 @@
         var stroke = regionObj.properties.get('strokeColor') || DEFAULT_STROKE;
         var opacity = regionObj.properties.get('fillOpacity');
         if (opacity == null || opacity === '') opacity = DEFAULT_FILL_OPACITY;
+        if (!isRegionFillVisible(regionObj)) opacity = 0;
         try {
             regionObj.options.set('fillColor', fill);
             regionObj.options.set('strokeColor', stroke);
@@ -721,6 +727,7 @@
         pointInPolygon: pointInPolygon,
         getAllRegions: getAllRegions,
         isRegionVisible: isRegionVisible,
+        isRegionFillVisible: isRegionFillVisible,
         getHiddenRegions: getHiddenRegions,
         hasAnyHiddenRegion: hasAnyHiddenRegion,
         invalidateHiddenRegionsCache: invalidateHiddenRegionsCache,

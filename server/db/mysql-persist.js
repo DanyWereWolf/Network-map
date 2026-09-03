@@ -30,7 +30,8 @@ function emptyStore() {
         visitLogs: [],
         deviceTokens: [],
         supportThreads: [],
-        passwordResetTokens: []
+        passwordResetTokens: [],
+        emailVerificationTokens: []
     };
 }
 
@@ -50,6 +51,9 @@ async function hydrateStoreFromMysql() {
             contactEmail: o.contact_email || '',
             twoFactorEnabled: !!o.two_factor_enabled,
             twoFactorSecret: o.two_factor_secret,
+            embedEnabled: !!o.embed_enabled,
+            embedToken: o.embed_token || null,
+            embedCreatedAt: o.embed_created_at ? new Date(o.embed_created_at).toISOString() : null,
             createdAt: o.created_at ? new Date(o.created_at).toISOString() : new Date().toISOString()
         };
     });
@@ -65,6 +69,7 @@ async function hydrateStoreFromMysql() {
             role: u.role,
             status: u.status,
             email: u.email || '',
+            emailVerified: u.email_verified === undefined || u.email_verified === null ? true : !!u.email_verified,
             organizationId: u.organization_id,
             avatarUpdatedAt: u.avatar_updated_at,
             mustChangePassword: !!u.must_change_password,
@@ -226,6 +231,17 @@ async function hydrateStoreFromMysql() {
         }, extra);
     });
 
+    const [evt] = await query('SELECT * FROM email_verification_tokens');
+    store.emailVerificationTokens = (evt || []).map(function (t) {
+        var extra = {};
+        try { extra = t.payload_json ? (typeof t.payload_json === 'string' ? JSON.parse(t.payload_json) : t.payload_json) : {}; } catch (e) {}
+        return Object.assign({
+            token: t.token,
+            userId: t.user_id,
+            expiresAt: t.expires_at ? new Date(t.expires_at).toISOString() : null
+        }, extra);
+    });
+
     // user map start / themes into settings
     const [ums] = await query('SELECT * FROM user_map_start');
     if (!store.settings.userMapStarts) store.settings.userMapStarts = '{}';
@@ -253,6 +269,7 @@ async function persistStoreToMysql(store, opts) {
         // Organizations first
         await conn.query('SET FOREIGN_KEY_CHECKS=0');
         await conn.query('DELETE FROM password_reset_tokens');
+        await conn.query('DELETE FROM email_verification_tokens');
         await conn.query('DELETE FROM support_messages');
         await conn.query('DELETE FROM support_threads');
         await conn.query('DELETE FROM visit_logs');
@@ -285,14 +302,17 @@ async function persistStoreToMysql(store, opts) {
             await conn.query(
                 `INSERT INTO organizations (
                     id, name, map_object_limit_unlocked, custom_map_object_limit, max_concurrent_users,
-                    status, contact_email, two_factor_enabled, two_factor_secret, created_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?)
+                    status, contact_email, two_factor_enabled, two_factor_secret,
+                    embed_enabled, embed_token, embed_created_at, created_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON DUPLICATE KEY UPDATE
                     name=VALUES(name), map_object_limit_unlocked=VALUES(map_object_limit_unlocked),
                     custom_map_object_limit=VALUES(custom_map_object_limit),
                     max_concurrent_users=VALUES(max_concurrent_users), status=VALUES(status),
                     contact_email=VALUES(contact_email), two_factor_enabled=VALUES(two_factor_enabled),
-                    two_factor_secret=VALUES(two_factor_secret)`,
+                    two_factor_secret=VALUES(two_factor_secret),
+                    embed_enabled=VALUES(embed_enabled), embed_token=VALUES(embed_token),
+                    embed_created_at=VALUES(embed_created_at)`,
                 [
                     o.id, o.name || 'Организация',
                     o.mapObjectLimitUnlocked ? 1 : 0,
@@ -302,6 +322,9 @@ async function persistStoreToMysql(store, opts) {
                     o.contactEmail || null,
                     o.twoFactorEnabled ? 1 : 0,
                     o.twoFactorSecret || null,
+                    o.embedEnabled ? 1 : 0,
+                    o.embedToken || null,
+                    toMysqlDate(o.embedCreatedAt) || null,
                     toMysqlDate(o.createdAt) || toMysqlDate(new Date())
                 ]
             );
@@ -311,14 +334,16 @@ async function persistStoreToMysql(store, opts) {
             var u = store.users[ui];
             await conn.query(
                 `INSERT INTO users (
-                    id, username, password_hash, full_name, role, status, email, organization_id,
+                    id, username, password_hash, full_name, role, status, email, email_verified, organization_id,
                     avatar_updated_at, must_change_password, created_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
                 [
                     u.id, u.username, u.password || '',
                     u.fullName || u.full_name || null,
                     u.role || 'user', u.status || 'pending',
-                    u.email || null, u.organizationId || null,
+                    u.email || null,
+                    u.emailVerified === false ? 0 : 1,
+                    u.organizationId || null,
                     toMysqlDate(u.avatarUpdatedAt),
                     u.mustChangePassword ? 1 : 0,
                     toMysqlDate(u.createdAt) || toMysqlDate(new Date())
@@ -482,6 +507,21 @@ async function persistStoreToMysql(store, opts) {
             await conn.query(
                 'INSERT INTO password_reset_tokens (token, user_id, expires_at, payload_json) VALUES (?,?,?,?)',
                 [pr.token, pr.userId || '', prExp, Object.keys(rest).length ? JSON.stringify(rest) : null]
+            );
+        }
+
+        for (var evi = 0; evi < (store.emailVerificationTokens || []).length; evi++) {
+            var ev = store.emailVerificationTokens[evi];
+            if (!ev || !ev.token) continue;
+            var evExp = toMysqlDate(ev.expiresAt);
+            if (!evExp) continue;
+            var evRest = Object.assign({}, ev);
+            delete evRest.token;
+            delete evRest.userId;
+            delete evRest.expiresAt;
+            await conn.query(
+                'INSERT INTO email_verification_tokens (token, user_id, expires_at, payload_json) VALUES (?,?,?,?)',
+                [ev.token, ev.userId || '', evExp, Object.keys(evRest).length ? JSON.stringify(evRest) : null]
             );
         }
 

@@ -134,6 +134,7 @@
 
                 <div class="auth-footer">
                     <p class="auth-footer-cta">Нет аккаунта? <a href="auth.html?register=1">Создать организацию</a></p>
+                    <p class="auth-footer-cta">Не пришло письмо с подтверждением? <a href="#" onclick="switchForm('resend'); return false;">Отправить ещё раз</a></p>
                     <a href="pricing.html" class="auth-main-link">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                             <polyline points="15 18 9 12 15 6"></polyline>
@@ -191,7 +192,7 @@
                         </svg>
                         <input type="email" id="regContactEmail" placeholder="name@company.ru" required autocomplete="email">
                     </div>
-                    <small class="hint">Используется для уведомлений и связи по вопросам сервиса.</small>
+                    <small class="hint">На этот адрес придёт ссылка для подтверждения регистрации. Также используется для уведомлений.</small>
                 </div>
 
                 <div class="form-group reg-map-group">
@@ -250,6 +251,38 @@
 
                 <div class="auth-footer">
                     <p class="auth-footer-cta">Уже есть аккаунт? <a href="#" onclick="switchForm('login')">Войти</a></p>
+                    <p class="auth-license">© 2024–2026 Карта оптической сети</p>
+                </div>
+            </form>
+
+            <!-- Повторная отправка письма подтверждения -->
+            <form id="resendVerifyForm" class="auth-form">
+                <h2>Подтверждение e-mail</h2>
+                <p class="hint">Укажите e-mail из регистрации или имя пользователя — мы отправим новую ссылку для подтверждения. Проверьте также папку «Спам».</p>
+
+                <div class="form-group">
+                    <label for="resendVerifyUsernameOrEmail">Имя пользователя или e-mail</label>
+                    <div class="input-wrapper">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                            <polyline points="22,6 12,13 2,6"></polyline>
+                        </svg>
+                        <input type="text" id="resendVerifyUsernameOrEmail" placeholder="Логин или name@company.ru" required autocomplete="username">
+                    </div>
+                </div>
+
+                <div class="auth-form-actions">
+                    <button type="submit" class="btn-primary">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                            <polyline points="22,6 12,13 2,6"></polyline>
+                        </svg>
+                        Отправить письмо ещё раз
+                    </button>
+                    <button type="button" class="btn-secondary auth-form-back" onclick="switchForm('login')">Назад к входу</button>
+                </div>
+
+                <div class="auth-footer">
                     <p class="auth-license">© 2024–2026 Карта оптической сети</p>
                 </div>
             </form>

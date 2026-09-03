@@ -135,7 +135,12 @@ function loginUser(username, password, rememberMe) {
                 organizationName: body.organizationName || ''
             };
         }
-        return { success: false, error: body.error || 'Ошибка входа', status: res.status };
+        return {
+            success: false,
+            error: body.error || 'Ошибка входа',
+            status: res.status,
+            code: body.code || ''
+        };
     }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
 }
 
@@ -371,9 +376,61 @@ function registerUser(username, password, fullName, organizationName, contactEma
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
-    }).then(function(r) { return r.json(); }).then(function(res) {
-        if (!res.success) return { success: false, error: res.error || 'Ошибка' };
-        return { success: true, pending: res.pending, organizationId: res.organizationId };
+    }).then(function(r) { return r.json().then(function(res) { return { status: r.status, body: res || {} }; }); })
+    .then(function(res) {
+        var body = res.body || {};
+        if (!body.success) return { success: false, error: body.error || 'Ошибка регистрации', status: res.status };
+        return {
+            success: true,
+            pending: body.pending,
+            organizationId: body.organizationId,
+            needsVerification: true,
+            sent: !!body.sent,
+            emailHint: body.emailHint || '',
+            message: body.message || ''
+        };
+    }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
+}
+
+function verifyEmailToken(token) {
+    if (!getApiBase()) return Promise.resolve({ success: false, error: 'Сервер недоступен' });
+    if (!token) return Promise.resolve({ success: false, error: 'Недействительная ссылка подтверждения' });
+    return fetch(getApiBase() + '/api/auth/verify-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: token })
+    }).then(function(r) { return r.json().then(function(body) { return { status: r.status, body: body }; }); })
+    .then(function(res) {
+        var body = res.body || {};
+        if (body.success) {
+            return { success: true, username: body.username || '', message: body.message || 'E-mail подтверждён' };
+        }
+        return { success: false, error: body.error || 'Не удалось подтвердить e-mail', status: res.status };
+    }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
+}
+
+function resendVerificationEmail(usernameOrEmail) {
+    if (!getApiBase()) {
+        return Promise.resolve({ success: false, error: 'Запустите сервер: npm run api, затем откройте http://localhost:3000' });
+    }
+    var input = (usernameOrEmail && String(usernameOrEmail).trim()) || '';
+    if (!input) return Promise.resolve({ success: false, error: 'Укажите имя пользователя или e-mail' });
+    return fetch(getApiBase() + '/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usernameOrEmail: input })
+    }).then(function(r) { return r.json().then(function(body) { return { status: r.status, body: body }; }); })
+    .then(function(res) {
+        var body = res.body || {};
+        if (body.success) {
+            return {
+                success: true,
+                sent: !!body.sent,
+                emailHint: body.emailHint || '',
+                message: body.message || 'Письмо отправлено'
+            };
+        }
+        return { success: false, error: body.error || 'Ошибка запроса', status: res.status };
     }).catch(function() { return { success: false, error: 'Сервер недоступен' }; });
 }
 
@@ -680,7 +737,7 @@ function initInactivityLogoutWatcher() {
 }
 
 function hideAllAuthForms() {
-    ['loginForm', 'registerForm', 'totpForm', 'forgotPasswordForm', 'resetPasswordForm'].forEach(function(id) {
+    ['loginForm', 'registerForm', 'totpForm', 'forgotPasswordForm', 'resetPasswordForm', 'resendVerifyForm'].forEach(function(id) {
         var el = document.getElementById(id);
         if (el) el.classList.remove('active');
     });
@@ -691,6 +748,7 @@ function switchForm(formType) {
     const registerForm = document.getElementById('registerForm');
     const forgotForm = document.getElementById('forgotPasswordForm');
     const resetForm = document.getElementById('resetPasswordForm');
+    const resendForm = document.getElementById('resendVerifyForm');
     const message = document.getElementById('authMessage');
     const authContainer = document.querySelector('.auth-container');
     
@@ -711,6 +769,10 @@ function switchForm(formType) {
         destroyRegisterMapPicker();
     } else if (formType === 'reset') {
         if (resetForm) resetForm.classList.add('active');
+        if (authContainer) authContainer.classList.remove('auth-register-active');
+        destroyRegisterMapPicker();
+    } else if (formType === 'resend') {
+        if (resendForm) resendForm.classList.add('active');
         if (authContainer) authContainer.classList.remove('auth-register-active');
         destroyRegisterMapPicker();
     } else {
@@ -737,7 +799,10 @@ document.addEventListener('DOMContentLoaded', function() {
     initInactivityLogoutWatcher();
 
     if (!isAuthPage && isAuthenticated()) {
-        initSessionWatcher();
+        if (!(window.VolsmapEmbed && VolsmapEmbed.isEmbed && VolsmapEmbed.isEmbed()) &&
+            !(getStoredSession() && getStoredSession().embed)) {
+            initSessionWatcher();
+        }
     }
 
     if (isAuthPage) {
@@ -763,7 +828,8 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
     }
 
-    // Открыть форму регистрации по ссылке с лендинга (?register=1) или сброс пароля (?reset=...)
+    // Открыть форму регистрации (?register=1), сброс (?reset=...) или подтверждение e-mail (?verify=...)
+    var activeVerifyToken = null;
     if (isAuthPage) {
         try {
             var search = window.location.search.replace(/^\?/, '').split('&').reduce(function(acc, part) {
@@ -772,7 +838,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 acc[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || '');
                 return acc;
             }, {});
-            if (search.reset) {
+            if (search.verify) {
+                activeVerifyToken = String(search.verify).trim();
+            } else if (search.reset) {
                 activeResetToken = String(search.reset).trim();
                 var tokenInput = document.getElementById('resetPasswordToken');
                 if (tokenInput) tokenInput.value = activeResetToken;
@@ -791,6 +859,26 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     loadAuthPublicConfig().then(function() {
+        if (activeVerifyToken) {
+            switchForm('login');
+            showMessage('Подтверждаем e-mail…', 'success');
+            verifyEmailToken(activeVerifyToken).then(function(result) {
+                if (window.history && window.history.replaceState) {
+                    window.history.replaceState({}, '', 'auth.html');
+                }
+                if (result.success) {
+                    showMessage(result.message || 'E-mail подтверждён. Теперь вы можете войти.', 'success');
+                    if (result.username) {
+                        var loginUserInput = document.getElementById('loginUsername');
+                        if (loginUserInput && !loginUserInput.value) loginUserInput.value = result.username;
+                    }
+                } else {
+                    showMessage(result.error || 'Не удалось подтвердить e-mail', 'error');
+                    switchForm('resend');
+                }
+            });
+            return;
+        }
         if (activeResetToken) {
             validateResetToken(activeResetToken).then(function(result) {
                 if (result.valid) {
@@ -876,6 +964,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     showMessage('', '');
                 } else {
                     showMessage(result.error, 'error');
+                    if (result.code === 'email_not_verified') {
+                        var resendInput = document.getElementById('resendVerifyUsernameOrEmail');
+                        if (resendInput) resendInput.value = username;
+                        setTimeout(function() { switchForm('resend'); showMessage(result.error, 'error'); }, 1800);
+                    }
                 }
             });
         });
@@ -895,14 +988,42 @@ document.addEventListener('DOMContentLoaded', function() {
             var regChain = registerUser(username, password, fullName, organizationName, contactEmail, mapStart);
             Promise.resolve(regChain).then(function(result) {
                 if (result.success) {
-                    if (result.organizationId) {
-                        showMessage('Организация создана. Вы можете войти.', 'success');
-                    } else {
-                        showMessage('Заявка на регистрацию отправлена! Ожидайте одобрения администратором.', 'success');
-                    }
-                    setTimeout(function() { switchForm('login'); }, 2500);
+                    var verifyMsg = result.message || ('Проверьте почту' + (result.emailHint ? ' (' + result.emailHint + ')' : '') + ' и подтвердите e-mail. Без подтверждения войти нельзя.');
+                    showMessage(verifyMsg, 'success');
+                    var resendField = document.getElementById('resendVerifyUsernameOrEmail');
+                    if (resendField) resendField.value = contactEmail || username;
+                    setTimeout(function() {
+                        switchForm('resend');
+                        showMessage(verifyMsg, 'success');
+                    }, 2200);
                 } else {
                     showMessage(result.error, 'error');
+                }
+            });
+        });
+    }
+
+    var resendVerifyForm = document.getElementById('resendVerifyForm');
+    if (resendVerifyForm) {
+        resendVerifyForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var input = document.getElementById('resendVerifyUsernameOrEmail').value.trim();
+            var submitBtn = resendVerifyForm.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.setAttribute('aria-busy', 'true');
+            }
+            showMessage('Отправка…', 'success');
+            Promise.resolve(resendVerificationEmail(input)).then(function(result) {
+                if (result.success) {
+                    showMessage(result.message || 'Если аккаунт найден, письмо отправлено.', 'success');
+                } else {
+                    showMessage(result.error || 'Не удалось отправить письмо', 'error');
+                }
+            }).finally(function() {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.removeAttribute('aria-busy');
                 }
             });
         });

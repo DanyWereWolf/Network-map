@@ -113,6 +113,12 @@ function createObject(type, name, coords, options = {}) {
         placemarkProperties.streamAutoplay = options.streamAutoplay !== false;
         placemarkProperties.streamMuted = options.streamMuted !== false;
         if (options.snapshotPhoto) placemarkProperties.snapshotPhoto = options.snapshotPhoto;
+        placemarkProperties.showCoverage = false;
+        placemarkProperties.coverageShape = 'circle';
+        placemarkProperties.coverageRadiusM = 50;
+        placemarkProperties.coverageLengthM = 50;
+        placemarkProperties.coverageAzimuth = 0;
+        placemarkProperties.coverageAngle = 60;
     }
     if (type === 'mediaConverter') {
         if (options.manufacturer) placemarkProperties.manufacturer = options.manufacturer;

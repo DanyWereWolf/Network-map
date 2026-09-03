@@ -86,7 +86,8 @@ function emptyStoreSkeleton() {
         visitLogs: [],
         deviceTokens: [],
         supportThreads: [],
-        passwordResetTokens: []
+        passwordResetTokens: [],
+        emailVerificationTokens: []
     };
 }
 
@@ -105,6 +106,7 @@ function normalizeStoreShape(s) {
     if (!Array.isArray(s.visitLogs)) s.visitLogs = [];
     if (!Array.isArray(s.supportThreads)) s.supportThreads = [];
     if (!Array.isArray(s.passwordResetTokens)) s.passwordResetTokens = [];
+    if (!Array.isArray(s.emailVerificationTokens)) s.emailVerificationTokens = [];
     if (!Array.isArray(s.mapData)) s.mapData = [];
     if (!Array.isArray(s.users)) s.users = [];
     if (!Array.isArray(s.history)) s.history = [];
@@ -1128,6 +1130,13 @@ function updateOrganization(orgId, updates) {
     if (updates.twoFactorSecret !== undefined) {
         s.organizations[idx].twoFactorSecret = updates.twoFactorSecret ? String(updates.twoFactorSecret) : null;
     }
+    if (updates.embedEnabled !== undefined) s.organizations[idx].embedEnabled = !!updates.embedEnabled;
+    if (updates.embedToken !== undefined) {
+        s.organizations[idx].embedToken = updates.embedToken ? String(updates.embedToken) : null;
+    }
+    if (updates.embedCreatedAt !== undefined) {
+        s.organizations[idx].embedCreatedAt = updates.embedCreatedAt ? String(updates.embedCreatedAt) : null;
+    }
     saveStore();
     return true;
 }
@@ -1876,6 +1885,76 @@ function deletePasswordResetToken(token) {
     if (s.passwordResetTokens.length !== before) saveStore();
 }
 
+function purgeExpiredEmailVerificationTokens() {
+    const s = loadStore();
+    if (!Array.isArray(s.emailVerificationTokens)) {
+        s.emailVerificationTokens = [];
+        return;
+    }
+    const now = Date.now();
+    const filtered = s.emailVerificationTokens.filter(function(t) {
+        if (!t || !t.expiresAt) return false;
+        const exp = new Date(t.expiresAt).getTime();
+        return !isNaN(exp) && exp > now;
+    });
+    if (filtered.length !== s.emailVerificationTokens.length) {
+        s.emailVerificationTokens = filtered;
+        saveStore();
+    }
+}
+
+function addEmailVerificationToken(entry) {
+    const s = loadStore();
+    if (!Array.isArray(s.emailVerificationTokens)) s.emailVerificationTokens = [];
+    purgeExpiredEmailVerificationTokens();
+    s.emailVerificationTokens = s.emailVerificationTokens.filter(function(t) {
+        return !t || String(t.userId) !== String(entry.userId);
+    });
+    s.emailVerificationTokens.push({
+        token: String(entry.token),
+        userId: String(entry.userId),
+        expiresAt: String(entry.expiresAt)
+    });
+    saveStore();
+}
+
+function getEmailVerificationToken(token) {
+    purgeExpiredEmailVerificationTokens();
+    const s = loadStore();
+    if (!Array.isArray(s.emailVerificationTokens)) return null;
+    const now = Date.now();
+    const item = s.emailVerificationTokens.find(function(t) {
+        return t && t.token === String(token);
+    });
+    if (!item) return null;
+    const exp = new Date(item.expiresAt).getTime();
+    if (isNaN(exp) || exp <= now) {
+        deleteEmailVerificationToken(token);
+        return null;
+    }
+    return { token: item.token, userId: item.userId, expiresAt: item.expiresAt };
+}
+
+function deleteEmailVerificationToken(token) {
+    const s = loadStore();
+    if (!Array.isArray(s.emailVerificationTokens)) return;
+    const before = s.emailVerificationTokens.length;
+    s.emailVerificationTokens = s.emailVerificationTokens.filter(function(t) {
+        return !t || t.token !== String(token);
+    });
+    if (s.emailVerificationTokens.length !== before) saveStore();
+}
+
+function deleteEmailVerificationTokensForUser(userId) {
+    const s = loadStore();
+    if (!Array.isArray(s.emailVerificationTokens)) return;
+    const before = s.emailVerificationTokens.length;
+    s.emailVerificationTokens = s.emailVerificationTokens.filter(function(t) {
+        return !t || String(t.userId) !== String(userId);
+    });
+    if (s.emailVerificationTokens.length !== before) saveStore();
+}
+
 function addVisitLog(entry) {
     const s = loadStore();
     if (!Array.isArray(s.visitLogs)) s.visitLogs = [];
@@ -2430,6 +2509,11 @@ module.exports = {
     addPasswordResetToken,
     getPasswordResetToken,
     deletePasswordResetToken,
+    purgeExpiredEmailVerificationTokens,
+    addEmailVerificationToken,
+    getEmailVerificationToken,
+    deleteEmailVerificationToken,
+    deleteEmailVerificationTokensForUser,
     getVisitLogs,
     getSupportThreads,
     findSupportThreadById,

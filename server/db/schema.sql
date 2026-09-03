@@ -19,6 +19,9 @@ CREATE TABLE IF NOT EXISTS organizations (
   contact_email VARCHAR(255) NULL,
   two_factor_enabled TINYINT(1) NOT NULL DEFAULT 0,
   two_factor_secret VARCHAR(255) NULL,
+  embed_enabled TINYINT(1) NOT NULL DEFAULT 0,
+  embed_token VARCHAR(128) NULL,
+  embed_created_at DATETIME(3) NULL,
   created_at DATETIME(3) NOT NULL,
   INDEX idx_orgs_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -31,6 +34,7 @@ CREATE TABLE IF NOT EXISTS users (
   role VARCHAR(32) NOT NULL DEFAULT 'user',
   status VARCHAR(32) NOT NULL DEFAULT 'pending',
   email VARCHAR(255) NULL,
+  email_verified TINYINT(1) NOT NULL DEFAULT 1,
   organization_id VARCHAR(64) NULL,
   avatar_updated_at DATETIME(3) NULL,
   must_change_password TINYINT(1) NOT NULL DEFAULT 0,
@@ -164,6 +168,14 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
   expires_at DATETIME(3) NOT NULL,
   payload_json JSON NULL,
   INDEX idx_prt_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS email_verification_tokens (
+  token VARCHAR(128) PRIMARY KEY,
+  user_id VARCHAR(64) NOT NULL,
+  expires_at DATETIME(3) NOT NULL,
+  payload_json JSON NULL,
+  INDEX idx_evt_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Temporary full-map blob per org (cutover safety); also used as cache/snapshot

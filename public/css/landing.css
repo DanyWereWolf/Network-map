@@ -954,7 +954,7 @@ section[id] {
 }
 .trust-strip {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 14px;
     margin: 0 0 36px;
     padding: 18px 20px;

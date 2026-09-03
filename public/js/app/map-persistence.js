@@ -81,6 +81,7 @@ function serializeMapItemFromObject(obj) {
                 strokeColor: props.strokeColor || MapRegions.DEFAULT_STROKE,
                 fillOpacity: props.fillOpacity != null ? props.fillOpacity : MapRegions.DEFAULT_FILL_OPACITY,
                 regionVisible: props.regionVisible !== false,
+                regionFillVisible: props.regionFillVisible !== false,
                 uniqueId: props.uniqueId,
                 revision: revision
             };
@@ -183,6 +184,18 @@ function serializeMapItemFromObject(obj) {
             if (props.streamAutoplay === false) result.streamAutoplay = false;
             if (props.streamMuted === false) result.streamMuted = false;
             if (props.snapshotPhoto) result.snapshotPhoto = props.snapshotPhoto;
+            result.showCoverage = !!props.showCoverage;
+            result.coverageShape = props.coverageShape || 'circle';
+            var camRadiusM = parseFloat(props.coverageRadiusM);
+            if (isNaN(camRadiusM) || camRadiusM <= 0) camRadiusM = 50;
+            if (camRadiusM > 200) camRadiusM = 200;
+            var camLengthM = parseFloat(props.coverageLengthM);
+            if (isNaN(camLengthM) || camLengthM <= 0) camLengthM = camRadiusM;
+            if (camLengthM > 200) camLengthM = 200;
+            result.coverageRadiusM = camRadiusM;
+            result.coverageLengthM = camLengthM;
+            result.coverageAzimuth = props.coverageAzimuth != null ? props.coverageAzimuth : 0;
+            result.coverageAngle = props.coverageAngle != null ? props.coverageAngle : 60;
         }
         if (props.type === 'mediaConverter') {
             if (props.incomingFiber) result.incomingFiber = props.incomingFiber;
@@ -2421,6 +2434,7 @@ function populateRegionFromSerializedData(regionObj, data) {
     if (data.strokeColor) regionObj.properties.set('strokeColor', data.strokeColor);
     if (data.fillOpacity != null) regionObj.properties.set('fillOpacity', data.fillOpacity);
     if (data.regionVisible != null) regionObj.properties.set('regionVisible', data.regionVisible !== false);
+    if (data.regionFillVisible != null) regionObj.properties.set('regionFillVisible', data.regionFillVisible !== false);
     if (data.revision != null) setMapRevision(regionObj, data.revision);
     if (window.ObjectGallery) ObjectGallery.applyPhotosFromData(regionObj, data);
     else if (Array.isArray(data.photos)) regionObj.properties.set('photos', data.photos);
@@ -2580,6 +2594,18 @@ function populatePlacemarkFromSerializedData(placemark, data) {
                 placemark.properties.set('snapshotPhoto', data.snapshotPhoto);
             }
         }
+        placemark.properties.set('showCoverage', !!data.showCoverage);
+        placemark.properties.set('coverageShape', data.coverageShape || 'circle');
+        var loadCamRadiusM = parseFloat(data.coverageRadiusM);
+        if (isNaN(loadCamRadiusM) || loadCamRadiusM <= 0) loadCamRadiusM = 50;
+        if (loadCamRadiusM > 200) loadCamRadiusM = 200;
+        var loadCamLengthM = parseFloat(data.coverageLengthM);
+        if (isNaN(loadCamLengthM) || loadCamLengthM <= 0) loadCamLengthM = loadCamRadiusM;
+        if (loadCamLengthM > 200) loadCamLengthM = 200;
+        placemark.properties.set('coverageRadiusM', loadCamRadiusM);
+        placemark.properties.set('coverageLengthM', loadCamLengthM);
+        placemark.properties.set('coverageAzimuth', data.coverageAzimuth != null ? data.coverageAzimuth : 0);
+        placemark.properties.set('coverageAngle', data.coverageAngle != null ? data.coverageAngle : 60);
     }
     if (type === 'mediaConverter') {
         placemark.properties.set('incomingFiber', data.incomingFiber || null);

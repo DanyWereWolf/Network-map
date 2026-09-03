@@ -543,6 +543,9 @@ function applyLowZoomMapUpdate() {
     if (typeof applyRadioBridgeCoverageVisibility === 'function') {
         applyRadioBridgeCoverageVisibility();
     }
+    if (typeof applyCameraCoverageVisibility === 'function') {
+        applyCameraCoverageVisibility();
+    }
 }
 
 function regionZoomLabelRebuildNeeded(oldZoom, newZoom) {
@@ -618,6 +621,9 @@ function applyMapViewportUpdate() {
     if (typeof applyRadioBridgeCoverageVisibility === 'function') {
         applyRadioBridgeCoverageVisibility();
     }
+    if (typeof applyCameraCoverageVisibility === 'function') {
+        applyCameraCoverageVisibility();
+    }
 }
 
 function isMapFilterObjVisible(obj, filter, hiddenRegions) {
@@ -678,6 +684,9 @@ function applyMapFilterForObject(obj) {
     } catch (e) {}
     if (type === 'radioBridge' && typeof applyRadioBridgeCoverageVisibility === 'function') {
         applyRadioBridgeCoverageVisibility(obj);
+    }
+    if (type === 'camera' && typeof applyCameraCoverageVisibility === 'function') {
+        applyCameraCoverageVisibility(obj);
     }
 }
 
@@ -823,6 +832,9 @@ function applyMapFilter() {
     }
     if (typeof applyRadioBridgeCoverageVisibility === 'function') {
         applyRadioBridgeCoverageVisibility();
+    }
+    if (typeof applyCameraCoverageVisibility === 'function') {
+        applyCameraCoverageVisibility();
     }
 }
 

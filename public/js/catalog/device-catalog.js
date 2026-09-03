@@ -912,6 +912,13 @@ function expandDeviceCatalogTabGroupForTab(tab) {
     if (!activeBtn) return;
     var group = activeBtn.closest('.device-catalog-tab-group');
     if (!group) return;
+    var root = group.closest('.device-catalog-tabs') || document;
+    root.querySelectorAll('.device-catalog-tab-group.is-open').forEach(function(g) {
+        if (g === group) return;
+        g.classList.remove('is-open');
+        var otherHdr = g.querySelector('.device-catalog-tab-group-header');
+        if (otherHdr) otherHdr.setAttribute('aria-expanded', 'false');
+    });
     group.classList.add('is-open');
     var hdr = group.querySelector('.device-catalog-tab-group-header');
     if (hdr) hdr.setAttribute('aria-expanded', 'true');
@@ -3791,8 +3798,18 @@ function setupDeviceCatalogHandlers() {
                 e.preventDefault();
                 var group = groupHdr.closest('.device-catalog-tab-group');
                 if (!group) return;
-                var open = group.classList.toggle('is-open');
-                groupHdr.setAttribute('aria-expanded', open ? 'true' : 'false');
+                var willOpen = !group.classList.contains('is-open');
+                if (willOpen) {
+                    var tabsRoot = group.closest('.device-catalog-tabs') || catModal;
+                    tabsRoot.querySelectorAll('.device-catalog-tab-group.is-open').forEach(function(g) {
+                        if (g === group) return;
+                        g.classList.remove('is-open');
+                        var otherHdr = g.querySelector('.device-catalog-tab-group-header');
+                        if (otherHdr) otherHdr.setAttribute('aria-expanded', 'false');
+                    });
+                }
+                group.classList.toggle('is-open', willOpen);
+                groupHdr.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
                 return;
             }
             var b = e.target.closest('.device-catalog-tab');

@@ -803,6 +803,10 @@ function buildCameraCardContent(obj, isEditMode, name) {
         }
     }
 
+    if (typeof buildCameraCoverageSectionHtml === 'function') {
+        html += buildCameraCoverageSectionHtml(obj, isEditMode);
+    }
+
     html += buildCameraTraceSectionHtml(obj);
     html += '</div>';
     return html;
@@ -5278,6 +5282,7 @@ function setupModalEventListeners() {
 
     setupFiberConnectionHandlers();
     if (typeof setupRadioBridgeCardHandlers === 'function') setupRadioBridgeCardHandlers();
+    if (typeof setupCameraCoverageCardHandlers === 'function') setupCameraCoverageCardHandlers();
 
     document.querySelectorAll('.btn-trace-from-node').forEach(btn => {
         btn.addEventListener('click', function(e) {

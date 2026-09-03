@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Apply server/db/schema.sql and record in schema_migrations.
+ * Apply server/db/schema.sql and incremental migrations; record in schema_migrations.
  */
 const fs = require('fs');
 const path = require('path');
@@ -19,20 +19,84 @@ async function ensureMigrationsTable() {
     `);
 }
 
-async function runMigrations() {
-    await getPool();
-    await ensureMigrationsTable();
-    const [rows] = await query('SELECT id FROM schema_migrations WHERE id = ?', [MIGRATION_ID]);
-    if (rows && rows.length) {
-        console.log('[MySQL] Migrations up to date (' + MIGRATION_ID + ')');
-        return { applied: false, id: MIGRATION_ID };
-    }
+async function hasMigration(id) {
+    const [rows] = await query('SELECT id FROM schema_migrations WHERE id = ?', [id]);
+    return !!(rows && rows.length);
+}
+
+async function markMigration(id) {
+    await query('INSERT IGNORE INTO schema_migrations (id) VALUES (?)', [id]);
+}
+
+async function applyInitialSchema() {
     const sql = fs.readFileSync(SCHEMA_PATH, 'utf8');
     console.log('[MySQL] Applying schema to', getMysqlConfig().database, '…');
     await query(sql);
-    await query('INSERT IGNORE INTO schema_migrations (id) VALUES (?)', [MIGRATION_ID]);
-    console.log('[MySQL] Migration applied:', MIGRATION_ID);
-    return { applied: true, id: MIGRATION_ID };
+}
+
+async function columnExists(table, column) {
+    const [rows] = await query(
+        `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+        [table, column]
+    );
+    return !!(rows && rows.length);
+}
+
+async function applyEmailVerificationMigration() {
+    if (!(await columnExists('users', 'email_verified'))) {
+        await query('ALTER TABLE users ADD COLUMN email_verified TINYINT(1) NOT NULL DEFAULT 1 AFTER email');
+    }
+    await query(`
+        CREATE TABLE IF NOT EXISTS email_verification_tokens (
+          token VARCHAR(128) PRIMARY KEY,
+          user_id VARCHAR(64) NOT NULL,
+          expires_at DATETIME(3) NOT NULL,
+          payload_json JSON NULL,
+          INDEX idx_evt_user (user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+}
+
+async function runMigrations() {
+    await getPool();
+    await ensureMigrationsTable();
+    var applied = [];
+
+    if (!(await hasMigration(MIGRATION_ID))) {
+        await applyInitialSchema();
+        await markMigration(MIGRATION_ID);
+        applied.push(MIGRATION_ID);
+        console.log('[MySQL] Migration applied:', MIGRATION_ID);
+    } else {
+        console.log('[MySQL] Migrations up to date (' + MIGRATION_ID + ')');
+    }
+
+    var emailMig = '002_email_verification';
+    if (!(await hasMigration(emailMig))) {
+        await applyEmailVerificationMigration();
+        await markMigration(emailMig);
+        applied.push(emailMig);
+        console.log('[MySQL] Migration applied:', emailMig);
+    }
+
+    var embedMig = '003_org_embed';
+    if (!(await hasMigration(embedMig))) {
+        if (!(await columnExists('organizations', 'embed_enabled'))) {
+            await query('ALTER TABLE organizations ADD COLUMN embed_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER two_factor_secret');
+        }
+        if (!(await columnExists('organizations', 'embed_token'))) {
+            await query('ALTER TABLE organizations ADD COLUMN embed_token VARCHAR(128) NULL AFTER embed_enabled');
+        }
+        if (!(await columnExists('organizations', 'embed_created_at'))) {
+            await query('ALTER TABLE organizations ADD COLUMN embed_created_at DATETIME(3) NULL AFTER embed_token');
+        }
+        await markMigration(embedMig);
+        applied.push(embedMig);
+        console.log('[MySQL] Migration applied:', embedMig);
+    }
+
+    return { applied: applied.length > 0, ids: applied.length ? applied : [MIGRATION_ID, emailMig, embedMig] };
 }
 
 if (require.main === module) {

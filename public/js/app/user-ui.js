@@ -596,6 +596,7 @@ function openUsersModal() {
     renderUsersList();
     loadOrgDisplayPanel();
     loadOrgSecurityPanel();
+    loadOrgEmbedPanel();
 }
 
 var orgSecurityPendingSecret = '';
@@ -608,8 +609,11 @@ function updateOrgAdminSettingsVisibility() {
     var wrap = document.getElementById('orgAdminSettings');
     var display = document.getElementById('orgDisplaySection');
     var security = document.getElementById('orgSecuritySection');
+    var embed = document.getElementById('orgEmbedSection');
     if (!wrap) return;
-    var anyVisible = (display && display.style.display !== 'none') || (security && security.style.display !== 'none');
+    var anyVisible = (display && display.style.display !== 'none') ||
+        (security && security.style.display !== 'none') ||
+        (embed && embed.style.display !== 'none');
     wrap.style.display = anyVisible ? 'flex' : 'none';
 }
 
@@ -781,6 +785,101 @@ function confirmDisableOrg2fa() {
     }).catch(function(e) {
         if (typeof showError === 'function') showError(e.message || 'Не удалось отключить 2FA');
     });
+}
+
+function loadOrgEmbedPanel() {
+    var section = document.getElementById('orgEmbedSection');
+    if (!section) return;
+    if (!isOrgMapAdmin() || !getApiBase()) {
+        section.style.display = 'none';
+        updateOrgAdminSettingsVisibility();
+        return;
+    }
+    section.style.display = 'block';
+    updateOrgAdminSettingsVisibility();
+    var statusEl = document.getElementById('orgEmbedStatus');
+    if (statusEl) statusEl.textContent = 'Загрузка…';
+    fetch(getApiBase() + '/api/organizations/me/embed', {
+        headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+    }).then(function(r) { return r.json(); })
+    .then(function(body) {
+        if (body.error) throw new Error(body.error);
+        renderOrgEmbedPanel(body);
+    }).catch(function(e) {
+        if (statusEl) statusEl.textContent = e.message || 'Не удалось загрузить настройки';
+    });
+}
+
+function renderOrgEmbedPanel(body) {
+    body = body || {};
+    var enabled = !!body.enabled;
+    var statusEl = document.getElementById('orgEmbedStatus');
+    var linkWrap = document.getElementById('orgEmbedLinkWrap');
+    var urlInput = document.getElementById('orgEmbedUrl');
+    var enableBtn = document.getElementById('orgEmbedEnableBtn');
+    var rotateBtn = document.getElementById('orgEmbedRotateBtn');
+    var disableBtn = document.getElementById('orgEmbedDisableBtn');
+    if (statusEl) {
+        statusEl.textContent = enabled
+            ? 'Ссылка активна. Вставьте URL в виджет URL дашборда Zabbix.'
+            : 'Ссылка не создана. После создания карта откроется во встраивании без входа.';
+        statusEl.className = 'org-security-status' + (enabled ? ' is-on' : '');
+    }
+    if (linkWrap) linkWrap.style.display = enabled ? 'block' : 'none';
+    if (urlInput) urlInput.value = body.embedUrl || '';
+    if (enableBtn) enableBtn.style.display = enabled ? 'none' : 'inline-flex';
+    if (rotateBtn) rotateBtn.style.display = enabled ? 'inline-flex' : 'none';
+    if (disableBtn) disableBtn.style.display = enabled ? 'inline-flex' : 'none';
+}
+
+function enableOrgEmbed(rotate) {
+    if (!getApiBase()) return;
+    fetch(getApiBase() + '/api/organizations/me/embed', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + getAuthToken(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rotate: !!rotate })
+    }).then(function(r) { return r.json(); })
+    .then(function(body) {
+        if (body.error) throw new Error(body.error);
+        renderOrgEmbedPanel(body);
+        if (typeof showSuccess === 'function') {
+            showSuccess(rotate ? 'Токен обновлён — обновите URL в Zabbix' : 'Ссылка для встраивания создана');
+        }
+    }).catch(function(e) {
+        if (typeof showError === 'function') showError(e.message || 'Не удалось создать ссылку');
+    });
+}
+
+function disableOrgEmbed() {
+    if (!getApiBase()) return;
+    var ask = window.confirm('Отключить ссылку встраивания? Виджет в Zabbix перестанет открывать карту.');
+    if (!ask) return;
+    fetch(getApiBase() + '/api/organizations/me/embed', {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+    }).then(function(r) { return r.json(); })
+    .then(function(body) {
+        if (body.error) throw new Error(body.error);
+        renderOrgEmbedPanel({ enabled: false });
+        if (typeof showSuccess === 'function') showSuccess('Встраивание отключено');
+    }).catch(function(e) {
+        if (typeof showError === 'function') showError(e.message || 'Не удалось отключить');
+    });
+}
+
+function copyOrgEmbedUrl() {
+    var urlInput = document.getElementById('orgEmbedUrl');
+    var url = urlInput ? String(urlInput.value || '').trim() : '';
+    if (!url) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(function() {
+            if (typeof showSuccess === 'function') showSuccess('URL скопирован');
+        }).catch(function() {});
+    } else {
+        urlInput.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        if (typeof showSuccess === 'function') showSuccess('URL скопирован');
+    }
 }
 
 function closeUsersModal() {
@@ -1396,6 +1495,15 @@ function setupUsersModalHandlers() {
             }
         });
     }
+
+    var orgEmbedEnableBtn = document.getElementById('orgEmbedEnableBtn');
+    if (orgEmbedEnableBtn) orgEmbedEnableBtn.addEventListener('click', function() { enableOrgEmbed(false); });
+    var orgEmbedRotateBtn = document.getElementById('orgEmbedRotateBtn');
+    if (orgEmbedRotateBtn) orgEmbedRotateBtn.addEventListener('click', function() { enableOrgEmbed(true); });
+    var orgEmbedDisableBtn = document.getElementById('orgEmbedDisableBtn');
+    if (orgEmbedDisableBtn) orgEmbedDisableBtn.addEventListener('click', disableOrgEmbed);
+    var orgEmbedCopyBtn = document.getElementById('orgEmbedCopyBtn');
+    if (orgEmbedCopyBtn) orgEmbedCopyBtn.addEventListener('click', copyOrgEmbedUrl);
 
     var closeOrganizationsBtn = document.querySelector('.close-organizations');
     if (closeOrganizationsBtn) closeOrganizationsBtn.addEventListener('click', closeOrganizationsModal);

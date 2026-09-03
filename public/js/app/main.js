@@ -1,4 +1,17 @@
 document.addEventListener('DOMContentLoaded', function() {
+    var boot = (window.VolsmapEmbed && typeof VolsmapEmbed.bootstrapAuth === 'function')
+        ? VolsmapEmbed.bootstrapAuth()
+        : Promise.resolve(true);
+
+    boot.then(function(ok) {
+        if (ok === false) return;
+        startMapApp();
+    }).catch(function() {
+        startMapApp();
+    });
+});
+
+function startMapApp() {
     bindCableDeleteDelegation();
 
     if (!checkAuth()) return;
@@ -15,8 +28,10 @@ document.addEventListener('DOMContentLoaded', function() {
     startMapLoadSafetyTimeout();
 
     initUserUI();
-    initWelcomeModal();
-    resumeOnboardingTourIfNeeded();
+    if (!(window.VolsmapEmbed && VolsmapEmbed.isEmbed && VolsmapEmbed.isEmbed())) {
+        initWelcomeModal();
+        resumeOnboardingTourIfNeeded();
+    }
     document.addEventListener('keydown', function(e) {
         if (e.key !== 'Escape') return;
         var wm = document.getElementById('welcomeModal');
@@ -29,7 +44,9 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             if (!localStorage.getItem('networkMap_viewModeHintShown')) {
                 localStorage.setItem('networkMap_viewModeHintShown', '1');
-                if (typeof showInfo === 'function') showInfo('Включён режим просмотра. Редактирование карты доступно только администраторам.', 'Режим просмотра');
+                if (!(window.VolsmapEmbed && VolsmapEmbed.isEmbed && VolsmapEmbed.isEmbed()) && typeof showInfo === 'function') {
+                    showInfo('Включён режим просмотра. Редактирование карты доступно только администраторам.', 'Режим просмотра');
+                }
             }
         } catch (e) {}
     }
@@ -59,7 +76,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     whenYmapsReady(init);
     refreshMapLimitsFromServer();
-});
+}
 
 setTimeout(function() {
     updateUIForMode();
