@@ -2190,6 +2190,30 @@
                         <button type="button" id="orgEmbedDisableBtn" class="btn-secondary btn-sm" style="display: none;">Отключить</button>
                     </div>
                 </div>
+
+                <div id="orgZabbixSection" class="org-settings-card org-zabbix-section" style="display: none;">
+                    <h3 class="section-title">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                        </svg>
+                        Мониторинг Zabbix
+                    </h3>
+                    <p class="hint org-settings-hint">Подключение к API Zabbix для подсветки объектов на карте. Связь: поле «Хост Zabbix» у объекта, иначе IP, иначе имя. Нужен API-токен (Users → API tokens).</p>
+                    <div id="orgZabbixStatus" class="org-security-status">Загрузка…</div>
+                    <div class="form-group">
+                        <label for="orgZabbixApiUrl">URL Zabbix</label>
+                        <input type="url" id="orgZabbixApiUrl" class="form-input" placeholder="https://zabbix.example.com" autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label for="orgZabbixApiToken">API-токен</label>
+                        <input type="password" id="orgZabbixApiToken" class="form-input" placeholder="Оставьте пустым, чтобы не менять" autocomplete="new-password">
+                    </div>
+                    <div id="orgZabbixActions" class="org-security-actions">
+                        <button type="button" id="orgZabbixSaveBtn" class="btn-primary btn-sm">Сохранить и проверить</button>
+                        <button type="button" id="orgZabbixTestBtn" class="btn-secondary btn-sm">Только проверить</button>
+                        <button type="button" id="orgZabbixDisableBtn" class="btn-secondary btn-sm" style="display: none;">Отключить</button>
+                    </div>
+                </div>
                 </div>
 
                 <!-- Заявки на регистрацию -->
@@ -3068,6 +3092,7 @@
     <script src="js/app/object-placement.js"></script>
     <script src="js/app/edit-mode.js"></script>
     <script src="js/app/map-init.js"></script>
+    <script src="js/app/zabbix-status.js"></script>
     <script src="js/app/map-clicks.js"></script>
     <script src="js/app/create-object.js"></script>
     <script src="js/app/cable-routing.js"></script>

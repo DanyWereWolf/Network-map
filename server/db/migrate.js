@@ -96,7 +96,26 @@ async function runMigrations() {
         console.log('[MySQL] Migration applied:', embedMig);
     }
 
-    return { applied: applied.length > 0, ids: applied.length ? applied : [MIGRATION_ID, emailMig, embedMig] };
+    var zabbixMig = '004_org_zabbix';
+    if (!(await hasMigration(zabbixMig))) {
+        if (!(await columnExists('organizations', 'zabbix_enabled'))) {
+            await query('ALTER TABLE organizations ADD COLUMN zabbix_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER embed_created_at');
+        }
+        if (!(await columnExists('organizations', 'zabbix_api_url'))) {
+            await query('ALTER TABLE organizations ADD COLUMN zabbix_api_url VARCHAR(512) NULL AFTER zabbix_enabled');
+        }
+        if (!(await columnExists('organizations', 'zabbix_api_token'))) {
+            await query('ALTER TABLE organizations ADD COLUMN zabbix_api_token VARCHAR(512) NULL AFTER zabbix_api_url');
+        }
+        if (!(await columnExists('organizations', 'zabbix_updated_at'))) {
+            await query('ALTER TABLE organizations ADD COLUMN zabbix_updated_at DATETIME(3) NULL AFTER zabbix_api_token');
+        }
+        await markMigration(zabbixMig);
+        applied.push(zabbixMig);
+        console.log('[MySQL] Migration applied:', zabbixMig);
+    }
+
+    return { applied: applied.length > 0, ids: applied.length ? applied : [MIGRATION_ID, emailMig, embedMig, zabbixMig] };
 }
 
 if (require.main === module) {

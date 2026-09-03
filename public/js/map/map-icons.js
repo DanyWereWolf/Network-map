@@ -288,7 +288,28 @@
             default:
                 body = '<circle cx="16" cy="16" r="10" fill="' + COLORS.default + '" stroke="' + sw + '" stroke-width="' + w + '"/>';
         }
-        return selectionRing(variant, fill) + body;
+        return selectionRing(variant, fill) + body + zabbixStatusRing(options.zabbixSeverity);
+    }
+
+    function zabbixSeverityColor(severity) {
+        var s = parseInt(severity, 10);
+        if (s === 1) return '#3b82f6';
+        if (s === 2) return '#eab308';
+        if (s === 3) return '#f97316';
+        if (s === 4) return '#ef4444';
+        if (s === 5) return '#a855f7';
+        return '#22c55e';
+    }
+
+    function zabbixStatusRing(severity) {
+        if (severity == null || severity === '' || isNaN(Number(severity))) return '';
+        var s = Math.max(0, Math.min(5, parseInt(severity, 10) || 0));
+        var c = zabbixSeverityColor(s);
+        var pulse = s >= 5
+            ? '<animate attributeName="stroke-opacity" values="1;0.3;1" dur="1.1s" repeatCount="indefinite"/>'
+            : '';
+        return '<circle cx="16" cy="16" r="15.35" fill="none" stroke="' + c + '" stroke-width="2.5" stroke-opacity="0.95">' +
+            pulse + '</circle>';
     }
 
     function getIconMetrics(type, variant) {

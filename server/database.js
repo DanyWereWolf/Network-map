@@ -1137,6 +1137,16 @@ function updateOrganization(orgId, updates) {
     if (updates.embedCreatedAt !== undefined) {
         s.organizations[idx].embedCreatedAt = updates.embedCreatedAt ? String(updates.embedCreatedAt) : null;
     }
+    if (updates.zabbixEnabled !== undefined) s.organizations[idx].zabbixEnabled = !!updates.zabbixEnabled;
+    if (updates.zabbixApiUrl !== undefined) {
+        s.organizations[idx].zabbixApiUrl = updates.zabbixApiUrl ? String(updates.zabbixApiUrl).trim() : null;
+    }
+    if (updates.zabbixApiToken !== undefined) {
+        s.organizations[idx].zabbixApiToken = updates.zabbixApiToken ? String(updates.zabbixApiToken) : null;
+    }
+    if (updates.zabbixUpdatedAt !== undefined) {
+        s.organizations[idx].zabbixUpdatedAt = updates.zabbixUpdatedAt ? String(updates.zabbixUpdatedAt) : null;
+    }
     saveStore();
     return true;
 }

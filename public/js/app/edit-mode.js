@@ -302,6 +302,10 @@ function buildMapPlacemarkIcon(type, variant, source) {
     if (type === 'camera' && source && source.properties && window.CameraPlayer) {
         opts.cameraOnline = CameraPlayer.isCameraOnline(source);
     }
+    if (source && source.properties && window.ZabbixStatus && typeof ZabbixStatus.getForPlacemark === 'function') {
+        var zx = ZabbixStatus.getForPlacemark(source);
+        if (zx && zx.matched) opts.zabbixSeverity = zx.severity;
+    }
     return MapIcons.buildPlacemarkIcon(type, opts);
 }
 

@@ -1799,6 +1799,12 @@ function buildRadioBridgeCardContent(obj, isEdit, name) {
     if (!isEdit && ipAddress) {
         html += '<div class="radio-bridge-card-comment">IP: ' + escapeHtml(ipAddress) + '</div>';
     }
+    if (!isEdit) {
+        var zxHostRb = (obj.properties.get('zabbixHost') || '').trim();
+        if (zxHostRb && typeof isOrgZabbixMonitoringEnabled === 'function' && isOrgZabbixMonitoringEnabled()) {
+            html += '<div class="radio-bridge-card-comment">Zabbix: ' + escapeHtml(zxHostRb) + '</div>';
+        }
+    }
     if (isEdit) {
         html += '<p class="object-card-hint radio-bridge-card-hero-hint">P2P — связь двух радиомостов по радиолинии. P2MP — базовая станция (AP) и абонентские станции. Порт — медь к коммутатору или оптика до кросса/муфты.</p>';
     }
@@ -1852,6 +1858,7 @@ function buildRadioBridgeCardContent(obj, isEdit, name) {
         html += '<div class="device-combobox" data-catalog="radioBridge" data-type="model" data-value-id="editRadioBridgeModel" data-manufacturer-id="editRadioBridgeManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editRadioBridgeModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
         if (typeof buildEquipmentIpAddressEditFieldHtml === 'function') {
             html += buildEquipmentIpAddressEditFieldHtml('editRadioBridgeIpAddress', ipAddress);
+            html += buildEquipmentZabbixHostEditFieldHtml('editRadioBridgeZabbixHost', (obj.properties.get('zabbixHost') || '').trim());
         }
         html += '<div class="form-group" style="margin-bottom:0;"><label for="editRadioBridgeComment" class="object-card-label">Комментарий</label>';
         html += '<textarea id="editRadioBridgeComment" class="form-input" rows="2" placeholder="Частота, мощность, примечания">' + escapeHtml(comment) + '</textarea></div>';

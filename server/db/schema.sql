@@ -22,6 +22,10 @@ CREATE TABLE IF NOT EXISTS organizations (
   embed_enabled TINYINT(1) NOT NULL DEFAULT 0,
   embed_token VARCHAR(128) NULL,
   embed_created_at DATETIME(3) NULL,
+  zabbix_enabled TINYINT(1) NOT NULL DEFAULT 0,
+  zabbix_api_url VARCHAR(512) NULL,
+  zabbix_api_token VARCHAR(512) NULL,
+  zabbix_updated_at DATETIME(3) NULL,
   created_at DATETIME(3) NOT NULL,
   INDEX idx_orgs_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -54,6 +54,10 @@ async function hydrateStoreFromMysql() {
             embedEnabled: !!o.embed_enabled,
             embedToken: o.embed_token || null,
             embedCreatedAt: o.embed_created_at ? new Date(o.embed_created_at).toISOString() : null,
+            zabbixEnabled: !!o.zabbix_enabled,
+            zabbixApiUrl: o.zabbix_api_url || null,
+            zabbixApiToken: o.zabbix_api_token || null,
+            zabbixUpdatedAt: o.zabbix_updated_at ? new Date(o.zabbix_updated_at).toISOString() : null,
             createdAt: o.created_at ? new Date(o.created_at).toISOString() : new Date().toISOString()
         };
     });
@@ -303,8 +307,9 @@ async function persistStoreToMysql(store, opts) {
                 `INSERT INTO organizations (
                     id, name, map_object_limit_unlocked, custom_map_object_limit, max_concurrent_users,
                     status, contact_email, two_factor_enabled, two_factor_secret,
-                    embed_enabled, embed_token, embed_created_at, created_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    embed_enabled, embed_token, embed_created_at,
+                    zabbix_enabled, zabbix_api_url, zabbix_api_token, zabbix_updated_at, created_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON DUPLICATE KEY UPDATE
                     name=VALUES(name), map_object_limit_unlocked=VALUES(map_object_limit_unlocked),
                     custom_map_object_limit=VALUES(custom_map_object_limit),
@@ -312,7 +317,9 @@ async function persistStoreToMysql(store, opts) {
                     contact_email=VALUES(contact_email), two_factor_enabled=VALUES(two_factor_enabled),
                     two_factor_secret=VALUES(two_factor_secret),
                     embed_enabled=VALUES(embed_enabled), embed_token=VALUES(embed_token),
-                    embed_created_at=VALUES(embed_created_at)`,
+                    embed_created_at=VALUES(embed_created_at),
+                    zabbix_enabled=VALUES(zabbix_enabled), zabbix_api_url=VALUES(zabbix_api_url),
+                    zabbix_api_token=VALUES(zabbix_api_token), zabbix_updated_at=VALUES(zabbix_updated_at)`,
                 [
                     o.id, o.name || 'Организация',
                     o.mapObjectLimitUnlocked ? 1 : 0,
@@ -325,6 +332,10 @@ async function persistStoreToMysql(store, opts) {
                     o.embedEnabled ? 1 : 0,
                     o.embedToken || null,
                     toMysqlDate(o.embedCreatedAt) || null,
+                    o.zabbixEnabled ? 1 : 0,
+                    o.zabbixApiUrl || null,
+                    o.zabbixApiToken || null,
+                    toMysqlDate(o.zabbixUpdatedAt) || null,
                     toMysqlDate(o.createdAt) || toMysqlDate(new Date())
                 ]
             );

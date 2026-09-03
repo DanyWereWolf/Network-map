@@ -34,6 +34,38 @@ function buildEquipmentIpAddressEditFieldHtml(id, value, labelClass) {
         '<input type="text" id="' + escapeHtml(id) + '" class="form-input equipment-ip-input" value="' + escapeHtml(value || '') + '" placeholder="Например: 192.168.1.10" inputmode="decimal" autocomplete="off"></div>';
 }
 
+function buildEquipmentZabbixHostEditFieldHtml(id, value, labelClass) {
+    if (typeof isOrgZabbixMonitoringEnabled === 'function' && !isOrgZabbixMonitoringEnabled()) return '';
+    var lc = labelClass || 'object-card-label';
+    return '<div class="form-group"><label class="' + lc + '" for="' + escapeHtml(id) + '">Хост Zabbix</label>' +
+        '<input type="text" id="' + escapeHtml(id) + '" class="form-input equipment-zabbix-host-input" value="' + escapeHtml(value || '') + '" placeholder="Имя хоста в Zabbix (необязательно)" autocomplete="off"></div>';
+}
+
+function buildEquipmentZabbixHostViewLineHtml(host, className) {
+    if (typeof isOrgZabbixMonitoringEnabled === 'function' && !isOrgZabbixMonitoringEnabled()) return '';
+    var v = (host || '').trim();
+    if (!v) return '';
+    return '<div class="' + (className || 'object-card-meta-line') + '">Zabbix: ' + escapeHtml(v) + '</div>';
+}
+
+function isOrgZabbixMonitoringEnabled() {
+    try {
+        if (window.ZabbixStatus && typeof ZabbixStatus.isEnabled === 'function' && ZabbixStatus.isEnabled()) return true;
+    } catch (e) {}
+    try {
+        if (typeof currentUser !== 'undefined' && currentUser && currentUser.organization && currentUser.organization.zabbixEnabled) {
+            return true;
+        }
+    } catch (e2) {}
+    try {
+        var sess = typeof getStoredSession === 'function' ? getStoredSession()
+            : (typeof AuthSystem !== 'undefined' && AuthSystem.getCurrentSession ? AuthSystem.getCurrentSession() : null);
+        if (sess && sess.organization && sess.organization.zabbixEnabled) return true;
+    } catch (e3) {}
+    return false;
+}
+window.isOrgZabbixMonitoringEnabled = isOrgZabbixMonitoringEnabled;
+
 function buildEquipmentIpAddressViewLineHtml(ip, className) {
     var v = (ip || '').trim();
     if (!v) return '';
@@ -94,9 +126,12 @@ function buildNodeCardContent(obj, isEditMode, name) {
         html += '<option value="network"' + (nodeKind === 'network' ? ' selected' : '') + '>Сеть (зелёный)</option>';
         html += '<option value="aggregation"' + (nodeKind === 'aggregation' ? ' selected' : '') + '>Агрегация (красный)</option>';
         html += '</select></div></div>';
+        html += buildEquipmentZabbixHostEditFieldHtml('editNodeZabbixHost', (obj.properties.get('zabbixHost') || '').trim());
         html += '<div class="form-group" style="margin-top:12px;margin-bottom:0;"><label for="editNodeComment" class="object-card-label">Комментарий</label>';
         html += '<textarea id="editNodeComment" class="form-input" rows="2" placeholder="Необязательно">' + escapeHtml(comment) + '</textarea></div>';
         html += '</section>';
+    } else {
+        html += buildEquipmentZabbixHostViewLineHtml((obj.properties.get('zabbixHost') || '').trim(), 'node-card-comment');
     }
 
     html += '<section class="object-card-section object-card-section--fibers">';
@@ -216,6 +251,10 @@ function buildNodeCardContent(obj, isEditMode, name) {
             html += '</div>';
             html += '<div class="form-group" style="margin-top:10px;margin-bottom:0;"><label class="object-card-label">IP-адрес</label>';
             html += '<input type="text" class="form-input edit-node-switch-ip" data-switch-id="' + uidEsc + '" value="' + escapeHtml(swIp) + '" placeholder="Необязательно" inputmode="decimal" autocomplete="off"></div>';
+            if (typeof isOrgZabbixMonitoringEnabled === 'function' && isOrgZabbixMonitoringEnabled()) {
+                html += '<div class="form-group" style="margin-top:10px;margin-bottom:0;"><label class="object-card-label">Хост Zabbix</label>';
+                html += '<input type="text" class="form-input edit-node-switch-zabbix" data-switch-id="' + uidEsc + '" value="' + escapeHtml((swRow.zabbixHost || '').trim()) + '" placeholder="Необязательно" autocomplete="off"></div>';
+            }
             html += '<div class="form-group" style="margin-top:10px;margin-bottom:0;"><label class="object-card-label">Комментарий</label>';
             html += '<textarea class="form-input edit-node-switch-comment" data-switch-id="' + uidEsc + '" rows="2" placeholder="Необязательно">' + escapeHtml(swComment) + '</textarea></div>';
         } else if (deviceLine) {
@@ -762,6 +801,7 @@ function buildCameraCardContent(obj, isEditMode, name) {
             html += '<div class="camera-card-comment">' + escapeHtml(comment) + '</div>';
         }
         html += buildEquipmentIpAddressViewLineHtml(ipAddress, 'camera-card-comment');
+        html += buildEquipmentZabbixHostViewLineHtml((obj.properties.get('zabbixHost') || '').trim(), 'camera-card-comment');
     } else {
         html += '<div class="camera-card-view-name-row">';
         html += '<div class="camera-card-view-name">' + escapeHtml(name || 'Новая камера') + '</div>';
@@ -784,6 +824,7 @@ function buildCameraCardContent(obj, isEditMode, name) {
         html += '<div class="form-group"><label class="object-card-label">Модель</label>';
         html += '<div class="device-combobox" data-catalog="camera" data-type="model" data-value-id="editCameraModel" data-manufacturer-id="editCameraManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editCameraModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
         html += buildEquipmentIpAddressEditFieldHtml('editCameraIpAddress', ipAddress);
+        html += buildEquipmentZabbixHostEditFieldHtml('editCameraZabbixHost', (obj.properties.get('zabbixHost') || '').trim());
         html += '<div class="form-group" style="margin-bottom:0;"><label for="editCameraComment" class="object-card-label">Комментарий</label>';
         html += '<textarea id="editCameraComment" class="form-input" rows="2" placeholder="Необязательно">' + escapeHtml(comment) + '</textarea></div>';
         html += '</section>';
@@ -934,6 +975,7 @@ function buildOltCardContent(obj, isEditMode, name) {
             html += '<div class="olt-card-comment">' + escapeHtml(comment) + '</div>';
         }
         html += buildEquipmentIpAddressViewLineHtml(ipAddress, 'olt-card-comment');
+        html += buildEquipmentZabbixHostViewLineHtml((obj.properties.get('zabbixHost') || '').trim(), 'olt-card-comment');
     } else {
         html += '<div class="olt-card-view-name">' + escapeHtml(name || 'Новый OLT') + '</div>';
         html += '<div class="olt-card-view-meta"><span class="olt-kind-pill">GPON</span></div>';
@@ -959,6 +1001,7 @@ function buildOltCardContent(obj, isEditMode, name) {
         html += '<div class="form-group"><label class="object-card-label">Модель</label>';
         html += '<div class="device-combobox" data-catalog="olt" data-type="model" data-value-id="editOltModel" data-manufacturer-id="editOltManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editOltModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
         html += buildEquipmentIpAddressEditFieldHtml('editOltIpAddress', ipAddress);
+        html += buildEquipmentZabbixHostEditFieldHtml('editOltZabbixHost', (obj.properties.get('zabbixHost') || '').trim());
         html += '<div class="form-group" style="margin-bottom:0;"><label for="editOltComment" class="object-card-label">Комментарий</label>';
         html += '<textarea id="editOltComment" class="form-input" rows="2" placeholder="Дополнительные сведения">' + escapeHtml(comment) + '</textarea></div>';
         html += '</section>';
@@ -3334,6 +3377,7 @@ function showObjectInfoBody(obj) {
             html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Производитель</label><div class="device-combobox" data-catalog="onu" data-type="manufacturer" data-value-id="editOnuManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturer ? escapeHtml(manufacturer) : 'Выберите производителя') + '</button><input type="hidden" id="editOnuManufacturer" value="' + escapeHtml(manufacturer) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
             html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Модель</label><div class="device-combobox" data-catalog="onu" data-type="model" data-value-id="editOnuModel" data-manufacturer-id="editOnuManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (model ? escapeHtml(model) : 'Выберите модель') + '</button><input type="hidden" id="editOnuModel" value="' + escapeHtml(model) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
             html += buildEquipmentIpAddressEditFieldHtml('editOnuIpAddress', ipAddress, 'object-card-label');
+            html += buildEquipmentZabbixHostEditFieldHtml('editOnuZabbixHost', (obj.properties.get('zabbixHost') || '').trim(), 'object-card-label');
             html += '<div class="form-group"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Комментарий</label>';
             html += '<textarea id="editOnuComment" class="form-input" rows="2" placeholder="Дополнительные сведения">' + escapeHtml(comment) + '</textarea></div>';
         } else if (name) {
@@ -3341,6 +3385,7 @@ function showObjectInfoBody(obj) {
         }
         if (manufacturer || model) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 6px;">Устройство: ' + escapeHtml([manufacturer, model].filter(Boolean).join(' ') || '—') + '</div>';
         if (ipAddress) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 6px;">IP: ' + escapeHtml(ipAddress) + '</div>';
+        if (!modalIsEditMode()) html += buildEquipmentZabbixHostViewLineHtml((obj.properties.get('zabbixHost') || '').trim());
         if (comment) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; white-space: pre-wrap; margin-top: 6px;">' + escapeHtml(comment) + '</div>';
         if (onuIncoming) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 6px;">Подключена жила: кабель ' + escapeHtml(String(onuIncoming.cableId).substring(0, 12)) + '…, жила ' + onuIncoming.fiberNumber + '</div>';
         html += '</div>';
@@ -3367,6 +3412,7 @@ function showObjectInfoBody(obj) {
             html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Производитель</label><div class="device-combobox" data-catalog="node" data-type="manufacturer" data-value-id="editMediaConverterManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (manufacturerMc ? escapeHtml(manufacturerMc) : 'Выберите производителя') + '</button><input type="hidden" id="editMediaConverterManufacturer" value="' + escapeHtml(manufacturerMc) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
             html += '<div class="form-group" style="margin-bottom: 8px;"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Модель</label><div class="device-combobox" data-catalog="node" data-type="model" data-value-id="editMediaConverterModel" data-manufacturer-id="editMediaConverterManufacturer"><button type="button" class="device-combobox-trigger" aria-expanded="false" aria-haspopup="listbox">' + (modelMc ? escapeHtml(modelMc) : 'Выберите модель') + '</button><input type="hidden" id="editMediaConverterModel" value="' + escapeHtml(modelMc) + '"><div class="device-combobox-panel" role="listbox"><input type="text" class="device-combobox-search" placeholder="Поиск..." autocomplete="off"><ul class="device-combobox-list"></ul></div></div></div>';
             html += buildEquipmentIpAddressEditFieldHtml('editMediaConverterIpAddress', ipAddressMc, 'object-card-label');
+            html += buildEquipmentZabbixHostEditFieldHtml('editMediaConverterZabbixHost', (obj.properties.get('zabbixHost') || '').trim(), 'object-card-label');
             html += '<div class="form-group"><label style="font-size: 0.8125rem; color: var(--text-secondary);">Комментарий</label>';
             html += '<textarea id="editMediaConverterComment" class="form-input" rows="2" placeholder="Дополнительные сведения">' + escapeHtml(commentMc) + '</textarea></div>';
         } else if (name) {
@@ -3374,6 +3420,7 @@ function showObjectInfoBody(obj) {
         }
         if (manufacturerMc || modelMc) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 6px;">Устройство: ' + escapeHtml([manufacturerMc, modelMc].filter(Boolean).join(' ') || '—') + '</div>';
         if (ipAddressMc) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 6px;">IP: ' + escapeHtml(ipAddressMc) + '</div>';
+        if (!modalIsEditMode()) html += buildEquipmentZabbixHostViewLineHtml((obj.properties.get('zabbixHost') || '').trim());
         if (commentMc) html += '<div style="color: var(--text-secondary); font-size: 0.875rem; white-space: pre-wrap; margin-top: 6px;">' + escapeHtml(commentMc) + '</div>';
         if (mcIncoming) {
             const cMc = objects.find(function(c) {
@@ -4164,6 +4211,20 @@ function setupEditAndDeleteListeners() {
                         updateAttachedSwitchMeta(co, swIdIp, 'ipAddress', t.value.trim());
                         saveData();
                     }
+                    return;
+                }
+                if (t.classList && t.classList.contains('edit-node-switch-zabbix')) {
+                    var swIdZx = t.getAttribute('data-switch-id');
+                    if (swIdZx) {
+                        updateAttachedSwitchMeta(co, swIdZx, 'zabbixHost', t.value.trim());
+                        saveData();
+                    }
+                    return;
+                }
+                if (t.classList && t.classList.contains('equipment-zabbix-host-input')) {
+                    if (!co) return;
+                    co.properties.set('zabbixHost', t.value.trim());
+                    saveData();
                     return;
                 }
                 if (t.classList && t.classList.contains('equipment-ip-input')) {

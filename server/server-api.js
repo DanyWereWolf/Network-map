@@ -21,6 +21,7 @@ const emailVerify = require('./lib/email-verify');
 const updateBroadcast = require('./lib/update-broadcast');
 const passwords = require('./lib/password');
 const cpuPool = require('./lib/cpu-pool');
+const zabbixClient = require('./lib/zabbix-client');
 
 /** Блокировка параллельных массовых рассылок. */
 var updateBroadcastInFlight = false;
@@ -318,7 +319,8 @@ function buildEmbedUserPayload(organization) {
             name: organization.name,
             status: organization.status,
             mapLimits: getMapObjectLimitPayload(organizationId),
-            concurrentUsers: getConcurrentUsersPayload(organizationId)
+            concurrentUsers: getConcurrentUsersPayload(organizationId),
+            zabbixEnabled: !!(organization.zabbixEnabled && organization.zabbixApiUrl && organization.zabbixApiToken)
         }
     };
 }
@@ -391,7 +393,8 @@ function getSessionUserFromToken(token) {
             name: organization.name,
             status: organization.status,
             mapLimits: mapLimits,
-            concurrentUsers: getConcurrentUsersPayload(organizationId)
+            concurrentUsers: getConcurrentUsersPayload(organizationId),
+            zabbixEnabled: !!(organization.zabbixEnabled && organization.zabbixApiUrl && organization.zabbixApiToken)
         } : null
     };
 }
@@ -510,7 +513,8 @@ function buildLoginUserPayload(user, organizationId, organization) {
             name: organization.name,
             status: organization.status,
             mapLimits: getMapObjectLimitPayload(organizationId),
-            concurrentUsers: getConcurrentUsersPayload(organizationId)
+            concurrentUsers: getConcurrentUsersPayload(organizationId),
+            zabbixEnabled: !!(organization.zabbixEnabled && organization.zabbixApiUrl && organization.zabbixApiToken)
         } : null
     };
 }
@@ -802,7 +806,8 @@ app.get('/api/organizations/me', (req, res) => {
             mapObjectLimitUnlocked: orgHasUnlimitedMapObjects(org),
             mapLimits: getMapObjectLimitPayload(user.organizationId),
             concurrentUsers: getConcurrentUsersPayload(user.organizationId),
-            twoFactorEnabled: !!org.twoFactorEnabled
+            twoFactorEnabled: !!org.twoFactorEnabled,
+            zabbixEnabled: !!(org.zabbixEnabled && org.zabbixApiUrl && org.zabbixApiToken)
         }
     });
 });
@@ -2067,6 +2072,275 @@ app.post('/api/auth/embed', (req, res) => {
         token: embedToken,
         user: buildEmbedUserPayload(org)
     });
+});
+
+function normalizeZabbixOrgUrl(raw) {
+    return zabbixClient.normalizeApiUrl(raw).replace(/\/api_jsonrpc\.php$/i, '');
+}
+
+app.get('/api/organizations/me/zabbix', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+    var org = db.getOrganization(user.organizationId);
+    if (!org) return res.status(404).json({ error: 'Организация не найдена' });
+    res.json({
+        enabled: !!org.zabbixEnabled,
+        apiUrl: org.zabbixApiUrl || '',
+        hasToken: !!(org.zabbixApiToken && String(org.zabbixApiToken).trim()),
+        updatedAt: org.zabbixUpdatedAt || null
+    });
+});
+
+app.post('/api/organizations/me/zabbix', async function(req, res) {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+    var org = db.getOrganization(user.organizationId);
+    if (!org) return res.status(404).json({ error: 'Организация не найдена' });
+    var body = req.body || {};
+    var apiUrlRaw = body.apiUrl != null ? String(body.apiUrl).trim() : (org.zabbixApiUrl || '');
+    var tokenRaw = body.apiToken != null ? String(body.apiToken).trim() : '';
+    var enabled = body.enabled !== undefined ? !!body.enabled : true;
+    var testOnly = !!body.testOnly;
+
+    var apiUrl = normalizeZabbixOrgUrl(apiUrlRaw);
+    if (enabled && !apiUrl) {
+        return res.status(400).json({ error: 'Укажите URL Zabbix (например https://zabbix.example.com)' });
+    }
+    var token = tokenRaw || (org.zabbixApiToken || '');
+    if (enabled && !token) {
+        return res.status(400).json({ error: 'Укажите API-токен Zabbix' });
+    }
+
+    if (enabled && token) {
+        try {
+            var test = await zabbixClient.testConnection(apiUrl, token);
+            if (testOnly) {
+                return res.json({ ok: true, tested: true, version: test.version || '' });
+            }
+        } catch (e) {
+            return res.status(400).json({
+                error: 'Не удалось подключиться к Zabbix: ' + (e && e.message ? e.message : String(e)),
+                tested: false
+            });
+        }
+    }
+
+    if (testOnly) {
+        return res.json({ ok: true, tested: true });
+    }
+
+    var updatedAt = new Date().toISOString();
+    var updates = {
+        zabbixEnabled: enabled,
+        zabbixApiUrl: enabled ? apiUrl : (apiUrl || null),
+        zabbixUpdatedAt: updatedAt
+    };
+    if (tokenRaw) updates.zabbixApiToken = tokenRaw;
+    if (!enabled) {
+        updates.zabbixApiToken = null;
+        updates.zabbixApiUrl = apiUrl || null;
+    }
+    db.updateOrganization(user.organizationId, updates);
+    invalidateZabbixStatusCache(user.organizationId);
+    res.json({
+        ok: true,
+        enabled: enabled,
+        apiUrl: enabled ? apiUrl : (apiUrl || ''),
+        hasToken: !!(enabled && (tokenRaw || org.zabbixApiToken)),
+        updatedAt: updatedAt
+    });
+});
+
+app.delete('/api/organizations/me/zabbix', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+    db.updateOrganization(user.organizationId, {
+        zabbixEnabled: false,
+        zabbixApiUrl: null,
+        zabbixApiToken: null,
+        zabbixUpdatedAt: null
+    });
+    invalidateZabbixStatusCache(user.organizationId);
+    res.json({ ok: true, enabled: false, hasToken: false });
+});
+
+var zabbixStatusCache = Object.create(null);
+var ZABBIX_STATUS_CACHE_MS = 40000;
+
+function invalidateZabbixStatusCache(orgId) {
+    if (orgId == null) {
+        zabbixStatusCache = Object.create(null);
+        return;
+    }
+    delete zabbixStatusCache[String(orgId)];
+}
+
+function normalizeMatchKey(s) {
+    return String(s || '').trim().toLowerCase();
+}
+
+function normalizeIpKey(s) {
+    return String(s || '').trim();
+}
+
+function collectZabbixCandidates(mapData) {
+    var list = [];
+    (mapData || []).forEach(function(item) {
+        if (!item || item.type === 'cable' || item.type === 'region') return;
+        var uid = item.uniqueId != null ? String(item.uniqueId) : '';
+        if (!uid) return;
+        var ips = [];
+        var names = [];
+        var hosts = [];
+        if (item.zabbixHost) hosts.push(String(item.zabbixHost).trim());
+        if (item.ipAddress) ips.push(normalizeIpKey(item.ipAddress));
+        if (item.name) names.push(String(item.name).trim());
+        if (item.type === 'node' && Array.isArray(item.attachedSwitches)) {
+            item.attachedSwitches.forEach(function(sw) {
+                if (!sw) return;
+                if (sw.zabbixHost) hosts.push(String(sw.zabbixHost).trim());
+                if (sw.ipAddress) ips.push(normalizeIpKey(sw.ipAddress));
+                if (sw.name) names.push(String(sw.name).trim());
+            });
+        }
+        list.push({
+            uniqueId: uid,
+            type: item.type,
+            zabbixHosts: hosts.filter(Boolean),
+            ips: ips.filter(Boolean),
+            names: names.filter(Boolean)
+        });
+    });
+    return list;
+}
+
+function buildZabbixHostIndexes(hosts) {
+    var byHostName = Object.create(null);
+    var byVisibleName = Object.create(null);
+    var byIp = Object.create(null);
+    (hosts || []).forEach(function(h) {
+        if (!h || !h.hostid) return;
+        var entry = {
+            hostid: String(h.hostid),
+            host: h.host || '',
+            name: h.name || h.host || ''
+        };
+        if (h.host) byHostName[normalizeMatchKey(h.host)] = entry;
+        if (h.name) byVisibleName[normalizeMatchKey(h.name)] = entry;
+        (h.interfaces || []).forEach(function(iface) {
+            if (iface && iface.ip) byIp[normalizeIpKey(iface.ip)] = entry;
+        });
+    });
+    return { byHostName: byHostName, byVisibleName: byVisibleName, byIp: byIp };
+}
+
+function matchCandidateToHost(candidate, indexes) {
+    var i;
+    for (i = 0; i < candidate.zabbixHosts.length; i++) {
+        var key = normalizeMatchKey(candidate.zabbixHosts[i]);
+        if (indexes.byHostName[key]) return indexes.byHostName[key];
+        if (indexes.byVisibleName[key]) return indexes.byVisibleName[key];
+    }
+    for (i = 0; i < candidate.ips.length; i++) {
+        var ip = normalizeIpKey(candidate.ips[i]);
+        if (indexes.byIp[ip]) return indexes.byIp[ip];
+    }
+    for (i = 0; i < candidate.names.length; i++) {
+        var n = normalizeMatchKey(candidate.names[i]);
+        if (indexes.byHostName[n]) return indexes.byHostName[n];
+        if (indexes.byVisibleName[n]) return indexes.byVisibleName[n];
+    }
+    return null;
+}
+
+async function buildZabbixStatusForOrg(org) {
+    var apiUrl = org.zabbixApiUrl;
+    var token = org.zabbixApiToken;
+    var hosts = await zabbixClient.fetchHostsWithInterfaces(apiUrl, token);
+    var problems = await zabbixClient.fetchActiveProblems(apiUrl, token);
+    var triggerIds = (problems || []).map(function(p) { return p.objectid; });
+    var triggerHostMap = await zabbixClient.fetchTriggerHostMap(apiUrl, token, triggerIds);
+
+    var problemsByHost = Object.create(null);
+    (problems || []).forEach(function(p) {
+        var hostid = triggerHostMap[String(p.objectid)];
+        if (!hostid) return;
+        if (!problemsByHost[hostid]) problemsByHost[hostid] = [];
+        problemsByHost[hostid].push({
+            name: p.name || 'Проблема',
+            severity: parseInt(p.severity, 10) || 0
+        });
+    });
+
+    var indexes = buildZabbixHostIndexes(hosts);
+    var mapData = db.getMapData(org.id) || [];
+    var candidates = collectZabbixCandidates(mapData);
+    var items = [];
+
+    candidates.forEach(function(c) {
+        var matched = matchCandidateToHost(c, indexes);
+        if (!matched) return;
+        var plist = problemsByHost[matched.hostid] || [];
+        var maxSev = 0;
+        var names = [];
+        plist.forEach(function(pr) {
+            if (pr.severity > maxSev) maxSev = pr.severity;
+            if (names.length < 5) names.push(pr.name);
+        });
+        items.push({
+            uniqueId: c.uniqueId,
+            matched: true,
+            host: matched.host || matched.name,
+            hostid: matched.hostid,
+            severity: maxSev,
+            ok: maxSev === 0,
+            problems: names
+        });
+    });
+
+    return {
+        enabled: true,
+        updatedAt: new Date().toISOString(),
+        items: items
+    };
+}
+
+app.get('/api/zabbix/status', async function(req, res) {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (isGlobalAdmin(user)) {
+        return res.status(403).json({ error: 'Главному администратору недоступен статус карты' });
+    }
+    var orgId = user.organizationId;
+    if (!orgId) return res.status(403).json({ error: 'Нет организации' });
+    var org = db.getOrganization(orgId);
+    if (!org) return res.status(404).json({ error: 'Организация не найдена' });
+    if (!org.zabbixEnabled || !org.zabbixApiUrl || !org.zabbixApiToken) {
+        return res.json({ enabled: false, updatedAt: null, items: [] });
+    }
+
+    var cacheKey = String(orgId);
+    var cached = zabbixStatusCache[cacheKey];
+    var now = Date.now();
+    if (cached && (now - cached.at) < ZABBIX_STATUS_CACHE_MS) {
+        return res.json(cached.payload);
+    }
+
+    try {
+        var payload = await buildZabbixStatusForOrg(org);
+        zabbixStatusCache[cacheKey] = { at: now, payload: payload };
+        res.json(payload);
+    } catch (e) {
+        res.status(502).json({
+            enabled: true,
+            error: e && e.message ? String(e.message) : 'Ошибка Zabbix API',
+            updatedAt: null,
+            items: []
+        });
+    }
 });
 
 app.get('/api/users', (req, res) => {

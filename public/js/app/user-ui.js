@@ -597,6 +597,7 @@ function openUsersModal() {
     loadOrgDisplayPanel();
     loadOrgSecurityPanel();
     loadOrgEmbedPanel();
+    loadOrgZabbixPanel();
 }
 
 var orgSecurityPendingSecret = '';
@@ -610,10 +611,12 @@ function updateOrgAdminSettingsVisibility() {
     var display = document.getElementById('orgDisplaySection');
     var security = document.getElementById('orgSecuritySection');
     var embed = document.getElementById('orgEmbedSection');
+    var zabbix = document.getElementById('orgZabbixSection');
     if (!wrap) return;
     var anyVisible = (display && display.style.display !== 'none') ||
         (security && security.style.display !== 'none') ||
-        (embed && embed.style.display !== 'none');
+        (embed && embed.style.display !== 'none') ||
+        (zabbix && zabbix.style.display !== 'none');
     wrap.style.display = anyVisible ? 'flex' : 'none';
 }
 
@@ -880,6 +883,125 @@ function copyOrgEmbedUrl() {
         try { document.execCommand('copy'); } catch (e) {}
         if (typeof showSuccess === 'function') showSuccess('URL скопирован');
     }
+}
+
+function loadOrgZabbixPanel() {
+    var section = document.getElementById('orgZabbixSection');
+    if (!section) return;
+    if (!isOrgMapAdmin() || !getApiBase()) {
+        section.style.display = 'none';
+        updateOrgAdminSettingsVisibility();
+        return;
+    }
+    section.style.display = 'block';
+    updateOrgAdminSettingsVisibility();
+    var statusEl = document.getElementById('orgZabbixStatus');
+    if (statusEl) statusEl.textContent = 'Загрузка…';
+    fetch(getApiBase() + '/api/organizations/me/zabbix', {
+        headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+    }).then(function(r) { return r.json(); })
+    .then(function(body) {
+        if (body.error) throw new Error(body.error);
+        renderOrgZabbixPanel(body);
+    }).catch(function(e) {
+        if (statusEl) statusEl.textContent = e.message || 'Не удалось загрузить настройки';
+    });
+}
+
+function renderOrgZabbixPanel(body) {
+    body = body || {};
+    var enabled = !!body.enabled;
+    var statusEl = document.getElementById('orgZabbixStatus');
+    var urlInput = document.getElementById('orgZabbixApiUrl');
+    var tokenInput = document.getElementById('orgZabbixApiToken');
+    var disableBtn = document.getElementById('orgZabbixDisableBtn');
+    if (urlInput) urlInput.value = body.apiUrl || '';
+    if (tokenInput) {
+        tokenInput.value = '';
+        tokenInput.placeholder = body.hasToken ? 'Токен сохранён — введите новый, чтобы заменить' : 'API-токен Zabbix';
+    }
+    if (statusEl) {
+        statusEl.textContent = enabled
+            ? ('Подключено' + (body.hasToken ? '' : ' (нет токена)') + '. Объекты с IP/именем или полем «Хост Zabbix» подсвечиваются на карте.')
+            : 'Отключено. Укажите URL и API-токен, затем сохраните.';
+        statusEl.className = 'org-security-status' + (enabled ? ' is-on' : '');
+    }
+    if (disableBtn) disableBtn.style.display = enabled ? 'inline-flex' : 'none';
+    setLocalOrgZabbixEnabled(enabled && !!body.hasToken);
+}
+
+function saveOrgZabbix(testOnly) {
+    if (!getApiBase()) return;
+    var urlInput = document.getElementById('orgZabbixApiUrl');
+    var tokenInput = document.getElementById('orgZabbixApiToken');
+    var apiUrl = urlInput ? String(urlInput.value || '').trim() : '';
+    var apiToken = tokenInput ? String(tokenInput.value || '').trim() : '';
+    var payload = {
+        enabled: true,
+        apiUrl: apiUrl,
+        testOnly: !!testOnly
+    };
+    if (apiToken) payload.apiToken = apiToken;
+    fetch(getApiBase() + '/api/organizations/me/zabbix', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + getAuthToken(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    }).then(function(r) { return r.json().then(function(b) { return { ok: r.ok, body: b }; }); })
+    .then(function(res) {
+        if (!res.ok) throw new Error((res.body && res.body.error) || 'Ошибка');
+        if (testOnly) {
+            var ver = res.body.version ? (' (API ' + res.body.version + ')') : '';
+            if (typeof showSuccess === 'function') showSuccess('Подключение к Zabbix успешно' + ver);
+            return;
+        }
+        renderOrgZabbixPanel(res.body);
+        if (typeof showSuccess === 'function') showSuccess('Настройки Zabbix сохранены');
+        setLocalOrgZabbixEnabled(!!(res.body && res.body.enabled));
+        if (typeof window.refreshZabbixStatuses === 'function') window.refreshZabbixStatuses(true);
+    }).catch(function(e) {
+        if (typeof showError === 'function') showError(e.message || 'Не удалось сохранить Zabbix');
+    });
+}
+
+function setLocalOrgZabbixEnabled(on) {
+    try {
+        if (typeof currentUser !== 'undefined' && currentUser) {
+            if (!currentUser.organization) currentUser.organization = {};
+            currentUser.organization.zabbixEnabled = !!on;
+        }
+        var sess = typeof getStoredSession === 'function' ? getStoredSession() : null;
+        if (sess) {
+            if (!sess.organization) sess.organization = {};
+            sess.organization.zabbixEnabled = !!on;
+            try {
+                sessionStorage.setItem('networkMap_session', JSON.stringify(sess));
+                if (localStorage.getItem('networkMap_tokenExpiry')) {
+                    localStorage.setItem('networkMap_session', JSON.stringify(sess));
+                }
+            } catch (eStore) {}
+        }
+        if (window.ZabbixStatus && typeof ZabbixStatus.setEnabledHint === 'function') {
+            ZabbixStatus.setEnabledHint(!!on);
+        }
+    } catch (e) {}
+}
+
+function disableOrgZabbix() {
+    if (!getApiBase()) return;
+    if (!window.confirm('Отключить мониторинг Zabbix? Подсветка статусов на карте пропадёт.')) return;
+    fetch(getApiBase() + '/api/organizations/me/zabbix', {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+    }).then(function(r) { return r.json(); })
+    .then(function(body) {
+        if (body.error) throw new Error(body.error);
+        renderOrgZabbixPanel({ enabled: false, apiUrl: '', hasToken: false });
+        if (typeof showSuccess === 'function') showSuccess('Мониторинг Zabbix отключён');
+        setLocalOrgZabbixEnabled(false);
+        if (typeof window.refreshZabbixStatuses === 'function') window.refreshZabbixStatuses(true);
+    }).catch(function(e) {
+        if (typeof showError === 'function') showError(e.message || 'Не удалось отключить');
+    });
 }
 
 function closeUsersModal() {
@@ -1504,6 +1626,13 @@ function setupUsersModalHandlers() {
     if (orgEmbedDisableBtn) orgEmbedDisableBtn.addEventListener('click', disableOrgEmbed);
     var orgEmbedCopyBtn = document.getElementById('orgEmbedCopyBtn');
     if (orgEmbedCopyBtn) orgEmbedCopyBtn.addEventListener('click', copyOrgEmbedUrl);
+
+    var orgZabbixSaveBtn = document.getElementById('orgZabbixSaveBtn');
+    if (orgZabbixSaveBtn) orgZabbixSaveBtn.addEventListener('click', function() { saveOrgZabbix(false); });
+    var orgZabbixTestBtn = document.getElementById('orgZabbixTestBtn');
+    if (orgZabbixTestBtn) orgZabbixTestBtn.addEventListener('click', function() { saveOrgZabbix(true); });
+    var orgZabbixDisableBtn = document.getElementById('orgZabbixDisableBtn');
+    if (orgZabbixDisableBtn) orgZabbixDisableBtn.addEventListener('click', disableOrgZabbix);
 
     var closeOrganizationsBtn = document.querySelector('.close-organizations');
     if (closeOrganizationsBtn) closeOrganizationsBtn.addEventListener('click', closeOrganizationsModal);

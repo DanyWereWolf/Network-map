@@ -212,6 +212,9 @@ function scheduleBackgroundAppScripts() {
 
 function finishMapInitialReveal() {
     scheduleBackgroundAppScripts();
+    if (window.ZabbixStatus && typeof ZabbixStatus.init === 'function') {
+        try { ZabbixStatus.init(); } catch (eZx) {}
+    }
     requestAnimationFrame(function() {
         requestAnimationFrame(function() {
             var status = document.querySelector('#appEntranceOverlay .map-loading-text');

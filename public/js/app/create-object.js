@@ -191,6 +191,7 @@ function createObject(type, name, coords, options = {}) {
             placemarkProperties.cabinetOrder = getNextCabinetMemberOrder(options.cabinetId);
         }
     }
+    if (options.zabbixHost) placemarkProperties.zabbixHost = String(options.zabbixHost).trim();
     if (!placemarkProperties.uniqueId) {
         placemarkProperties.uniqueId = 'obj-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
     }

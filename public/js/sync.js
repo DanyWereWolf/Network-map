@@ -246,6 +246,9 @@
                     : (typeof window.applyRemoteState === 'function' ? window.applyRemoteState : null);
                 if (applyFn) applyFn(data, applyMeta);
                 else if (typeof window.markMapDataReady === 'function') window.markMapDataReady();
+                if (typeof window.refreshZabbixStatusPresentation === 'function') {
+                    try { window.refreshZabbixStatusPresentation(); } catch (eZx) {}
+                }
                 updateSyncUIStatus(true);
                 if (typeof window.hideSyncRequiredOverlay === 'function') window.hideSyncRequiredOverlay();
             } catch (e) {

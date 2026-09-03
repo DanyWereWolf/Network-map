@@ -1342,6 +1342,7 @@ function buildCabinetCardContent(cabinet, isEditMode) {
         html += '<label class="object-card-label" for="editCabinetIpAddress">IP-адрес</label>';
         html += '<input type="text" id="editCabinetIpAddress" class="form-input equipment-ip-input" value="' + escapeHtml(ipAddress) + '" placeholder="Например: 192.168.1.10" inputmode="decimal" autocomplete="off">';
         html += '</div>';
+        html += buildEquipmentZabbixHostEditFieldHtml('editCabinetZabbixHost', (cabinet.properties.get('zabbixHost') || '').trim());
         html += '<div class="form-group">';
         html += '<label class="object-card-label" for="editCabinetComment">Комментарий</label>';
         html += '<textarea id="editCabinetComment" class="form-input" rows="3" placeholder="Ключ, доступ, примечания">' + escapeHtml(comment) + '</textarea>';
@@ -1366,8 +1367,12 @@ function buildCabinetCardContent(cabinet, isEditMode) {
         if (inventoryNumber) html += '<div class="cabinet-meta-row"><dt>Инв. №</dt><dd>' + escapeHtml(inventoryNumber) + '</dd></div>';
         if (serialNumber) html += '<div class="cabinet-meta-row"><dt>Серийный №</dt><dd>' + escapeHtml(serialNumber) + '</dd></div>';
         if (ipAddress) html += '<div class="cabinet-meta-row"><dt>IP</dt><dd>' + escapeHtml(ipAddress) + '</dd></div>';
+        var zxCab = (cabinet.properties.get('zabbixHost') || '').trim();
+        if (zxCab && typeof isOrgZabbixMonitoringEnabled === 'function' && isOrgZabbixMonitoringEnabled()) {
+            html += '<div class="cabinet-meta-row"><dt>Zabbix</dt><dd>' + escapeHtml(zxCab) + '</dd></div>';
+        }
         if (comment) html += '<div class="cabinet-meta-row"><dt>Комментарий</dt><dd>' + escapeHtml(comment) + '</dd></div>';
-        if (!manufacturer && !model && !cabinetMount && !cabinetHeight && !cabinetWidth && !cabinetUnits && !address && !inventoryNumber && !serialNumber && !ipAddress && !comment) {
+        if (!manufacturer && !model && !cabinetMount && !cabinetHeight && !cabinetWidth && !cabinetUnits && !address && !inventoryNumber && !serialNumber && !ipAddress && !(zxCab && typeof isOrgZabbixMonitoringEnabled === 'function' && isOrgZabbixMonitoringEnabled()) && !comment) {
             html += '<p class="object-card-hint">Характеристики не заполнены — укажите в режиме редактирования.</p>';
         }
         html += '</dl>';
@@ -1817,5 +1822,7 @@ function flushCabinetFieldsIfChanged() {
     if (invEl) currentModalObject.properties.set('inventoryNumber', invEl.value.trim());
     if (serialEl) currentModalObject.properties.set('serialNumber', serialEl.value.trim());
     if (ipEl) currentModalObject.properties.set('ipAddress', ipEl.value.trim());
+    var zxEl = document.getElementById('editCabinetZabbixHost');
+    if (zxEl) currentModalObject.properties.set('zabbixHost', zxEl.value.trim());
     if (commentEl) currentModalObject.properties.set('comment', commentEl.value.trim());
 }

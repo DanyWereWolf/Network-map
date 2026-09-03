@@ -95,6 +95,7 @@ function serializeMapItemFromObject(obj) {
             revision: revision
         };
         if (props.uniqueId) result.uniqueId = props.uniqueId;
+        if (props.zabbixHost) result.zabbixHost = String(props.zabbixHost).trim();
         if (props.usedFibers) result.usedFibers = props.usedFibers;
         if (props.fiberConnections) result.fiberConnections = props.fiberConnections;
         if (props.fiberLabels) result.fiberLabels = props.fiberLabels;
@@ -2481,6 +2482,8 @@ function populatePlacemarkFromSerializedData(placemark, data) {
     if (data.usedFibers) placemark.properties.set('usedFibers', data.usedFibers);
     if (data.fiberConnections) placemark.properties.set('fiberConnections', data.fiberConnections);
     if (data.fiberLabels) placemark.properties.set('fiberLabels', data.fiberLabels);
+    if (data.zabbixHost) placemark.properties.set('zabbixHost', String(data.zabbixHost).trim());
+    else if (placemark.properties.get('zabbixHost') && data.zabbixHost === '') placemark.properties.set('zabbixHost', '');
     if (type === 'node') {
         placemark.properties.set('nodeKind', data.nodeKind || 'network');
         if (data.comment) placemark.properties.set('comment', data.comment);
