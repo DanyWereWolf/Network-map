@@ -821,10 +821,15 @@ function findFiberSignalSourceViaNetwork(startHost, startCableId, startFiberNumb
             });
             return;
         }
+        // Кабинет уже развёрнут выше. Для самого OLT asOlt === host —
+        // без проверки получается бесконечная рекурсия и муфта не открывается.
         var asOlt = cableEndpointRepresentsOlt(host);
         if (asOlt) {
-            considerRemoteHost(asOlt, cableId, fiberNumber);
-            if (host.properties.get('type') === 'cabinet') return;
+            var asOltId = getObjectUniqueId(asOlt) || '';
+            if (asOltId && asOltId !== hid) {
+                considerRemoteHost(asOlt, cableId, fiberNumber);
+            }
+            if (t === 'cabinet') return;
         }
         if (!isFiberHostType(t) && t !== 'olt') return;
         var key = hid + '|' + fiberConnKey(cableId, fiberNumber);
