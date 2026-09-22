@@ -17112,6 +17112,34 @@ html.cable-split-mode-active #map {
 .device-catalog-tab--orange { --tab-tone: #ea580c; }
 .device-catalog-tab--rose { --tab-tone: #e11d48; }
 .device-catalog-tab--amber { --tab-tone: #f59e0b; }
+.device-catalog-tab--lime { --tab-tone: #84cc16; }
+
+.olt-optical-fieldset--wide {
+    grid-column: 1 / -1;
+}
+.olt-optical-field--check {
+    align-items: center;
+}
+.olt-optical-field--check input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+}
+.sfp-param-compat-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+}
+.sfp-param-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8125rem;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+.sfp-param-check input {
+    margin: 0;
+}
 
 .device-catalog-sleeve-row .device-catalog-mfr-title {
     flex-wrap: wrap;

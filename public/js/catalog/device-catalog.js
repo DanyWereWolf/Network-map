@@ -714,6 +714,9 @@ var radioBridgeDeviceCatalog = {};
 var cabinetDeviceCatalog = {};
 var switchDeviceCatalog = {};
 var cableDeviceCatalog = {};
+var sfpDeviceCatalog = {};
+/** sfpModelParams['manufacturer||model'] = { type, speed, role, ... }. */
+var sfpModelParams = {};
 /** Разделы справочника, явно загруженные из сохранения (не подставлять заводские списки повторно). */
 var _deviceCatalogWasPersisted = {};
 
@@ -866,6 +869,10 @@ var DEVICE_CATALOG_TAB_META = {
     cable: {
         label: 'Кабели',
         desc: 'Марки и модели оптического кабеля. Для каждой модели можно задать число жил и цвета — они подставятся при прокладке и в карточке кабеля.'
+    },
+    sfp: {
+        label: 'SFP / SFP+',
+        desc: 'Оптические модули для портов OLT и коммутаторов: производитель, модель, Tx/Rx, класс и совместимость. Подставляются в списки при установке SFP в карточке OLT.'
     }
 };
 
@@ -880,10 +887,11 @@ var DEVICE_CATALOG_TAB_TONE = {
     cross: '#a855f7',
     spliceCassette: '#ea580c',
     cabinet: '#e11d48',
-    cable: '#f59e0b'
+    cable: '#f59e0b',
+    sfp: '#84cc16'
 };
 
-var DEVICE_CATALOG_ALLOWED_TABS = { node: 1, olt: 1, onu: 1, camera: 1, radioBridge: 1, switch: 1, sleeve: 1, cross: 1, spliceCassette: 1, cabinet: 1, cable: 1 };
+var DEVICE_CATALOG_ALLOWED_TABS = { node: 1, olt: 1, onu: 1, camera: 1, radioBridge: 1, switch: 1, sleeve: 1, cross: 1, spliceCassette: 1, cabinet: 1, cable: 1, sfp: 1 };
 var DEVICE_CATALOG_TAB_STORAGE_KEY = 'networkmap_deviceCatalogActiveTab';
 var DEVICE_CATALOG_TYPE_TABS = { sleeve: 1, cross: 1, spliceCassette: 1 };
 
@@ -1133,6 +1141,7 @@ function getCatalogObjectRef(kind) {
     if (kind === 'cabinet') return cabinetDeviceCatalog;
     if (kind === 'switch') return switchDeviceCatalog;
     if (kind === 'cable') return cableDeviceCatalog;
+    if (kind === 'sfp') return sfpDeviceCatalog;
     if (kind === 'general') return nodeDeviceCatalog;
     return nodeDeviceCatalog;
 }
@@ -1146,6 +1155,7 @@ function getCatalogDefault(kind) {
     if (kind === 'cabinet') return CABINET_CATALOG_DEFAULT;
     if (kind === 'switch') return SWITCH_CATALOG_DEFAULT;
     if (kind === 'cable') return CABLE_CATALOG_DEFAULT;
+    if (kind === 'sfp') return typeof buildSfpNameCatalogFromDefault === 'function' ? buildSfpNameCatalogFromDefault() : {};
     return NODE_CATALOG_DEFAULT;
 }
 
@@ -1173,6 +1183,9 @@ function resetDeviceCatalogTabToDefault(kind) {
     } else if (kind === 'cable') {
         cableDeviceCatalog = cloneDeepCatalog(def);
         cableModelFiberSettings = {};
+    } else if (kind === 'sfp') {
+        sfpDeviceCatalog = cloneDeepCatalog(def);
+        sfpModelParams = typeof buildSfpParamsFromDefault === 'function' ? buildSfpParamsFromDefault() : {};
     } else if (kind === 'sleeve') {
         resetSleeveCatalogToDefault();
         refreshAllSleeveTypeSelects();
@@ -1225,6 +1238,11 @@ function removeManufacturerForCatalog(kind, name) {
     }
     if (kind === 'cable' && cableModelFiberSettings[name]) {
         delete cableModelFiberSettings[name];
+    }
+    if (kind === 'sfp') {
+        Object.keys(sfpModelParams || {}).forEach(function(key) {
+            if (key.indexOf(String(name) + '||') === 0) delete sfpModelParams[key];
+        });
     }
     saveDeviceCatalog();
     return true;
@@ -1299,6 +1317,9 @@ function removeModelForCatalog(kind, manufacturer, model) {
         if (Object.keys(cableModelFiberSettings[manufacturer]).length === 0) {
             delete cableModelFiberSettings[manufacturer];
         }
+    }
+    if (kind === 'sfp') {
+        delete sfpModelParams[sfpParamsKey(manufacturer, model)];
     }
     saveDeviceCatalog();
     return true;
@@ -2130,6 +2151,8 @@ function buildDeviceCatalogPayload() {
         oltModelOpticalParams: JSON.parse(JSON.stringify(oltModelOpticalParams || {})),
         cableDeviceCatalog: cloneDeepCatalog(cableDeviceCatalog),
         cableModelFiberSettings: JSON.parse(JSON.stringify(cableModelFiberSettings || {})),
+        sfpDeviceCatalog: cloneDeepCatalog(sfpDeviceCatalog),
+        sfpModelParams: JSON.parse(JSON.stringify(sfpModelParams || {})),
         customSleeveTypes: getCustomSleeveTypes(),
         hiddenBuiltinSleeveTypes: getHiddenBuiltinSleeveTypes(),
         customCrossTypes: getCustomCrossTypes(),
@@ -2246,6 +2269,16 @@ function loadDeviceCatalog(opts) {
         } else {
             cableModelFiberSettings = {};
         }
+        if ('sfpDeviceCatalog' in opts && opts.sfpDeviceCatalog && typeof opts.sfpDeviceCatalog === 'object') {
+            sfpDeviceCatalog = cloneDeepCatalog(opts.sfpDeviceCatalog);
+        } else {
+            sfpDeviceCatalog = cloneDeepCatalog(typeof buildSfpNameCatalogFromDefault === 'function' ? buildSfpNameCatalogFromDefault() : {});
+        }
+        if (opts.sfpModelParams && typeof opts.sfpModelParams === 'object') {
+            sfpModelParams = JSON.parse(JSON.stringify(opts.sfpModelParams));
+        } else {
+            sfpModelParams = typeof buildSfpParamsFromDefault === 'function' ? buildSfpParamsFromDefault() : {};
+        }
         applyCustomSleeveTypesFromOpts(opts);
         applyCustomCrossTypesFromOpts(opts);
         saveDeviceCatalog();
@@ -2326,6 +2359,13 @@ function loadDeviceCatalog(opts) {
         cableDeviceCatalog = cloneDeepCatalog(CABLE_CATALOG_DEFAULT);
     }
 
+    if ('sfpDeviceCatalog' in opts && typeof opts.sfpDeviceCatalog === 'object') {
+        markDeviceCatalogPersisted('sfp');
+        sfpDeviceCatalog = cloneDeepCatalog(opts.sfpDeviceCatalog);
+    } else if (!('sfpDeviceCatalog' in opts)) {
+        sfpDeviceCatalog = cloneDeepCatalog(typeof buildSfpNameCatalogFromDefault === 'function' ? buildSfpNameCatalogFromDefault() : {});
+    }
+
     if (opts.switchModelDefaultPorts && typeof opts.switchModelDefaultPorts === 'object') {
         switchModelDefaultPorts = JSON.parse(JSON.stringify(opts.switchModelDefaultPorts));
     } else {
@@ -2366,6 +2406,12 @@ function loadDeviceCatalog(opts) {
         cableModelFiberSettings = JSON.parse(JSON.stringify(opts.cableModelFiberSettings));
     } else if (!('cableModelFiberSettings' in opts)) {
         cableModelFiberSettings = {};
+    }
+
+    if (opts.sfpModelParams && typeof opts.sfpModelParams === 'object') {
+        sfpModelParams = JSON.parse(JSON.stringify(opts.sfpModelParams));
+    } else if (!('sfpModelParams' in opts)) {
+        sfpModelParams = typeof buildSfpParamsFromDefault === 'function' ? buildSfpParamsFromDefault() : {};
     }
 
     applyCustomSleeveTypesFromOpts(opts);
@@ -2466,7 +2512,8 @@ function hasPersistedDeviceCatalogOpts(opts) {
     if (!opts || typeof opts !== 'object') return false;
     var catalogKeys = [
         'nodeDeviceCatalog', 'oltDeviceCatalog', 'onuDeviceCatalog', 'cameraDeviceCatalog',
-        'radioBridgeDeviceCatalog', 'cabinetDeviceCatalog', 'switchDeviceCatalog', 'cableDeviceCatalog'
+        'radioBridgeDeviceCatalog', 'cabinetDeviceCatalog', 'switchDeviceCatalog', 'cableDeviceCatalog',
+        'sfpDeviceCatalog'
     ];
     for (var i = 0; i < catalogKeys.length; i++) {
         if (catalogKeys[i] in opts) return true;
@@ -2503,6 +2550,12 @@ function ensureDeviceCatalogsNonEmpty() {
     if (!wasDeviceCatalogPersisted('cabinet') && Object.keys(cabinetDeviceCatalog || {}).length === 0) cabinetDeviceCatalog = cloneDeepCatalog(CABINET_CATALOG_DEFAULT);
     if (!wasDeviceCatalogPersisted('switch') && Object.keys(switchDeviceCatalog || {}).length === 0) switchDeviceCatalog = cloneDeepCatalog(SWITCH_CATALOG_DEFAULT);
     if (!wasDeviceCatalogPersisted('cable') && Object.keys(cableDeviceCatalog || {}).length === 0) cableDeviceCatalog = cloneDeepCatalog(CABLE_CATALOG_DEFAULT);
+    if (!wasDeviceCatalogPersisted('sfp') && Object.keys(sfpDeviceCatalog || {}).length === 0) {
+        sfpDeviceCatalog = cloneDeepCatalog(typeof buildSfpNameCatalogFromDefault === 'function' ? buildSfpNameCatalogFromDefault() : {});
+        if (!Object.keys(sfpModelParams || {}).length && typeof buildSfpParamsFromDefault === 'function') {
+            sfpModelParams = buildSfpParamsFromDefault();
+        }
+    }
 }
 
 function getCableProductLabel(manufacturer, model) {
@@ -2782,7 +2835,7 @@ function initDeviceComboboxes(container) {
         var type = wrapper.dataset.type;
         var catalogKind = (wrapper.dataset.catalog || 'node').trim();
         if (catalogKind === 'general') catalogKind = 'node';
-        var allowedCatalogKinds = { node: 1, olt: 1, onu: 1, camera: 1, radioBridge: 1, switch: 1, cable: 1, cabinet: 1 };
+        var allowedCatalogKinds = { node: 1, olt: 1, onu: 1, camera: 1, radioBridge: 1, switch: 1, cable: 1, cabinet: 1, sfp: 1 };
         if (!allowedCatalogKinds[catalogKind]) catalogKind = 'node';
         var valueId = wrapper.dataset.valueId;
         var manufacturerId = wrapper.dataset.manufacturerId;
@@ -3159,7 +3212,7 @@ function renderDeviceCatalogList() {
 
     var catalog = getCatalogObjectRef(tab);
     var mfrs = Object.keys(catalog).sort();
-    var richModels = tab === 'switch' || tab === 'olt' || tab === 'cable';
+    var richModels = tab === 'switch' || tab === 'olt' || tab === 'cable' || tab === 'sfp';
 
     if (mfrs.length === 0) {
         container.innerHTML =
@@ -3204,7 +3257,7 @@ function renderDeviceCatalogList() {
             html += '<span class="device-catalog-mfr-count">Нет моделей — нажмите «+ модель»</span>';
         }
         models.forEach(function(mod) {
-            html += '<span class="device-catalog-model-tag' + (tab === 'cable' ? ' device-catalog-model-tag--cable' : '') + (tab === 'switch' || tab === 'olt' ? ' device-catalog-model-tag--switch' : '') + '">';
+            html += '<span class="device-catalog-model-tag' + (tab === 'cable' ? ' device-catalog-model-tag--cable' : '') + (tab === 'switch' || tab === 'olt' || tab === 'sfp' ? ' device-catalog-model-tag--switch' : '') + '">';
             html += '<span class="device-catalog-model-name">' + escapeHtml(mod) + '</span>';
             html += '<span class="device-catalog-model-meta">';
             if (tab === 'switch') {
@@ -3227,6 +3280,15 @@ function renderDeviceCatalogList() {
                 html += '<span class="device-catalog-switch-ports-btn__label">Порты</span></button>';
                 html += '<button type="button" class="device-catalog-switch-ports-btn device-catalog-olt-optical-btn' + (customOltOptical ? ' device-catalog-switch-ports-btn--custom' : '') + '" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" title="' + escapeHtml(optHint) + '">';
                 html += '<span class="device-catalog-switch-ports-btn__label">Оптика</span></button>';
+            }
+            if (tab === 'sfp') {
+                var sfpParams = typeof getSfpParams === 'function' ? getSfpParams(mfr, mod) : null;
+                var sfpCustom = typeof sfpModelHasCustomParams === 'function' && sfpModelHasCustomParams(mfr, mod);
+                var sfpHint = sfpParams
+                    ? ([sfpParams.type, sfpParams.speed, sfpParams.role, sfpParams.class, sfpParams.txPowerMinDbm != null ? ('Tx ' + sfpParams.txPowerMinDbm + '…' + (sfpParams.txPowerMaxDbm != null ? sfpParams.txPowerMaxDbm : '') + ' дБм') : ''].filter(Boolean).join(' · '))
+                    : 'Параметры модуля SFP';
+                html += '<button type="button" class="device-catalog-switch-ports-btn device-catalog-sfp-params-btn' + (sfpCustom ? ' device-catalog-switch-ports-btn--custom' : '') + '" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" title="' + escapeHtml(sfpHint) + '">';
+                html += '<span class="device-catalog-switch-ports-btn__label">Параметры</span></button>';
             }
             if (tab === 'cable') {
                 var cableSettings = getCableModelFiberSettings(mfr, mod);
@@ -3360,6 +3422,15 @@ function renderDeviceCatalogList() {
                 rowInp = rowInp ? rowInp.querySelector('.cable-catalog-fiber-count') : null;
                 var fcOverride = rowInp && rowInp.value ? parseInt(rowInp.value, 10) : null;
                 openCableCatalogPaletteEditor(mf, md, fcOverride);
+            });
+        });
+    }
+    if (tab === 'sfp') {
+        container.querySelectorAll('.device-catalog-sfp-params-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                openSfpModelParamsEditor(btn.getAttribute('data-mfr'), btn.getAttribute('data-model'));
             });
         });
     }
@@ -3725,6 +3796,9 @@ function saveDeviceCatalogEntry() {
         }
         _cableEntryPendingFiber = null;
     }
+    if (tab === 'sfp') {
+        setSfpModelParams(mfr, model, getSfpDefaultTemplate());
+    }
 
     closeDeviceCatalogEntryModal();
     renderDeviceCatalogList();
@@ -3968,6 +4042,8 @@ function openDeviceCatalogModal() {
 function closeDeviceCatalogModal() {
     closeDeviceCatalogEntryModal();
     closeSwitchModelPortsModal();
+    if (typeof closeOltModelOpticalEditor === 'function') closeOltModelOpticalEditor();
+    if (typeof closeSfpModelParamsEditor === 'function') closeSfpModelParamsEditor();
     var modal = document.getElementById('deviceCatalogModal');
     if (modal) {
         modal.classList.remove('device-catalog-modal-open');
@@ -4315,21 +4391,131 @@ var SFP_CATALOG_DEFAULT = {
     ]
 };
 
-function getSfpParams(manufacturer, model) {
+var SFP_DEFAULT_TEMPLATE = {
+    type: 'SFP',
+    speed: '1G',
+    role: 'uplink',
+    wavelengthNm: 1310,
+    wavelengthRxNm: null,
+    fiberType: 'single-mode',
+    maxDistanceKm: 10,
+    connectorType: 'LC',
+    txPowerMinDbm: -9.5,
+    txPowerMaxDbm: -3,
+    rxSensitivityDbm: -20,
+    rxSaturationDbm: -3,
+    budgetDb: 10.5,
+    ddm: true,
+    class: '',
+    compatibleWith: ['olt', 'switch'],
+    ponKinds: []
+};
+
+function sfpParamsKey(manufacturer, model) {
+    return String(manufacturer || '').trim() + '||' + String(model || '').trim();
+}
+
+function getSfpDefaultTemplate() {
+    return JSON.parse(JSON.stringify(SFP_DEFAULT_TEMPLATE));
+}
+
+function buildSfpNameCatalogFromDefault() {
+    var o = {};
+    Object.keys(SFP_CATALOG_DEFAULT || {}).forEach(function(mfr) {
+        if (!mfr) return;
+        o[mfr] = (SFP_CATALOG_DEFAULT[mfr] || []).map(function(entry) {
+            return entry && entry.model ? entry.model : null;
+        }).filter(Boolean);
+    });
+    return o;
+}
+
+function buildSfpParamsFromDefault() {
+    var o = {};
+    Object.keys(SFP_CATALOG_DEFAULT || {}).forEach(function(mfr) {
+        (SFP_CATALOG_DEFAULT[mfr] || []).forEach(function(entry) {
+            if (!entry || !entry.model) return;
+            var params = Object.assign({}, entry);
+            delete params.model;
+            o[sfpParamsKey(mfr, entry.model)] = params;
+        });
+    });
+    return o;
+}
+
+function getBuiltinSfpParams(manufacturer, model) {
     if (!SFP_CATALOG_DEFAULT[manufacturer]) return null;
     var models = SFP_CATALOG_DEFAULT[manufacturer];
     for (var i = 0; i < models.length; i++) {
-        if (models[i].model === model) return models[i];
+        if (models[i].model === model) {
+            var copy = Object.assign({}, models[i]);
+            delete copy.model;
+            return copy;
+        }
     }
     return null;
+}
+
+function getSfpParams(manufacturer, model) {
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (!mfr || !mod) return null;
+    var key = sfpParamsKey(mfr, mod);
+    var stored = sfpModelParams[key];
+    if (stored && typeof stored === 'object') {
+        return Object.assign({ model: mod }, stored);
+    }
+    var builtin = getBuiltinSfpParams(mfr, mod);
+    if (builtin) return Object.assign({ model: mod }, builtin);
+    if (sfpDeviceCatalog[mfr] && (sfpDeviceCatalog[mfr] || []).indexOf(mod) !== -1) {
+        return Object.assign({ model: mod }, getSfpDefaultTemplate());
+    }
+    return null;
+}
+
+function setSfpModelParams(manufacturer, model, params, skipSave) {
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (!mfr || !mod) return false;
+    var key = sfpParamsKey(mfr, mod);
+    if (params == null) {
+        delete sfpModelParams[key];
+    } else {
+        var clean = {};
+        ['type', 'speed', 'role', 'wavelengthNm', 'wavelengthRxNm', 'fiberType', 'maxDistanceKm',
+            'connectorType', 'txPowerMinDbm', 'txPowerMaxDbm', 'rxSensitivityDbm', 'rxSaturationDbm',
+            'budgetDb', 'ddm', 'class', 'compatibleWith', 'ponKinds'].forEach(function(k) {
+            if (params[k] !== undefined) clean[k] = params[k];
+        });
+        sfpModelParams[key] = clean;
+    }
+    if (!skipSave) saveDeviceCatalog();
+    return true;
+}
+
+function sfpModelHasCustomParams(manufacturer, model) {
+    var key = sfpParamsKey(manufacturer, model);
+    var stored = sfpModelParams[key];
+    if (!stored || typeof stored !== 'object') return false;
+    var builtin = getBuiltinSfpParams(manufacturer, model);
+    if (!builtin) return true;
+    try {
+        return JSON.stringify(stored) !== JSON.stringify(builtin);
+    } catch (e) {
+        return true;
+    }
 }
 
 /** Все модули SFP плоским списком { manufacturer, model, ...params }. */
 function listSfpCatalogEntries(filterFn) {
     var out = [];
-    Object.keys(SFP_CATALOG_DEFAULT).forEach(function(mfr) {
-        (SFP_CATALOG_DEFAULT[mfr] || []).forEach(function(entry) {
-            var row = Object.assign({ manufacturer: mfr }, entry);
+    var catalog = sfpDeviceCatalog && Object.keys(sfpDeviceCatalog).length
+        ? sfpDeviceCatalog
+        : buildSfpNameCatalogFromDefault();
+    Object.keys(catalog).forEach(function(mfr) {
+        (catalog[mfr] || []).forEach(function(mod) {
+            var params = getSfpParams(mfr, mod) || Object.assign({ model: mod }, getSfpDefaultTemplate());
+            var row = Object.assign({ manufacturer: mfr }, params, { model: mod });
             if (typeof filterFn === 'function' && !filterFn(row)) return;
             out.push(row);
         });
@@ -4378,6 +4564,146 @@ function formatSfpOptionLabel(entry) {
     if (entry.class) bits.push(entry.class);
     if (entry.txPowerMinDbm != null) bits.push(entry.txPowerMinDbm + '…' + (entry.txPowerMaxDbm != null ? entry.txPowerMaxDbm : '') + ' дБм');
     return bits.filter(Boolean).join(' · ');
+}
+
+var _sfpParamsEditorCtx = { manufacturer: '', model: '' };
+
+function _sfpParamNum(id, fallback) {
+    var el = document.getElementById(id);
+    if (!el || el.value === '' || el.value == null) return fallback;
+    var n = parseFloat(el.value);
+    return isNaN(n) ? fallback : n;
+}
+
+function openSfpModelParamsEditor(manufacturer, model) {
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (!mfr || !mod) return;
+    var modal = document.getElementById('sfpModelParamsModal');
+    if (!modal) return;
+    _sfpParamsEditorCtx = { manufacturer: mfr, model: mod };
+    var params = getSfpParams(mfr, mod) || Object.assign({ model: mod }, getSfpDefaultTemplate());
+    var title = document.getElementById('sfpModelParamsModalTitle');
+    if (title) title.textContent = 'SFP — ' + mfr + ' ' + mod;
+    var hint = document.getElementById('sfpModelParamsModalHint');
+    if (hint) {
+        hint.textContent = sfpModelHasCustomParams(mfr, mod)
+            ? 'Сохранены пользовательские значения. «Сбросить» вернёт заводские параметры модуля (если есть) или шаблон по умолчанию.'
+            : 'Параметры модуля. Изменения попадут в списки установки SFP на портах OLT.';
+    }
+    var setVal = function(id, v) {
+        var el = document.getElementById(id);
+        if (el) el.value = v != null && v !== '' ? String(v) : '';
+    };
+    setVal('sfpParamType', params.type || 'SFP');
+    setVal('sfpParamSpeed', params.speed || '');
+    setVal('sfpParamRole', params.role || 'uplink');
+    setVal('sfpParamClass', params.class || '');
+    setVal('sfpParamConnector', params.connectorType || 'LC');
+    setVal('sfpParamFiberType', params.fiberType || 'single-mode');
+    setVal('sfpParamMaxDistance', params.maxDistanceKm);
+    setVal('sfpParamWlTx', params.wavelengthNm);
+    setVal('sfpParamWlRx', params.wavelengthRxNm);
+    setVal('sfpParamTxMin', params.txPowerMinDbm);
+    setVal('sfpParamTxMax', params.txPowerMaxDbm);
+    setVal('sfpParamRxSens', params.rxSensitivityDbm);
+    setVal('sfpParamRxSat', params.rxSaturationDbm);
+    setVal('sfpParamBudget', params.budgetDb);
+    var ddmEl = document.getElementById('sfpParamDdm');
+    if (ddmEl) ddmEl.checked = params.ddm !== false;
+    var compat = params.compatibleWith || [];
+    var oltCb = document.getElementById('sfpCompatOlt');
+    var swCb = document.getElementById('sfpCompatSwitch');
+    var mcCb = document.getElementById('sfpCompatMc');
+    if (oltCb) oltCb.checked = compat.indexOf('olt') >= 0;
+    if (swCb) swCb.checked = compat.indexOf('switch') >= 0;
+    if (mcCb) mcCb.checked = compat.indexOf('mediaConverter') >= 0;
+    var ponKinds = params.ponKinds || [];
+    document.querySelectorAll('.sfp-pon-kind').forEach(function(cb) {
+        cb.checked = ponKinds.indexOf(cb.value) >= 0;
+    });
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+}
+
+function closeSfpModelParamsEditor() {
+    var modal = document.getElementById('sfpModelParamsModal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+    }
+    _sfpParamsEditorCtx = { manufacturer: '', model: '' };
+}
+
+function saveSfpModelParamsEditor() {
+    var mfr = _sfpParamsEditorCtx.manufacturer;
+    var mod = _sfpParamsEditorCtx.model;
+    if (!mfr || !mod) return;
+    var base = getSfpParams(mfr, mod) || getSfpDefaultTemplate();
+    var compatibleWith = [];
+    if (document.getElementById('sfpCompatOlt') && document.getElementById('sfpCompatOlt').checked) compatibleWith.push('olt');
+    if (document.getElementById('sfpCompatSwitch') && document.getElementById('sfpCompatSwitch').checked) compatibleWith.push('switch');
+    if (document.getElementById('sfpCompatMc') && document.getElementById('sfpCompatMc').checked) compatibleWith.push('mediaConverter');
+    var ponKinds = [];
+    document.querySelectorAll('.sfp-pon-kind:checked').forEach(function(cb) {
+        ponKinds.push(cb.value);
+    });
+    var wlRxRaw = (document.getElementById('sfpParamWlRx') || {}).value;
+    var params = {
+        type: (document.getElementById('sfpParamType') || {}).value || base.type || 'SFP',
+        speed: (document.getElementById('sfpParamSpeed') || {}).value || null,
+        role: (document.getElementById('sfpParamRole') || {}).value || 'uplink',
+        class: (document.getElementById('sfpParamClass') || {}).value || '',
+        connectorType: (document.getElementById('sfpParamConnector') || {}).value || base.connectorType || 'LC',
+        fiberType: (document.getElementById('sfpParamFiberType') || {}).value || 'single-mode',
+        maxDistanceKm: _sfpParamNum('sfpParamMaxDistance', base.maxDistanceKm),
+        wavelengthNm: _sfpParamNum('sfpParamWlTx', base.wavelengthNm),
+        wavelengthRxNm: wlRxRaw === '' || wlRxRaw == null ? null : _sfpParamNum('sfpParamWlRx', null),
+        txPowerMinDbm: _sfpParamNum('sfpParamTxMin', base.txPowerMinDbm),
+        txPowerMaxDbm: _sfpParamNum('sfpParamTxMax', base.txPowerMaxDbm),
+        rxSensitivityDbm: _sfpParamNum('sfpParamRxSens', base.rxSensitivityDbm),
+        rxSaturationDbm: _sfpParamNum('sfpParamRxSat', base.rxSaturationDbm),
+        budgetDb: _sfpParamNum('sfpParamBudget', base.budgetDb),
+        ddm: !!(document.getElementById('sfpParamDdm') && document.getElementById('sfpParamDdm').checked),
+        compatibleWith: compatibleWith,
+        ponKinds: ponKinds
+    };
+    setSfpModelParams(mfr, mod, params);
+    closeSfpModelParamsEditor();
+    renderDeviceCatalogList();
+    if (typeof showInfo === 'function') showInfo('Параметры SFP сохранены', mfr + ' ' + mod);
+}
+
+function resetSfpModelParamsEditor() {
+    var mfr = _sfpParamsEditorCtx.manufacturer;
+    var mod = _sfpParamsEditorCtx.model;
+    if (!mfr || !mod) return;
+    var builtin = getBuiltinSfpParams(mfr, mod);
+    if (builtin) {
+        setSfpModelParams(mfr, mod, builtin);
+    } else {
+        setSfpModelParams(mfr, mod, getSfpDefaultTemplate());
+    }
+    openSfpModelParamsEditor(mfr, mod);
+    renderDeviceCatalogList();
+    if (typeof showInfo === 'function') showInfo('Сброшено к заводским', mfr + ' ' + mod);
+}
+
+function setupSfpModelParamsModalHandlers() {
+    var modal = document.getElementById('sfpModelParamsModal');
+    if (!modal || modal._sfpParamsHandlersBound) return;
+    modal._sfpParamsHandlersBound = true;
+    var closeBtn = modal.querySelector('.close-sfp-model-params');
+    if (closeBtn) closeBtn.addEventListener('click', closeSfpModelParamsEditor);
+    var cancelBtn = document.getElementById('sfpModelParamsCancelBtn');
+    if (cancelBtn) cancelBtn.addEventListener('click', closeSfpModelParamsEditor);
+    var saveBtn = document.getElementById('sfpModelParamsSaveBtn');
+    if (saveBtn) saveBtn.addEventListener('click', saveSfpModelParamsEditor);
+    var resetBtn = document.getElementById('sfpModelParamsResetBtn');
+    if (resetBtn) resetBtn.addEventListener('click', resetSfpModelParamsEditor);
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) closeSfpModelParamsEditor();
+    });
 }
 
 var _oltOpticalEditorCtx = { manufacturer: '', model: '' };
@@ -4526,9 +4852,14 @@ window.decodeSfpSelectValue = decodeSfpSelectValue;
 window.formatSfpOptionLabel = formatSfpOptionLabel;
 window.openOltModelOpticalEditor = openOltModelOpticalEditor;
 window.closeOltModelOpticalEditor = closeOltModelOpticalEditor;
+window.openSfpModelParamsEditor = openSfpModelParamsEditor;
+window.closeSfpModelParamsEditor = closeSfpModelParamsEditor;
+window.setSfpModelParams = setSfpModelParams;
+window.sfpModelHasCustomParams = sfpModelHasCustomParams;
 
 function setupDeviceCatalogModalHandlers() {
     setupOltModelOpticalModalHandlers();
+    setupSfpModelParamsModalHandlers();
     var closeBtn = document.querySelector('.close-device-catalog');
     if (closeBtn) closeBtn.addEventListener('click', closeDeviceCatalogModal);
     var modal = document.getElementById('deviceCatalogModal');
@@ -4539,6 +4870,8 @@ function setupDeviceCatalogModalHandlers() {
             if (entry && entry.style.display && entry.style.display !== 'none') return;
             var optical = document.getElementById('oltModelOpticalModal');
             if (optical && optical.style.display && optical.style.display !== 'none') return;
+            var sfpModal = document.getElementById('sfpModelParamsModal');
+            if (sfpModal && sfpModal.style.display && sfpModal.style.display !== 'none') return;
             closeDeviceCatalogModal();
         });
     }
