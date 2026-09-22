@@ -325,7 +325,7 @@ function setupEventListeners() {
                 e.stopPropagation();
                 return;
             }
-            var modalIds = ['deviceCatalogEntryModal', 'infoModal', 'nodeSelectionModal', 'onuSelectionModal', 'splitterSelectionModal', 'splitterOutputOnuModal', 'splitterOutputSplitterModal', 'splitterOutputHostModal', 'oltSelectionModal', 'usersModal', 'userEditModal', 'organizationsModal', 'organizationEditModal', 'profileModal', 'deviceCatalogModal'];
+            var modalIds = ['deviceCatalogEntryModal', 'infoModal', 'nodeSelectionModal', 'onuSelectionModal', 'splitterSelectionModal', 'splitterOutputOnuModal', 'splitterOutputSplitterModal', 'splitterOutputHostModal', 'oltSelectionModal', 'oltPortSelectionModal', 'signalTraceModal', 'usersModal', 'userEditModal', 'organizationsModal', 'organizationEditModal', 'profileModal', 'deviceCatalogModal'];
             for (var i = 0; i < modalIds.length; i++) {
                 var m = document.getElementById(modalIds[i]);
                 var modalOpen = m && m.style && m.style.display && m.style.display !== 'none';
@@ -336,6 +336,12 @@ function setupEventListeners() {
                         closeDeviceCatalogEntryModal();
                     } else if (modalIds[i] === 'deviceCatalogModal' && typeof closeDeviceCatalogModal === 'function') {
                         closeDeviceCatalogModal();
+                    } else if (modalIds[i] === 'oltSelectionModal' && typeof closeOltSelectionModal === 'function') {
+                        closeOltSelectionModal();
+                    } else if (modalIds[i] === 'oltPortSelectionModal' && typeof window.closeOltPortSelectionModal === 'function') {
+                        window.closeOltPortSelectionModal();
+                    } else if (modalIds[i] === 'signalTraceModal' && typeof window.closeSignalTraceModal === 'function') {
+                        window.closeSignalTraceModal();
                     } else {
                         m.style.display = 'none';
                     }

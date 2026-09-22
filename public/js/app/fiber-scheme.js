@@ -242,12 +242,20 @@ function estimateFiberSchemeTopStripMinWidth(topCables, opts) {
     var sidePad = opts.sidePad != null ? opts.sidePad : 12;
     var topGap = 8;
     var sideInset = 8;
+    var moduleGapPx = 12;
     var pitch = badgeW + topFiberGap;
     var widthsSum = 0;
     for (var i = 0; i < topCables.length; i++) {
-        var fibers = topCables[i].fibers;
+        var cableData = topCables[i];
+        var fibers = cableData.fibers;
         var n = Math.max((fibers && fibers.length) || 1, 1);
-        widthsSum += Math.max(120, n * pitch + 20);
+        var mpm = cableData.fibersPerModule || 0;
+        var extraGaps = 0;
+        if (mpm > 0) {
+            var modCount = cableData.moduleCount > 0 ? cableData.moduleCount : Math.ceil(n / mpm);
+            extraGaps = Math.max(0, modCount - 1) * moduleGapPx;
+        }
+        widthsSum += Math.max(120, n * pitch + 20 + extraGaps);
     }
     widthsSum += Math.max(0, topCables.length - 1) * topGap;
     return sidePad * 2 + sideInset * 2 + widthsSum;

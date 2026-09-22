@@ -224,6 +224,11 @@ function deleteObject(obj, opts) {
             if (changed) slot.properties.set('mediaConverterConnections', mcConn);
         });
     }
+    if (objType === 'cable' && objUniqueId) {
+        if (typeof window.releaseOltPortForCable === 'function') {
+            window.releaseOltPortForCable(objUniqueId);
+        }
+    }
     if (objType === 'radioBridge' && objUniqueId && typeof purgeRadioBridgeReferences === 'function') {
         purgeRadioBridgeReferences(objUniqueId);
     }

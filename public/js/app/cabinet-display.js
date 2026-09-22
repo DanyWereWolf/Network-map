@@ -314,7 +314,7 @@ function findCabinetAtCoords(coords, excludeObj) {
 }
 
 function isCabinetCableEndpointType(type) {
-    return type === 'cross' || type === 'sleeve' || type === 'spliceCassette' || type === 'olt';
+    return type === 'cross' || type === 'sleeve' || type === 'spliceCassette';
 }
 
 function isCopperCabinetCableLayingActive() {
@@ -331,6 +331,7 @@ function isCabinetCopperCableEndpointMember(member) {
 function isCabinetMemberCableActionTarget(member) {
     if (!member || !member.properties) return false;
     var type = member.properties.get('type');
+    if (type === 'olt') return false;
     if (isCabinetCableEndpointType(type)) return true;
     return isCopperCabinetCableLayingActive() && isCabinetCopperCableEndpointMember(member);
 }

@@ -308,6 +308,87 @@ function initThemeAccentControls() {
     }
 }
 
+function canEditOrgFiberMapStyle() {
+    try {
+        if (typeof isAdmin === 'function' && isAdmin()) return true;
+        if (typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin') return true;
+    } catch (e) {}
+    return false;
+}
+
+function syncThemeFiberMapAdminUi() {
+    var canEdit = canEditOrgFiberMapStyle();
+    var colorEl = document.getElementById('themeFiberMapColor');
+    var widthEl = document.getElementById('themeFiberMapStrokeWidth');
+    var hint = document.getElementById('themeFiberMapAdminHint');
+    if (colorEl) colorEl.disabled = !canEdit;
+    if (widthEl) widthEl.disabled = !canEdit;
+    if (hint) hint.hidden = canEdit;
+}
+
+function syncOrgFiberMapStyleToServer(color, width) {
+    if (!canEditOrgFiberMapStyle()) return;
+    if (typeof getApiBase !== 'function' || typeof getAuthToken !== 'function') return;
+    var base = getApiBase();
+    var token = getAuthToken();
+    if (!base || !token) return;
+    try {
+        fetch(base + '/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({
+                fiberMapColor: color,
+                fiberMapStrokeWidth: width
+            })
+        }).catch(function () {});
+    } catch (e) {}
+}
+
+function applyThemeFiberMapStyleFromUi(syncServer) {
+    if (!window.FiberCableConfig || typeof window.FiberCableConfig.setOrgFiberMapStyle !== 'function') return;
+    var colorEl = document.getElementById('themeFiberMapColor');
+    var widthEl = document.getElementById('themeFiberMapStrokeWidth');
+    var widthVal = document.getElementById('themeFiberMapStrokeWidthVal');
+    var color = colorEl ? colorEl.value : undefined;
+    var width = widthEl ? widthEl.value : undefined;
+    if (widthVal && widthEl) widthVal.textContent = String(widthEl.value);
+    var applied = window.FiberCableConfig.setOrgFiberMapStyle(color, width, { applyAll: true });
+    if (syncServer && applied) {
+        syncOrgFiberMapStyleToServer(applied.color, applied.width);
+    }
+}
+
+function initThemeFiberMapControls() {
+    syncThemeFiberMapAdminUi();
+    if (window.FiberCableConfig && typeof window.FiberCableConfig.syncThemeFiberMapControls === 'function') {
+        window.FiberCableConfig.syncThemeFiberMapControls();
+    }
+    var colorEl = document.getElementById('themeFiberMapColor');
+    var widthEl = document.getElementById('themeFiberMapStrokeWidth');
+    if (colorEl && colorEl.dataset.bound !== '1') {
+        colorEl.dataset.bound = '1';
+        colorEl.addEventListener('input', function() {
+            if (!canEditOrgFiberMapStyle()) return;
+            applyThemeFiberMapStyleFromUi(false);
+        });
+        colorEl.addEventListener('change', function() {
+            if (!canEditOrgFiberMapStyle()) return;
+            applyThemeFiberMapStyleFromUi(true);
+        });
+    }
+    if (widthEl && widthEl.dataset.bound !== '1') {
+        widthEl.dataset.bound = '1';
+        widthEl.addEventListener('input', function() {
+            if (!canEditOrgFiberMapStyle()) return;
+            applyThemeFiberMapStyleFromUi(false);
+        });
+        widthEl.addEventListener('change', function() {
+            if (!canEditOrgFiberMapStyle()) return;
+            applyThemeFiberMapStyleFromUi(true);
+        });
+    }
+}
+
 function formatMapZoomValue(zoom) {
     if (typeof zoom !== 'number' || isNaN(zoom)) return '—';
     var rounded = Math.round(zoom * 10) / 10;
@@ -414,6 +495,7 @@ function initTheme() {
     if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
     try { initMapAnimationsToggle(); } catch (eAnim) {}
     try { initThemeAccentControls(); } catch (eAccent) {}
+    try { initThemeFiberMapControls(); } catch (eFiberMap) {}
     try { initLodThresholdControls(); } catch (eLod) {}
     try {
         if (typeof initPerfSettingsControls === 'function') initPerfSettingsControls();
@@ -490,3 +572,5 @@ window.getThemeAccent = getThemeAccent;
 window.setThemeAccent = setThemeAccent;
 window.updateSettingsCurrentZoom = updateSettingsCurrentZoom;
 window.syncLodControlsUi = syncLodControlsUi;
+window.initThemeFiberMapControls = initThemeFiberMapControls;
+window.syncThemeFiberMapAdminUi = syncThemeFiberMapAdminUi;

@@ -1513,12 +1513,37 @@ function getSettings(orgId) {
         theme: theme || '',
         groupNames: parsedGroupNames,
         customDeviceOptions: parsedCustomDevice,
-        collaboratorCursorStyle: normalizeCollaboratorCursorStyle(collaboratorCursorStyle)
+        collaboratorCursorStyle: normalizeCollaboratorCursorStyle(collaboratorCursorStyle),
+        fiberMapColor: normalizeFiberMapColor(byOrg && byOrg.fiberMapColor),
+        fiberMapStrokeWidth: normalizeFiberMapStrokeWidth(byOrg && byOrg.fiberMapStrokeWidth)
     };
 }
 
 function normalizeCollaboratorCursorStyle(value) {
     return value === 'circle' ? 'circle' : 'pointer';
+}
+
+var DEFAULT_FIBER_MAP_COLOR = '#16a34a';
+var DEFAULT_FIBER_MAP_WIDTH = 3;
+var MIN_FIBER_MAP_WIDTH = 1;
+var MAX_FIBER_MAP_WIDTH = 8;
+
+function normalizeFiberMapColor(value) {
+    if (value == null || value === '') return DEFAULT_FIBER_MAP_COLOR;
+    var s = String(value).trim();
+    if (/^#[0-9A-Fa-f]{6}$/.test(s)) return s.toLowerCase();
+    if (/^#[0-9A-Fa-f]{3}$/.test(s)) {
+        return ('#' + s.charAt(1) + s.charAt(1) + s.charAt(2) + s.charAt(2) + s.charAt(3) + s.charAt(3)).toLowerCase();
+    }
+    return DEFAULT_FIBER_MAP_COLOR;
+}
+
+function normalizeFiberMapStrokeWidth(value) {
+    var n = parseInt(value, 10);
+    if (isNaN(n)) return DEFAULT_FIBER_MAP_WIDTH;
+    if (n < MIN_FIBER_MAP_WIDTH) return MIN_FIBER_MAP_WIDTH;
+    if (n > MAX_FIBER_MAP_WIDTH) return MAX_FIBER_MAP_WIDTH;
+    return n;
 }
 
 function setSettings(obj, orgId) {
@@ -1532,6 +1557,8 @@ function setSettings(obj, orgId) {
         if (obj.groupNames !== undefined) o.groupNames = typeof obj.groupNames === 'string' ? obj.groupNames : JSON.stringify(obj.groupNames);
         if (obj.customDeviceOptions !== undefined) o.customDeviceOptions = typeof obj.customDeviceOptions === 'string' ? obj.customDeviceOptions : JSON.stringify(obj.customDeviceOptions);
         if (obj.collaboratorCursorStyle !== undefined) o.collaboratorCursorStyle = normalizeCollaboratorCursorStyle(obj.collaboratorCursorStyle);
+        if (obj.fiberMapColor !== undefined) o.fiberMapColor = normalizeFiberMapColor(obj.fiberMapColor);
+        if (obj.fiberMapStrokeWidth !== undefined) o.fiberMapStrokeWidth = normalizeFiberMapStrokeWidth(obj.fiberMapStrokeWidth);
         saveStore();
         return;
     }

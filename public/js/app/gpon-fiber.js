@@ -35,24 +35,42 @@ function applySerializedCopperMetadataToCable(cable, item) {
 
 function getEffectiveCableLayingType() {
     if (typeof copperCableLayingActive !== 'undefined' && copperCableLayingActive) return 'copper';
+    if (window.FiberCableConfig && typeof window.FiberCableConfig.getLayCableKind === 'function') {
+        return window.FiberCableConfig.getLayCableKind();
+    }
+    var sel = document.getElementById('cableType');
+    if (sel && sel.value) return sel.value;
     return 'fiber';
 }
 
 function applyNewCableFiberProps(cable) {
     if (!cable || !cable.properties || !window.FiberCableConfig) return;
-    if (!window.FiberCableConfig.isOpticalCableType(cable.properties.get('cableType'))) return;
-    var count = window.FiberCableConfig.getLayFiberCount();
-    cable.properties.set('fiberCount', count);
-    cable.properties.set('cableType', 'fiber');
-    var pal = window.FiberCableConfig.getLayFiberPalette();
-    if (pal && pal.length) {
-        cable.properties.set('fiberPalette', window.FiberCableConfig.trimPaletteToCount
-            ? window.FiberCableConfig.trimPaletteToCount(pal, count)
-            : pal);
-    } else {
-        cable.properties.unset('fiberPalette');
+    var kind = typeof window.FiberCableConfig.getLayCableKind === 'function'
+        ? window.FiberCableConfig.getLayCableKind()
+        : 'fiber';
+    if (!window.FiberCableConfig.isOpticalCableType(kind) && !window.FiberCableConfig.isOpticalCableType(cable.properties.get('cableType'))) {
+        return;
     }
-    window.FiberCableConfig.applyOpticalMapStyle(cable);
+    cable.properties.set('cableType', kind === 'fiberModular' ? 'fiberModular' : 'fiber');
+    var pal = window.FiberCableConfig.getLayFiberPalette();
+    if (kind === 'fiberModular' && typeof window.FiberCableConfig.getLayModularTotals === 'function') {
+        var totals = window.FiberCableConfig.getLayModularTotals();
+        window.FiberCableConfig.applyCableFiberSettings(
+            cable,
+            totals.fiberCount,
+            pal && pal.length ? pal : null,
+            totals.perModule,
+            totals.modules
+        );
+    } else {
+        var count = window.FiberCableConfig.getLayFiberCount();
+        window.FiberCableConfig.applyCableFiberSettings(
+            cable,
+            count,
+            pal && pal.length ? pal : null,
+            0
+        );
+    }
     if (typeof applyLayCableProductToCable === 'function') applyLayCableProductToCable(cable);
 }
 
@@ -72,6 +90,35 @@ function applyImportedCableFiberProps(cable, item) {
         cable.properties.set('fiberPalette', window.FiberCableConfig.trimPaletteToCount
             ? window.FiberCableConfig.trimPaletteToCount(item.fiberPalette, impCount)
             : item.fiberPalette);
+    }
+    if (item.fibersPerModule != null && item.fibersPerModule !== '') {
+        var mpmImp = window.FiberCableConfig.normalizeFibersPerModule
+            ? window.FiberCableConfig.normalizeFibersPerModule(item.fibersPerModule)
+            : parseInt(item.fibersPerModule, 10);
+        if (mpmImp > 0) cable.properties.set('fibersPerModule', mpmImp);
+        else cable.properties.unset('fibersPerModule');
+    }
+    if (item.moduleCount != null && item.moduleCount !== '') {
+        var mcImp = window.FiberCableConfig.normalizeModuleCount
+            ? window.FiberCableConfig.normalizeModuleCount(item.moduleCount)
+            : parseInt(item.moduleCount, 10);
+        if (!isNaN(mcImp) && mcImp > 0) cable.properties.set('moduleCount', mcImp);
+        else cable.properties.unset('moduleCount');
+    }
+    if (item.cableType === 'fiberModular' || (cable.properties.get('fibersPerModule') > 0)) {
+        cable.properties.set('cableType', 'fiberModular');
+        if (!(cable.properties.get('fibersPerModule') > 0)) {
+            cable.properties.set('fibersPerModule',
+                window.FiberCableConfig.DEFAULT_FIBERS_PER_MODULE || 12);
+        }
+        if (!(cable.properties.get('moduleCount') > 0)) {
+            var fcImp = cable.properties.get('fiberCount') || window.FiberCableConfig.getFiberCountFromCable(cable);
+            var mpmDef = cable.properties.get('fibersPerModule') || window.FiberCableConfig.DEFAULT_FIBERS_PER_MODULE || 12;
+            cable.properties.set('moduleCount',
+                window.FiberCableConfig.getModuleCount
+                    ? window.FiberCableConfig.getModuleCount(fcImp, mpmDef)
+                    : Math.ceil((fcImp || 1) / mpmDef));
+        }
     }
     if (window.FiberCableConfig.isOpticalCableType(cable.properties.get('cableType'))) {
         window.FiberCableConfig.applyOpticalMapStyle(cable);
@@ -1565,6 +1612,7 @@ function pruneConnectionsForRemovedCableFibers(cableUniqueId, maxFiber) {
                         });
                         if (oltObj) {
                             if (conn.incoming) {
+                                if (typeof clearOltIncomingUplinkPort === 'function') clearOltIncomingUplinkPort(oltObj);
                                 oltObj.properties.set('incomingFiber', null);
                             } else if (conn.portNumber != null) {
                                 var portAssignments = oltObj.properties.get('portAssignments') || {};
@@ -2346,6 +2394,61 @@ function connectOltPortToCrossPort(oltObj, portNumber, crossObj, crossPortNum) {
     return true;
 }
 
+/**
+ * Привязать уже проложенный feeder-кабель PON к порту панели кросса
+ * (после assignOltPortFeederCable — порт уже «занят», connectOltPortToCrossPort тут нельзя).
+ */
+function bindOltFeederCableToCrossPort(oltObj, portNumber, crossObj, crossPortNum, cableId, fiberNumber, opts) {
+    opts = opts || {};
+    if (!oltObj || !crossObj || portNumber == null || crossPortNum == null || !cableId || fiberNumber == null) {
+        return false;
+    }
+    var crossPort = parseInt(crossPortNum, 10);
+    var portNum = parseInt(portNumber, 10);
+    if (isNaN(crossPort) || isNaN(portNum)) return false;
+    if (!isCrossPortAvailableForOltConnect(crossObj, crossPort, oltObj, portNum)) {
+        showError('Порт кросса недоступен: он уже занят другим PON-портом OLT.', 'Порт недоступен');
+        return false;
+    }
+    var oltId = getObjectUniqueId(oltObj);
+    if (isFiberUsedByOtherOltPon(cableId, fiberNumber, oltId, portNum)) {
+        showError('Эта жила уже подключена к другому PON-порту OLT.', 'Жила занята');
+        return false;
+    }
+    var fiberKey = fiberConnKey(cableId, fiberNumber);
+    var fiberPorts = Object.assign({}, crossObj.properties.get('fiberPorts') || {});
+    var keysOnPort = getCrossPortFiberKeys(crossObj, crossPort);
+    for (var ki = 0; ki < keysOnPort.length; ki++) {
+        if (keysOnPort[ki] !== fiberKey) {
+            delete fiberPorts[keysOnPort[ki]];
+        }
+    }
+    fiberPorts[fiberKey] = crossPort;
+    crossObj.properties.set('fiberPorts', fiberPorts);
+
+    var portAssignments = Object.assign({}, oltObj.properties.get('portAssignments') || {});
+    portAssignments[String(portNum)] = {
+        cableId: cableId,
+        fiberNumber: fiberNumber,
+        crossId: getObjectUniqueId(crossObj),
+        crossPort: crossPort
+    };
+    oltObj.properties.set('portAssignments', portAssignments);
+    setHostFiberAssignment(crossObj, 'oltConnections', cableId, fiberNumber, {
+        oltId: oltId,
+        portNumber: portNum
+    });
+    if (!opts.skipSave) {
+        saveLinkedMapObjects([oltObj, crossObj]);
+        if (typeof createOltConnectionLine === 'function') {
+            createOltConnectionLine(crossObj, oltObj, cableId, fiberNumber, []);
+        } else if (typeof scheduleConnectionLinesUpdate === 'function') {
+            scheduleConnectionLinesUpdate();
+        }
+    }
+    return true;
+}
+
 function connectOltPortToMediaConverter(oltObj, portNumber, mcObj, routeIds) {
     if (!oltObj || !mcObj || portNumber == null) return false;
     if (isOltPortInUse(oltObj, portNumber)) {
@@ -2584,7 +2687,14 @@ function syncOltPlacementPortsFromCatalog() {
         return;
     }
     var defN = typeof getOltModelDefaultPortCount === 'function' ? getOltModelDefaultPortCount(mfr, mod) : null;
-    if (defN != null && defN >= 1) setOltPonPortsPlacementSelect(defN);
+    if (defN != null && defN >= 1) {
+        setOltPonPortsPlacementSelect(defN);
+        return;
+    }
+    var opt = typeof getOltModelOpticalParams === 'function'
+        ? getOltModelOpticalParams(mfr, mod)
+        : (typeof window.getDeviceOpticalParams === 'function' ? window.getDeviceOpticalParams('olt', mfr, mod) : null);
+    if (opt && opt.ponPorts != null && opt.ponPorts >= 1) setOltPonPortsPlacementSelect(opt.ponPorts);
 }
 
 function isOltPortConnected(oltObj, portNumber) {
@@ -2721,8 +2831,26 @@ function syncOltLogicalState(oltObj, opts) {
                 }
             } else {
                 var feederHost = getOltPortFeederHost(oltObj, parseInt(portKey, 10));
-                if (!feederHost || !isOltCableLinkedToHost(oltObj, feederHost, a.cableId)) {
-                    invalid = true;
+                if (feederHost && isOltCableLinkedToHost(oltObj, feederHost, a.cableId)) {
+                    /* ok */
+                } else {
+                    var cableObj = objects.find(function(c) {
+                        return c.properties && c.properties.get('type') === 'cable' &&
+                            c.properties.get('uniqueId') === a.cableId;
+                    });
+                    var otherEnd = cableObj ? getOtherEndOfCable(cableObj, oltObj) : null;
+                    var hostOk = !!(otherEnd && otherEnd.properties && isFiberHostType(otherEnd.properties.get('type')));
+                    if (!hostOk) {
+                        var hasHostConn = false;
+                        objects.forEach(function(slot) {
+                            if (hasHostConn || !slot.properties || !isFiberHostType(slot.properties.get('type'))) return;
+                            var conn = getHostFiberMapEntry(slot, 'oltConnections', a.cableId, a.fiberNumber);
+                            if (conn && conn.oltId === oltUid && conn.portNumber === parseInt(portKey, 10)) {
+                                hasHostConn = true;
+                            }
+                        });
+                        if (!hasHostConn) invalid = true;
+                    }
                 }
             }
         }
@@ -2744,6 +2872,7 @@ function syncOltLogicalState(oltObj, opts) {
 
     var incoming = oltObj.properties.get('incomingFiber');
     if (incoming && incoming.cableId && !isFiberExistingOnCable(incoming.cableId, incoming.fiberNumber)) {
+        if (typeof clearOltIncomingUplinkPort === 'function') clearOltIncomingUplinkPort(oltObj);
         oltObj.properties.set('incomingFiber', null);
         changed = true;
         incoming = null;
@@ -2759,7 +2888,10 @@ function syncOltLogicalState(oltObj, opts) {
             if (!conn || conn.oltId !== oltUid) return;
             var p = parseFiberConnectionKey(key);
             if (!p || !isFiberExistingOnCable(p.cableId, p.fiberNumber)) {
-                if (conn.incoming) oltObj.properties.set('incomingFiber', null);
+                if (conn.incoming) {
+                    if (typeof clearOltIncomingUplinkPort === 'function') clearOltIncomingUplinkPort(oltObj);
+                    oltObj.properties.set('incomingFiber', null);
+                }
                 if (conn.portNumber != null) delete portAssignments[String(conn.portNumber)];
                 clearHostOltConnKey(slot, key);
                 changed = true;
@@ -2767,8 +2899,19 @@ function syncOltLogicalState(oltObj, opts) {
             }
             if (conn.incoming) {
                 var curInc = oltObj.properties.get('incomingFiber');
-                if (!curInc || curInc.cableId !== p.cableId || curInc.fiberNumber !== p.fiberNumber) {
-                    oltObj.properties.set('incomingFiber', { cableId: p.cableId, fiberNumber: p.fiberNumber });
+                var nextInc = {
+                    cableId: p.cableId,
+                    fiberNumber: p.fiberNumber
+                };
+                if (conn.uplinkPortIndex != null) nextInc.uplinkPortIndex = conn.uplinkPortIndex;
+                else if (curInc && curInc.uplinkPortIndex != null) nextInc.uplinkPortIndex = curInc.uplinkPortIndex;
+                if (!curInc || curInc.cableId !== nextInc.cableId || curInc.fiberNumber !== nextInc.fiberNumber ||
+                    curInc.uplinkPortIndex !== nextInc.uplinkPortIndex) {
+                    if (nextInc.uplinkPortIndex != null && typeof assignOltIncomingToUplinkPort === 'function') {
+                        assignOltIncomingToUplinkPort(oltObj, nextInc.uplinkPortIndex, nextInc.cableId, nextInc.fiberNumber);
+                    } else {
+                        oltObj.properties.set('incomingFiber', nextInc);
+                    }
                     changed = true;
                 }
             } else if (conn.portNumber != null) {
@@ -3010,6 +3153,36 @@ function buildOltPortFeederCableName(oltObj, portNumber, hostObj) {
     return name;
 }
 
+/** Прокладка кабеля к/от OLT только с кнопки «Подключить» в карточке (PON / SFP / RJ45). */
+function isOltPortDirectedCableLayActive() {
+    if (pendingOltPortPreset || pendingOltUplinkPreset) return true;
+    if (typeof pendingCopperPortPreset !== 'undefined' && pendingCopperPortPreset &&
+        pendingCopperPortPreset.kind === 'olt') {
+        return true;
+    }
+    return false;
+}
+
+function showOltCableLayMustStartFromCardError() {
+    if (typeof showError === 'function') {
+        showError(
+            'Кабель к OLT нельзя прокладывать из режима «Проложить кабель» кликом по карте. Откройте карточку OLT и нажмите «Подключить» у нужного порта (PON, SFP/SFP+ или RJ45).',
+            'Только с OLT'
+        );
+    }
+}
+
+/** Разрешить OLT как конец/начало кабеля только при направленной прокладке с карточки. */
+function allowOltAsFiberCableEndpoint(objOrType) {
+    var type = typeof objOrType === 'string'
+        ? objOrType
+        : (objOrType && objOrType.properties ? objOrType.properties.get('type') : null);
+    if (type !== 'olt') return true;
+    if (isOltPortDirectedCableLayActive()) return true;
+    showOltCableLayMustStartFromCardError();
+    return false;
+}
+
 function validatePendingOltPortCableEndpoint(endpointObj) {
     if (!pendingOltPortPreset || !endpointObj || !endpointObj.properties) return true;
     if (!isFiberHostType(endpointObj.properties.get('type'))) {
@@ -3027,6 +3200,12 @@ function validatePendingOltPortCableEndpoint(endpointObj) {
     return true;
 }
 
+window.isOltPortDirectedCableLayActive = isOltPortDirectedCableLayActive;
+window.allowOltAsFiberCableEndpoint = allowOltAsFiberCableEndpoint;
+window.showOltCableLayMustStartFromCardError = showOltCableLayMustStartFromCardError;
+window.finalizeOltPortPresetAfterCableSaved = finalizeOltPortPresetAfterCableSaved;
+window.tryApplyOltPortPresetOnCableCreated = tryApplyOltPortPresetOnCableCreated;
+
 function finishOltPortCableLayingSession(completed) {
     if (pendingOltPortLayFiberBackup != null && window.FiberCableConfig) {
         window.FiberCableConfig.setLayFiberCount(pendingOltPortLayFiberBackup);
@@ -3034,6 +3213,8 @@ function finishOltPortCableLayingSession(completed) {
         if (typeof syncCableTypePickerUI === 'function') syncCableTypePickerUI();
     }
     pendingOltPortPreset = null;
+    pendingOltUplinkPreset = null;
+    if (!completed) pendingOltPortPresetResult = null;
     if (completed) oltPortCableJustFinished = true;
     currentCableTool = false;
     cableSource = null;
@@ -3055,7 +3236,8 @@ function finishOltPortCableLayingSession(completed) {
     if (typeof syncMapPanLockForEditTools === 'function') syncMapPanLockForEditTools();
 }
 
-function assignOltPortFeederCable(oltObj, portNumber, cableId, fiberNumber, hostObj, cableObj) {
+function assignOltPortFeederCable(oltObj, portNumber, cableId, fiberNumber, hostObj, cableObj, opts) {
+    opts = opts || {};
     var oltId = getObjectUniqueId(oltObj);
     getObjectUniqueId(hostObj);
     if (!isOltCableLinkedToHost(oltObj, hostObj, cableId)) {
@@ -3074,10 +3256,11 @@ function assignOltPortFeederCable(oltObj, portNumber, cableId, fiberNumber, host
         oltId: oltId,
         portNumber: portNumber
     });
-    var toSave = [oltObj, hostObj];
-    if (cableObj) toSave.push(cableObj);
-    saveLinkedMapObjects(toSave);
-    if (typeof scheduleConnectionLinesUpdate === 'function') scheduleConnectionLinesUpdate();
+    if (!opts.skipSave) {
+        // Новый кабель ещё не на сервере — не слать update_cable, только OLT и хост.
+        saveLinkedMapObjects([oltObj, hostObj]);
+        if (typeof scheduleConnectionLinesUpdate === 'function') scheduleConnectionLinesUpdate();
+    }
     return true;
 }
 
@@ -3101,7 +3284,9 @@ function tryApplyOltPortPresetOnCableCreated(points, cable) {
     }
     var feederCableName = buildOltPortFeederCableName(ends.oltObj, preset.portNumber, ends.hostObj);
     if (feederCableName) cable.properties.set('cableName', feederCableName);
-    if (!assignOltPortFeederCable(ends.oltObj, preset.portNumber, cableId, 1, ends.hostObj, cable)) {
+    // Только мутация свойств — save/add_cable делает createCableFromPoints, иначе update_cable
+    // уходит раньше add_cable и кабель не попадает в БД.
+    if (!assignOltPortFeederCable(ends.oltObj, preset.portNumber, cableId, 1, ends.hostObj, cable, { skipSave: true })) {
         finishOltPortCableLayingSession(false);
         return false;
     }
@@ -3115,28 +3300,122 @@ function tryApplyOltPortPresetOnCableCreated(points, cable) {
             finishOltPortCableLayingSession(false);
             return false;
         }
-        if (!connectOltPortToCrossPort(ends.oltObj, preset.portNumber, targetCross, preset.crossPort)) {
+        if (!bindOltFeederCableToCrossPort(ends.oltObj, preset.portNumber, targetCross, preset.crossPort, cableId, 1, { skipSave: true })) {
             finishOltPortCableLayingSession(false);
             return false;
         }
     }
+    // Не finish/save здесь — иначе pending сбросится и syncFull уйдёт до add_cable.
+    pendingOltPortPresetResult = {
+        oltObj: ends.oltObj,
+        hostObj: ends.hostObj,
+        portNumber: preset.portNumber,
+        crossPort: preset.crossPort != null ? preset.crossPort : null,
+        cableId: cableId
+    };
+    return true;
+}
+
+function finalizeOltPortPresetAfterCableSaved() {
+    var result = pendingOltPortPresetResult;
+    pendingOltPortPresetResult = null;
+    if (!result || !result.oltObj) {
+        if (pendingOltPortPreset) finishOltPortCableLayingSession(false);
+        return false;
+    }
     finishOltPortCableLayingSession(true);
-    saveData({ syncFull: true });
-    if (typeof showObjectInfo === 'function') showObjectInfo(ends.oltObj);
+    saveLinkedMapObjects([result.oltObj, result.hostObj].filter(Boolean));
+    if (typeof saveData === 'function') saveData({ syncFull: true });
+    if (typeof scheduleConnectionLinesUpdate === 'function') scheduleConnectionLinesUpdate();
+    if (typeof showObjectInfo === 'function') showObjectInfo(result.oltObj);
     if (typeof showSuccess === 'function') {
-        var hType = ends.hostObj.properties.get('type');
+        var hType = result.hostObj && result.hostObj.properties ? result.hostObj.properties.get('type') : null;
         var hostType = hType === 'cross' ? 'кросса' : (hType === 'spliceCassette' ? 'сплайс-кассеты' : 'муфты');
-        var hostName = ends.hostObj.properties.get('name') || (hType === 'cross' ? 'Кросс' : (hType === 'spliceCassette' ? 'Сплайс-кассета' : 'Муфта'));
+        var hostName = result.hostObj && result.hostObj.properties
+            ? (result.hostObj.properties.get('name') || (hType === 'cross' ? 'Кросс' : (hType === 'spliceCassette' ? 'Сплайс-кассета' : 'Муфта')))
+            : 'хост';
         var portLblDone = typeof formatOltPortDisplay === 'function'
-            ? formatOltPortDisplay(preset.portNumber, typeof getOltPortLabel === 'function' ? getOltPortLabel(ends.oltObj, preset.portNumber) : '', true)
-            : ('п.' + preset.portNumber);
-        if (preset.crossPort != null) {
-            showSuccess('PON-порт ' + portLblDone + ' подключён к порту ' + preset.crossPort + ' кросса «' + hostName + '».', 'OLT');
+            ? formatOltPortDisplay(result.portNumber, typeof getOltPortLabel === 'function' ? getOltPortLabel(result.oltObj, result.portNumber) : '', true)
+            : ('п.' + result.portNumber);
+        if (result.crossPort != null) {
+            showSuccess('PON-порт ' + portLblDone + ' подключён к порту ' + result.crossPort + ' кросса «' + hostName + '».', 'OLT');
         } else {
             showSuccess('Feeder с ' + portLblDone + ' проложен до ' + hostType + ' «' + hostName + '».', 'OLT');
         }
     }
     return true;
+}
+
+function tryApplyOltUplinkPresetOnCableCreated(points, cable) {
+    if (!pendingOltUplinkPreset || !points || points.length < 2 || !cable || !cable.properties) return false;
+    var preset = pendingOltUplinkPreset;
+    var oltObj = null;
+    if (points[0] && points[0].properties && points[0].properties.get('type') === 'olt' &&
+        getObjectUniqueId(points[0]) === preset.oltUid) {
+        oltObj = points[0];
+    } else if (points[points.length - 1] && points[points.length - 1].properties &&
+        points[points.length - 1].properties.get('type') === 'olt' &&
+        getObjectUniqueId(points[points.length - 1]) === preset.oltUid) {
+        oltObj = points[points.length - 1];
+    }
+    if (!oltObj) return false;
+    var cableId = cable.properties.get('uniqueId');
+    if (!cableId) return false;
+    pendingOltUplinkPreset = null;
+    if (typeof window.assignCableToOltPortByIndex === 'function') {
+        var ok = window.assignCableToOltPortByIndex(oltObj, preset.portIndex, cableId);
+        if (!ok) return false;
+    }
+    finishOltPortCableLayingSession(true);
+    if (typeof showObjectInfo === 'function') showObjectInfo(oltObj);
+    if (typeof showSuccess === 'function') {
+        showSuccess('Кабель подключён к uplink-порту ' + preset.portIndex + '.', 'OLT');
+    }
+    return true;
+}
+
+function startOltUplinkFiberCable(oltObj, portIndex) {
+    if (!isEditMode || !oltObj || !oltObj.properties || oltObj.properties.get('type') !== 'olt') return;
+    var portIdx = parseInt(portIndex, 10);
+    if (isNaN(portIdx)) return;
+    var ports = oltObj.properties.get('ports') || [];
+    var port = null;
+    for (var i = 0; i < ports.length; i++) {
+        if (ports[i].portIndex === portIdx) { port = ports[i]; break; }
+    }
+    if (!port || (port.portType !== 'sfp-uplink' && port.portType !== 'sfp-plus-uplink')) {
+        if (typeof showError === 'function') showError('Оптический кабель с uplink прокладывается с порта SFP или SFP+.', 'Порт');
+        return;
+    }
+    if (port.connectedCableId) {
+        if (typeof showError === 'function') showError('Этот uplink-порт уже занят.', 'Порт занят');
+        return;
+    }
+    if (objectPlacementMode && typeof cancelObjectPlacement === 'function') cancelObjectPlacement();
+    if (splitterFiberRoutingMode && typeof cancelSplitterFiberRouting === 'function') cancelSplitterFiberRouting();
+    if (fiberRoutingMode && typeof cancelFiberRouting === 'function') cancelFiberRouting();
+    if (cableSplitMode && typeof cancelCableSplitMode === 'function') cancelCableSplitMode();
+    pendingOltPortPreset = null;
+    pendingCopperPortPreset = null;
+    copperCableLayingActive = false;
+    activateCableLayingTool();
+    pendingOltUplinkPreset = {
+        oltUid: getObjectUniqueId(oltObj),
+        portIndex: portIdx,
+        portType: port.portType
+    };
+    cableSource = oltObj;
+    cableWaypoints = [];
+    if (typeof removePhantomPlacemark === 'function') removePhantomPlacemark();
+    if (typeof clearSelection === 'function') clearSelection();
+    if (typeof closeInfoModal === 'function') closeInfoModal();
+    else {
+        var modal = document.getElementById('infoModal');
+        if (modal) modal.style.display = 'none';
+        currentModalObject = null;
+    }
+    var label = port.portLabel ? (' «' + port.portLabel + '»') : '';
+    showInfo('Оптический кабель с uplink' + label + ' (порт ' + portIdx + '): кликайте по опорам, затем выберите вторую точку. Escape — отмена.', 'Подключение OLT');
 }
 
 function activateCableLayingTool() {
@@ -3195,6 +3474,7 @@ function startOltPortCrossRouting(oltObj, portNumber, crossObj, crossPortNum) {
         crossId: getObjectUniqueId(crossObj),
         crossPort: crossPort
     };
+    pendingOltUplinkPreset = null;
     if (typeof saveLinkedMapObjects === 'function') saveLinkedMapObjects([oltObj]);
     cableSource = oltObj;
     cableWaypoints = [];
@@ -3235,6 +3515,7 @@ function startOltPortFiberCable(oltObj, portNumber) {
     if (typeof syncCableTypePickerUI === 'function') syncCableTypePickerUI();
     activateCableLayingTool();
     pendingOltPortPreset = { oltUid: getObjectUniqueId(oltObj), portNumber: portNum };
+    pendingOltUplinkPreset = null;
     if (typeof saveLinkedMapObjects === 'function') saveLinkedMapObjects([oltObj]);
     cableSource = oltObj;
     cableWaypoints = [];

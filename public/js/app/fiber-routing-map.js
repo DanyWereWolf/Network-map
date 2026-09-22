@@ -363,20 +363,22 @@ function tryCompleteFiberRoutingForCabinetClick(clickedObject) {
     return true;
 }
 
-function startFiberRouting(sleeveObj, cableId, fiberNumber, targetType, targetObj) {
+function startFiberRouting(sleeveObj, cableId, fiberNumber, targetType, targetObj, extra) {
     fiberRoutingMode = true;
     var targetId = getObjectUniqueId(targetObj);
     if (!targetId) {
         targetId = generateUniqueId(targetType);
         targetObj.properties.set('uniqueId', targetId);
     }
+    extra = extra || {};
     fiberRoutingData = {
         sleeveObj: sleeveObj,
         cableId: cableId,
         fiberNumber: fiberNumber,
         targetType: targetType,
         targetObj: targetObj,
-        targetId: targetId
+        targetId: targetId,
+        uplinkPortIndex: extra.uplinkPortIndex != null ? extra.uplinkPortIndex : null
     };
     fiberRoutingWaypoints = [];
     var sleeveName = sleeveObj.properties.get('name') || (sleeveObj.properties.get('type') === 'cross' ? 'Кросс' : 'Муфта');
@@ -438,7 +440,7 @@ function completeFiberRouting() {
             refreshedUi = true;
         }
     } else if (data.targetType === 'olt') {
-        connectFiberToOltWithRoute(data.sleeveObj, data.cableId, data.fiberNumber, data.targetObj, routeIds);
+        connectFiberToOltWithRoute(data.sleeveObj, data.cableId, data.fiberNumber, data.targetObj, routeIds, data.uplinkPortIndex);
         refreshedUi = true;
     }
     

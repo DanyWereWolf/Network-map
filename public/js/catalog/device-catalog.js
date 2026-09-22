@@ -1157,6 +1157,7 @@ function resetDeviceCatalogTabToDefault(kind) {
         oltDeviceCatalog = cloneDeepCatalog(def);
         oltModelDefaultPorts = {};
         oltModelPortTypes = {};
+        oltModelOpticalParams = {};
     }
     else if (kind === 'onu') onuDeviceCatalog = cloneDeepCatalog(def);
     else if (kind === 'camera') cameraDeviceCatalog = cloneDeepCatalog(def);
@@ -1216,6 +1217,11 @@ function removeManufacturerForCatalog(kind, name) {
     }
     if (kind === 'olt' && oltModelPortTypes[name]) {
         delete oltModelPortTypes[name];
+    }
+    if (kind === 'olt') {
+        Object.keys(oltModelOpticalParams || {}).forEach(function(key) {
+            if (key.indexOf(String(name) + '||') === 0) delete oltModelOpticalParams[key];
+        });
     }
     if (kind === 'cable' && cableModelFiberSettings[name]) {
         delete cableModelFiberSettings[name];
@@ -1282,6 +1288,9 @@ function removeModelForCatalog(kind, manufacturer, model) {
         if (Object.keys(oltModelPortTypes[manufacturer]).length === 0) {
             delete oltModelPortTypes[manufacturer];
         }
+    }
+    if (kind === 'olt') {
+        delete oltModelOpticalParams[oltOpticalKey(manufacturer, model)];
     }
     if (kind === 'cable' && cableModelFiberSettings[manufacturer]) {
         if (cableModelFiberSettings[manufacturer][model] !== undefined) {
@@ -2118,6 +2127,7 @@ function buildDeviceCatalogPayload() {
         switchModelPortTypes: JSON.parse(JSON.stringify(switchModelPortTypes || {})),
         oltModelDefaultPorts: JSON.parse(JSON.stringify(oltModelDefaultPorts || {})),
         oltModelPortTypes: JSON.parse(JSON.stringify(oltModelPortTypes || {})),
+        oltModelOpticalParams: JSON.parse(JSON.stringify(oltModelOpticalParams || {})),
         cableDeviceCatalog: cloneDeepCatalog(cableDeviceCatalog),
         cableModelFiberSettings: JSON.parse(JSON.stringify(cableModelFiberSettings || {})),
         customSleeveTypes: getCustomSleeveTypes(),
@@ -2225,6 +2235,11 @@ function loadDeviceCatalog(opts) {
             oltModelPortTypes = JSON.parse(JSON.stringify(opts.oltModelPortTypes));
         } else {
             oltModelPortTypes = {};
+        }
+        if (opts.oltModelOpticalParams && typeof opts.oltModelOpticalParams === 'object') {
+            oltModelOpticalParams = JSON.parse(JSON.stringify(opts.oltModelOpticalParams));
+        } else {
+            oltModelOpticalParams = {};
         }
         if (opts.cableModelFiberSettings && typeof opts.cableModelFiberSettings === 'object') {
             cableModelFiberSettings = JSON.parse(JSON.stringify(opts.cableModelFiberSettings));
@@ -2339,6 +2354,12 @@ function loadDeviceCatalog(opts) {
         oltModelPortTypes = JSON.parse(JSON.stringify(opts.oltModelPortTypes));
     } else if (!('oltModelPortTypes' in opts)) {
         oltModelPortTypes = {};
+    }
+
+    if (opts.oltModelOpticalParams && typeof opts.oltModelOpticalParams === 'object') {
+        oltModelOpticalParams = JSON.parse(JSON.stringify(opts.oltModelOpticalParams));
+    } else if (!('oltModelOpticalParams' in opts)) {
+        oltModelOpticalParams = {};
     }
 
     if (opts.cableModelFiberSettings && typeof opts.cableModelFiberSettings === 'object') {
@@ -3196,9 +3217,16 @@ function renderDeviceCatalogList() {
             if (tab === 'olt') {
                 var defOltN = getOltModelDefaultPortCount(mfr, mod);
                 var customOltPorts = oltModelHasCustomPortTypes(mfr, mod);
-                html += '<label class="device-catalog-ports-label" title="PON-портов по умолчанию при добавлении OLT на карту">PON<input type="number" class="form-input device-catalog-ports-input olt-catalog-def-ports" min="1" max="96" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" value="' + (defOltN != null ? String(defOltN) : '') + '" placeholder="—" aria-label="PON-портов по умолчанию"></label>';
+                var customOltOptical = oltModelHasCustomOptical(mfr, mod);
+                var optParams = getOltModelOpticalParams(mfr, mod);
+                var optHint = optParams
+                    ? ('Tx ' + optParams.txPowerDbm + ' дБм · бюджет ' + optParams.budgetDb + ' дБ · uplink SFP/SFP+ ' + (optParams.uplinkSfpPorts || 0) + '/' + (optParams.uplinkSfpPlusPorts || 0))
+                    : 'Оптика и uplink-порты модели';
+                html += '<label class="device-catalog-ports-label" title="PON-портов по умолчанию при добавлении OLT на карту">PON<input type="number" class="form-input device-catalog-ports-input olt-catalog-def-ports" min="1" max="96" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" value="' + (defOltN != null ? String(defOltN) : '') + '" placeholder="' + (optParams && optParams.ponPorts != null ? String(optParams.ponPorts) : '—') + '" aria-label="PON-портов по умолчанию"></label>';
                 html += '<button type="button" class="device-catalog-switch-ports-btn' + (customOltPorts ? ' device-catalog-switch-ports-btn--custom' : '') + '" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" data-catalog-kind="olt" title="Настроить тип каждого PON-порта">';
                 html += '<span class="device-catalog-switch-ports-btn__label">Порты</span></button>';
+                html += '<button type="button" class="device-catalog-switch-ports-btn device-catalog-olt-optical-btn' + (customOltOptical ? ' device-catalog-switch-ports-btn--custom' : '') + '" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" title="' + escapeHtml(optHint) + '">';
+                html += '<span class="device-catalog-switch-ports-btn__label">Оптика</span></button>';
             }
             if (tab === 'cable') {
                 var cableSettings = getCableModelFiberSettings(mfr, mod);
@@ -3297,6 +3325,13 @@ function renderDeviceCatalogList() {
                 e.preventDefault();
                 e.stopPropagation();
                 openSwitchModelPortsEditor(btn.getAttribute('data-mfr'), btn.getAttribute('data-model'), { catalogKind: 'olt' });
+            });
+        });
+        container.querySelectorAll('.device-catalog-olt-optical-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                openOltModelOpticalEditor(btn.getAttribute('data-mfr'), btn.getAttribute('data-model'));
             });
         });
     }
@@ -3941,7 +3976,559 @@ function closeDeviceCatalogModal() {
     }
 }
 
+/** Оптические параметры моделей OLT (не заменяет OLT_CATALOG_DEFAULT со строками). */
+var OLT_OPTICAL_DEFAULT_TEMPLATE = {
+    ponPorts: 8,
+    uplinkSfpPorts: 2,
+    uplinkSfpPlusPorts: 2,
+    rj45Ports: 2,
+    syncPorts: 1,
+    consolePorts: 1,
+    txPowerDbm: 3,
+    rxSensitivityDbm: -28,
+    budgetDb: 31,
+    wavelengthTxNm: 1490,
+    wavelengthRxNm: 1310,
+    connectorType: 'SC/APC',
+    defaultPonSfpClass: 'C+'
+};
+
+var OLT_OPTICAL_PARAMS_DEFAULT = {
+    'Huawei': [
+        { model: 'MA5608T', ponPorts: 8, uplinkSfpPorts: 2, uplinkSfpPlusPorts: 0,
+          rj45Ports: 2, syncPorts: 1, consolePorts: 1,
+          txPowerDbm: 3, rxSensitivityDbm: -28, budgetDb: 31,
+          wavelengthTxNm: 1490, wavelengthRxNm: 1310, connectorType: 'SC/APC', defaultPonSfpClass: 'C+' },
+        { model: 'MA5683T', ponPorts: 16, uplinkSfpPorts: 4, uplinkSfpPlusPorts: 2,
+          rj45Ports: 2, syncPorts: 1, consolePorts: 1,
+          txPowerDbm: 3, rxSensitivityDbm: -28, budgetDb: 31,
+          wavelengthTxNm: 1490, wavelengthRxNm: 1310, connectorType: 'SC/APC', defaultPonSfpClass: 'C+' },
+        { model: 'MA5800-X7', ponPorts: 16, uplinkSfpPorts: 2, uplinkSfpPlusPorts: 4,
+          rj45Ports: 2, syncPorts: 1, consolePorts: 1,
+          txPowerDbm: 3, rxSensitivityDbm: -28, budgetDb: 32,
+          wavelengthTxNm: 1490, wavelengthRxNm: 1310, connectorType: 'SC/APC', defaultPonSfpClass: 'C+' }
+    ],
+    'ZTE': [
+        { model: 'C300', ponPorts: 16, uplinkSfpPorts: 4, uplinkSfpPlusPorts: 2,
+          rj45Ports: 2, syncPorts: 1, consolePorts: 1,
+          txPowerDbm: 3, rxSensitivityDbm: -28, budgetDb: 31,
+          wavelengthTxNm: 1490, wavelengthRxNm: 1310, connectorType: 'SC/APC', defaultPonSfpClass: 'C+' },
+        { model: 'C320', ponPorts: 8, uplinkSfpPorts: 4, uplinkSfpPlusPorts: 2,
+          rj45Ports: 2, syncPorts: 1, consolePorts: 1,
+          txPowerDbm: 3, rxSensitivityDbm: -28, budgetDb: 31,
+          wavelengthTxNm: 1490, wavelengthRxNm: 1310, connectorType: 'SC/APC', defaultPonSfpClass: 'C+' },
+        { model: 'C600', ponPorts: 16, uplinkSfpPorts: 4, uplinkSfpPlusPorts: 4,
+          rj45Ports: 2, syncPorts: 1, consolePorts: 1,
+          txPowerDbm: 3, rxSensitivityDbm: -28, budgetDb: 32,
+          wavelengthTxNm: 1490, wavelengthRxNm: 1310, connectorType: 'SC/APC', defaultPonSfpClass: 'C+' }
+    ],
+    'FiberHome': [
+        { model: 'AN5516-01', ponPorts: 8, uplinkSfpPorts: 2, uplinkSfpPlusPorts: 2,
+          rj45Ports: 2, syncPorts: 1, consolePorts: 1,
+          txPowerDbm: 3, rxSensitivityDbm: -28, budgetDb: 31,
+          wavelengthTxNm: 1490, wavelengthRxNm: 1310, connectorType: 'SC/APC', defaultPonSfpClass: 'B+' },
+        { model: 'AN5516-06', ponPorts: 16, uplinkSfpPorts: 4, uplinkSfpPlusPorts: 2,
+          rj45Ports: 2, syncPorts: 1, consolePorts: 1,
+          txPowerDbm: 3, rxSensitivityDbm: -28, budgetDb: 31,
+          wavelengthTxNm: 1490, wavelengthRxNm: 1310, connectorType: 'SC/APC', defaultPonSfpClass: 'C+' }
+    ],
+    'Eltex': [
+        { model: 'LTP-8X', ponPorts: 8, uplinkSfpPorts: 4, uplinkSfpPlusPorts: 0,
+          rj45Ports: 2, syncPorts: 1, consolePorts: 1,
+          txPowerDbm: 3, rxSensitivityDbm: -28, budgetDb: 31,
+          wavelengthTxNm: 1490, wavelengthRxNm: 1310, connectorType: 'SC/APC', defaultPonSfpClass: 'B+' },
+        { model: 'LTP-4X', ponPorts: 4, uplinkSfpPorts: 2, uplinkSfpPlusPorts: 0,
+          rj45Ports: 2, syncPorts: 0, consolePorts: 1,
+          txPowerDbm: 3, rxSensitivityDbm: -28, budgetDb: 28,
+          wavelengthTxNm: 1490, wavelengthRxNm: 1310, connectorType: 'SC/APC', defaultPonSfpClass: 'B+' }
+    ],
+    'BDCOM': [
+        { model: 'P3310C', ponPorts: 8, uplinkSfpPorts: 2, uplinkSfpPlusPorts: 2,
+          rj45Ports: 1, syncPorts: 0, consolePorts: 1,
+          txPowerDbm: 3, rxSensitivityDbm: -28, budgetDb: 30,
+          wavelengthTxNm: 1490, wavelengthRxNm: 1310, connectorType: 'SC/APC', defaultPonSfpClass: 'B+' },
+        { model: 'P3608B', ponPorts: 8, uplinkSfpPorts: 4, uplinkSfpPlusPorts: 2,
+          rj45Ports: 2, syncPorts: 0, consolePorts: 1,
+          txPowerDbm: 3, rxSensitivityDbm: -28, budgetDb: 31,
+          wavelengthTxNm: 1490, wavelengthRxNm: 1310, connectorType: 'SC/APC', defaultPonSfpClass: 'C+' }
+    ],
+    'SNR': [
+        { model: 'SNR-GPON-OLT', ponPorts: 8, uplinkSfpPorts: 2, uplinkSfpPlusPorts: 2,
+          rj45Ports: 2, syncPorts: 0, consolePorts: 1,
+          txPowerDbm: 3, rxSensitivityDbm: -28, budgetDb: 30,
+          wavelengthTxNm: 1490, wavelengthRxNm: 1310, connectorType: 'SC/APC', defaultPonSfpClass: 'B+' }
+    ],
+    'B-OptiX': [
+        { model: 'BO-GPON-OLT', ponPorts: 8, uplinkSfpPorts: 2, uplinkSfpPlusPorts: 0,
+          rj45Ports: 1, syncPorts: 0, consolePorts: 1,
+          txPowerDbm: 3, rxSensitivityDbm: -28, budgetDb: 28,
+          wavelengthTxNm: 1490, wavelengthRxNm: 1310, connectorType: 'SC/APC', defaultPonSfpClass: 'B+' }
+    ],
+    'Nokia': [
+        { model: '7360 ISAM FX', ponPorts: 16, uplinkSfpPorts: 4, uplinkSfpPlusPorts: 4,
+          rj45Ports: 2, syncPorts: 1, consolePorts: 1,
+          txPowerDbm: 3, rxSensitivityDbm: -28, budgetDb: 32,
+          wavelengthTxNm: 1490, wavelengthRxNm: 1310, connectorType: 'SC/APC', defaultPonSfpClass: 'C+' }
+    ]
+};
+
+/** Пользовательские переопределения оптики моделей OLT: { "Mfr||Model": { ...params } }. */
+var oltModelOpticalParams = {};
+
+function oltOpticalKey(manufacturer, model) {
+    return String(manufacturer || '').trim() + '||' + String(model || '').trim();
+}
+
+function getDefaultOltOpticalParams(manufacturer, model) {
+    var catalog = OLT_OPTICAL_PARAMS_DEFAULT[manufacturer];
+    if (catalog) {
+        for (var i = 0; i < catalog.length; i++) {
+            if (catalog[i].model === model) {
+                return Object.assign({}, OLT_OPTICAL_DEFAULT_TEMPLATE, catalog[i]);
+            }
+        }
+    }
+    return Object.assign({}, OLT_OPTICAL_DEFAULT_TEMPLATE, { model: model });
+}
+
+function getOltModelOpticalParams(manufacturer, model) {
+    if (!manufacturer || !model) return null;
+    var key = oltOpticalKey(manufacturer, model);
+    var override = oltModelOpticalParams[key];
+    var base = getDefaultOltOpticalParams(manufacturer, model);
+    if (override && typeof override === 'object') {
+        return Object.assign({}, base, override, { model: model });
+    }
+    return base;
+}
+
+function setOltModelOpticalParams(manufacturer, model, params, skipSave) {
+    if (!manufacturer || !model) return false;
+    var key = oltOpticalKey(manufacturer, model);
+    if (!params || typeof params !== 'object') {
+        delete oltModelOpticalParams[key];
+    } else {
+        var clean = {};
+        ['ponPorts', 'uplinkSfpPorts', 'uplinkSfpPlusPorts', 'rj45Ports', 'syncPorts', 'consolePorts',
+            'txPowerDbm', 'rxSensitivityDbm', 'budgetDb', 'wavelengthTxNm', 'wavelengthRxNm',
+            'connectorType', 'defaultPonSfpClass'].forEach(function(k) {
+            if (params[k] !== undefined && params[k] !== null && params[k] !== '') clean[k] = params[k];
+        });
+        oltModelOpticalParams[key] = clean;
+    }
+    if (!skipSave) saveDeviceCatalog();
+    return true;
+}
+
+function oltModelHasCustomOptical(manufacturer, model) {
+    var key = oltOpticalKey(manufacturer, model);
+    return !!(oltModelOpticalParams[key] && Object.keys(oltModelOpticalParams[key]).length);
+}
+
+var SFP_CATALOG_DEFAULT = {
+    'Huawei': [
+        { model: 'SFP-10G-LR-SM1310', type: 'SFP+', speed: '10G', role: 'uplink',
+          wavelengthNm: 1310, fiberType: 'single-mode', maxDistanceKm: 10, connectorType: 'LC',
+          txPowerMinDbm: -8.2, txPowerMaxDbm: 0.5,
+          rxSensitivityDbm: -14.4, rxSaturationDbm: 0.5,
+          budgetDb: 6.2, ddm: true,
+          compatibleWith: ['olt', 'switch'], ponKinds: [] },
+        { model: 'SFP-GE-LX-SM1310', type: 'SFP', speed: '1G', role: 'uplink',
+          wavelengthNm: 1310, fiberType: 'single-mode', maxDistanceKm: 10, connectorType: 'LC',
+          txPowerMinDbm: -9.5, txPowerMaxDbm: -3,
+          rxSensitivityDbm: -20, rxSaturationDbm: -3,
+          budgetDb: 10.5, ddm: true,
+          compatibleWith: ['olt', 'switch', 'mediaConverter'], ponKinds: [] },
+        { model: 'SFP-GPON-B+', type: 'SFP', speed: '2.5G', role: 'pon',
+          wavelengthNm: 1490, wavelengthRxNm: 1310, fiberType: 'single-mode', maxDistanceKm: 20,
+          connectorType: 'SC/APC',
+          txPowerMinDbm: 1.5, txPowerMaxDbm: 5,
+          rxSensitivityDbm: -28, rxSaturationDbm: -8,
+          budgetDb: 28, ddm: true, class: 'B+',
+          compatibleWith: ['olt'], ponKinds: ['GPON', 'Combo GPON/XGS-PON'] },
+        { model: 'SFP-GPON-C+', type: 'SFP', speed: '2.5G', role: 'pon',
+          wavelengthNm: 1490, wavelengthRxNm: 1310, fiberType: 'single-mode', maxDistanceKm: 20,
+          connectorType: 'SC/APC',
+          txPowerMinDbm: 3, txPowerMaxDbm: 7,
+          rxSensitivityDbm: -32, rxSaturationDbm: -12,
+          budgetDb: 32, ddm: true, class: 'C+',
+          compatibleWith: ['olt'], ponKinds: ['GPON', 'Combo GPON/XGS-PON'] },
+        { model: 'SFP-XGS-PON-N1', type: 'SFP+', speed: '10G', role: 'pon',
+          wavelengthNm: 1577, wavelengthRxNm: 1270, fiberType: 'single-mode', maxDistanceKm: 20,
+          connectorType: 'SC/APC',
+          txPowerMinDbm: 2, txPowerMaxDbm: 5,
+          rxSensitivityDbm: -28, rxSaturationDbm: -8,
+          budgetDb: 29, ddm: true, class: 'N1',
+          compatibleWith: ['olt'], ponKinds: ['XGS-PON', 'Combo GPON/XGS-PON'] },
+        { model: 'SFP-XG-PON-N1', type: 'SFP+', speed: '10G', role: 'pon',
+          wavelengthNm: 1577, wavelengthRxNm: 1270, fiberType: 'single-mode', maxDistanceKm: 20,
+          connectorType: 'SC/APC',
+          txPowerMinDbm: 2, txPowerMaxDbm: 5,
+          rxSensitivityDbm: -28, rxSaturationDbm: -8,
+          budgetDb: 29, ddm: true, class: 'N1',
+          compatibleWith: ['olt'], ponKinds: ['XG-PON'] }
+    ],
+    'ZTE': [
+        { model: 'SFP-GPON-C+', type: 'SFP', speed: '2.5G', role: 'pon',
+          wavelengthNm: 1490, wavelengthRxNm: 1310, fiberType: 'single-mode', maxDistanceKm: 20,
+          connectorType: 'SC/APC',
+          txPowerMinDbm: 3, txPowerMaxDbm: 7,
+          rxSensitivityDbm: -32, rxSaturationDbm: -12,
+          budgetDb: 32, ddm: true, class: 'C+',
+          compatibleWith: ['olt'], ponKinds: ['GPON', 'Combo GPON/XGS-PON'] },
+        { model: 'SFP-XGS-PON-N2', type: 'SFP+', speed: '10G', role: 'pon',
+          wavelengthNm: 1577, wavelengthRxNm: 1270, fiberType: 'single-mode', maxDistanceKm: 20,
+          connectorType: 'SC/APC',
+          txPowerMinDbm: 4, txPowerMaxDbm: 8,
+          rxSensitivityDbm: -29.5, rxSaturationDbm: -9,
+          budgetDb: 31, ddm: true, class: 'N2',
+          compatibleWith: ['olt'], ponKinds: ['XGS-PON', 'Combo GPON/XGS-PON'] }
+    ],
+    'Eltex': [
+        { model: 'SFP-GPON-B+', type: 'SFP', speed: '2.5G', role: 'pon',
+          wavelengthNm: 1490, wavelengthRxNm: 1310, fiberType: 'single-mode', maxDistanceKm: 20,
+          connectorType: 'SC/APC',
+          txPowerMinDbm: 1.5, txPowerMaxDbm: 5,
+          rxSensitivityDbm: -28, rxSaturationDbm: -8,
+          budgetDb: 28, ddm: true, class: 'B+',
+          compatibleWith: ['olt'], ponKinds: ['GPON'] },
+        { model: 'SFP-EPON-PX20+', type: 'SFP', speed: '1.25G', role: 'pon',
+          wavelengthNm: 1490, wavelengthRxNm: 1310, fiberType: 'single-mode', maxDistanceKm: 20,
+          connectorType: 'SC/APC',
+          txPowerMinDbm: 2, txPowerMaxDbm: 7,
+          rxSensitivityDbm: -30, rxSaturationDbm: -6,
+          budgetDb: 30, ddm: true, class: 'PX20+',
+          compatibleWith: ['olt'], ponKinds: ['EPON', '10G-EPON'] }
+    ],
+    'FiberHome': [
+        { model: 'SFP-GPON-B+', type: 'SFP', speed: '2.5G', role: 'pon',
+          wavelengthNm: 1490, wavelengthRxNm: 1310, fiberType: 'single-mode', maxDistanceKm: 20,
+          connectorType: 'SC/APC',
+          txPowerMinDbm: 1.5, txPowerMaxDbm: 5,
+          rxSensitivityDbm: -28, rxSaturationDbm: -8,
+          budgetDb: 28, ddm: true, class: 'B+',
+          compatibleWith: ['olt'], ponKinds: ['GPON', 'Combo GPON/XGS-PON'] },
+        { model: 'SFP-GPON-C+', type: 'SFP', speed: '2.5G', role: 'pon',
+          wavelengthNm: 1490, wavelengthRxNm: 1310, fiberType: 'single-mode', maxDistanceKm: 20,
+          connectorType: 'SC/APC',
+          txPowerMinDbm: 3, txPowerMaxDbm: 7,
+          rxSensitivityDbm: -32, rxSaturationDbm: -12,
+          budgetDb: 32, ddm: true, class: 'C+',
+          compatibleWith: ['olt'], ponKinds: ['GPON', 'Combo GPON/XGS-PON'] }
+    ],
+    'BDCOM': [
+        { model: 'SFP-GPON-C+', type: 'SFP', speed: '2.5G', role: 'pon',
+          wavelengthNm: 1490, wavelengthRxNm: 1310, fiberType: 'single-mode', maxDistanceKm: 20,
+          connectorType: 'SC/APC',
+          txPowerMinDbm: 3, txPowerMaxDbm: 7,
+          rxSensitivityDbm: -32, rxSaturationDbm: -12,
+          budgetDb: 32, ddm: true, class: 'C+',
+          compatibleWith: ['olt'], ponKinds: ['GPON'] },
+        { model: 'SFP-GE-LX', type: 'SFP', speed: '1G', role: 'uplink',
+          wavelengthNm: 1310, fiberType: 'single-mode', maxDistanceKm: 10, connectorType: 'LC',
+          txPowerMinDbm: -9.5, txPowerMaxDbm: -3,
+          rxSensitivityDbm: -20, rxSaturationDbm: -3,
+          budgetDb: 10.5, ddm: true,
+          compatibleWith: ['olt', 'switch'], ponKinds: [] }
+    ],
+    'SNR': [
+        { model: 'SFP-GPON-B+', type: 'SFP', speed: '2.5G', role: 'pon',
+          wavelengthNm: 1490, wavelengthRxNm: 1310, fiberType: 'single-mode', maxDistanceKm: 20,
+          connectorType: 'SC/APC',
+          txPowerMinDbm: 1.5, txPowerMaxDbm: 5,
+          rxSensitivityDbm: -28, rxSaturationDbm: -8,
+          budgetDb: 28, ddm: true, class: 'B+',
+          compatibleWith: ['olt'], ponKinds: ['GPON'] },
+        { model: 'SFP-10G-LR', type: 'SFP+', speed: '10G', role: 'uplink',
+          wavelengthNm: 1310, fiberType: 'single-mode', maxDistanceKm: 10, connectorType: 'LC',
+          txPowerMinDbm: -8.2, txPowerMaxDbm: 0.5,
+          rxSensitivityDbm: -14.4, rxSaturationDbm: 0.5,
+          budgetDb: 6.2, ddm: true,
+          compatibleWith: ['olt', 'switch'], ponKinds: [] }
+    ],
+    'Nokia': [
+        { model: 'SFP-GPON-C+', type: 'SFP', speed: '2.5G', role: 'pon',
+          wavelengthNm: 1490, wavelengthRxNm: 1310, fiberType: 'single-mode', maxDistanceKm: 20,
+          connectorType: 'SC/APC',
+          txPowerMinDbm: 3, txPowerMaxDbm: 7,
+          rxSensitivityDbm: -32, rxSaturationDbm: -12,
+          budgetDb: 32, ddm: true, class: 'C+',
+          compatibleWith: ['olt'], ponKinds: ['GPON', 'Combo GPON/XGS-PON'] },
+        { model: 'SFP-XGS-PON-N1', type: 'SFP+', speed: '10G', role: 'pon',
+          wavelengthNm: 1577, wavelengthRxNm: 1270, fiberType: 'single-mode', maxDistanceKm: 20,
+          connectorType: 'SC/APC',
+          txPowerMinDbm: 2, txPowerMaxDbm: 5,
+          rxSensitivityDbm: -28, rxSaturationDbm: -8,
+          budgetDb: 29, ddm: true, class: 'N1',
+          compatibleWith: ['olt'], ponKinds: ['XGS-PON', 'Combo GPON/XGS-PON'] }
+    ],
+    'Generic': [
+        { model: 'GPON Class B+', type: 'SFP', speed: '2.5G', role: 'pon',
+          wavelengthNm: 1490, wavelengthRxNm: 1310, fiberType: 'single-mode', maxDistanceKm: 20,
+          connectorType: 'SC/APC',
+          txPowerMinDbm: 1.5, txPowerMaxDbm: 5,
+          rxSensitivityDbm: -28, rxSaturationDbm: -8,
+          budgetDb: 28, ddm: true, class: 'B+',
+          compatibleWith: ['olt'], ponKinds: ['GPON', 'Combo GPON/XGS-PON'] },
+        { model: 'GPON Class C+', type: 'SFP', speed: '2.5G', role: 'pon',
+          wavelengthNm: 1490, wavelengthRxNm: 1310, fiberType: 'single-mode', maxDistanceKm: 20,
+          connectorType: 'SC/APC',
+          txPowerMinDbm: 3, txPowerMaxDbm: 7,
+          rxSensitivityDbm: -32, rxSaturationDbm: -12,
+          budgetDb: 32, ddm: true, class: 'C+',
+          compatibleWith: ['olt'], ponKinds: ['GPON', 'Combo GPON/XGS-PON'] },
+        { model: 'XGS-PON N1', type: 'SFP+', speed: '10G', role: 'pon',
+          wavelengthNm: 1577, wavelengthRxNm: 1270, fiberType: 'single-mode', maxDistanceKm: 20,
+          connectorType: 'SC/APC',
+          txPowerMinDbm: 2, txPowerMaxDbm: 5,
+          rxSensitivityDbm: -28, rxSaturationDbm: -8,
+          budgetDb: 29, ddm: true, class: 'N1',
+          compatibleWith: ['olt'], ponKinds: ['XGS-PON', 'Combo GPON/XGS-PON'] },
+        { model: 'XG-PON N1', type: 'SFP+', speed: '10G', role: 'pon',
+          wavelengthNm: 1577, wavelengthRxNm: 1270, fiberType: 'single-mode', maxDistanceKm: 20,
+          connectorType: 'SC/APC',
+          txPowerMinDbm: 2, txPowerMaxDbm: 5,
+          rxSensitivityDbm: -28, rxSaturationDbm: -8,
+          budgetDb: 29, ddm: true, class: 'N1',
+          compatibleWith: ['olt'], ponKinds: ['XG-PON'] },
+        { model: 'EPON PX20+', type: 'SFP', speed: '1.25G', role: 'pon',
+          wavelengthNm: 1490, wavelengthRxNm: 1310, fiberType: 'single-mode', maxDistanceKm: 20,
+          connectorType: 'SC/APC',
+          txPowerMinDbm: 2, txPowerMaxDbm: 7,
+          rxSensitivityDbm: -30, rxSaturationDbm: -6,
+          budgetDb: 30, ddm: true, class: 'PX20+',
+          compatibleWith: ['olt'], ponKinds: ['EPON', '10G-EPON'] },
+        { model: 'NG-PON2', type: 'SFP+', speed: '10G', role: 'pon',
+          wavelengthNm: 1596, wavelengthRxNm: 1532, fiberType: 'single-mode', maxDistanceKm: 20,
+          connectorType: 'SC/APC',
+          txPowerMinDbm: 2, txPowerMaxDbm: 6,
+          rxSensitivityDbm: -28, rxSaturationDbm: -8,
+          budgetDb: 30, ddm: true,
+          compatibleWith: ['olt'], ponKinds: ['NG-PON2'] },
+        { model: 'OTDR monitor', type: 'SFP', speed: null, role: 'pon',
+          wavelengthNm: 1625, fiberType: 'single-mode', maxDistanceKm: 40,
+          connectorType: 'SC/APC',
+          txPowerMinDbm: 0, txPowerMaxDbm: 5,
+          rxSensitivityDbm: -35, rxSaturationDbm: -5,
+          budgetDb: 35, ddm: true,
+          compatibleWith: ['olt'], ponKinds: ['OTDR / мониторинг'] }
+    ]
+};
+
+function getSfpParams(manufacturer, model) {
+    if (!SFP_CATALOG_DEFAULT[manufacturer]) return null;
+    var models = SFP_CATALOG_DEFAULT[manufacturer];
+    for (var i = 0; i < models.length; i++) {
+        if (models[i].model === model) return models[i];
+    }
+    return null;
+}
+
+/** Все модули SFP плоским списком { manufacturer, model, ...params }. */
+function listSfpCatalogEntries(filterFn) {
+    var out = [];
+    Object.keys(SFP_CATALOG_DEFAULT).forEach(function(mfr) {
+        (SFP_CATALOG_DEFAULT[mfr] || []).forEach(function(entry) {
+            var row = Object.assign({ manufacturer: mfr }, entry);
+            if (typeof filterFn === 'function' && !filterFn(row)) return;
+            out.push(row);
+        });
+    });
+    return out;
+}
+
+/** SFP, подходящие под вид PON-порта (GPON / XGS-PON / …). */
+function listSfpForPonKind(ponKind) {
+    var kind = String(ponKind || 'GPON').trim();
+    return listSfpCatalogEntries(function(row) {
+        if (row.role && row.role !== 'pon') return false;
+        var kinds = row.ponKinds || [];
+        if (!kinds.length) return false;
+        return kinds.indexOf(kind) >= 0;
+    });
+}
+
+/** SFP для uplink OLT (SFP / SFP+). */
+function listSfpForOltUplink(portType) {
+    return listSfpCatalogEntries(function(row) {
+        if (row.role === 'pon') return false;
+        var compat = row.compatibleWith || [];
+        if (compat.indexOf('olt') < 0 && compat.indexOf('switch') < 0) return false;
+        if (portType === 'sfp-plus-uplink') return row.type === 'SFP+' || row.speed === '10G';
+        if (portType === 'sfp-uplink') return row.type === 'SFP' || row.speed === '1G';
+        return true;
+    });
+}
+
+function encodeSfpSelectValue(manufacturer, model) {
+    if (!manufacturer || !model) return '';
+    return String(manufacturer) + '||' + String(model);
+}
+
+function decodeSfpSelectValue(value) {
+    if (!value) return null;
+    var parts = String(value).split('||');
+    if (parts.length < 2) return null;
+    return { manufacturer: parts[0], model: parts.slice(1).join('||') };
+}
+
+function formatSfpOptionLabel(entry) {
+    if (!entry) return '';
+    var bits = [entry.manufacturer, entry.model];
+    if (entry.class) bits.push(entry.class);
+    if (entry.txPowerMinDbm != null) bits.push(entry.txPowerMinDbm + '…' + (entry.txPowerMaxDbm != null ? entry.txPowerMaxDbm : '') + ' дБм');
+    return bits.filter(Boolean).join(' · ');
+}
+
+var _oltOpticalEditorCtx = { manufacturer: '', model: '' };
+
+function _oltOpticalNum(id, fallback) {
+    var el = document.getElementById(id);
+    if (!el || el.value === '' || el.value == null) return fallback;
+    var n = parseFloat(el.value);
+    return isNaN(n) ? fallback : n;
+}
+
+function _oltOpticalInt(id, fallback) {
+    var el = document.getElementById(id);
+    if (!el || el.value === '' || el.value == null) return fallback;
+    var n = parseInt(el.value, 10);
+    return isNaN(n) ? fallback : Math.max(0, Math.min(96, n));
+}
+
+function openOltModelOpticalEditor(manufacturer, model) {
+    var mfr = (manufacturer || '').trim();
+    var mod = (model || '').trim();
+    if (!mfr || !mod) return;
+    var modal = document.getElementById('oltModelOpticalModal');
+    if (!modal) return;
+    _oltOpticalEditorCtx = { manufacturer: mfr, model: mod };
+    var params = getOltModelOpticalParams(mfr, mod) || Object.assign({}, OLT_OPTICAL_DEFAULT_TEMPLATE);
+    var title = document.getElementById('oltModelOpticalModalTitle');
+    if (title) title.textContent = 'Оптика OLT — ' + mfr + ' ' + mod;
+    var hint = document.getElementById('oltModelOpticalModalHint');
+    if (hint) {
+        hint.textContent = oltModelHasCustomOptical(mfr, mod)
+            ? 'Сохранены пользовательские значения. «Сбросить» вернёт заводские параметры модели.'
+            : 'Заводские параметры модели. Изменения применятся к новым OLT этой модели и при смене модели в карточке.';
+    }
+    var map = {
+        oltOpticalPonPorts: params.ponPorts,
+        oltOpticalUplinkSfp: params.uplinkSfpPorts,
+        oltOpticalUplinkSfpPlus: params.uplinkSfpPlusPorts,
+        oltOpticalRj45: params.rj45Ports,
+        oltOpticalSync: params.syncPorts,
+        oltOpticalConsole: params.consolePorts,
+        oltOpticalTxPower: params.txPowerDbm,
+        oltOpticalRxSens: params.rxSensitivityDbm,
+        oltOpticalBudget: params.budgetDb,
+        oltOpticalWlTx: params.wavelengthTxNm,
+        oltOpticalWlRx: params.wavelengthRxNm
+    };
+    Object.keys(map).forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.value = map[id] != null ? String(map[id]) : '';
+    });
+    var conn = document.getElementById('oltOpticalConnector');
+    if (conn) conn.value = params.connectorType || 'SC/APC';
+    var sfpClass = document.getElementById('oltOpticalDefaultSfpClass');
+    if (sfpClass) sfpClass.value = params.defaultPonSfpClass || 'C+';
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+}
+
+function closeOltModelOpticalEditor() {
+    var modal = document.getElementById('oltModelOpticalModal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+    }
+    _oltOpticalEditorCtx = { manufacturer: '', model: '' };
+}
+
+function saveOltModelOpticalEditor() {
+    var mfr = _oltOpticalEditorCtx.manufacturer;
+    var mod = _oltOpticalEditorCtx.model;
+    if (!mfr || !mod) return;
+    var base = getDefaultOltOpticalParams(mfr, mod);
+    var params = {
+        ponPorts: _oltOpticalInt('oltOpticalPonPorts', base.ponPorts),
+        uplinkSfpPorts: _oltOpticalInt('oltOpticalUplinkSfp', base.uplinkSfpPorts),
+        uplinkSfpPlusPorts: _oltOpticalInt('oltOpticalUplinkSfpPlus', base.uplinkSfpPlusPorts),
+        rj45Ports: _oltOpticalInt('oltOpticalRj45', base.rj45Ports),
+        syncPorts: _oltOpticalInt('oltOpticalSync', base.syncPorts),
+        consolePorts: _oltOpticalInt('oltOpticalConsole', base.consolePorts),
+        txPowerDbm: _oltOpticalNum('oltOpticalTxPower', base.txPowerDbm),
+        rxSensitivityDbm: _oltOpticalNum('oltOpticalRxSens', base.rxSensitivityDbm),
+        budgetDb: _oltOpticalNum('oltOpticalBudget', base.budgetDb),
+        wavelengthTxNm: _oltOpticalInt('oltOpticalWlTx', base.wavelengthTxNm),
+        wavelengthRxNm: _oltOpticalInt('oltOpticalWlRx', base.wavelengthRxNm),
+        connectorType: (document.getElementById('oltOpticalConnector') || {}).value || base.connectorType,
+        defaultPonSfpClass: (document.getElementById('oltOpticalDefaultSfpClass') || {}).value || base.defaultPonSfpClass
+    };
+    setOltModelOpticalParams(mfr, mod, params);
+    if (typeof getOltModelDefaultPortCount === 'function' && getOltModelDefaultPortCount(mfr, mod) == null && params.ponPorts) {
+        setOltModelDefaultPortCount(mfr, mod, params.ponPorts);
+    }
+    closeOltModelOpticalEditor();
+    renderDeviceCatalogList();
+    if (typeof showInfo === 'function') showInfo('Параметры оптики сохранены', mfr + ' ' + mod);
+}
+
+function resetOltModelOpticalEditor() {
+    var mfr = _oltOpticalEditorCtx.manufacturer;
+    var mod = _oltOpticalEditorCtx.model;
+    if (!mfr || !mod) return;
+    setOltModelOpticalParams(mfr, mod, null);
+    openOltModelOpticalEditor(mfr, mod);
+    renderDeviceCatalogList();
+    if (typeof showInfo === 'function') showInfo('Сброшено к заводским', mfr + ' ' + mod);
+}
+
+function setupOltModelOpticalModalHandlers() {
+    var modal = document.getElementById('oltModelOpticalModal');
+    if (!modal || modal._oltOpticalHandlersBound) return;
+    modal._oltOpticalHandlersBound = true;
+    var closeBtn = modal.querySelector('.close-olt-model-optical');
+    if (closeBtn) closeBtn.addEventListener('click', closeOltModelOpticalEditor);
+    var cancelBtn = document.getElementById('oltModelOpticalCancelBtn');
+    if (cancelBtn) cancelBtn.addEventListener('click', closeOltModelOpticalEditor);
+    var saveBtn = document.getElementById('oltModelOpticalSaveBtn');
+    if (saveBtn) saveBtn.addEventListener('click', saveOltModelOpticalEditor);
+    var resetBtn = document.getElementById('oltModelOpticalResetBtn');
+    if (resetBtn) resetBtn.addEventListener('click', resetOltModelOpticalEditor);
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) closeOltModelOpticalEditor();
+    });
+}
+
+function getDeviceOpticalParams(type, manufacturer, model) {
+    if (type === 'olt') {
+        if (!manufacturer || !model) return null;
+        return getOltModelOpticalParams(manufacturer, model);
+    }
+    return null;
+}
+
+window.getSfpParams = getSfpParams;
+window.getDeviceOpticalParams = getDeviceOpticalParams;
+window.getOltModelOpticalParams = getOltModelOpticalParams;
+window.setOltModelOpticalParams = setOltModelOpticalParams;
+window.oltModelHasCustomOptical = oltModelHasCustomOptical;
+window.OLT_OPTICAL_PARAMS_DEFAULT = OLT_OPTICAL_PARAMS_DEFAULT;
+window.OLT_OPTICAL_DEFAULT_TEMPLATE = OLT_OPTICAL_DEFAULT_TEMPLATE;
+window.SFP_CATALOG_DEFAULT = SFP_CATALOG_DEFAULT;
+window.listSfpCatalogEntries = listSfpCatalogEntries;
+window.listSfpForPonKind = listSfpForPonKind;
+window.listSfpForOltUplink = listSfpForOltUplink;
+window.encodeSfpSelectValue = encodeSfpSelectValue;
+window.decodeSfpSelectValue = decodeSfpSelectValue;
+window.formatSfpOptionLabel = formatSfpOptionLabel;
+window.openOltModelOpticalEditor = openOltModelOpticalEditor;
+window.closeOltModelOpticalEditor = closeOltModelOpticalEditor;
+
 function setupDeviceCatalogModalHandlers() {
+    setupOltModelOpticalModalHandlers();
     var closeBtn = document.querySelector('.close-device-catalog');
     if (closeBtn) closeBtn.addEventListener('click', closeDeviceCatalogModal);
     var modal = document.getElementById('deviceCatalogModal');
@@ -3950,6 +4537,8 @@ function setupDeviceCatalogModalHandlers() {
             if (e.target !== modal) return;
             var entry = document.getElementById('deviceCatalogEntryModal');
             if (entry && entry.style.display && entry.style.display !== 'none') return;
+            var optical = document.getElementById('oltModelOpticalModal');
+            if (optical && optical.style.display && optical.style.display !== 'none') return;
             closeDeviceCatalogModal();
         });
     }

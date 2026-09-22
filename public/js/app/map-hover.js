@@ -732,8 +732,8 @@ function highlightCableOnHover(cable) {
     }
 
     const cableType = cable.properties.get('cableType');
-    const normalWidth = getCableWidth(cableType);
-    const normalColor = getCableColor(cableType);
+    const normalWidth = getCableWidth(cable);
+    const normalColor = getCableColor(cable);
     
     cable.options.set({
         strokeWidth: normalWidth * 1.8,

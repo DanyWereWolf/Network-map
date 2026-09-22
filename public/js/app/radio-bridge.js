@@ -1767,10 +1767,6 @@ function buildRadioBridgeCardContent(obj, isEdit, name) {
     var deviceLine = [manufacturer, model].filter(Boolean).join(' · ');
     var showCoverage = !!obj.properties.get('showCoverage');
     var coverageShape = obj.properties.get('coverageShape') || 'circle';
-    var coverageRadiusKm = getRadioBridgeCoverageRadiusKm(obj);
-    var coverageLengthKm = getRadioBridgeCoverageLengthKm(obj);
-    var coverageAzimuth = obj.properties.get('coverageAzimuth') != null ? obj.properties.get('coverageAzimuth') : 0;
-    var coverageAngle = obj.properties.get('coverageAngle') != null ? obj.properties.get('coverageAngle') : 60;
     var html = '<div class="radio-bridge-card">';
 
     html += '<section class="object-card-section radio-bridge-card-hero">';
@@ -1940,21 +1936,8 @@ function buildRadioBridgeCardContent(obj, isEdit, name) {
         html += '<option value="circle"' + (coverageShape === 'circle' ? ' selected' : '') + '>Круглая (всенаправленная)</option>';
         html += '<option value="sector"' + (coverageShape === 'sector' ? ' selected' : '') + '>Направленная (луч)</option>';
         html += '</select></div>';
-        html += '<div id="editRadioBridgeCircleFields" class="radio-bridge-coverage-fields"' + (coverageShape === 'circle' ? '' : ' style="display:none;"') + '>';
-        html += '<div class="form-group"><label for="editRadioBridgeCoverageRadius" class="object-card-label">Радиус, км</label>';
-        html += '<input type="number" id="editRadioBridgeCoverageRadius" class="form-input" min="0.05" max="50" step="0.1" value="' + coverageRadiusKm + '"></div>';
-        html += '</div>';
-        html += '<div id="editRadioBridgeSectorFields" class="radio-bridge-coverage-fields"' + (coverageShape === 'sector' ? '' : ' style="display:none;"') + '>';
-        html += '<div class="form-group"><label for="editRadioBridgeCoverageLength" class="object-card-label">Длина луча, км</label>';
-        html += '<input type="number" id="editRadioBridgeCoverageLength" class="form-input" min="0.05" max="50" step="0.1" value="' + coverageLengthKm + '"></div>';
-        html += '<div class="radio-bridge-coverage-grid">';
-        html += '<div class="form-group"><label for="editRadioBridgeCoverageAzimuth" class="object-card-label">Азимут, °</label>';
-        html += '<input type="number" id="editRadioBridgeCoverageAzimuth" class="form-input" min="0" max="359" step="1" value="' + coverageAzimuth + '"></div>';
-        html += '<div class="form-group"><label for="editRadioBridgeCoverageAngle" class="object-card-label">Угол сектора, °</label>';
-        html += '<input type="number" id="editRadioBridgeCoverageAngle" class="form-input" min="5" max="360" step="5" value="' + coverageAngle + '"></div>';
-        html += '</div>';
-        html += '<p class="object-card-hint radio-bridge-coverage-hint">0° — север, 90° — восток. Луч рисуется от радиомоста по азимуту на заданную длину.</p>';
-        html += '</div>';
+        html += '<button type="button" class="btn-secondary radio-bridge-action-btn" id="btnRadioBridgeCoverageJoystick">Настроить направление и охват</button>';
+        html += '<p class="object-card-hint radio-bridge-coverage-hint">0° — север, 90° — восток. Джойстик открывается отдельной панелью.</p>';
         html += '</div>';
     } else {
         html += '<div class="radio-bridge-coverage-summary">' + escapeHtml(buildRadioBridgeCoverageSummaryHtml(obj)) + '</div>';
@@ -2115,56 +2098,124 @@ function buildRadioBridgeCardContent(obj, isEdit, name) {
 }
 
 function setupRadioBridgeCardHandlers() {
+    function applyRadioBridgeCoverageFromCardUi(joyValues) {
+        if (!currentModalObject || currentModalObject.properties.get('type') !== 'radioBridge') return;
+        var shapeEl = document.getElementById('editRadioBridgeCoverageShape');
+        var shape = (shapeEl && shapeEl.value) || 'circle';
+        var showEl = document.getElementById('editRadioBridgeShowCoverage');
+        var az = currentModalObject.properties.get('coverageAzimuth');
+        var ang = currentModalObject.properties.get('coverageAngle');
+        var range;
+        if (joyValues) {
+            az = joyValues.azimuth;
+            ang = joyValues.angle;
+            range = parseCoverageKm(joyValues.range);
+            if (joyValues.shape) shape = joyValues.shape;
+        } else if (shape === 'sector') {
+            range = getRadioBridgeCoverageLengthKm(currentModalObject);
+        } else {
+            range = getRadioBridgeCoverageRadiusKm(currentModalObject);
+        }
+        az = parseFloat(az);
+        ang = parseFloat(ang);
+        if (isNaN(az) || az < 0) az = 0;
+        if (az > 359) az = 359;
+        if (isNaN(ang) || ang < 5) ang = 60;
+        if (ang > 360) ang = 360;
+        currentModalObject.properties.set('showCoverage', !!(showEl && showEl.checked));
+        currentModalObject.properties.set('coverageShape', shape);
+        if (shape === 'sector') {
+            currentModalObject.properties.set('coverageLengthKm', range);
+        } else {
+            currentModalObject.properties.set('coverageRadiusKm', range);
+        }
+        currentModalObject.properties.set('coverageRadiusM', null);
+        currentModalObject.properties.set('coverageLengthM', null);
+        currentModalObject.properties.set('coverageAzimuth', az);
+        currentModalObject.properties.set('coverageAngle', ang);
+        applyRadioBridgeCoverageSettings(currentModalObject);
+    }
+
+    function openRadioBridgeCoverageJoystickPanel() {
+        if (!currentModalObject || currentModalObject.properties.get('type') !== 'radioBridge') return;
+        if (typeof openCoverageJoystickPanel !== 'function') return;
+        var showEl = document.getElementById('editRadioBridgeShowCoverage');
+        if (showEl && !showEl.checked) {
+            showEl.checked = true;
+            var params = document.getElementById('editRadioBridgeCoverageParams');
+            if (params) params.style.display = '';
+        }
+        var shapeEl = document.getElementById('editRadioBridgeCoverageShape');
+        var shape = (shapeEl && shapeEl.value) || currentModalObject.properties.get('coverageShape') || 'circle';
+        var range = shape === 'sector'
+            ? getRadioBridgeCoverageLengthKm(currentModalObject)
+            : getRadioBridgeCoverageRadiusKm(currentModalObject);
+        openCoverageJoystickPanel({
+            title: 'Зона покрытия радиомоста',
+            shape: shape,
+            azimuth: currentModalObject.properties.get('coverageAzimuth') != null
+                ? currentModalObject.properties.get('coverageAzimuth') : 0,
+            angle: currentModalObject.properties.get('coverageAngle') != null
+                ? currentModalObject.properties.get('coverageAngle') : 60,
+            range: range,
+            rangeMin: 0.05,
+            rangeMax: 50,
+            rangeStep: 0.1,
+            rangeUnit: 'км',
+            rangeLabel: shape === 'sector' ? 'Длина луча' : 'Радиус',
+            accent: RADIO_BRIDGE_LINE_COLOR,
+            hideCard: true,
+            lockMap: true,
+            restoreCard: true,
+            getShape: function() { return shape; },
+            onChange: function(vals) {
+                applyRadioBridgeCoverageFromCardUi(vals);
+            }
+        });
+        applyRadioBridgeCoverageFromCardUi();
+    }
+
     function bindCoverageInputs() {
         var shapeSel = document.getElementById('editRadioBridgeCoverageShape');
-        var sectorFields = document.getElementById('editRadioBridgeSectorFields');
-        var circleFields = document.getElementById('editRadioBridgeCircleFields');
         var coverageParams = document.getElementById('editRadioBridgeCoverageParams');
         var showCoverageEl = document.getElementById('editRadioBridgeShowCoverage');
+        var joyBtn = document.getElementById('btnRadioBridgeCoverageJoystick');
 
         function syncCoverageParamsVisibility() {
             if (coverageParams && showCoverageEl) {
                 coverageParams.style.display = showCoverageEl.checked ? '' : 'none';
             }
+            if (!showCoverageEl || !showCoverageEl.checked) {
+                if (typeof closeCoverageJoystickPanel === 'function') closeCoverageJoystickPanel();
+            }
         }
 
-        if (shapeSel) {
+        if (joyBtn && !joyBtn._rbCovJoyBtnBound) {
+            joyBtn._rbCovJoyBtnBound = true;
+            joyBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                openRadioBridgeCoverageJoystickPanel();
+            });
+        }
+
+        if (shapeSel && !shapeSel._rbCovShapeBound) {
+            shapeSel._rbCovShapeBound = true;
             shapeSel.addEventListener('change', function() {
-                var isSector = this.value === 'sector';
-                if (sectorFields) sectorFields.style.display = isSector ? '' : 'none';
-                if (circleFields) circleFields.style.display = isSector ? 'none' : '';
+                if (typeof syncCoverageJoystickPanelShape === 'function') {
+                    syncCoverageJoystickPanelShape(this.value, this.value === 'sector' ? 'Длина луча' : 'Радиус');
+                }
+                applyRadioBridgeCoverageFromCardUi();
             });
         }
         if (showCoverageEl && !showCoverageEl._rbCovVisBound) {
             showCoverageEl._rbCovVisBound = true;
-            showCoverageEl.addEventListener('change', syncCoverageParamsVisibility);
+            showCoverageEl.addEventListener('change', function() {
+                syncCoverageParamsVisibility();
+                applyRadioBridgeCoverageFromCardUi();
+            });
         }
         syncCoverageParamsVisibility();
-        ['editRadioBridgeShowCoverage', 'editRadioBridgeCoverageShape', 'editRadioBridgeCoverageRadius',
-            'editRadioBridgeCoverageLength',
-            'editRadioBridgeCoverageAzimuth', 'editRadioBridgeCoverageAngle'].forEach(function(id) {
-            var el = document.getElementById(id);
-            if (!el || el._rbCovBound) return;
-            el._rbCovBound = true;
-            var evt = el.type === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input';
-            el.addEventListener(evt, function() {
-                if (!currentModalObject || currentModalObject.properties.get('type') !== 'radioBridge') return;
-                var shape = document.getElementById('editRadioBridgeCoverageShape').value || 'circle';
-                currentModalObject.properties.set('showCoverage', !!document.getElementById('editRadioBridgeShowCoverage').checked);
-                currentModalObject.properties.set('coverageShape', shape);
-                if (shape === 'sector') {
-                    var lenEl = document.getElementById('editRadioBridgeCoverageLength');
-                    currentModalObject.properties.set('coverageLengthKm', parseCoverageKm(lenEl && lenEl.value));
-                } else {
-                    currentModalObject.properties.set('coverageRadiusKm', parseCoverageKm(document.getElementById('editRadioBridgeCoverageRadius').value));
-                }
-                currentModalObject.properties.set('coverageRadiusM', null);
-                currentModalObject.properties.set('coverageLengthM', null);
-                currentModalObject.properties.set('coverageAzimuth', parseFloat(document.getElementById('editRadioBridgeCoverageAzimuth').value) || 0);
-                currentModalObject.properties.set('coverageAngle', parseFloat(document.getElementById('editRadioBridgeCoverageAngle').value) || 60);
-                applyRadioBridgeCoverageSettings(currentModalObject);
-            });
-        });
     }
     bindCoverageInputs();
     document.querySelectorAll('.btn-radio-bridge-port-connect').forEach(function(btn) {

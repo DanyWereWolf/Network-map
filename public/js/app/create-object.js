@@ -78,6 +78,12 @@ function createObject(type, name, coords, options = {}) {
             oltPortTypes = resolveOltPortTypesForModel(oltMfr, oltMod, oltPorts);
         }
         if (oltPortTypes.length) oltPorts = oltPortTypes.length;
+        var oltOptical = (oltMfr && oltMod && typeof window.getDeviceOpticalParams === 'function')
+            ? window.getDeviceOpticalParams('olt', oltMfr, oltMod)
+            : null;
+        if (oltOptical && (!options.ponPorts || options.ponPorts < 1) && !oltPortTypes.length && oltOptical.ponPorts) {
+            oltPorts = oltOptical.ponPorts;
+        }
         placemarkProperties.ponPorts = oltPorts;
         placemarkProperties.incomingFiber = null;
         placemarkProperties.portAssignments = {};
@@ -87,6 +93,20 @@ function createObject(type, name, coords, options = {}) {
         if (options.model) placemarkProperties.model = options.model;
         placemarkProperties.comment = options.comment || '';
         if (options.ipAddress) placemarkProperties.ipAddress = options.ipAddress;
+        if (oltOptical) {
+            if (oltOptical.txPowerDbm != null) placemarkProperties.txPowerDbm = oltOptical.txPowerDbm;
+            if (oltOptical.rxSensitivityDbm != null) placemarkProperties.rxSensitivityDbm = oltOptical.rxSensitivityDbm;
+            if (oltOptical.budgetDb != null) placemarkProperties.budgetDb = oltOptical.budgetDb;
+            if (oltOptical.wavelengthTxNm != null) placemarkProperties.wavelengthTxNm = oltOptical.wavelengthTxNm;
+            if (oltOptical.wavelengthRxNm != null) placemarkProperties.wavelengthRxNm = oltOptical.wavelengthRxNm;
+            if (oltOptical.connectorType) placemarkProperties.connectorType = oltOptical.connectorType;
+            if (oltOptical.defaultPonSfpClass) placemarkProperties.defaultPonSfpClass = oltOptical.defaultPonSfpClass;
+            if (oltOptical.uplinkSfpPorts != null) placemarkProperties.uplinkSfpPortsCount = oltOptical.uplinkSfpPorts;
+            if (oltOptical.uplinkSfpPlusPorts != null) placemarkProperties.uplinkSfpPlusPortsCount = oltOptical.uplinkSfpPlusPorts;
+            if (oltOptical.rj45Ports != null) placemarkProperties.rj45PortsCount = oltOptical.rj45Ports;
+            if (oltOptical.syncPorts != null) placemarkProperties.syncPortsCount = oltOptical.syncPorts;
+            if (oltOptical.consolePorts != null) placemarkProperties.consolePortsCount = oltOptical.consolePorts;
+        }
     }
     if (type === 'splitter') {
         placemarkProperties.splitRatio = options.splitRatio || 8;
@@ -197,6 +217,10 @@ function createObject(type, name, coords, options = {}) {
     }
     const placemark = new ymaps.Placemark(coords, placemarkProperties, placemarkOptions);
     if (typeof disableNativePlacemarkBalloon === 'function') disableNativePlacemarkBalloon(placemark);
+    if (type === 'olt' && typeof window.buildOltPorts === 'function') {
+        window.buildOltPorts(placemark);
+        if (typeof window.updateOltPortCounters === 'function') window.updateOltPortCounters(placemark);
+    }
 
     updateObjectLabel(placemark, name);
     if (type === 'camera') refreshCameraMapPresentation(placemark);
@@ -303,7 +327,7 @@ function createObject(type, name, coords, options = {}) {
             var cableTypeVal = getEffectiveCableLayingType();
             if (handleCopperCablePlacemarkStep(placemark, type, cableTypeVal)) return;
             if (type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'radioBridge') {
-                showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU, камеры, медиаконвертера или радиомоста. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
+                showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU, камеры, медиаконвертера или радиомоста. Кабель прокладывается между муфтой, кроссом или креплением. К OLT — только «Подключить» в карточке.', 'Недопустимое действие');
                 return;
             }
             if (cableUndergroundActive) {
@@ -321,9 +345,12 @@ function createObject(type, name, coords, options = {}) {
             }
             var cableEndpointsPlacemark = ['cross', 'sleeve', 'spliceCassette', 'support', 'attachment', 'manhole', 'olt'];
             if (cableEndpointsPlacemark.indexOf(type) !== -1) {
+                if (type === 'olt' && typeof allowOltAsFiberCableEndpoint === 'function' && !allowOltAsFiberCableEndpoint(placemark)) {
+                    return;
+                }
                 if (!cableSource) {
                     if (isCableIntermediateWaypoint(type)) {
-                        showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры, крепления и колодцы — только промежуточные точки.', 'Недопустимое действие');
+                        showError('Начало кабеля должно быть муфтой или кроссом. К OLT — только «Подключить» в карточке. Опоры, крепления и колодцы — промежуточные точки.', 'Недопустимое действие');
                         return;
                     }
                     cableSource = placemark;

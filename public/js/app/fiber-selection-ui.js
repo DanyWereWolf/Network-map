@@ -4,7 +4,7 @@
 function updateFiberSelectionUI() {
     const bar = document.getElementById('fiber-selection-bar');
     if (bar) {
-        bar.style.display = selectedFiberForConnection ? 'block' : 'none';
+        bar.style.display = selectedFiberForConnection ? 'flex' : 'none';
         bar.innerHTML = '';
         if (selectedFiberForConnection) {
             const sc = selectedFiberForConnection;

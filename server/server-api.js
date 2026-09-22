@@ -604,7 +604,20 @@ app.get('/api/map', (req, res) => {
         }
         var orgId = (user && user.organizationId) ? user.organizationId : null;
         if (!orgId && user) return res.status(403).json({ error: 'Выберите организацию или привяжите учётную запись к организации' });
-        var data = orgId ? db.getMapData(orgId) : [];
+        // Живое sync-состояние приоритетнее store: иначе reload до debounce (1.5с)
+        // отдаёт карту без только что добавленного кабеля.
+        var data = [];
+        if (orgId) {
+            var live = null;
+            try {
+                live = getSyncStateForOrg(orgId, { forceFromDb: false });
+            } catch (eLive) { live = null; }
+            if (live && Array.isArray(live.data) && live.data.length) {
+                data = live.data;
+            } else {
+                data = db.getMapData(orgId) || [];
+            }
+        }
         res.json({ data: data, organizationId: orgId || null });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
@@ -3225,8 +3238,17 @@ app.post('/api/settings', (req, res) => {
             delete toSave.lodThresholds;
         }
         if (Object.keys(toSave).length > 0) db.setSettings(toSave, orgId || undefined);
-        if (toSave.collaboratorCursorStyle !== undefined && orgId) {
-            broadcastOrgSettings(orgId, { collaboratorCursorStyle: db.getSettings(orgId).collaboratorCursorStyle });
+        if (orgId && (toSave.collaboratorCursorStyle !== undefined || toSave.fiberMapColor !== undefined || toSave.fiberMapStrokeWidth !== undefined)) {
+            var orgSettings = db.getSettings(orgId);
+            var broadcastPayload = {};
+            if (toSave.collaboratorCursorStyle !== undefined) {
+                broadcastPayload.collaboratorCursorStyle = orgSettings.collaboratorCursorStyle;
+            }
+            if (toSave.fiberMapColor !== undefined || toSave.fiberMapStrokeWidth !== undefined) {
+                broadcastPayload.fiberMapColor = orgSettings.fiberMapColor;
+                broadcastPayload.fiberMapStrokeWidth = orgSettings.fiberMapStrokeWidth;
+            }
+            broadcastOrgSettings(orgId, broadcastPayload);
         }
         res.json({ ok: true });
     } catch (e) {
@@ -3861,30 +3883,32 @@ var mapDbSaveTimersByOrg = {};
 var MAP_DB_SAVE_DEBOUNCE_MS = 1500;
 
 function scheduleMapDbSave(orgId) {
-    if (!orgId) return;
-    if (mapDbSaveTimersByOrg[orgId]) clearTimeout(mapDbSaveTimersByOrg[orgId]);
-    mapDbSaveTimersByOrg[orgId] = setTimeout(function() {
-        mapDbSaveTimersByOrg[orgId] = null;
+    var key = normalizeSyncOrgId(orgId);
+    if (!key) return;
+    if (mapDbSaveTimersByOrg[key]) clearTimeout(mapDbSaveTimersByOrg[key]);
+    mapDbSaveTimersByOrg[key] = setTimeout(function() {
+        mapDbSaveTimersByOrg[key] = null;
         try {
-            var state = syncCurrentStateByOrg[orgId];
-            if (state && Array.isArray(state.data)) db.setMapData(orgId, state.data);
+            var state = syncCurrentStateByOrg[key];
+            if (state && Array.isArray(state.data)) db.setMapData(key, state.data);
         } catch (e) {
-            console.error('[Sync] setMapData refused for', orgId, e && e.message);
+            console.error('[Sync] setMapData refused for', key, e && e.message);
         }
     }, MAP_DB_SAVE_DEBOUNCE_MS);
 }
 
 function flushMapDbSave(orgId) {
-    if (!orgId) return;
-    if (mapDbSaveTimersByOrg[orgId]) {
-        clearTimeout(mapDbSaveTimersByOrg[orgId]);
-        mapDbSaveTimersByOrg[orgId] = null;
+    var key = normalizeSyncOrgId(orgId);
+    if (!key) return;
+    if (mapDbSaveTimersByOrg[key]) {
+        clearTimeout(mapDbSaveTimersByOrg[key]);
+        mapDbSaveTimersByOrg[key] = null;
     }
     try {
-        var state = syncCurrentStateByOrg[orgId];
-        if (state && Array.isArray(state.data)) db.setMapData(orgId, state.data);
+        var state = syncCurrentStateByOrg[key];
+        if (state && Array.isArray(state.data)) db.setMapData(key, state.data);
     } catch (e) {
-        console.error('[Sync] flush setMapData refused for', orgId, e && e.message);
+        console.error('[Sync] flush setMapData refused for', key, e && e.message);
     }
 }
 
@@ -4061,6 +4085,14 @@ function copyOpticalFiberFieldsToCableData(cableData, c) {
     }
     if (Array.isArray(c.fiberPalette) && c.fiberPalette.length) {
         cableData.fiberPalette = c.fiberPalette;
+    }
+    if (c.fibersPerModule != null && c.fibersPerModule !== '') {
+        var mpm = parseInt(c.fibersPerModule, 10);
+        if (!isNaN(mpm) && mpm > 0) cableData.fibersPerModule = mpm;
+    }
+    if (c.moduleCount != null && c.moduleCount !== '') {
+        var mc = parseInt(c.moduleCount, 10);
+        if (!isNaN(mc) && mc > 0) cableData.moduleCount = mc;
     }
 }
 
@@ -4245,6 +4277,13 @@ function applyOperationToState(state, op) {
         fromUid = op.data.fromUniqueId; toUid = op.data.toUniqueId;
         fromIdx = state.findIndex(function(i) { return i.type !== 'cable' && i.uniqueId === fromUid; });
         toIdx = state.findIndex(function(i) { return i.type !== 'cable' && i.uniqueId === toUid; });
+        // Fallback: uniqueId как строка / без строгого type filter если концы потерялись в индексе
+        if (fromIdx < 0 && fromUid != null && fromUid !== '') {
+            fromIdx = state.findIndex(function(i) { return i && i.type !== 'cable' && String(i.uniqueId) === String(fromUid); });
+        }
+        if (toIdx < 0 && toUid != null && toUid !== '') {
+            toIdx = state.findIndex(function(i) { return i && i.type !== 'cable' && String(i.uniqueId) === String(toUid); });
+        }
         if (fromIdx >= 0 && toIdx >= 0) {
             c = { type: 'cable', cableType: op.data.cableType, from: fromIdx, to: toIdx, geometry: op.data.geometry };
             if (fromUid != null && fromUid !== '') c.fromUniqueId = fromUid;
@@ -4276,6 +4315,7 @@ function applyOperationToState(state, op) {
             op.data = c;
             return { state: state.concat([c]), conflict: null };
         }
+        console.warn('[Sync] add_cable dropped: endpoints not found', fromUid, toUid);
         return { state: state, conflict: null };
     }
     if (op.type === 'update_cable' && op.uniqueId != null && op.data) {
@@ -4499,7 +4539,13 @@ wss.on('connection', (ws, req) => {
                 }
                 state.data = nextData;
                 state.clientId = msg.clientId || clientId;
-                scheduleMapDbSave(orgId);
+                // Структурные op (кабель/объект) — сразу в store/БД, иначе F5 до debounce теряет данные.
+                if (msg.op.type === 'add_cable' || msg.op.type === 'delete_cable' ||
+                    msg.op.type === 'add_object' || msg.op.type === 'delete_object') {
+                    flushMapDbSave(orgId);
+                } else {
+                    scheduleMapDbSave(orgId);
+                }
                 wss.clients.forEach(function(client) {
                     if (client !== ws && client.readyState === WebSocket.OPEN && syncOrgIdsEqual(client.orgId, orgId)) {
                         try { client.send(JSON.stringify({ type: 'op', op: msg.op })); } catch (e) {}

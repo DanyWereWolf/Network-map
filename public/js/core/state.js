@@ -25,6 +25,10 @@ var pendingCopperRouteFinish = null;
 var copperCableLayingActive = false;
 /** Прокладка одножильного feeder с PON-порта OLT в муфту/кросс */
 var pendingOltPortPreset = null;
+/** Результат apply PON до add_cable — финализация после sync */
+var pendingOltPortPresetResult = null;
+/** Прокладка с конкретного uplink-порта OLT: { oltUid, portIndex, portType }. */
+var pendingOltUplinkPreset = null;
 var pendingOltPortLayFiberBackup = null;
 var oltPortCableJustFinished = false;
 var cableWaypoints = [];

@@ -553,6 +553,18 @@
                                     </span>
                                     <input type="color" id="themeAccentCustom" value="#2563eb" title="Выбрать свой цвет" aria-label="Свой акцентный цвет">
                                 </label>
+                                <div class="theme-fiber-map-style" id="themeFiberMapStyleSection">
+                                    <p class="app-settings-section-desc">Линия ВОЛС на карте</p>
+                                    <p class="theme-fiber-map-hint">Общий вид для всей организации. Изменения применяются сразу у всех участников.</p>
+                                    <div class="cable-fiber-lay-row cable-map-style-lay-row">
+                                        <label class="cable-fiber-lay-label" for="themeFiberMapColor">Цвет</label>
+                                        <input type="color" id="themeFiberMapColor" class="cable-map-color-input" value="#16a34a" title="Цвет линии ВОЛС" aria-label="Цвет линии ВОЛС на карте">
+                                        <label class="cable-fiber-lay-label" for="themeFiberMapStrokeWidth">Толщина</label>
+                                        <input type="range" id="themeFiberMapStrokeWidth" class="cable-map-width-input" min="1" max="8" step="1" value="3" title="Толщина линии (1–8)" aria-label="Толщина линии ВОЛС на карте">
+                                        <span class="cable-map-width-value" id="themeFiberMapStrokeWidthVal">3</span>
+                                    </div>
+                                    <p class="theme-fiber-map-admin-hint" id="themeFiberMapAdminHint" hidden>Менять может только администратор организации.</p>
+                                </div>
                             </div>
                         </div>
 
@@ -1111,7 +1123,7 @@
                     </div>
                     <div class="accordion-content" id="cables-content">
                         <div class="cables-panel">
-                            <p class="cables-panel-hint">Укажите число жил и при необходимости цвета, нажмите «Проложить кабель» и отметьте точки на карте. Двойной клик или «Завершить» — закончить трассу.</p>
+                            <p class="cables-panel-hint">Укажите число жил и при необходимости цвета жил, нажмите «Проложить кабель» и отметьте точки на карте. Двойной клик или «Завершить» — закончить трассу. Цвет и толщину линии ВОЛС задают в настройках темы (для всей организации).</p>
                             <div class="cable-type-section cable-fiber-config-card">
                                 <p class="cable-type-section-label">ВОЛС</p>
                                 <div class="cable-type-picker" id="cableTypePicker" role="group" aria-label="Вид кабеля на карте">
@@ -1139,6 +1151,13 @@
                                     </div>
                                     <p class="form-hint">Марка и модель — из справочника. После выбора модели подставятся жилы и цвета; их можно изменить ниже.</p>
                                 </div>
+                                <div class="cable-fiber-lay-row cable-kind-lay-row">
+                                    <label class="cable-fiber-lay-label">Вид</label>
+                                    <div class="cable-kind-presets" role="group" aria-label="Вид кабеля">
+                                        <button type="button" class="cable-kind-preset cable-kind-preset--active" data-kind="fiber">ВОЛС</button>
+                                        <button type="button" class="cable-kind-preset" data-kind="fiberModular">Модульный</button>
+                                    </div>
+                                </div>
                                 <div class="cable-fiber-lay-row">
                                     <label class="cable-fiber-lay-label" for="layFiberCount">Жил</label>
                                     <input type="number" id="layFiberCount" class="form-input cable-fiber-count-input" min="1" max="96" value="4" aria-label="Число жил">
@@ -1147,7 +1166,12 @@
                                         <button type="button" class="cable-fiber-preset" data-count="8">8</button>
                                         <button type="button" class="cable-fiber-preset" data-count="16">16</button>
                                         <button type="button" class="cable-fiber-preset" data-count="24">24</button>
+                                        <button type="button" class="cable-fiber-preset" data-count="48">48</button>
+                                        <button type="button" class="cable-fiber-preset" data-count="96">96</button>
                                     </div>
+                                </div>
+                                <div id="layModuleSizeWrap" class="cable-modular-lay-panel" style="display:none;">
+                                    <div id="layModularConfigMount"></div>
                                 </div>
                                 <button type="button" id="layFiberPaletteBtn" class="btn-secondary cable-fiber-palette-btn">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 0 20 10 10 0 0 1 0-20z" fill="currentColor" opacity="0.15"></path><circle cx="8" cy="10" r="2" fill="#3b82f6"></circle><circle cx="14" cy="8" r="2" fill="#f59e0b"></circle><circle cx="15" cy="14" r="2" fill="#22c55e"></circle></svg>
@@ -1155,6 +1179,7 @@
                                 </button>
                                 <select id="cableType" class="cable-type-select-native" aria-hidden="true" tabindex="-1">
                                     <option value="fiber" selected>ВОЛС</option>
+                                    <option value="fiberModular">Модульный ВОЛС</option>
                                 </select>
                             </div>
                             <p class="cables-copper-note">
@@ -2044,12 +2069,12 @@
         </div>
     </div>
 
-    <!-- Модальное окно: приход жилы от кросса/муфты к OLT (upstream, не PON-порт) -->
+    <!-- Модальное окно: приход жилы от кросса/муфты к OLT (upstream → SFP) -->
     <div id="oltSelectionModal" class="modal">
         <div class="modal-content node-selection-modal-content">
             <div class="network-map-balloon node-selection-balloon">
                 <div class="group-balloon-header">
-                    <span class="group-balloon-title">Приход OLT (upstream)</span>
+                    <span class="group-balloon-title">Приход OLT → SFP</span>
                     <button type="button" class="group-balloon-close close-olt-selection" title="Закрыть">&times;</button>
                 </div>
                 <div class="modal-body node-selection-body">
@@ -2062,10 +2087,59 @@
                             <option value="">— выберите OLT</option>
                         </select>
                     </div>
-                    <p class="node-selection-info" style="font-size: 0.8125rem; color: var(--text-secondary); margin-top: 8px;">Это <strong>приход</strong> от кросса/муфты к OLT, не PON-порт. PON-порты назначаются в карточке OLT.</p>
+                    <div class="form-group" id="oltSelectUplinkPortGroup" hidden>
+                        <label for="oltSelectUplinkPort">Порт SFP / SFP+ (приход)</label>
+                        <select id="oltSelectUplinkPort" class="form-input" style="width: 100%; padding: 8px;">
+                            <option value="">— выберите порт —</option>
+                        </select>
+                    </div>
+                    <p class="node-selection-info" style="font-size: 0.8125rem; color: var(--text-secondary); margin-top: 8px;">Жила с кросса/муфты подключается в <strong>реальный uplink SFP или SFP+</strong> на OLT, не в виртуальный приход. PON-порты — отдельно, в карточке OLT.</p>
                     <div class="node-selection-actions">
                         <button id="confirmOltSelection" class="btn-primary" disabled>Подключить</button>
                         <button id="cancelOltSelection" class="btn-secondary">Отмена</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно выбора uplink-порта OLT -->
+    <div id="oltPortSelectionModal" class="modal">
+        <div class="modal-content node-selection-modal-content">
+            <div class="network-map-balloon node-selection-balloon">
+                <div class="group-balloon-header">
+                    <span class="group-balloon-title">Выбор uplink-порта OLT</span>
+                    <button type="button" class="group-balloon-close close-olt-port-selection" title="Закрыть">&times;</button>
+                </div>
+                <div class="modal-body node-selection-body">
+                    <div class="node-selection-info">
+                        <p id="oltPortSelectionInfo"></p>
+                    </div>
+                    <div id="oltPortSelectionBody"></div>
+                    <div class="node-selection-actions">
+                        <button id="cancelOltPortSelection" class="btn-secondary">Отмена</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно "Уровень сигнала на трассе" -->
+    <div id="signalTraceModal" class="modal">
+        <div class="modal-content node-selection-modal-content signal-trace-modal-content panel-glass panel-glass--shell">
+            <div class="network-map-balloon node-selection-balloon panel-glass signal-trace-balloon">
+                <div class="group-balloon-header signal-trace-balloon-header">
+                    <div class="signal-trace-balloon-heading">
+                        <span class="group-balloon-title">Уровень сигнала на трассе</span>
+                        <span class="signal-trace-balloon-sub">OLT → … → ONU · расчёт потерь</span>
+                    </div>
+                    <button type="button" class="group-balloon-close close-signal-trace" title="Закрыть" aria-label="Закрыть">&times;</button>
+                </div>
+                <div class="modal-body node-selection-body signal-trace-body-wrap">
+                    <div id="signalTraceBody" class="signal-trace-body"></div>
+                    <div class="node-selection-actions signal-trace-actions">
+                        <button type="button" id="exportSignalTraceBtn" class="btn-secondary">Экспорт</button>
+                        <button type="button" id="closeSignalTraceBtn" class="btn-primary">Закрыть</button>
                     </div>
                 </div>
             </div>
@@ -2974,6 +3048,61 @@
         </div>
     </div>
 
+    <div id="oltModelOpticalModal" class="modal modal--centered device-catalog-switch-ports-modal" style="display: none;" role="dialog" aria-labelledby="oltModelOpticalModalTitle" aria-modal="true" aria-hidden="true">
+        <div class="modal-content panel-glass device-catalog-switch-ports-modal-content olt-model-optical-modal-content">
+            <header class="modal-header">
+                <h2 id="oltModelOpticalModalTitle">Оптика OLT</h2>
+                <span class="close close-olt-model-optical" title="Закрыть">&times;</span>
+            </header>
+            <div class="modal-body device-catalog-switch-ports-body">
+                <p id="oltModelOpticalModalHint" class="form-hint device-catalog-switch-ports-hint"></p>
+                <div class="olt-optical-form-grid">
+                    <fieldset class="olt-optical-fieldset">
+                        <legend>Порты по умолчанию</legend>
+                        <label class="olt-optical-field"><span>PON</span><input type="number" id="oltOpticalPonPorts" class="form-input" min="0" max="96"></label>
+                        <label class="olt-optical-field"><span>Uplink SFP</span><input type="number" id="oltOpticalUplinkSfp" class="form-input" min="0" max="96"></label>
+                        <label class="olt-optical-field"><span>Uplink SFP+</span><input type="number" id="oltOpticalUplinkSfpPlus" class="form-input" min="0" max="96"></label>
+                        <label class="olt-optical-field"><span>RJ45</span><input type="number" id="oltOpticalRj45" class="form-input" min="0" max="96"></label>
+                        <label class="olt-optical-field"><span>Sync</span><input type="number" id="oltOpticalSync" class="form-input" min="0" max="96"></label>
+                        <label class="olt-optical-field"><span>Console</span><input type="number" id="oltOpticalConsole" class="form-input" min="0" max="96"></label>
+                    </fieldset>
+                    <fieldset class="olt-optical-fieldset">
+                        <legend>Оптика PON (без SFP)</legend>
+                        <label class="olt-optical-field"><span>Tx, дБм</span><input type="number" id="oltOpticalTxPower" class="form-input" step="0.1"></label>
+                        <label class="olt-optical-field"><span>Rx чувств., дБм</span><input type="number" id="oltOpticalRxSens" class="form-input" step="0.1"></label>
+                        <label class="olt-optical-field"><span>Бюджет, дБ</span><input type="number" id="oltOpticalBudget" class="form-input" step="0.1"></label>
+                        <label class="olt-optical-field"><span>λ Tx, нм</span><input type="number" id="oltOpticalWlTx" class="form-input" min="800" max="1700"></label>
+                        <label class="olt-optical-field"><span>λ Rx, нм</span><input type="number" id="oltOpticalWlRx" class="form-input" min="800" max="1700"></label>
+                        <label class="olt-optical-field"><span>Разъём</span>
+                            <select id="oltOpticalConnector" class="form-input">
+                                <option value="SC/APC">SC/APC</option>
+                                <option value="SC/UPC">SC/UPC</option>
+                                <option value="LC/APC">LC/APC</option>
+                                <option value="LC/UPC">LC/UPC</option>
+                            </select>
+                        </label>
+                        <label class="olt-optical-field"><span>SFP класс по ум.</span>
+                            <select id="oltOpticalDefaultSfpClass" class="form-input">
+                                <option value="B+">B+</option>
+                                <option value="C+">C+</option>
+                                <option value="C++">C++</option>
+                                <option value="N1">N1</option>
+                                <option value="N2">N2</option>
+                                <option value="PX20+">PX20+</option>
+                            </select>
+                        </label>
+                    </fieldset>
+                </div>
+            </div>
+            <footer class="device-catalog-switch-ports-footer olt-optical-footer">
+                <button type="button" id="oltModelOpticalResetBtn" class="btn-secondary">Сбросить</button>
+                <span class="olt-optical-footer-spacer"></span>
+                <button type="button" id="oltModelOpticalCancelBtn" class="btn-secondary">Отмена</button>
+                <button type="button" id="oltModelOpticalSaveBtn" class="btn-primary">Сохранить</button>
+            </footer>
+        </div>
+    </div>
+
     <!-- Чат организации -->
     <div id="orgChatBackdrop" class="org-chat-backdrop" hidden aria-hidden="true"></div>
     <aside id="orgChatPanel" class="org-chat-panel panel-glass" aria-hidden="true" aria-label="Чат организации">
@@ -3194,6 +3323,7 @@
     <script src="js/app/fiber-routing-modals.js"></script>
     <script src="js/app/fiber-routing-map.js"></script>
     <script src="js/app/gpon-connect-modals.js"></script>
+    <script src="js/app/coverage-joystick.js"></script>
     <script src="js/app/radio-bridge.js"></script>
     <script src="js/app/camera-coverage.js"></script>
     <script src="js/app/connection-lines.js"></script>
@@ -3207,6 +3337,7 @@
     <script src="js/app/map-filter.js"></script>
     <script src="js/app/fiber-workspace.js"></script>
     <script src="js/app/main.js"></script>
+    <script src="js/optical-calculator.js"></script>
     <script src="js/sync.js"></script>
     <script src="js/ui/lofi-radio.js"></script>
 </body></html>

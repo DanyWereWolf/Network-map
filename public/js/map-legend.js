@@ -14,6 +14,25 @@
         { id: 'copper', label: 'Медный кабель', short: 'Медь', color: '#b45309', width: 3, tone: 'copper', layViaUi: false }
     ];
 
+    function syncCableTypesFiberStyle() {
+        for (var i = 0; i < CABLE_TYPES.length; i++) {
+            if (CABLE_TYPES[i].id === 'copper') continue;
+            CABLE_TYPES[i].color = FIBER_MAP_COLOR;
+            CABLE_TYPES[i].width = FIBER_MAP_WIDTH;
+        }
+    }
+
+    function setFiberMapStyle(color, width) {
+        if (color) FIBER_MAP_COLOR = String(color);
+        if (width != null && width !== '') {
+            var n = parseInt(width, 10);
+            if (!isNaN(n)) FIBER_MAP_WIDTH = n;
+        }
+        syncCableTypesFiberStyle();
+        try { renderSidebarLegend(); } catch (e) {}
+        return { color: FIBER_MAP_COLOR, width: FIBER_MAP_WIDTH };
+    }
+
     var FIBER_ROUTE_LEGEND = [
         { color: '#22c55e', label: 'Кросс / муфта → узел или ONU', tag: 'жила' },
         { color: '#0ea5e9', label: 'Кросс / муфта → OLT', tag: 'жила' },
@@ -52,7 +71,7 @@
 
         html += '<div class="legend-group">';
         html += '<p class="legend-group-title">Магистраль (ВОЛС)</p>';
-        html += '<p class="legend-group-hint">На карте все ВОЛС одного вида; число жил и цвета настраиваются при прокладке и в карточке кабеля</p>';
+        html += '<p class="legend-group-hint">На карте все ВОЛС одного вида (цвет и толщину задают в настройках темы); число жил и цвета жил — при прокладке и в карточке кабеля</p>';
         html += '<div class="legend-item legend-item--cable">' +
             '<span class="legend-line legend-line--solid" style="--legend-color:var(--fiber-map-line);--legend-width:' + (FIBER_MAP_WIDTH + 1) + 'px" aria-hidden="true"></span>' +
             '<span class="legend-text">ВОЛС</span></div>';
@@ -110,6 +129,7 @@
         FIBER_ROUTE_LEGEND: FIBER_ROUTE_LEGEND,
         getCableMeta: getCableMeta,
         getCableTypesForPicker: getCableTypesForPicker,
+        setFiberMapStyle: setFiberMapStyle,
         renderSidebarLegend: renderSidebarLegend,
         renderCableTypePicker: renderCableTypePicker
     };

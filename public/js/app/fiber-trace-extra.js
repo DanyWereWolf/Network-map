@@ -364,12 +364,12 @@ function traceFromOLTPort(oltObj, portNumber) {
         }
         startHostDirect = oltObj;
     }
-    var directTraceOpts = {};
+    // Всегда идём «вниз» по сети: иначе embedded-сплиттер в кроссе не попадает в путь.
+    var directTraceOpts = { traceTowardOnu: true };
     var targetOnuDirect = null;
     if (ass.onuId) {
         targetOnuDirect = getMapObjectByUid(ass.onuId, 'onu');
         if (targetOnuDirect) {
-            directTraceOpts.traceTowardOnu = true;
             directTraceOpts.targetOnuId = getObjectUniqueId(targetOnuDirect);
         }
     }
@@ -786,7 +786,11 @@ function tryAppendOnuAtHostForTrace(path, hostObj, cableId, fiberNumber, targetO
                 fiberNumber: fiberNumber,
                 onuName: onuConn.onuName || onuDirect.properties.get('name') || 'ONU',
                 cross: hostObj,
-                onu: onuDirect
+                onu: onuDirect,
+                routeIds: onuConn.routeIds || [],
+                distanceM: (typeof measureHostToOnuDropDistanceM === 'function'
+                    ? measureHostToOnuDropDistanceM(hostObj, onuDirect, onuConn.routeIds || [])
+                    : 0)
             });
             path.push({
                 type: 'object',
@@ -881,19 +885,26 @@ function appendSplitterOnuStepsToPath(path, splitterObj, onuUid, hostObj) {
             port: null
         });
     }
-    out.push({
-        type: 'splitterOutputToOnu',
-        splitter: splitterObj,
-        onuObj: onuObj,
-        onuName: onuObj.properties.get('name') || 'ONU'
-    });
-    out.push({
-        type: 'object',
-        objectType: 'onu',
-        objectName: onuObj.properties.get('name') || 'ONU',
-        object: onuObj,
-        port: null
-    });
+    var onuSteps = typeof buildSplitterOutputToOnuPathSteps === 'function'
+        ? buildSplitterOutputToOnuPathSteps(splitterObj, onuObj, null)
+        : null;
+    if (onuSteps && onuSteps.length) {
+        onuSteps.forEach(function(step) { out.push(step); });
+    } else {
+        out.push({
+            type: 'splitterOutputToOnu',
+            splitter: splitterObj,
+            onuObj: onuObj,
+            onuName: onuObj.properties.get('name') || 'ONU'
+        });
+        out.push({
+            type: 'object',
+            objectType: 'onu',
+            objectName: onuObj.properties.get('name') || 'ONU',
+            object: onuObj,
+            port: null
+        });
+    }
     return out;
 }
 

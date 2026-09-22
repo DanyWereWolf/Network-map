@@ -532,6 +532,26 @@
                     if (segLen != null) copy.segmentLengthM = segLen;
                     lastObj = nextObj;
                 }
+            } else if (item.type === 'onuConnection' && item.onu) {
+                var hostForDrop = item.cross || lastObj;
+                var dropDist = item.distanceM != null ? Number(item.distanceM) : null;
+                if (dropDist == null && typeof measureHostToOnuDropDistanceM === 'function' && hostForDrop) {
+                    dropDist = measureHostToOnuDropDistanceM(hostForDrop, item.onu, item.routeIds || []);
+                }
+                if (dropDist == null && hostForDrop && hostForDrop.geometry && item.onu.geometry &&
+                    typeof calculateDistance === 'function') {
+                    try {
+                        dropDist = calculateDistance(
+                            hostForDrop.geometry.getCoordinates(),
+                            item.onu.geometry.getCoordinates()
+                        );
+                    } catch (eDrop) { dropDist = 0; }
+                }
+                if (dropDist != null && dropDist > 0) {
+                    copy.segmentLengthM = Math.round(dropDist);
+                    copy.distanceM = copy.segmentLengthM;
+                }
+                lastObj = item.onu;
             }
             out.push(copy);
         }
@@ -547,6 +567,10 @@
         for (var i = 0; i < path.length; i++) {
             var item = path[i];
             if (item.type === 'cable' && item.segmentLengthM != null) {
+                distanceM += Number(item.segmentLengthM) || 0;
+                hasDistance = true;
+            }
+            if (item.type === 'onuConnection' && item.segmentLengthM != null) {
                 distanceM += Number(item.segmentLengthM) || 0;
                 hasDistance = true;
             }
@@ -736,7 +760,10 @@
             if (!item || !item.object) return;
             if (isWaypointType(item.objectType)) return;
             var obj = item.object;
-            if (obj._embedded && obj._host) obj = obj._host;
+            // Embedded-сплиттер оставляем отдельным узлом схемы (не схлопываем в кросс/муфту).
+            var keepEmbeddedSplitter = !!(obj._embedded && (item.objectType === 'splitter' ||
+                (obj.properties && obj.properties.get('type') === 'splitter')));
+            if (obj._embedded && obj._host && !keepEmbeddedSplitter) obj = obj._host;
             var uid = getUid(obj);
             if (lastHost && getUid(lastHost.object) === uid) {
                 // тот же хост — можно дописать порт/имя
@@ -746,10 +773,11 @@
             var node = {
                 id: uid,
                 name: item.objectName || getTypeName(item.objectType),
-                type: item.objectType,
+                type: keepEmbeddedSplitter ? 'splitter' : item.objectType,
                 object: obj,
                 reserveM: item.reserveM || getObjectReserveM(obj),
-                port: item.port || null
+                port: item.port || null,
+                embeddedInHost: keepEmbeddedSplitter ? obj._host : null
             };
             nodes.push(node);
             if (pendingNodeLink && lastHostIdx >= 0) {
@@ -866,6 +894,16 @@
                             (item.splitter || item.toSplitter ? 'splitter' : (item.toCross ? 'cross' : 'object'))))));
                 var endName = item.nodeName || item.onuName || item.oltName || item.mediaConverterName ||
                     (endObj && endObj.properties ? endObj.properties.get('name') : null) || getTypeName(endType);
+                if (item.type === 'splitterConnection' && lastHostIdx >= 0 && !pendingCable) {
+                    pendingNodeLink = {
+                        fromNode: false,
+                        cableId: item.cableId || null,
+                        fiberNumber: item.fiberNumber,
+                        cable: null,
+                        cableName: 'Вход сплиттера',
+                        label: item.fiberNumber != null ? ('вход · ж' + item.fiberNumber) : 'вход сплиттера'
+                    };
+                }
                 if (endObj) {
                     pushHost({
                         type: 'object',
@@ -1729,9 +1767,11 @@
                     '<div class="trace-item-main"><span>На «' + esc(spName) + '» · ж' + item.fiberNumber + '</span></div>' +
                     mapPinBtn(item.splitter ? getUid(item.splitter) : null) + '</div>';
             } else if (item.type === 'splitterOutputToOnu') {
+                var onuOutLabel = 'Выход → ONU «' + esc(item.onuName || 'ONU') + '»';
+                if (item.fiberNumber != null) onuOutLabel += ' · ж' + item.fiberNumber;
                 html += '<div class="trace-item trace-item--meta">' +
                     '<span class="trace-item-glyph trace-item-glyph--muted" aria-hidden="true">🔀</span>' +
-                    '<div class="trace-item-main"><span>Выход → ONU «' + esc(item.onuName || 'ONU') + '»</span></div>' +
+                    '<div class="trace-item-main"><span>' + onuOutLabel + '</span></div>' +
                     mapPinBtn(item.onuObj ? getUid(item.onuObj) : null) + '</div>';
             } else if (item.type === 'splitterOutputToNode') {
                 var spNodePortLbl = item.switchPort != null ? ' · SFP ' + item.switchPort : '';

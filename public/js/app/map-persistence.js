@@ -45,6 +45,16 @@ function serializeMapItemFromObject(obj) {
                 if (fcSer != null && fcSer !== '') result.fiberCount = parseInt(fcSer, 10);
                 var fpSer = props.fiberPalette;
                 if (Array.isArray(fpSer) && fpSer.length) result.fiberPalette = fpSer;
+                var mpmSer = props.fibersPerModule;
+                if (mpmSer != null && mpmSer !== '') {
+                    var mpmN = parseInt(mpmSer, 10);
+                    if (!isNaN(mpmN) && mpmN > 0) result.fibersPerModule = mpmN;
+                }
+                var mcSer = props.moduleCount;
+                if (mcSer != null && mcSer !== '') {
+                    var mcN = parseInt(mcSer, 10);
+                    if (!isNaN(mcN) && mcN > 0) result.moduleCount = mcN;
+                }
             }
             var ptsRoute = props.points;
             if (Array.isArray(ptsRoute) && ptsRoute.length >= 2) {
@@ -158,6 +168,19 @@ function serializeMapItemFromObject(obj) {
             if (props.model) result.model = props.model;
             if (props.comment) result.comment = props.comment;
             if (props.ipAddress) result.ipAddress = props.ipAddress;
+            if (Array.isArray(props.ports)) result.ports = props.ports;
+            if (props.uplinkSfpPortsCount != null) result.uplinkSfpPortsCount = props.uplinkSfpPortsCount;
+            if (props.uplinkSfpPlusPortsCount != null) result.uplinkSfpPlusPortsCount = props.uplinkSfpPlusPortsCount;
+            if (props.rj45PortsCount != null) result.rj45PortsCount = props.rj45PortsCount;
+            if (props.syncPortsCount != null) result.syncPortsCount = props.syncPortsCount;
+            if (props.consolePortsCount != null) result.consolePortsCount = props.consolePortsCount;
+            if (props.txPowerDbm != null) result.txPowerDbm = props.txPowerDbm;
+            if (props.rxSensitivityDbm != null) result.rxSensitivityDbm = props.rxSensitivityDbm;
+            if (props.budgetDb != null) result.budgetDb = props.budgetDb;
+            if (props.wavelengthTxNm != null) result.wavelengthTxNm = props.wavelengthTxNm;
+            if (props.wavelengthRxNm != null) result.wavelengthRxNm = props.wavelengthRxNm;
+            if (props.connectorType) result.connectorType = props.connectorType;
+            if (props.defaultPonSfpClass) result.defaultPonSfpClass = props.defaultPonSfpClass;
         }
         if (props.type === 'splitter') {
             if (props.splitRatio !== undefined) result.splitRatio = props.splitRatio;
@@ -933,6 +956,11 @@ function loadData() {
             if (s.collaboratorCursorStyle && typeof applyCollaboratorCursorStyle === 'function') {
                 applyCollaboratorCursorStyle(s.collaboratorCursorStyle);
             }
+            if ((s.fiberMapColor || s.fiberMapStrokeWidth) && window.FiberCableConfig && typeof window.FiberCableConfig.setOrgFiberMapStyle === 'function') {
+                try {
+                    window.FiberCableConfig.setOrgFiberMapStyle(s.fiberMapColor, s.fiberMapStrokeWidth, { applyAll: true });
+                } catch (eFiberMap) {}
+            }
         }).catch(function() {
             if (typeof withDeviceCatalogHydration === 'function') {
                 withDeviceCatalogHydration(function() {
@@ -1013,8 +1041,14 @@ function applyCollaboratorCursorStyle(style) {
 window.applyCollaboratorCursorStyle = applyCollaboratorCursorStyle;
 
 function applyOrgDisplaySettings(settings) {
-    if (!settings || settings.collaboratorCursorStyle === undefined) return;
-    applyCollaboratorCursorStyle(settings.collaboratorCursorStyle);
+    if (!settings) return;
+    if (settings.collaboratorCursorStyle !== undefined) {
+        applyCollaboratorCursorStyle(settings.collaboratorCursorStyle);
+    }
+    if ((settings.fiberMapColor !== undefined || settings.fiberMapStrokeWidth !== undefined) &&
+        window.FiberCableConfig && typeof window.FiberCableConfig.setOrgFiberMapStyle === 'function') {
+        window.FiberCableConfig.setOrgFiberMapStyle(settings.fiberMapColor, settings.fiberMapStrokeWidth, { applyAll: true });
+    }
 }
 window.applyOrgDisplaySettings = applyOrgDisplaySettings;
 
@@ -2559,6 +2593,23 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         if (data.model) placemark.properties.set('model', data.model);
         if (data.comment != null) placemark.properties.set('comment', data.comment || '');
         if (data.ipAddress) placemark.properties.set('ipAddress', data.ipAddress);
+        if (data.uplinkSfpPortsCount != null) placemark.properties.set('uplinkSfpPortsCount', data.uplinkSfpPortsCount);
+        if (data.uplinkSfpPlusPortsCount != null) placemark.properties.set('uplinkSfpPlusPortsCount', data.uplinkSfpPlusPortsCount);
+        if (data.rj45PortsCount != null) placemark.properties.set('rj45PortsCount', data.rj45PortsCount);
+        if (data.syncPortsCount != null) placemark.properties.set('syncPortsCount', data.syncPortsCount);
+        if (data.consolePortsCount != null) placemark.properties.set('consolePortsCount', data.consolePortsCount);
+        if (data.txPowerDbm != null) placemark.properties.set('txPowerDbm', data.txPowerDbm);
+        if (data.rxSensitivityDbm != null) placemark.properties.set('rxSensitivityDbm', data.rxSensitivityDbm);
+        if (data.budgetDb != null) placemark.properties.set('budgetDb', data.budgetDb);
+        if (data.wavelengthTxNm != null) placemark.properties.set('wavelengthTxNm', data.wavelengthTxNm);
+        if (data.wavelengthRxNm != null) placemark.properties.set('wavelengthRxNm', data.wavelengthRxNm);
+        if (data.connectorType) placemark.properties.set('connectorType', data.connectorType);
+        if (data.defaultPonSfpClass) placemark.properties.set('defaultPonSfpClass', data.defaultPonSfpClass);
+        if (Array.isArray(data.ports) && data.ports.length) {
+            placemark.properties.set('ports', data.ports.slice());
+        } else if (typeof window.buildOltPorts === 'function') {
+            window.buildOltPorts(placemark);
+        }
     }
     if (type === 'splitter') {
         placemark.properties.set('splitRatio', data.splitRatio || 8);
@@ -2908,7 +2959,7 @@ function createObjectFromData(data, opts, createOpts) {
             var cableTypeVal = getEffectiveCableLayingType();
             if (handleCopperCablePlacemarkStep(placemark, type, cableTypeVal)) return;
             if (type === 'splitter' || type === 'onu' || type === 'camera' || type === 'mediaConverter' || type === 'radioBridge') {
-                showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU, камеры, медиаконвертера или радиомоста. Кабель прокладывается между муфтой, кроссом, креплением или OLT.', 'Недопустимое действие');
+                showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU, камеры, медиаконвертера или радиомоста. Кабель прокладывается между муфтой, кроссом или креплением. К OLT — только «Подключить» в карточке.', 'Недопустимое действие');
                 return;
             }
             if (cableUndergroundActive) {
@@ -2926,9 +2977,12 @@ function createObjectFromData(data, opts, createOpts) {
             }
             var cableEndpointsPlacemark = ['cross', 'sleeve', 'spliceCassette', 'support', 'attachment', 'manhole', 'olt'];
             if (cableEndpointsPlacemark.indexOf(type) !== -1) {
+                if (type === 'olt' && typeof allowOltAsFiberCableEndpoint === 'function' && !allowOltAsFiberCableEndpoint(placemark)) {
+                    return;
+                }
                 if (!cableSource) {
                     if (isCableIntermediateWaypoint(type)) {
-                        showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры, крепления и колодцы — только промежуточные точки.', 'Недопустимое действие');
+                        showError('Начало кабеля должно быть муфтой или кроссом. К OLT — только «Подключить» в карточке. Опоры, крепления и колодцы — промежуточные точки.', 'Недопустимое действие');
                         return;
                     }
                     cableSource = placemark;
@@ -3236,8 +3290,11 @@ function resolveMapExportObjectTypeLabel(type, plural) {
 function resolveMapExportCableTypeLabel(cableType) {
     if (typeof isCopperCableType === 'function' && isCopperCableType(cableType)) return 'Медный кабель';
     if (cableType === 'copper') return 'Медный кабель';
-    if (typeof isOpticalCableType === 'function' && isOpticalCableType(cableType)) return 'ВОЛС';
+    if (typeof isOpticalCableType === 'function' && isOpticalCableType(cableType)) {
+        return cableType === 'fiberModular' ? 'ВОЛС модульный' : 'ВОЛС';
+    }
     if (cableType === 'fiber') return 'ВОЛС';
+    if (cableType === 'fiberModular') return 'ВОЛС модульный';
     if (typeof getCableDescription === 'function') return getCableDescription(cableType);
     return 'Кабель';
 }

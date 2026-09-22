@@ -430,6 +430,376 @@ function buildSplitterOutputToMediaConverterPathSteps(splitterObj, outConn) {
     ];
 }
 
+/** Drop-кабель от сплиттера/хоста до ONU (для трассы и расчёта дБм). */
+function resolveSplitterToOnuDropFiber(splitterObj, onuObj, outputEntry) {
+    if (!onuObj || !onuObj.properties) return null;
+    var onuUid = typeof getObjectUniqueId === 'function' ? getObjectUniqueId(onuObj) : onuObj.properties.get('uniqueId');
+    var cableId = null;
+    var fiberNumber = null;
+
+    if (outputEntry && outputEntry.cableId) {
+        cableId = outputEntry.cableId;
+        fiberNumber = outputEntry.fiberNumber;
+    }
+
+    if (!cableId) {
+        var inc = onuObj.properties.get('incomingFiber');
+        if (inc && inc.cableId) {
+            cableId = inc.cableId;
+            fiberNumber = inc.fiberNumber;
+        }
+    }
+
+    if (!cableId && splitterObj && onuUid) {
+        var host = splitterObj._host || null;
+        if (host && host.properties) {
+            var onuMap = host.properties.get('onuConnections') || {};
+            Object.keys(onuMap).forEach(function(key) {
+                if (cableId) return;
+                var e = onuMap[key];
+                if (!e || e.onuId !== onuUid) return;
+                var parsed = typeof parseFiberConnectionKey === 'function' ? parseFiberConnectionKey(key) : null;
+                if (parsed && parsed.cableId) {
+                    cableId = parsed.cableId;
+                    fiberNumber = parsed.fiberNumber;
+                }
+            });
+        }
+    }
+
+    if (!cableId) return null;
+    var cable = objects.find(function(c) {
+        return c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === cableId;
+    }) || null;
+    if (!cable) return null;
+    return { cableId: cableId, fiberNumber: fiberNumber != null ? fiberNumber : 1, cable: cable };
+}
+
+function buildSplitterOutputToOnuPathSteps(splitterObj, onuObj, outputEntry) {
+    if (!onuObj || !onuObj.properties) return null;
+    var onuName = onuObj.properties.get('name') || 'ONU';
+    var drop = resolveSplitterToOnuDropFiber(splitterObj, onuObj, outputEntry || null);
+    var steps = [{
+        type: 'splitterOutputToOnu',
+        splitter: splitterObj,
+        onuObj: onuObj,
+        onuName: onuName,
+        cableId: drop ? drop.cableId : null,
+        fiberNumber: drop ? drop.fiberNumber : null,
+        cable: drop ? drop.cable : null
+    }];
+    if (drop && drop.cable) {
+        var cabName = drop.cable.properties.get('cableName') ||
+            (typeof getCableDescription === 'function'
+                ? getCableDescription(drop.cable.properties.get('cableType'))
+                : 'Кабель');
+        steps.push({
+            type: 'cable',
+            cableId: drop.cableId,
+            cableName: cabName,
+            fiberNumber: drop.fiberNumber,
+            cable: drop.cable
+        });
+    }
+    steps.push({
+        type: 'object',
+        objectType: 'onu',
+        objectName: onuName,
+        object: onuObj,
+        port: null
+    });
+    return steps;
+}
+
+/** Физические жилы на порту кросса (fiberPorts), кроме указанной (обычно feeder сплиттера). */
+function findPhysicalFibersOnCrossPort(crossObj, portNumber, excludeCableId, excludeFiberNumber) {
+    if (!crossObj || !crossObj.properties || portNumber == null) return [];
+    var fiberPorts = crossObj.properties.get('fiberPorts') || {};
+    var keys = typeof findFiberKeysByCrossPort === 'function'
+        ? findFiberKeysByCrossPort(fiberPorts, portNumber)
+        : Object.keys(fiberPorts).filter(function(k) { return String(fiberPorts[k]) === String(portNumber); });
+    var out = [];
+    keys.forEach(function(key) {
+        var parsed = typeof parseFiberConnectionKey === 'function'
+            ? parseFiberConnectionKey(key)
+            : (typeof parseFiberKey === 'function' ? parseFiberKey(key) : null);
+        if (!parsed) return;
+        if (excludeCableId && parsed.cableId === excludeCableId &&
+            Number(parsed.fiberNumber) === Number(excludeFiberNumber)) return;
+        out.push(parsed);
+    });
+    return out;
+}
+
+function findCableByUniqueIdLocal(cableId) {
+    if (!cableId || typeof objects === 'undefined') return null;
+    return objects.find(function(c) {
+        return c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === cableId;
+    }) || null;
+}
+
+/** Длина линии связи хост → ONU (кросс/муфта → waypoints → ONU), м. */
+function measureHostToOnuDropDistanceM(hostObj, onuObj, routeIds) {
+    if (!hostObj || !onuObj || !hostObj.geometry || !onuObj.geometry) return 0;
+    var start;
+    var end;
+    try {
+        start = hostObj.geometry.getCoordinates();
+        end = onuObj.geometry.getCoordinates();
+    } catch (e) {
+        return 0;
+    }
+    if (!start || !end) return 0;
+    var coords = [start];
+    if (routeIds && routeIds.length && typeof gponRouteWaypointCoords === 'function') {
+        coords = coords.concat(gponRouteWaypointCoords(routeIds) || []);
+    }
+    coords.push(end);
+    if (typeof polylineLength === 'function') return polylineLength(coords);
+    if (typeof calculateDistance !== 'function') return 0;
+    var sum = 0;
+    for (var i = 0; i < coords.length - 1; i++) {
+        sum += calculateDistance(coords[i], coords[i + 1]);
+    }
+    return sum;
+}
+
+function pushOnuDropStepsFromHost(steps, crossObj, cableId, fiberNumber, onuObj, onuAss, opts) {
+    opts = opts || {};
+    if (!onuObj || !onuObj.properties) return;
+    var routeIds = (onuAss && onuAss.routeIds) || [];
+    var distanceM = measureHostToOnuDropDistanceM(crossObj, onuObj, routeIds);
+    var cable = (!opts.skipCable && cableId) ? findCableByUniqueIdLocal(cableId) : null;
+    // Отдельный drop-кабель: только если это не входная/логическая жила сплиттера
+    // и второй конец кабеля — ONU.
+    if (cable && !opts.logicalFiberOnly) {
+        var otherEnd = typeof getOtherEndOfCable === 'function' ? getOtherEndOfCable(cable, crossObj) : null;
+        var isDropCable = otherEnd && otherEnd.properties && otherEnd.properties.get('type') === 'onu';
+        if (isDropCable) {
+            var cabName = cable.properties.get('cableName') ||
+                (typeof getCableDescription === 'function'
+                    ? getCableDescription(cable.properties.get('cableType'))
+                    : 'Кабель');
+            steps.push({
+                type: 'cable',
+                cableId: cableId,
+                cableName: cabName,
+                fiberNumber: fiberNumber,
+                cable: cable
+            });
+        }
+    }
+    steps.push({
+        type: 'onuConnection',
+        cableId: cableId,
+        fiberNumber: fiberNumber,
+        onuName: onuObj.properties.get('name') || 'ONU',
+        cross: crossObj,
+        onu: onuObj,
+        routeIds: routeIds,
+        distanceM: distanceM,
+        segmentLengthM: distanceM
+    });
+    steps.push({
+        type: 'object',
+        objectType: 'onu',
+        objectName: onuObj.properties.get('name') || 'ONU',
+        object: onuObj,
+        port: null
+    });
+}
+
+function resolveOnuObjFromAss(onuAss) {
+    if (!onuAss || !onuAss.onuId) return null;
+    if (typeof getMapObjectByUid === 'function') return getMapObjectByUid(onuAss.onuId, 'onu');
+    return objects.find(function(o) {
+        return o.properties && o.properties.get('type') === 'onu' && getObjectUniqueId(o) === onuAss.onuId;
+    }) || null;
+}
+
+/**
+ * Продолжение после выхода сплиттера на порт кросса: разъём → drop (кабель или линия связи) → ONU.
+ * feederCableId/feederFiber — входная жила сплиттера (не считать её drop-кабелем).
+ */
+function buildContinuationAfterSplitterCrossPort(crossObj, portNumber, feederCableId, feederFiberNumber, splitterObj, outConn) {
+    if (!crossObj || portNumber == null) return [];
+    var steps = [];
+    var portNum = parseInt(portNumber, 10);
+
+    // 1) Выход сразу на ONU (onuId на выходе сплиттера)
+    if (outConn && outConn.onuId) {
+        var onuDirect = typeof getMapObjectByUid === 'function'
+            ? getMapObjectByUid(outConn.onuId, 'onu')
+            : objects.find(function(o) {
+                return o.properties && o.properties.get('type') === 'onu' && getObjectUniqueId(o) === outConn.onuId;
+            });
+        if (onuDirect) {
+            var onuSteps = buildSplitterOutputToOnuPathSteps(splitterObj, onuDirect, outConn);
+            return onuSteps || [];
+        }
+    }
+
+    // 2) ONU на логической жиле выхода сплиттера (линия связи кросс→ONU, часто без drop-кабеля)
+    var logical = typeof resolveSplitterCrossPortLogicalFiber === 'function'
+        ? resolveSplitterCrossPortLogicalFiber(crossObj, portNum)
+        : null;
+    if (logical && typeof getHostAssignment === 'function') {
+        var onuOnLogical = getHostAssignment(crossObj, 'onuConnections', logical.cableId, logical.fiberNumber);
+        var onuLogicalObj = resolveOnuObjFromAss(onuOnLogical);
+        if (onuLogicalObj) {
+            pushOnuDropStepsFromHost(steps, crossObj, logical.cableId, logical.fiberNumber, onuLogicalObj, onuOnLogical, {
+                logicalFiberOnly: true,
+                skipCable: true
+            });
+            return steps;
+        }
+    }
+
+    // 3) Жилы на этом порту (fiberPorts), кроме feeder → ONU / drop-кабель
+    var fibers = findPhysicalFibersOnCrossPort(crossObj, portNum, feederCableId, feederFiberNumber);
+    if ((!fibers || !fibers.length) && feederCableId && feederFiberNumber != null &&
+        typeof getCrossPortMateFibers === 'function') {
+        fibers = getCrossPortMateFibers(crossObj, feederCableId, feederFiberNumber) || [];
+    }
+
+    for (var i = 0; i < fibers.length; i++) {
+        var f = fibers[i];
+        var onuAss = typeof getHostAssignment === 'function'
+            ? getHostAssignment(crossObj, 'onuConnections', f.cableId, f.fiberNumber)
+            : null;
+        var onuObj = resolveOnuObjFromAss(onuAss);
+        if (onuObj) {
+            pushOnuDropStepsFromHost(steps, crossObj, f.cableId, f.fiberNumber, onuObj, onuAss, {});
+            return steps;
+        }
+
+        var cable = findCableByUniqueIdLocal(f.cableId);
+        if (!cable) continue;
+        var otherEnd = typeof getOtherEndOfCable === 'function' ? getOtherEndOfCable(cable, crossObj) : null;
+        if (otherEnd && otherEnd.properties && otherEnd.properties.get('type') === 'onu') {
+            pushOnuDropStepsFromHost(steps, crossObj, f.cableId, f.fiberNumber, otherEnd, null, {});
+            return steps;
+        }
+    }
+
+    // 4) Любая onuConnections, чья жила относится к этому порту (физ. или логически)
+    var onuMap = crossObj.properties.get('onuConnections') || {};
+    var onuKeys = Object.keys(onuMap);
+    for (var ok = 0; ok < onuKeys.length; ok++) {
+        var key = onuKeys[ok];
+        var ass = onuMap[key];
+        if (!ass || !ass.onuId) continue;
+        var parsed = typeof parseFiberConnectionKey === 'function'
+            ? parseFiberConnectionKey(key)
+            : (typeof parseFiberPortKey === 'function' ? parseFiberPortKey(key) : null);
+        if (!parsed) continue;
+        var portOfFiber = typeof getCrossPortForFiber === 'function'
+            ? getCrossPortForFiber(crossObj, parsed.cableId, parsed.fiberNumber)
+            : null;
+        var matchesPort = portOfFiber != null && Number(portOfFiber) === Number(portNum);
+        if (!matchesPort && logical &&
+            parsed.cableId === logical.cableId &&
+            Number(parsed.fiberNumber) === Number(logical.fiberNumber)) {
+            matchesPort = true;
+        }
+        if (!matchesPort) continue;
+        var onuFromMap = resolveOnuObjFromAss(ass);
+        if (!onuFromMap) continue;
+        var isLogical = logical && parsed.cableId === logical.cableId &&
+            Number(parsed.fiberNumber) === Number(logical.fiberNumber);
+        pushOnuDropStepsFromHost(steps, crossObj, parsed.cableId, parsed.fiberNumber, onuFromMap, ass, {
+            logicalFiberOnly: !!isLogical,
+            skipCable: !!isLogical
+        });
+        return steps;
+    }
+
+    // 5) ONU с incomingFiber на порту (отдельный drop-кабель)
+    if (typeof objects !== 'undefined') {
+        for (var oi = 0; oi < objects.length; oi++) {
+            var cand = objects[oi];
+            if (!cand.properties || cand.properties.get('type') !== 'onu') continue;
+            var inc = cand.properties.get('incomingFiber');
+            if (!inc || !inc.cableId) continue;
+            var portOfInc = typeof getCrossPortForFiber === 'function'
+                ? getCrossPortForFiber(crossObj, inc.cableId, inc.fiberNumber)
+                : null;
+            var onThisPort = portOfInc != null && Number(portOfInc) === Number(portNum);
+            if (!onThisPort && logical &&
+                inc.cableId === logical.cableId &&
+                Number(inc.fiberNumber) === Number(logical.fiberNumber)) {
+                onThisPort = true;
+            }
+            if (!onThisPort) continue;
+            var dropCab = findCableByUniqueIdLocal(inc.cableId);
+            var otherDrop = dropCab && typeof getOtherEndOfCable === 'function'
+                ? getOtherEndOfCable(dropCab, crossObj)
+                : null;
+            var isRealDrop = otherDrop === cand ||
+                (otherDrop && otherDrop.properties && getObjectUniqueId(otherDrop) === getObjectUniqueId(cand));
+            if (isRealDrop) {
+                pushOnuDropStepsFromHost(steps, crossObj, inc.cableId, inc.fiberNumber, cand, null, {});
+                return steps;
+            }
+            // Линия связи по логической жиле
+            if (logical && inc.cableId === logical.cableId &&
+                Number(inc.fiberNumber) === Number(logical.fiberNumber)) {
+                var hostAss = typeof getHostAssignment === 'function'
+                    ? getHostAssignment(crossObj, 'onuConnections', inc.cableId, inc.fiberNumber)
+                    : null;
+                pushOnuDropStepsFromHost(steps, crossObj, inc.cableId, inc.fiberNumber, cand, hostAss, {
+                    logicalFiberOnly: true,
+                    skipCable: true
+                });
+                return steps;
+            }
+        }
+    }
+
+    return steps;
+}
+
+function buildSplitterOutputToCrossPortPathSteps(splitterObj, crossObj, outConn, outputIndex) {
+    if (!splitterObj || !crossObj || !outConn || outConn.crossPort == null) return null;
+    var portNum = parseInt(outConn.crossPort, 10);
+    var crossName = crossObj.properties.get('name') || 'Кросс';
+    var feeder = null;
+    if (typeof syncSplitterInputFromHost === 'function') syncSplitterInputFromHost(splitterObj);
+    feeder = splitterObj.properties.get('inputFiber') ||
+        (typeof getSplitterRootInputFiber === 'function' ? getSplitterRootInputFiber(splitterObj) : null);
+
+    var steps = [{
+        type: 'splitterOutputToCrossPort',
+        splitter: splitterObj,
+        cross: crossObj,
+        crossName: crossName,
+        crossPort: portNum,
+        outputIndex: outputIndex != null ? outputIndex : 0,
+        cableId: feeder ? feeder.cableId : null,
+        fiberNumber: feeder ? feeder.fiberNumber : null,
+        connectorLossDb: (crossObj.properties.get('connectorLossDb') != null
+            ? Number(crossObj.properties.get('connectorLossDb'))
+            : 0.3)
+    }, {
+        type: 'object',
+        objectType: 'cross',
+        objectName: crossName,
+        object: crossObj,
+        port: portNum,
+        signalRole: 'splitter-out-port'
+    }];
+
+    var cont = buildContinuationAfterSplitterCrossPort(
+        crossObj,
+        portNum,
+        feeder ? feeder.cableId : null,
+        feeder ? feeder.fiberNumber : null,
+        splitterObj,
+        outConn
+    );
+    return steps.concat(cont || []);
+}
+
 function appendSplitterDirectOutputSteps(path, splitterObj, outputConnections, targetOnuId) {
     var outs = outputConnections || [];
     var firstOutOnu = null;
@@ -442,8 +812,15 @@ function appendSplitterDirectOutputSteps(path, splitterObj, outputConnections, t
     if (firstOutOnu) {
         var onuObj = objects.find(function(o) { return o.properties && o.properties.get('type') === 'onu' && getObjectUniqueId(o) === firstOutOnu.onuId; });
         if (onuObj) {
-            path.push({ type: 'splitterOutputToOnu', splitter: splitterObj, onuObj: onuObj, onuName: onuObj.properties.get('name') || 'ONU' });
-            path.push({ type: 'object', objectType: 'onu', objectName: onuObj.properties.get('name') || 'ONU', object: onuObj, port: null });
+            var onuSteps = typeof buildSplitterOutputToOnuPathSteps === 'function'
+                ? buildSplitterOutputToOnuPathSteps(splitterObj, onuObj, firstOutOnu)
+                : null;
+            if (onuSteps && onuSteps.length) {
+                onuSteps.forEach(function(step) { path.push(step); });
+            } else {
+                path.push({ type: 'splitterOutputToOnu', splitter: splitterObj, onuObj: onuObj, onuName: onuObj.properties.get('name') || 'ONU' });
+                path.push({ type: 'object', objectType: 'onu', objectName: onuObj.properties.get('name') || 'ONU', object: onuObj, port: null });
+            }
             return true;
         }
     }
@@ -482,18 +859,35 @@ function appendSplitterDirectOutputSteps(path, splitterObj, outputConnections, t
             crossHost = getMapObjectByUid(firstOutCross.hostId, 'cross');
         }
         if (!crossHost && splitterObj._host) crossHost = splitterObj._host;
+        if (crossHost && typeof buildSplitterOutputToCrossPortPathSteps === 'function') {
+            var outIdx = outs.indexOf(firstOutCross);
+            var fullCrossSteps = buildSplitterOutputToCrossPortPathSteps(splitterObj, crossHost, firstOutCross, outIdx);
+            if (fullCrossSteps && fullCrossSteps.length) {
+                fullCrossSteps.forEach(function(step) { path.push(step); });
+                var last = fullCrossSteps[fullCrossSteps.length - 1];
+                if (last && last.objectType === 'onu') return true;
+                var feeder = splitterObj.properties.get('inputFiber') ||
+                    (typeof getSplitterRootInputFiber === 'function' ? getSplitterRootInputFiber(splitterObj) : null);
+                return {
+                    crossHost: crossHost,
+                    crossPort: parseInt(firstOutCross.crossPort, 10),
+                    cableId: feeder ? feeder.cableId : null,
+                    fiberNumber: feeder ? feeder.fiberNumber : null
+                };
+            }
+        }
         if (crossHost && typeof resolveSplitterCrossPortLogicalFiber === 'function') {
             var crossLogical = resolveSplitterCrossPortLogicalFiber(crossHost, firstOutCross.crossPort);
             if (crossLogical) {
                 var crossName = crossHost.properties.get('name') || 'Кросс';
-                var outIdx = outs.indexOf(firstOutCross);
+                var outIdxLegacy = outs.indexOf(firstOutCross);
                 path.push({
                     type: 'splitterOutputToCrossPort',
                     splitter: splitterObj,
                     cross: crossHost,
                     crossName: crossName,
                     crossPort: parseInt(firstOutCross.crossPort, 10),
-                    outputIndex: outIdx >= 0 ? outIdx : 0,
+                    outputIndex: outIdxLegacy >= 0 ? outIdxLegacy : 0,
                     cableId: crossLogical.cableId,
                     fiberNumber: crossLogical.fiberNumber
                 });

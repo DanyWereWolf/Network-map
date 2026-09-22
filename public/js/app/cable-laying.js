@@ -14,7 +14,7 @@ function revertCableFiberCountInputs(cableUniqueId) {
     if (mainInput && cable === currentModalObject) mainInput.value = count;
 }
 
-async function updateCableFiberSettings(cableUniqueId, fiberCount, fiberPalette) {
+async function updateCableFiberSettings(cableUniqueId, fiberCount, fiberPalette, fibersPerModule, moduleCount) {
     var cable = objects.find(function(obj) {
         return obj.properties && obj.properties.get('type') === 'cable' && obj.properties.get('uniqueId') === cableUniqueId;
     });
@@ -42,7 +42,7 @@ async function updateCableFiberSettings(cableUniqueId, fiberCount, fiberPalette)
         removedConnections = lost.total;
         pruneConnectionsForRemovedCableFibers(cableUniqueId, newCount);
     }
-    window.FiberCableConfig.applyCableFiberSettings(cable, newCount, fiberPalette);
+    window.FiberCableConfig.applyCableFiberSettings(cable, newCount, fiberPalette, fibersPerModule, moduleCount);
     disableCableMapBalloon(cable);
     saveData();
     if (currentModalObject) {
@@ -98,11 +98,22 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
             return t === 'radioBridge';
         };
         if (!isFiberCableEndpointType(firstType) && !isRbFiberCableEndpoint(firstType)) {
-            if (!skipSync) showError('Кабель можно прокладывать от муфты, сплайс-кассеты, кросса, OLT или радиомоста (оптический порт). Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
+            if (!skipSync) showError('Кабель можно прокладывать от муфты, сплайс-кассеты, кросса или радиомоста (оптический порт). К OLT — только «Подключить» в карточке. Опоры и крепления — промежуточные точки.', 'Недопустимое действие');
             return false;
         }
         if (!isFiberCableEndpointType(lastType) && !isRbFiberCableEndpoint(lastType)) {
-            if (!skipSync) showError('Кабель можно прокладывать до муфты, сплайс-кассеты, кросса, OLT или радиомоста (оптический порт). Опоры и крепления — только промежуточные точки.', 'Недопустимое действие');
+            if (!skipSync) showError('Кабель можно прокладывать до муфты, сплайс-кассеты, кросса или радиомоста (оптический порт). К OLT — только «Подключить» в карточке. Опоры и крепления — промежуточные точки.', 'Недопустимое действие');
+            return false;
+        }
+        // Блок только для ручной прокладки. При skipSync (загрузка/sync/импорт)
+        // feeder OLT↔кросс должен создаваться, иначе кабель «пропадает» после F5.
+        if (!skipSync && (firstType === 'olt' || lastType === 'olt') &&
+            typeof isOltPortDirectedCableLayActive === 'function' && !isOltPortDirectedCableLayActive()) {
+            if (typeof showOltCableLayMustStartFromCardError === 'function') {
+                showOltCableLayMustStartFromCardError();
+            } else {
+                showError('Кабель к OLT — только кнопкой «Подключить» в карточке OLT.', 'Только с OLT');
+            }
             return false;
         }
 
@@ -114,7 +125,7 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
                 return false;
             }
             if (pt === 'splitter' || pt === 'onu' || pt === 'camera' || pt === 'mediaConverter') {
-                if (!skipSync) showError('Сплиттер, ONU, камера и медиаконвертер не могут быть началом, концом или промежуточной точкой кабеля ВОЛС. Кабель прокладывается между муфтой, кроссом, OLT или радиомостом (оптический порт).', 'Недопустимое действие');
+                if (!skipSync) showError('Сплиттер, ONU, камера и медиаконвертер не могут быть началом, концом или промежуточной точкой кабеля ВОЛС. Кабель прокладывается между муфтой, кроссом или радиомостом (оптический порт). К OLT — только «Подключить» в карточке.', 'Недопустимое действие');
                 return false;
             }
             if (pt === 'radioBridge' && idx !== 0 && idx !== points.length - 1) {
@@ -213,6 +224,12 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
                 polyline.properties.set('copperSwitchFromId', pp.switchId);
                 polyline.properties.set('copperPortFrom', pp.port);
             }
+            if (pp.kind === 'olt' && fType === 'olt' && fUid === pp.oltUid && pp.portIndex != null) {
+                polyline.properties.set('copperPortFrom', pp.portIndex);
+                if (typeof window.assignCableToOltPortByIndex === 'function') {
+                    window.assignCableToOltPortByIndex(firstPt, pp.portIndex, cableUniqueId);
+                }
+            }
             pendingCopperPortPreset = null;
         }
         var cpToMeta = cm.copperPortTo;
@@ -224,6 +241,20 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
             polyline.properties.set('copperPortFrom', parseInt(cpFromMeta, 10));
         }
         applyCopperCableOccupancyFromCable(polyline);
+        var fromOlt = points[0];
+        if (fromOlt && fromOlt.properties && fromOlt.properties.get('type') === 'olt') {
+            var oltPortFrom = polyline.properties.get('copperPortFrom');
+            if (oltPortFrom != null && typeof window.assignCableToOltPortByIndex === 'function') {
+                window.assignCableToOltPortByIndex(fromOlt, oltPortFrom, cableUniqueId);
+            }
+        }
+        var toOlt = points[points.length - 1];
+        if (toOlt && toOlt.properties && toOlt.properties.get('type') === 'olt') {
+            var oltPortTo = polyline.properties.get('copperPortTo');
+            if (oltPortTo != null && typeof window.assignCableToOltPortByIndex === 'function') {
+                window.assignCableToOltPortByIndex(toOlt, oltPortTo, cableUniqueId);
+            }
+        }
     } else if (isOpticalCableType(cableType) && !existingCableId) {
         applyNewCableFiberProps(polyline);
     }
@@ -278,6 +309,27 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
         }
     }
 
+    // PON/RB-назначения до save (только мутация; add_cable ниже, затем finalize).
+    var rbPresetApplied = false;
+    var oltPortPresetApplied = false;
+    if (!existingCableId && !isCopperCableType(cableType)) {
+        rbPresetApplied = typeof tryApplyRadioBridgePortPresetOnCableCreated === 'function' &&
+            tryApplyRadioBridgePortPresetOnCableCreated(points, polyline);
+        if (!rbPresetApplied && typeof tryApplyRadioBridgeHostToRbPresetOnCableCreated === 'function') {
+            rbPresetApplied = tryApplyRadioBridgeHostToRbPresetOnCableCreated(points, polyline);
+        }
+        if (!rbPresetApplied && typeof tryApplyOltPortPresetOnCableCreated === 'function') {
+            oltPortPresetApplied = !!tryApplyOltPortPresetOnCableCreated(points, polyline);
+            rbPresetApplied = oltPortPresetApplied;
+        }
+        if (!rbPresetApplied && typeof tryApplyOltUplinkPresetOnCableCreated === 'function') {
+            rbPresetApplied = !!tryApplyOltUplinkPresetOnCableCreated(points, polyline);
+        }
+        if (!rbPresetApplied && typeof notifyOltCableConnectivityIfNeeded === 'function') {
+            notifyOltCableConnectivityIfNeeded(points, polyline);
+        }
+    }
+
     if (!skipSync) {
         syncCableRoutePlacemarkUids(points);
         saveData({ undoLabel: 'прокладка кабеля', coalesce: false });
@@ -295,20 +347,16 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
             });
         }
     }
+    if (oltPortPresetApplied && typeof finalizeOltPortPresetAfterCableSaved === 'function') {
+        finalizeOltPortPresetAfterCableSaved();
+    }
     if (!existingCableId && !isCopperCableType(cableType)) {
         resetCableUndergroundPendingSpans();
     }
     if (!isMapBulkImportActive()) updateStats();
     if (!existingCableId && !isCopperCableType(cableType)) {
-        var rbPresetApplied = typeof tryApplyRadioBridgePortPresetOnCableCreated === 'function' &&
-            tryApplyRadioBridgePortPresetOnCableCreated(points, polyline);
-        if (!rbPresetApplied && typeof tryApplyRadioBridgeHostToRbPresetOnCableCreated === 'function') {
-            rbPresetApplied = tryApplyRadioBridgeHostToRbPresetOnCableCreated(points, polyline);
-        }
-        if (!rbPresetApplied && typeof tryApplyOltPortPresetOnCableCreated === 'function') {
-            tryApplyOltPortPresetOnCableCreated(points, polyline);
-        } else if (!rbPresetApplied && typeof notifyOltCableConnectivityIfNeeded === 'function') {
-            notifyOltCableConnectivityIfNeeded(points, polyline);
+        if (typeof polyline !== 'undefined' && polyline && polyline.properties) {
+            document.dispatchEvent(new CustomEvent('cableCreated', { detail: { cable: polyline, points: points } }));
         }
     }
     return true;
@@ -358,6 +406,16 @@ function buildAddCableSyncOp(polyline, points) {
         if (fcOp != null && fcOp !== '') addCableOp.data.fiberCount = parseInt(fcOp, 10);
         var fpOp = polyline.properties.get('fiberPalette');
         if (Array.isArray(fpOp) && fpOp.length) addCableOp.data.fiberPalette = fpOp;
+        var mpmOp = polyline.properties.get('fibersPerModule');
+        if (mpmOp != null && mpmOp !== '') {
+            var mpmN = parseInt(mpmOp, 10);
+            if (!isNaN(mpmN) && mpmN > 0) addCableOp.data.fibersPerModule = mpmN;
+        }
+        var mcOp = polyline.properties.get('moduleCount');
+        if (mcOp != null && mcOp !== '') {
+            var mcN = parseInt(mcOp, 10);
+            if (!isNaN(mcN) && mcN > 0) addCableOp.data.moduleCount = mcN;
+        }
     }
     if (points.length >= 2) {
         var ridAdd = [];

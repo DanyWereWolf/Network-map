@@ -571,13 +571,20 @@ function tryAppendHostDropTerminals(path, hostObj, cableId, fiberNumber) {
             return obj.properties && obj.properties.get('type') === 'onu' && obj.properties.get('uniqueId') === onuConn.onuId;
         });
         if (connectedOnu) {
+            var routeIdsDrop = onuConn.routeIds || [];
+            var distanceMDrop = typeof measureHostToOnuDropDistanceM === 'function'
+                ? measureHostToOnuDropDistanceM(hostObj, connectedOnu, routeIdsDrop)
+                : 0;
             path.push({
                 type: 'onuConnection',
                 cableId: cableId,
                 fiberNumber: fiberNumber,
                 onuName: onuConn.onuName || 'ONU',
                 cross: hostObj,
-                onu: connectedOnu
+                onu: connectedOnu,
+                routeIds: routeIdsDrop,
+                distanceM: distanceMDrop,
+                segmentLengthM: distanceMDrop
             });
             path.push({
                 type: 'object',
@@ -786,6 +793,8 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
             afterSplitterInputBranch = false;
             nextObject = currentObject;
         } else {
+            // Ранний вход в сплиттер/сварку только при трассировке «к ONU» / от OLT вниз.
+            // Иначе ломается обычная трассировка жилы с кросса/муфты по выбранному кабелю.
             if (traceOptions.traceTowardOnu) {
                 var hostTowardType = currentObject.properties.get('type');
                 if (isFiberHostType(hostTowardType)) {
@@ -1473,12 +1482,16 @@ function traceAllFiberPathsFromObject(startObject, startCableId, startFiberNumbe
                 if (out2.onuId) {
                     var onuObj = objects.find(function(o) { return o.properties && o.properties.get('type') === 'onu' && getObjectUniqueId(o) === out2.onuId; });
                     if (onuObj) {
-                        var suffix = [
-                            { type: 'splitterOutputToOnu', splitter: splitterObj, onuObj: onuObj, onuName: onuObj.properties.get('name') || 'ONU' },
-                            { type: 'object', objectType: 'onu', objectName: onuObj.properties.get('name') || 'ONU', object: onuObj, port: null }
-                        ];
-                        paths.push(prefix.concat(suffix));
-                        anyExpanded = true;
+                        var onuSuffix = typeof buildSplitterOutputToOnuPathSteps === 'function'
+                            ? buildSplitterOutputToOnuPathSteps(splitterObj, onuObj, out2)
+                            : [
+                                { type: 'splitterOutputToOnu', splitter: splitterObj, onuObj: onuObj, onuName: onuObj.properties.get('name') || 'ONU' },
+                                { type: 'object', objectType: 'onu', objectName: onuObj.properties.get('name') || 'ONU', object: onuObj, port: null }
+                            ];
+                        if (onuSuffix && onuSuffix.length) {
+                            paths.push(prefix.concat(onuSuffix));
+                            anyExpanded = true;
+                        }
                     }
                 } else if (out2.nodeId) {
                     var nodeSuffix = buildSplitterOutputToNodePathSteps(splitterObj, out2);
@@ -1499,30 +1512,52 @@ function traceAllFiberPathsFromObject(startObject, startCableId, startFiberNumbe
                             return o.properties && getObjectUniqueId(o) === out2.hostId && isCrossLikeHostType(o.properties.get('type'));
                         }) || null;
                     }
-                    if (crossHostOut && typeof resolveSplitterCrossPortLogicalFiber === 'function') {
-                        var logOut = resolveSplitterCrossPortLogicalFiber(crossHostOut, out2.crossPort);
-                        if (logOut) {
-                            var crossNameOut = crossHostOut.properties.get('name') || 'Кросс';
-                            var crossSuffix = [
-                                { type: 'splitterOutputToCrossPort', splitter: splitterObj, cross: crossHostOut, crossName: crossNameOut, crossPort: parseInt(out2.crossPort, 10), outputIndex: oi2, cableId: logOut.cableId, fiberNumber: logOut.fiberNumber },
-                                { type: 'object', objectType: 'cross', objectName: crossNameOut, object: crossHostOut, port: parseInt(out2.crossPort, 10) }
-                            ];
-                            var branchPath = prefix.concat(crossSuffix);
-                            var patchVisited = new Set();
-                            var patchContOut = typeof applyCrossPortPatchTraceContinuation === 'function'
-                                ? applyCrossPortPatchTraceContinuation(branchPath, crossHostOut, logOut.cableId, logOut.fiberNumber, findCableById(logOut.cableId), patchVisited, parseInt(out2.crossPort, 10))
-                                : null;
-                            if (patchContOut && !patchContOut.break) {
-                                var subCross = traceFiberPathFromObject(patchContOut.currentObject, patchContOut.currentCableId, patchContOut.currentFiberNumber);
-                                if (!subCross.error && subCross.path.length > 1) {
-                                    paths.push(branchPath.concat(subCross.path.slice(1)));
-                                } else {
-                                    paths.push(branchPath);
-                                }
+                    if (crossHostOut) {
+                        var crossPortSteps = typeof buildSplitterOutputToCrossPortPathSteps === 'function'
+                            ? buildSplitterOutputToCrossPortPathSteps(splitterObj, crossHostOut, out2, oi2)
+                            : null;
+                        if (crossPortSteps && crossPortSteps.length) {
+                            var branchWithDrop = prefix.concat(crossPortSteps);
+                            // Если продолжение уже дошло до ONU — ветка готова
+                            var reachesOnu = branchWithDrop.some(function(s) {
+                                return (s.type === 'object' && s.objectType === 'onu') || s.type === 'onuConnection';
+                            });
+                            if (reachesOnu) {
+                                paths.push(branchWithDrop);
+                                anyExpanded = true;
                             } else {
-                                paths.push(branchPath);
+                                // Иначе пробуем патч-кроссировку / дальнейший обход
+                                var patchVisited = new Set();
+                                var feederForPatch = null;
+                                if (typeof syncSplitterInputFromHost === 'function') syncSplitterInputFromHost(splitterObj);
+                                feederForPatch = splitterObj.properties.get('inputFiber') ||
+                                    (typeof getSplitterRootInputFiber === 'function' ? getSplitterRootInputFiber(splitterObj) : null);
+                                var logCableId = feederForPatch ? feederForPatch.cableId : null;
+                                var logFiber = feederForPatch ? feederForPatch.fiberNumber : null;
+                                var outCableForPatch = logCableId ? objects.find(function(c) {
+                                    return c.properties && c.properties.get('type') === 'cable' &&
+                                        c.properties.get('uniqueId') === logCableId;
+                                }) : null;
+                                var patchContOut = (logCableId != null && typeof applyCrossPortPatchTraceContinuation === 'function')
+                                    ? applyCrossPortPatchTraceContinuation(branchWithDrop, crossHostOut, logCableId, logFiber, outCableForPatch, patchVisited, parseInt(out2.crossPort, 10))
+                                    : null;
+                                if (patchContOut && !patchContOut.break) {
+                                    var subCross = traceFiberPathFromObject(
+                                        patchContOut.currentObject,
+                                        patchContOut.currentCableId,
+                                        patchContOut.currentFiberNumber,
+                                        { traceTowardOnu: true }
+                                    );
+                                    if (!subCross.error && subCross.path.length > 1) {
+                                        paths.push(branchWithDrop.concat(subCross.path.slice(1)));
+                                    } else {
+                                        paths.push(branchWithDrop);
+                                    }
+                                } else {
+                                    paths.push(branchWithDrop);
+                                }
+                                anyExpanded = true;
                             }
-                            anyExpanded = true;
                         }
                     }
                 } else if (out2.splitterId) {
@@ -1540,11 +1575,16 @@ function traceAllFiberPathsFromObject(startObject, startCableId, startFiberNumbe
                             if (tout && tout.onuId) {
                                 var onuObj2 = objects.find(function(o) { return o.properties && o.properties.get('type') === 'onu' && getObjectUniqueId(o) === tout.onuId; });
                                 if (onuObj2) {
-                                    paths.push(prefix.concat(midSuffix, [
-                                        { type: 'splitterOutputToOnu', splitter: targetSplitter, onuObj: onuObj2, onuName: onuObj2.properties.get('name') || 'ONU' },
-                                        { type: 'object', objectType: 'onu', objectName: onuObj2.properties.get('name') || 'ONU', object: onuObj2, port: null }
-                                    ]));
-                                    anyExpanded = true;
+                                    var onuSuffix2 = typeof buildSplitterOutputToOnuPathSteps === 'function'
+                                        ? buildSplitterOutputToOnuPathSteps(targetSplitter, onuObj2, tout)
+                                        : [
+                                            { type: 'splitterOutputToOnu', splitter: targetSplitter, onuObj: onuObj2, onuName: onuObj2.properties.get('name') || 'ONU' },
+                                            { type: 'object', objectType: 'onu', objectName: onuObj2.properties.get('name') || 'ONU', object: onuObj2, port: null }
+                                        ];
+                                    if (onuSuffix2 && onuSuffix2.length) {
+                                        paths.push(prefix.concat(midSuffix, onuSuffix2));
+                                        anyExpanded = true;
+                                    }
                                 }
                             } else if (tout && tout.nodeId) {
                                 var nodeSuffix2 = buildSplitterOutputToNodePathSteps(targetSplitter, tout);
@@ -1570,11 +1610,16 @@ function traceAllFiberPathsFromObject(startObject, startCableId, startFiberNumbe
                                         if (out3[t2] && out3[t2].onuId) {
                                             var onu3 = objects.find(function(o) { return o.properties && o.properties.get('type') === 'onu' && getObjectUniqueId(o) === out3[t2].onuId; });
                                             if (onu3) {
-                                                paths.push(prefix.concat(mid2, [
-                                                    { type: 'splitterOutputToOnu', splitter: sp3, onuObj: onu3, onuName: onu3.properties.get('name') || 'ONU' },
-                                                    { type: 'object', objectType: 'onu', objectName: onu3.properties.get('name') || 'ONU', object: onu3, port: null }
-                                                ]));
-                                                anyExpanded = true;
+                                                var onuSuffix3 = typeof buildSplitterOutputToOnuPathSteps === 'function'
+                                                    ? buildSplitterOutputToOnuPathSteps(sp3, onu3, out3[t2])
+                                                    : [
+                                                        { type: 'splitterOutputToOnu', splitter: sp3, onuObj: onu3, onuName: onu3.properties.get('name') || 'ONU' },
+                                                        { type: 'object', objectType: 'onu', objectName: onu3.properties.get('name') || 'ONU', object: onu3, port: null }
+                                                    ];
+                                                if (onuSuffix3 && onuSuffix3.length) {
+                                                    paths.push(prefix.concat(mid2, onuSuffix3));
+                                                    anyExpanded = true;
+                                                }
                                             }
                                         } else if (out3[t2] && out3[t2].nodeId) {
                                             var nodeSuffix3 = buildSplitterOutputToNodePathSteps(sp3, out3[t2]);

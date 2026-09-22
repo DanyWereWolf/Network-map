@@ -331,12 +331,45 @@ function syncPushObjectUpdate(obj, immediate) {
 
 function syncPushCableUpdate(cable, immediate) {
     if (!cable || !cable.properties || cable.properties.get('type') !== 'cable') return false;
+    var data = serializeMapItemFromObject(cable);
+    if (!data || !data.uniqueId) return false;
+    var existsInSnapshot = false;
+    if (Array.isArray(lastSavedState)) {
+        for (var si = 0; si < lastSavedState.length; si++) {
+            var it = lastSavedState[si];
+            if (it && it.type === 'cable' && String(it.uniqueId) === String(data.uniqueId)) {
+                existsInSnapshot = true;
+                break;
+            }
+        }
+    }
+    // Новый кабель: update_cable на сервере молча игнорируется — нужен add_cable.
+    if (!existsInSnapshot && typeof buildAddCableSyncOp === 'function' && typeof window.syncSendOp === 'function') {
+        var pts = cable.properties.get('points');
+        if (!pts || pts.length < 2) {
+            var fromPm = cable.properties.get('from');
+            var toPm = cable.properties.get('to');
+            if (fromPm && toPm) pts = [fromPm, toPm];
+        }
+        if (pts && pts.length >= 2) {
+            if (!immediate) {
+                scheduleSyncPushForObject(cable);
+                return true;
+            }
+            ensurePlacemarkUniqueIdForSync(pts[0]);
+            ensurePlacemarkUniqueIdForSync(pts[pts.length - 1]);
+            var addOp = buildAddCableSyncOp(cable, pts);
+            if (addOp) {
+                window.syncSendOp(addOp);
+                setMapRevision(cable, Math.max(1, getMapRevision(cable)));
+                return true;
+            }
+        }
+    }
     if (!immediate) {
         scheduleSyncPushForObject(cable);
         return true;
     }
-    var data = serializeMapItemFromObject(cable);
-    if (!data || !data.uniqueId) return false;
     var baseRevision = getMapRevision(cable);
     delete data.revision;
     if (typeof window.syncSendOp === 'function') {

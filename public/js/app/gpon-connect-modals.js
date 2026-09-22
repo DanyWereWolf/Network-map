@@ -276,15 +276,105 @@ function getAvailableOlts() {
     );
 }
 
+function listOltFreeUplinkSfpPorts(oltObj) {
+    if (!oltObj || !oltObj.properties) return [];
+    if (typeof window.buildOltPorts === 'function' && !(oltObj.properties.get('ports') || []).length) {
+        window.buildOltPorts(oltObj);
+    }
+    var ports = oltObj.properties.get('ports') || [];
+    return ports.filter(function(p) {
+        if (!p || (p.portType !== 'sfp-uplink' && p.portType !== 'sfp-plus-uplink')) return false;
+        if (p.connectedCableId || p.connectedFiberNumber != null) return false;
+        return true;
+    });
+}
+
+function clearOltIncomingUplinkPort(oltObj) {
+    if (!oltObj || !oltObj.properties) return;
+    var inc = oltObj.properties.get('incomingFiber');
+    var ports = oltObj.properties.get('ports') || [];
+    var changed = false;
+    var portIdx = inc && inc.uplinkPortIndex != null ? parseInt(inc.uplinkPortIndex, 10) : NaN;
+    for (var i = 0; i < ports.length; i++) {
+        var p = ports[i];
+        if (!p) continue;
+        var isTarget = !isNaN(portIdx) && p.portIndex === portIdx;
+        var isIncomingFiber = inc && p.connectedCableId === inc.cableId &&
+            p.connectedFiberNumber === inc.fiberNumber;
+        if (isTarget || isIncomingFiber) {
+            p.connectedCableId = null;
+            p.connectedFiberNumber = null;
+            if (p.portType === 'sfp-uplink' || p.portType === 'sfp-plus-uplink') p.status = 'down';
+            changed = true;
+        }
+    }
+    if (changed) oltObj.properties.set('ports', ports);
+}
+
+function assignOltIncomingToUplinkPort(oltObj, uplinkPortIndex, cableId, fiberNumber) {
+    if (!oltObj || !oltObj.properties) return false;
+    var portIdx = parseInt(uplinkPortIndex, 10);
+    if (isNaN(portIdx)) return false;
+    if (typeof window.buildOltPorts === 'function' && !(oltObj.properties.get('ports') || []).length) {
+        window.buildOltPorts(oltObj);
+    }
+    clearOltIncomingUplinkPort(oltObj);
+    var ports = oltObj.properties.get('ports') || [];
+    var port = null;
+    for (var i = 0; i < ports.length; i++) {
+        if (ports[i] && ports[i].portIndex === portIdx) { port = ports[i]; break; }
+    }
+    if (!port || (port.portType !== 'sfp-uplink' && port.portType !== 'sfp-plus-uplink')) return false;
+    if (port.connectedCableId && (port.connectedCableId !== cableId || port.connectedFiberNumber !== fiberNumber)) {
+        return false;
+    }
+    port.connectedCableId = cableId;
+    port.connectedFiberNumber = fiberNumber;
+    port.status = 'up';
+    oltObj.properties.set('ports', ports);
+    oltObj.properties.set('incomingFiber', {
+        cableId: cableId,
+        fiberNumber: fiberNumber,
+        uplinkPortIndex: portIdx
+    });
+    if (typeof window.updateOltPortCounters === 'function') window.updateOltPortCounters(oltObj);
+    return true;
+}
+
 function getAvailableOltsForIncoming() {
     return getAvailableOlts().filter(function(oltObj) {
         if (typeof getDisplayOltIncomingFiber === 'function') {
             var incoming = getDisplayOltIncomingFiber(oltObj);
-            return !(incoming && incoming.cableId);
+            if (incoming && incoming.cableId) return false;
+        } else {
+            var direct = oltObj.properties.get('incomingFiber');
+            if (direct && direct.cableId) return false;
         }
-        var direct = oltObj.properties.get('incomingFiber');
-        return !(direct && direct.cableId);
+        return listOltFreeUplinkSfpPorts(oltObj).length > 0;
     });
+}
+
+function fillOltIncomingUplinkPortSelect(oltObj) {
+    var portSelect = document.getElementById('oltSelectUplinkPort');
+    var portGroup = document.getElementById('oltSelectUplinkPortGroup');
+    var confirmBtn = document.getElementById('confirmOltSelection');
+    if (!portSelect) return;
+    portSelect.innerHTML = '<option value="">— выберите порт —</option>';
+    if (!oltObj) {
+        if (portGroup) portGroup.hidden = true;
+        if (confirmBtn) confirmBtn.disabled = true;
+        return;
+    }
+    var free = listOltFreeUplinkSfpPorts(oltObj);
+    free.forEach(function(p) {
+        var typeLabel = (typeof window.getOltPortTypeLabel === 'function')
+            ? window.getOltPortTypeLabel(p.portType)
+            : (p.portType || 'SFP');
+        var label = '#' + p.portIndex + ' · ' + typeLabel + (p.portLabel ? (' · ' + p.portLabel) : '');
+        portSelect.innerHTML += '<option value="' + escapeHtml(String(p.portIndex)) + '">' + escapeHtml(label) + '</option>';
+    });
+    if (portGroup) portGroup.hidden = free.length === 0;
+    if (confirmBtn) confirmBtn.disabled = true;
 }
 
 function showOltSelectionDialog(sleeveObj, cableId, fiberNumber) {
@@ -310,7 +400,7 @@ function showOltSelectionDialog(sleeveObj, cableId, fiberNumber) {
         var hasAnyOlt = getAvailableOlts().length > 0;
         showWarning(
             hasAnyOlt
-                ? 'Нет свободных OLT. У всех OLT на карте уже задан приход — сначала отключите текущий приход.'
+                ? 'Нет OLT со свободным портом SFP/SFP+. Добавьте uplink SFP в карточке OLT или отключите текущий приход.'
                 : 'Нет доступных OLT. Сначала создайте OLT на карте.',
             'Нет OLT'
         );
@@ -321,7 +411,7 @@ function showOltSelectionDialog(sleeveObj, cableId, fiberNumber) {
     const fiberInfo = document.getElementById('oltSelectionFiberInfo');
     const oltSelect = document.getElementById('oltSelectSelect');
     const confirmBtn = document.getElementById('confirmOltSelection');
-    if (fiberInfo) fiberInfo.textContent = 'Подключение жилы #' + fiberNumber + ' как приход от кросса к OLT';
+    if (fiberInfo) fiberInfo.textContent = 'Подключение жилы #' + fiberNumber + ' как приход в uplink SFP OLT';
     if (oltSelect) {
         oltSelect.innerHTML = '<option value="">— выберите OLT</option>';
         olts.forEach((olt, idx) => {
@@ -330,6 +420,7 @@ function showOltSelectionDialog(sleeveObj, cableId, fiberNumber) {
             oltSelect.innerHTML += '<option value="' + escapeHtml(uid) + '">' + escapeHtml(name) + '</option>';
         });
     }
+    fillOltIncomingUplinkPortSelect(null);
     if (confirmBtn) confirmBtn.disabled = true;
     if (modal) modal.style.display = 'block';
 }
@@ -340,11 +431,11 @@ function closeOltSelectionModal() {
     oltSelectionModalData = null;
 }
 
-function connectFiberToOlt(sleeveObj, cableId, fiberNumber, oltObj) {
-    connectFiberToOltWithRoute(sleeveObj, cableId, fiberNumber, oltObj, []);
+function connectFiberToOlt(sleeveObj, cableId, fiberNumber, oltObj, uplinkPortIndex) {
+    connectFiberToOltWithRoute(sleeveObj, cableId, fiberNumber, oltObj, [], uplinkPortIndex);
 }
 
-function connectFiberToOltWithRoute(sleeveObj, cableId, fiberNumber, oltObj, routeIds) {
+function connectFiberToOltWithRoute(sleeveObj, cableId, fiberNumber, oltObj, routeIds, uplinkPortIndex) {
     routeIds = resolveGponRouteIds(routeIds);
     const t = sleeveObj.properties.get('type');
     const placeId = sleeveObj.properties.get('uniqueId');
@@ -353,6 +444,17 @@ function connectFiberToOltWithRoute(sleeveObj, cableId, fiberNumber, oltObj, rou
     const usage = getFiberUsage(cableId, fiberNumber, opts);
     if (usage.used) {
         showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
+        return;
+    }
+    var portIdx = parseInt(uplinkPortIndex, 10);
+    if (isNaN(portIdx)) {
+        showError('Выберите порт SFP или SFP+ на OLT для прихода.', 'Порт не выбран');
+        return;
+    }
+    var freePorts = listOltFreeUplinkSfpPorts(oltObj);
+    var portOk = freePorts.some(function(p) { return p.portIndex === portIdx; });
+    if (!portOk) {
+        showError('Выбранный uplink-порт занят или недоступен. Добавьте свободный SFP/SFP+ в карточке OLT.', 'Порт занят');
         return;
     }
     var prevIncoming = oltObj.properties.get('incomingFiber');
@@ -392,10 +494,14 @@ function connectFiberToOltWithRoute(sleeveObj, cableId, fiberNumber, oltObj, rou
                 }
             });
         }
-        oltObj.properties.set('incomingFiber', { cableId: cableId, fiberNumber: fiberNumber });
+        if (!assignOltIncomingToUplinkPort(oltObj, portIdx, cableId, fiberNumber)) {
+            showError('Не удалось назначить приход на выбранный SFP-порт.', 'Ошибка');
+            return;
+        }
         setHostFiberAssignment(sleeveObj, 'oltConnections', cableId, fiberNumber, {
             oltId: oltId,
             incoming: true,
+            uplinkPortIndex: portIdx,
             routeIds: routeIds
         });
     });
@@ -419,7 +525,9 @@ function disconnectFiberFromOlt(sleeveObj, cableId, fiberNumber) {
     }
     var oltObj = objects.find(function(o) { return o.properties && o.properties.get('type') === 'olt' && o.properties.get('uniqueId') === conn.oltId; });
     if (conn.incoming && oltObj) {
+        clearOltIncomingUplinkPort(oltObj);
         oltObj.properties.set('incomingFiber', null);
+        if (typeof window.updateOltPortCounters === 'function') window.updateOltPortCounters(oltObj);
     } else if (oltObj && conn.portNumber != null) {
         var portAssignments = oltObj.properties.get('portAssignments') || {};
         delete portAssignments[String(conn.portNumber)];
@@ -439,6 +547,7 @@ function initOltSelectionModal() {
     const closeBtn = modal.querySelector('.close-olt-selection');
     const cancelBtn = document.getElementById('cancelOltSelection');
     const oltSelect = document.getElementById('oltSelectSelect');
+    const uplinkSelect = document.getElementById('oltSelectUplinkPort');
     const confirmBtn = document.getElementById('confirmOltSelection');
     if (closeBtn) closeBtn.addEventListener('click', closeOltSelectionModal);
     if (cancelBtn) cancelBtn.addEventListener('click', closeOltSelectionModal);
@@ -446,23 +555,40 @@ function initOltSelectionModal() {
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape' && modal.style.display === 'block') closeOltSelectionModal();
     });
+    function syncConfirmEnabled() {
+        if (!confirmBtn) return;
+        confirmBtn.disabled = !(oltSelect && oltSelect.value && uplinkSelect && uplinkSelect.value);
+    }
     if (oltSelect) {
         oltSelect.addEventListener('change', function() {
-            if (confirmBtn) confirmBtn.disabled = !this.value;
+            var oltObj = null;
+            if (this.value) {
+                oltObj = objects.find(function(o) {
+                    return o.properties && o.properties.get('type') === 'olt' && o.properties.get('uniqueId') === oltSelect.value;
+                });
+            }
+            fillOltIncomingUplinkPortSelect(oltObj || null);
+            syncConfirmEnabled();
         });
+    }
+    if (uplinkSelect) {
+        uplinkSelect.addEventListener('change', syncConfirmEnabled);
     }
     if (confirmBtn) {
         confirmBtn.addEventListener('click', function() {
             if (!oltSelectionModalData) return;
             const oltVal = oltSelect && oltSelect.value;
-            if (!oltVal) return;
+            const uplinkVal = uplinkSelect && uplinkSelect.value;
+            if (!oltVal || !uplinkVal) return;
             const oltObj = objects.find(o => o.properties && o.properties.get('type') === 'olt' && o.properties.get('uniqueId') === oltVal);
             if (!oltObj) return;
             const data = oltSelectionModalData;
             closeOltSelectionModal();
             var infoModal = document.getElementById('infoModal');
             if (infoModal) infoModal.style.display = 'none';
-            startFiberRouting(data.sleeveObj, data.cableId, data.fiberNumber, 'olt', oltObj);
+            startFiberRouting(data.sleeveObj, data.cableId, data.fiberNumber, 'olt', oltObj, {
+                uplinkPortIndex: parseInt(uplinkVal, 10)
+            });
         });
     }
 }
@@ -803,3 +929,11 @@ function confirmOltCrossPortConnect() {
     if (typeof refreshObjectModal === 'function') refreshObjectModal(oltObj);
     else if (typeof showObjectInfo === 'function') showObjectInfo(oltObj);
 }
+
+window.listOltFreeUplinkSfpPorts = listOltFreeUplinkSfpPorts;
+window.clearOltIncomingUplinkPort = clearOltIncomingUplinkPort;
+window.assignOltIncomingToUplinkPort = assignOltIncomingToUplinkPort;
+window.connectFiberToOlt = connectFiberToOlt;
+window.connectFiberToOltWithRoute = connectFiberToOltWithRoute;
+window.showOltSelectionDialog = showOltSelectionDialog;
+window.disconnectFiberFromOlt = disconnectFiberFromOlt;

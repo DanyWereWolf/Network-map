@@ -2,6 +2,7 @@
  * Клики и движение мыши по карте в режиме редактирования.
  */
 function validateFiberCableLayEndpoint(endpointObj) {
+    if (typeof allowOltAsFiberCableEndpoint === 'function' && !allowOltAsFiberCableEndpoint(endpointObj)) return false;
     if (typeof validatePendingOltPortCableEndpoint === 'function' && !validatePendingOltPortCableEndpoint(endpointObj)) return false;
     if (typeof validatePendingRadioBridgePortCableEndpoint === 'function' && !validatePendingRadioBridgePortCableEndpoint(endpointObj)) return false;
     return true;
@@ -23,14 +24,18 @@ function processFiberCableEndpointClick(clickedObject) {
 
     if (objType === 'splitter' || objType === 'onu' || objType === 'camera' || objType === 'mediaConverter' ||
         (objType === 'radioBridge' && !(typeof isRadioBridgeFiberCableLayToEndpointActive === 'function' && isRadioBridgeFiberCableLayToEndpointActive()))) {
-        showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU, камеры или медиаконвертера. Кабель прокладывается между муфтой, кроссом, креплением, OLT или радиомостом (оптический порт).', 'Недопустимое действие');
+        showError('Нельзя прокладывать кабель ВОЛС от сплиттера, ONU, камеры или медиаконвертера. Кабель прокладывается между муфтой, кроссом, креплением или радиомостом (оптический порт). К OLT — только кнопкой «Подключить» в карточке.', 'Недопустимое действие');
+        return;
+    }
+
+    if (objType === 'olt' && typeof allowOltAsFiberCableEndpoint === 'function' && !allowOltAsFiberCableEndpoint(clickedObject)) {
         return;
     }
 
     if (isFiberCableEndpointType(objType) || isCableIntermediateWaypoint(objType)) {
         if (!cableSource) {
             if (isCableIntermediateWaypoint(objType)) {
-                showError('Начало кабеля должно быть муфтой, кроссом или OLT. Опоры, крепления и колодцы — только промежуточные точки.', 'Недопустимое действие');
+                showError('Начало кабеля должно быть муфтой или кроссом. К OLT — только «Подключить» в карточке. Опоры, крепления и колодцы — промежуточные точки.', 'Недопустимое действие');
                 return;
             }
             cableSource = clickedObject;
@@ -90,7 +95,10 @@ function processFiberCableEndpointClick(clickedObject) {
 
     if (!cableSource) {
         if (!isFiberCableEndpointType(objType)) {
-            showError('Начало кабеля должно быть муфтой, сплайс-кассетой, кроссом или OLT. Опоры, крепления и колодцы — только промежуточные точки.', 'Недопустимое действие');
+            showError('Начало кабеля должно быть муфтой, сплайс-кассетой или кроссом. К OLT — только «Подключить» в карточке. Опоры, крепления и колодцы — промежуточные точки.', 'Недопустимое действие');
+            return;
+        }
+        if (objType === 'olt' && typeof allowOltAsFiberCableEndpoint === 'function' && !allowOltAsFiberCableEndpoint(clickedObject)) {
             return;
         }
         cableSource = clickedObject;
@@ -145,11 +153,14 @@ function processFiberCableEndpointClick(clickedObject) {
         }
         return;
     }
-    showError('Кабель прокладывается между муфтой, сплайс-кассетой, кроссом или OLT. Промежуточные точки: опора, крепление; под землёй — между двумя колодцами.', 'Недопустимое действие');
+    showError('Кабель прокладывается между муфтой, сплайс-кассетой или кроссом. К OLT — только «Подключить» в карточке. Промежуточные точки: опора, крепление; под землёй — между двумя колодцами.', 'Недопустимое действие');
 }
 
 function handleMapClick(e) {
     try {
+    if (window._coverageJoystickMapLock || (typeof isCoverageJoystickMapLocked === 'function' && isCoverageJoystickMapLocked())) {
+        return;
+    }
     clearShowOnMapHighlight();
     const coords = e.get('coords');
     window.lastMapClickCoords = coords;
@@ -460,6 +471,9 @@ function handleMapClick(e) {
 var mapMouseMoveRafId = null;
 function handleMapMouseMove(e) {
     try {
+        if (window._coverageJoystickMapLock || (typeof isCoverageJoystickMapLocked === 'function' && isCoverageJoystickMapLocked())) {
+            return;
+        }
         if (e.originalEvent) {
             window.lastMouseX = e.originalEvent.clientX || 0;
             window.lastMouseY = e.originalEvent.clientY || 0;

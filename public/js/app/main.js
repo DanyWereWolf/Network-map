@@ -78,6 +78,14 @@ function startMapApp() {
     refreshMapLimitsFromServer();
 }
 
+// ===== ЭКСПОРТЫ ДЛЯ OPTICAL-CALCULATOR.JS =====
+if (typeof getOtherEndOfCable === 'function') window.getOtherEndOfCable = getOtherEndOfCable;
+if (typeof traceFiberPathFromObject === 'function') window.traceFiberPathFromObject = traceFiberPathFromObject;
+if (typeof traceFromOLTPort === 'function') window.traceFromOLTPort = traceFromOLTPort;
+if (typeof deleteObject === 'function') window.deleteObject = deleteObject;
+if (typeof createCableFromPoints === 'function') window.createCableFromPoints = createCableFromPoints;
+if (typeof findObjectAtCoords === 'function') window.findObjectAtCoords = findObjectAtCoords;
+
 setTimeout(function() {
     updateUIForMode();
     updateEditControls();

@@ -222,7 +222,9 @@ function extractFiberFields(_item) {
             crossPortPatches: 1, embeddedSplitters: 1,
             nodeConnections: 1, oltConnections: 1, onuConnections: 1,
             mediaConverterConnections: 1, radioBridgeConnections: 1, splitterConnections: 1,
-            incomingFiber: 1, portAssignments: 1, attachedSwitches: 1, photos: 1
+            incomingFiber: 1, attachedSwitches: 1, photos: 1
+            // portAssignments: keep in attrs_json (crossId/crossPort/onuId extras);
+            // cableId+fiberNumber also mirrored in olt_port_assignments
         }
     };
 }
@@ -467,10 +469,26 @@ async function assembleMapData(conn, orgId) {
         if (inc) item.incomingFiber = { cableId: inc.cable_id, fiberNumber: Number(inc.fiber_number) };
         if (row.type === 'olt') {
             var op = oltById[row.unique_id] || [];
-            if (op.length) {
+            var attrsPa = (attrs && attrs.portAssignments && typeof attrs.portAssignments === 'object')
+                ? attrs.portAssignments
+                : {};
+            if (op.length || Object.keys(attrsPa).length) {
                 item.portAssignments = {};
                 op.forEach(function (o) {
-                    item.portAssignments[o.port_number] = { cableId: o.cable_id, fiberNumber: Number(o.fiber_number) };
+                    var base = { cableId: o.cable_id, fiberNumber: Number(o.fiber_number) };
+                    var fromAttrs = attrsPa[o.port_number];
+                    if (fromAttrs && typeof fromAttrs === 'object') {
+                        item.portAssignments[o.port_number] = Object.assign({}, fromAttrs, base);
+                    } else {
+                        item.portAssignments[o.port_number] = base;
+                    }
+                });
+                Object.keys(attrsPa).forEach(function (pk) {
+                    if (item.portAssignments[pk]) return;
+                    var a = attrsPa[pk];
+                    if (a && typeof a === 'object' && (a.onuId || a.mediaConverterId || a.cableId != null)) {
+                        item.portAssignments[pk] = a;
+                    }
                 });
             }
         }

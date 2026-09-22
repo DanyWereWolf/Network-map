@@ -222,6 +222,9 @@ function initUserUI() {
     if (deviceCatalogBtn) {
         deviceCatalogBtn.style.display = currentUser.role === 'admin' ? 'flex' : 'none';
     }
+    if (typeof syncThemeFiberMapAdminUi === 'function') {
+        try { syncThemeFiberMapAdminUi(); } catch (eFiberUi) {}
+    }
 
     const editModeBtn = document.getElementById('editMode');
     if (editModeBtn && currentUser.role !== 'admin') {

@@ -13,6 +13,56 @@ function buildOltPortTypeOptionsHtml(currentKind, kindOpts) {
     return html;
 }
 
+/** Опции SFP для PON-порта (фильтр по виду GPON/XGS-…). */
+function buildOltPonSfpOptionsHtml(ponKind, installedSfp) {
+    var listFn = typeof listSfpForPonKind === 'function' ? listSfpForPonKind : window.listSfpForPonKind;
+    var encode = typeof encodeSfpSelectValue === 'function' ? encodeSfpSelectValue : window.encodeSfpSelectValue;
+    var format = typeof formatSfpOptionLabel === 'function' ? formatSfpOptionLabel : window.formatSfpOptionLabel;
+    var entries = typeof listFn === 'function' ? listFn(ponKind) : [];
+    var curVal = (installedSfp && encode)
+        ? encode(installedSfp.manufacturer, installedSfp.model)
+        : '';
+    var html = '<option value="">— без SFP —</option>';
+    entries.forEach(function(entry) {
+        var val = encode(entry.manufacturer, entry.model);
+        var label = typeof format === 'function' ? format(entry) : (entry.manufacturer + ' · ' + entry.model);
+        html += '<option value="' + escapeHtml(val) + '"' + (val === curVal ? ' selected' : '') + '>' +
+            escapeHtml(label) + '</option>';
+    });
+    if (curVal && entries.every(function(e) { return encode(e.manufacturer, e.model) !== curVal; })) {
+        html += '<option value="' + escapeHtml(curVal) + '" selected>' +
+            escapeHtml((installedSfp.manufacturer || '') + ' · ' + (installedSfp.model || '')) +
+            ' (несовместим с типом)</option>';
+    }
+    return html;
+}
+
+function buildOltUplinkSfpOptionsHtml(portType, installedSfp) {
+    var listFn = typeof listSfpForOltUplink === 'function' ? listSfpForOltUplink : window.listSfpForOltUplink;
+    var encode = typeof encodeSfpSelectValue === 'function' ? encodeSfpSelectValue : window.encodeSfpSelectValue;
+    var format = typeof formatSfpOptionLabel === 'function' ? formatSfpOptionLabel : window.formatSfpOptionLabel;
+    var entries = typeof listFn === 'function' ? listFn(portType) : [];
+    var curVal = (installedSfp && encode)
+        ? encode(installedSfp.manufacturer, installedSfp.model)
+        : '';
+    var html = '<option value="">— без SFP —</option>';
+    entries.forEach(function(entry) {
+        var val = encode(entry.manufacturer, entry.model);
+        var label = typeof format === 'function' ? format(entry) : (entry.manufacturer + ' · ' + entry.model);
+        html += '<option value="' + escapeHtml(val) + '"' + (val === curVal ? ' selected' : '') + '>' +
+            escapeHtml(label) + '</option>';
+    });
+    return html;
+}
+
+function ensureOltPortsArray(oltObj) {
+    if (!oltObj || !oltObj.properties) return;
+    if ((!oltObj.properties.get('ports') || !oltObj.properties.get('ports').length) &&
+        typeof window.buildOltPorts === 'function') {
+        window.buildOltPorts(oltObj);
+    }
+}
+
 function buildNodeSwitchPortKindOptionsHtml(currentKind, kindOpts) {
     kindOpts = kindOpts || (typeof getSwitchPortKindOptions === 'function' ? getSwitchPortKindOptions() : []);
     var cur = String(currentKind || '').trim();
@@ -866,7 +916,27 @@ function buildOltIncomingFiberLabel(incomingFiber, cables) {
         });
     }
     var desc = c ? (c.properties.get('cableName') || getCableDescription(c.properties.get('cableType'))) : incomingFiber.cableId;
-    return desc + ', жила ' + incomingFiber.fiberNumber;
+    var label = desc + ', жила ' + incomingFiber.fiberNumber;
+    if (incomingFiber.uplinkPortIndex != null) {
+        var portIdx = parseInt(incomingFiber.uplinkPortIndex, 10);
+        var typeLabel = 'SFP';
+        if (currentModalObject && currentModalObject.properties && currentModalObject.properties.get('type') === 'olt') {
+            var ports = currentModalObject.properties.get('ports') || [];
+            for (var i = 0; i < ports.length; i++) {
+                if (ports[i] && ports[i].portIndex === portIdx) {
+                    typeLabel = (typeof window.getOltPortTypeLabel === 'function')
+                        ? window.getOltPortTypeLabel(ports[i].portType)
+                        : (ports[i].portType || 'SFP');
+                    if (ports[i].portLabel) typeLabel += ' «' + ports[i].portLabel + '»';
+                    break;
+                }
+            }
+        }
+        label += ' → порт #' + portIdx + ' (' + typeLabel + ')';
+    } else {
+        label += ' (без порта SFP — переподключите приход)';
+    }
+    return label;
 }
 
 function buildOltPortFiberLabel(ass, cables) {
@@ -931,7 +1001,7 @@ function setOltPortLabel(oltObj, portNumber, label) {
 }
 
 function buildOltCardContent(obj, isEditMode, name) {
-    if (typeof syncOltLogicalState === 'function') syncOltLogicalState(obj);
+    if (typeof syncOltLogicalState === 'function') syncOltLogicalState(obj, { save: false });
     var ponPorts = Math.max(1, parseInt(obj.properties.get('ponPorts'), 10) || 8);
     var incomingFiber = typeof getDisplayOltIncomingFiber === 'function'
         ? getDisplayOltIncomingFiber(obj)
@@ -979,13 +1049,30 @@ function buildOltCardContent(obj, isEditMode, name) {
     } else {
         html += '<div class="olt-card-view-name">' + escapeHtml(name || 'Новый OLT') + '</div>';
         html += '<div class="olt-card-view-meta"><span class="olt-kind-pill">GPON</span></div>';
-        html += '<p class="object-card-hint olt-card-hero-hint"><strong>Приход</strong> — жила от кросса/муфты к OLT. <strong>PON-порты</strong> — feeder от OLT в сеть: нажмите «Подключить» и проложите кабель до муфты или кросса.</p>';
+        html += '<p class="object-card-hint olt-card-hero-hint"><strong>Приход</strong> — жила с кросса/муфты в uplink SFP/SFP+. <strong>PON-порты</strong> — feeder от OLT в сеть: нажмите «Подключить» и проложите кабель до муфты или кросса.</p>';
     }
     html += '</div></div>';
     html += '<dl class="olt-card-stats">';
     html += '<div class="olt-card-stat"><dt>PON-портов</dt><dd>' + ponPorts + '</dd></div>';
     html += '<div class="olt-card-stat"><dt>Назначено</dt><dd>' + assignedCount + ' / ' + ponPorts + '</dd></div>';
     html += '<div class="olt-card-stat"><dt>Кабелей</dt><dd>' + physicalCableCount + '</dd></div>';
+    var optTx = obj.properties.get('txPowerDbm');
+    var optBudget = obj.properties.get('budgetDb');
+    if (optTx == null || optBudget == null) {
+        var catalogOpt = (typeof window.getDeviceOpticalParams === 'function' && manufacturer && model)
+            ? window.getDeviceOpticalParams('olt', manufacturer, model)
+            : null;
+        if (catalogOpt) {
+            if (optTx == null) optTx = catalogOpt.txPowerDbm;
+            if (optBudget == null) optBudget = catalogOpt.budgetDb;
+        }
+    }
+    if (optTx != null) {
+        html += '<div class="olt-card-stat"><dt>Tx</dt><dd>' + escapeHtml(String(optTx)) + ' дБм</dd></div>';
+    }
+    if (optBudget != null) {
+        html += '<div class="olt-card-stat"><dt>Бюджет</dt><dd>' + escapeHtml(String(optBudget)) + ' дБ</dd></div>';
+    }
     html += '</dl></section>';
 
     html += buildObjectCoordsSectionHtml(obj);
@@ -1013,7 +1100,7 @@ function buildOltCardContent(obj, isEditMode, name) {
     html += '<span class="object-card-badge object-card-badge--gpon" title="Назначено PON-портов">' + assignedCount + ' / ' + ponPorts + '</span>';
     html += '</div>';
     if (isEditMode) {
-        html += '<p class="object-card-hint olt-card-gpon-hint">Два независимых назначения: <strong>приход</strong> (от кросса/муфты к OLT) и <strong>PON-порты</strong> (feeder от OLT в GPON-сеть через прокладку кабеля до муфты или кросса).</p>';
+        html += '<p class="object-card-hint olt-card-gpon-hint"><strong>Приход</strong> — жила с кросса/муфты в uplink SFP/SFP+. <strong>PON-порты</strong> — feeder от OLT в GPON-сеть.</p>';
     }
     if (oltConnectivityIssues.length) {
         oltConnectivityIssues.forEach(function(issue) {
@@ -1025,14 +1112,23 @@ function buildOltCardContent(obj, isEditMode, name) {
     html += '<span class="olt-card-incoming-label">Приход (upstream)</span>';
     html += '<span class="olt-card-incoming-value">' + escapeHtml(incomingLabel) + '</span>';
     html += '</div>';
-    html += '<span class="olt-card-incoming-hint">Задаётся кнопкой «Приход OLT» у жилы в кроссе или муфте</span>';
+    html += '<span class="olt-card-incoming-hint">Задаётся кнопкой «Приход OLT» у жилы в кроссе/муфте и выбирается порт SFP или SFP+</span>';
     html += '</div>';
     html += '<h5 class="olt-card-ports-title">PON-порты</h5>';
     var ponPortTypes = typeof getOltPonPortTypes === 'function' ? getOltPonPortTypes(obj) : [];
     var kindOptsOlt = typeof getPonPortKindOptions === 'function' ? getPonPortKindOptions() : ['GPON'];
 
+    if (isEditMode) {
+        html += '<div class="olt-ports-toolbar">';
+        html += '<label class="object-card-label" for="editOltPonPortsCount">Число PON-портов</label>';
+        html += '<div class="olt-ports-toolbar-row">';
+        html += '<input type="number" id="editOltPonPortsCount" class="form-input form-input-compact olt-pon-count-input" min="1" max="64" value="' + ponPorts + '" title="Число PON-портов">';
+        html += '</div></div>';
+    }
+
+    ensureOltPortsArray(obj);
     html += '<div class="olt-ports-table-wrap"><table class="node-ports-table olt-ports-table"><thead><tr>';
-    html += '<th scope="col">#</th><th scope="col">Тип</th><th scope="col">Подпись</th><th scope="col">Назначение</th>';
+    html += '<th scope="col">#</th><th scope="col">Тип</th><th scope="col">SFP</th><th scope="col">Подпись</th><th scope="col">Назначение</th>';
     html += '<th scope="col" class="node-ports-table-actions"></th>';
     html += '</tr></thead><tbody>';
     for (var p = 1; p <= ponPorts; p++) {
@@ -1042,6 +1138,9 @@ function buildOltCardContent(obj, isEditMode, name) {
         var portLabel = (portLabels[String(p)] || '').trim();
         var portType = ponPortTypes[p - 1] || (typeof getPonPortDefaultKind === 'function' ? getPonPortDefaultKind() : 'GPON');
         var rowBusy = !!portInUse;
+        var installedSfp = (typeof window.getOltInstalledSfp === 'function')
+            ? window.getOltInstalledSfp(obj, { portNumber: p })
+            : null;
         html += '<tr class="olt-port-row ' + (rowBusy ? 'olt-port-row--busy' : 'olt-port-row--free') + '" data-port="' + p + '">';
         html += '<td class="olt-ports-table-port">' + p + '</td>';
         html += '<td class="olt-ports-table-type">';
@@ -1051,6 +1150,18 @@ function buildOltCardContent(obj, isEditMode, name) {
             html += '</select>';
         } else {
             html += '<span class="olt-port-type-pill">' + escapeHtml(portType) + '</span>';
+        }
+        html += '</td>';
+        html += '<td class="olt-ports-table-sfp">';
+        if (isEditMode) {
+            html += '<select class="olt-port-sfp form-select form-select-compact" data-port="' + p + '" title="SFP-модуль на PON-порту">';
+            html += buildOltPonSfpOptionsHtml(portType, installedSfp);
+            html += '</select>';
+        } else if (installedSfp) {
+            html += '<span class="olt-port-sfp-label" title="' + escapeHtml((installedSfp.manufacturer || '') + ' ' + (installedSfp.model || '')) + '">' +
+                escapeHtml(installedSfp.model || installedSfp.manufacturer || 'SFP') + '</span>';
+        } else {
+            html += '<span class="node-port-status node-port-status--muted">—</span>';
         }
         html += '</td>';
         if (isEditMode) {
@@ -1066,12 +1177,16 @@ function buildOltCardContent(obj, isEditMode, name) {
         html += '<td class="node-ports-table-actions"><div class="olt-port-actions">';
         if (portInUse) {
             html += '<button type="button" class="btn-trace-olt-port btn-olt-trace" data-port="' + p + '">Трассировка</button>';
+            html += '<button type="button" class="btn-olt-signal" data-port="' + p + '" title="Уровень сигнала на трассе">Уровень сигнала</button>';
             if (isEditMode) {
-                html += '<button type="button" class="btn-disconnect-olt-port btn-compact btn-olt-disconnect" data-port="' + p + '" title="Отключить PON-порт">Отключить</button>';
+                html += '<button type="button" class="btn-disconnect-olt-port btn-olt-disconnect" data-port="' + p + '" title="Отключить PON-порт">Отключить</button>';
             }
         } else if (isEditMode) {
             html += '<button type="button" class="btn-olt-port-cable" data-port="' + p + '" title="Прокладка одножильного кабеля в муфту или кросс">Подключить</button>';
             html += '<button type="button" class="btn-olt-port-onu" data-port="' + p + '" title="Подключить ONU">ONU</button>';
+            if (p === ponPorts && ponPorts > 1) {
+                html += '<button type="button" class="btn-olt-remove-port" data-port-index="' + (p - 1) + '" data-port-type="pon" title="Удалить последний PON-порт" aria-label="Удалить последний PON-порт">✕</button>';
+            }
         } else {
             html += '<span class="node-port-status node-port-status--muted">Свободен</span>';
         }
@@ -1079,6 +1194,123 @@ function buildOltCardContent(obj, isEditMode, name) {
         html += '</tr>';
     }
     html += '</tbody></table></div>';
+    html += '</section>';
+
+    if (typeof window.buildOltPorts === 'function' && !(obj.properties.get('ports') || []).length) {
+        window.buildOltPorts(obj);
+    }
+    var oltPortsArr = obj.properties.get('ports') || [];
+    var extraPorts = [];
+    for (var upi = 0; upi < oltPortsArr.length; upi++) {
+        var up = oltPortsArr[upi];
+        if (!up || up.portType === 'pon') continue;
+        extraPorts.push(up);
+    }
+    var extraDefs = (typeof window.getOltExtraPortTypeDefs === 'function')
+        ? window.getOltExtraPortTypeDefs()
+        : [
+            { type: 'sfp-uplink', label: 'SFP uplink (1G)' },
+            { type: 'sfp-plus-uplink', label: 'SFP+ uplink (10G)' },
+            { type: 'rj45', label: 'RJ45 (GE)' },
+            { type: 'console', label: 'Console' },
+            { type: 'sync', label: 'Sync / BITS' }
+        ];
+
+    html += '<section class="object-card-section">';
+    html += '<div class="object-card-section-head">';
+    html += '<h4 class="object-card-section-title">Uplink и служебные</h4>';
+    html += '<span class="object-card-badge" title="Uplink и служебные">' + extraPorts.length + '</span>';
+    html += '</div>';
+    if (isEditMode) {
+        html += '<p class="object-card-hint">SFP и SFP+ — оптический кабель, RJ45 — медь, как у порта коммутатора. Console и Sync не подключаются кабелем.</p>';
+        html += '<div class="olt-ports-add-row">';
+        extraDefs.forEach(function(def) {
+            html += '<button type="button" class="btn-olt-add-port" data-port-type="' +
+                escapeHtml(def.type) + '" title="Добавить ' + escapeHtml(def.label) + '">+ ' +
+                escapeHtml(def.label) + '</button>';
+        });
+        html += '</div>';
+    }
+    if (extraPorts.length) {
+        html += '<div class="olt-ports-table-wrap"><table class="node-ports-table olt-ports-table"><thead><tr>';
+        html += '<th scope="col">№</th><th scope="col">Тип</th><th scope="col">SFP</th><th scope="col">Метка</th><th scope="col">Кабель</th>';
+        html += '<th scope="col" class="node-ports-table-actions"></th></tr></thead><tbody>';
+        extraPorts.forEach(function(uport) {
+            var hasCab = !!uport.connectedCableId;
+            var typeLabel = (typeof window.getOltPortTypeLabel === 'function')
+                ? window.getOltPortTypeLabel(uport.portType)
+                : (uport.portType || '');
+            var canHaveSfp = uport.portType === 'sfp-uplink' || uport.portType === 'sfp-plus-uplink';
+            html += '<tr class="olt-port-row ' + (hasCab ? 'olt-port-row--busy' : 'olt-port-row--free') +
+                '" data-port-index="' + uport.portIndex + '">';
+            html += '<td class="olt-ports-table-port">' + escapeHtml(String(uport.portIndex)) + '</td>';
+            html += '<td><span class="olt-port-type-pill">' + escapeHtml(typeLabel) + '</span></td>';
+            html += '<td class="olt-ports-table-sfp">';
+            if (canHaveSfp) {
+                if (isEditMode) {
+                    html += '<select class="olt-extra-port-sfp form-select form-select-compact" data-port-index="' +
+                        uport.portIndex + '" data-port-type="' + escapeHtml(uport.portType) + '" title="SFP-модуль">';
+                    html += buildOltUplinkSfpOptionsHtml(uport.portType, uport.installedSfp || null);
+                    html += '</select>';
+                } else if (uport.installedSfp) {
+                    html += '<span class="olt-port-sfp-label">' + escapeHtml(uport.installedSfp.model || 'SFP') + '</span>';
+                } else {
+                    html += '<span class="node-port-status node-port-status--muted">—</span>';
+                }
+            } else {
+                html += '<span class="node-port-status node-port-status--muted">—</span>';
+            }
+            html += '</td>';
+            if (isEditMode) {
+                html += '<td><input type="text" class="olt-extra-port-label form-input form-input-compact" data-port-index="' +
+                    uport.portIndex + '" value="' + escapeHtml(uport.portLabel || '') + '" placeholder="Метка"></td>';
+            } else {
+                html += '<td class="olt-ports-table-label">' + escapeHtml(uport.portLabel || '—') + '</td>';
+            }
+            html += '<td class="node-port-assign">';
+            if (hasCab) {
+                var upCable = objects.find(function(c) {
+                    return c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === uport.connectedCableId;
+                });
+                var upCableName = upCable
+                    ? (upCable.properties.get('cableName') || (typeof getCableDescription === 'function' ? getCableDescription(upCable.properties.get('cableType')) : 'Кабель'))
+                    : 'Кабель';
+                if (uport.connectedFiberNumber != null) {
+                    html += '<span class="node-port-state-connected">Приход: ' + escapeHtml(upCableName) +
+                        ', ж.' + escapeHtml(String(uport.connectedFiberNumber)) + '</span>';
+                } else {
+                    html += '<span class="node-port-state-connected">' + escapeHtml(upCableName) + '</span>';
+                }
+            } else {
+                html += '<span class="node-port-assign--free">—</span>';
+            }
+            html += '</td>';
+            html += '<td class="node-ports-table-actions"><div class="olt-port-actions">';
+            var canConnectUplink = uport.portType === 'sfp-uplink' || uport.portType === 'sfp-plus-uplink' || uport.portType === 'rj45';
+            var isIncomingPort = !!(uport.connectedFiberNumber != null && uport.connectedCableId);
+            var uplinkCableIsCopper = !!(hasCab && upCable && typeof isCopperCableType === 'function' &&
+                isCopperCableType(upCable.properties.get('cableType')));
+            var canSignalUplink = (uport.portType === 'sfp-uplink' || uport.portType === 'sfp-plus-uplink') && !uplinkCableIsCopper;
+            if (hasCab && canSignalUplink && !isIncomingPort) {
+                html += '<button type="button" class="btn-olt-uplink-signal btn-olt-signal" data-port-index="' +
+                    uport.portIndex + '">Уровень сигнала</button>';
+            }
+            if (isEditMode && !hasCab && canConnectUplink) {
+                html += '<button type="button" class="btn-olt-uplink-connect" data-port-index="' + uport.portIndex +
+                    '" data-port-type="' + escapeHtml(uport.portType) + '" title="Проложить кабель с этого порта">Подключить</button>';
+            } else if (!hasCab && !canConnectUplink) {
+                html += '<span class="node-port-status node-port-status--muted">Свободен</span>';
+            }
+            if (isEditMode && !hasCab) {
+                html += '<button type="button" class="btn-olt-remove-port" data-port-index="' +
+                    uport.portIndex + '" title="Удалить порт" aria-label="Удалить порт">✕</button>';
+            }
+            html += '</div></td></tr>';
+        });
+        html += '</tbody></table></div>';
+    } else if (!isEditMode) {
+        html += '<p class="object-card-hint" style="margin:0;">Uplink и служебные порты не добавлены.</p>';
+    }
     html += '</section>';
 
     html += buildObjectGallerySectionHtml(obj, isEditMode);
@@ -1136,9 +1368,20 @@ function validateCopperCableRoute(points, skipSync, copperMeta) {
         var camPm = cam0 ? p0 : pL;
         var otherPm = cam0 ? pL : p0;
         var ot = otherPm.properties.get('type');
-        if (ot !== 'node' && ot !== 'switch') {
-            if (!skipSync) showError('Камеру или медиаконвертер можно подключить только медным кабелем от коммутатора (узел сети или отдельный коммутатор на карте).', 'Недопустимое действие');
+        if (ot !== 'node' && ot !== 'switch' && ot !== 'olt') {
+            if (!skipSync) showError('Камеру или медиаконвертер можно подключить медным кабелем от коммутатора (узел сети или отдельный коммутатор) или от RJ45-порта OLT.', 'Недопустимое действие');
             return false;
+        }
+        if (ot === 'olt') {
+            var oltPortNeed = cam0 ? copperMeta.oltUplinkPortTo : copperMeta.oltUplinkPortFrom;
+            if ((oltPortNeed == null || oltPortNeed === '') && typeof pendingCopperPortPreset !== 'undefined' &&
+                pendingCopperPortPreset && pendingCopperPortPreset.kind === 'olt') {
+                oltPortNeed = pendingCopperPortPreset.portIndex;
+            }
+            if (oltPortNeed == null || oltPortNeed === '') {
+                if (!skipSync) showError('Для линии от OLT начните прокладку кнопкой «Подключить» у порта RJ45.', 'Недопустимое действие');
+                return false;
+            }
         }
         var sidNeed = cam0 ? copperMeta.copperSwitchToId : copperMeta.copperSwitchFromId;
         if (ot === 'node') {
@@ -1166,14 +1409,18 @@ function validateCopperCableRoute(points, skipSync, copperMeta) {
             var sid = isFirst ? copperMeta.copperSwitchFromId : copperMeta.copperSwitchToId;
             return !!sid && !!findAttachedSwitchOnNode(obj, sid);
         }
+        if (t === 'olt') {
+            var oltPort = isFirst ? copperMeta.oltUplinkPortFrom : copperMeta.oltUplinkPortTo;
+            return oltPort != null && oltPort !== '';
+        }
         return false;
     }
     if (!endOk(points[0], true)) {
-        if (!skipSync) showError('Медный кабель: начало маршрута — узел сети с коммутатором, отдельный коммутатор, радиомост или медиаконвертер с подключённой оптической жилой.', 'Недопустимое действие');
+        if (!skipSync) showError('Медный кабель: начало маршрута — узел с коммутатором, отдельный коммутатор, радиомост, OLT (RJ45) или медиаконвертер с подключённой оптической жилой.', 'Недопустимое действие');
         return false;
     }
     if (!endOk(points[points.length - 1], false)) {
-        if (!skipSync) showError('Медный кабель: конец маршрута — узел сети с коммутатором, отдельный коммутатор, радиомост или медиаконвертер с подключённой оптической жилой.', 'Недопустимое действие');
+        if (!skipSync) showError('Медный кабель: конец маршрута — узел с коммутатором, отдельный коммутатор, радиомост, OLT (RJ45) или медиаконвертер с подключённой оптической жилой.', 'Недопустимое действие');
         return false;
     }
     var rb0 = t0 === 'radioBridge';
@@ -1493,6 +1740,22 @@ function openCopperEndPortModal(points, cableTypeVal, copperMeta) {
             if (typeof showError === 'function') showError('Камеру или медиаконвертер можно подключить только от коммутатора.', 'Недопустимое действие');
             return;
         }
+        if (startType === 'olt' && copperMeta.oltUplinkPortFrom != null) {
+            var cmOltCam = Object.assign({}, copperMeta, {
+                copperPortFrom: copperMeta.oltUplinkPortFrom,
+                copperPortTo: null,
+                copperSwitchFromId: null,
+                copperSwitchToId: null
+            });
+            if (createCableFromPoints(points, cableTypeVal, null, null, false, false, cmOltCam)) {
+                finishCopperCableToolSession();
+                var lastOltCam = objects[objects.length - 1];
+                if (lastOltCam && lastOltCam.properties && lastOltCam.properties.get('type') === 'cable' && isCopperCableType(lastOltCam.properties.get('cableType'))) {
+                    if (typeof showCableInfo === 'function') showCableInfo(lastOltCam);
+                }
+            }
+            return;
+        }
         if (startType === 'camera' && endType === 'mediaConverter') {
             var incEndMc = endObj.properties.get('incomingFiber');
             if (!incEndMc || !incEndMc.cableId) {
@@ -1544,8 +1807,8 @@ function openCopperEndPortModal(points, cableTypeVal, copperMeta) {
                 return;
             }
         }
-        if (startType !== 'node' && startType !== 'switch' && startType !== 'mediaConverter') {
-            if (typeof showError === 'function') showError('Камеру или медиаконвертер можно подключить только от коммутатора.', 'Недопустимое действие');
+        if (startType !== 'node' && startType !== 'switch' && startType !== 'mediaConverter' && startType !== 'olt') {
+            if (typeof showError === 'function') showError('Камеру или медиаконвертер можно подключить от коммутатора или от RJ45-порта OLT.', 'Недопустимое действие');
             return;
         }
         var swStartId = startType === 'node' ? (copperMeta.copperSwitchFromId || cableSourceCopperSwitchId) : null;
@@ -1691,7 +1954,14 @@ function handleCopperCablePlacemarkStep(placemark, type, cableTypeVal) {
         return true;
     }
     if (isFiberHostType(type) || type === 'olt') {
-        showError('Медный кабель не прокладывается к муфте, кроссу или OLT. Концы маршрута — узел сети с коммутатором, камера или медиаконвертер (с подключённой оптической жилой).', 'Недопустимое действие');
+        if (type === 'olt' && cableSource && placemark === cableSource &&
+            pendingCopperPortPreset && pendingCopperPortPreset.kind === 'olt') {
+            cableWaypoints = [];
+            clearSelection();
+            selectObject(cableSource);
+            return true;
+        }
+        showError('Медный кабель не прокладывается к муфте, кроссу или OLT. С порта RJ45 OLT линия начинается кнопкой «Подключить», второй конец — узел с коммутатором, камера или медиаконвертер.', 'Недопустимое действие');
         return true;
     }
     if (rbSwitchLay && type !== 'switch' && type !== 'node' && type !== 'support' && type !== 'attachment' && type !== 'radioBridge') {
@@ -1784,6 +2054,12 @@ function handleCopperCablePlacemarkStep(placemark, type, cableTypeVal) {
         copperSwitchFromId: cableSource.properties.get('type') === 'node' ? cableSourceCopperSwitchId : null,
         copperSwitchToId: type === 'node' ? toSwitchId : null
     };
+    if (pendingCopperPortPreset && pendingCopperPortPreset.kind === 'olt' &&
+        cableSource.properties.get('type') === 'olt' &&
+        getObjectUniqueId(cableSource) === pendingCopperPortPreset.oltUid) {
+        copperMeta.oltUplinkPortFrom = pendingCopperPortPreset.portIndex;
+        copperMeta.copperPortFrom = pendingCopperPortPreset.portIndex;
+    }
     openCopperEndPortModal(points, cableTypeVal, copperMeta);
     return true;
 }
@@ -1822,6 +2098,51 @@ function startCopperCableFromMediaConverter(mcObj) {
     currentModalObject = null;
     if (typeof showInfo === 'function') {
         showInfo('Укажите на карте второй конец: узел сети с коммутатором, отдельный коммутатор или камера. Опоры и крепления — только промежуточные точки.', 'Медный кабель');
+    }
+}
+
+function startCopperCableFromOltUplinkPort(oltObj, portIndex) {
+    if (!isEditMode || !oltObj || !oltObj.properties || oltObj.properties.get('type') !== 'olt') return;
+    var portIdx = parseInt(portIndex, 10);
+    if (isNaN(portIdx)) return;
+    var ports = oltObj.properties.get('ports') || [];
+    var port = null;
+    for (var i = 0; i < ports.length; i++) {
+        if (ports[i].portIndex === portIdx) { port = ports[i]; break; }
+    }
+    if (!port || port.portType !== 'rj45') {
+        if (typeof showError === 'function') showError('Медный кабель с OLT прокладывается только с порта RJ45.', 'Порт');
+        return;
+    }
+    if (port.connectedCableId) {
+        if (typeof showError === 'function') showError('Этот порт уже занят кабелем.', 'Порт занят');
+        return;
+    }
+    if (objectPlacementMode && typeof cancelObjectPlacement === 'function') cancelObjectPlacement();
+    if (splitterFiberRoutingMode && typeof cancelSplitterFiberRouting === 'function') cancelSplitterFiberRouting();
+    if (fiberRoutingMode && typeof cancelFiberRouting === 'function') cancelFiberRouting();
+    if (radioBridgeRoutingMode && typeof cancelRadioBridgeRouting === 'function') cancelRadioBridgeRouting();
+    if (!currentCableTool) {
+        var cableBtnOlt = document.getElementById('addCable');
+        if (cableBtnOlt) cableBtnOlt.click();
+    }
+    copperCableLayingActive = true;
+    if (typeof syncCableTypePickerUI === 'function') syncCableTypePickerUI();
+    pendingCopperPortPreset = { kind: 'olt', oltUid: getObjectUniqueId(oltObj), portIndex: portIdx, portType: 'rj45' };
+    pendingOltUplinkPreset = null;
+    cableSource = oltObj;
+    cableSourceCopperSwitchId = null;
+    cableWaypoints = [];
+    if (typeof removePhantomPlacemark === 'function') removePhantomPlacemark();
+    if (typeof removeCablePreview === 'function') removeCablePreview();
+    if (typeof clearSelection === 'function') clearSelection();
+    if (typeof selectObject === 'function') selectObject(cableSource);
+    var modalOltCu = document.getElementById('infoModal');
+    if (modalOltCu) modalOltCu.style.display = 'none';
+    currentModalObject = null;
+    var portLabel = port.portLabel ? (' «' + port.portLabel + '»') : '';
+    if (typeof showInfo === 'function') {
+        showInfo('Медный кабель с RJ45' + portLabel + ' (порт ' + portIdx + '). Укажите второй конец: узел с коммутатором, отдельный коммутатор или камера. Опоры — промежуточные точки.', 'Подключение OLT');
     }
 }
 
@@ -1985,7 +2306,7 @@ function findCableAtCoords(coords, zoom) {
             if (!cableCoordsList || !cableCoordsList.length) return;
 
             var cableType = obj.properties.get('cableType');
-            var cableWidthPixels = getCableWidth(cableType);
+            var cableWidthPixels = getCableWidth(obj);
             var cableWidthInDegrees = (cableWidthPixels / 2) * tol.pixelToDegree;
 
             for (var ci = 0; ci < cableCoordsList.length; ci++) {
@@ -2234,6 +2555,9 @@ function closeInfoModal(opts) {
         lockBanner.textContent = '';
     }
     if (typeof clearFiberConnectionLabelSelection === 'function') clearFiberConnectionLabelSelection();
+    if (typeof closeCoverageJoystickPanel === 'function') {
+        closeCoverageJoystickPanel({ skipRestore: true, silent: true });
+    }
 }
 
 function relayoutUndergroundSpanFromCableCard(cableUniqueId, spanIndex) {
@@ -2474,7 +2798,7 @@ function showCableInfoBody(cable) {
         ? '🔌 Кабель ВОЛС · с подземным участком'
         : '🔌 Информация о кабеле';
 
-    var cableColor = getCableColor(cableType);
+    var cableColor = getCableColor(cable);
     
     let html = '<div class="info-section">';
 
@@ -2534,12 +2858,33 @@ function showCableInfoBody(cable) {
     html += '</div>';
 
     if (modalIsEditMode()) {
+        var cableMpm = window.FiberCableConfig && window.FiberCableConfig.getFibersPerModuleFromCable
+            ? window.FiberCableConfig.getFibersPerModuleFromCable(cable) : 0;
+        var isModType = (window.FiberCableConfig && window.FiberCableConfig.isModularCableType
+            ? window.FiberCableConfig.isModularCableType(cable.properties.get('cableType'))
+            : false) || cableMpm > 0;
         html += '<div class="cable-fiber-settings-row form-group">';
-        html += '<label>Число жил и цвета</label>';
+        html += '<label>Вид и жилы</label>';
+        html += '<div class="cable-kind-presets cable-kind-presets--card" role="group" aria-label="Вид кабеля">';
+        html += '<button type="button" class="cable-kind-preset' + (!isModType ? ' cable-kind-preset--active' : '') + '" id="cableKindFiber" data-kind="fiber">ВОЛС</button>';
+        html += '<button type="button" class="cable-kind-preset' + (isModType ? ' cable-kind-preset--active' : '') + '" id="cableKindModular" data-kind="fiberModular">Модульный</button>';
+        html += '</div>';
         html += '<div class="cable-fiber-settings-toolbar">';
         html += '<input type="number" id="cableFiberCountInput" class="form-input cable-fiber-count-input" min="1" max="96" value="' + fiberCount + '" aria-label="Число жил">';
         html += '<button type="button" class="btn-secondary btn-cable-palette-edit" id="cableFiberPaletteBtn">' + (window.FiberCableConfig && window.FiberCableConfig.cablePaletteButtonHtml ? window.FiberCableConfig.cablePaletteButtonHtml() : 'Цвета') + '</button>';
         html += '<button type="button" class="btn-primary btn-inline" id="cableFiberCountSaveBtn">Применить</button>';
+        html += '</div>';
+        html += '<div id="cableModuleSizeWrap" class="cable-modular-lay-panel"' + (isModType ? '' : ' style="display:none;"') + '>';
+        if (window.FiberCableConfig && typeof window.FiberCableConfig.buildModularConfigPanelHtml === 'function') {
+            var cardMods = window.FiberCableConfig.getModuleCountFromCable
+                ? window.FiberCableConfig.getModuleCountFromCable(cable) : 0;
+            var cardPer = cableMpm || (window.FiberCableConfig.DEFAULT_FIBERS_PER_MODULE || 12);
+            html += window.FiberCableConfig.buildModularConfigPanelHtml({
+                idPrefix: 'cardModCfg',
+                modules: cardMods || 2,
+                perModule: cardPer
+            });
+        }
         html += '</div></div>';
     }
 
@@ -2589,6 +2934,12 @@ function showCableInfoBody(cable) {
     html += `<div style="flex: 1; padding: 10px; background: var(--bg-tertiary); border-radius: 8px; text-align: center; border: 1px solid var(--border-color);">`;
     html += `<div style="font-size: 0.7rem; color: var(--accent-success); margin-bottom: 2px;">Жил</div>`;
     html += `<div style="font-size: 1rem; font-weight: 600; color: var(--text-primary);">${fiberCount}</div>`;
+    var viewMpm = window.FiberCableConfig && window.FiberCableConfig.getFibersPerModuleFromCable
+        ? window.FiberCableConfig.getFibersPerModuleFromCable(cable) : 0;
+    if (viewMpm > 0) {
+        var viewMods = window.FiberCableConfig.getModuleCount(fiberCount, viewMpm);
+        html += `<div style="font-size: 0.65rem; color: var(--text-muted);">${viewMods} мод. × ${viewMpm}</div>`;
+    }
     html += `</div>`;
     html += `<div style="flex: 1; padding: 10px; background: ${totalCablesOnSegment > 1 ? 'var(--bg-accent)' : 'var(--bg-tertiary)'}; border-radius: 8px; text-align: center; border: 1px solid ${totalCablesOnSegment > 1 ? 'var(--accent-warning)' : 'var(--border-color)'};">`;
     html += `<div style="font-size: 0.7rem; color: ${totalCablesOnSegment > 1 ? 'var(--accent-warning)' : 'var(--text-muted)'}; margin-bottom: 2px;">На участке</div>`;
@@ -2664,9 +3015,65 @@ function showCableInfoBody(cable) {
     var fiberCountSaveBtn = modalContent.querySelector('#cableFiberCountSaveBtn');
     var fiberCountInput = modalContent.querySelector('#cableFiberCountInput');
     var fiberPaletteBtn = modalContent.querySelector('#cableFiberPaletteBtn');
+    var moduleSizeWrap = modalContent.querySelector('#cableModuleSizeWrap');
+    var kindFiberBtn = modalContent.querySelector('#cableKindFiber');
+    var kindModBtn = modalContent.querySelector('#cableKindModular');
+    var cardKindModular = !!(kindModBtn && kindModBtn.classList.contains('cable-kind-preset--active'));
+
+    function setCardCableKind(modular) {
+        cardKindModular = !!modular;
+        if (kindFiberBtn) kindFiberBtn.classList.toggle('cable-kind-preset--active', !cardKindModular);
+        if (kindModBtn) kindModBtn.classList.toggle('cable-kind-preset--active', cardKindModular);
+        if (moduleSizeWrap) moduleSizeWrap.style.display = cardKindModular ? '' : 'none';
+        if (cardKindModular && window.FiberCableConfig && typeof window.FiberCableConfig.bindModularConfigPanel === 'function') {
+            window.FiberCableConfig.bindModularConfigPanel('cardModCfg', function(totals) {
+                if (fiberCountInput) fiberCountInput.value = String(totals.fiberCount);
+            });
+            if (fiberCountInput && typeof window.FiberCableConfig.readModularConfigFromPanel === 'function') {
+                var syncTot = window.FiberCableConfig.readModularConfigFromPanel('cardModCfg');
+                fiberCountInput.value = String(syncTot.fiberCount);
+            }
+        }
+    }
+
+    function readCableModularSettingsFromUi() {
+        if (!cardKindModular) return { fibersPerModule: 0, moduleCount: undefined, fiberCount: null };
+        if (window.FiberCableConfig && typeof window.FiberCableConfig.readModularConfigFromPanel === 'function') {
+            var totals = window.FiberCableConfig.readModularConfigFromPanel('cardModCfg');
+            return {
+                fibersPerModule: totals.perModule,
+                moduleCount: totals.modules,
+                fiberCount: totals.fiberCount
+            };
+        }
+        return { fibersPerModule: 12, moduleCount: 2, fiberCount: null };
+    }
+
+    if (kindFiberBtn && !kindFiberBtn._bound) {
+        kindFiberBtn._bound = true;
+        kindFiberBtn.addEventListener('click', function() { setCardCableKind(false); });
+    }
+    if (kindModBtn && !kindModBtn._bound) {
+        kindModBtn._bound = true;
+        kindModBtn.addEventListener('click', function() { setCardCableKind(true); });
+    }
+    if (cardKindModular && window.FiberCableConfig && typeof window.FiberCableConfig.bindModularConfigPanel === 'function') {
+        window.FiberCableConfig.bindModularConfigPanel('cardModCfg', function(totals) {
+            if (fiberCountInput) fiberCountInput.value = String(totals.fiberCount);
+        });
+    }
+
     if (fiberCountSaveBtn && fiberCountInput) {
         fiberCountSaveBtn.addEventListener('click', async function() {
-            await updateCableFiberSettings(uniqueId, fiberCountInput.value, undefined);
+            var modSettings = readCableModularSettingsFromUi();
+            var applyCount = modSettings.fiberCount != null ? modSettings.fiberCount : fiberCountInput.value;
+            await updateCableFiberSettings(
+                uniqueId,
+                applyCount,
+                undefined,
+                modSettings.fibersPerModule,
+                modSettings.moduleCount
+            );
         });
     }
     if (fiberPaletteBtn && window.FiberCableConfig) {
@@ -2676,7 +3083,14 @@ function showCableInfoBody(cable) {
                 fiberCount: getFiberCount(cable),
                 palette: window.FiberCableConfig.getFiberPaletteForCable(cable),
                 onSave: async function(r) {
-                    await updateCableFiberSettings(uniqueId, r.fiberCount, r.palette);
+                    var modSettings = readCableModularSettingsFromUi();
+                    await updateCableFiberSettings(
+                        uniqueId,
+                        r.fiberCount,
+                        r.palette,
+                        modSettings.fibersPerModule,
+                        modSettings.moduleCount
+                    );
                 }
             });
         });
@@ -2839,7 +3253,11 @@ function updateCablePreview(sourceObj, waypoints, targetCoords) {
     }
     const cableType = getEffectiveCableLayingType();
     const cableWidth = getCableWidth(cableType);
-    var previewColor = cableUndergroundActive ? (window.CableUnderground ? CableUnderground.UNDERGROUND_COLOR : '#dc2626') : '#3b82f6';
+    var previewColor = cableUndergroundActive
+        ? (window.CableUnderground ? CableUnderground.UNDERGROUND_COLOR : '#dc2626')
+        : ((typeof isOpticalCableType === 'function' && isOpticalCableType(cableType))
+            ? getCableColor(cableType)
+            : '#3b82f6');
     var previewDash = cableUndergroundActive ? '10 6' : '12 6';
     if (cablePreviewLine) {
         cablePreviewLine.geometry.setCoordinates(allCoords);
@@ -4341,6 +4759,9 @@ function setupEditAndDeleteListeners() {
                 if (typeof applyOltModelCatalogSettings === 'function') {
                     applyOltModelCatalogSettings(currentModalObject, mfr, this.value || '');
                 }
+                if (typeof window.applyOltModelParams === 'function') {
+                    window.applyOltModelParams(mfr, this.value || '');
+                }
                 saveData();
             }
         });
@@ -4350,9 +4771,12 @@ function setupEditAndDeleteListeners() {
             var mfr = mfrEl ? (mfrEl.value || '').trim() : '';
             if (typeof applyOltModelCatalogSettings === 'function') {
                 applyOltModelCatalogSettings(currentModalObject, mfr, this.value || '');
-                saveData();
-                refreshObjectModal(currentModalObject);
             }
+            if (typeof window.applyOltModelParams === 'function') {
+                window.applyOltModelParams(mfr, this.value || '');
+            }
+            saveData();
+            refreshObjectModal(currentModalObject);
         });
     }
     var editOltComment = document.getElementById('editOltComment');
@@ -5305,6 +5729,35 @@ function setupModalEventListeners() {
             });
         });
 
+        document.querySelectorAll('.cross-cable-modular').forEach(function(cb) {
+            cb.addEventListener('change', async function() {
+                var uid = cb.getAttribute('data-cable-id');
+                var sizeSel = document.querySelector('.cross-cable-module-size[data-cable-id="' + uid + '"]');
+                if (sizeSel) sizeSel.disabled = !cb.checked;
+                var countInp = document.querySelector('.cable-fiber-count-input[data-cable-id="' + uid + '"]');
+                var count = countInp ? countInp.value : getFiberCount(
+                    objects.find(function(o) {
+                        return o.properties && o.properties.get('uniqueId') === uid;
+                    })
+                );
+                var mpm = cb.checked
+                    ? (sizeSel ? parseInt(sizeSel.value, 10) : 12)
+                    : 0;
+                await updateCableFiberSettings(uid, count, undefined, mpm);
+            });
+        });
+
+        document.querySelectorAll('.cross-cable-module-size').forEach(function(sel) {
+            sel.addEventListener('change', async function() {
+                var uid = sel.getAttribute('data-cable-id');
+                var cb = document.querySelector('.cross-cable-modular[data-cable-id="' + uid + '"]');
+                if (!cb || !cb.checked) return;
+                var countInp = document.querySelector('.cable-fiber-count-input[data-cable-id="' + uid + '"]');
+                var count = countInp ? countInp.value : 24;
+                await updateCableFiberSettings(uid, count, undefined, parseInt(sel.value, 10) || 12);
+            });
+        });
+
         document.querySelectorAll('.btn-cable-palette-edit').forEach(function(btn) {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -5313,12 +5766,14 @@ function setupModalEventListeners() {
                     return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === uid;
                 });
                 if (!cableObj || !window.FiberCableConfig) return;
+                var mpm = window.FiberCableConfig.getFibersPerModuleFromCable
+                    ? window.FiberCableConfig.getFibersPerModuleFromCable(cableObj) : 0;
                 window.FiberCableConfig.openFiberPaletteEditor({
                     title: 'Цвета жил кабеля',
                     fiberCount: getFiberCount(cableObj),
                     palette: window.FiberCableConfig.getFiberPaletteForCable(cableObj),
                     onSave: async function(r) {
-                        await updateCableFiberSettings(uid, r.fiberCount, r.palette);
+                        await updateCableFiberSettings(uid, r.fiberCount, r.palette, mpm);
                     }
                 });
             });
@@ -5406,7 +5861,66 @@ function setupModalEventListeners() {
                 if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
                 var portNum = parseInt(this.getAttribute('data-port'), 10);
                 if (typeof setOltPonPortType === 'function') setOltPonPortType(currentModalObject, portNum, this.value);
+                // Обновить список SFP под новый тип PON
+                var sfpSelect = modalInfo.querySelector('.olt-port-sfp[data-port="' + portNum + '"]');
+                if (sfpSelect) {
+                    var curSfp = typeof window.getOltInstalledSfp === 'function'
+                        ? window.getOltInstalledSfp(currentModalObject, { portNumber: portNum })
+                        : null;
+                    // если текущий SFP несовместим — сбросить
+                    var listFn = typeof listSfpForPonKind === 'function' ? listSfpForPonKind : null;
+                    var encode = typeof encodeSfpSelectValue === 'function' ? encodeSfpSelectValue : null;
+                    if (curSfp && listFn && encode) {
+                        var ok = listFn(this.value).some(function(e) {
+                            return encode(e.manufacturer, e.model) === encode(curSfp.manufacturer, curSfp.model);
+                        });
+                        if (!ok && typeof window.setOltInstalledSfp === 'function') {
+                            window.setOltInstalledSfp(currentModalObject, { portNumber: portNum }, null);
+                            curSfp = null;
+                        }
+                    }
+                    sfpSelect.innerHTML = buildOltPonSfpOptionsHtml(this.value, curSfp);
+                }
                 saveData();
+            });
+        });
+        modalInfo.querySelectorAll('.olt-port-sfp').forEach(function(select) {
+            select.addEventListener('change', function() {
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
+                var portNum = parseInt(this.getAttribute('data-port'), 10);
+                var decode = typeof decodeSfpSelectValue === 'function' ? decodeSfpSelectValue : window.decodeSfpSelectValue;
+                var ref = this.value && typeof decode === 'function' ? decode(this.value) : null;
+                if (typeof window.setOltInstalledSfp === 'function') {
+                    window.setOltInstalledSfp(currentModalObject, { portNumber: portNum }, ref);
+                }
+                saveData();
+            });
+        });
+        modalInfo.querySelectorAll('.olt-extra-port-sfp').forEach(function(select) {
+            select.addEventListener('change', function() {
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
+                var portIndex = parseInt(this.getAttribute('data-port-index'), 10);
+                var decode = typeof decodeSfpSelectValue === 'function' ? decodeSfpSelectValue : window.decodeSfpSelectValue;
+                var ref = this.value && typeof decode === 'function' ? decode(this.value) : null;
+                if (typeof window.setOltInstalledSfp === 'function') {
+                    window.setOltInstalledSfp(currentModalObject, { portIndex: portIndex }, ref);
+                }
+                saveData();
+            });
+        });
+        modalInfo.querySelectorAll('.btn-olt-uplink-connect').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
+                var portIndex = parseInt(this.getAttribute('data-port-index'), 10);
+                var portType = this.getAttribute('data-port-type') || '';
+                if (portType === 'rj45') {
+                    if (typeof startCopperCableFromOltUplinkPort === 'function') {
+                        startCopperCableFromOltUplinkPort(currentModalObject, portIndex);
+                    }
+                } else if (typeof startOltUplinkFiberCable === 'function') {
+                    startOltUplinkFiberCable(currentModalObject, portIndex);
+                }
             });
         });
         modalInfo.querySelectorAll('.btn-olt-port-cable').forEach(function(btn) {
@@ -5442,6 +5956,89 @@ function setupModalEventListeners() {
                 const port = parseInt(this.getAttribute('data-port'), 10);
                 if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
                 traceFromOLTPort(currentModalObject, port);
+            });
+        });
+        modalInfo.querySelectorAll('.btn-olt-signal').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (this.classList.contains('btn-olt-uplink-signal')) return;
+                var port = parseInt(this.getAttribute('data-port'), 10);
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
+                if (typeof window.openSignalLevelFromOltPort === 'function') {
+                    window.openSignalLevelFromOltPort(currentModalObject, port);
+                } else if (typeof showWarning === 'function') {
+                    showWarning('Калькулятор сигнала ещё не загружен', 'Ошибка');
+                }
+            });
+        });
+        modalInfo.querySelectorAll('.btn-olt-uplink-signal').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var portIndex = parseInt(this.getAttribute('data-port-index'), 10);
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
+                if (typeof window.openSignalLevelFromUplinkPort === 'function') {
+                    window.openSignalLevelFromUplinkPort(currentModalObject, portIndex);
+                }
+            });
+        });
+
+        var editOltPonPortsCount = document.getElementById('editOltPonPortsCount');
+        if (editOltPonPortsCount) {
+            editOltPonPortsCount.addEventListener('change', function() {
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
+                var n = parseInt(this.value, 10);
+                if (typeof window.setOltPonPortCount === 'function') {
+                    if (!window.setOltPonPortCount(currentModalObject, n)) {
+                        this.value = String(Math.max(1, parseInt(currentModalObject.properties.get('ponPorts'), 10) || 8));
+                        return;
+                    }
+                } else {
+                    currentModalObject.properties.set('ponPorts', Math.max(1, Math.min(64, n || 8)));
+                }
+                saveData();
+                refreshObjectModal(currentModalObject);
+            });
+        }
+        modalInfo.querySelectorAll('.btn-olt-add-port').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
+                var portType = this.getAttribute('data-port-type');
+                if (typeof window.addOltPort !== 'function') {
+                    if (typeof showWarning === 'function') showWarning('Модуль портов OLT не загружен', 'Ошибка');
+                    return;
+                }
+                if (window.addOltPort(currentModalObject, portType)) {
+                    saveData();
+                    refreshObjectModal(currentModalObject);
+                }
+            });
+        });
+        modalInfo.querySelectorAll('.btn-olt-remove-port').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
+                var portIndex = parseInt(this.getAttribute('data-port-index'), 10);
+                if (typeof window.removeOltPort !== 'function') return;
+                if (window.removeOltPort(currentModalObject, portIndex)) {
+                    saveData();
+                    refreshObjectModal(currentModalObject);
+                }
+            });
+        });
+        modalInfo.querySelectorAll('.olt-extra-port-label').forEach(function(input) {
+            input.addEventListener('change', function() {
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
+                var portIndex = parseInt(this.getAttribute('data-port-index'), 10);
+                var ports = currentModalObject.properties.get('ports') || [];
+                for (var i = 0; i < ports.length; i++) {
+                    if (ports[i] && Number(ports[i].portIndex) === portIndex) {
+                        ports[i].portLabel = (this.value || '').trim();
+                        break;
+                    }
+                }
+                currentModalObject.properties.set('ports', ports);
+                saveData();
             });
         });
 

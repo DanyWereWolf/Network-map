@@ -68,6 +68,10 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
 
     clearCopperCableOccupancyForCableId(cableUniqueId);
 
+    if (typeof window.releaseOltPortForCable === 'function') {
+        window.releaseOltPortForCable(cableUniqueId);
+    }
+
     const fromObj = cable.properties.get('from');
     const toObj = cable.properties.get('to');
     const cableType = getCableDescription(cable.properties.get('cableType'));
