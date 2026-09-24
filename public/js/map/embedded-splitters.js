@@ -587,12 +587,233 @@
         return buildSplitterSchematicPath(fromX, fromY, toX, toY, localOpts, 'vh');
     }
 
+    /** Наружная нормаль порта: куда уходит линия от корпуса. */
+    function chainPortOutward(kind, orient, mirrored) {
+        orient = orient || 'horizontal';
+        if (orient === 'vertical') {
+            if (kind === 'input') return mirrored ? { x: 0, y: 1 } : { x: 0, y: -1 };
+            return mirrored ? { x: 0, y: -1 } : { x: 0, y: 1 };
+        }
+        if (kind === 'input') return mirrored ? { x: 1, y: 0 } : { x: -1, y: 0 };
+        return mirrored ? { x: -1, y: 0 } : { x: 1, y: 0 };
+    }
+
+    function crossLayoutToObstacle(crossLayout, pad) {
+        if (!crossLayout) return null;
+        var x = crossLayout.panelX;
+        var y = crossLayout.panelTop;
+        var w = crossLayout.panelW;
+        var h = crossLayout.panelH;
+        if (x == null || y == null || !(w > 0) || !(h > 0)) return null;
+        pad = pad != null ? pad : 12;
+        return {
+            x: x - pad,
+            y: y - pad,
+            w: w + pad * 2,
+            h: h + pad * 2,
+            cx: x + w / 2,
+            cy: y + h / 2,
+            kind: 'cross'
+        };
+    }
+
+    function getCrossPanelObstacleFromSvg(svg) {
+        if (!svg || !svg.querySelector) return null;
+        var root = svg.querySelector('.fiber-scheme-cross');
+        if (!root) return null;
+        var panelX = parseFloat(root.getAttribute('data-panel-x'));
+        var panelTop = parseFloat(root.getAttribute('data-panel-top'));
+        var panelW = parseFloat(root.getAttribute('data-panel-w'));
+        var panelH = parseFloat(root.getAttribute('data-panel-h'));
+        if (isNaN(panelX) || isNaN(panelTop) || isNaN(panelW) || isNaN(panelH)) return null;
+        var off = typeof global.getCrossPanelTransformOffset === 'function'
+            ? global.getCrossPanelTransformOffset(svg)
+            : { x: 0, y: 0 };
+        return crossLayoutToObstacle({
+            panelX: panelX + (off.x || 0),
+            panelTop: panelTop + (off.y || 0),
+            panelW: panelW,
+            panelH: panelH
+        }, 12);
+    }
+
+    function dedupeChainPts(pts) {
+        if (!pts || !pts.length) return [];
+        var out = [pts[0]];
+        for (var i = 1; i < pts.length; i++) {
+            var a = out[out.length - 1];
+            var b = pts[i];
+            if (!b || (Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5)) continue;
+            out.push(b);
+        }
+        return out;
+    }
+
+    function segmentHitsBox(x1, y1, x2, y2, box, margin) {
+        if (!box) return false;
+        if (typeof global.routeNeedsAroundObstacle === 'function') {
+            return global.routeNeedsAroundObstacle(x1, y1, x2, y2, box, margin != null ? margin : 4);
+        }
+        var m = margin != null ? margin : 4;
+        var left = box.x - m;
+        var right = box.x + box.w + m;
+        var top = box.y - m;
+        var bottom = box.y + box.h + m;
+        var minX = Math.min(x1, x2);
+        var maxX = Math.max(x1, x2);
+        var minY = Math.min(y1, y2);
+        var maxY = Math.max(y1, y2);
+        return !(maxX < left || minX > right || maxY < top || minY > bottom);
+    }
+
+    function pickChainClearX(leave, approach, hit, pathOpts) {
+        var pad = 18;
+        var stagger = pathOpts && pathOpts.routeStagger != null ? pathOpts.routeStagger : 14;
+        var lane = pathOpts && pathOpts.laneIndex != null ? pathOpts.laneIndex : 0;
+        var preferLeft = pathOpts && pathOpts.preferLeft;
+        var cx = hit.cx != null ? hit.cx : (hit.x + hit.w / 2);
+        if (preferLeft == null) {
+            preferLeft = ((leave.x + approach.x) * 0.5) <= cx;
+            // Каскад к боковому входу — предпочитаем сторону входа.
+            if (Math.abs(approach.x - leave.x) > 8) preferLeft = approach.x <= cx;
+        }
+        var clearX = preferLeft ? (hit.x - pad - stagger - lane * 4) : (hit.x + hit.w + pad + stagger + lane * 4);
+        var svgW = (pathOpts && pathOpts.svgWidth) || 800;
+        return Math.max(10, Math.min(svgW - 10, clearX));
+    }
+
+    /**
+     * Каскад сплиттер→сплиттер: короткий вынос с портов + обход кросса/карточек сбоку,
+     * без прямой «прострельной» линии через панель кросса.
+     */
     function buildSplitterChainPath(srcPt, tgtPt, srcOrient, tgtOrient, srcMirrored, tgtMirrored, pathOpts) {
         if (!srcPt || !tgtPt) return '';
+        pathOpts = pathOpts || {};
         srcOrient = srcOrient || 'horizontal';
         tgtOrient = tgtOrient || 'horizontal';
-        var preferHV = (srcOrient === 'vertical' || tgtOrient === 'vertical') ? 'vh' : 'hv';
-        return buildSplitterSchematicPath(srcPt.x, srcPt.y, tgtPt.x, tgtPt.y, pathOpts, preferHV);
+        var lane = pathOpts.laneIndex != null ? pathOpts.laneIndex : 0;
+        var stemSrc = pathOpts.stemStart != null ? Math.max(14, pathOpts.stemStart * 0.75) : (18 + lane * 6);
+        var stemTgt = pathOpts.stemEnd != null ? Math.max(12, pathOpts.stemEnd) : (16 + lane * 3);
+
+        var srcExit = chainPortOutward('output', srcOrient, srcMirrored);
+        var tgtOut = chainPortOutward('input', tgtOrient, tgtMirrored);
+        var leave = {
+            x: srcPt.x + srcExit.x * stemSrc,
+            y: srcPt.y + srcExit.y * stemSrc
+        };
+        var approach = {
+            x: tgtPt.x + tgtOut.x * stemTgt,
+            y: tgtPt.y + tgtOut.y * stemTgt
+        };
+
+        var hitBoxes = [];
+        if (pathOpts.crossPanel) hitBoxes.push(pathOpts.crossPanel);
+        if (pathOpts.avoidBox) hitBoxes.push(pathOpts.avoidBox);
+        if (pathOpts.targetAvoidBox) hitBoxes.push(pathOpts.targetAvoidBox);
+        if (pathOpts.obstacles && pathOpts.obstacles.length) {
+            for (var oi = 0; oi < pathOpts.obstacles.length; oi++) {
+                var obs = pathOpts.obstacles[oi];
+                if (!obs) continue;
+                var dup = false;
+                for (var di = 0; di < hitBoxes.length; di++) {
+                    var b = hitBoxes[di];
+                    if (b && obs.cx != null && b.cx != null &&
+                        Math.abs(obs.cx - b.cx) < 2 && Math.abs(obs.cy - b.cy) < 2) {
+                        dup = true;
+                        break;
+                    }
+                }
+                if (!dup) hitBoxes.push(obs);
+            }
+        }
+
+        function portsStraddleBox(box) {
+            if (!box) return false;
+            var above = Math.min(srcPt.y, tgtPt.y) < box.y + 4;
+            var below = Math.max(srcPt.y, tgtPt.y) > box.y + box.h - 4;
+            var leftOf = Math.min(srcPt.x, tgtPt.x) < box.x + 4;
+            var rightOf = Math.max(srcPt.x, tgtPt.x) > box.x + box.w - 4;
+            var overlapX = Math.min(srcPt.x, tgtPt.x) <= box.x + box.w + 8 &&
+                Math.max(srcPt.x, tgtPt.x) >= box.x - 8;
+            var overlapY = Math.min(srcPt.y, tgtPt.y) <= box.y + box.h + 8 &&
+                Math.max(srcPt.y, tgtPt.y) >= box.y - 8;
+            return (above && below && overlapX) || (leftOf && rightOf && overlapY);
+        }
+
+        var hit = null;
+        if (pathOpts.crossPanel && (segmentHitsBox(leave.x, leave.y, approach.x, approach.y, pathOpts.crossPanel, 4) ||
+            portsStraddleBox(pathOpts.crossPanel))) {
+            hit = pathOpts.crossPanel;
+        }
+        if (!hit) {
+            for (var hi = 0; hi < hitBoxes.length; hi++) {
+                if (hitBoxes[hi].kind === 'cross') continue;
+                if (segmentHitsBox(leave.x, leave.y, approach.x, approach.y, hitBoxes[hi], 4) ||
+                    portsStraddleBox(hitBoxes[hi])) {
+                    hit = hitBoxes[hi];
+                    break;
+                }
+            }
+        }
+
+        // Вынос/подход не должны стартовать внутри препятствия.
+        if (hit) {
+            var gap = 12;
+            if (leave.y > hit.y - 2 && leave.y < hit.y + hit.h + 2) {
+                if (srcExit.y > 0 || srcPt.y <= hit.cy) leave.y = Math.min(leave.y, hit.y - gap);
+                else leave.y = Math.max(leave.y, hit.y + hit.h + gap);
+            }
+            if (leave.x > hit.x - 2 && leave.x < hit.x + hit.w + 2 && Math.abs(srcExit.x) > 0) {
+                if (srcExit.x > 0 || srcPt.x <= hit.cx) leave.x = Math.min(leave.x, hit.x - gap);
+                else leave.x = Math.max(leave.x, hit.x + hit.w + gap);
+            }
+            if (approach.y > hit.y - 2 && approach.y < hit.y + hit.h + 2) {
+                if (tgtOut.y > 0 || tgtPt.y >= hit.cy) approach.y = Math.max(approach.y, hit.y + hit.h + gap);
+                else approach.y = Math.min(approach.y, hit.y - gap);
+            }
+            if (approach.x > hit.x - 2 && approach.x < hit.x + hit.w + 2 && Math.abs(tgtOut.x) > 0) {
+                if (tgtOut.x > 0 || tgtPt.x >= hit.cx) approach.x = Math.max(approach.x, hit.x + hit.w + gap);
+                else approach.x = Math.min(approach.x, hit.x - gap);
+            }
+        }
+
+        var pts = [{ x: srcPt.x, y: srcPt.y }, leave];
+
+        if (hit) {
+            var clearX = pickChainClearX(leave, approach, hit, pathOpts);
+            if (leave.x <= hit.x - 8 || leave.x >= hit.x + hit.w + 8) {
+                clearX = leave.x;
+            }
+            if (Math.abs(leave.x - clearX) > 1) {
+                pts.push({ x: clearX, y: leave.y });
+            }
+            if (Math.abs(approach.y - leave.y) > 1) {
+                pts.push({ x: clearX, y: approach.y });
+            }
+            if (Math.abs(approach.x - clearX) > 1) {
+                pts.push({ x: approach.x, y: approach.y });
+            } else if (Math.abs(pts[pts.length - 1].x - approach.x) > 0.5 ||
+                Math.abs(pts[pts.length - 1].y - approach.y) > 0.5) {
+                pts.push(approach);
+            }
+        } else if (Math.abs(leave.x - approach.x) > 1 && Math.abs(leave.y - approach.y) > 1) {
+            if (Math.abs(srcExit.y) >= Math.abs(srcExit.x)) {
+                pts.push({ x: leave.x, y: approach.y });
+            } else {
+                pts.push({ x: approach.x, y: leave.y });
+            }
+            pts.push(approach);
+        } else {
+            pts.push(approach);
+        }
+
+        var last = pts[pts.length - 1];
+        if (Math.abs(last.x - approach.x) > 0.5 || Math.abs(last.y - approach.y) > 0.5) {
+            pts.push(approach);
+        }
+        pts.push({ x: tgtPt.x, y: tgtPt.y });
+        pts = dedupeChainPts(pts);
+        return buildOrthogonalPts(pts);
     }
 
     function buildSplitterConnectionPath(x1, y1, x2, y2, fiberIsLeft, pathOpts, routeOpts) {
@@ -646,10 +867,13 @@
             svgHeight: pathOpts.svgHeight,
             hostObj: pathOpts.hostObj,
             obstacles: pathOpts.obstacles,
+            crossPanel: meta.crossPanel != null ? meta.crossPanel : pathOpts.crossPanel,
             avoidBox: meta.avoidBox != null ? meta.avoidBox : pathOpts.avoidBox,
+            targetAvoidBox: meta.targetAvoidBox != null ? meta.targetAvoidBox : pathOpts.targetAvoidBox,
             routeSeed: meta.routeSeed,
             routeStagger: meta.routeStagger,
-            preferLeft: meta.preferLeft,
+            preferLeft: meta.preferLeft != null ? meta.preferLeft : pathOpts.preferLeft,
+            preferAbove: meta.preferAbove != null ? meta.preferAbove : pathOpts.preferAbove,
             stemStart: meta.stemStart != null ? meta.stemStart : pathOpts.stemStart,
             stemEnd: meta.stemEnd != null ? meta.stemEnd : pathOpts.stemEnd,
             laneIndex: meta.laneIndex != null ? meta.laneIndex : pathOpts.laneIndex,
@@ -783,6 +1007,12 @@
         if (!pathOpts.obstacles && pathOpts.hostObj) {
             pathOpts.obstacles = getSchemeSplitterObstacles(pathOpts.hostObj, svgW, svgH);
         }
+        if (!pathOpts.crossPanel) {
+            pathOpts.crossPanel = getCrossPanelObstacleFromSvg(svg);
+            if (pathOpts.crossPanel) {
+                pathOpts.obstacles = (pathOpts.obstacles || []).concat([pathOpts.crossPanel]);
+            }
+        }
         pathOpts.avoidBox = avoidBox;
         var topUpdateEntries = [];
         var leftUpdateEntries = [];
@@ -906,6 +1136,43 @@
             var srcRec = findInHost(hostObj, srcId);
             var tgtRec2 = findInHost(hostObj, tgtId);
             var chainMeta = buildRouteMeta(srcId, 'chain', oi, srcPort.x, srcPort.x);
+            var listDrag = getList(hostObj);
+            if (srcRec) {
+                var srcBoxDrag = computeSchemeSplitterBox(
+                    parseInt(srcRec.splitRatio, 10) || DEFAULT_RATIO,
+                    getSchemeOrientation(srcRec)
+                );
+                var srcCx = srcId === splitterId && cx != null ? cx : (srcRec.schemeX != null ? srcRec.schemeX : srcPort.x);
+                var srcCy = srcId === splitterId && cy != null ? cy : (srcRec.schemeY != null ? srcRec.schemeY : srcPort.y);
+                if (srcId !== splitterId) {
+                    var srcIdxDrag = listDrag.indexOf(srcRec);
+                    var srcDefDrag = defaultPosition(svgW, svgH, srcIdxDrag >= 0 ? srcIdxDrag : 0, listDrag.length);
+                    srcCx = srcRec.schemeX != null ? srcRec.schemeX : srcDefDrag.x;
+                    srcCy = srcRec.schemeY != null ? srcRec.schemeY : srcDefDrag.y;
+                }
+                chainMeta.avoidBox = splitterAvoidBox(srcCx, srcCy, srcBoxDrag, 8);
+            }
+            if (tgtRec2) {
+                var tgtBoxDrag = computeSchemeSplitterBox(
+                    parseInt(tgtRec2.splitRatio, 10) || DEFAULT_RATIO,
+                    getSchemeOrientation(tgtRec2)
+                );
+                var tgtCx;
+                var tgtCy;
+                if (tgtId === splitterId && cx != null && cy != null) {
+                    tgtCx = cx;
+                    tgtCy = cy;
+                } else {
+                    var tgtIdxDrag = listDrag.indexOf(tgtRec2);
+                    var tgtDefDrag = defaultPosition(svgW, svgH, tgtIdxDrag >= 0 ? tgtIdxDrag : 0, listDrag.length);
+                    tgtCx = tgtRec2.schemeX != null ? tgtRec2.schemeX : tgtDefDrag.x;
+                    tgtCy = tgtRec2.schemeY != null ? tgtRec2.schemeY : tgtDefDrag.y;
+                }
+                chainMeta.targetAvoidBox = splitterAvoidBox(tgtCx, tgtCy, tgtBoxDrag, 8);
+            }
+            chainMeta.preferLeft = tgtPort.x <= ((pathOpts.crossPanel && pathOpts.crossPanel.cx != null)
+                ? pathOpts.crossPanel.cx
+                : ((srcPort.x + tgtPort.x) * 0.5));
             var chainOpts = withRouteMeta(pathOpts, chainMeta);
             var d = buildSplitterChainPath(
                 srcPort, tgtPort,
@@ -1483,6 +1750,12 @@
         var zoneStroke = isDark ? 'rgba(251,146,60,0.12)' : 'rgba(234,88,12,0.15)';
         var linkColor = isDark ? '#fb923c' : '#f97316';
         var linkShadow = isDark ? '#9a3412' : '#c2410c';
+        var obstacles = getSchemeSplitterObstacles(hostObj, svgW, svgH);
+        var crossPanel = null;
+        if (opts.crossPanelLayout) {
+            crossPanel = crossLayoutToObstacle(opts.crossPanelLayout, 12);
+            if (crossPanel) obstacles = obstacles.concat([crossPanel]);
+        }
         var pathOpts = {
             buildConnectionPath: opts.buildConnectionPath,
             buildBendPath: opts.buildBendPath,
@@ -1492,7 +1765,8 @@
             svgWidth: svgW,
             svgHeight: svgH,
             hostObj: hostObj,
-            obstacles: getSchemeSplitterObstacles(hostObj, svgW, svgH)
+            obstacles: obstacles,
+            crossPanel: crossPanel
         };
         var renderOpts = {
             isEditMode: opts.isEditMode,
@@ -1527,6 +1801,12 @@
                 var box = computeSchemeSplitterBox(ratio, orient);
                 var hasIn = !!(rec.inputCableId && rec.inputFiberNumber != null);
                 if (hasIn) {
+                    var cascadeInCollect = false;
+                    if (typeof global.getEmbeddedSplitterInputSource === 'function') {
+                        var inSrcCollect = global.getEmbeddedSplitterInputSource(hostObj, rec);
+                        if (inSrcCollect && inSrcCollect.type === 'splitter') cascadeInCollect = true;
+                    }
+                    if (!cascadeInCollect) {
                     var fpos = opts.fiberPositions.get(fiberKey(rec.inputCableId, rec.inputFiberNumber));
                     if (fpos) {
                         var inPt = schemeSplitterPortPos(x, y, box, 'input', 0, ratio, isMirrored, isFlipV, orient);
@@ -1551,6 +1831,7 @@
                             if (fpos.isLeft) leftApproachEntries.push(inSide);
                             else rightApproachEntries.push(inSide);
                         }
+                    }
                     }
                 }
                 var outs = rec.outputConnections || [];
@@ -1738,6 +2019,14 @@
             if (opts.fiberPositions && pathOpts.buildConnectionPath) {
                 var badgeW = pathOpts.badgeW || 22;
                 if (hasIn) {
+                    var cascadeInputOnly = false;
+                    if (typeof global.getEmbeddedSplitterInputSource === 'function') {
+                        var inSrcCheck = global.getEmbeddedSplitterInputSource(hostObj, rec);
+                        // Каскад parent-out → child-in: линия к feeder-жиле не нужна,
+                        // соединение рисуется отдельно как chain-link.
+                        if (inSrcCheck && inSrcCheck.type === 'splitter') cascadeInputOnly = true;
+                    }
+                    if (!cascadeInputOnly) {
                     var fkey = fiberKey(rec.inputCableId, rec.inputFiberNumber);
                     var fpos = opts.fiberPositions.get(fkey);
                     if (fpos) {
@@ -1785,6 +2074,7 @@
                             label: inLabel,
                             extra: ' data-fiber-exit-x="' + fexit.x + '" data-fiber-exit-y="' + fexit.y + '" data-fiber-is-left="' + (fpos.isLeft ? '1' : '0') + '" data-fiber-is-top="' + (fpos.isTop ? '1' : '0') + '" data-cable-id="' + esc(rec.inputCableId) + '" data-fiber-number="' + rec.inputFiberNumber + '"'
                         }, linkColor, linkShadow, renderOpts);
+                    }
                     }
                 }
                 var hostUid = typeof global.getObjectUniqueId === 'function' ? global.getObjectUniqueId(hostObj) : null;
@@ -1859,6 +2149,10 @@
                     var tgtPt = schemeSplitterPortPos(tx, ty, tgtBox, 'input', 0, tgtRatio, isSchemeMirrored(tgtRec), isSchemeFlipVertical(tgtRec), getSchemeOrientation(tgtRec));
                     var chainMeta = buildRouteMeta(rec.id, 'chain', si, srcPt.x, x);
                     chainMeta.avoidBox = cardAvoidBox;
+                    chainMeta.targetAvoidBox = splitterAvoidBox(tx, ty, tgtBox, 8);
+                    chainMeta.preferLeft = tgtPt.x <= ((pathOpts.crossPanel && pathOpts.crossPanel.cx != null)
+                        ? pathOpts.crossPanel.cx
+                        : ((srcPt.x + tgtPt.x) * 0.5));
                     var spPathD = buildSplitterChainPath(
                         srcPt, tgtPt,
                         getSchemeOrientation(rec),
@@ -1874,7 +2168,7 @@
                         id: esc(rec.id),
                         outputIndex: si,
                         label: spLabel,
-                        extra: ' data-output-index="' + si + '" data-target-splitter-id="' + esc(spOut.splitterId) + '"'
+                        extra: ' data-output-index="' + si + '" data-target-splitter-id="' + esc(spOut.splitterId) + '" data-link-chain="1"'
                     }, linkColor, linkShadow, renderOpts);
                 }
             }

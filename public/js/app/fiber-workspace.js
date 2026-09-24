@@ -1063,7 +1063,8 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             pathMidpoint: fiberSchemePathMidpoint,
             nodeR: nodeR,
             badgeW: badgeW,
-            badgeH: badgeH
+            badgeH: badgeH,
+            crossPanelLayout: crossPanelLayout
         });
     }
 
@@ -2767,6 +2768,7 @@ function buildFiberSchemeAroundObstaclesPath(x1, y1, x2, y2, obstacles, opts) {
 if (typeof window !== 'undefined') {
     window.buildFiberSchemeAroundObstaclesPath = buildFiberSchemeAroundObstaclesPath;
     window.fiberSchemeStableHash01 = fiberSchemeStableHash01;
+    window.routeNeedsAroundObstacle = routeNeedsAroundObstacle;
 }
 
 /** Плавный ортогональный путь с кубическими скруглениями углов. */
@@ -3952,6 +3954,15 @@ function buildCrossSchemePanelSvg(crossLayout, fiberPorts, fiberPositions, schem
         if (typeof getFiberSignalSource === 'function') {
             var signalHost = hostObj;
             var signalFiber = primaryAssign || null;
+            if (!signalFiber && hasSplitterOut && typeof resolveSplitterCrossPortLogicalFiber === 'function') {
+                var logicalSpFiber = resolveSplitterCrossPortLogicalFiber(hostObj, portNum);
+                if (logicalSpFiber && logicalSpFiber.cableId && logicalSpFiber.fiberNumber != null) {
+                    signalFiber = {
+                        cableId: logicalSpFiber.cableId,
+                        fiberNumber: logicalSpFiber.fiberNumber
+                    };
+                }
+            }
             if (!signalFiber && isPatched && patchInfo && typeof resolveCrossPortPatchHost === 'function' &&
                 typeof getCrossPortFiberKeys === 'function') {
                 var mateForSrc = resolveCrossPortPatchHost(patchInfo.crossId);
@@ -3970,6 +3981,18 @@ function buildCrossSchemePanelSvg(crossLayout, fiberPorts, fiberPositions, schem
             }
             if (signalFiber && signalHost) {
                 var portSignalSrc = getFiberSignalSource(signalHost, signalFiber.cableId, signalFiber.fiberNumber);
+                if (!portSignalSrc && hasSplitterOut && spOnPort) {
+                    portSignalSrc = {
+                        kind: 'splitter',
+                        role: 'output',
+                        splitterName: spOnPort.splitterName,
+                        outputIndex: spOnPort.outputIndex,
+                        placeHostName: hostObj.properties.get('name') || '',
+                        placeHostType: hostObj.properties.get('type') || 'cross',
+                        hostName: hostObj.properties.get('name') || '',
+                        hostType: hostObj.properties.get('type') || 'cross'
+                    };
+                }
                 if (portSignalSrc) {
                     if (typeof formatFiberSignalSourceSchemeLines === 'function') {
                         crossPortSignalLines = formatFiberSignalSourceSchemeLines(portSignalSrc);
@@ -3978,6 +4001,23 @@ function buildCrossSchemePanelSvg(crossLayout, fiberPorts, fiberPositions, schem
                         ? formatFiberSignalSourceText(portSignalSrc) : '';
                     if (portSrcText) crossPortSignalHint = ' · ' + portSrcText;
                 }
+            } else if (hasSplitterOut && spOnPort) {
+                var spOnlySrc = {
+                    kind: 'splitter',
+                    role: 'output',
+                    splitterName: spOnPort.splitterName,
+                    outputIndex: spOnPort.outputIndex,
+                    placeHostName: hostObj.properties.get('name') || '',
+                    placeHostType: hostObj.properties.get('type') || 'cross',
+                    hostName: hostObj.properties.get('name') || '',
+                    hostType: hostObj.properties.get('type') || 'cross'
+                };
+                if (typeof formatFiberSignalSourceSchemeLines === 'function') {
+                    crossPortSignalLines = formatFiberSignalSourceSchemeLines(spOnlySrc);
+                }
+                var spOnlyText = typeof formatFiberSignalSourceText === 'function'
+                    ? formatFiberSignalSourceText(spOnlySrc) : '';
+                if (spOnlyText) crossPortSignalHint = ' · ' + spOnlyText;
             }
         }
         tooltip += crossPortSignalHint;

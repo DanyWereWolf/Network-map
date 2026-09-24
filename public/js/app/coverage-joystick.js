@@ -142,19 +142,76 @@
 
         html += '<div class="coverage-joystick-hint" id="' + p + 'Hint">';
         html += shape === 'sector'
-            ? 'Тяните ручку — направление и дальность. Края сектора — угол обзора. Колёсико — угол.'
-            : 'Тяните ручку от центра — радиус зоны.';
+            ? 'Ручка / поля ниже. Края и колёсико — угол.'
+            : 'Ручка или поле ниже — радиус.';
         html += '</div>';
         html += '</div>';
 
-        html += '<div class="coverage-joystick-readout" id="' + p + 'Readout" aria-live="polite"></div>';
+        html += '<div class="coverage-joystick-fields" id="' + p + 'Fields">';
+        html += buildCoverageJoystickFieldHtml({
+            id: p + 'Azimuth',
+            fieldClass: 'coverage-joystick-field--azimuth',
+            label: 'Азимут',
+            value: az,
+            min: 0,
+            max: 359,
+            step: 1,
+            unit: '°',
+            inputmode: 'numeric',
+            ariaLabel: 'Азимут, градусы'
+        });
+        html += buildCoverageJoystickFieldHtml({
+            id: p + 'Range',
+            fieldClass: 'coverage-joystick-field--range',
+            label: rangeLabel,
+            labelId: p + 'RangeLabel',
+            value: range,
+            min: rangeMin,
+            max: rangeMax,
+            step: rangeStep,
+            unit: unit,
+            inputmode: 'decimal',
+            dataLabel: rangeLabel,
+            ariaLabel: rangeLabel + ', ' + unit
+        });
+        html += buildCoverageJoystickFieldHtml({
+            id: p + 'Angle',
+            fieldClass: 'coverage-joystick-field--angle',
+            label: 'Угол',
+            value: angle,
+            min: 5,
+            max: 360,
+            step: 5,
+            unit: '°',
+            inputmode: 'numeric',
+            ariaLabel: 'Угол сектора, градусы'
+        });
+        html += '</div>';
 
-        // Hidden fields keep existing save/handlers wiring stable
-        html += '<input type="hidden" id="' + p + 'Azimuth" value="' + az + '">';
-        html += '<input type="hidden" id="' + p + 'Angle" value="' + angle + '">';
-        html += '<input type="hidden" id="' + p + 'Range" value="' + range + '" data-label="' + escapeAttr(rangeLabel) + '">';
+        html += '<div class="coverage-joystick-readout visually-hidden" id="' + p + 'Readout" aria-live="polite"></div>';
 
         html += '</div>';
+        return html;
+    }
+
+    function buildCoverageJoystickFieldHtml(cfg) {
+        var html = '<div class="coverage-joystick-field ' + (cfg.fieldClass || '') + '">';
+        html += '<label class="coverage-joystick-field__label"' + (cfg.labelId ? ' id="' + cfg.labelId + '"' : '') +
+            ' for="' + cfg.id + '">' + escapeAttr(cfg.label) +
+            ' <span class="coverage-joystick-field__unit">' + escapeAttr(cfg.unit) + '</span></label>';
+        html += '<div class="coverage-joystick-stepper">';
+        html += '<button type="button" class="coverage-joystick-stepper__btn" data-step-for="' + cfg.id + '" data-dir="-1" tabindex="-1" title="Уменьшить" aria-label="Уменьшить ' + escapeAttr(cfg.label) + '">';
+        html += '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M5 12h14"/></svg>';
+        html += '</button>';
+        html += '<input type="number" class="form-input coverage-joystick-field__input" id="' + cfg.id + '"';
+        html += ' min="' + cfg.min + '" max="' + cfg.max + '" step="' + cfg.step + '" value="' + cfg.value + '"';
+        html += ' inputmode="' + (cfg.inputmode || 'numeric') + '" aria-label="' + escapeAttr(cfg.ariaLabel || cfg.label) + '"';
+        if (cfg.dataLabel) html += ' data-label="' + escapeAttr(cfg.dataLabel) + '"';
+        html += '>';
+        html += '<button type="button" class="coverage-joystick-stepper__btn" data-step-for="' + cfg.id + '" data-dir="1" tabindex="-1" title="Увеличить" aria-label="Увеличить ' + escapeAttr(cfg.label) + '">';
+        html += '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+        html += '</button>';
+        html += '</div></div>';
         return html;
     }
 
@@ -243,8 +300,8 @@
         if (root) root.setAttribute('data-shape', state.shape);
         if (hint) {
             hint.textContent = state.shape === 'sector'
-                ? 'Тяните ручку — направление и дальность. Края сектора — угол обзора. Колёсико — угол.'
-                : 'Тяните ручку от центра — радиус зоны.';
+                ? 'Ручка / поля ниже. Края и колёсико — угол.'
+                : 'Ручка или поле ниже — радиус.';
         }
         if (readout) {
             if (state.shape === 'sector') {
@@ -261,9 +318,29 @@
         var azEl = document.getElementById(p + 'Azimuth');
         var angEl = document.getElementById(p + 'Angle');
         var rngEl = document.getElementById(p + 'Range');
-        if (azEl) azEl.value = String(state.azimuth);
-        if (angEl) angEl.value = String(state.angle);
-        if (rngEl) rngEl.value = String(state.range);
+        var rangeLabelEl = document.getElementById(p + 'RangeLabel');
+        var fields = document.getElementById(p + 'Fields');
+        if (azEl && document.activeElement !== azEl) azEl.value = String(state.azimuth);
+        if (angEl && document.activeElement !== angEl) angEl.value = String(state.angle);
+        if (rngEl && document.activeElement !== rngEl) {
+            rngEl.value = String(state.range);
+            if (state.rangeLabel) rngEl.setAttribute('data-label', state.rangeLabel);
+        }
+        if (rangeLabelEl) {
+            var labelText = state.shape === 'circle' ? 'Радиус' : (state.rangeLabel || 'Дальность');
+            var unitSpan = rangeLabelEl.querySelector('.coverage-joystick-field__unit');
+            var unitText = unitSpan ? unitSpan.textContent : (state.rangeUnit || '');
+            rangeLabelEl.textContent = '';
+            rangeLabelEl.appendChild(document.createTextNode(labelText + ' '));
+            var unitEl = document.createElement('span');
+            unitEl.className = 'coverage-joystick-field__unit';
+            unitEl.textContent = unitText;
+            rangeLabelEl.appendChild(unitEl);
+        }
+        if (fields) {
+            fields.classList.toggle('coverage-joystick-fields--circle', state.shape === 'circle');
+            fields.classList.toggle('coverage-joystick-fields--sector', state.shape === 'sector');
+        }
     }
 
     function readStateFromDom(prefix) {
@@ -406,6 +483,177 @@
             updateVisual(state);
             emit();
         }
+
+        function applyFromAzimuthInput(raw, finalize) {
+            var n = parseFloat(raw);
+            if (isNaN(n)) {
+                if (finalize) {
+                    state.azimuth = normalizeAzimuth(state.azimuth);
+                    updateVisual(state);
+                    emit();
+                }
+                return;
+            }
+            state.azimuth = finalize ? normalizeAzimuth(n) : normalizeAzimuth(Math.round(n));
+            updateVisual(state);
+            emit();
+        }
+
+        function applyFromAngleInput(raw, finalize) {
+            var n = parseFloat(raw);
+            if (isNaN(n)) {
+                if (finalize) {
+                    state.angle = snapAngle(state.angle);
+                    updateVisual(state);
+                    emit();
+                }
+                return;
+            }
+            state.angle = finalize ? snapAngle(n) : clamp(Math.round(n), 5, 360);
+            updateVisual(state);
+            emit();
+        }
+
+        function applyFromRangeInput(raw, finalize) {
+            var n = parseFloat(String(raw).replace(',', '.'));
+            if (isNaN(n)) {
+                if (finalize) {
+                    state.range = clamp(state.range, state.rangeMin, state.rangeMax);
+                    updateVisual(state);
+                    emit();
+                }
+                return;
+            }
+            if (finalize && state.rangeStep > 0) {
+                n = Math.round(n / state.rangeStep) * state.rangeStep;
+            }
+            state.range = clamp(n, state.rangeMin, state.rangeMax);
+            updateVisual(state);
+            emit();
+        }
+
+        function bindNumberField(el, onInput, onCommit) {
+            if (!el || el._covJoyFieldBound) return;
+            el._covJoyFieldBound = true;
+            el.addEventListener('pointerdown', function(e) { e.stopPropagation(); });
+            el.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+            el.addEventListener('click', function(e) { e.stopPropagation(); });
+            el.addEventListener('keydown', function(e) {
+                e.stopPropagation();
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    onCommit(el.value);
+                    el.blur();
+                }
+            });
+            el.addEventListener('input', function() { onInput(el.value); });
+            el.addEventListener('change', function() { onCommit(el.value); });
+            el.addEventListener('blur', function() { onCommit(el.value); });
+        }
+
+        var azInput = document.getElementById(prefix + 'Azimuth');
+        var angInput = document.getElementById(prefix + 'Angle');
+        var rngInput = document.getElementById(prefix + 'Range');
+        bindNumberField(azInput,
+            function(v) { applyFromAzimuthInput(v, false); },
+            function(v) { applyFromAzimuthInput(v, true); }
+        );
+        bindNumberField(angInput,
+            function(v) { applyFromAngleInput(v, false); },
+            function(v) { applyFromAngleInput(v, true); }
+        );
+        bindNumberField(rngInput,
+            function(v) { applyFromRangeInput(v, false); },
+            function(v) { applyFromRangeInput(v, true); }
+        );
+
+        function stepFieldByDir(inputId, dir) {
+            if (inputId === prefix + 'Azimuth') {
+                state.azimuth = normalizeAzimuth(state.azimuth + dir);
+                updateVisual(state);
+                emit();
+                return;
+            }
+            if (inputId === prefix + 'Angle') {
+                state.angle = snapAngle(state.angle + dir * 5);
+                updateVisual(state);
+                emit();
+                return;
+            }
+            if (inputId === prefix + 'Range') {
+                var step = state.rangeStep > 0 ? state.rangeStep : 1;
+                var next = state.range + dir * step;
+                if (step >= 1) next = Math.round(next / step) * step;
+                else next = Math.round(next / step) * step;
+                // Avoid float noise for 0.1 km steps
+                next = Math.round(next * 1000) / 1000;
+                state.range = clamp(next, state.rangeMin, state.rangeMax);
+                updateVisual(state);
+                emit();
+            }
+        }
+
+        function bindStepperButtons() {
+            if (!root || root._covJoyStepperBound) return;
+            root._covJoyStepperBound = true;
+            var holdTimer = null;
+            var holdInterval = null;
+            var activeBtn = null;
+
+            function clearHold() {
+                if (holdTimer) {
+                    clearTimeout(holdTimer);
+                    holdTimer = null;
+                }
+                if (holdInterval) {
+                    clearInterval(holdInterval);
+                    holdInterval = null;
+                }
+                if (activeBtn) {
+                    activeBtn.classList.remove('is-active');
+                    activeBtn = null;
+                }
+            }
+
+            function startHold(btn, inputId, dir) {
+                clearHold();
+                activeBtn = btn;
+                btn.classList.add('is-active');
+                stepFieldByDir(inputId, dir);
+                holdTimer = setTimeout(function() {
+                    holdInterval = setInterval(function() {
+                        stepFieldByDir(inputId, dir);
+                    }, 70);
+                }, 380);
+            }
+
+            root.querySelectorAll('.coverage-joystick-stepper__btn').forEach(function(btn) {
+                btn.addEventListener('pointerdown', function(e) {
+                    if (e.button != null && e.button !== 0) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    var inputId = btn.getAttribute('data-step-for');
+                    var dir = parseInt(btn.getAttribute('data-dir'), 10) || 1;
+                    try { btn.setPointerCapture(e.pointerId); } catch (err) {}
+                    startHold(btn, inputId, dir);
+                });
+                btn.addEventListener('pointerup', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    clearHold();
+                    try { btn.releasePointerCapture(e.pointerId); } catch (err) {}
+                });
+                btn.addEventListener('pointercancel', clearHold);
+                btn.addEventListener('pointerleave', function() {
+                    if (activeBtn === btn) clearHold();
+                });
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                });
+            });
+        }
+        bindStepperButtons();
 
         svg.addEventListener('pointerdown', onPointerDown);
         svg.addEventListener('pointermove', onPointerMove);
