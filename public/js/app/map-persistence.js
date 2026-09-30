@@ -961,6 +961,15 @@ function loadData() {
                     window.FiberCableConfig.setOrgFiberMapStyle(s.fiberMapColor, s.fiberMapStrokeWidth, { applyAll: true });
                 } catch (eFiberMap) {}
             }
+            if (typeof applyOrgCoverageColorsFromSettings === 'function' || window.applyOrgCoverageColorsFromSettings) {
+                try {
+                    (window.applyOrgCoverageColorsFromSettings || applyOrgCoverageColorsFromSettings)(s, { applyAll: true });
+                } catch (eCov) {}
+            } else if (typeof applyOrgCoverageColors === 'function' || window.applyOrgCoverageColors) {
+                try {
+                    (window.applyOrgCoverageColors || applyOrgCoverageColors)(s, { applyAll: true });
+                } catch (eCov2) {}
+            }
         }).catch(function() {
             if (typeof withDeviceCatalogHydration === 'function') {
                 withDeviceCatalogHydration(function() {
@@ -1048,6 +1057,15 @@ function applyOrgDisplaySettings(settings) {
     if ((settings.fiberMapColor !== undefined || settings.fiberMapStrokeWidth !== undefined) &&
         window.FiberCableConfig && typeof window.FiberCableConfig.setOrgFiberMapStyle === 'function') {
         window.FiberCableConfig.setOrgFiberMapStyle(settings.fiberMapColor, settings.fiberMapStrokeWidth, { applyAll: true });
+    }
+    if (typeof applyOrgCoverageColorsFromSettings === 'function' || window.applyOrgCoverageColorsFromSettings) {
+        try {
+            (window.applyOrgCoverageColorsFromSettings || applyOrgCoverageColorsFromSettings)(settings, { applyAll: true });
+        } catch (eCov) {}
+    } else if (typeof applyOrgCoverageColors === 'function' || window.applyOrgCoverageColors) {
+        try {
+            (window.applyOrgCoverageColors || applyOrgCoverageColors)(settings, { applyAll: true });
+        } catch (eCov2) {}
     }
 }
 window.applyOrgDisplaySettings = applyOrgDisplaySettings;
@@ -2370,6 +2388,12 @@ function importData(data, opts, done) {
             if (typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization()) {
                 MapPerf.adoptExistingGeoObjects(objects);
             }
+            // Повторно применить LOD/фильтр уже после снятия bulk-флага —
+            // иначе объекты, добавленные в обход MapPerf, остаются видимыми.
+            try {
+                if (typeof applyMapFilter === 'function') applyMapFilter();
+                else if (typeof applyMapViewportUpdate === 'function') applyMapViewportUpdate();
+            } catch (eLodApply) {}
             if (typeof done === 'function') done(err || null);
         });
     }

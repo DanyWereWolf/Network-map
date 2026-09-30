@@ -208,7 +208,11 @@
     function cameraOnlineIndicator(online) {
         if (online !== true && online !== false) return '';
         var color = online ? '#22c55e' : '#94a3b8';
-        return '<circle cx="26.5" cy="5.5" r="4" fill="' + color + '" stroke="#ffffff" stroke-width="1.4"/>' +
+        var pulse = online
+            ? '<animate attributeName="r" values="4;5.2;4" dur="1.6s" repeatCount="indefinite"/>' +
+              '<animate attributeName="opacity" values="1;0.55;1" dur="1.6s" repeatCount="indefinite"/>'
+            : '';
+        return '<circle cx="26.5" cy="5.5" r="4" fill="' + color + '" stroke="#ffffff" stroke-width="1.4">' + pulse + '</circle>' +
             (online ? '<circle cx="26.5" cy="5.5" r="1.6" fill="#ffffff" opacity="0.45"/>' : '');
     }
 

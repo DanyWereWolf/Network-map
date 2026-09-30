@@ -524,6 +524,17 @@ function disconnectFiberFromOlt(sleeveObj, cableId, fiberNumber) {
         return;
     }
     var oltObj = objects.find(function(o) { return o.properties && o.properties.get('type') === 'olt' && o.properties.get('uniqueId') === conn.oltId; });
+    if (oltObj && !conn.incoming &&
+        typeof canDeleteOltFeederCableOnDisconnect === 'function' &&
+        canDeleteOltFeederCableOnDisconnect(oltObj, sleeveObj, cableId) &&
+        typeof deleteCableByUniqueId === 'function') {
+        removeOltConnectionLine(sleeveObj, cableId, fiberNumber);
+        deleteCableByUniqueId(cableId, { skipSync: false, deferMapRefresh: false });
+        savedFiberConnectionsScrollPos = getFiberSchemeScrollPos();
+        showObjectInfo(sleeveObj);
+        cleanupGponAssignmentsWithoutOlt();
+        return;
+    }
     if (conn.incoming && oltObj) {
         clearOltIncomingUplinkPort(oltObj);
         oltObj.properties.set('incomingFiber', null);

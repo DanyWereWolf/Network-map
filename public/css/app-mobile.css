@@ -14,9 +14,18 @@ html {
 }
 
 @media (max-width: 768px) {
-    /* Карта на всю высоту под шапкой — боковую панель на телефоне не показываем */
+    /* Карта на всю высоту под шапкой — боковые панели на телефоне не показываем */
     .container {
         flex-direction: column;
+    }
+
+    .edit-toolbar {
+        display: none !important;
+    }
+
+    .edit-tools-strip {
+        flex-wrap: nowrap;
+        overflow-x: auto;
     }
 
     .map-area-wrapper {
@@ -54,14 +63,15 @@ html {
         border-radius: 0;
     }
 
-    .sidebar {
+    .sidebar,
+    .info-dock {
         display: none !important;
     }
 
     .sidebar-toggle,
     #sidebarToggle,
-    .lofi-radio-dock,
-    #lofiRadioCard {
+    .info-dock-toggle,
+    #infoDockToggle {
         display: none !important;
     }
 

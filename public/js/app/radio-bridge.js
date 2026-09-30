@@ -2,11 +2,63 @@
  * Wi‑Fi радиомосты: точка-точка (P2P) и точка-многоточка (P2MP).
  */
 var RADIO_BRIDGE_LINE_COLOR = '#06b6d4';
+var RADIO_BRIDGE_COVERAGE_DEFAULT_COLOR = '#06b6d4';
+var RADIO_BRIDGE_COVERAGE_COLOR = RADIO_BRIDGE_COVERAGE_DEFAULT_COLOR;
 var RADIO_BRIDGE_COVERAGE_DEFAULT_KM = 3;
 var radioBridgeCoverageOverlays = [];
 var radioBridgeCoveragePulseEntries = [];
 var radioBridgeCoveragePulseAnim = null;
 var radioBridgeCoveragePulsePaused = false;
+
+function normalizeRadioBridgeCoverageHex(value) {
+    if (value == null || value === '') return RADIO_BRIDGE_COVERAGE_DEFAULT_COLOR;
+    var s = String(value).trim();
+    if (/^#[0-9A-Fa-f]{6}$/.test(s)) return s.toLowerCase();
+    if (/^#[0-9A-Fa-f]{3}$/.test(s)) {
+        return ('#' + s.charAt(1) + s.charAt(1) + s.charAt(2) + s.charAt(2) + s.charAt(3) + s.charAt(3)).toLowerCase();
+    }
+    return RADIO_BRIDGE_COVERAGE_DEFAULT_COLOR;
+}
+
+function getRadioBridgeCoverageColor() {
+    return RADIO_BRIDGE_COVERAGE_COLOR || RADIO_BRIDGE_COVERAGE_DEFAULT_COLOR;
+}
+
+function applyRadioBridgeCoverageColorToOverlays(color) {
+    var c = normalizeRadioBridgeCoverageHex(color != null ? color : getRadioBridgeCoverageColor());
+    function paint(overlay) {
+        if (!overlay || !overlay.options) return;
+        try {
+            overlay.options.set({ fillColor: c, strokeColor: c });
+        } catch (ePaint) {}
+    }
+    radioBridgeCoverageOverlays.forEach(paint);
+    radioBridgeCoveragePulseEntries.forEach(function(entry) {
+        paint(entry && entry.pulseOverlay);
+    });
+    if (!Array.isArray(objects)) return;
+    objects.forEach(function(rb) {
+        if (!rb || !rb.properties || rb.properties.get('type') !== 'radioBridge') return;
+        paint(rb.properties.get('coverageOverlay'));
+        var pulses = rb.properties.get('coveragePulseOverlays');
+        if (Array.isArray(pulses)) pulses.forEach(paint);
+    });
+}
+
+function setRadioBridgeCoverageColor(color, opts) {
+    opts = opts || {};
+    RADIO_BRIDGE_COVERAGE_COLOR = normalizeRadioBridgeCoverageHex(color);
+    if (opts.applyAll !== false) {
+        try {
+            applyRadioBridgeCoverageColorToOverlays(RADIO_BRIDGE_COVERAGE_COLOR);
+        } catch (eApply) {
+            if (typeof updateAllRadioBridgeCoverages === 'function') {
+                try { updateAllRadioBridgeCoverages(); } catch (eAll) {}
+            }
+        }
+    }
+    return RADIO_BRIDGE_COVERAGE_COLOR;
+}
 
 function parseCoverageKm(val, fallbackKm) {
     if (val === 0 || val === '0') return 0;
@@ -912,10 +964,11 @@ function addRadioBridgeCoveragePulse(rb) {
     if (!params) return;
     var initGeom = buildRadioBridgeCoveragePulseGeometry(params, 0.05);
     if (!initGeom) return;
+    var covColor = getRadioBridgeCoverageColor();
     var pulseStyle = {
-        fillColor: RADIO_BRIDGE_LINE_COLOR,
+        fillColor: covColor,
         fillOpacity: 0.2,
-        strokeColor: RADIO_BRIDGE_LINE_COLOR,
+        strokeColor: covColor,
         strokeWidth: 2,
         strokeOpacity: 0.45,
         zIndex: 91,
@@ -1017,9 +1070,9 @@ function updateRadioBridgeCoverage(rb) {
     var shape = rb.properties.get('coverageShape') || 'circle';
     var overlay;
     var style = {
-        fillColor: RADIO_BRIDGE_LINE_COLOR,
+        fillColor: getRadioBridgeCoverageColor(),
         fillOpacity: 0.12,
-        strokeColor: RADIO_BRIDGE_LINE_COLOR,
+        strokeColor: getRadioBridgeCoverageColor(),
         strokeWidth: 2,
         strokeOpacity: 0.45,
         zIndex: 90,
@@ -1047,6 +1100,10 @@ function updateAllRadioBridgeCoverages() {
     });
     radioBridgeCoverageOverlays = [];
     clearAllRadioBridgeCoveragePulses();
+    if (!Array.isArray(objects)) {
+        applyRadioBridgeCoverageVisibility();
+        return;
+    }
     objects.forEach(function(o) {
         if (o.properties && o.properties.get('type') === 'radioBridge') {
             o.properties.set('coverageOverlay', null);
@@ -2163,7 +2220,7 @@ function setupRadioBridgeCardHandlers() {
             rangeStep: 0.1,
             rangeUnit: 'км',
             rangeLabel: shape === 'sector' ? 'Длина луча' : 'Радиус',
-            accent: RADIO_BRIDGE_LINE_COLOR,
+            accent: getRadioBridgeCoverageColor(),
             hideCard: true,
             lockMap: true,
             restoreCard: true,
@@ -2359,3 +2416,10 @@ function setupRadioBridgeCardHandlers() {
         });
     });
 }
+
+window.getRadioBridgeCoverageColor = getRadioBridgeCoverageColor;
+window.setRadioBridgeCoverageColor = setRadioBridgeCoverageColor;
+window.updateRadioBridgeCoverage = updateRadioBridgeCoverage;
+window.updateAllRadioBridgeCoverages = updateAllRadioBridgeCoverages;
+window.applyRadioBridgeCoverageVisibility = applyRadioBridgeCoverageVisibility;
+window.removeRadioBridgeCoverage = removeRadioBridgeCoverage;

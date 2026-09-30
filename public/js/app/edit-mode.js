@@ -201,6 +201,7 @@ function updateUIForMode() {
         if (isEditMode) badge.removeAttribute('hidden');
         else badge.setAttribute('hidden', '');
     }
+    if (typeof syncEditToolbarVisibility === 'function') syncEditToolbarVisibility();
 
     if (myMap && myMap.container) {
         const mapEl = myMap.container.getElement();

@@ -537,7 +537,14 @@ function handleMapMouseMove(e) {
                 var t = snapObj.properties.get('type');
                 if (t !== 'cable' && t !== 'cableLabel') {
                     previewCoords = snapObj.geometry.getCoordinates();
+                    if (typeof AppMotion !== 'undefined' && AppMotion.showSnapHint) {
+                        try { AppMotion.showSnapHint(previewCoords, snapObj); } catch (eSnap) {}
+                    }
+                } else if (typeof AppMotion !== 'undefined' && AppMotion.hideSnapHint) {
+                    try { AppMotion.hideSnapHint(); } catch (eSnap2) {}
                 }
+            } else if (typeof AppMotion !== 'undefined' && AppMotion.hideSnapHint) {
+                try { AppMotion.hideSnapHint(); } catch (eSnap3) {}
             }
             updateCablePreview(cableSource, cableWaypoints, previewCoords);
         });

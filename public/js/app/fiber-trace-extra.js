@@ -143,40 +143,62 @@ function traceFromNodeSplitter(nodeObj, splitterId, outputIndex) {
     runFiberTraceWithLoading({
         title: 'Трассировка к узлу',
         subtitle: nodeName + ' · выход сплиттера ' + (outputIndex + 1)
-    }, function() {
-        var res = traceAllFiberPathsFromObject(hostIn.hostObj, hostIn.cableId, hostIn.fiberNumber);
-        if (res.error) {
-            failFiberTraceLoading('Ошибка трассировки: ' + res.error, false);
-            return;
-        }
-        if (!res.paths.length) {
-            failFiberTraceLoading('Путь не найден', true);
-            return;
-        }
-        var paths = res.paths.filter(function(p) { return pathReachesNodeViaSplitter(p, nodeUid, splitterId); });
-        if (!paths.length) paths = res.paths;
-        var bodyHtml = '<p class="trace-intro">Узел «' + escapeHtml(nodeName) + '» · сплиттер «' + escapeHtml(spName) + '», выход ' + (outputIndex + 1) + '</p>';
-        if (paths.length > 1 && window.FiberTrace && FiberTrace.renderPathsOverviewHtml) {
-            bodyHtml += FiberTrace.renderPathsOverviewHtml(paths);
-        }
-        var stepNum = 1;
-        for (var pi = 0; pi < paths.length; pi++) {
-            if (paths.length > 1 && pi > 0) {
-                bodyHtml += '<div class="trace-branch-separator" data-branch-index="' + pi + '">' + escapeHtml(FiberTrace.getPathEndpointLabel(paths[pi])) + '</div>';
+    }, function(ctl) {
+        return (async function() {
+            if (ctl && ctl.setProgress) ctl.setProgress('Строим маршрут…', 'Обходим кабели и сварки', 20);
+            if (ctl && ctl.yield) await ctl.yield(16);
+            if (ctl && ctl.isCancelled && ctl.isCancelled()) return;
+            var res = traceAllFiberPathsFromObject(hostIn.hostObj, hostIn.cableId, hostIn.fiberNumber);
+            if (res.error) {
+                failFiberTraceLoading('Ошибка трассировки: ' + res.error, false);
+                return;
             }
-            var pathHtml = renderOnePathToTraceHtml(paths[pi], stepNum);
-            bodyHtml += '<div class="trace-branch-block" data-branch-index="' + pi + '">' + pathHtml.html + '</div>';
-            stepNum = pathHtml.nextStepNumber;
-        }
-        bodyHtml = (typeof appendFiberTraceExtrasHtml === 'function')
-            ? appendFiberTraceExtrasHtml(bodyHtml, paths)
-            : bodyHtml + ((window.FiberTrace && FiberTrace.buildTraceActionsHtml) ? FiberTrace.buildTraceActionsHtml() : '');
-        openFiberTraceModal({
-            title: 'Трассировка к узлу',
-            subtitle: nodeName + ' · выход сплиттера ' + (outputIndex + 1),
-            bodyHtml: bodyHtml,
-            paths: paths
-        });
+            if (!res.paths.length) {
+                failFiberTraceLoading('Путь не найден', true);
+                return;
+            }
+            if (ctl && ctl.setProgress) ctl.setProgress('Собираем ветки…', 'Готовим шаги маршрута', 50);
+            if (ctl && ctl.yield) await ctl.yield(16);
+            if (ctl && ctl.isCancelled && ctl.isCancelled()) return;
+            var paths = res.paths.filter(function(p) { return pathReachesNodeViaSplitter(p, nodeUid, splitterId); });
+            if (!paths.length) paths = res.paths;
+            var bodyHtml = '<p class="trace-intro">Узел «' + escapeHtml(nodeName) + '» · сплиттер «' + escapeHtml(spName) + '», выход ' + (outputIndex + 1) + '</p>';
+            if (paths.length > 1 && window.FiberTrace && FiberTrace.renderPathsOverviewHtml) {
+                bodyHtml += FiberTrace.renderPathsOverviewHtml(paths);
+            }
+            var stepNum = 1;
+            for (var pi = 0; pi < paths.length; pi++) {
+                if (ctl && ctl.isCancelled && ctl.isCancelled()) return;
+                if (paths.length > 1 && pi > 0) {
+                    bodyHtml += '<div class="trace-branch-separator" data-branch-index="' + pi + '">' + escapeHtml(FiberTrace.getPathEndpointLabel(paths[pi])) + '</div>';
+                }
+                var pathHtml = renderOnePathToTraceHtml(paths[pi], stepNum);
+                bodyHtml += '<div class="trace-branch-block" data-branch-index="' + pi + '">' + pathHtml.html + '</div>';
+                stepNum = pathHtml.nextStepNumber;
+                if (ctl && ctl.setProgress && (pi % 2 === 0 || pi === paths.length - 1)) {
+                    var pctHtml = 50 + Math.round(((pi + 1) / Math.max(1, paths.length)) * 18);
+                    ctl.setProgress('Собираем ветки…', 'Ветка ' + (pi + 1) + ' из ' + paths.length, pctHtml);
+                }
+                if (ctl && ctl.yield && (pi % 2 === 1 || paths.length > 6)) await ctl.yield(0);
+            }
+            if (ctl && ctl.setProgress) ctl.setProgress('Строим схему жил…', 'Кассеты, сварки и ветки', 70);
+            if (ctl && ctl.yield) await ctl.yield(24);
+            if (ctl && ctl.isCancelled && ctl.isCancelled()) return;
+            bodyHtml = (typeof appendFiberTraceExtrasHtmlAsync === 'function')
+                ? await appendFiberTraceExtrasHtmlAsync(bodyHtml, paths, ctl)
+                : ((typeof appendFiberTraceExtrasHtml === 'function')
+                    ? appendFiberTraceExtrasHtml(bodyHtml, paths)
+                    : bodyHtml + ((window.FiberTrace && FiberTrace.buildTraceActionsHtml) ? FiberTrace.buildTraceActionsHtml() : ''));
+            if (ctl && ctl.setProgress) ctl.setProgress('Готово', 'Открываем трассировку', 100);
+            if (ctl && ctl.yield) await ctl.yield(20);
+            if (ctl && ctl.isCancelled && ctl.isCancelled()) return;
+            openFiberTraceModal({
+                title: 'Трассировка к узлу',
+                subtitle: nodeName + ' · выход сплиттера ' + (outputIndex + 1),
+                bodyHtml: bodyHtml,
+                paths: paths
+            });
+        })();
     });
 }
 
@@ -1209,7 +1231,7 @@ function buildOltTracePrefixSteps(oltObj, portNumber, startObj, cableId, fiberNu
         objectType: 'olt',
         objectName: oltName,
         object: oltObj,
-        port: null
+        port: portNumber != null ? portNumber : null
     }, {
         type: 'oltPortConnection',
         cableId: cableId,
@@ -1286,6 +1308,21 @@ function prependOltPrefixToPath(path, oltObj, portNumber, startObj, cableId, fib
         rest[0] && rest[0].type === 'cable' && prefix[prefix.length - 2].cableId === rest[0].cableId) {
         rest = rest.slice(1);
     }
+    // Убрать «возврат» на тот же OLT по feeder — иначе схема: OLT → кросс → OLT без сегмента.
+    var oltUid = getObjectUniqueId(oltObj);
+    while (rest.length) {
+        var head = rest[0];
+        if (head.type === 'object' && head.objectType === 'olt' && head.object &&
+            getObjectUniqueId(head.object) === oltUid) {
+            rest = rest.slice(1);
+            continue;
+        }
+        if (head.type === 'oltPortConnection' && head.olt && getObjectUniqueId(head.olt) === oltUid) {
+            rest = rest.slice(1);
+            continue;
+        }
+        break;
+    }
     return prefix.concat(rest);
 }
 
@@ -1295,7 +1332,11 @@ function showFiberTraceFromOLTPort(oltObj, oltName, portNumber, startObj, cableI
     runFiberTraceWithLoading({
         title: 'Трассировка от OLT',
         subtitle: loadingSubtitle
-    }, function() {
+    }, function(ctl) {
+        return (async function() {
+        if (ctl && ctl.setProgress) ctl.setProgress('Строим маршрут…', 'Обходим кабели и сварки', 18);
+        if (ctl && ctl.yield) await ctl.yield(16);
+        if (ctl && ctl.isCancelled && ctl.isCancelled()) return;
         var opts = traceOptions ? Object.assign({}, traceOptions) : {};
         if (targetOnu && targetOnu.properties) {
             opts.targetOnuId = getObjectUniqueId(targetOnu);
@@ -1310,6 +1351,9 @@ function showFiberTraceFromOLTPort(oltObj, oltName, portNumber, startObj, cableI
             failFiberTraceLoading('Ошибка трассировки: ' + res.error, false);
             return;
         }
+        if (ctl && ctl.setProgress) ctl.setProgress('Собираем ветки…', 'Готовим шаги маршрута', 45);
+        if (ctl && ctl.yield) await ctl.yield(16);
+        if (ctl && ctl.isCancelled && ctl.isCancelled()) return;
         var displayPaths = res.paths.length
             ? res.paths.map(function(p) {
                 return prependOltPrefixToPath(p, oltObj, portNumber, startObj, cableId, fiberNumber);
@@ -1342,22 +1386,37 @@ function showFiberTraceFromOLTPort(oltObj, oltName, portNumber, startObj, cableI
         }
         var stepNum = 1;
         for (var pi = 0; pi < displayPaths.length; pi++) {
+            if (ctl && ctl.isCancelled && ctl.isCancelled()) return;
             if (displayPaths.length > 1 && pi > 0) {
                 bodyHtml += '<div class="trace-branch-separator" data-branch-index="' + pi + '">' + escapeHtml(FiberTrace.getPathEndpointLabel(displayPaths[pi])) + '</div>';
             }
             var pathHtml = renderOnePathToTraceHtml(displayPaths[pi], stepNum);
             bodyHtml += '<div class="trace-branch-block" data-branch-index="' + pi + '">' + pathHtml.html + '</div>';
             stepNum = pathHtml.nextStepNumber;
+            if (ctl && ctl.setProgress && (pi % 2 === 0 || pi === displayPaths.length - 1)) {
+                var pctHtml = 45 + Math.round(((pi + 1) / Math.max(1, displayPaths.length)) * 22);
+                ctl.setProgress('Собираем ветки…', 'Ветка ' + (pi + 1) + ' из ' + displayPaths.length, pctHtml);
+            }
+            if (ctl && ctl.yield && (pi % 2 === 1 || displayPaths.length > 6)) await ctl.yield(0);
         }
-        bodyHtml = (typeof appendFiberTraceExtrasHtml === 'function')
-            ? appendFiberTraceExtrasHtml(bodyHtml, displayPaths)
-            : bodyHtml + ((window.FiberTrace && FiberTrace.buildTraceActionsHtml) ? FiberTrace.buildTraceActionsHtml() : '');
+        if (ctl && ctl.setProgress) ctl.setProgress('Строим схему жил…', 'Кассеты, сварки и ветки сплиттеров', 70);
+        if (ctl && ctl.yield) await ctl.yield(24);
+        if (ctl && ctl.isCancelled && ctl.isCancelled()) return;
+        bodyHtml = (typeof appendFiberTraceExtrasHtmlAsync === 'function')
+            ? await appendFiberTraceExtrasHtmlAsync(bodyHtml, displayPaths, ctl)
+            : ((typeof appendFiberTraceExtrasHtml === 'function')
+                ? appendFiberTraceExtrasHtml(bodyHtml, displayPaths)
+                : bodyHtml + ((window.FiberTrace && FiberTrace.buildTraceActionsHtml) ? FiberTrace.buildTraceActionsHtml() : ''));
+        if (ctl && ctl.setProgress) ctl.setProgress('Готово', 'Открываем трассировку', 100);
+        if (ctl && ctl.yield) await ctl.yield(20);
+        if (ctl && ctl.isCancelled && ctl.isCancelled()) return;
         openFiberTraceModal({
             title: 'Трассировка от OLT',
             subtitle: formatOltPortDisplay(portNumber, portLabel, true) + ' · ' + oltName,
             bodyHtml: bodyHtml,
             paths: displayPaths
         });
+        })();
     });
 }
 
@@ -1478,67 +1537,93 @@ function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeO
     runFiberTraceWithLoading({
         title: 'Трассировка с ' + titleHost,
         subtitle: loadingSubtitle
-    }, function() {
-        var res = traceAllFiberPathsFromObject(startCrossObj, cableId, fiberNumber, traceOptions);
+    }, function(ctl) {
+        return (async function() {
+            if (ctl && ctl.setProgress) ctl.setProgress('Строим маршрут…', 'Обходим кабели и сварки', 18);
+            if (ctl && ctl.yield) await ctl.yield(16);
+            if (ctl && ctl.isCancelled && ctl.isCancelled()) return;
 
-        if (res.error) {
-            failFiberTraceLoading('Ошибка трассировки: ' + res.error, false);
-            return;
-        }
+            var res = traceAllFiberPathsFromObject(startCrossObj, cableId, fiberNumber, traceOptions);
 
-        var paths = res.paths ? res.paths.slice() : [];
-        if (traceOptions && traceOptions.originNodeId && startCrossObj) {
-            var peerPaths = tracePeerNodePathsOnSharedCable(startCrossObj, cableId, fiberNumber, traceOptions.originNodeId);
-            if (peerPaths.length) {
-                // Два узла на одной жиле — один прямой маршрут по кабелю, без лишних веток обхода
-                paths = peerPaths;
+            if (res.error) {
+                failFiberTraceLoading('Ошибка трассировки: ' + res.error, false);
+                return;
             }
-        }
 
-        if (!paths.length) {
-            failFiberTraceLoading('Путь не найден', true);
-            return;
-        }
+            if (ctl && ctl.setProgress) ctl.setProgress('Собираем ветки…', 'Готовим шаги маршрута', 45);
+            if (ctl && ctl.yield) await ctl.yield(16);
+            if (ctl && ctl.isCancelled && ctl.isCancelled()) return;
 
-        var nodePaths = startNodeObj ? filterPathsToPeerNodes(paths, startNodeObj) : paths;
-        var sortedPaths = startNodeObj
-            ? preferNodeTracePaths(nodePaths, startNodeObj)
-            : preferHostWorkspaceTracePaths(nodePaths);
-        var displayPaths = sortedPaths;
-        var highlightPaths = sortedPaths;
-        if (startNodeObj && window.FiberTrace && FiberTrace.prependNodePrefixToPath) {
-            displayPaths = sortedPaths.map(function(p) {
-                return FiberTrace.prependNodePrefixToPath(p, startNodeObj, startCrossObj, cableId, fiberNumber, nodeConnMeta);
+            var paths = res.paths ? res.paths.slice() : [];
+            if (traceOptions && traceOptions.originNodeId && startCrossObj) {
+                var peerPaths = tracePeerNodePathsOnSharedCable(startCrossObj, cableId, fiberNumber, traceOptions.originNodeId);
+                if (peerPaths.length) {
+                    paths = peerPaths;
+                }
+            }
+
+            if (!paths.length) {
+                failFiberTraceLoading('Путь не найден', true);
+                return;
+            }
+
+            var nodePaths = startNodeObj ? filterPathsToPeerNodes(paths, startNodeObj) : paths;
+            var sortedPaths = startNodeObj
+                ? preferNodeTracePaths(nodePaths, startNodeObj)
+                : preferHostWorkspaceTracePaths(nodePaths);
+            var displayPaths = sortedPaths;
+            var highlightPaths = sortedPaths;
+            if (startNodeObj && window.FiberTrace && FiberTrace.prependNodePrefixToPath) {
+                displayPaths = sortedPaths.map(function(p) {
+                    return FiberTrace.prependNodePrefixToPath(p, startNodeObj, startCrossObj, cableId, fiberNumber, nodeConnMeta);
+                });
+                highlightPaths = displayPaths;
+            }
+
+            var traceSubtitle = loadingSubtitle;
+            var bodyHtml = '';
+            if (displayPaths.length > 1 && window.FiberTrace && FiberTrace.renderPathsOverviewHtml) {
+                bodyHtml += FiberTrace.renderPathsOverviewHtml(displayPaths);
+            }
+            if (displayPaths.length > 1) {
+                var stepNum = 1;
+                for (var pi = 0; pi < displayPaths.length; pi++) {
+                    if (ctl && ctl.isCancelled && ctl.isCancelled()) return;
+                    if (pi > 0) bodyHtml += '<div class="trace-branch-separator" data-branch-index="' + pi + '">' + escapeHtml(FiberTrace.getPathEndpointLabel(displayPaths[pi])) + '</div>';
+                    var pathHtml = renderOnePathToTraceHtml(displayPaths[pi], stepNum);
+                    bodyHtml += '<div class="trace-branch-block" data-branch-index="' + pi + '">' + pathHtml.html + '</div>';
+                    stepNum = pathHtml.nextStepNumber;
+                    if (ctl && ctl.setProgress && (pi % 2 === 0 || pi === displayPaths.length - 1)) {
+                        var pctHtml = 50 + Math.round(((pi + 1) / Math.max(1, displayPaths.length)) * 18);
+                        ctl.setProgress('Собираем ветки…', 'Ветка ' + (pi + 1) + ' из ' + displayPaths.length, pctHtml);
+                    }
+                    if (ctl && ctl.yield && (pi % 2 === 1 || displayPaths.length > 6)) await ctl.yield(0);
+                }
+            } else {
+                var pathHtmlSingle = renderOnePathToTraceHtml(displayPaths[0], 1);
+                bodyHtml += pathHtmlSingle.html;
+            }
+
+            if (ctl && ctl.setProgress) ctl.setProgress('Строим схему жил…', 'Кассеты, сварки и ветки сплиттеров', 70);
+            if (ctl && ctl.yield) await ctl.yield(24);
+            if (ctl && ctl.isCancelled && ctl.isCancelled()) return;
+
+            bodyHtml = (typeof appendFiberTraceExtrasHtmlAsync === 'function')
+                ? await appendFiberTraceExtrasHtmlAsync(bodyHtml, highlightPaths, ctl)
+                : ((typeof appendFiberTraceExtrasHtml === 'function')
+                    ? appendFiberTraceExtrasHtml(bodyHtml, highlightPaths)
+                    : bodyHtml + ((window.FiberTrace && FiberTrace.buildTraceActionsHtml) ? FiberTrace.buildTraceActionsHtml() : ''));
+
+            if (ctl && ctl.setProgress) ctl.setProgress('Готово', 'Открываем трассировку', 100);
+            if (ctl && ctl.yield) await ctl.yield(20);
+            if (ctl && ctl.isCancelled && ctl.isCancelled()) return;
+
+            openFiberTraceModal({
+                title: 'Трассировка с ' + titleHost,
+                subtitle: traceSubtitle,
+                bodyHtml: bodyHtml,
+                paths: highlightPaths
             });
-            highlightPaths = displayPaths;
-        }
-
-        var traceSubtitle = loadingSubtitle;
-        var bodyHtml = '';
-        if (displayPaths.length > 1 && window.FiberTrace && FiberTrace.renderPathsOverviewHtml) {
-            bodyHtml += FiberTrace.renderPathsOverviewHtml(displayPaths);
-        }
-        if (displayPaths.length > 1) {
-            var stepNum = 1;
-            for (var pi = 0; pi < displayPaths.length; pi++) {
-                if (pi > 0) bodyHtml += '<div class="trace-branch-separator" data-branch-index="' + pi + '">' + escapeHtml(FiberTrace.getPathEndpointLabel(displayPaths[pi])) + '</div>';
-                var pathHtml = renderOnePathToTraceHtml(displayPaths[pi], stepNum);
-                bodyHtml += '<div class="trace-branch-block" data-branch-index="' + pi + '">' + pathHtml.html + '</div>';
-                stepNum = pathHtml.nextStepNumber;
-            }
-        } else {
-            var pathHtmlSingle = renderOnePathToTraceHtml(displayPaths[0], 1);
-            bodyHtml += pathHtmlSingle.html;
-        }
-        bodyHtml = (typeof appendFiberTraceExtrasHtml === 'function')
-            ? appendFiberTraceExtrasHtml(bodyHtml, highlightPaths)
-            : bodyHtml + ((window.FiberTrace && FiberTrace.buildTraceActionsHtml) ? FiberTrace.buildTraceActionsHtml() : '');
-
-        openFiberTraceModal({
-            title: 'Трассировка с ' + titleHost,
-            subtitle: traceSubtitle,
-            bodyHtml: bodyHtml,
-            paths: highlightPaths
-        });
+        })();
     });
 }

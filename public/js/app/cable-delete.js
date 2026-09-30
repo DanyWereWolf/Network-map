@@ -66,6 +66,10 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
         return;
     }
 
+    if (typeof AppMotion !== 'undefined' && AppMotion.celebrateRemove && !(opts && opts.skipSync && opts.remoteOp)) {
+        try { AppMotion.celebrateRemove(cable, { color: '#c2410c' }); } catch (eCabDel) {}
+    }
+
     clearCopperCableOccupancyForCableId(cableUniqueId);
 
     if (typeof window.releaseOltPortForCable === 'function') {
@@ -153,6 +157,34 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
                 });
                 if (newFiberConn.length !== fiberConn.length) {
                     slot.properties.set('fiberConnections', newFiberConn);
+                    changed = true;
+                }
+            }
+            var fiberPortsDel = slot.properties.get('fiberPorts');
+            if (fiberPortsDel) {
+                var fpChanged = false;
+                Object.keys(fiberPortsDel).forEach(function(fpKey) {
+                    if (fpKey.indexOf(cableUniqueId + '-') === 0) {
+                        delete fiberPortsDel[fpKey];
+                        fpChanged = true;
+                    }
+                });
+                if (fpChanged) {
+                    slot.properties.set('fiberPorts', fiberPortsDel);
+                    changed = true;
+                }
+            }
+            var fiberLabelsDel = slot.properties.get('fiberLabels');
+            if (fiberLabelsDel) {
+                var flChanged = false;
+                Object.keys(fiberLabelsDel).forEach(function(flKey) {
+                    if (flKey.indexOf(cableUniqueId + '-') === 0) {
+                        delete fiberLabelsDel[flKey];
+                        flChanged = true;
+                    }
+                });
+                if (flChanged) {
+                    slot.properties.set('fiberLabels', fiberLabelsDel);
                     changed = true;
                 }
             }

@@ -52,7 +52,13 @@ function loadBackupsList() {
     }).then(function(data) {
         const backups = data.backups || [];
         if (backups.length === 0) {
-            listEl.innerHTML = '<p class="backups-empty">Нет резервных копий</p>';
+            listEl.innerHTML = (typeof AppMotion !== 'undefined' && AppMotion.emptyStateHtml)
+                ? AppMotion.emptyStateHtml({
+                    emotion: 'shy',
+                    title: 'Нет резервных копий',
+                    text: 'Когда появятся бэкапы организации, они отобразятся здесь.'
+                })
+                : '<p class="backups-empty">Нет резервных копий</p>';
             return;
         }
         var groups = groupBackupsByMonth(backups);

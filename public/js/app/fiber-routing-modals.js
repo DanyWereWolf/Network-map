@@ -366,7 +366,8 @@ function getOtherEndForSplitterCable(cable, splitterObj, cableId, fiberNumber) {
     if (direct) return direct;
     if (!splitterObj._embedded) return null;
     var hostIn = getSplitterHostInputFiber(splitterObj);
-    if (hostIn && hostIn.cableId === cableId && hostIn.fiberNumber === fiberNumber) {
+    if (hostIn && hostIn.cableId === cableId &&
+        Number(hostIn.fiberNumber) === Number(fiberNumber)) {
         return hostIn.hostObj || null;
     }
     return splitterObj._host || null;
@@ -399,9 +400,15 @@ function resolveSplitterOutputPeer(splitterObj, outConn) {
         return c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === outConn.cableId;
     });
     if (!outCable) return null;
+    // Выход на жилу кабеля: точка посадки = hostId (или хост сплиттера), не «другой конец от сплиттера»
+    var landing = getHostForSplitterOutputConn(outConn, splitterObj);
+    if (landing) {
+        var remote = typeof getOtherEndOfCable === 'function' ? getOtherEndOfCable(outCable, landing) : null;
+        return { cable: outCable, host: landing, remoteHost: remote || null };
+    }
     var otherEnd = getOtherEndOfCable(outCable, splitterObj);
     if (!otherEnd) otherEnd = getHostForSplitterOutputConn(outConn, splitterObj);
-    return otherEnd ? { cable: outCable, host: otherEnd } : null;
+    return otherEnd ? { cable: outCable, host: otherEnd, remoteHost: null } : null;
 }
 
 function buildSplitterOutputToNodePathSteps(splitterObj, outConn) {
@@ -948,8 +955,12 @@ function syncSplitterInputFromHost(splitterObj) {
         return false;
     }
     var cur = splitterObj.properties.get('inputFiber');
-    if (!cur || cur.cableId !== hostIn.cableId || cur.fiberNumber !== hostIn.fiberNumber) {
-        splitterObj.properties.set('inputFiber', { cableId: hostIn.cableId, fiberNumber: hostIn.fiberNumber });
+    if (!cur || cur.cableId !== hostIn.cableId ||
+        Number(cur.fiberNumber) !== Number(hostIn.fiberNumber)) {
+        splitterObj.properties.set('inputFiber', {
+            cableId: hostIn.cableId,
+            fiberNumber: Number(hostIn.fiberNumber)
+        });
         if (splitterObj._embedded && splitterObj._host && splitterObj._record && window.EmbeddedSplitters) {
             EmbeddedSplitters.syncInputFromConnections(splitterObj._host, splitterObj._record);
         }
@@ -1135,7 +1146,7 @@ function findSplitterOutputAtHost(hostObj, cableId, fiberNumber) {
         for (var oi = 0; oi < outputs.length; oi++) {
             var out = outputs[oi];
             if (!out) continue;
-            if (out.cableId === cableId && out.fiberNumber === fiberNumber) {
+            if (out.cableId === cableId && Number(out.fiberNumber) === Number(fiberNumber)) {
                 if (out.onuId || out.splitterId || out.nodeId || out.mediaConverterId) continue;
                 if (localOnly) {
                     if (!out.hostId || out.hostId === hostUid) {

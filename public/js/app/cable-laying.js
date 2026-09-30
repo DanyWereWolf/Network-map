@@ -359,6 +359,13 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
             document.dispatchEvent(new CustomEvent('cableCreated', { detail: { cable: polyline, points: points } }));
         }
     }
+    if (!existingCableId && typeof AppMotion !== 'undefined' && AppMotion.celebrateCreate && polyline &&
+        !(typeof isMapBulkImportActive === 'function' && isMapBulkImportActive())) {
+        try { AppMotion.celebrateCreate(polyline); } catch (eCabMotion) {}
+    }
+    if (typeof AppMotion !== 'undefined' && AppMotion.hideCableLengthHud) {
+        try { AppMotion.hideCableLengthHud(); } catch (eHud) {}
+    }
     return true;
 }
 

@@ -7,7 +7,7 @@
     <meta name="keywords" content="программа для оптической сети, ВОЛС, карта оптической сети, учёт ВОЛС, GPON, кроссы, муфты, Wi‑Fi радиомост, volsmap">
     <meta name="author" content="Карта оптической сети">
     <meta name="robots" content="index, follow">
-    <meta name="theme-color" content="#1d4ed8">
+    <meta name="theme-color" content="#0a1628">
     <title>Карта оптической сети — программа для работы с оптической сетью</title>
     <link rel="canonical" href="https://volsmap.ru/">
     <meta property="og:type" content="website">
@@ -49,8 +49,9 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/auth.css">
+    <link rel="stylesheet" href="css/scrollbars.css">
     <link rel="stylesheet" href="css/cookie-consent.css">
     <link rel="stylesheet" href="css/maintenance-notice.css">
     <link rel="stylesheet" href="css/support-chat.css">
@@ -69,8 +70,9 @@
     <link rel="stylesheet" href="css/pages-mobile.css">
 </head>
 <body class="landing-page">
-    <div class="auth-bg" aria-hidden="true">
-        <div class="auth-bg-gradient"></div>
+    <div class="auth-bg landing-bg" aria-hidden="true">
+        <div class="auth-bg-gradient landing-bg-gradient"></div>
+        <div class="landing-bg-grid"></div>
         <canvas id="authPlexusCanvas" class="auth-bg-plexus"></canvas>
     </div>
     <div class="auth-container landing-root">
@@ -79,19 +81,20 @@
             <header class="landing-nav" id="landingNav">
                 <div class="landing-nav-overlay" id="landingNavOverlay" aria-hidden="true"></div>
                 <div class="landing-nav-left">
-                    <div class="auth-logo landing-nav-logo" role="img" aria-label="Карта оптической сети" title="Карта оптической сети">
-                        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                            <circle cx="12" cy="10" r="3"></circle>
-                        </svg>
-                    </div>
+                    <a href="#home" class="landing-nav-logo-link" title="На главную">
+                        <div class="auth-logo landing-nav-logo" role="img" aria-label="Карта оптической сети">
+                            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                <circle cx="12" cy="10" r="3"></circle>
+                            </svg>
+                        </div>
+                    </a>
                     <div>
                         <div class="landing-brand-title">Карта оптической сети</div>
-                        <div class="landing-brand-sub">Программа для работы с оптической сетью</div>
+                        <div class="landing-brand-sub">volsmap.ru</div>
                     </div>
                 </div>
                 <nav class="landing-nav-menu" id="landingNavMenu" aria-label="Разделы страницы">
-                    <a href="#home">Главная</a>
                     <a href="#capabilities">Возможности</a>
                     <a href="#how">Как начать</a>
                     <a href="#about">О продукте</a>
@@ -110,166 +113,121 @@
                         <span>Разделы</span>
                     </button>
                     <button id="landingThemeToggle" type="button" class="btn-outline theme-toggle-btn" title="Тёмная тема" aria-label="Включить тёмную тему">
-                        <span aria-hidden="true">🌙</span>
+                        <svg class="theme-icon theme-icon--moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
                     </button>
                     <button class="btn-outline" onclick="window.location.href='auth.html'">Войти</button>
                     <button class="btn-primary-hero" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">
-                        Попробовать сейчас
+                        Попробовать
                     </button>
                 </div>
             </header>
 
             <!-- Главная / hero -->
             <section id="home" class="landing-hero">
+                <div class="landing-hero-map" aria-hidden="true">
+                    <svg class="landing-hero-map-svg" viewBox="0 0 1200 720" preserveAspectRatio="xMidYMid slice" focusable="false">
+                        <defs>
+                            <linearGradient id="heroFiberA" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="#0d9488"/>
+                                <stop offset="50%" stop-color="#22d3ee"/>
+                                <stop offset="100%" stop-color="#0d9488"/>
+                            </linearGradient>
+                            <linearGradient id="heroFiberB" x1="0%" y1="100%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="#ea580c"/>
+                                <stop offset="100%" stop-color="#fbbf24"/>
+                            </linearGradient>
+                            <radialGradient id="heroGlow" cx="50%" cy="45%" r="55%">
+                                <stop offset="0%" stop-color="#14b8a6" stop-opacity="0.22"/>
+                                <stop offset="55%" stop-color="#0ea5e9" stop-opacity="0.08"/>
+                                <stop offset="100%" stop-color="#0ea5e9" stop-opacity="0"/>
+                            </radialGradient>
+                            <pattern id="heroTopo" width="48" height="48" patternUnits="userSpaceOnUse">
+                                <path d="M0 24h48M24 0v48" stroke="currentColor" stroke-width="0.6" opacity="0.12"/>
+                            </pattern>
+                        </defs>
+                        <rect width="1200" height="720" fill="url(#heroGlow)"/>
+                        <rect width="1200" height="720" fill="url(#heroTopo)" class="hero-map-topo"/>
+                        <path class="hero-map-road" d="M40 520 C220 480, 340 560, 520 500 S820 420, 980 460 S1160 540, 1200 520" fill="none" stroke="currentColor" stroke-width="18" opacity="0.06"/>
+                        <path class="hero-map-road" d="M0 280 C180 300, 320 220, 480 260 S780 340, 960 280 S1120 200, 1200 220" fill="none" stroke="currentColor" stroke-width="12" opacity="0.05"/>
+                        <path class="hero-fiber hero-fiber--a" d="M120 560 C280 420, 360 300, 480 280 S700 320, 780 200 S940 120, 1080 160" fill="none" stroke="url(#heroFiberA)" stroke-width="3.5" stroke-linecap="round"/>
+                        <path class="hero-fiber hero-fiber--b" d="M160 180 C300 260, 380 400, 520 440 S760 480, 860 560 S1000 620, 1120 540" fill="none" stroke="url(#heroFiberB)" stroke-width="2.5" stroke-linecap="round" opacity="0.85"/>
+                        <path class="hero-fiber hero-fiber--c" d="M80 360 C240 340, 400 380, 560 320 S820 240, 980 360" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" opacity="0.55"/>
+                        <g class="hero-map-nodes">
+                            <circle class="hero-node hero-node--hub" cx="480" cy="280" r="9"/>
+                            <circle class="hero-node" cx="780" cy="200" r="7"/>
+                            <circle class="hero-node hero-node--olt" cx="520" cy="440" r="8"/>
+                            <circle class="hero-node" cx="860" cy="560" r="6"/>
+                            <circle class="hero-node" cx="1080" cy="160" r="7"/>
+                            <circle class="hero-node" cx="160" cy="180" r="6"/>
+                            <circle class="hero-node" cx="980" cy="360" r="6"/>
+                            <circle class="hero-node" cx="120" cy="560" r="6"/>
+                        </g>
+                        <g class="hero-map-labels" fill="currentColor" font-family="IBM Plex Sans, sans-serif" font-size="13" opacity="0.45">
+                            <text x="496" y="258">Кросс</text>
+                            <text x="534" y="468">OLT</text>
+                            <text x="796" y="188">Муфта</text>
+                            <text x="874" y="548">ONU</text>
+                        </g>
+                    </svg>
+                </div>
                 <div class="landing-hero-copy">
-                    <div class="landing-hero-badges">
-                        <span class="badge-pill badge-pill--early">Ранний доступ</span>
-                        <span class="badge-pill">Без установки</span>
-                    </div>
-                    <h1 class="landing-hero-title">
-                        <span class="hero-line">Вся ваша сеть на одной карте</span>
-                        <span class="hero-line hero-highlight">Учёт ВОЛС и инфраструктуры в браузере</span>
-                    </h1>
+                    <p class="landing-hero-brand">Карта оптической сети</p>
+                    <h1 class="landing-hero-title">Учёт ВОЛС и инфраструктуры в браузере</h1>
                     <p class="landing-hero-subtitle">
-                        Яндекс.Карты для вашей организации: жилы в кроссе и муфте, GPON, медные линии, камеры и Wi‑Fi радиомосты. Команда видит изменения сразу — отдельная карта на каждую компанию.
+                        Жилы, GPON, медь, камеры и радиомосты на Яндекс.Картах — отдельная карта на организацию, синхронизация команды в реальном времени.
                     </p>
                     <div class="landing-hero-cta-row">
                         <button class="btn-primary-hero" id="heroRegisterCtaBtn" onclick="window.location.href='auth.html?register=1'">
                             Начать бесплатно
                         </button>
-                        <button type="button" class="btn-outline" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">
-                            Условия и лимиты
+                        <button type="button" class="btn-outline btn-outline--hero" onclick="document.getElementById('capabilities').scrollIntoView({behavior:'smooth'})">
+                            Смотреть возможности
                         </button>
                     </div>
-                    <p class="landing-hero-meta">Для провайдеров, интеграторов и эксплуатации · работайте в облаке или получите программу для своей организации · с телефона — просмотр, правки — с ПК</p>
+                    <p class="landing-hero-foot">Провайдеры · интеграторы · эксплуатация · облако или своя копия</p>
                 </div>
-                <aside class="landing-hero-visual" aria-label="Возможности на карте и статистика сервиса">
-                    <div class="hero-capabilities">
-                        <div class="hero-capabilities-header">
-                            <span class="hero-capabilities-title">Всё на одной карте</span>
-                            <span class="hero-showcase-live" aria-hidden="true">
-                                <span class="hero-live-dot"></span>Синхронизация
-                            </span>
-                        </div>
-                        <ul class="hero-capabilities-grid" role="list">
-                            <li class="hero-capability">
-                                <span class="hero-capability-icon hero-capability-icon--fiber" aria-hidden="true">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M9 3v18M15 7v10"></path></svg>
-                                </span>
-                                <span class="hero-capability-text"><strong>ВОЛС</strong>Кроссы, муфты, схема жил</span>
-                            </li>
-                            <li class="hero-capability">
-                                <span class="hero-capability-icon hero-capability-icon--gpon" aria-hidden="true">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
-                                </span>
-                                <span class="hero-capability-text"><strong>GPON</strong>OLT, сплиттер, ONU</span>
-                            </li>
-                            <li class="hero-capability">
-                                <span class="hero-capability-icon hero-capability-icon--radio" aria-hidden="true">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="2"></circle><path d="M16.24 7.76a6 6 0 0 1 0 8.49"></path><path d="M7.76 16.24a6 6 0 0 1 0-8.49"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path><path d="M4.93 19.07a10 10 0 0 1 0-14.14"></path></svg>
-                                </span>
-                                <span class="hero-capability-text"><strong>Wi‑Fi радиомосты</strong>P2P и P2MP на карте</span>
-                            </li>
-                            <li class="hero-capability">
-                                <span class="hero-capability-icon hero-capability-icon--copper" aria-hidden="true">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"></path></svg>
-                                </span>
-                                <span class="hero-capability-text"><strong>Медь и камеры</strong>Коммутаторы, медиаконвертеры</span>
-                            </li>
-                            <li class="hero-capability">
-                                <span class="hero-capability-icon hero-capability-icon--trace" aria-hidden="true">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
-                                </span>
-                                <span class="hero-capability-text"><strong>Трассировка</strong>Путь волокна по сети</span>
-                            </li>
-                            <li class="hero-capability">
-                                <span class="hero-capability-icon hero-capability-icon--team" aria-hidden="true">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                                </span>
-                                <span class="hero-capability-text"><strong>Команда</strong>Правки в реальном времени</span>
-                            </li>
-                        </ul>
-                        <div class="hero-capabilities-stats" aria-label="Статистика по всем организациям">
-                            <p class="hero-capabilities-stats-lead">Всего на платформе</p>
-                            <div class="hero-showcase-stats">
-                                <div class="hero-stat-card">
-                                    <span class="hero-stat-icon" aria-hidden="true">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
-                                    </span>
-                                    <div class="hero-stat-text">
-                                        <span class="hero-stat-label">Организаций</span>
-                                        <span class="hero-stat-value" id="heroStatOrgs">—</span>
-                                    </div>
-                                </div>
-                                <div class="hero-stat-card">
-                                    <span class="hero-stat-icon" aria-hidden="true">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
-                                    </span>
-                                    <div class="hero-stat-text">
-                                        <span class="hero-stat-label">Пользователей</span>
-                                        <span class="hero-stat-value" id="heroStatUsers">—</span>
-                                    </div>
-                                </div>
-                                <div class="hero-stat-card">
-                                    <span class="hero-stat-icon" aria-hidden="true">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-                                    </span>
-                                    <div class="hero-stat-text">
-                                        <span class="hero-stat-label" title="Узлы, кроссы, муфты, OLT, радиомосты и др.; без кабелей">Объектов</span>
-                                        <span class="hero-stat-value" id="heroStatNodes">—</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </aside>
             </section>
+
+            <div class="landing-stats" aria-label="Статистика по всем организациям">
+                <div class="landing-stat">
+                    <span class="landing-stat-value" id="heroStatOrgs">—</span>
+                    <span class="landing-stat-label">организаций</span>
+                </div>
+                <div class="landing-stat">
+                    <span class="landing-stat-value" id="heroStatUsers">—</span>
+                    <span class="landing-stat-label">пользователей</span>
+                </div>
+                <div class="landing-stat">
+                    <span class="landing-stat-value" id="heroStatNodes">—</span>
+                    <span class="landing-stat-label" title="Узлы, кроссы, муфты, OLT, радиомосты и др.; без кабелей">объектов на картах</span>
+                </div>
+            </div>
 
             <div class="trust-strip" role="list">
                 <div class="trust-item" role="listitem">
-                    <div class="trust-item-icon" aria-hidden="true">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                    </div>
-                    <div>
-                        <h3>Изоляция данных</h3>
-                        <p>Отдельная карта на организацию, доступ только у приглашённых.</p>
-                    </div>
+                    <span class="trust-item-index" aria-hidden="true">01</span>
+                    <h3>Изоляция данных</h3>
+                    <p>Отдельная карта на организацию, доступ только у приглашённых.</p>
                 </div>
                 <div class="trust-item" role="listitem">
-                    <div class="trust-item-icon" aria-hidden="true">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                    </div>
-                    <div>
-                        <h3>Роли</h3>
-                        <p>Администратор и пользователи с разными правами.</p>
-                    </div>
+                    <span class="trust-item-index" aria-hidden="true">02</span>
+                    <h3>Роли</h3>
+                    <p>Администратор и пользователи с разными правами.</p>
                 </div>
                 <div class="trust-item" role="listitem">
-                    <div class="trust-item-icon" aria-hidden="true">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
-                    </div>
-                    <div>
-                        <h3>Синхронизация</h3>
-                        <p>Правки на карте в реальном времени.</p>
-                    </div>
+                    <span class="trust-item-index" aria-hidden="true">03</span>
+                    <h3>Синхронизация</h3>
+                    <p>Правки на карте в реальном времени.</p>
                 </div>
                 <div class="trust-item" role="listitem">
-                    <div class="trust-item-icon" aria-hidden="true">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
-                    </div>
-                    <div>
-                        <h3>Бэкапы</h3>
-                        <p>Снимки 30 дней и журнал изменений.</p>
-                    </div>
+                    <span class="trust-item-index" aria-hidden="true">04</span>
+                    <h3>Бэкапы</h3>
+                    <p>Снимки 30 дней и журнал изменений.</p>
                 </div>
                 <div class="trust-item" role="listitem">
-                    <div class="trust-item-icon" aria-hidden="true">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"></rect><rect x="2" y="14" width="20" height="8" rx="2"></rect><circle cx="6" cy="6" r="1" fill="currentColor" stroke="none"></circle><circle cx="6" cy="18" r="1" fill="currentColor" stroke="none"></circle></svg>
-                    </div>
-                    <div>
-                        <h3>Своя копия программы</h3>
-                        <p>Нужна программа для организации — напишите владельцу.</p>
-                    </div>
+                    <span class="trust-item-index" aria-hidden="true">05</span>
+                    <h3>Своя копия</h3>
+                    <p>Нужна программа для организации — напишите владельцу.</p>
                 </div>
             </div>
 
@@ -278,21 +236,21 @@
                 <p class="capability-section-lead">Три шага от регистрации до совместной работы на карте.</p>
                 <ol class="landing-steps-list">
                     <li class="landing-step">
-                        <span class="landing-step-num" aria-hidden="true">1</span>
+                        <span class="landing-step-num" aria-hidden="true">01</span>
                         <div>
                             <h3>Регистрация</h3>
                             <p>Учётная запись и отдельная карта организации.</p>
                         </div>
                     </li>
                     <li class="landing-step">
-                        <span class="landing-step-num" aria-hidden="true">2</span>
+                        <span class="landing-step-num" aria-hidden="true">02</span>
                         <div>
                             <h3>Схема на карте</h3>
                             <p>Узлы, кабели, кроссы, GPON, Wi‑Fi радиомосты, трассировка и жилы в карточке объекта.</p>
                         </div>
                     </li>
                     <li class="landing-step">
-                        <span class="landing-step-num" aria-hidden="true">3</span>
+                        <span class="landing-step-num" aria-hidden="true">03</span>
                         <div>
                             <h3>Команда</h3>
                             <p>Синхронизация правок, журнал, бэкапы, чат организации.</p>
@@ -309,46 +267,58 @@
                         <div class="capability-card-icon" aria-hidden="true">
                             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
                         </div>
-                        <h3>Карта и топология</h3>
-                        <p>Яндекс.Карты, ВОЛС и медные линии, Wi‑Fi радиомосты (P2P/P2MP), фильтры по типам, поиск и сохранение вида карты.</p>
+                        <div class="capability-card-body">
+                            <h3>Карта и топология</h3>
+                            <p>Яндекс.Карты, ВОЛС и медные линии, Wi‑Fi радиомосты (P2P/P2MP), фильтры по типам, поиск и сохранение вида карты.</p>
+                        </div>
                     </article>
                     <article class="capability-card">
                         <div class="capability-card-icon" aria-hidden="true">
                             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M9 3v18M15 7v10"></path></svg>
                         </div>
-                        <h3>Кроссы, муфты и GPON</h3>
-                        <p>Схема жил, OLT, сплиттеры, ONU, трассировка от порта PON.</p>
+                        <div class="capability-card-body">
+                            <h3>Кроссы, муфты и GPON</h3>
+                            <p>Схема жил, OLT, сплиттеры, ONU, трассировка от порта PON.</p>
+                        </div>
                     </article>
                     <article class="capability-card">
                         <div class="capability-card-icon" aria-hidden="true">
                             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
                         </div>
-                        <h3>Команда</h3>
-                        <p>Роли, синхронизация правок, чат организации. С телефона — просмотр.</p>
+                        <div class="capability-card-body">
+                            <h3>Команда</h3>
+                            <p>Роли, синхронизация правок, чат организации. С телефона — просмотр.</p>
+                        </div>
                     </article>
                     <article class="capability-card">
                         <div class="capability-card-icon" aria-hidden="true">
                             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
                         </div>
-                        <h3>Бэкапы</h3>
-                        <p>Снимки 30 дней, журнал правок, справочник оборудования.</p>
+                        <div class="capability-card-body">
+                            <h3>Бэкапы</h3>
+                            <p>Снимки 30 дней, журнал правок, справочник оборудования.</p>
+                        </div>
                     </article>
                 </div>
                 <p class="capability-footnote">Также: камеры, медиаконвертеры, зоны покрытия радиомостов, печать схем, 2FA.</p>
             </section>
 
-            <section id="about" class="landing-block landing-about">
+            <section id="about" class="landing-block landing-about" aria-labelledby="about-heading">
+                <div class="landing-block-head">
+                    <h2 id="about-heading" class="capability-section-title">О продукте</h2>
+                    <p class="capability-section-lead section-body">Программа для учёта оптической сети в облаке volsmap.ru — или своя копия для организации.</p>
+                </div>
                 <details class="about-card about-card--wide about-security-details">
-                        <summary class="about-security-summary">
-                            <span class="about-security-summary-icon" aria-hidden="true">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                            </span>
-                            Защита и безопасность
-                        </summary>
-                        <div class="section-body about-security-body">
-                            <p>Изоляция по организациям, защищённый вход, опциональная 2FA. Данные на серверах volsmap.ru; доступ — у вашей команды и поддержки сервиса.</p>
-                        </div>
-                    </details>
+                    <summary class="about-security-summary">
+                        <span class="about-security-summary-icon" aria-hidden="true">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                        </span>
+                        Защита и безопасность
+                    </summary>
+                    <div class="section-body about-security-body">
+                        <p>Изоляция по организациям, защищённый вход, опциональная 2FA. Данные на серверах volsmap.ru; доступ — у вашей команды и поддержки сервиса.</p>
+                    </div>
+                </details>
             </section>
 
             <!-- Условия использования -->
@@ -425,6 +395,13 @@
                     <summary>Как снять лимит объектов?</summary>
                     <p>Напишите владельцу программы (e-mail или Telegram ниже), укажите название организации и e-mail учётной записи. После согласования лимит снимается для вашей организации.</p>
                 </details>
+                <details class="faq-item">
+                    <summary>Как удалить данные организации?</summary>
+                    <p>Организация может запросить удаление всех своих данных. Оформите
+                    <a href="data-deletion.html">заявление на удаление данных</a>
+                    или напишите на support@volsmap.ru с указанием названия организации и e‑mail администратора.
+                    Текст <a href="privacy.html">Политики обработки персональных данных</a> — на отдельной странице.</p>
+                </details>
             </section>
 
             <!-- Контакты -->
@@ -492,6 +469,11 @@
                     <span aria-hidden="true">·</span>
                     <a href="auth.html">Войти</a>
                 </nav>
+                <nav class="landing-footer-legal" aria-label="Документы">
+                    <a href="privacy.html">Политика обработки персональных данных</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="data-deletion.html">Удаление данных</a>
+                </nav>
             </footer>
         </div>
     </div>
@@ -499,6 +481,8 @@
     <script>
     (function() {
         var toggleBtn = document.getElementById('landingThemeToggle');
+        var iconMoon = '<svg class="theme-icon theme-icon--moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+        var iconSun = '<svg class="theme-icon theme-icon--sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>';
         function setTheme(theme) {
             var t = (theme === 'dark') ? 'dark' : 'light';
             document.documentElement.setAttribute('data-theme', t);
@@ -508,11 +492,11 @@
             } catch (e) {}
             if (!toggleBtn) return;
             if (t === 'dark') {
-                toggleBtn.innerHTML = '<span aria-hidden="true">☀️</span>';
+                toggleBtn.innerHTML = iconSun;
                 toggleBtn.setAttribute('aria-label', 'Включить светлую тему');
                 toggleBtn.setAttribute('title', 'Светлая тема');
             } else {
-                toggleBtn.innerHTML = '<span aria-hidden="true">🌙</span>';
+                toggleBtn.innerHTML = iconMoon;
                 toggleBtn.setAttribute('aria-label', 'Включить тёмную тему');
                 toggleBtn.setAttribute('title', 'Тёмная тема');
             }
@@ -525,6 +509,18 @@
                 setTheme(current === 'dark' ? 'light' : 'dark');
             });
         }
+    })();
+    </script>
+    <script>
+    (function() {
+        var nav = document.getElementById('landingNav');
+        if (!nav) return;
+        function onScroll() {
+            var y = window.scrollY || window.pageYOffset || 0;
+            nav.classList.toggle('is-scrolled', y > 12);
+        }
+        window.addEventListener('scroll', onScroll, { passive: true });
+        onScroll();
     })();
     </script>
     <script>
@@ -853,6 +849,7 @@
     })();
     </script>
     <script src="js/landing-nav.js"></script>
+    <script src="js/landing-motion.js"></script>
     <script src="js/ui/assistant-avatars.js"></script>
     <script src="js/core/page-bg-plexus.js"></script>
     <script src="js/core/cookie-consent.js"></script>

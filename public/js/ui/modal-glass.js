@@ -93,6 +93,19 @@
     function onModalShown(modal) {
         normalizeModalDisplay(modal);
         refreshModalGlass(modal);
+        if (modal && modal.classList) {
+            modal.classList.add('modal-motion-open');
+        }
+        if (window.AppMotion && typeof AppMotion.play === 'function' &&
+            typeof AppMotion.motionOn === 'function' && AppMotion.motionOn()) {
+            try { AppMotion.play('click'); } catch (eMot) {}
+        }
+    }
+
+    function onModalHidden(modal) {
+        if (modal && modal.classList) {
+            modal.classList.remove('modal-motion-open', 'modal-motion-closing');
+        }
     }
 
     function initAllModals() {
@@ -111,6 +124,7 @@
                 if (!modal.classList || !modal.classList.contains('modal')) return;
                 var shown = modal.style.display === 'flex' || modal.style.display === 'block';
                 if (shown) onModalShown(modal);
+                else onModalHidden(modal);
             });
         });
         document.querySelectorAll('.modal').forEach(function (modal) {

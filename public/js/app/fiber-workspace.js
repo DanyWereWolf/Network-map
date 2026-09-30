@@ -835,6 +835,69 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     const badgeStroke = isDark ? '#60a5fa' : '#2563eb';
     const badgeFill = isDark ? '#1e3a5f' : '#eff6ff';
 
+    // Дорожки сращиваний верх↔бок: без них все уходят на одну горизонталь/вертикаль и сливаются со сплиттером.
+    const spliceTopApproachEntries = [];
+    const spliceLeftApproachEntries = [];
+    const spliceRightApproachEntries = [];
+    fiberConnections.forEach((connection, connIndex) => {
+        const fromKey = `${connection.from.cableId}-${connection.from.fiberNumber}`;
+        const toKey = `${connection.to.cableId}-${connection.to.fiberNumber}`;
+        const fromPos = fiberPositions.get(fromKey);
+        const toPos = fiberPositions.get(toKey);
+        if (!fromPos || !toPos) return;
+        const fromExit = fiberSchemeLinkExit(fromPos);
+        const toExit = fiberSchemeLinkExit(toPos);
+        const topSide = (fromPos.isTop && !toPos.isTop) || (toPos.isTop && !fromPos.isTop);
+        if (!topSide) return;
+        const topExit = fromPos.isTop ? fromExit : toExit;
+        const sideExit = fromPos.isTop ? toExit : fromExit;
+        const sidePos = fromPos.isTop ? toPos : fromPos;
+        const approachKey = 'splice:' + connIndex;
+        spliceTopApproachEntries.push({
+            fiberKey: approachKey,
+            fx: topExit.x,
+            px: sideExit.x,
+            fy: topExit.y,
+            py: sideExit.y
+        });
+        const sideEntry = {
+            fiberKey: approachKey,
+            fx: sideExit.x,
+            px: topExit.x,
+            fy: sideExit.y,
+            py: topExit.y
+        };
+        if (sidePos.isLeft) spliceLeftApproachEntries.push(sideEntry);
+        else spliceRightApproachEntries.push(sideEntry);
+    });
+    const spliceTopApproachMap = typeof assignTopCrossLinkApproachYs === 'function'
+        ? assignTopCrossLinkApproachYs(spliceTopApproachEntries, (function () {
+            var maxFy = null;
+            spliceTopApproachEntries.forEach(function (e) {
+                if (e && e.fy != null && !isNaN(e.fy)) maxFy = maxFy == null ? e.fy : Math.max(maxFy, e.fy);
+            });
+            return (maxFy == null ? 40 : maxFy) + 22 + Math.max(0, spliceTopApproachEntries.length - 1) * 8;
+        })())
+        : new Map();
+    const spliceLeftApproachMap = typeof assignSideSplitterApproachXs === 'function'
+        ? assignSideSplitterApproachXs(spliceLeftApproachEntries, (function () {
+            var baseFx = null;
+            spliceLeftApproachEntries.forEach(function (e) {
+                if (e && e.fx != null && !isNaN(e.fx)) baseFx = baseFx == null ? e.fx : Math.max(baseFx, e.fx);
+            });
+            return (baseFx == null ? 80 : baseFx) + 28;
+        })(), { towardLeft: false })
+        : new Map();
+    const spliceRightApproachMap = typeof assignSideSplitterApproachXs === 'function'
+        ? assignSideSplitterApproachXs(spliceRightApproachEntries, (function () {
+            var baseFx = null;
+            spliceRightApproachEntries.forEach(function (e) {
+                if (e && e.fx != null && !isNaN(e.fx)) baseFx = baseFx == null ? e.fx : Math.min(baseFx, e.fx);
+            });
+            return (baseFx == null ? 700 : baseFx) - 28;
+        })(), { towardLeft: true })
+        : new Map();
+
     const linkPaint = [];
     fiberConnections.forEach((connection, connIndex) => {
         const fromKey = `${connection.from.cableId}-${connection.from.fiberNumber}`;
@@ -845,6 +908,16 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         const fromExit = fiberSchemeLinkExit(fromPos);
         const toExit = fiberSchemeLinkExit(toPos);
         const sameSide = (fromPos.isTop && toPos.isTop) || (!fromPos.isTop && !toPos.isTop && fromPos.isLeft === toPos.isLeft);
+        const spliceKey = 'splice:' + connIndex;
+        const topSideSplice = (fromPos.isTop && !toPos.isTop) || (toPos.isTop && !fromPos.isTop);
+        let spliceCableAy = null;
+        let spliceCableAx = null;
+        if (topSideSplice) {
+            if (spliceTopApproachMap.has(spliceKey)) spliceCableAy = spliceTopApproachMap.get(spliceKey);
+            const sidePos = fromPos.isTop ? toPos : fromPos;
+            if (sidePos.isLeft && spliceLeftApproachMap.has(spliceKey)) spliceCableAx = spliceLeftApproachMap.get(spliceKey);
+            else if (!sidePos.isLeft && spliceRightApproachMap.has(spliceKey)) spliceCableAx = spliceRightApproachMap.get(spliceKey);
+        }
         const pathD = buildFiberSchemeConnectionPath(
             fromExit.x, fromExit.y,
             toExit.x, toExit.y,
@@ -859,7 +932,13 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
                 routeSeed: 'splice:' + connIndex,
                 routeStagger: connIndex * 9 + 8,
                 stemStart: 14 + (connIndex % 7) * 2,
-                stemEnd: 12 + (connIndex % 5) * 2
+                stemEnd: 12 + (connIndex % 5) * 2,
+                laneIndex: connIndex,
+                cableApproachY: spliceCableAy,
+                cableApproachX: spliceCableAx,
+                preferLeft: topSideSplice
+                    ? !!(fromPos.isTop ? toPos : fromPos).isLeft
+                    : undefined
             }
         );
         const connLabel = resolveFiberConnectionLabel(connection, fiberLabels);
@@ -875,6 +954,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             connIndex: connIndex, pathD: pathD, fromKey: fromKey, toKey: toKey, label: connLabel,
             fromExitX: fromExit.x, fromY: fromExit.y, toExitX: toExit.x, toY: toExit.y,
             sameSide: sameSide, isLeft: fromPos.isLeft, isTop: !!fromPos.isTop, toTop: !!toPos.isTop,
+            toLeft: !!toPos.isLeft,
             stripeA: stripeA,
             stripeB: stripeB,
             sameFiberColor: sameFiberColor,
@@ -931,9 +1011,9 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         }
         const clickable = isEditMode ? 'cursor: pointer;' : 'cursor: default;';
         if (link.sameFiberColor) {
-            html += `<path id="connection-${link.connIndex}" class="fiber-scheme-link" d="${link.pathD}" stroke="${stripeA}" stroke-width="4.5" stroke-linecap="round" data-connection-index="${link.connIndex}" data-from-fiber="${link.fromKey}" data-to-fiber="${link.toKey}" data-from-exit-x="${link.fromExitX}" data-from-y="${link.fromY}" data-to-exit-x="${link.toExitX}" data-to-y="${link.toY}" data-same-side="${link.sameSide ? '1' : '0'}" data-from-left="${link.isLeft ? '1' : '0'}" data-from-top="${link.isTop ? '1' : '0'}" data-to-top="${link.toTop ? '1' : '0'}" data-conn-label="${escapeHtml(link.label || '')}" style="${clickable}"></path>`;
+            html += `<path id="connection-${link.connIndex}" class="fiber-scheme-link" d="${link.pathD}" stroke="${stripeA}" stroke-width="4.5" stroke-linecap="round" data-connection-index="${link.connIndex}" data-from-fiber="${link.fromKey}" data-to-fiber="${link.toKey}" data-from-exit-x="${link.fromExitX}" data-from-y="${link.fromY}" data-to-exit-x="${link.toExitX}" data-to-y="${link.toY}" data-same-side="${link.sameSide ? '1' : '0'}" data-from-left="${link.isLeft ? '1' : '0'}" data-to-left="${link.toLeft ? '1' : '0'}" data-from-top="${link.isTop ? '1' : '0'}" data-to-top="${link.toTop ? '1' : '0'}" data-conn-label="${escapeHtml(link.label || '')}" style="${clickable}"></path>`;
         } else {
-            html += `<path id="connection-${link.connIndex}" class="fiber-scheme-link fiber-scheme-link-stripe-a" d="${link.pathD}" stroke="${stripeA}" stroke-width="4.5" stroke-linecap="butt" stroke-dasharray="${spliceDash}" data-connection-index="${link.connIndex}" data-from-fiber="${link.fromKey}" data-to-fiber="${link.toKey}" data-from-exit-x="${link.fromExitX}" data-from-y="${link.fromY}" data-to-exit-x="${link.toExitX}" data-to-y="${link.toY}" data-same-side="${link.sameSide ? '1' : '0'}" data-from-left="${link.isLeft ? '1' : '0'}" data-from-top="${link.isTop ? '1' : '0'}" data-to-top="${link.toTop ? '1' : '0'}" data-conn-label="${escapeHtml(link.label || '')}" style="${clickable}"></path>`;
+            html += `<path id="connection-${link.connIndex}" class="fiber-scheme-link fiber-scheme-link-stripe-a" d="${link.pathD}" stroke="${stripeA}" stroke-width="4.5" stroke-linecap="butt" stroke-dasharray="${spliceDash}" data-connection-index="${link.connIndex}" data-from-fiber="${link.fromKey}" data-to-fiber="${link.toKey}" data-from-exit-x="${link.fromExitX}" data-from-y="${link.fromY}" data-to-exit-x="${link.toExitX}" data-to-y="${link.toY}" data-same-side="${link.sameSide ? '1' : '0'}" data-from-left="${link.isLeft ? '1' : '0'}" data-to-left="${link.toLeft ? '1' : '0'}" data-from-top="${link.isTop ? '1' : '0'}" data-to-top="${link.toTop ? '1' : '0'}" data-conn-label="${escapeHtml(link.label || '')}" style="${clickable}"></path>`;
         }
         if (!link.sameFiberColor) {
             html += `<path class="fiber-scheme-link-stripe-b" d="${link.pathD}" stroke="${stripeB}" stroke-width="4.5" stroke-linecap="butt" stroke-dasharray="${spliceDash}" stroke-dashoffset="${FIBER_SPLICE_STRIPE_LEN}" data-connection-index="${link.connIndex}" pointer-events="none"/>`;
@@ -2626,6 +2706,11 @@ function buildFiberSchemeAroundObstaclesPath(x1, y1, x2, y2, obstacles, opts) {
     var rim = 22;
 
     function sideOf(x, y) {
+        // Сначала явный бок: жила справа/слева от корпуса (даже если её Y ниже bottom)
+        // иначе М2/боковой кабель ошибочно становится 'below' и уходит длинной петлёй.
+        var sideSlack = 12;
+        if (x < left - sideSlack) return 'left';
+        if (x > right + sideSlack) return 'right';
         var underBox = x >= left - 8 && x <= right + 8;
         if (y >= bottom - rim && underBox) return 'below';
         if (y <= top + rim && underBox) return 'above';
@@ -2669,6 +2754,26 @@ function buildFiberSchemeAroundObstaclesPath(x1, y1, x2, y2, obstacles, opts) {
         return out;
     }
 
+    /** Коридор сбоку от корпуса — со стороны целевой жилы (не «предпочитаемой» стороны). */
+    function clearXTowardSide(side) {
+        if (side === 'right') {
+            var cxR = (cableAx != null && !isNaN(cableAx)) ? cableAx : (right + pad + staggerBase);
+            return Math.max(cxR, right + 10 + lane * 6);
+        }
+        if (side === 'left') {
+            var cxL = (cableAx != null && !isNaN(cableAx)) ? cableAx : (left - pad - staggerBase);
+            return Math.min(cxL, left - 10 - lane * 6);
+        }
+        return clearX;
+    }
+
+    function approachYFromTop(fiberY) {
+        var ay = Math.max(fiberY + 16, cableAy != null ? cableAy : (fiberY + 20 + lane * 8));
+        if (ay > top - 4 && ay < bottom + 4) ay = Math.min(ay, top - 12);
+        if (ay <= fiberY + 8) ay = fiberY + 18 + lane * 6;
+        return ay;
+    }
+
     // Схематичный обход: ортогональные Г/П + дорожка под верхним кабелем.
     if ((s1 === 'below' && s2 === 'above') || (s1 === 'above' && s2 === 'below')) {
         if (s1 === 'below') {
@@ -2679,10 +2784,7 @@ function buildFiberSchemeAroundObstaclesPath(x1, y1, x2, y2, obstacles, opts) {
                 { x: clearX, y: yLane }
             ]);
         } else {
-            var yLaneFromFiber = Math.max(y1 + 16, cableAy != null ? cableAy : (y1 + 20 + lane * 8));
-            if (yLaneFromFiber > top - 4 && yLaneFromFiber < bottom + 4) {
-                yLaneFromFiber = Math.min(yLaneFromFiber, top - 12);
-            }
+            var yLaneFromFiber = approachYFromTop(y1);
             var yLaneBottom = Math.max(y2, bottom) + stemStart;
             pts = [
                 { x: x1, y: y1 },
@@ -2700,13 +2802,40 @@ function buildFiberSchemeAroundObstaclesPath(x1, y1, x2, y2, obstacles, opts) {
             { x: x2, y: clearY },
             { x: x2, y: y2 }
         ];
+    } else if (s1 === 'above' && (s2 === 'left' || s2 === 'right')) {
+        // Верх → бок: вниз на дорожку, вбок МИМО корпуса, вертикаль к Y жилы, в бейдж.
+        // Раньше шла горизонталь x1→x2 на yOut и резала сплиттер / чужие жилы.
+        var yTopSide = approachYFromTop(y1);
+        var cxTopSide = clearXTowardSide(s2);
+        pts = [
+            { x: x1, y: y1 },
+            { x: x1, y: yTopSide },
+            { x: cxTopSide, y: yTopSide },
+            { x: cxTopSide, y: y2 },
+            { x: x2, y: y2 }
+        ];
+    } else if (s1 === 'below' && (s2 === 'left' || s2 === 'right')) {
+        var yBotSide = Math.max(y1, bottom) + stemStart;
+        var cxBotSide = clearXTowardSide(s2);
+        pts = [
+            { x: x1, y: y1 },
+            { x: x1, y: yBotSide },
+            { x: cxBotSide, y: yBotSide },
+            { x: cxBotSide, y: y2 },
+            { x: x2, y: y2 }
+        ];
     } else if (s1 === 'below' || s1 === 'above') {
         if (s1 === 'above') {
-            var yOutFiber = Math.max(y1 + 16, cableAy != null ? cableAy : (y1 + 20 + lane * 8));
+            // above → inside/above: всё равно обходим clearX, не режем корпус горизонталью.
+            var yOutFiber = approachYFromTop(y1);
+            var cxAbove = clearX;
+            if (x2 > right) cxAbove = clearXTowardSide('right');
+            else if (x2 < left) cxAbove = clearXTowardSide('left');
             pts = [
                 { x: x1, y: y1 },
                 { x: x1, y: yOutFiber },
-                { x: x2, y: yOutFiber },
+                { x: cxAbove, y: yOutFiber },
+                { x: cxAbove, y: y2 },
                 { x: x2, y: y2 }
             ];
         } else if (s2 === 'above') {
@@ -2728,17 +2857,24 @@ function buildFiberSchemeAroundObstaclesPath(x1, y1, x2, y2, obstacles, opts) {
         }
     } else if (s1 === 'left' || s1 === 'right') {
         if (s2 === 'above') {
-            pts = withCableApproachAbove(x2, y2, [
-                { x: x1, y: y1 },
-                { x: clearX, y: y1 },
-                { x: clearX, y: Math.max(y1, bottom) + stemStart }
-            ]);
-        } else if (s2 === 'below') {
-            var yEnd = Math.max(y2, bottom) + stemStart;
+            // Бок → верх: к коридору со своей стороны, вверх на дорожку под кабелем, к жиле.
+            // Не уходим под корпус (старый stem ниже bottom давал длинную петлю).
+            var ySideTop = approachYFromTop(y2);
+            var cxSideTop = clearXTowardSide(s1);
             pts = [
                 { x: x1, y: y1 },
-                { x: clearX, y: y1 },
-                { x: clearX, y: yEnd },
+                { x: cxSideTop, y: y1 },
+                { x: cxSideTop, y: ySideTop },
+                { x: x2, y: ySideTop },
+                { x: x2, y: y2 }
+            ];
+        } else if (s2 === 'below') {
+            var yEnd = Math.max(y2, bottom) + stemStart;
+            var cxSideBot = clearXTowardSide(s1);
+            pts = [
+                { x: x1, y: y1 },
+                { x: cxSideBot, y: y1 },
+                { x: cxSideBot, y: yEnd },
                 { x: x2, y: yEnd },
                 { x: x2, y: y2 }
             ];
@@ -2748,9 +2884,12 @@ function buildFiberSchemeAroundObstaclesPath(x1, y1, x2, y2, obstacles, opts) {
                 { x: x2, y: y2 }
             ];
         } else {
+            // Бок → бок/inside: сначала свой clearX, чтобы не резать корпус.
+            var cxSide = clearXTowardSide(s1);
             pts = [
                 { x: x1, y: y1 },
-                { x: x2, y: y1 },
+                { x: cxSide, y: y1 },
+                { x: cxSide, y: y2 },
                 { x: x2, y: y2 }
             ];
         }
@@ -2911,6 +3050,10 @@ function updateFiberSchemeSplicePaths(svg, hostObj, svgWidth, svgHeight, portHal
     var obstacles = window.EmbeddedSplitters && EmbeddedSplitters.getSchemeSplitterObstacles
         ? EmbeddedSplitters.getSchemeSplitterObstacles(hostObj, svgWidth, svgHeight)
         : [];
+    var topEntries = [];
+    var leftEntries = [];
+    var rightEntries = [];
+    var linkNodes = [];
     svg.querySelectorAll('.fiber-scheme-link[data-connection-index]').forEach(function(link) {
         var fromX = parseFloat(link.getAttribute('data-from-exit-x'));
         var fromY = parseFloat(link.getAttribute('data-from-y'));
@@ -2918,18 +3061,85 @@ function updateFiberSchemeSplicePaths(svg, hostObj, svgWidth, svgHeight, portHal
         var toY = parseFloat(link.getAttribute('data-to-y'));
         if (isNaN(fromX) || isNaN(fromY) || isNaN(toX) || isNaN(toY)) return;
         var connIndex = link.getAttribute('data-connection-index');
-        var pathD = buildFiberSchemeConnectionPath(fromX, fromY, toX, toY, portHalf, {
-            sameSide: link.getAttribute('data-same-side') === '1',
-            isLeft: link.getAttribute('data-from-left') === '1',
-            isTop: link.getAttribute('data-from-top') === '1',
-            toTop: link.getAttribute('data-to-top') === '1',
+        var isTop = link.getAttribute('data-from-top') === '1';
+        var toTop = link.getAttribute('data-to-top') === '1';
+        var isLeft = link.getAttribute('data-from-left') === '1';
+        var toLeftAttr = link.getAttribute('data-to-left');
+        var topSide = (isTop && !toTop) || (toTop && !isTop);
+        linkNodes.push({
+            link: link,
+            fromX: fromX, fromY: fromY, toX: toX, toY: toY,
+            connIndex: connIndex, isTop: isTop, toTop: toTop, isLeft: isLeft, topSide: topSide
+        });
+        if (!topSide) return;
+        var approachKey = 'splice:' + connIndex;
+        var topX = isTop ? fromX : toX;
+        var topY = isTop ? fromY : toY;
+        var sideX = isTop ? toX : fromX;
+        var sideY = isTop ? toY : fromY;
+        var sideIsLeft;
+        if (isTop && !toTop) {
+            sideIsLeft = toLeftAttr != null ? toLeftAttr === '1' : (sideX < (svgWidth || 800) * 0.5);
+        } else {
+            sideIsLeft = isLeft;
+        }
+        topEntries.push({ fiberKey: approachKey, fx: topX, px: sideX, fy: topY, py: sideY });
+        var sideEntry = { fiberKey: approachKey, fx: sideX, px: topX, fy: sideY, py: topY };
+        if (sideIsLeft) leftEntries.push(sideEntry);
+        else rightEntries.push(sideEntry);
+        link._spliceSideIsLeft = sideIsLeft;
+    });
+    var maxFy = null;
+    topEntries.forEach(function (e) {
+        if (e && e.fy != null && !isNaN(e.fy)) maxFy = maxFy == null ? e.fy : Math.max(maxFy, e.fy);
+    });
+    var topMap = typeof assignTopCrossLinkApproachYs === 'function'
+        ? assignTopCrossLinkApproachYs(topEntries, (maxFy == null ? 40 : maxFy) + 22 + Math.max(0, topEntries.length - 1) * 8)
+        : new Map();
+    var leftBase = null;
+    leftEntries.forEach(function (e) {
+        if (e && e.fx != null && !isNaN(e.fx)) leftBase = leftBase == null ? e.fx : Math.max(leftBase, e.fx);
+    });
+    var rightBase = null;
+    rightEntries.forEach(function (e) {
+        if (e && e.fx != null && !isNaN(e.fx)) rightBase = rightBase == null ? e.fx : Math.min(rightBase, e.fx);
+    });
+    var leftMap = typeof assignSideSplitterApproachXs === 'function'
+        ? assignSideSplitterApproachXs(leftEntries, (leftBase == null ? 80 : leftBase) + 28, { towardLeft: false })
+        : new Map();
+    var rightMap = typeof assignSideSplitterApproachXs === 'function'
+        ? assignSideSplitterApproachXs(rightEntries, (rightBase == null ? 700 : rightBase) - 28, { towardLeft: true })
+        : new Map();
+
+    linkNodes.forEach(function(item) {
+        var spliceKey = 'splice:' + item.connIndex;
+        var cableAy = item.topSide && topMap.has(spliceKey) ? topMap.get(spliceKey) : null;
+        var cableAx = null;
+        var preferLeft;
+        if (item.topSide) {
+            var sideIsLeft = !!item.link._spliceSideIsLeft;
+            preferLeft = sideIsLeft;
+            if (sideIsLeft && leftMap.has(spliceKey)) cableAx = leftMap.get(spliceKey);
+            else if (!sideIsLeft && rightMap.has(spliceKey)) cableAx = rightMap.get(spliceKey);
+        }
+        var pathD = buildFiberSchemeConnectionPath(item.fromX, item.fromY, item.toX, item.toY, portHalf, {
+            sameSide: item.link.getAttribute('data-same-side') === '1',
+            isLeft: item.isLeft,
+            isTop: item.isTop,
+            toTop: item.toTop,
             svgWidth: svgWidth,
             obstacles: obstacles,
-            routeSeed: 'splice:' + connIndex,
-            routeStagger: (parseInt(connIndex, 10) || 0) * 9 + 8,
-            stemStart: 14 + ((parseInt(connIndex, 10) || 0) % 7) * 2,
-            stemEnd: 12 + ((parseInt(connIndex, 10) || 0) % 5) * 2
+            routeSeed: 'splice:' + item.connIndex,
+            routeStagger: (parseInt(item.connIndex, 10) || 0) * 9 + 8,
+            stemStart: 14 + ((parseInt(item.connIndex, 10) || 0) % 7) * 2,
+            stemEnd: 12 + ((parseInt(item.connIndex, 10) || 0) % 5) * 2,
+            laneIndex: parseInt(item.connIndex, 10) || 0,
+            cableApproachY: cableAy,
+            cableApproachX: cableAx,
+            preferLeft: preferLeft
         });
+        var link = item.link;
+        var connIndex = item.connIndex;
         link.setAttribute('d', pathD);
         var shadow = svg.querySelector('.fiber-scheme-link-shadow[data-connection-index="' + connIndex + '"]');
         if (shadow) shadow.setAttribute('d', pathD);
@@ -2976,7 +3186,9 @@ function buildFiberSchemeConnectionPath(x1, y1, x2, y2, portHalf, opts) {
             preferAbove: opts.preferAbove,
             stemStart: opts.stemStart,
             stemEnd: opts.stemEnd,
-            laneIndex: opts.laneIndex
+            laneIndex: opts.laneIndex,
+            cableApproachY: opts.cableApproachY,
+            cableApproachX: opts.cableApproachX
         });
         if (aroundPath) return aroundPath;
     }

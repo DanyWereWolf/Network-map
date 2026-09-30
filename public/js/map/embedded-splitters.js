@@ -385,13 +385,32 @@
                 // Коридор слева от карточки и справа от жилы — без затаскивания внутрь корпуса.
                 var leftMax = box.x - 12;
                 var leftMin = fiberX + 18;
-                if (leftMin <= leftMax) ax = Math.max(leftMin, Math.min(leftMax, ax));
-                else ax = leftMax;
+                if (leftMin <= leftMax) {
+                    if (pathOpts.cableApproachX != null && !isNaN(pathOpts.cableApproachX)) {
+                        ax = Math.max(leftMin, Math.min(leftMax, pathOpts.cableApproachX));
+                    } else {
+                        var leftSpan = leftMax - leftMin;
+                        var leftGap = Math.min(12, Math.max(6, leftSpan / Math.max(1, lane + 1)));
+                        ax = Math.max(leftMin, Math.min(leftMax, leftMin + lane * leftGap));
+                    }
+                } else {
+                    ax = leftMax - lane * 6;
+                }
             } else {
                 var rightMin = box.x + box.w + 12;
                 var rightMax = fiberX - 18;
-                if (rightMin <= rightMax) ax = Math.max(rightMin, Math.min(rightMax, ax));
-                else ax = rightMin;
+                if (rightMin <= rightMax) {
+                    if (pathOpts.cableApproachX != null && !isNaN(pathOpts.cableApproachX)) {
+                        ax = Math.max(rightMin, Math.min(rightMax, pathOpts.cableApproachX));
+                    } else {
+                        var rightSpan = rightMax - rightMin;
+                        var rightGap = Math.min(12, Math.max(6, rightSpan / Math.max(1, lane + 1)));
+                        ax = Math.max(rightMin, Math.min(rightMax, rightMax - lane * rightGap));
+                    }
+                } else {
+                    // Места нет — хотя бы чуть развести по lane около правого края корпуса.
+                    ax = rightMin + lane * 6;
+                }
             }
         }
         return ax;
@@ -900,7 +919,7 @@
         return assignFn(entries, baseApproachY);
     }
 
-    /** Дорожки у бокового кабеля для вертикального сплиттера. */
+    /** Дорожки у бокового кабеля: пакуем в зазор кабель↔сплиттер, не уезжая в корпус. */
     function buildSideCableSplitterApproachMap(entries, isLeft) {
         var assignFn = getAssignSideApproachXs();
         if (!assignFn || !entries || !entries.length) return new Map();
@@ -911,10 +930,12 @@
             }
         });
         if (baseFx == null) return new Map();
+        // База ближе к кабелю; паковщик разводит полосы В сторону сплиттера.
         var baseApproachX = isLeft
-            ? (baseFx + 28 + Math.max(0, entries.length - 1) * 4)
-            : (baseFx - 28 - Math.max(0, entries.length - 1) * 4);
-        return assignFn(entries, baseApproachX, { towardLeft: !isLeft });
+            ? (baseFx + 26)
+            : (baseFx - 26);
+        var laneGap = Math.max(10, Math.min(14, 120 / Math.max(1, entries.length)));
+        return assignFn(entries, baseApproachX, { towardLeft: !isLeft, laneGap: laneGap });
     }
 
     function setSplitterLinkPathD(pathEl, d) {
@@ -1400,11 +1421,8 @@
                     rec.inputCableId = root.cableId;
                     rec.inputFiberNumber = root.fiberNumber;
                     rec.inputFiber = { cableId: root.cableId, fiberNumber: root.fiberNumber };
-                } else {
-                    rec.inputCableId = null;
-                    rec.inputFiberNumber = null;
-                    rec.inputFiber = null;
                 }
+                // Родитель найден: не затираем вход ребёнка, даже если у родителя input ещё не synced
                 return true;
             }
         }
@@ -1443,10 +1461,17 @@
     }
 
     function syncAllInputs(hostObj) {
-        getList(hostObj).forEach(function (rec, idx) {
+        var list = getList(hostObj);
+        list.forEach(function (rec, idx) {
             normalizeRecord(rec, idx);
-            syncInputFromConnections(hostObj, rec);
         });
+        // Несколько проходов: сначала корни (splitterConnections), потом дети каскада
+        var passes = Math.max(2, list.length);
+        for (var p = 0; p < passes; p++) {
+            list.forEach(function (rec) {
+                syncInputFromConnections(hostObj, rec);
+            });
+        }
     }
 
     function createFacade(hostObj, rec) {

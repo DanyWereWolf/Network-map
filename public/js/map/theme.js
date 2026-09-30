@@ -7,14 +7,14 @@ var THEME_TRANSITION_MS = 450;
 
 var THEME_ACCENT_PRESETS = {
     blue: '#2563eb',
-    teal: '#0d9488',
+    teal: '#0f766e',
     violet: '#7c3aed',
     rose: '#e11d48',
     amber: '#d97706',
     emerald: '#059669'
 };
 
-var DEFAULT_THEME_ACCENT = { id: 'blue', color: THEME_ACCENT_PRESETS.blue };
+var DEFAULT_THEME_ACCENT = { id: 'teal', color: THEME_ACCENT_PRESETS.teal };
 
 function getThemeUserIdFromSession() {
     try {
@@ -170,18 +170,19 @@ function mixHexToward(hex, towardHex, amount) {
 
 function accentSoftRgba(hex, alpha) {
     var rgb = hexToRgbParts(hex);
-    if (!rgb) return 'rgba(37, 99, 235, ' + alpha + ')';
+    if (!rgb) return 'rgba(15, 118, 110, ' + alpha + ')';
     return 'rgba(' + rgb.r + ', ' + rgb.g + ', ' + rgb.b + ', ' + alpha + ')';
 }
 
 function buildHeaderGradient(accentHex, isDark) {
-    var deep = mixHexToward(accentHex, '#0f172a', isDark ? 0.55 : 0.42);
-    var mid = mixHexToward(accentHex, '#1e3a8a', isDark ? 0.28 : 0.18);
+    var ink = '#0a1628';
+    var deep = mixHexToward(accentHex, ink, isDark ? 0.55 : 0.42);
+    var mid = mixHexToward(accentHex, '#115e59', isDark ? 0.28 : 0.18);
     var bright = mixHexToward(accentHex, '#ffffff', isDark ? 0.12 : 0.18);
     if (isDark) {
-        return 'linear-gradient(135deg, #0f172a 0%, ' + deep + ' 48%, ' + mid + ' 100%)';
+        return 'linear-gradient(145deg, #050a12 0%, ' + deep + ' 50%, ' + mid + ' 100%)';
     }
-    return 'linear-gradient(122deg, ' + deep + ' 0%, ' + mid + ' 42%, ' + accentHex + ' 78%, ' + bright + ' 100%)';
+    return 'linear-gradient(145deg, ' + deep + ' 0%, ' + mid + ' 48%, ' + accentHex + ' 100%)';
 }
 
 function readSavedThemeAccent() {
@@ -316,32 +317,105 @@ function canEditOrgFiberMapStyle() {
     return false;
 }
 
+var COVERAGE_COLOR_STORAGE_PREFIX = 'networkMap_coverageColors';
+var DEFAULT_CAMERA_COVERAGE_THEME_COLOR = '#22a06b';
+var DEFAULT_RADIO_BRIDGE_THEME_COLOR = '#06b6d4';
+var _coverageColorSyncTimer = null;
+
+function getCoverageColorsStorageKey() {
+    var orgId = null;
+    try {
+        if (typeof currentUser !== 'undefined' && currentUser && currentUser.organizationId != null) {
+            orgId = String(currentUser.organizationId);
+        }
+    } catch (e) {}
+    return COVERAGE_COLOR_STORAGE_PREFIX + (orgId ? ('_' + orgId) : '');
+}
+
+function readLocalCoverageColors() {
+    try {
+        var raw = localStorage.getItem(getCoverageColorsStorageKey());
+        if (!raw) return null;
+        var parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        var out = {};
+        if (parsed.cameraCoverageColor) out.cameraCoverageColor = String(parsed.cameraCoverageColor).toLowerCase();
+        if (parsed.radioBridgeCoverageColor) out.radioBridgeCoverageColor = String(parsed.radioBridgeCoverageColor).toLowerCase();
+        return (out.cameraCoverageColor || out.radioBridgeCoverageColor) ? out : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function writeLocalCoverageColors(coverage) {
+    if (!coverage) return;
+    try {
+        var prev = readLocalCoverageColors() || {};
+        var next = {
+            cameraCoverageColor: coverage.cameraCoverageColor || prev.cameraCoverageColor || DEFAULT_CAMERA_COVERAGE_THEME_COLOR,
+            radioBridgeCoverageColor: coverage.radioBridgeCoverageColor || prev.radioBridgeCoverageColor || DEFAULT_RADIO_BRIDGE_THEME_COLOR
+        };
+        localStorage.setItem(getCoverageColorsStorageKey(), JSON.stringify(next));
+        window._orgCoverageColorSettings = Object.assign({}, window._orgCoverageColorSettings || {}, next);
+    } catch (e) {}
+}
+
+function isDefaultCoverageColorPair(settings) {
+    if (!settings) return true;
+    var cam = settings.cameraCoverageColor ? String(settings.cameraCoverageColor).toLowerCase() : DEFAULT_CAMERA_COVERAGE_THEME_COLOR;
+    var radio = settings.radioBridgeCoverageColor ? String(settings.radioBridgeCoverageColor).toLowerCase() : DEFAULT_RADIO_BRIDGE_THEME_COLOR;
+    return cam === DEFAULT_CAMERA_COVERAGE_THEME_COLOR && radio === DEFAULT_RADIO_BRIDGE_THEME_COLOR;
+}
+
 function syncThemeFiberMapAdminUi() {
     var canEdit = canEditOrgFiberMapStyle();
     var colorEl = document.getElementById('themeFiberMapColor');
     var widthEl = document.getElementById('themeFiberMapStrokeWidth');
+    var camEl = document.getElementById('themeCameraCoverageColor');
+    var radioEl = document.getElementById('themeRadioCoverageColor');
     var hint = document.getElementById('themeFiberMapAdminHint');
     if (colorEl) colorEl.disabled = !canEdit;
     if (widthEl) widthEl.disabled = !canEdit;
+    if (camEl) camEl.disabled = !canEdit;
+    if (radioEl) radioEl.disabled = !canEdit;
     if (hint) hint.hidden = canEdit;
 }
 
-function syncOrgFiberMapStyleToServer(color, width) {
+function syncOrgFiberMapStyleToServer(color, width, coverage) {
     if (!canEditOrgFiberMapStyle()) return;
     if (typeof getApiBase !== 'function' || typeof getAuthToken !== 'function') return;
     var base = getApiBase();
     var token = getAuthToken();
     if (!base || !token) return;
+    var body = {};
+    if (color !== undefined) body.fiberMapColor = color;
+    if (width !== undefined) body.fiberMapStrokeWidth = width;
+    if (coverage && coverage.cameraCoverageColor !== undefined) body.cameraCoverageColor = coverage.cameraCoverageColor;
+    if (coverage && coverage.radioBridgeCoverageColor !== undefined) body.radioBridgeCoverageColor = coverage.radioBridgeCoverageColor;
+    try {
+        if (typeof currentUser !== 'undefined' && currentUser && currentUser.organizationId != null) {
+            body.organizationId = currentUser.organizationId;
+        }
+    } catch (eOrg) {}
+    if (!Object.keys(body).length) return;
     try {
         fetch(base + '/api/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-            body: JSON.stringify({
-                fiberMapColor: color,
-                fiberMapStrokeWidth: width
-            })
+            body: JSON.stringify(body)
         }).catch(function () {});
     } catch (e) {}
+}
+
+function scheduleCoverageColorsServerSync(coverage) {
+    if (_coverageColorSyncTimer) {
+        clearTimeout(_coverageColorSyncTimer);
+        _coverageColorSyncTimer = null;
+    }
+    _coverageColorSyncTimer = setTimeout(function() {
+        _coverageColorSyncTimer = null;
+        syncOrgFiberMapStyleToServer(undefined, undefined, coverage);
+    }, 350);
 }
 
 function applyThemeFiberMapStyleFromUi(syncServer) {
@@ -358,13 +432,120 @@ function applyThemeFiberMapStyleFromUi(syncServer) {
     }
 }
 
+function syncThemeCoverageColorControls() {
+    var camEl = document.getElementById('themeCameraCoverageColor');
+    var radioEl = document.getElementById('themeRadioCoverageColor');
+    var getCam = typeof getCameraCoverageColor === 'function'
+        ? getCameraCoverageColor
+        : (window.getCameraCoverageColor || null);
+    var getRadio = typeof getRadioBridgeCoverageColor === 'function'
+        ? getRadioBridgeCoverageColor
+        : (window.getRadioBridgeCoverageColor || null);
+    if (camEl && typeof getCam === 'function') {
+        try { camEl.value = getCam(); } catch (eCam) {}
+    }
+    if (radioEl && typeof getRadio === 'function') {
+        try { radioEl.value = getRadio(); } catch (eRadio) {}
+    }
+}
+
+function applyThemeCoverageColorsFromUi(syncServer) {
+    var camEl = document.getElementById('themeCameraCoverageColor');
+    var radioEl = document.getElementById('themeRadioCoverageColor');
+    var camColor;
+    var radioColor;
+    var setCam = typeof setCameraCoverageColor === 'function'
+        ? setCameraCoverageColor
+        : (typeof window !== 'undefined' ? window.setCameraCoverageColor : null);
+    var setRadio = typeof setRadioBridgeCoverageColor === 'function'
+        ? setRadioBridgeCoverageColor
+        : (typeof window !== 'undefined' ? window.setRadioBridgeCoverageColor : null);
+    if (camEl && typeof setCam === 'function') {
+        camColor = setCam(camEl.value, { applyAll: true });
+    }
+    if (radioEl && typeof setRadio === 'function') {
+        radioColor = setRadio(radioEl.value, { applyAll: true });
+    }
+    var coverage = {};
+    if (camColor) coverage.cameraCoverageColor = camColor;
+    if (radioColor) coverage.radioBridgeCoverageColor = radioColor;
+    if (coverage.cameraCoverageColor !== undefined || coverage.radioBridgeCoverageColor !== undefined) {
+        writeLocalCoverageColors(coverage);
+        if (syncServer === 'debounce') {
+            scheduleCoverageColorsServerSync(coverage);
+        } else if (syncServer) {
+            if (_coverageColorSyncTimer) {
+                clearTimeout(_coverageColorSyncTimer);
+                _coverageColorSyncTimer = null;
+            }
+            syncOrgFiberMapStyleToServer(undefined, undefined, coverage);
+        }
+    }
+}
+
+function applyOrgCoverageColors(settings, opts) {
+    opts = opts || {};
+    if (!settings) return;
+    var next = Object.assign({}, window._orgCoverageColorSettings || {});
+    if (settings.cameraCoverageColor !== undefined) next.cameraCoverageColor = settings.cameraCoverageColor;
+    if (settings.radioBridgeCoverageColor !== undefined) next.radioBridgeCoverageColor = settings.radioBridgeCoverageColor;
+    window._orgCoverageColorSettings = next;
+    var setCam = typeof setCameraCoverageColor === 'function'
+        ? setCameraCoverageColor
+        : (typeof window !== 'undefined' ? window.setCameraCoverageColor : null);
+    var setRadio = typeof setRadioBridgeCoverageColor === 'function'
+        ? setRadioBridgeCoverageColor
+        : (typeof window !== 'undefined' ? window.setRadioBridgeCoverageColor : null);
+    if (settings.cameraCoverageColor !== undefined && typeof setCam === 'function') {
+        setCam(settings.cameraCoverageColor, { applyAll: opts.applyAll !== false });
+    }
+    if (settings.radioBridgeCoverageColor !== undefined && typeof setRadio === 'function') {
+        setRadio(settings.radioBridgeCoverageColor, { applyAll: opts.applyAll !== false });
+    }
+    syncThemeCoverageColorControls();
+}
+
+/** Применить цвета зон из ответа /api/settings + запасной localStorage. */
+function applyOrgCoverageColorsFromSettings(settings, opts) {
+    opts = opts || {};
+    var local = readLocalCoverageColors();
+    var server = settings || {};
+    var merged = {
+        cameraCoverageColor: server.cameraCoverageColor,
+        radioBridgeCoverageColor: server.radioBridgeCoverageColor
+    };
+    // Если на сервере ещё дефолты, а локально уже выбран свой цвет — не теряем его и дожимаем на сервер.
+    if (local && isDefaultCoverageColorPair(server) && !isDefaultCoverageColorPair(local)) {
+        merged.cameraCoverageColor = local.cameraCoverageColor || merged.cameraCoverageColor;
+        merged.radioBridgeCoverageColor = local.radioBridgeCoverageColor || merged.radioBridgeCoverageColor;
+        applyOrgCoverageColors(merged, opts);
+        writeLocalCoverageColors(merged);
+        if (canEditOrgFiberMapStyle()) {
+            syncOrgFiberMapStyleToServer(undefined, undefined, merged);
+        }
+        return;
+    }
+    applyOrgCoverageColors(merged, opts);
+    if (!isDefaultCoverageColorPair(merged)) {
+        writeLocalCoverageColors(merged);
+    }
+}
+
 function initThemeFiberMapControls() {
     syncThemeFiberMapAdminUi();
     if (window.FiberCableConfig && typeof window.FiberCableConfig.syncThemeFiberMapControls === 'function') {
         window.FiberCableConfig.syncThemeFiberMapControls();
     }
+    var localCoverage = readLocalCoverageColors();
+    if (localCoverage) {
+        try { applyOrgCoverageColors(localCoverage, { applyAll: true }); } catch (eLocal) {}
+    } else {
+        syncThemeCoverageColorControls();
+    }
     var colorEl = document.getElementById('themeFiberMapColor');
     var widthEl = document.getElementById('themeFiberMapStrokeWidth');
+    var camEl = document.getElementById('themeCameraCoverageColor');
+    var radioEl = document.getElementById('themeRadioCoverageColor');
     if (colorEl && colorEl.dataset.bound !== '1') {
         colorEl.dataset.bound = '1';
         colorEl.addEventListener('input', function() {
@@ -385,6 +566,28 @@ function initThemeFiberMapControls() {
         widthEl.addEventListener('change', function() {
             if (!canEditOrgFiberMapStyle()) return;
             applyThemeFiberMapStyleFromUi(true);
+        });
+    }
+    if (camEl && camEl.dataset.bound !== '1') {
+        camEl.dataset.bound = '1';
+        camEl.addEventListener('input', function() {
+            if (!canEditOrgFiberMapStyle()) return;
+            applyThemeCoverageColorsFromUi('debounce');
+        });
+        camEl.addEventListener('change', function() {
+            if (!canEditOrgFiberMapStyle()) return;
+            applyThemeCoverageColorsFromUi(true);
+        });
+    }
+    if (radioEl && radioEl.dataset.bound !== '1') {
+        radioEl.dataset.bound = '1';
+        radioEl.addEventListener('input', function() {
+            if (!canEditOrgFiberMapStyle()) return;
+            applyThemeCoverageColorsFromUi('debounce');
+        });
+        radioEl.addEventListener('change', function() {
+            if (!canEditOrgFiberMapStyle()) return;
+            applyThemeCoverageColorsFromUi(true);
         });
     }
 }
@@ -574,3 +777,6 @@ window.updateSettingsCurrentZoom = updateSettingsCurrentZoom;
 window.syncLodControlsUi = syncLodControlsUi;
 window.initThemeFiberMapControls = initThemeFiberMapControls;
 window.syncThemeFiberMapAdminUi = syncThemeFiberMapAdminUi;
+window.applyOrgCoverageColors = applyOrgCoverageColors;
+window.applyOrgCoverageColorsFromSettings = applyOrgCoverageColorsFromSettings;
+window.syncThemeCoverageColorControls = syncThemeCoverageColorControls;

@@ -8,11 +8,12 @@
     </script>
     <meta name="description" content="Панель администратора программы «Карта оптической сети» для работы с оптической сетью.">
     <meta name="robots" content="noindex, nofollow">
+    <meta name="theme-color" content="#0a1628">
     <title>Панель администратора — Карта оптической сети</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet">
     <script>
         (function() {
             try {
@@ -24,6 +25,7 @@
         })();
     </script>
     <link rel="stylesheet" href="css/auth.css">
+    <link rel="stylesheet" href="css/scrollbars.css">
     <link rel="stylesheet" href="css/android-app.css">
     <link rel="stylesheet" href="css/cookie-consent.css">
     <link rel="stylesheet" href="css/maintenance-notice.css">
@@ -35,6 +37,7 @@
             padding: 0;
             align-items: center;
             justify-content: center;
+            font-family: 'IBM Plex Sans', 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
         .admin-root {
             max-width: 1440px;
@@ -86,34 +89,35 @@
             align-items: center;
         }
         .btn-sm {
-            border-radius: 999px;
-            padding: 5px 12px;
+            border-radius: 4px;
+            padding: 6px 12px;
             border: 1px solid rgba(15,23,42,0.14);
-            background: rgba(255,255,255,0.96);
+            background: rgba(255,255,255,0.7);
             font-size: 0.78rem;
             cursor: pointer;
-            color: #111827;
+            color: #0a1628;
         }
         .btn-sm:hover {
-            background: #f3f4f6;
+            background: #fff;
+            border-color: rgba(15, 118, 110, 0.35);
         }
         .btn-sm-primary {
-            border-radius: 999px;
-            padding: 6px 14px;
+            border-radius: 4px;
+            padding: 7px 14px;
             border: none;
-            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            background: linear-gradient(135deg, #c2410c 0%, #ea580c 55%, #f97316 100%);
             color: #fff;
             font-size: 0.8rem;
-            font-weight: 500;
+            font-weight: 600;
             cursor: pointer;
-            box-shadow: 0 10px 26px rgba(37,99,235,0.35);
+            box-shadow: 0 10px 26px rgba(194, 65, 12, 0.32);
         }
         .btn-sm-primary:hover {
-            filter: brightness(1.03);
+            filter: brightness(1.05);
         }
         .btn-sm-danger {
-            border-radius: 999px;
-            padding: 5px 12px;
+            border-radius: 4px;
+            padding: 6px 12px;
             border: 1px solid rgba(239, 68, 68, 0.35);
             background: rgba(254, 242, 242, 0.96);
             color: #b91c1c;
@@ -136,11 +140,11 @@
             color: #fff;
         }
         .theme-toggle-btn {
-            min-width: 104px;
+            min-width: 0;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 6px;
+            gap: 7px;
         }
         .tab-content {
             display: none;
@@ -188,9 +192,9 @@
             border-color: #fdba74;
         }
         .maint-live-badge--scheduled {
-            background: #eff6ff;
-            color: #1d4ed8;
-            border-color: #93c5fd;
+            background: #f0fdfa;
+            color: #0f766e;
+            border-color: #99f6e4;
         }
         .maint-live-badge--off {
             background: #f1f5f9;
@@ -210,20 +214,21 @@
         }
         .maintenance-preview-card,
         .maintenance-form-card {
-            border-radius: 16px;
-            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            border: 1px solid rgba(15, 23, 42, 0.1);
             background: #fff;
             padding: 18px 20px;
-            box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
+            box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
         }
         .maintenance-form-card {
-            border-color: #fed7aa;
-            background: linear-gradient(180deg, #fffbeb 0%, #ffffff 42%);
+            border-color: rgba(15, 118, 110, 0.22);
+            background: linear-gradient(180deg, #f0fdfa 0%, #ffffff 48%);
         }
         .maintenance-card-label {
-            font-size: 0.72rem;
-            font-weight: 600;
-            letter-spacing: 0.06em;
+            font-family: 'Sora', 'IBM Plex Sans', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
             text-transform: uppercase;
             color: #94a3b8;
             margin: 0 0 12px;
@@ -368,24 +373,26 @@
         .broadcast-preview-card,
         .broadcast-recipients-card {
             background: var(--surface, #fff);
-            border: 1px solid var(--border, #e2e8f0);
-            border-radius: 14px;
+            border: 1px solid var(--border, rgba(15, 23, 42, 0.1));
+            border-radius: 12px;
             padding: 16px;
+            box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
         }
         .broadcast-card-label {
             margin: 0 0 12px;
-            font-size: 12px;
+            font-family: 'Sora', 'IBM Plex Sans', sans-serif;
+            font-size: 0.7rem;
             font-weight: 700;
-            letter-spacing: 0.04em;
+            letter-spacing: 0.08em;
             text-transform: uppercase;
             color: var(--muted, #64748b);
         }
         .broadcast-preview-frame {
             width: 100%;
             min-height: 520px;
-            border: 1px solid var(--border, #e2e8f0);
-            border-radius: 12px;
-            background: #eef2ff;
+            border: 1px solid var(--border, rgba(15, 23, 42, 0.1));
+            border-radius: 10px;
+            background: #f0fdfa;
         }
         .broadcast-actions {
             display: flex;
@@ -442,8 +449,22 @@
             cursor: pointer;
         }
         .support-thread-item:hover { background: #f8fafc; }
-        .support-thread-item.is-active { background: #eff6ff; }
-        .support-thread-item.is-unread { border-left: 3px solid #2563eb; }
+        .support-thread-item.is-active { background: #f0fdfa; }
+        .support-thread-item.is-unread { border-left: 3px solid #0f766e; }
+        .support-thread-item.is-privacy-deletion { border-left: 3px solid #dc2626; }
+        .support-deletion-badge {
+            display: inline-block;
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            color: #fff;
+            background: #dc2626;
+            border-radius: 4px;
+            padding: 1px 5px;
+            vertical-align: middle;
+            margin-right: 2px;
+        }
         .support-thread-item-title { font-weight: 600; font-size: 0.86rem; color: #0f172a; }
         .support-thread-item-preview { font-size: 0.76rem; color: #64748b; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .support-thread-detail {
@@ -477,7 +498,7 @@
             white-space: pre-wrap;
         }
         .support-admin-msg.visitor { align-self: flex-start; background: #f1f5f9; }
-        .support-admin-msg.admin { align-self: flex-end; background: #2563eb; color: #fff; }
+        .support-admin-msg.admin { align-self: flex-end; background: #0f766e; color: #fff; }
         .support-admin-msg.bot { align-self: flex-start; background: #fef3c7; color: #78350f; }
         .support-thread-reply {
             flex: 0 0 auto;
@@ -555,8 +576,8 @@
         }
         .search-field input:focus {
             outline: none;
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+            border-color: #0f766e;
+            box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
         }
         .org-toolbar-meta {
             font-size: 0.78rem;
@@ -643,15 +664,15 @@
         .bar-chart {
             display: flex;
             flex-direction: column;
-            gap: 9px;
+            gap: 11px;
             min-width: 0;
         }
         .bar-row {
             display: grid;
-            grid-template-columns: minmax(0, 112px) minmax(0, 1fr) auto;
+            grid-template-columns: minmax(0, 118px) minmax(0, 1fr) auto;
             align-items: center;
-            gap: 8px;
-            font-size: 0.74rem;
+            gap: 10px;
+            font-size: 0.76rem;
             color: #64748b;
             min-width: 0;
         }
@@ -661,55 +682,107 @@
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
-            line-height: 1.2;
+            line-height: 1.25;
             word-break: break-word;
+            color: #475569;
+            font-weight: 500;
         }
         .bar-row > strong {
             white-space: nowrap;
             font-variant-numeric: tabular-nums;
-            color: #334155;
+            font-family: 'Sora', 'IBM Plex Sans', sans-serif;
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #0a1628;
+            min-width: 2.4em;
+            text-align: right;
         }
         .bar-track {
             position: relative;
-            height: 8px;
-            border-radius: 999px;
-            background: #e2e8f0;
+            height: 11px;
+            border-radius: 4px;
+            background: #e8eef3;
             overflow: hidden;
+            box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06);
         }
         .bar-fill {
             position: absolute;
             inset: 0 auto 0 0;
             width: 0;
-            border-radius: 999px;
-            background: linear-gradient(90deg, #2563eb, #1d4ed8);
+            border-radius: 4px;
+            background: linear-gradient(90deg, #0f766e 0%, #14b8a6 70%, #2dd4bf 100%);
+            box-shadow: 0 0 12px rgba(20, 184, 166, 0.25);
+            transition: width 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .bar-row.tone-b .bar-fill {
+            background: linear-gradient(90deg, #115e59 0%, #0f766e 55%, #0891b2 100%);
+            box-shadow: 0 0 12px rgba(8, 145, 178, 0.22);
+        }
+        .bar-row.tone-c .bar-fill {
+            background: linear-gradient(90deg, #c2410c 0%, #ea580c 60%, #f97316 100%);
+            box-shadow: 0 0 12px rgba(234, 88, 12, 0.22);
+        }
+        .bar-row.tone-d .bar-fill {
+            background: linear-gradient(90deg, #0e7490 0%, #06b6d4 100%);
+            box-shadow: 0 0 12px rgba(6, 182, 212, 0.2);
         }
         .bar-row.warn .bar-fill {
-            background: linear-gradient(90deg, #f59e0b, #d97706);
+            background: linear-gradient(90deg, #d97706 0%, #f59e0b 55%, #fbbf24 100%);
+            box-shadow: 0 0 12px rgba(245, 158, 11, 0.28);
         }
         .bar-row.danger .bar-fill {
-            background: linear-gradient(90deg, #ef4444, #dc2626);
+            background: linear-gradient(90deg, #dc2626 0%, #ef4444 60%, #f87171 100%);
+            box-shadow: 0 0 12px rgba(239, 68, 68, 0.28);
+        }
+        .bar-chart .hint {
+            padding: 18px 12px;
+            text-align: center;
+            border: 1px dashed rgba(15, 23, 42, 0.12);
+            border-radius: 8px;
+            background: rgba(248, 250, 252, 0.7);
+            margin: 0;
         }
         .donut-wrap {
             display: flex;
-            gap: 12px;
+            gap: 18px;
             align-items: center;
             min-width: 0;
         }
         .donut-chart {
             --donut-a: 0deg;
             --donut-b: 0deg;
-            width: 88px;
-            height: 88px;
+            --donut-c: 0deg;
+            position: relative;
+            width: 108px;
+            height: 108px;
             border-radius: 50%;
             background:
-                radial-gradient(circle at center, #ffffff 0 52%, transparent 53% 100%),
+                radial-gradient(circle at center, #ffffff 0 54%, transparent 55% 100%),
                 conic-gradient(
-                    #16a34a 0 var(--donut-a),
-                    #f59e0b var(--donut-a) var(--donut-b),
-                    #ef4444 var(--donut-b) 360deg
+                    #0f766e 0 var(--donut-a),
+                    #6366f1 var(--donut-a) var(--donut-b),
+                    #ea580c var(--donut-b) var(--donut-c),
+                    #94a3b8 var(--donut-c) 360deg
                 );
-            border: 1px solid #e2e8f0;
+            border: none;
             flex: 0 0 auto;
+            box-shadow:
+                0 8px 24px rgba(15, 118, 110, 0.14),
+                inset 0 0 0 1px rgba(15, 23, 42, 0.06);
+        }
+        .donut-chart::after {
+            content: attr(data-center);
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Sora', 'IBM Plex Sans', sans-serif;
+            font-size: 1.05rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            color: #0a1628;
+            pointer-events: none;
         }
         .legend-list {
             margin: 0;
@@ -717,38 +790,95 @@
             list-style: none;
             display: flex;
             flex-direction: column;
-            gap: 6px;
-            font-size: 0.75rem;
+            gap: 8px;
+            font-size: 0.78rem;
             color: #64748b;
             min-width: 0;
+            flex: 1;
         }
         .legend-item {
             display: grid;
             grid-template-columns: auto minmax(0, 1fr) auto;
-            align-items: start;
-            gap: 8px;
+            align-items: center;
+            gap: 10px;
             min-width: 0;
-            line-height: 1.25;
+            line-height: 1.3;
+            padding: 7px 10px;
+            border-radius: 8px;
+            background: rgba(248, 250, 252, 0.85);
+            border: 1px solid rgba(15, 23, 42, 0.06);
         }
         .legend-item strong {
+            font-family: 'Sora', 'IBM Plex Sans', sans-serif;
             font-variant-numeric: tabular-nums;
+            font-weight: 700;
+            color: #0a1628;
             white-space: nowrap;
         }
         .legend-item-label {
             min-width: 0;
             word-break: break-word;
+            font-weight: 500;
+            color: #475569;
         }
         .legend-dot {
-            width: 9px;
-            height: 9px;
-            border-radius: 50%;
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
             flex: 0 0 auto;
+            box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.04);
         }
-        .legend-dot.active { background: #16a34a; }
-        .legend-dot.suspended { background: #f59e0b; }
-        .legend-dot.expired { background: #ef4444; }
-        .legend-dot.warn { background: #f97316; }
-        .legend-dot.info { background: #2563eb; }
+        .legend-dot.active { background: #0f766e; }
+        .legend-dot.suspended { background: #ea580c; }
+        .legend-dot.pending { background: #6366f1; }
+        .legend-dot.expired { background: #94a3b8; }
+        .legend-dot.warn { background: #f59e0b; }
+        .legend-dot.info { background: #14b8a6; }
+        .visit-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            min-width: 0;
+            max-height: min(320px, 42vh);
+            overflow-y: auto;
+            overflow-x: hidden;
+            overscroll-behavior: contain;
+            padding-right: 4px;
+        }
+        .visit-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 10px;
+            align-items: start;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            background: linear-gradient(135deg, rgba(240, 253, 250, 0.55), rgba(255, 255, 255, 0.9));
+        }
+        .visit-row-main {
+            min-width: 0;
+        }
+        .visit-row-who {
+            font-weight: 600;
+            font-size: 0.8rem;
+            color: #0a1628;
+            line-height: 1.3;
+            word-break: break-word;
+        }
+        .visit-row-src {
+            font-size: 0.72rem;
+            color: #64748b;
+            margin-top: 2px;
+            word-break: break-word;
+        }
+        .visit-row-when {
+            font-family: 'Sora', 'IBM Plex Sans', sans-serif;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: #0f766e;
+            white-space: nowrap;
+            text-align: right;
+        }
         .table-wrap {
             border-radius: 12px;
             border: 1px solid #e5e7eb;
@@ -786,7 +916,7 @@
             font-size: 0.75rem;
             font-weight: 700;
             color: #fff;
-            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            background: linear-gradient(135deg, #0f766e, #115e59);
             overflow: hidden;
             vertical-align: middle;
         }
@@ -812,6 +942,10 @@
         .pill-suspended {
             background: #fef3c7;
             color: #92400e;
+        }
+        .pill-pending {
+            background: #eef2ff;
+            color: #4338ca;
         }
         .pill-expired {
             background: #fef2f2;
@@ -863,11 +997,11 @@
         }
         .info-box {
             font-size: 0.78rem;
-            color: #4b5563;
-            background: #eff6ff;
+            color: #334155;
+            background: #f0fdfa;
             border-radius: 10px;
             padding: 8px 10px;
-            border: 1px solid rgba(59,130,246,0.25);
+            border: 1px solid rgba(15, 118, 110, 0.28);
             margin-bottom: 10px;
         }
         .no-access {
@@ -926,8 +1060,14 @@
                 grid-column: 2;
             }
             .donut-chart {
-                width: 82px;
-                height: 82px;
+                width: 96px;
+                height: 96px;
+            }
+            .visit-row {
+                grid-template-columns: minmax(0, 1fr);
+            }
+            .visit-row-when {
+                text-align: left;
             }
             .table-wrap {
                 overflow-x: auto;
@@ -975,9 +1115,6 @@
         [data-theme="dark"] .tabs {
             border-bottom-color: #334155;
         }
-        [data-theme="dark"] .tabs::-webkit-scrollbar-thumb {
-            background: #334155;
-        }
         [data-theme="dark"] .tab {
             color: #94a3b8;
         }
@@ -1003,17 +1140,51 @@
             border-bottom-color: #334155;
         }
         [data-theme="dark"] .bar-track {
-            background: #334155;
+            background: #1e293b;
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+        }
+        [data-theme="dark"] .bar-row > span:first-child {
+            color: #94a3b8;
+        }
+        [data-theme="dark"] .bar-chart .hint {
+            background: rgba(15, 23, 42, 0.6);
+            border-color: rgba(148, 163, 184, 0.2);
         }
         [data-theme="dark"] .donut-chart {
             background:
-                radial-gradient(circle at center, #0f172a 0 52%, transparent 53% 100%),
+                radial-gradient(circle at center, #0f172a 0 54%, transparent 55% 100%),
                 conic-gradient(
-                    #16a34a 0 var(--donut-a),
-                    #f59e0b var(--donut-a) var(--donut-b),
-                    #ef4444 var(--donut-b) 360deg
+                    #14b8a6 0 var(--donut-a),
+                    #818cf8 var(--donut-a) var(--donut-b),
+                    #f97316 var(--donut-b) var(--donut-c),
+                    #64748b var(--donut-c) 360deg
                 );
-            border-color: #334155;
+            box-shadow:
+                0 10px 28px rgba(0, 0, 0, 0.35),
+                inset 0 0 0 1px rgba(148, 163, 184, 0.16);
+        }
+        [data-theme="dark"] .donut-chart::after {
+            color: #f8fafc;
+        }
+        [data-theme="dark"] .legend-item {
+            background: rgba(15, 23, 42, 0.65);
+            border-color: rgba(148, 163, 184, 0.14);
+        }
+        [data-theme="dark"] .legend-item-label {
+            color: #94a3b8;
+        }
+        [data-theme="dark"] .legend-item strong {
+            color: #f8fafc;
+        }
+        [data-theme="dark"] .visit-row {
+            background: linear-gradient(135deg, rgba(15, 118, 110, 0.12), rgba(15, 23, 42, 0.8));
+            border-color: rgba(148, 163, 184, 0.16);
+        }
+        [data-theme="dark"] .visit-row-who {
+            color: #f1f5f9;
+        }
+        [data-theme="dark"] .visit-row-when {
+            color: #5eead4;
         }
         [data-theme="dark"] .search-field input[type="search"],
         [data-theme="dark"] .search-field input[type="text"],
@@ -1033,8 +1204,8 @@
             color: #64748b;
         }
         [data-theme="dark"] .search-field input:focus {
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+            border-color: #0f766e;
+            box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.2);
         }
         [data-theme="dark"] thead {
             background: #1e293b;
@@ -1049,9 +1220,9 @@
             color: #cbd5e1;
         }
         [data-theme="dark"] .info-box {
-            color: #93c5fd;
-            background: rgba(30, 64, 175, 0.15);
-            border-color: rgba(96, 165, 250, 0.35);
+            color: #99f6e4;
+            background: rgba(15, 118, 110, 0.18);
+            border-color: rgba(45, 212, 191, 0.35);
         }
     </style>
     <link rel="stylesheet" href="css/site-admin.css">
@@ -1061,8 +1232,9 @@
     <script src="js/core/config.js"></script>
     <script src="js/core/android-app.js"></script>
     <script src="js/app/auth.js"></script>
-    <div class="auth-bg" aria-hidden="true">
-        <div class="auth-bg-gradient"></div>
+    <div class="auth-bg landing-bg" aria-hidden="true">
+        <div class="auth-bg-gradient landing-bg-gradient"></div>
+        <div class="landing-bg-grid" aria-hidden="true"></div>
         <canvas id="authPlexusCanvas" class="auth-bg-plexus"></canvas>
     </div>
     <div class="auth-container admin-root">
@@ -1070,19 +1242,24 @@
             <div id="adminContent" style="display:none;">
                 <header class="admin-header">
                     <div class="admin-header-left">
-                        <div class="auth-logo admin-brand-mark">
-                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <div class="auth-logo admin-brand-mark" role="img" aria-label="Карта оптической сети">
+                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                                 <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
                                 <circle cx="12" cy="10" r="3"></circle>
                             </svg>
                         </div>
                         <div class="admin-brand-copy">
+                            <div class="admin-eyebrow">volsmap.ru · admin</div>
                             <div class="admin-title">Панель администратора</div>
-                            <div class="admin-subtitle">Организации · мониторинг · витрина · поддержка</div>
+                            <div class="admin-subtitle">Организации, витрина, поддержка и мониторинг</div>
                         </div>
                     </div>
                     <div class="admin-header-actions">
-                        <button class="btn-sm theme-toggle-btn" id="adminThemeToggle" type="button">🌙 Тёмная</button>
+                        <button class="btn-sm theme-toggle-btn" id="adminThemeToggle" type="button" title="Тёмная тема" aria-label="Включить тёмную тему">
+                            <svg class="theme-icon theme-icon--moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                            <svg class="theme-icon theme-icon--sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" hidden><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>
+                            <span class="theme-toggle-label">Тема</span>
+                        </button>
                         <button class="btn-sm" id="backToLandingBtn" type="button">На главную</button>
                         <button class="btn-sm-primary" id="logoutBtn" type="button">Выйти</button>
                     </div>
@@ -1092,8 +1269,8 @@
                 <div class="admin-sidebar-overlay" id="adminSidebarOverlay" aria-hidden="true"></div>
                 <div class="admin-layout">
                     <aside class="admin-sidebar" id="adminSidebar" aria-label="Разделы панели">
-                        <span class="admin-nav-group-label">Разделы</span>
                         <nav class="admin-nav" role="tablist">
+                            <span class="admin-nav-group-label">Мониторинг</span>
                             <button type="button" class="admin-nav-item active" role="tab" data-tab="overview" aria-selected="true" id="nav-overview">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg>
                                 <span class="admin-nav-label">Обзор</span>
@@ -1106,6 +1283,8 @@
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
                                 <span class="admin-nav-label">База данных</span>
                             </button>
+
+                            <span class="admin-nav-group-label admin-nav-group-label--spaced">Контент</span>
                             <button type="button" class="admin-nav-item" role="tab" data-tab="showcase" id="nav-showcase">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
                                 <span class="admin-nav-label">Витрина</span>
@@ -1128,6 +1307,8 @@
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path><line x1="12" y1="6" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                                 <span class="admin-nav-label">Новости</span>
                             </button>
+
+                            <span class="admin-nav-group-label admin-nav-group-label--spaced">Система</span>
                             <button type="button" class="admin-nav-item" role="tab" data-tab="account" id="nav-account">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                                 <span class="admin-nav-label">Аккаунт</span>
@@ -1168,7 +1349,7 @@
                         <div class="stat-card stat-card--action" data-admin-goto="organizations" tabindex="0" role="button" title="Открыть список организаций">
                             <div class="stat-label">Всего организаций</div>
                             <div class="stat-value" id="statOrgsTotal">—</div>
-                            <div class="stat-extra">Активные / приостановленные: <span id="statOrgsSplit" class="text-muted">—</span></div>
+                            <div class="stat-extra">Активные / ожидают / приостановленные: <span id="statOrgsSplit" class="text-muted">—</span></div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-label">Сейчас онлайн</div>
@@ -1231,56 +1412,88 @@
                             <div class="stat-extra">Суммарно по всем организациям</div>
                         </div>
                     </div>
-                    <div class="overview-analytics-grid">
-                        <div class="analytics-card analytics-card--wide">
-                            <div class="analytics-title">Топ‑10 часто используемых объектов</div>
-                            <p class="hint" id="topObjectTypesHint" style="margin:0 0 10px;">По текущему составу всех карт</p>
-                            <div class="bar-chart" id="topObjectTypesChart"></div>
-                        </div>
-                        <div class="analytics-card">
-                            <div class="analytics-title">Статусы организаций</div>
-                            <div class="donut-wrap">
-                                <div class="donut-chart" id="statusDonutChart"></div>
-                                <ul class="legend-list">
-                                    <li class="legend-item"><span class="legend-dot active"></span><span class="legend-item-label">Активные</span><strong id="statusLegendActive">0</strong></li>
-                                    <li class="legend-item"><span class="legend-dot suspended"></span><span class="legend-item-label">Приостановленные</span><strong id="statusLegendSuspended">0</strong></li>
-                                    <li class="legend-item"><span class="legend-dot info"></span><span class="legend-item-label">Безлимит объектов</span><strong id="statusLegendUnlimited">0</strong></li>
-                                </ul>
+                    <div class="overview-analytics">
+                        <section class="analytics-section" aria-labelledby="analyticsHealthTitle">
+                            <h3 class="analytics-section-title" id="analyticsHealthTitle">Состояние платформы</h3>
+                            <div class="analytics-section-grid analytics-section-grid--health">
+                                <div class="analytics-card">
+                                    <div class="analytics-title">Статусы организаций</div>
+                                    <div class="donut-wrap">
+                                        <div class="donut-chart" id="statusDonutChart" data-center="—"></div>
+                                        <ul class="legend-list">
+                                            <li class="legend-item"><span class="legend-dot active"></span><span class="legend-item-label">Активные</span><strong id="statusLegendActive">0</strong></li>
+                                            <li class="legend-item"><span class="legend-dot pending"></span><span class="legend-item-label">Ожидают e-mail</span><strong id="statusLegendPending">0</strong></li>
+                                            <li class="legend-item"><span class="legend-dot suspended"></span><span class="legend-item-label">Приостановленные</span><strong id="statusLegendSuspended">0</strong></li>
+                                            <li class="legend-item"><span class="legend-dot info"></span><span class="legend-item-label">Безлимит объектов</span><strong id="statusLegendUnlimited">0</strong></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div class="analytics-card">
+                                    <div class="analytics-title">Лимиты объектов на карте</div>
+                                    <div class="split-meter" id="mapLimitBarChart"></div>
+                                </div>
+                                <div class="analytics-card">
+                                    <div class="analytics-title">Риски и качество данных</div>
+                                    <div class="risk-tiles" id="riskTiles">
+                                        <div class="risk-tile risk-tile--warn">
+                                            <strong id="riskLegendHighLoad">0</strong>
+                                            <span>Высокая загрузка сессий (≥80%)</span>
+                                        </div>
+                                        <div class="risk-tile risk-tile--info">
+                                            <strong id="riskLegendUnlimited">0</strong>
+                                            <span>Безлимит объектов</span>
+                                        </div>
+                                        <div class="risk-tile risk-tile--muted">
+                                            <strong id="riskLegendSuspended">0</strong>
+                                            <span>Приостановленные</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                        <div class="analytics-card">
-                            <div class="analytics-title">Лимиты объектов на карте</div>
-                            <div class="bar-chart" id="mapLimitBarChart"></div>
-                        </div>
-                        <div class="analytics-card">
-                            <div class="analytics-title">Топ организаций по загрузке лимита</div>
-                            <div class="bar-chart" id="capacityBarChart"></div>
-                        </div>
-                        <div class="analytics-card">
-                            <div class="analytics-title">Топ организаций по объектам на карте</div>
-                            <div class="bar-chart" id="mapObjectsBarChart"></div>
-                        </div>
-                        <div class="analytics-card">
-                            <div class="analytics-title">Качество данных и риски</div>
-                            <ul class="legend-list">
-                                <li class="legend-item"><span class="legend-dot warn"></span><span class="legend-item-label">Высокая загрузка сессий (≥80%)</span><strong id="riskLegendHighLoad">0</strong></li>
-                                <li class="legend-item"><span class="legend-dot info"></span><span class="legend-item-label">Безлимит объектов</span><strong id="riskLegendUnlimited">0</strong></li>
-                                <li class="legend-item"><span class="legend-dot suspended"></span><span class="legend-item-label">Приостановленные</span><strong id="riskLegendSuspended">0</strong></li>
-                            </ul>
-                        </div>
-                        <div class="analytics-card">
-                            <div class="analytics-title">Топ источников входа</div>
-                            <div class="bar-chart" id="visitSourcesChart"></div>
-                        </div>
-                        <div class="analytics-card">
-                            <div class="analytics-title">Последние входы</div>
-                            <div class="bar-chart" id="recentVisitsList"></div>
-                        </div>
+                        </section>
+
+                        <section class="analytics-section" aria-labelledby="analyticsObjectsTitle">
+                            <div class="analytics-section-head">
+                                <h3 class="analytics-section-title" id="analyticsObjectsTitle">Объекты на картах</h3>
+                                <p class="hint" id="topObjectTypesHint">По текущему составу всех карт</p>
+                            </div>
+                            <div class="analytics-card analytics-card--flush">
+                                <div class="col-chart" id="topObjectTypesChart"></div>
+                            </div>
+                        </section>
+
+                        <section class="analytics-section" aria-labelledby="analyticsOrgsTitle">
+                            <h3 class="analytics-section-title" id="analyticsOrgsTitle">Организации</h3>
+                            <div class="analytics-section-grid analytics-section-grid--2">
+                                <div class="analytics-card">
+                                    <div class="analytics-title">По загрузке лимита</div>
+                                    <div class="rank-chart" id="capacityBarChart"></div>
+                                </div>
+                                <div class="analytics-card">
+                                    <div class="analytics-title">По числу объектов</div>
+                                    <div class="rank-chart" id="mapObjectsBarChart"></div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="analytics-section" aria-labelledby="analyticsVisitsTitle">
+                            <h3 class="analytics-section-title" id="analyticsVisitsTitle">Активность входов</h3>
+                            <div class="analytics-section-grid analytics-section-grid--2">
+                                <div class="analytics-card">
+                                    <div class="analytics-title">Источники входа</div>
+                                    <div class="source-cloud" id="visitSourcesChart"></div>
+                                </div>
+                                <div class="analytics-card">
+                                    <div class="analytics-title">Последние входы</div>
+                                    <div class="visit-list" id="recentVisitsList"></div>
+                                </div>
+                            </div>
+                        </section>
                     </div>
                 </section>
 
                 <!-- Организации -->
-                <section id="tab-organizations" class="tab-content">
+                <section id="tab-organizations" class="tab-content tab-organizations">
                     <div class="panel-head">
                         <details class="panel-help">
                             <summary>Справка по разделу</summary>
@@ -1292,30 +1505,33 @@
                         </ul>
                         </details>
                     </div>
-                    <div class="org-filters" id="orgsFilters" role="group" aria-label="Фильтр организаций">
-                        <button type="button" class="org-filter active" data-filter="all">Все</button>
-                        <button type="button" class="org-filter" data-filter="active">Активные</button>
-                        <button type="button" class="org-filter" data-filter="suspended">Приостановленные</button>
-                        <button type="button" class="org-filter" data-filter="unlimited">Безлимит</button>
-                        <button type="button" class="org-filter" data-filter="highload">Высокая загрузка</button>
-                        <button type="button" class="org-filter" data-filter="online">В онлайне</button>
-                    </div>
-                    <div class="org-toolbar">
-                        <div class="search-field">
-                            <label for="orgsSearchInput" class="sr-only">Поиск организаций</label>
-                            <input type="search" id="orgsSearchInput" placeholder="Поиск: название, e-mail, ID…" autocomplete="off">
+                    <div class="org-controls">
+                        <div class="org-filters" id="orgsFilters" role="group" aria-label="Фильтр организаций">
+                            <button type="button" class="org-filter active" data-filter="all">Все</button>
+                            <button type="button" class="org-filter" data-filter="active">Активные</button>
+                            <button type="button" class="org-filter" data-filter="pending">Ожидают e-mail</button>
+                            <button type="button" class="org-filter" data-filter="suspended">Приостановленные</button>
+                            <button type="button" class="org-filter" data-filter="unlimited">Безлимит</button>
+                            <button type="button" class="org-filter" data-filter="highload">Высокая загрузка</button>
+                            <button type="button" class="org-filter" data-filter="online">В онлайне</button>
                         </div>
-                        <span class="org-toolbar-meta" id="orgsSearchMeta">—</span>
+                        <div class="org-toolbar">
+                            <div class="search-field">
+                                <label for="orgsSearchInput" class="sr-only">Поиск организаций</label>
+                                <input type="search" id="orgsSearchInput" placeholder="Поиск: название, e-mail, ID…" autocomplete="off">
+                            </div>
+                            <span class="org-toolbar-meta" id="orgsSearchMeta">—</span>
+                        </div>
                     </div>
-                    <div class="table-wrap org-monitor-table" style="margin-bottom:10px;">
+                    <div class="table-wrap table-wrap--scroll org-monitor-table">
                         <table>
                             <thead>
                                 <tr>
                                     <th>Организация</th>
                                     <th>Онлайн</th>
                                     <th>+ / −</th>
-                                    <th>Топ‑3 типов</th>
-                                    <th>Лимит / карта</th>
+                                    <th>Топ‑3</th>
+                                    <th>Лимит</th>
                                     <th>Статус</th>
                                     <th></th>
                                 </tr>
@@ -1326,11 +1542,11 @@
                     </div>
                     <div class="org-activity-panel" id="orgActivityPanel" hidden>
                         <div class="org-activity-head">
-                            <h3 class="panel-title" style="font-size:0.95rem;margin:0;">Активность: <span id="orgActivityTitle">—</span></h3>
+                            <h3 class="panel-title" style="font-size:0.9rem;margin:0;">Активность: <span id="orgActivityTitle">—</span></h3>
                             <button type="button" class="btn-sm" id="orgActivityCloseBtn">Закрыть</button>
                         </div>
-                        <p class="hint" style="margin:8px 0 10px;">Счётчики из журнала действий организации (создание / удаление объектов и кабелей).</p>
-                        <div class="table-wrap" style="max-height:280px;overflow:auto;">
+                        <p class="hint" style="margin:6px 0 8px;">Счётчики из журнала действий (создание / удаление).</p>
+                        <div class="table-wrap table-wrap--scroll table-wrap--scroll-sm">
                             <table>
                                 <thead>
                                     <tr>
@@ -1346,8 +1562,8 @@
                             </table>
                         </div>
                     </div>
-                    <div style="margin-top:22px;padding-top:18px;border-top:1px solid rgba(15,23,42,0.08);">
-                        <h3 class="panel-title" style="font-size:0.95rem;margin-bottom:12px;">Лимиты организации</h3>
+                    <div class="admin-section-card">
+                        <h3 class="panel-title admin-section-card-title">Лимиты организации</h3>
                         <div class="field-row">
                             <div class="field-col">
                                 <label for="pricingOrgSelect">Организация</label>
@@ -1361,11 +1577,11 @@
                         </div>
                         <div class="field-row">
                             <div class="field-col">
-                                <label for="pricingCustomMapLimit">Свой лимит объектов (пусто = по умолчанию с витрины)</label>
-                                <input id="pricingCustomMapLimit" type="number" min="1" placeholder="по умолчанию">
+                                <label for="pricingCustomMapLimit">Свой лимит объектов</label>
+                                <input id="pricingCustomMapLimit" type="number" min="1" placeholder="по умолчанию с витрины">
                             </div>
                             <div class="field-col">
-                                <label for="pricingMaxConcurrentUsers">Макс. одновременных пользователей</label>
+                                <label for="pricingMaxConcurrentUsers">Макс. одновременных</label>
                                 <input id="pricingMaxConcurrentUsers" type="number" min="-1" placeholder="4">
                                 <div class="hint">Пусто — как на витрине; −1 — без ограничения.</div>
                             </div>
@@ -1373,6 +1589,7 @@
                                 <label for="pricingStatus">Статус</label>
                                 <select id="pricingStatus">
                                     <option value="active">Активна</option>
+                                    <option value="pending">Ожидает e-mail</option>
                                     <option value="suspended">Приостановлена</option>
                                 </select>
                             </div>
@@ -1382,12 +1599,14 @@
                                 <label for="pricingContactEmail">E-mail для связи</label>
                                 <input id="pricingContactEmail" type="email" placeholder="name@company.ru">
                             </div>
+                            <div class="field-col field-col--action">
+                                <button class="btn-sm-primary" id="pricingSaveBtn">Сохранить лимиты</button>
+                            </div>
                         </div>
-                        <button class="btn-sm-primary" id="pricingSaveBtn">Сохранить лимиты организации</button>
                     </div>
-                    <div class="admin-users-block" style="margin-top:22px;padding-top:18px;border-top:1px solid rgba(15,23,42,0.08);">
-                        <h3 class="panel-title" style="font-size:0.95rem;margin-bottom:12px;">Пользователи платформы</h3>
-                        <p class="hint" style="margin:0 0 10px;">Поиск по имени, логину и организации. Роль меняется сразу; удаление завершает все сессии.</p>
+                    <div class="admin-users-block admin-section-card">
+                        <h3 class="panel-title admin-section-card-title">Пользователи платформы</h3>
+                        <p class="hint" style="margin:0 0 8px;">Роль меняется сразу; удаление завершает все сессии.</p>
                         <div class="org-toolbar users-toolbar">
                             <div class="search-field">
                                 <label for="usersSearchInput" class="sr-only">Поиск пользователей</label>
@@ -1400,16 +1619,16 @@
                             </select>
                             <span class="org-toolbar-meta" id="usersSearchMeta">—</span>
                         </div>
-                        <div class="table-wrap" style="max-height:380px;overflow:auto;margin-bottom:12px;">
+                        <div class="table-wrap table-wrap--scroll">
                             <table>
                                 <thead>
                                     <tr>
-                                        <th style="width:48px;"></th>
+                                        <th style="width:40px;"></th>
                                         <th>Имя / логин</th>
                                         <th>Роль</th>
                                         <th>Организация</th>
                                         <th>Статус</th>
-                                        <th style="width:88px;"></th>
+                                        <th style="width:72px;"></th>
                                     </tr>
                                 </thead>
                                 <tbody id="adminUsersTableBody">
@@ -1418,32 +1637,30 @@
                             </table>
                         </div>
                     </div>
-                    <div style="margin-top:22px;padding-top:18px;border-top:1px solid rgba(15,23,42,0.08);">
-                        <h3 class="panel-title" style="font-size:0.95rem;margin-bottom:12px;">Сброс пароля пользователя</h3>
+                    <div class="admin-section-card">
+                        <h3 class="panel-title admin-section-card-title">Сброс пароля</h3>
                         <div class="field-row">
-                            <div class="field-col" style="flex:1;min-width:220px;">
+                            <div class="field-col" style="flex:1;min-width:180px;">
                                 <label for="orgPasswordResetSelect">Организация</label>
                                 <select id="orgPasswordResetSelect">
                                     <option value="">Выберите организацию…</option>
                                 </select>
                             </div>
-                            <div class="field-col" style="flex:1;min-width:200px;">
+                            <div class="field-col" style="flex:1;min-width:160px;">
                                 <label for="orgPasswordResetUserSelect">Пользователь</label>
                                 <select id="orgPasswordResetUserSelect">
                                     <option value="">— Сначала выберите организацию —</option>
                                 </select>
                             </div>
-                        </div>
-                        <div class="field-row">
-                            <div class="field-col">
+                            <div class="field-col" style="flex:1;min-width:160px;">
                                 <label for="orgPasswordResetNew">Новый пароль</label>
                                 <input id="orgPasswordResetNew" type="password" minlength="6" autocomplete="new-password" placeholder="Не менее 6 символов">
                             </div>
-                            <div class="field-col" style="align-self:flex-end;">
+                            <div class="field-col field-col--action">
                                 <button class="btn-sm-primary" type="button" id="orgPasswordResetBtn">Установить пароль</button>
                             </div>
                         </div>
-                        <div class="hint" id="orgPasswordResetMsg" style="margin-top:6px;"></div>
+                        <div class="hint" id="orgPasswordResetMsg" style="margin-top:4px;"></div>
                     </div>
                 </section>
 
@@ -1478,7 +1695,7 @@
                         <button type="button" class="btn-sm" id="storeBackupRefreshBtn">Обновить список</button>
                         <span class="hint" id="storeBackupStatus" style="margin:0;"></span>
                     </div>
-                    <div class="table-wrap" style="margin-bottom:22px;">
+                    <div class="table-wrap table-wrap--scroll" style="margin-bottom:22px;">
                         <table>
                             <thead>
                                 <tr>
@@ -1501,7 +1718,7 @@
                         <button type="button" class="btn-sm" id="mysqlDumpRefreshBtn">Обновить список</button>
                         <span class="hint" id="mysqlDumpStatus" style="margin:0;"></span>
                     </div>
-                    <div class="table-wrap">
+                    <div class="table-wrap table-wrap--scroll">
                         <table>
                             <thead>
                                 <tr>
@@ -1969,12 +2186,21 @@
                 localStorage.setItem('networkMap_landingTheme', t);
             } catch (e) {}
             if (!themeBtn) return;
+            var moon = themeBtn.querySelector('.theme-icon--moon');
+            var sun = themeBtn.querySelector('.theme-icon--sun');
+            var label = themeBtn.querySelector('.theme-toggle-label');
             if (t === 'dark') {
-                themeBtn.textContent = '☀️ Светлая';
+                if (moon) moon.hidden = true;
+                if (sun) sun.hidden = false;
+                if (label) label.textContent = 'Светлая';
                 themeBtn.setAttribute('aria-label', 'Включить светлую тему');
+                themeBtn.title = 'Светлая тема';
             } else {
-                themeBtn.textContent = '🌙 Тёмная';
+                if (moon) moon.hidden = false;
+                if (sun) sun.hidden = true;
+                if (label) label.textContent = 'Тёмная';
                 themeBtn.setAttribute('aria-label', 'Включить тёмную тему');
+                themeBtn.title = 'Тёмная тема';
             }
         }
         setTheme(document.documentElement.getAttribute('data-theme') || 'light');
@@ -2143,6 +2369,7 @@
             if (!o || orgListFilter === 'all') return true;
             if (orgListFilter === 'unlimited') return !!o.mapObjectLimitUnlocked;
             if (orgListFilter === 'suspended') return o.status === 'suspended';
+            if (orgListFilter === 'pending') return o.status === 'pending';
             if (orgListFilter === 'active') return o.status === 'active';
             if (orgListFilter === 'online') {
                 var online = o.onlineUsers != null ? o.onlineUsers : (o.activeSessions != null ? o.activeSessions : 0);
@@ -2246,9 +2473,40 @@
             return value.slice(0, Math.max(1, max - 1)) + '…';
         }
 
+        var BAR_TONES = ['', 'tone-b', 'tone-c', 'tone-d'];
+
+        function barToneClass(index) {
+            return BAR_TONES[index % BAR_TONES.length] || '';
+        }
+
+        function appendBarRow(container, opts) {
+            var pct = Math.max(0, Math.min(100, Math.round(opts.pct || 0)));
+            var row = document.createElement('div');
+            var classes = ['bar-row'];
+            if (opts.extraClass) classes.push(opts.extraClass);
+            if (opts.tone) classes.push(opts.tone);
+            row.className = classes.join(' ');
+            var labelHtml = opts.labelHtml || ('<span title="' + escapeHtml(opts.title || opts.label || '') + '">' + escapeHtml(opts.label || '—') + '</span>');
+            row.innerHTML =
+                labelHtml +
+                '<span class="bar-track"><span class="bar-fill" style="width:0%"></span></span>' +
+                '<strong>' + (opts.valueHtml != null ? opts.valueHtml : escapeHtml(String(opts.value != null ? opts.value : ''))) + '</strong>';
+            container.appendChild(row);
+            var fill = row.querySelector('.bar-fill');
+            if (fill) {
+                requestAnimationFrame(function() {
+                    requestAnimationFrame(function() {
+                        fill.style.width = pct + '%';
+                    });
+                });
+            }
+            return row;
+        }
+
         function renderOverview() {
             var total = orgs.length;
             var active = orgs.filter(function(o) { return o.status === 'active'; }).length;
+            var pending = orgs.filter(function(o) { return o.status === 'pending'; }).length;
             var suspended = orgs.filter(function(o) { return o.status === 'suspended'; }).length;
             var unlimitedOrgs = orgs.filter(function(o) { return o.mapObjectLimitUnlocked; }).length;
             var sessions = 0;
@@ -2290,7 +2548,7 @@
                 });
             });
             document.getElementById('statOrgsTotal').textContent = total || '0';
-            document.getElementById('statOrgsSplit').textContent = active + ' / ' + suspended;
+            document.getElementById('statOrgsSplit').textContent = active + ' / ' + pending + ' / ' + suspended;
             document.getElementById('statSessionsActive').textContent = sessions || '0';
             var statUnl = document.getElementById('statUnlimitedOrgs');
             if (statUnl) statUnl.textContent = String(unlimitedOrgs);
@@ -2325,17 +2583,16 @@
                     mapObjectsContainer.innerHTML = '<div class="hint">Нет объектов на картах</div>';
                 } else {
                     var maxMapObj = topMapObjects[0].count || 1;
-                    topMapObjects.forEach(function(item) {
+                    topMapObjects.forEach(function(item, idx) {
                         var pct = Math.round((item.count / maxMapObj) * 100);
-                        var safeFullName = escapeHtml(item.name);
-                        var safeShortName = escapeHtml(compactLabel(item.name, 20));
-                        var row = document.createElement('div');
-                        row.className = 'bar-row';
-                        row.innerHTML =
-                            '<span title="' + safeFullName + '">' + safeShortName + '</span>' +
-                            '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>' +
-                            '<strong>' + item.count + '</strong>';
-                        mapObjectsContainer.appendChild(row);
+                        appendRankRow(mapObjectsContainer, {
+                            rank: idx + 1,
+                            label: compactLabel(item.name, 22),
+                            title: item.name,
+                            pct: pct,
+                            value: item.count,
+                            tone: barToneClass(idx)
+                        });
                     });
                 }
             }
@@ -2343,32 +2600,39 @@
             var donutEl = document.getElementById('statusDonutChart');
             var statusTotal = Math.max(total, 1);
             var activeDeg = Math.round((active / statusTotal) * 360);
+            var pendingDeg = Math.round((pending / statusTotal) * 360);
             var suspendedDeg = Math.round((suspended / statusTotal) * 360);
             donutEl.style.setProperty('--donut-a', activeDeg + 'deg');
-            donutEl.style.setProperty('--donut-b', (activeDeg + suspendedDeg) + 'deg');
+            donutEl.style.setProperty('--donut-b', (activeDeg + pendingDeg) + 'deg');
+            donutEl.style.setProperty('--donut-c', (activeDeg + pendingDeg + suspendedDeg) + 'deg');
+            donutEl.setAttribute('data-center', String(total));
             document.getElementById('statusLegendActive').textContent = String(active);
+            var legPending = document.getElementById('statusLegendPending');
+            if (legPending) legPending.textContent = String(pending);
             document.getElementById('statusLegendSuspended').textContent = String(suspended);
             var legUnl = document.getElementById('statusLegendUnlimited');
             if (legUnl) legUnl.textContent = String(unlimitedOrgs);
 
             var limitChart = document.getElementById('mapLimitBarChart');
             if (limitChart) {
-                limitChart.innerHTML = '';
-                var entries = [
-                    { label: 'С лимитом', value: limitBuckets.withLimit },
-                    { label: 'Безлимит', value: limitBuckets.unlimited }
-                ];
-                var maxB = Math.max(entries[0].value, entries[1].value, 1);
-                entries.forEach(function(item) {
-                    var pct = Math.round((item.value / maxB) * 100);
-                    var row = document.createElement('div');
-                    row.className = 'bar-row';
-                    row.innerHTML =
-                        '<span>' + escapeHtml(item.label) + '</span>' +
-                        '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>' +
-                        '<strong>' + item.value + '</strong>';
-                    limitChart.appendChild(row);
-                });
+                var withLimit = limitBuckets.withLimit || 0;
+                var unlimited = limitBuckets.unlimited || 0;
+                var limitSum = Math.max(withLimit + unlimited, 1);
+                var withPct = Math.round((withLimit / limitSum) * 100);
+                var unlPct = 100 - withPct;
+                limitChart.innerHTML =
+                    '<div class="split-meter-track">' +
+                        '<div class="split-meter-seg split-meter-seg--limit" style="width:' + withPct + '%">' +
+                            (withPct >= 18 ? '<span>С лимитом · ' + withLimit + '</span>' : '') +
+                        '</div>' +
+                        '<div class="split-meter-seg split-meter-seg--free" style="width:' + unlPct + '%">' +
+                            (unlPct >= 18 ? '<span>Безлимит · ' + unlimited + '</span>' : '') +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="split-meter-legend">' +
+                        '<span><i class="split-meter-swatch split-meter-swatch--limit"></i>С лимитом <strong>' + withLimit + '</strong></span>' +
+                        '<span><i class="split-meter-swatch split-meter-swatch--free"></i>Безлимит <strong>' + unlimited + '</strong></span>' +
+                    '</div>';
             }
 
             var capacityContainer = document.getElementById('capacityBarChart');
@@ -2379,20 +2643,19 @@
             if (!topCapacity.length) {
                 capacityContainer.innerHTML = '<div class="hint">Нет организаций с валидным лимитом</div>';
             } else {
-                topCapacity.forEach(function(item) {
+                topCapacity.forEach(function(item, idx) {
                     var pctSafe = Math.max(0, Math.min(100, Math.round(item.loadPct)));
-                    var safeFullName = escapeHtml(item.name);
-                    var safeShortName = escapeHtml(compactLabel(item.name, 20));
-                    var row = document.createElement('div');
-                    var rowClass = 'bar-row';
-                    if (pctSafe >= 95) rowClass += ' danger';
-                    else if (pctSafe >= 80) rowClass += ' warn';
-                    row.className = rowClass;
-                    row.innerHTML =
-                        '<span title="' + safeFullName + '">' + safeShortName + '</span>' +
-                        '<span class="bar-track"><span class="bar-fill" style="width:' + pctSafe + '%"></span></span>' +
-                        '<strong>' + pctSafe + '%</strong>';
-                    capacityContainer.appendChild(row);
+                    var extra = '';
+                    if (pctSafe >= 95) extra = 'danger';
+                    else if (pctSafe >= 80) extra = 'warn';
+                    appendRankRow(capacityContainer, {
+                        rank: idx + 1,
+                        label: compactLabel(item.name, 22),
+                        title: item.name,
+                        pct: pctSafe,
+                        value: pctSafe + '%',
+                        extraClass: extra
+                    });
                 });
             }
 
@@ -2406,6 +2669,34 @@
             renderTopObjectTypesChart();
         }
 
+        function appendRankRow(container, opts) {
+            var pct = Math.max(0, Math.min(100, Math.round(opts.pct || 0)));
+            var row = document.createElement('div');
+            var classes = ['rank-row'];
+            if (opts.extraClass) classes.push(opts.extraClass);
+            if (opts.tone) classes.push(opts.tone);
+            row.className = classes.join(' ');
+            row.innerHTML =
+                '<span class="rank-row-index">' + (opts.rank || '') + '</span>' +
+                '<div class="rank-row-body">' +
+                    '<div class="rank-row-meta">' +
+                        '<span class="rank-row-label" title="' + escapeHtml(opts.title || opts.label || '') + '">' + escapeHtml(opts.label || '—') + '</span>' +
+                        '<strong class="rank-row-value">' + escapeHtml(String(opts.value != null ? opts.value : '')) + '</strong>' +
+                    '</div>' +
+                    '<span class="rank-row-track"><span class="rank-row-fill" style="width:0%"></span></span>' +
+                '</div>';
+            container.appendChild(row);
+            var fill = row.querySelector('.rank-row-fill');
+            if (fill) {
+                requestAnimationFrame(function() {
+                    requestAnimationFrame(function() {
+                        fill.style.width = pct + '%';
+                    });
+                });
+            }
+            return row;
+        }
+
         function renderTopObjectTypesChart() {
             var chart = document.getElementById('topObjectTypesChart');
             var hint = document.getElementById('topObjectTypesHint');
@@ -2415,7 +2706,7 @@
             var source = payload && payload.source ? payload.source : 'none';
             if (hint) {
                 if (source === 'history') hint.textContent = 'По журналу созданий (на картах пока пусто)';
-                else if (source === 'map') hint.textContent = 'По текущему составу всех карт платформы';
+                else if (source === 'map') hint.textContent = 'Топ типов по текущему составу всех карт';
                 else hint.textContent = 'Нет данных по объектам';
             }
             chart.innerHTML = '';
@@ -2424,21 +2715,31 @@
                 return;
             }
             var maxVal = items[0].count || 1;
-            items.forEach(function(item, idx) {
+            var show = items.slice(0, 10);
+            var bars = document.createElement('div');
+            bars.className = 'col-chart-bars';
+            show.forEach(function(item, idx) {
                 var count = item.count || 0;
-                var pct = Math.round((count / maxVal) * 100);
+                var pct = Math.max(8, Math.round((count / maxVal) * 100));
                 var label = item.label || item.type || 'Объект';
-                var row = document.createElement('div');
-                row.className = 'bar-row top-object-row';
-                row.innerHTML =
-                    '<span class="top-object-label" title="' + escapeHtml(label) + '">' +
-                        '<span class="top-object-rank">' + (idx + 1) + '</span>' +
-                        '<span class="top-object-name">' + escapeHtml(compactLabel(label, 20)) + '</span>' +
-                    '</span>' +
-                    '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>' +
-                    '<strong>' + count + '</strong>';
-                chart.appendChild(row);
+                var col = document.createElement('div');
+                col.className = 'col-item tone-' + ((idx % 4) + 1);
+                col.title = label + ': ' + count;
+                col.innerHTML =
+                    '<div class="col-value">' + count + '</div>' +
+                    '<div class="col-bar-wrap"><div class="col-bar" style="height:0%"></div></div>' +
+                    '<div class="col-label">' + escapeHtml(compactLabel(label, 12)) + '</div>';
+                bars.appendChild(col);
+                var bar = col.querySelector('.col-bar');
+                if (bar) {
+                    requestAnimationFrame(function() {
+                        requestAnimationFrame(function() {
+                            bar.style.height = pct + '%';
+                        });
+                    });
+                }
             });
+            chart.appendChild(bars);
         }
 
         function renderVisitOverview(data) {
@@ -2457,17 +2758,18 @@
                     sourceChart.innerHTML = '<div class="hint">Пока нет данных по источникам</div>';
                 } else {
                     var max = sources[0].count || 1;
-                    sources.forEach(function(item) {
+                    sources.forEach(function(item, idx) {
                         var count = item.count || 0;
-                        var pct = Math.round((count / max) * 100);
-                        var label = compactLabel(item.source || 'unknown', 24);
-                        var row = document.createElement('div');
-                        row.className = 'bar-row';
-                        row.innerHTML =
-                            '<span title="' + escapeHtml(item.source || 'unknown') + '">' + escapeHtml(label) + '</span>' +
-                            '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>' +
-                            '<strong>' + count + '</strong>';
-                        sourceChart.appendChild(row);
+                        var weight = Math.max(0.55, count / max);
+                        var chip = document.createElement('button');
+                        chip.type = 'button';
+                        chip.className = 'source-chip tone-' + ((idx % 4) + 1);
+                        chip.style.setProperty('--chip-scale', String(0.9 + weight * 0.35));
+                        chip.title = (item.source || 'unknown') + ': ' + count;
+                        chip.innerHTML =
+                            '<span class="source-chip-label">' + escapeHtml(compactLabel(item.source || 'unknown', 28)) + '</span>' +
+                            '<strong class="source-chip-count">' + count + '</strong>';
+                        sourceChart.appendChild(chip);
                     });
                 }
             }
@@ -2475,6 +2777,7 @@
             var recentEl = document.getElementById('recentVisitsList');
             if (recentEl) {
                 recentEl.innerHTML = '';
+                recentEl.className = 'visit-list';
                 var recent = (data && Array.isArray(data.recentVisits)) ? data.recentVisits : [];
                 if (!recent.length) {
                     recentEl.innerHTML = '<div class="hint">Пока нет входов</div>';
@@ -2483,13 +2786,15 @@
                         var at = item.at ? new Date(item.at) : null;
                         var when = at && !isNaN(at.getTime()) ? at.toLocaleString('ru-RU') : '—';
                         var who = item.username || '—';
-                        var src = compactLabel(item.source || 'unknown', 30);
+                        var src = item.source || 'unknown';
                         var row = document.createElement('div');
-                        row.className = 'bar-row';
+                        row.className = 'visit-row';
                         row.innerHTML =
-                            '<span title="' + escapeHtml(item.source || 'unknown') + '">' + escapeHtml(who + ' · ' + src) + '</span>' +
-                            '<span class="bar-track"><span class="bar-fill" style="width:100%"></span></span>' +
-                            '<strong>' + escapeHtml(when) + '</strong>';
+                            '<div class="visit-row-main">' +
+                                '<div class="visit-row-who">' + escapeHtml(who) + '</div>' +
+                                '<div class="visit-row-src" title="' + escapeHtml(src) + '">' + escapeHtml(compactLabel(src, 40)) + '</div>' +
+                            '</div>' +
+                            '<div class="visit-row-when">' + escapeHtml(when) + '</div>';
                         recentEl.appendChild(row);
                     });
                 }
@@ -2589,7 +2894,10 @@
                 else if (maxU == null || maxU <= 0) maxU = '4';
                 var pillClass = 'pill-active';
                 var pillText = 'Активна';
-                if (o.status === 'suspended') {
+                if (o.status === 'pending') {
+                    pillClass = 'pill-pending';
+                    pillText = 'Ожидает e-mail';
+                } else if (o.status === 'suspended') {
                     pillClass = 'pill-suspended';
                     pillText = 'Приостановлена';
                 }
@@ -2920,14 +3228,22 @@
                 var status = u.status || 'approved';
                 var statusLabel = status === 'pending' ? 'Ожидает' : (status === 'rejected' ? 'Отклонён' : 'Активен');
                 var isMainAdmin = String(u.username || '').toLowerCase() === 'admin';
-                var canDelete = !isMainAdmin && String(u.id) !== String(adminUserId || '');
-                var canChangeRole = !isMainAdmin;
+                var isSelf = String(u.id) === String(adminUserId || '');
+                var isLastOrgAdmin = false;
+                if (u.role === 'admin' && u.organizationId) {
+                    var orgAdminCount = (cachedUsers || []).filter(function(x) {
+                        return x.role === 'admin' && x.organizationId && String(x.organizationId) === String(u.organizationId);
+                    }).length;
+                    isLastOrgAdmin = orgAdminCount <= 1;
+                }
+                var canDelete = !isMainAdmin && !isSelf && !isLastOrgAdmin;
+                var canChangeRole = !isMainAdmin && !isSelf && !isLastOrgAdmin;
                 var roleSelect = canChangeRole
                     ? ('<select class="user-role-select" data-user-id="' + escapeHtml(u.id) + '" data-prev-role="' + escapeHtml(u.role || 'user') + '" aria-label="Роль">' +
                         '<option value="user"' + (u.role !== 'admin' ? ' selected' : '') + '>Пользователь</option>' +
                         '<option value="admin"' + (u.role === 'admin' ? ' selected' : '') + '>Администратор</option>' +
                         '</select>')
-                    : '<span class="pill pill-active">Администратор</span>';
+                    : '<span class="pill pill-active">' + (u.role === 'admin' ? 'Администратор' : 'Пользователь') + '</span>';
                 var deleteCell = canDelete
                     ? '<button type="button" class="btn-sm-danger" data-user-id="' + escapeHtml(u.id) + '" data-action="deleteUser">Удалить</button>'
                     : '<span class="text-muted">—</span>';
@@ -3219,8 +3535,16 @@
                 li.setAttribute('data-thread-id', t.id);
                 var title = t.name || t.email || ('Посетитель ' + (t.visitorId || '').slice(-6));
                 var preview = t.lastMessage ? t.lastMessage.text : '—';
+                var isDeletion = (t.page && String(t.page).indexOf('data-deletion') >= 0) ||
+                    (t.page && String(t.page).indexOf('privacy') >= 0 && String(t.page).indexOf('deletion') >= 0) ||
+                    (t.name && String(t.name).indexOf('Удаление ПДн') >= 0) ||
+                    (preview && String(preview).indexOf('ЗАПРОС НА УДАЛЕНИЕ') >= 0);
+                if (isDeletion) li.className += ' is-privacy-deletion';
                 li.innerHTML =
-                    '<div class="support-thread-item-title">' + escapeSupportHtml(title) + '</div>' +
+                    '<div class="support-thread-item-title">' +
+                        (isDeletion ? '<span class="support-deletion-badge">ПДн</span> ' : '') +
+                        escapeSupportHtml(title) +
+                    '</div>' +
                     '<div class="support-thread-item-preview">' + escapeSupportHtml(preview) + '</div>' +
                     '<div class="hint" style="margin-top:4px;font-size:0.72rem;">' + escapeSupportHtml(formatSupportDate(t.updatedAt)) + '</div>';
                 li.addEventListener('click', function() { openSupportThread(t.id); });

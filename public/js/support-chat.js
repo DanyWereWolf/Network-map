@@ -429,7 +429,13 @@
         if (ownerFields) ownerFields.classList.toggle('is-visible', mode === 'owner');
         var sendBtn = document.getElementById('supportChatSend');
         var input = document.getElementById('supportChatInput');
-        if (sendBtn) sendBtn.textContent = mode === 'owner' ? 'Отправить владельцу' : 'Спросить';
+        if (sendBtn) {
+            var sendLabel = mode === 'owner' ? 'Отправить владельцу' : 'Спросить';
+            var labelEl = sendBtn.querySelector('.support-chat-send-label');
+            if (labelEl) labelEl.textContent = sendLabel;
+            sendBtn.setAttribute('title', sendLabel);
+            sendBtn.setAttribute('aria-label', sendLabel);
+        }
         if (headerTitle) headerTitle.textContent = ASSISTANT_NAME;
         if (headerSub) {
             headerSub.textContent = ASSISTANT_TAGLINE;
@@ -541,7 +547,9 @@
                         '</div>' +
                     '</div>' +
                     '<h3 class="support-chat-header-owner-title" id="supportChatOwnerTitle" hidden>Сообщение владельцу</h3>' +
-                    '<button type="button" class="support-chat-close" id="supportChatClose" aria-label="Закрыть чат">×</button>' +
+                    '<button type="button" class="support-chat-close" id="supportChatClose" aria-label="Закрыть чат">' +
+                        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>' +
+                    '</button>' +
                 '</div>' +
                 '<div class="support-chat-status">' +
                     '<span class="support-chat-status-dot" id="supportChatStatusDot"></span>' +
@@ -565,8 +573,13 @@
                         '</div>' +
                     '</div>'
                     : '') +
-                '<textarea id="supportChatInput" rows="2" placeholder="Спросите меня о сервисе…" maxlength="4000"></textarea>' +
-                '<button type="button" class="support-chat-send" id="supportChatSend">Спросить</button>' +
+                '<div class="support-chat-compose-row">' +
+                    '<textarea id="supportChatInput" rows="2" placeholder="Спросите меня о сервисе…" maxlength="4000"></textarea>' +
+                    '<button type="button" class="support-chat-send" id="supportChatSend" title="Отправить" aria-label="Отправить">' +
+                        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>' +
+                        '<span class="support-chat-send-label">Спросить</span>' +
+                    '</button>' +
+                '</div>' +
                 '<p class="support-chat-hint" id="supportChatHint"></p>' +
             '</div>';
 

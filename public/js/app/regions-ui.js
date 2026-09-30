@@ -373,7 +373,13 @@ function renderRegionsSidebarList() {
     var editable = isEditMode && canEdit();
     if (badge) badge.textContent = regions.length ? String(regions.length) : '';
     if (!regions.length) {
-        root.innerHTML = '<p class="regions-list-empty">Регионов пока нет. Нарисуйте первый контур на карте.</p>';
+        root.innerHTML = (typeof AppMotion !== 'undefined' && AppMotion.emptyStateHtml)
+            ? AppMotion.emptyStateHtml({
+                emotion: 'wave',
+                title: 'Регионов пока нет',
+                text: 'Нарисуйте первый контур на карте — он появится в этом списке.'
+            })
+            : '<p class="regions-list-empty">Регионов пока нет. Нарисуйте первый контур на карте.</p>';
         return;
     }
     var html = '';
@@ -517,9 +523,12 @@ function showRegionEditModalBody(regionObj) {
         if (el) el.addEventListener('input', function() { applyRegionCardEdits(regionObj); });
     });
     if (modal) {
-        modal.style.display = 'flex';
-        modal.classList.add('modal--centered');
+        presentInfoCard({
+            workspace: false,
+            title: document.getElementById('modalTitle') ? document.getElementById('modalTitle').textContent : 'Регион'
+        });
         updateModalLockBanner(getObjectUniqueId(regionObj));
+        if (typeof syncPropertiesLockFromModal === 'function') syncPropertiesLockFromModal();
     }
 }
 

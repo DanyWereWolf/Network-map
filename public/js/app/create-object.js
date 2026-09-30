@@ -567,5 +567,9 @@ function createObject(type, name, coords, options = {}) {
         objectType: type,
         name: name || ''
     });
+    if (!(typeof isMapBulkImportActive === 'function' && isMapBulkImportActive()) &&
+        typeof AppMotion !== 'undefined' && AppMotion.celebrateCreate) {
+        try { AppMotion.celebrateCreate(placemark); } catch (eMotion) {}
+    }
     return placemark;
 }

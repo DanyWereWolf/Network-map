@@ -245,7 +245,9 @@ function repairCablesAfterImport() {
     objects.forEach(function (cable) {
         if (!cable || !cable.properties || cable.properties.get('type') !== 'cable') return;
         try {
-            if (myMap.geoObjects.indexOf(cable) === -1) myMap.geoObjects.add(cable);
+            // Через MapPerf: учитывает LOD/virtualization (не форсим raw add — иначе вспышка всех кабелей).
+            if (typeof mapGeoAdd === 'function') mapGeoAdd(cable);
+            else if (myMap.geoObjects.indexOf(cable) === -1) myMap.geoObjects.add(cable);
         } catch (eAdd) {}
         var points = cable.properties.get('points');
         var spans = cable.properties.get('undergroundSpans') || [];

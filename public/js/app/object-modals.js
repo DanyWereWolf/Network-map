@@ -1834,7 +1834,7 @@ function openCopperEndPortModal(points, cableTypeVal, copperMeta) {
         htmlCam += '<button type="button" id="copperEndPortCancel" class="btn-secondary">Отмена</button>';
         htmlCam += '<button type="button" id="copperEndPortOk" class="btn-primary">Проложить</button></div></div>';
         modalContentCam.innerHTML = htmlCam;
-        modalCam.style.display = 'block';
+        presentInfoCard({ workspace: false, title: 'Медный кабель: порт коммутатора' });
         currentModalObject = null;
 
         var btnCancelCam = document.getElementById('copperEndPortCancel');
@@ -1842,7 +1842,8 @@ function openCopperEndPortModal(points, cableTypeVal, copperMeta) {
         if (btnCancelCam) {
             btnCancelCam.onclick = function() {
                 pendingCopperRouteFinish = null;
-                modalCam.style.display = 'none';
+                if (typeof closeInfoModal === 'function') closeInfoModal({ force: true });
+                else modalCam.style.display = 'none';
             };
         }
         if (btnOkCam) {
@@ -1903,7 +1904,10 @@ function openCopperEndPortModal(points, cableTypeVal, copperMeta) {
     htmlM += '<button type="button" id="copperEndPortCancel" class="btn-secondary">Отмена</button>';
     htmlM += '<button type="button" id="copperEndPortOk" class="btn-primary">Проложить</button></div></div>';
     modalContent.innerHTML = htmlM;
-    modal.style.display = 'block';
+    presentInfoCard({
+        workspace: false,
+        title: 'Медный кабель: порт на конце'
+    });
     currentModalObject = null;
 
     var btnCancel = document.getElementById('copperEndPortCancel');
@@ -1911,7 +1915,11 @@ function openCopperEndPortModal(points, cableTypeVal, copperMeta) {
     if (btnCancel) {
         btnCancel.onclick = function() {
             pendingCopperRouteFinish = null;
-            modal.style.display = 'none';
+            if (typeof closeInfoModal === 'function') closeInfoModal({ force: true });
+            else {
+                modal.style.display = 'none';
+                clearPropertiesInspector();
+            }
         };
     }
     if (btnOk) {
@@ -2096,6 +2104,7 @@ function startCopperCableFromMediaConverter(mcObj) {
     var modalMc = document.getElementById('infoModal');
     if (modalMc) modalMc.style.display = 'none';
     currentModalObject = null;
+    if (typeof clearPropertiesInspector === 'function') clearPropertiesInspector();
     if (typeof showInfo === 'function') {
         showInfo('Укажите на карте второй конец: узел сети с коммутатором, отдельный коммутатор или камера. Опоры и крепления — только промежуточные точки.', 'Медный кабель');
     }
@@ -2140,6 +2149,7 @@ function startCopperCableFromOltUplinkPort(oltObj, portIndex) {
     var modalOltCu = document.getElementById('infoModal');
     if (modalOltCu) modalOltCu.style.display = 'none';
     currentModalObject = null;
+    if (typeof clearPropertiesInspector === 'function') clearPropertiesInspector();
     var portLabel = port.portLabel ? (' «' + port.portLabel + '»') : '';
     if (typeof showInfo === 'function') {
         showInfo('Медный кабель с RJ45' + portLabel + ' (порт ' + portIdx + '). Укажите второй конец: узел с коммутатором, отдельный коммутатор или камера. Опоры — промежуточные точки.', 'Подключение OLT');
@@ -2206,6 +2216,7 @@ function startCopperCableFromNodeSwitchPort(nodeObj, switchId, portNum) {
     var modal2 = document.getElementById('infoModal');
     if (modal2) modal2.style.display = 'none';
     currentModalObject = null;
+    if (typeof clearPropertiesInspector === 'function') clearPropertiesInspector();
     if (typeof showInfo === 'function') {
         showInfo('Укажите на карте второй конец: узел сети с коммутатором, отдельный коммутатор или камера. Опоры и крепления — только промежуточные точки.', 'Медный кабель');
     }
@@ -2510,10 +2521,150 @@ function updateInfoModalChrome(type, name, opts) {
 }
 
 function isInfoModalVisible(modal) {
+    modal = modal || document.getElementById('infoModal');
     if (!modal) return false;
     var display = modal.style.display;
     return display === 'flex' || display === 'block';
 }
+
+var propertiesInspectorOpen = false;
+
+function placeModalInfoNode(useWorkspaceModal) {
+    var modalInfo = document.getElementById('modalInfo');
+    if (!modalInfo) return null;
+    // Карточки объектов всегда в модалке; боковая панель — только параметры инструмента создания
+    var host = document.getElementById('modalInfoHost');
+    if (host && modalInfo.parentNode !== host) host.appendChild(modalInfo);
+    return modalInfo;
+}
+
+function presentInfoCard(opts) {
+    opts = opts || {};
+    var useWorkspace = !!opts.workspace;
+    var modal = document.getElementById('infoModal');
+    placeModalInfoNode(true);
+    if (!modal) return;
+    modal.style.display = 'flex';
+    if (useWorkspace) {
+        modal.classList.remove('modal--centered');
+    } else {
+        modal.classList.add('modal--centered');
+        modal.classList.remove(
+            'fiber-management-modal-open',
+            'fiber-management-modal-open--edit',
+            'fiber-management-modal-open--view'
+        );
+    }
+    if (typeof window.initPanelPlexusCanvases === 'function') {
+        requestAnimationFrame(function () { window.initPanelPlexusCanvases(modal); });
+    }
+}
+
+function syncPropertiesPanelChrome(title, sub, opts) {
+    opts = opts || {};
+    var panel = document.getElementById('sidebar');
+    var titleEl = document.getElementById('propertiesPanelTitle');
+    var subEl = document.getElementById('propertiesPanelSub');
+    var empty = document.getElementById('propertiesEmpty');
+    var body = document.getElementById('propertiesBody');
+    var closeBtn = document.getElementById('propertiesPanelClose');
+    if (titleEl && title != null) titleEl.textContent = title || 'Свойства';
+    if (subEl) {
+        if (sub) {
+            subEl.hidden = false;
+            subEl.textContent = sub;
+        } else {
+            subEl.hidden = true;
+            subEl.textContent = '';
+        }
+    }
+    if (opts.filled) {
+        if (panel) {
+            panel.classList.add('is-filled');
+            panel.classList.remove('properties-panel--empty');
+        }
+        if (empty) empty.hidden = true;
+        if (body) {
+            body.hidden = false;
+            body.removeAttribute('hidden');
+        }
+        if (closeBtn) closeBtn.hidden = false;
+        propertiesInspectorOpen = true;
+        document.body.classList.add('properties-open');
+        if (typeof myMap !== 'undefined' && myMap && myMap.container) {
+            setTimeout(function () {
+                try { myMap.container.fitToViewport(); } catch (e) {}
+            }, 280);
+        }
+    }
+}
+
+function clearPropertiesInspector() {
+    var panel = document.getElementById('sidebar');
+    var titleEl = document.getElementById('propertiesPanelTitle');
+    var subEl = document.getElementById('propertiesPanelSub');
+    var empty = document.getElementById('propertiesEmpty');
+    var body = document.getElementById('propertiesBody');
+    var closeBtn = document.getElementById('propertiesPanelClose');
+    var lockBanner = document.getElementById('propertiesLockBanner');
+    if (panel) {
+        panel.classList.remove('is-filled');
+        panel.classList.add('properties-panel--empty');
+    }
+    if (titleEl) titleEl.textContent = 'Свойства';
+    if (subEl) {
+        subEl.hidden = true;
+        subEl.textContent = '';
+    }
+    if (empty) empty.hidden = false;
+    if (body) body.hidden = true;
+    if (closeBtn) closeBtn.hidden = true;
+    if (lockBanner) {
+        lockBanner.hidden = true;
+        lockBanner.textContent = '';
+    }
+    propertiesInspectorOpen = false;
+    document.body.classList.remove('properties-open');
+    placeModalInfoNode(false);
+    var modalInfo = document.getElementById('modalInfo');
+    if (modalInfo) modalInfo.innerHTML = '';
+    if (typeof myMap !== 'undefined' && myMap && myMap.container) {
+        setTimeout(function () {
+            try { myMap.container.fitToViewport(); } catch (e) {}
+        }, 280);
+    }
+}
+
+function expandPropertiesSidebar() {
+    if (!document.body.classList.contains('sidebar-collapsed')) return;
+    document.body.classList.remove('sidebar-collapsed');
+    var toggleBtn = document.getElementById('sidebarToggle');
+    if (toggleBtn) {
+        toggleBtn.setAttribute('aria-expanded', 'true');
+        toggleBtn.setAttribute('aria-label', 'Скрыть панель');
+        toggleBtn.setAttribute('title', 'Скрыть панель');
+    }
+    if (typeof myMap !== 'undefined' && myMap && myMap.container) {
+        setTimeout(function () {
+            try { myMap.container.fitToViewport(); } catch (e) {}
+        }, 280);
+    }
+}
+
+function syncPropertiesLockFromModal() {
+    var modalLock = document.getElementById('modalLockBanner');
+    var propsLock = document.getElementById('propertiesLockBanner');
+    if (!propsLock || !modalLock) return;
+    propsLock.hidden = modalLock.hidden;
+    propsLock.textContent = modalLock.textContent || '';
+    propsLock.className = modalLock.className;
+}
+
+    window.placeModalInfoNode = placeModalInfoNode;
+    window.presentInfoCard = presentInfoCard;
+    window.clearPropertiesInspector = clearPropertiesInspector;
+    window.syncPropertiesLockFromModal = syncPropertiesLockFromModal;
+    window.expandPropertiesSidebar = expandPropertiesSidebar;
 
 function closeInfoModal(opts) {
     if (!opts || !opts.force) {
@@ -2554,6 +2705,9 @@ function closeInfoModal(opts) {
         lockBanner.hidden = true;
         lockBanner.textContent = '';
     }
+    // Не трогаем правую панель параметров инструмента создания
+    var modalInfo = document.getElementById('modalInfo');
+    if (modalInfo) modalInfo.innerHTML = '';
     if (typeof clearFiberConnectionLabelSelection === 'function') clearFiberConnectionLabelSelection();
     if (typeof closeCoverageJoystickPanel === 'function') {
         closeCoverageJoystickPanel({ skipRestore: true, silent: true });
@@ -2787,9 +2941,13 @@ function showCableInfoBody(cable) {
                 if (window.applyCopperCablePortSelection) window.applyCopperCablePortSelection(uniqueId, vf, vt);
             });
         }
-        modal.style.display = 'block';
         currentModalObject = cable;
+        presentInfoCard({
+            workspace: false,
+            title: document.getElementById('modalTitle') ? document.getElementById('modalTitle').textContent : 'Кабель'
+        });
         updateModalLockBanner(uniqueId);
+        syncPropertiesLockFromModal();
         applyObjectLocksToMapDraggable();
         return;
     }
@@ -3109,9 +3267,13 @@ function showCableInfoBody(cable) {
             startCableSplitPickOnCable(cable, sleeveOpts);
         });
     }
-    modal.style.display = 'block';
     currentModalObject = cable;
+    presentInfoCard({
+        workspace: false,
+        title: document.getElementById('modalTitle') ? document.getElementById('modalTitle').textContent : 'Кабель'
+    });
     updateModalLockBanner(uniqueId);
+    syncPropertiesLockFromModal();
     applyObjectLocksToMapDraggable();
 }
 
@@ -3278,12 +3440,21 @@ function updateCablePreview(sourceObj, waypoints, targetCoords) {
         });
         myMap.geoObjects.add(cablePreviewLine);
     }
+    if (typeof AppMotion !== 'undefined' && AppMotion.updateCableLengthHud) {
+        try { AppMotion.updateCableLengthHud(allCoords); } catch (eHud) {}
+    }
 }
 
 function removeCablePreview() {
     if (cablePreviewLine) {
         myMap.geoObjects.remove(cablePreviewLine);
         cablePreviewLine = null;
+    }
+    if (typeof AppMotion !== 'undefined') {
+        try {
+            if (AppMotion.hideCableLengthHud) AppMotion.hideCableLengthHud();
+            if (AppMotion.hideSnapHint) AppMotion.hideSnapHint();
+        } catch (eHud2) {}
     }
     
     if (hoveredObject) {
@@ -3451,13 +3622,16 @@ function updateStats() {
 
 function showInfoModalLoadingShell(title) {
     var modal = document.getElementById('infoModal');
-    var modalInfo = document.getElementById('modalInfo');
+    var modalInfo = placeModalInfoNode(true);
     var titleEl = document.getElementById('modalTitle');
-    if (!modal || !modalInfo) return;
     if (titleEl) titleEl.textContent = title || 'Загрузка…';
-    modalInfo.innerHTML = '<div class="modal-info-loading" aria-busy="true"><span class="modal-info-loading-spinner" aria-hidden="true"></span></div>';
-    modal.style.display = 'flex';
-    modal.classList.add('modal--centered');
+    if (modalInfo) {
+        modalInfo.innerHTML = '<div class="modal-info-loading" aria-busy="true"><span class="modal-info-loading-spinner" aria-hidden="true"></span></div>';
+    }
+    if (modal) {
+        modal.style.display = 'flex';
+        modal.classList.add('modal--centered');
+    }
 }
 
 function deferHeavyModalWork(fn) {
@@ -3989,12 +4163,15 @@ function showObjectInfoBody(obj) {
         }
     }
     bindObjectGalleryModal(modalInfo, obj);
-    modal.style.display = 'flex';
-    modal.classList.add('modal--centered');
+    presentInfoCard({ workspace: fiberUsesWorkspace, title: title });
     updateModalLockBanner(getObjectUniqueId(obj));
+    syncPropertiesLockFromModal();
     applyObjectLocksToMapDraggable();
-    if (typeof window.initPanelPlexusCanvases === 'function') {
-        requestAnimationFrame(function () { window.initPanelPlexusCanvases(modal); });
+    if (fiberUsesWorkspace) {
+        var modalEl = document.getElementById('infoModal');
+        if (typeof window.initPanelPlexusCanvases === 'function' && modalEl) {
+            requestAnimationFrame(function () { window.initPanelPlexusCanvases(modalEl); });
+        }
     }
 
     if (isFiberHostType(type) && fiberUsesWorkspace) {
@@ -4345,15 +4522,13 @@ function showSignalPostInfoBody(obj) {
     var modal = document.getElementById('infoModal');
     setupEditAndDeleteListeners();
     bindObjectGalleryModal(modalInfoEl, obj);
-    if (modal) {
-        modal.style.display = 'flex';
-        modal.classList.add('modal--centered');
-        updateModalLockBanner(getObjectUniqueId(obj));
-        applyObjectLocksToMapDraggable();
-        if (typeof window.initPanelPlexusCanvases === 'function') {
-            requestAnimationFrame(function () { window.initPanelPlexusCanvases(modal); });
-        }
-    }
+    presentInfoCard({
+        workspace: false,
+        title: document.getElementById('modalTitle') ? document.getElementById('modalTitle').textContent : 'Сигнальный столб'
+    });
+    updateModalLockBanner(getObjectUniqueId(obj));
+    syncPropertiesLockFromModal();
+    applyObjectLocksToMapDraggable();
 }
 
 function getSupportWaypointCopy(isAttachment, waypointType) {
@@ -4573,15 +4748,13 @@ function showSupportInfoBody(supportObj) {
     var modal = document.getElementById('infoModal');
     setupEditAndDeleteListeners();
     bindObjectGalleryModal(modalInfoEl, supportObj);
-    if (modal) {
-        modal.style.display = 'flex';
-        modal.classList.add('modal--centered');
-        updateModalLockBanner(getObjectUniqueId(supportObj));
-        applyObjectLocksToMapDraggable();
-        if (typeof window.initPanelPlexusCanvases === 'function') {
-            requestAnimationFrame(function () { window.initPanelPlexusCanvases(modal); });
-        }
-    }
+    presentInfoCard({
+        workspace: false,
+        title: document.getElementById('modalTitle') ? document.getElementById('modalTitle').textContent : 'Объект'
+    });
+    updateModalLockBanner(getObjectUniqueId(supportObj));
+    syncPropertiesLockFromModal();
+    applyObjectLocksToMapDraggable();
 }
 
 /** Обновить карточку объекта: опора и крепление — через showSupportInfo, остальные — showObjectInfo. */

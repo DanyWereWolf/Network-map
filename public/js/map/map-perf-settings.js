@@ -39,7 +39,6 @@
     var settings = {
         mode: 'auto',
         animations: true,
-        lofi: true,
         connectionLines: true,
         radioCoverage: true,
         plexus: true,
@@ -79,11 +78,10 @@
         return fallback;
     }
 
-    function clonePresetFlags(preset, keepLofi) {
+    function clonePresetFlags(preset) {
         return {
             mode: preset.mode,
             animations: !!preset.animations,
-            lofi: keepLofi !== false,
             connectionLines: !!preset.connectionLines,
             radioCoverage: !!preset.radioCoverage,
             plexus: !!preset.plexus,
@@ -99,7 +97,6 @@
         return {
             mode: mode,
             animations: readBool(raw, 'animations', !!base.animations),
-            lofi: readBool(raw, 'lofi', true),
             connectionLines: readBool(raw, 'connectionLines', !!base.connectionLines),
             radioCoverage: readBool(raw, 'radioCoverage', !!base.radioCoverage),
             plexus: readBool(raw, 'plexus', !!base.plexus),
@@ -153,7 +150,6 @@
         return {
             mode: settings.mode,
             animations: !!settings.animations,
-            lofi: !!settings.lofi,
             connectionLines: !!settings.connectionLines,
             radioCoverage: !!settings.radioCoverage,
             plexus: !!settings.plexus,
@@ -211,12 +207,6 @@
         }
     }
 
-    function applyLofiPreference(enabled) {
-        if (typeof global.setLofiRadioEnabled === 'function') {
-            try { global.setLofiRadioEnabled(!!enabled); } catch (e) {}
-        }
-    }
-
     function rebuildRadioCoveragesIfNeeded() {
         if (!Array.isArray(global.objects)) return;
         if (!isRadioCoverageEnabled()) {
@@ -255,7 +245,6 @@
 
     function applyPerfSideEffects() {
         applyAnimationsPreference(!!settings.animations);
-        applyLofiPreference(!!settings.lofi);
         applyPlexusPreference(isPlexusEnabled());
         applyConnectionLinesPreference();
         rebuildRadioCoveragesIfNeeded();
@@ -280,7 +269,6 @@
             btn.setAttribute('aria-pressed', active ? 'true' : 'false');
         });
         setCheckbox('mapAnimationsToggle', !!settings.animations);
-        setCheckbox('lofiRadioEnabledToggle', !!settings.lofi);
         setCheckbox('perfConnectionLinesToggle', areConnectionLinesEnabled());
         setCheckbox('perfRadioCoverageToggle', isRadioCoverageEnabled());
         setCheckbox('perfPlexusToggle', isPlexusEnabled());
@@ -291,7 +279,6 @@
         var next = normalizeSettings({
             mode: partial && partial.mode != null ? partial.mode : settings.mode,
             animations: partial && partial.animations != null ? partial.animations : settings.animations,
-            lofi: partial && partial.lofi != null ? partial.lofi : settings.lofi,
             connectionLines: partial && partial.connectionLines != null ? partial.connectionLines : settings.connectionLines,
             radioCoverage: partial && partial.radioCoverage != null ? partial.radioCoverage : settings.radioCoverage,
             plexus: partial && partial.plexus != null ? partial.plexus : settings.plexus,
@@ -317,8 +304,7 @@
         options = options || {};
         var key = name === 'economy' || name === 'max' || name === 'auto' ? name : 'auto';
         var preset = PRESETS[key];
-        var keepLofi = settings.lofi !== false;
-        settings = clonePresetFlags(preset, keepLofi);
+        settings = clonePresetFlags(preset);
         if (options.persist !== false) persist({ syncServer: options.syncServer !== false });
         syncingUi = true;
         try {
@@ -351,7 +337,7 @@
         patch[key] = !!checked;
         setPerfSettings(patch, {
             persist: true,
-            recomputeMode: key !== 'lofi'
+            recomputeMode: true
         });
     }
 
@@ -374,7 +360,6 @@
             if (syncingUi) return;
             var id = t.id;
             if (id === 'mapAnimationsToggle') onPerfToggleChange('animations', t.checked);
-            else if (id === 'lofiRadioEnabledToggle') onPerfToggleChange('lofi', t.checked);
             else if (id === 'perfConnectionLinesToggle') onPerfToggleChange('connectionLines', t.checked);
             else if (id === 'perfRadioCoverageToggle') onPerfToggleChange('radioCoverage', t.checked);
             else if (id === 'perfPlexusToggle') onPerfToggleChange('plexus', t.checked);
@@ -384,24 +369,11 @@
     function initPerfSettingsControls() {
         var saved = readFromStorage();
         if (saved) settings = saved;
-        else settings = clonePresetFlags(PRESETS.auto, true);
+        else settings = clonePresetFlags(PRESETS.auto);
 
         if (typeof global.areMapAnimationsEnabled === 'function' && saved && saved.animations === undefined) {
             settings.animations = !!global.areMapAnimationsEnabled();
         }
-        if (typeof global.isLofiRadioEnabled === 'function' && (saved == null || saved.lofi === undefined)) {
-            settings.lofi = !!global.isLofiRadioEnabled();
-        }
-
-        try {
-            if (!localStorage.getItem('networkMap_perfLofiIndependent')) {
-                localStorage.setItem('networkMap_perfLofiIndependent', '1');
-                if (settings.lofi === false) {
-                    settings.lofi = true;
-                    persist({ syncServer: false });
-                }
-            }
-        } catch (eMig) {}
 
         bindPerfControls();
         syncingUi = true;

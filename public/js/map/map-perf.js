@@ -532,6 +532,29 @@
             toUnmount.push(obj);
         });
         for (var i = 0; i < toUnmount.length; i++) unmountObject(toUnmount[i]);
+
+        // Снять «сирот», добавленных мимо MapPerf (например raw geoObjects.add при импорте).
+        if (!Array.isArray(global.objects)) return;
+        for (var j = 0; j < global.objects.length; j++) {
+            var o = global.objects[j];
+            if (!o || isExternallyManagedMapObject(o)) continue;
+            var t = o.properties && o.properties.get('type');
+            if (t === 'region' && !ctx.hideRegions) continue;
+            var uid2 = uidFromObj(o);
+            if (uid2 && pinnedUids.has(uid2)) continue;
+            if (uid2 && mountedUids.has(uid2)) continue;
+            try {
+                if (global.myMap.geoObjects.indexOf(o) === -1) continue;
+                global.myMap.geoObjects.remove(o);
+                var label = o.properties && o.properties.get('label');
+                if (label) {
+                    try { global.myMap.geoObjects.remove(label); } catch (eLbl) {}
+                }
+                if (t === 'cable' && global.CableUnderground) {
+                    try { global.CableUnderground.setOverlaysVisible(o, false); } catch (eUg) {}
+                }
+            } catch (eSweep) {}
+        }
     }
 
     function syncViewportMounts(ctx) {

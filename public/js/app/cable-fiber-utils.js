@@ -173,9 +173,11 @@ function isFiberPortSplicedAtHost(crossObj, cableId, fiberNumber) {
 function isFiberSplicedAtHost(hostObj, cableId, fiberNumber) {
     if (!hostObj || !cableId || fiberNumber == null) return false;
     const fiberConnections = hostObj.properties.get('fiberConnections') || [];
+    const fn = Number(fiberNumber);
+    const cid = String(cableId);
     return fiberConnections.some(function(conn) {
-        return (conn.from && conn.from.cableId === cableId && conn.from.fiberNumber === fiberNumber) ||
-            (conn.to && conn.to.cableId === cableId && conn.to.fiberNumber === fiberNumber);
+        return (conn.from && String(conn.from.cableId) === cid && Number(conn.from.fiberNumber) === fn) ||
+            (conn.to && String(conn.to.cableId) === cid && Number(conn.to.fiberNumber) === fn);
     });
 }
 
@@ -187,12 +189,13 @@ function getFiberNeighborsAtHost(hostObj, cableId, fiberNumber) {
     if (!hostObj || !cableId || fiberNumber == null) return [];
     const neighbors = [];
     const connections = hostObj.properties.get('fiberConnections') || [];
+    const fn = Number(fiberNumber);
     connections.forEach(function(conn) {
         if (!conn || !conn.from || !conn.to) return;
-        if (conn.from.cableId === cableId && conn.from.fiberNumber === fiberNumber) {
-            neighbors.push({ cableId: conn.to.cableId, fiberNumber: conn.to.fiberNumber });
-        } else if (conn.to.cableId === cableId && conn.to.fiberNumber === fiberNumber) {
-            neighbors.push({ cableId: conn.from.cableId, fiberNumber: conn.from.fiberNumber });
+        if (String(conn.from.cableId) === String(cableId) && Number(conn.from.fiberNumber) === fn) {
+            neighbors.push({ cableId: conn.to.cableId, fiberNumber: Number(conn.to.fiberNumber) });
+        } else if (String(conn.to.cableId) === String(cableId) && Number(conn.to.fiberNumber) === fn) {
+            neighbors.push({ cableId: conn.from.cableId, fiberNumber: Number(conn.from.fiberNumber) });
         }
     });
     return neighbors;

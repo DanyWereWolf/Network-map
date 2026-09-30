@@ -26,6 +26,8 @@ body.landing-page .landing-nav-actions > .btn-primary-hero {
     display: none;
 }
 
+/* CTA в шапке не показываем — место для пунктов меню; кнопки есть в hero и футере */
+
 /* Режим «не влезло» — выпадающий список */
 body.landing-page .landing-nav.landing-nav--menu-collapsed .landing-nav-burger {
     display: inline-flex;
@@ -88,17 +90,17 @@ body.landing-page .landing-nav.landing-nav--menu-collapsed .landing-nav-menu a {
 }
 
 body.landing-page .landing-nav.landing-nav--menu-collapsed .landing-nav-menu a:hover {
-    background: rgba(59, 130, 246, 0.08);
+    background: rgba(15, 118, 110, 0.1);
 }
 
 [data-theme="dark"] body.landing-page .landing-nav.landing-nav--menu-collapsed .landing-nav-menu {
-    background: rgba(15, 23, 42, 0.97);
+    background: rgba(6, 13, 22, 0.97);
     border-color: rgba(148, 163, 184, 0.25);
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
 }
 
 [data-theme="dark"] body.landing-page .landing-nav.landing-nav--menu-collapsed .landing-nav-menu a:hover {
-    background: rgba(59, 130, 246, 0.15);
+    background: rgba(20, 184, 166, 0.14);
 }
 
 /* Обычный режим: одна строка */
@@ -146,17 +148,11 @@ body.landing-page .landing-nav:not(.landing-nav--menu-collapsed) .landing-nav-ac
 
 @container landing-shell (min-width: 1000px) {
     body.landing-page .landing-nav:not(.landing-nav--menu-collapsed) {
-        grid-template-columns: minmax(0, 240px) minmax(0, 1fr) auto;
+        grid-template-columns: minmax(0, 200px) minmax(0, 1fr) auto;
     }
 
     body.landing-page .landing-nav:not(.landing-nav--menu-collapsed) .landing-nav-left {
-        max-width: 240px;
-    }
-
-    body.landing-page .landing-nav-actions > .btn-primary-hero {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
+        max-width: 200px;
     }
 }
 
@@ -244,12 +240,6 @@ body.landing-page .landing-nav-actions .theme-toggle-btn {
             font-size: 0.62rem;
             line-height: 1.25;
             max-width: 12.5em;
-        }
-    }
-
-    @media (min-width: 1000px) {
-        body.landing-page .landing-nav-actions > .btn-primary-hero {
-            display: inline-flex;
         }
     }
 }

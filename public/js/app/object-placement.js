@@ -641,7 +641,11 @@ function ensureObjectTypeChipIcons() {
         var type = chip.getAttribute('data-type');
         var icon = OBJECT_TYPE_CHIP_ICONS[type];
         if (!icon) return;
-        var label = (OBJECT_TYPE_LABELS[type] || chip.textContent || '').trim();
+        var label = (OBJECT_TYPE_LABELS[type] || chip.getAttribute('aria-label') || chip.getAttribute('title') || chip.textContent || '').trim();
+        if (label) {
+            chip.setAttribute('title', label);
+            chip.setAttribute('aria-label', label);
+        }
         chip.innerHTML =
             '<span class="object-type-chip__icon" aria-hidden="true">' + icon + '</span>' +
             '<span class="object-type-chip__label">' + (typeof escapeHtml === 'function' ? escapeHtml(label) : label) + '</span>';
@@ -733,8 +737,10 @@ function syncObjectTypePickerUI() {
         chip.classList.toggle('object-type-chip--active', active);
         chip.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
-    var badge = document.getElementById('objectTypeBadge');
-    if (badge) badge.textContent = getObjectTypeLabel(val);
+    var propsSub = document.getElementById('propertiesPanelSub');
+    if (propsSub && !propsSub.hidden && document.body.classList.contains('properties-open')) {
+        propsSub.textContent = 'Клик по карте — поставить: ' + getObjectTypeLabel(val);
+    }
 }
 
 function setupObjectTypePicker() {
@@ -749,10 +755,16 @@ function setupObjectTypePicker() {
     } catch (e) {}
     document.querySelectorAll('.object-type-chip').forEach(function(chip) {
         chip.addEventListener('click', function() {
+            if (chip.closest('#editToolsStrip')) return;
             var type = chip.getAttribute('data-type');
-            if (!type || select.value === type) return;
-            select.value = type;
-            select.dispatchEvent(new Event('change'));
+            if (!type) return;
+            if (select.value !== type) {
+                select.value = type;
+                select.dispatchEvent(new Event('change'));
+            } else {
+                syncObjectTypePickerUI();
+            }
+            if (typeof openToolProps === 'function') openToolProps('object');
         });
     });
     syncObjectTypePickerUI();
@@ -787,11 +799,7 @@ function getCableTypeLabel(type) {
 
 function syncCableTypePickerUI() {
     var select = document.getElementById('cableType');
-    var badge = document.getElementById('cableTypeBadge');
     var copperActive = typeof copperCableLayingActive !== 'undefined' && copperCableLayingActive;
-    if (badge) {
-        badge.textContent = copperActive ? 'Медь' : getCableTypeLabel(select ? select.value : 'fiber4');
-    }
     if (!select || copperActive) return;
     var val = select.value;
     document.querySelectorAll('.cable-type-chip').forEach(function(chip) {

@@ -291,7 +291,18 @@ function initUserUI() {
 
     setupSidebarToggle();
     setupStatsToggle();
+    if (typeof initEditorShell === 'function') initEditorShell();
+    setupPropertiesPanelClose();
     setupProfileAvatarHandlers();
+}
+
+function setupPropertiesPanelClose() {
+    var btn = document.getElementById('propertiesPanelClose');
+    if (!btn || btn._propsCloseBound) return;
+    btn._propsCloseBound = true;
+    btn.addEventListener('click', function () {
+        if (typeof closeToolProps === 'function') closeToolProps();
+    });
 }
 
 var mapLimitsCache = { count: 0, limit: 20000, unlocked: false, remaining: 20000, defaultFreeLimit: 20000 };
@@ -426,6 +437,9 @@ function setProfileStatusBadge(status) {
     if (status === 'suspended') {
         el.textContent = 'Приостановлена';
         el.classList.add('profile-status-badge--suspended');
+    } else if (status === 'pending') {
+        el.textContent = 'Ожидает e-mail';
+        el.classList.add('profile-status-badge--neutral');
     } else if (status === 'active') {
         el.textContent = 'Активна';
         el.classList.add('profile-status-badge--active');
@@ -496,7 +510,7 @@ function renderProfileOrganizationInfo(org) {
     if (limits) applyMapLimitsCache(limits);
     var count = limits && limits.count != null ? limits.count : null;
     setProfileModalField('profileOrgName', org.name || '—');
-    setProfileStatusBadge(org.status === 'suspended' ? 'suspended' : 'active');
+    setProfileStatusBadge(org.status === 'suspended' ? 'suspended' : (org.status === 'pending' ? 'pending' : 'active'));
     setProfileModalField('profileMapObjects', count != null ? String(count) : '—');
     if (limits && limits.unlocked) {
         setProfileModalField('profileMapLimit', '∞');
@@ -1101,13 +1115,14 @@ function renderOrganizationsList(organizations) {
     organizations.forEach(function(org) {
         var limitText = org.mapObjectLimitUnlocked ? 'Без лимита' :
             ((org.mapObjectCount != null ? org.mapObjectCount : 0) + ' / ' + (org.mapObjectLimit != null ? org.mapObjectLimit : '—'));
-        var statusClass = org.status === 'suspended' ? 'rejected' : 'approved';
+        var statusClass = org.status === 'suspended' ? 'rejected' : (org.status === 'pending' ? 'pending' : 'approved');
+        var statusLabel = org.status === 'suspended' ? 'Приостановлена' : (org.status === 'pending' ? 'Ожидает e-mail' : 'Активна');
         html += '<div class="user-item">';
         html += '<div class="user-item-info" style="flex: 1;">';
         html += '<div class="user-item-name">' + escapeHtml(org.name) + '</div>';
         html += '<div class="user-item-username">Объекты: ' + escapeHtml(limitText) + ' · Сессий: ' + (org.activeSessions != null ? org.activeSessions : '—') + '</div>';
         html += '</div>';
-        html += '<span class="user-item-role ' + statusClass + '">' + (org.status === 'suspended' ? 'Приостановлена' : 'Активна') + '</span>';
+        html += '<span class="user-item-role ' + statusClass + '">' + statusLabel + '</span>';
         html += '<div class="user-item-actions"><button class="user-item-btn" title="Редактировать" onclick="editOrganization(\'' + escapeHtml(org.id) + '\')">Изменить</button></div>';
         html += '</div>';
     });
@@ -1231,7 +1246,13 @@ function renderUsersList() {
     }
 
     if (activeUsers.length === 0 && rejectedUsers.length === 0) {
-        container.innerHTML = '<div class="users-list-empty">Нет пользователей</div>';
+        container.innerHTML = (typeof AppMotion !== 'undefined' && AppMotion.emptyStateHtml)
+            ? AppMotion.emptyStateHtml({
+                emotion: 'shy',
+                title: 'Пока никого нет',
+                text: 'Пригласите коллег в организацию — здесь появится список пользователей.'
+            })
+            : '<div class="users-list-empty">Нет пользователей</div>';
         return;
     }
     
@@ -1377,6 +1398,25 @@ function syncUserEditRoleVisual(role) {
     });
 }
 
+function setUserEditRoleLocked(locked) {
+    var roleSelect = document.getElementById('editRole');
+    if (roleSelect) roleSelect.disabled = !!locked;
+    document.querySelectorAll('input[name="userEditRoleVisual"]').forEach(function(input) {
+        input.disabled = !!locked;
+    });
+    var roleField = document.querySelector('.user-edit-role-field');
+    if (roleField) roleField.classList.toggle('user-edit-role-field--locked', !!locked);
+}
+
+function isLastOrgAdminUser(user, usersList) {
+    if (!user || user.role !== 'admin' || !user.organizationId) return false;
+    var list = usersList || (typeof AuthSystem !== 'undefined' && AuthSystem.getUsers ? AuthSystem.getUsers() : []);
+    var count = list.filter(function(u) {
+        return u.role === 'admin' && u.organizationId && String(u.organizationId) === String(user.organizationId);
+    }).length;
+    return count <= 1;
+}
+
 function openUserEditModal(userId = null) {
     const modal = document.getElementById('userEditModal');
     const title = document.getElementById('userEditTitle');
@@ -1395,6 +1435,8 @@ function openUserEditModal(userId = null) {
         const user = users.find(u => u.id === userId);
         if (!user) return;
         var isMainAdminUser = user.username === 'admin';
+        var isSelfUser = !!(currentUser && String(user.id) === String(currentUser.userId));
+        var lockRole = isMainAdminUser || isSelfUser || isLastOrgAdminUser(user, users);
         var showOrgField = isGlobalMapAdmin() && !isMainAdminUser;
         if (orgSelect) {
             if (orgGroup) orgGroup.style.display = showOrgField ? '' : 'none';
@@ -1415,8 +1457,9 @@ function openUserEditModal(userId = null) {
         passwordInput.placeholder = 'Новый пароль (необязательно)';
         if (passwordHint) passwordHint.style.display = '';
         syncUserEditRoleVisual(user.role);
+        setUserEditRoleLocked(lockRole);
         if (deleteUserBtn) {
-            var canDelete = user.id !== currentUser.userId && !isMainAdminUser;
+            var canDelete = !isSelfUser && !isMainAdminUser && !isLastOrgAdminUser(user, users);
             deleteUserBtn.style.display = canDelete ? '' : 'none';
             deleteUserBtn.onclick = canDelete ? function() { deleteUser(user.id); } : null;
         }
@@ -1432,6 +1475,7 @@ function openUserEditModal(userId = null) {
         passwordInput.placeholder = 'Придумайте пароль';
         if (passwordHint) passwordHint.style.display = 'none';
         syncUserEditRoleVisual('user');
+        setUserEditRoleLocked(false);
         if (orgSelect) {
             if (currentUser && currentUser.organizationId != null) {
                 if (orgGroup) orgGroup.style.display = 'none';
@@ -1478,6 +1522,16 @@ function saveUser() {
         if (users[userIndex].username === 'admin' && role !== 'admin') {
             showError('Нельзя снять роль администратора с главного администратора');
             return;
+        }
+        if (users[userIndex].role === 'admin' && role !== 'admin') {
+            if (currentUser && String(userId) === String(currentUser.userId)) {
+                showError('Нельзя снять с себя роль администратора');
+                return;
+            }
+            if (isLastOrgAdminUser(users[userIndex], users)) {
+                showError('Нельзя снять роль с единственного администратора организации');
+                return;
+            }
         }
         var orgSelect = document.getElementById('editOrganizationId');
         var organizationId = null;
@@ -1589,6 +1643,11 @@ function deleteUser(userId) {
 
     if (users[userIndex].username === 'admin') {
         showError('Нельзя удалить главного администратора');
+        return;
+    }
+
+    if (isLastOrgAdminUser(users[userIndex], users)) {
+        showError('Нельзя удалить единственного администратора организации');
         return;
     }
     

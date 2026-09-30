@@ -1515,7 +1515,9 @@ function getSettings(orgId) {
         customDeviceOptions: parsedCustomDevice,
         collaboratorCursorStyle: normalizeCollaboratorCursorStyle(collaboratorCursorStyle),
         fiberMapColor: normalizeFiberMapColor(byOrg && byOrg.fiberMapColor),
-        fiberMapStrokeWidth: normalizeFiberMapStrokeWidth(byOrg && byOrg.fiberMapStrokeWidth)
+        fiberMapStrokeWidth: normalizeFiberMapStrokeWidth(byOrg && byOrg.fiberMapStrokeWidth),
+        cameraCoverageColor: normalizeMapCoverageColor(byOrg && byOrg.cameraCoverageColor, DEFAULT_CAMERA_COVERAGE_COLOR),
+        radioBridgeCoverageColor: normalizeMapCoverageColor(byOrg && byOrg.radioBridgeCoverageColor, DEFAULT_RADIO_BRIDGE_COVERAGE_COLOR)
     };
 }
 
@@ -1527,6 +1529,8 @@ var DEFAULT_FIBER_MAP_COLOR = '#16a34a';
 var DEFAULT_FIBER_MAP_WIDTH = 3;
 var MIN_FIBER_MAP_WIDTH = 1;
 var MAX_FIBER_MAP_WIDTH = 8;
+var DEFAULT_CAMERA_COVERAGE_COLOR = '#22a06b';
+var DEFAULT_RADIO_BRIDGE_COVERAGE_COLOR = '#06b6d4';
 
 function normalizeFiberMapColor(value) {
     if (value == null || value === '') return DEFAULT_FIBER_MAP_COLOR;
@@ -1536,6 +1540,17 @@ function normalizeFiberMapColor(value) {
         return ('#' + s.charAt(1) + s.charAt(1) + s.charAt(2) + s.charAt(2) + s.charAt(3) + s.charAt(3)).toLowerCase();
     }
     return DEFAULT_FIBER_MAP_COLOR;
+}
+
+function normalizeMapCoverageColor(value, fallback) {
+    var fb = fallback || DEFAULT_CAMERA_COVERAGE_COLOR;
+    if (value == null || value === '') return fb;
+    var s = String(value).trim();
+    if (/^#[0-9A-Fa-f]{6}$/.test(s)) return s.toLowerCase();
+    if (/^#[0-9A-Fa-f]{3}$/.test(s)) {
+        return ('#' + s.charAt(1) + s.charAt(1) + s.charAt(2) + s.charAt(2) + s.charAt(3) + s.charAt(3)).toLowerCase();
+    }
+    return fb;
 }
 
 function normalizeFiberMapStrokeWidth(value) {
@@ -1559,6 +1574,8 @@ function setSettings(obj, orgId) {
         if (obj.collaboratorCursorStyle !== undefined) o.collaboratorCursorStyle = normalizeCollaboratorCursorStyle(obj.collaboratorCursorStyle);
         if (obj.fiberMapColor !== undefined) o.fiberMapColor = normalizeFiberMapColor(obj.fiberMapColor);
         if (obj.fiberMapStrokeWidth !== undefined) o.fiberMapStrokeWidth = normalizeFiberMapStrokeWidth(obj.fiberMapStrokeWidth);
+        if (obj.cameraCoverageColor !== undefined) o.cameraCoverageColor = normalizeMapCoverageColor(obj.cameraCoverageColor, DEFAULT_CAMERA_COVERAGE_COLOR);
+        if (obj.radioBridgeCoverageColor !== undefined) o.radioBridgeCoverageColor = normalizeMapCoverageColor(obj.radioBridgeCoverageColor, DEFAULT_RADIO_BRIDGE_COVERAGE_COLOR);
         saveStore();
         return;
     }
@@ -1708,7 +1725,6 @@ function normalizePerfSettingsForUser(raw) {
     return {
         mode: mode,
         animations: readPerfBool(raw, 'animations', true),
-        lofi: readPerfBool(raw, 'lofi', true),
         connectionLines: readPerfBool(raw, 'connectionLines', true),
         radioCoverage: readPerfBool(raw, 'radioCoverage', true),
         plexus: readPerfBool(raw, 'plexus', true),
@@ -2105,6 +2121,38 @@ function deletePasswordResetToken(token) {
     if (s.passwordResetTokens.length !== before) saveStore();
 }
 
+function cleanupUnverifiedRegistrationsForUsers(userIds) {
+    if (!userIds || !userIds.length) return;
+    const s = loadStore();
+    const remainingTokenUserIds = Object.create(null);
+    (s.emailVerificationTokens || []).forEach(function(t) {
+        if (t && t.userId != null) remainingTokenUserIds[String(t.userId)] = true;
+    });
+    const seen = Object.create(null);
+    userIds.forEach(function(rawId) {
+        const userId = String(rawId);
+        if (!userId || seen[userId]) return;
+        seen[userId] = true;
+        if (remainingTokenUserIds[userId]) return;
+        const users = Array.isArray(s.users) ? s.users : [];
+        const user = users.find(function(u) { return String(u.id) === userId; });
+        if (!user || user.emailVerified !== false || !user.organizationId) return;
+        const org = (s.organizations || []).find(function(o) {
+            return organizationIdsMatch(o.id, user.organizationId);
+        });
+        if (!org || org.status !== 'pending') return;
+        const orgUsers = users.filter(function(u) {
+            return organizationIdsMatch(u.organizationId, org.id);
+        });
+        const allUnverified = orgUsers.length > 0 && orgUsers.every(function(u) {
+            return u.emailVerified === false;
+        });
+        if (!allUnverified) return;
+        console.log('[Auth] cleanup expired unverified registration org', org.id, 'user', userId);
+        deleteOrganization(org.id);
+    });
+}
+
 function purgeExpiredEmailVerificationTokens() {
     const s = loadStore();
     if (!Array.isArray(s.emailVerificationTokens)) {
@@ -2112,14 +2160,23 @@ function purgeExpiredEmailVerificationTokens() {
         return;
     }
     const now = Date.now();
-    const filtered = s.emailVerificationTokens.filter(function(t) {
-        if (!t || !t.expiresAt) return false;
+    const kept = [];
+    const expiredUserIds = [];
+    s.emailVerificationTokens.forEach(function(t) {
+        if (!t || !t.expiresAt) return;
         const exp = new Date(t.expiresAt).getTime();
-        return !isNaN(exp) && exp > now;
+        if (!isNaN(exp) && exp > now) {
+            kept.push(t);
+        } else if (t.userId != null) {
+            expiredUserIds.push(String(t.userId));
+        }
     });
-    if (filtered.length !== s.emailVerificationTokens.length) {
-        s.emailVerificationTokens = filtered;
+    if (kept.length !== s.emailVerificationTokens.length) {
+        s.emailVerificationTokens = kept;
         saveStore();
+    }
+    if (expiredUserIds.length) {
+        cleanupUnverifiedRegistrationsForUsers(expiredUserIds);
     }
 }
 

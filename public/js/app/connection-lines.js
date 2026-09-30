@@ -795,6 +795,12 @@ function updateAllConnectionLines() {
     if (typeof updateAllRadioBridgeCoverages === 'function') updateAllRadioBridgeCoverages();
     if (typeof updateAllCameraCoverages === 'function') updateAllCameraCoverages();
     applyConnectionLinesVisibility();
+    // После пересоздания зон подтянуть актуальный цвет темы (если уже пришёл с сервера).
+    if (typeof window.applyOrgCoverageColors === 'function' && window._orgCoverageColorSettings) {
+        try {
+            window.applyOrgCoverageColors(window._orgCoverageColorSettings, { applyAll: true });
+        } catch (eCovRe) {}
+    }
 }
 
 function createSplitterOutputConnectionLine(sourceObj, targetObj, outIdx, routeIds, connectionKey) {

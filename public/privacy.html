@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="description" content="Политика обработки персональных данных сервиса «Карта оптической сети» (volsmap.ru) в соответствии с 152‑ФЗ.">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#0a1628">
+    <title>Политика обработки персональных данных — Карта оптической сети</title>
+    <link rel="canonical" href="https://volsmap.ru/privacy.html">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/auth.css">
+    <link rel="stylesheet" href="css/scrollbars.css">
+    <link rel="stylesheet" href="css/cookie-consent.css">
+    <link rel="stylesheet" href="css/maintenance-notice.css">
+    <link rel="stylesheet" href="css/support-chat.css">
+    <script>
+        (function() {
+            try {
+                var saved = localStorage.getItem('networkMap_landingTheme');
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var theme = (saved === 'dark' || saved === 'light') ? saved : (prefersDark ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch (e) {}
+        })();
+        (function() {
+            var hash = (location.hash || '').toLowerCase();
+            if (hash.indexOf('deletion') >= 0 || hash === '#privacy-deletion') {
+                location.replace('data-deletion.html');
+            }
+        })();
+    </script>
+    <link rel="stylesheet" href="css/landing.css">
+    <link rel="stylesheet" href="css/landing-header.css">
+    <link rel="stylesheet" href="css/privacy.css">
+    <link rel="stylesheet" href="css/pages-mobile.css">
+</head>
+<body class="landing-page legal-page">
+    <div class="auth-bg landing-bg" aria-hidden="true">
+        <div class="auth-bg-gradient landing-bg-gradient"></div>
+        <div class="landing-bg-grid"></div>
+        <canvas id="authPlexusCanvas" class="auth-bg-plexus"></canvas>
+    </div>
+    <div class="auth-container landing-root">
+        <div class="auth-card landing-shell">
+            <header class="landing-nav" id="landingNav">
+                <div class="landing-nav-overlay" id="landingNavOverlay" aria-hidden="true"></div>
+                <div class="landing-nav-left">
+                    <a href="/" class="landing-nav-logo-link" title="На главную">
+                        <div class="auth-logo landing-nav-logo" role="img" aria-label="Карта оптической сети">
+                            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                <circle cx="12" cy="10" r="3"></circle>
+                            </svg>
+                        </div>
+                    </a>
+                    <div>
+                        <div class="landing-brand-title">Карта оптической сети</div>
+                        <div class="landing-brand-sub">volsmap.ru</div>
+                    </div>
+                </div>
+                <nav class="landing-nav-menu" id="landingNavMenu" aria-label="Разделы страницы">
+                    <a href="/#home">Главная</a>
+                    <a href="/#capabilities">Возможности</a>
+                    <a href="/#about">О продукте</a>
+                    <a href="/#pricing">Условия</a>
+                    <a href="news.html">Новости</a>
+                    <a href="/#faq">Вопросы</a>
+                    <a href="/#contacts">Контакты</a>
+                </nav>
+                <div class="landing-nav-actions">
+                    <button type="button" class="btn-outline landing-nav-burger" id="landingNavBurger" aria-expanded="false" aria-controls="landingNavMenu" title="Разделы страницы">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <line x1="3" y1="12" x2="21" y2="12"></line>
+                            <line x1="3" y1="18" x2="21" y2="18"></line>
+                        </svg>
+                        <span>Разделы</span>
+                    </button>
+                    <button id="landingThemeToggle" type="button" class="btn-outline theme-toggle-btn" title="Тёмная тема" aria-label="Включить тёмную тему">
+                        <svg class="theme-icon theme-icon--moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                    </button>
+                    <button class="btn-outline" onclick="window.location.href='auth.html'">Войти</button>
+                    <button class="btn-primary-hero" onclick="window.location.href='/#pricing'">Попробовать сейчас</button>
+                </div>
+            </header>
+
+            <section class="legal-hero legal-hero--policy" aria-labelledby="privacyPageTitle">
+                <p class="legal-eyebrow"><span class="legal-eyebrow-dot" aria-hidden="true"></span>152‑ФЗ · volsmap.ru</p>
+                <h1 id="privacyPageTitle" class="legal-hero-title">Политика обработки персональных данных</h1>
+                <p class="legal-hero-sub">
+                    Какие данные обрабатывает сервис «Карта оптической сети», для каких целей
+                    и какие права есть у пользователей и организаций.
+                </p>
+                <div class="legal-meta-row">
+                    <span class="legal-chip">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                        Редакция от 29 сентября 2026&nbsp;г.
+                    </span>
+                    <span class="legal-chip">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                        Оператор: volsmap.ru
+                    </span>
+                </div>
+                <div class="legal-hero-actions">
+                    <a class="legal-btn legal-btn--ghost" href="data-deletion.html">Заявление на удаление данных</a>
+                    <a class="legal-btn legal-btn--ghost" href="mailto:support@volsmap.ru">support@volsmap.ru</a>
+                </div>
+            </section>
+
+            <div class="legal-shell legal-shell--policy">
+                <nav class="legal-toc" aria-label="Содержание">
+                    <span class="legal-toc-label">Содержание</span>
+                    <ul class="legal-toc-list">
+                        <li><a href="#s1"><span class="legal-toc-num">01</span>Общие положения</a></li>
+                        <li><a href="#s2"><span class="legal-toc-num">02</span>Какие данные</a></li>
+                        <li><a href="#s3"><span class="legal-toc-num">03</span>Цели</a></li>
+                        <li><a href="#s4"><span class="legal-toc-num">04</span>Срок хранения</a></li>
+                        <li><a href="#s5"><span class="legal-toc-num">05</span>Права</a></li>
+                        <li><a href="#s6"><span class="legal-toc-num">06</span>Защита</a></li>
+                        <li><a href="#s7"><span class="legal-toc-num">07</span>Изменения</a></li>
+                    </ul>
+                </nav>
+
+                <div class="legal-doc" id="privacy-policy">
+                    <section class="legal-section" id="s1">
+                        <div class="legal-section-head">
+                            <span class="legal-section-num" aria-hidden="true">01</span>
+                            <h2>Общие положения</h2>
+                        </div>
+                        <p>
+                            Настоящая Политика определяет порядок обработки персональных данных пользователей сервиса
+                            «Карта оптической сети» (далее — Сервис), доступного по адресу
+                            <a href="https://volsmap.ru/">https://volsmap.ru/</a>, в соответствии с Федеральным законом
+                            от&nbsp;27.07.2006&nbsp;№&nbsp;152‑ФЗ «О персональных данных».
+                        </p>
+                        <p>
+                            Оператор персональных данных — владелец Сервиса volsmap.ru. По вопросам обработки данных
+                            обращайтесь на <a href="mailto:support@volsmap.ru">support@volsmap.ru</a>.
+                        </p>
+                        <p>
+                            Используя Сервис (регистрация, вход, работа с картой, обращение в поддержку), вы подтверждаете,
+                            что ознакомились с этой Политикой. При регистрации требуется явное согласие через чекбокс.
+                        </p>
+                    </section>
+
+                    <section class="legal-section" id="s2">
+                        <div class="legal-section-head">
+                            <span class="legal-section-num" aria-hidden="true">02</span>
+                            <h2>Какие данные мы обрабатываем</h2>
+                        </div>
+                        <p>В зависимости от использования Сервиса могут обрабатываться:</p>
+                        <ul>
+                            <li>учётные данные: имя пользователя, пароль (в виде хеша), полное имя, адрес электронной почты;</li>
+                            <li>данные организации: название, контактный e‑mail, настройки доступа (в том числе 2FA);</li>
+                            <li>содержимое карты организации: объекты сети, связи, схемы, вложения и связанные служебные записи;</li>
+                            <li>технические данные: IP‑адрес, сведения о сессии, журналы безопасности и обращений в поддержку;</li>
+                            <li>данные файлов cookie и локального хранилища браузера — в объёме, необходимом для работы Сервиса.</li>
+                        </ul>
+                        <p>
+                            Карты и данные разных организаций изолированы. Третьим лицам персональные данные не продаются
+                            и не передаются, за исключением случаев, предусмотренных законом, или привлечения подрядчиков,
+                            обеспечивающих работу инфраструктуры (хостинг, почта), при сохранении конфиденциальности.
+                        </p>
+                    </section>
+
+                    <section class="legal-section" id="s3">
+                        <div class="legal-section-head">
+                            <span class="legal-section-num" aria-hidden="true">03</span>
+                            <h2>Цели и правовые основания</h2>
+                        </div>
+                        <p>Данные обрабатываются для:</p>
+                        <ul>
+                            <li>регистрации организации и предоставления доступа к Сервису;</li>
+                            <li>идентификации пользователей, поддержки и восстановления доступа;</li>
+                            <li>хранения и синхронизации карты сети в рамках выбранной организации;</li>
+                            <li>обеспечения безопасности, предотвращения злоупотреблений и соблюдения лимитов;</li>
+                            <li>ответов на обращения в поддержку и исполнения запросов субъектов персональных данных.</li>
+                        </ul>
+                        <p>
+                            Правовые основания: согласие субъекта персональных данных; исполнение договора / предоставление
+                            функционала Сервиса по инициативе пользователя; законные интересы Оператора по защите Сервиса
+                            и исполнению требований законодательства РФ.
+                        </p>
+                    </section>
+
+                    <section class="legal-section" id="s4">
+                        <div class="legal-section-head">
+                            <span class="legal-section-num" aria-hidden="true">04</span>
+                            <h2>Срок хранения</h2>
+                        </div>
+                        <p>
+                            Персональные данные хранятся, пока действует учётная запись организации / пользователя
+                            и пока это необходимо для целей обработки, либо до отзыва согласия / исполнения запроса
+                            на удаление — если иное не требуется законом (например, для разбора инцидентов безопасности
+                            в разумный срок).
+                        </p>
+                    </section>
+
+                    <section class="legal-section" id="s5">
+                        <div class="legal-section-head">
+                            <span class="legal-section-num" aria-hidden="true">05</span>
+                            <h2>Права пользователя</h2>
+                        </div>
+                        <p>Вы вправе:</p>
+                        <ul>
+                            <li>получить сведения об обработке своих персональных данных;</li>
+                            <li>требовать уточнения, блокирования или удаления данных, если они неполны, устарели или обрабатываются незаконно;</li>
+                            <li>отозвать согласие на обработку — с учётом того, что без части данных использование Сервиса может стать невозможным;</li>
+                            <li>направить <a href="data-deletion.html">заявление на удаление данных организации</a>;</li>
+                            <li>обратиться с жалобой в уполномоченный орган по защите прав субъектов персональных данных.</li>
+                        </ul>
+                    </section>
+
+                    <section class="legal-section" id="s6">
+                        <div class="legal-section-head">
+                            <span class="legal-section-num" aria-hidden="true">06</span>
+                            <h2>Меры защиты</h2>
+                        </div>
+                        <p>
+                            Оператор принимает организационные и технические меры: изоляция данных организаций,
+                            хеширование паролей, контроль сессий, ограничение попыток входа, опциональная 2FA,
+                            ограничение доступа сотрудников поддержки. Данные размещаются на серверах, используемых
+                            для работы volsmap.ru.
+                        </p>
+                    </section>
+
+                    <section class="legal-section" id="s7">
+                        <div class="legal-section-head">
+                            <span class="legal-section-num" aria-hidden="true">07</span>
+                            <h2>Изменение Политики</h2>
+                        </div>
+                        <p>
+                            Актуальная версия всегда опубликована на этой странице. Существенные изменения могут
+                            дополнительно доводиться через интерфейс Сервиса или e‑mail, указанный при регистрации.
+                        </p>
+                    </section>
+
+                    <aside class="legal-cta-band" aria-label="Удаление данных">
+                        <div>
+                            <h2>Нужно удалить данные организации?</h2>
+                            <p>Администратор может подать отдельное заявление. После проверки учётные записи, карта и связанные материалы удаляются.</p>
+                        </div>
+                        <a class="legal-btn legal-btn--warn" href="data-deletion.html">Перейти к заявлению</a>
+                    </aside>
+                </div>
+            </div>
+
+            <footer class="landing-footer legal-footer-links">
+                <div>© 2024–2026 «Карта оптической сети». Все права защищены.</div>
+                <nav class="landing-footer-nav" aria-label="Нижняя навигация">
+                    <a href="/#home">Главная</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="/#pricing">Условия</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="news.html">Новости</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="/#contacts">Контакты</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="auth.html">Войти</a>
+                </nav>
+                <nav class="landing-footer-legal" aria-label="Документы">
+                    <a href="privacy.html" aria-current="page">Политика обработки персональных данных</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="data-deletion.html">Удаление данных</a>
+                </nav>
+            </footer>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        var toggleBtn = document.getElementById('landingThemeToggle');
+        var iconMoon = '<svg class="theme-icon theme-icon--moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+        var iconSun = '<svg class="theme-icon theme-icon--sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>';
+        function setTheme(theme) {
+            var t = (theme === 'dark') ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', t);
+            try {
+                localStorage.setItem('networkMap_landingTheme', t);
+            } catch (e) {}
+            if (!toggleBtn) return;
+            if (t === 'dark') {
+                toggleBtn.innerHTML = iconSun;
+                toggleBtn.setAttribute('aria-label', 'Включить светлую тему');
+                toggleBtn.setAttribute('title', 'Светлая тема');
+            } else {
+                toggleBtn.innerHTML = iconMoon;
+                toggleBtn.setAttribute('aria-label', 'Включить тёмную тему');
+                toggleBtn.setAttribute('title', 'Тёмная тема');
+            }
+        }
+        setTheme(document.documentElement.getAttribute('data-theme') || 'light');
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', function() {
+                var current = document.documentElement.getAttribute('data-theme') || 'light';
+                setTheme(current === 'dark' ? 'light' : 'dark');
+            });
+        }
+
+        var links = document.querySelectorAll('.legal-toc a[href^="#"]');
+        var sections = [];
+        links.forEach(function(a) {
+            var id = a.getAttribute('href').slice(1);
+            var el = document.getElementById(id);
+            if (el) sections.push({ id: id, el: el, a: a });
+        });
+        function syncToc() {
+            var y = window.scrollY + 120;
+            var current = sections[0];
+            for (var i = 0; i < sections.length; i++) {
+                if (sections[i].el.offsetTop <= y) current = sections[i];
+            }
+            links.forEach(function(a) { a.classList.remove('is-active'); });
+            if (current) current.a.classList.add('is-active');
+        }
+        if (sections.length) {
+            window.addEventListener('scroll', syncToc, { passive: true });
+            syncToc();
+        }
+
+        var nav = document.getElementById('landingNav');
+        if (nav) {
+            function onNavScroll() {
+                nav.classList.toggle('is-scrolled', (window.scrollY || 0) > 12);
+            }
+            window.addEventListener('scroll', onNavScroll, { passive: true });
+            onNavScroll();
+        }
+    })();
+    </script>
+    <script src="js/landing-nav.js"></script>
+    <script src="js/landing-motion.js"></script>
+    <script src="js/ui/assistant-avatars.js"></script>
+    <script src="js/core/page-bg-plexus.js"></script>
+    <script src="js/core/cookie-consent.js"></script>
+    <script src="js/core/maintenance-notice.js"></script>
+    <script src="js/support-chat.js"></script>
+</body>
+</html>

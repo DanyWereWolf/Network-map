@@ -102,6 +102,9 @@ function deleteObject(obj, opts) {
     const objType = obj.properties.get('type');
     const objName = obj.properties.get('name') || '';
     const objUniqueId = obj.properties.get('uniqueId');
+    if (typeof AppMotion !== 'undefined' && AppMotion.celebrateRemove && !(opts && opts.skipSync && opts.remoteOp)) {
+        try { AppMotion.celebrateRemove(obj); } catch (eMotionDel) {}
+    }
     var objGroupKey = null;
     if (obj.geometry && (objType === 'node' || objType === 'cross')) {
         var objCoords = obj.geometry.getCoordinates();

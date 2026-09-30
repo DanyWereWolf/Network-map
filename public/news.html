@@ -5,14 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="description" content="Новости проекта «Карта оптической сети» — что нового в программе для работы с ВОЛС.">
     <meta name="robots" content="index, follow">
-    <meta name="theme-color" content="#1d4ed8">
+    <meta name="theme-color" content="#0a1628">
     <title>Новости — Карта оптической сети</title>
     <link rel="canonical" href="https://volsmap.ru/news.html">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/auth.css">
+    <link rel="stylesheet" href="css/scrollbars.css">
     <link rel="stylesheet" href="css/cookie-consent.css">
     <link rel="stylesheet" href="css/maintenance-notice.css">
     <link rel="stylesheet" href="css/support-chat.css">
@@ -32,8 +33,9 @@
     <link rel="stylesheet" href="css/pages-mobile.css">
 </head>
 <body class="landing-page">
-    <div class="auth-bg" aria-hidden="true">
-        <div class="auth-bg-gradient"></div>
+    <div class="auth-bg landing-bg" aria-hidden="true">
+        <div class="auth-bg-gradient landing-bg-gradient"></div>
+        <div class="landing-bg-grid"></div>
         <canvas id="authPlexusCanvas" class="auth-bg-plexus"></canvas>
     </div>
     <div class="auth-container landing-root">
@@ -51,7 +53,7 @@
                     </a>
                     <div>
                         <div class="landing-brand-title">Карта оптической сети</div>
-                        <div class="landing-brand-sub">Программа для работы с оптической сетью</div>
+                        <div class="landing-brand-sub">volsmap.ru</div>
                     </div>
                 </div>
                 <nav class="landing-nav-menu" id="landingNavMenu" aria-label="Разделы страницы">
@@ -73,7 +75,7 @@
                         <span>Разделы</span>
                     </button>
                     <button id="landingThemeToggle" type="button" class="btn-outline theme-toggle-btn" title="Тёмная тема" aria-label="Включить тёмную тему">
-                        <span aria-hidden="true">🌙</span>
+                        <svg class="theme-icon theme-icon--moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
                     </button>
                     <button class="btn-outline" onclick="window.location.href='auth.html'">Войти</button>
                     <button class="btn-primary-hero" onclick="window.location.href='/#pricing'">Попробовать сейчас</button>
@@ -108,6 +110,11 @@
                     <span aria-hidden="true">·</span>
                     <a href="auth.html">Войти</a>
                 </nav>
+                <nav class="landing-footer-legal" aria-label="Документы">
+                    <a href="privacy.html">Политика обработки персональных данных</a>
+                    <span aria-hidden="true">·</span>
+                    <a href="data-deletion.html">Удаление данных</a>
+                </nav>
             </footer>
         </div>
     </div>
@@ -115,6 +122,8 @@
     <script>
     (function() {
         var toggleBtn = document.getElementById('landingThemeToggle');
+        var iconMoon = '<svg class="theme-icon theme-icon--moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+        var iconSun = '<svg class="theme-icon theme-icon--sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>';
         function setTheme(theme) {
             var t = (theme === 'dark') ? 'dark' : 'light';
             document.documentElement.setAttribute('data-theme', t);
@@ -123,11 +132,11 @@
             } catch (e) {}
             if (!toggleBtn) return;
             if (t === 'dark') {
-                toggleBtn.innerHTML = '<span aria-hidden="true">☀️</span>';
+                toggleBtn.innerHTML = iconSun;
                 toggleBtn.setAttribute('aria-label', 'Включить светлую тему');
                 toggleBtn.setAttribute('title', 'Светлая тема');
             } else {
-                toggleBtn.innerHTML = '<span aria-hidden="true">🌙</span>';
+                toggleBtn.innerHTML = iconMoon;
                 toggleBtn.setAttribute('aria-label', 'Включить тёмную тему');
                 toggleBtn.setAttribute('title', 'Тёмная тема');
             }
@@ -141,7 +150,19 @@
         }
     })();
     </script>
+    <script>
+    (function() {
+        var nav = document.getElementById('landingNav');
+        if (!nav) return;
+        function onScroll() {
+            nav.classList.toggle('is-scrolled', (window.scrollY || 0) > 12);
+        }
+        window.addEventListener('scroll', onScroll, { passive: true });
+        onScroll();
+    })();
+    </script>
     <script src="js/landing-nav.js"></script>
+    <script src="js/landing-motion.js"></script>
     <script src="js/ui/assistant-avatars.js"></script>
     <script src="js/core/page-bg-plexus.js"></script>
     <script src="js/core/cookie-consent.js"></script>

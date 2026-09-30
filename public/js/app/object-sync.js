@@ -93,22 +93,26 @@ function updateModalLockBanner(uniqueId) {
         el.hidden = false;
         el.textContent = 'Редактирует: ' + (lock.displayName || 'другой пользователь');
         el.className = 'object-lock-banner object-lock-banner--remote';
+        if (typeof syncPropertiesLockFromModal === 'function') syncPropertiesLockFromModal();
         return;
     }
     if (uniqueId && myHeldObjectLockId === uniqueId && modalIsEditMode()) {
         el.hidden = false;
         el.textContent = 'Вы редактируете этот объект';
         el.className = 'object-lock-banner object-lock-banner--mine';
+        if (typeof syncPropertiesLockFromModal === 'function') syncPropertiesLockFromModal();
         return;
     }
     if (!modalIsEditMode() && uniqueId && lock) {
         el.hidden = false;
         el.textContent = 'Только просмотр — редактирует ' + (lock.displayName || 'другой пользователь');
         el.className = 'object-lock-banner object-lock-banner--remote';
+        if (typeof syncPropertiesLockFromModal === 'function') syncPropertiesLockFromModal();
         return;
     }
     el.hidden = true;
     el.textContent = '';
+    if (typeof syncPropertiesLockFromModal === 'function') syncPropertiesLockFromModal();
 }
 
 function describeObjectForCollab(uniqueId) {

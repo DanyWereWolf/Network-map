@@ -160,12 +160,7 @@ function verifyLoginTotp(pendingId, totpCode, rememberMe) {
 }
 
 function showTotpStep(organizationName) {
-    var loginForm = document.getElementById('loginForm');
-    var registerForm = document.getElementById('registerForm');
-    var totpForm = document.getElementById('totpForm');
-    if (loginForm) loginForm.classList.remove('active');
-    if (registerForm) registerForm.classList.remove('active');
-    if (totpForm) totpForm.classList.add('active');
+    switchForm('totp');
     var hint = document.getElementById('totpOrgHint');
     if (hint) {
         hint.textContent = organizationName
@@ -178,10 +173,7 @@ function showTotpStep(organizationName) {
 
 function hideTotpStep() {
     pendingLoginId = null;
-    var totpForm = document.getElementById('totpForm');
-    var loginForm = document.getElementById('loginForm');
-    if (totpForm) totpForm.classList.remove('active');
-    if (loginForm) loginForm.classList.add('active');
+    switchForm('login');
 }
 
 var REGISTER_MAP_DEFAULT = { center: [54.663609, 86.162243], zoom: 15 };
@@ -361,14 +353,22 @@ function tryRegisterMapGeolocation() {
     }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
 }
 
-function registerUser(username, password, fullName, organizationName, contactEmail, mapStart) {
+function registerUser(username, password, fullName, organizationName, contactEmail, mapStart, privacyConsent) {
     if (username.length < 3) return Promise.resolve({ success: false, error: 'Имя пользователя должно быть не менее 3 символов' });
     if (!organizationName || organizationName.trim().length < 3) return Promise.resolve({ success: false, error: 'Укажите название организации (не менее 3 символов)' });
     if (password.length < 6) return Promise.resolve({ success: false, error: 'Пароль должен быть не менее 6 символов' });
     var email = (contactEmail && String(contactEmail).trim()) || '';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return Promise.resolve({ success: false, error: 'Укажите корректный e-mail для связи' });
+    if (!privacyConsent) return Promise.resolve({ success: false, error: 'Необходимо согласие на обработку персональных данных' });
     if (!getApiBase()) return Promise.resolve({ success: false, error: 'Запустите сервер: npm run api, затем откройте http://localhost:3000' });
-    var body = { username: username, password: password, fullName: fullName || username, organizationName: String(organizationName).trim(), contactEmail: email };
+    var body = {
+        username: username,
+        password: password,
+        fullName: fullName || username,
+        organizationName: String(organizationName).trim(),
+        contactEmail: email,
+        privacyConsent: true
+    };
     var start = mapStart && Array.isArray(mapStart.center) && mapStart.center.length >= 2 ? mapStart : null;
     if (!start) start = getRegisterMapStart();
     body.mapStart = start;
@@ -751,34 +751,72 @@ function switchForm(formType) {
     const resendForm = document.getElementById('resendVerifyForm');
     const message = document.getElementById('authMessage');
     const authContainer = document.querySelector('.auth-container');
+    const authCard = document.querySelector('.auth-card');
+    const titleEl = document.getElementById('authPageTitle');
+    const subtitleEl = document.getElementById('authPageSubtitle');
     
     message.className = 'auth-message';
     message.textContent = '';
     
     var totpForm = document.getElementById('totpForm');
     hideAllAuthForms();
-    pendingLoginId = null;
+    if (formType !== 'totp') pendingLoginId = null;
+
+    function setHeader(mode) {
+        if (authCard) authCard.classList.toggle('auth-card--register', mode === 'register');
+        if (titleEl && subtitleEl) {
+            if (mode === 'register') {
+                titleEl.textContent = 'Создать организацию';
+                subtitleEl.textContent = 'Отдельная карта, команда и синхронизация — бесплатно в пределах лимита';
+            } else if (mode === 'forgot') {
+                titleEl.textContent = 'Восстановление пароля';
+                subtitleEl.textContent = 'Отправим ссылку на e-mail из регистрации';
+            } else if (mode === 'reset') {
+                titleEl.textContent = 'Новый пароль';
+                subtitleEl.textContent = 'Задайте новый пароль для учётной записи';
+            } else if (mode === 'resend') {
+                titleEl.textContent = 'Подтверждение e-mail';
+                subtitleEl.textContent = 'Отправим новую ссылку для подтверждения';
+            } else if (mode === 'totp') {
+                titleEl.textContent = 'Двухфакторная аутентификация';
+                subtitleEl.textContent = 'Введите код из приложения-аутентификатора';
+            } else {
+                titleEl.textContent = 'Вход в систему';
+                subtitleEl.textContent = 'Программа для работы с оптической сетью на volsmap.ru';
+            }
+        }
+    }
 
     if (formType === 'login') {
         loginForm.classList.add('active');
         if (authContainer) authContainer.classList.remove('auth-register-active');
         destroyRegisterMapPicker();
+        setHeader('login');
     } else if (formType === 'forgot') {
         if (forgotForm) forgotForm.classList.add('active');
         if (authContainer) authContainer.classList.remove('auth-register-active');
         destroyRegisterMapPicker();
+        setHeader('forgot');
     } else if (formType === 'reset') {
         if (resetForm) resetForm.classList.add('active');
         if (authContainer) authContainer.classList.remove('auth-register-active');
         destroyRegisterMapPicker();
+        setHeader('reset');
     } else if (formType === 'resend') {
         if (resendForm) resendForm.classList.add('active');
         if (authContainer) authContainer.classList.remove('auth-register-active');
         destroyRegisterMapPicker();
+        setHeader('resend');
+    } else if (formType === 'totp') {
+        if (totpForm) totpForm.classList.add('active');
+        if (authContainer) authContainer.classList.remove('auth-register-active');
+        destroyRegisterMapPicker();
+        setHeader('totp');
     } else {
         registerForm.classList.add('active');
         if (authContainer) authContainer.classList.add('auth-register-active');
         initRegisterMapPicker();
+        setHeader('register');
     }
 }
 
@@ -984,8 +1022,11 @@ document.addEventListener('DOMContentLoaded', function() {
             var password = document.getElementById('regPassword').value;
             var passwordConfirm = document.getElementById('regPasswordConfirm').value;
             if (password !== passwordConfirm) { showMessage('Пароли не совпадают', 'error'); return; }
+            var privacyConsentEl = document.getElementById('regPrivacyConsent');
+            var privacyConsent = !!(privacyConsentEl && privacyConsentEl.checked);
+            if (!privacyConsent) { showMessage('Необходимо согласие на обработку персональных данных', 'error'); return; }
             var mapStart = syncRegisterMapCoordsFromMap();
-            var regChain = registerUser(username, password, fullName, organizationName, contactEmail, mapStart);
+            var regChain = registerUser(username, password, fullName, organizationName, contactEmail, mapStart, privacyConsent);
             Promise.resolve(regChain).then(function(result) {
                 if (result.success) {
                     var verifyMsg = result.message || ('Проверьте почту' + (result.emailHint ? ' (' + result.emailHint + ')' : '') + ' и подтвердите e-mail. Без подтверждения войти нельзя.');

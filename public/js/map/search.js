@@ -130,11 +130,19 @@ function searchObjects(query) {
 function renderSearchResults(results, query) {
     const searchResults = document.getElementById('searchResults');
     if (results.length === 0) {
-        var emptyAvatar = window.AssistantAvatars
-            ? AssistantAvatars.imgHtml('question', 'search-no-results-avatar')
-            : '<img class="search-no-results-avatar" src="icons/assistant/vola-question.png" alt="" aria-hidden="true" decoding="async">';
-        searchResults.innerHTML = '<div class="search-no-results">' + emptyAvatar +
-            '<p>Ничего не найдено по запросу «' + escapeHtml(query) + '»</p></div>';
+        if (typeof AppMotion !== 'undefined' && AppMotion.emptyStateHtml) {
+            searchResults.innerHTML = AppMotion.emptyStateHtml({
+                emotion: 'question',
+                title: 'Ничего не найдено',
+                text: 'По запросу «' + escapeHtml(query) + '» объектов нет. Попробуйте другое имя или тип.'
+            });
+        } else {
+            var emptyAvatar = window.AssistantAvatars
+                ? AssistantAvatars.imgHtml('question', 'search-no-results-avatar')
+                : '<img class="search-no-results-avatar" src="icons/assistant/vola-question.png" alt="" aria-hidden="true" decoding="async">';
+            searchResults.innerHTML = '<div class="search-no-results">' + emptyAvatar +
+                '<p>Ничего не найдено по запросу «' + escapeHtml(query) + '»</p></div>';
+        }
         searchResults.style.display = 'block';
         return;
     }

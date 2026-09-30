@@ -2,10 +2,57 @@
  * Зона захвата объектива камеры видеонаблюдения (круг / направленный луч).
  * Дальность — в метрах, максимум 200 м.
  */
-var CAMERA_COVERAGE_COLOR = '#22a06b';
+var CAMERA_COVERAGE_DEFAULT_COLOR = '#22a06b';
+var CAMERA_COVERAGE_COLOR = CAMERA_COVERAGE_DEFAULT_COLOR;
 var CAMERA_COVERAGE_DEFAULT_M = 50;
 var CAMERA_COVERAGE_MAX_M = 200;
 var cameraCoverageOverlays = [];
+
+function normalizeCoverageHexColor(value, fallback) {
+    var fb = fallback || CAMERA_COVERAGE_DEFAULT_COLOR;
+    if (value == null || value === '') return fb;
+    var s = String(value).trim();
+    if (/^#[0-9A-Fa-f]{6}$/.test(s)) return s.toLowerCase();
+    if (/^#[0-9A-Fa-f]{3}$/.test(s)) {
+        return ('#' + s.charAt(1) + s.charAt(1) + s.charAt(2) + s.charAt(2) + s.charAt(3) + s.charAt(3)).toLowerCase();
+    }
+    return fb;
+}
+
+function getCameraCoverageColor() {
+    return CAMERA_COVERAGE_COLOR || CAMERA_COVERAGE_DEFAULT_COLOR;
+}
+
+function applyCameraCoverageColorToOverlays(color) {
+    var c = normalizeCoverageHexColor(color, getCameraCoverageColor());
+    function paint(overlay) {
+        if (!overlay || !overlay.options) return;
+        try {
+            overlay.options.set({ fillColor: c, strokeColor: c });
+        } catch (ePaint) {}
+    }
+    cameraCoverageOverlays.forEach(paint);
+    if (!Array.isArray(objects)) return;
+    objects.forEach(function(cam) {
+        if (!cam || !cam.properties || cam.properties.get('type') !== 'camera') return;
+        paint(cam.properties.get('coverageOverlay'));
+    });
+}
+
+function setCameraCoverageColor(color, opts) {
+    opts = opts || {};
+    CAMERA_COVERAGE_COLOR = normalizeCoverageHexColor(color, CAMERA_COVERAGE_DEFAULT_COLOR);
+    if (opts.applyAll !== false) {
+        try {
+            applyCameraCoverageColorToOverlays(CAMERA_COVERAGE_COLOR);
+        } catch (eApply) {
+            if (typeof updateAllCameraCoverages === 'function') {
+                try { updateAllCameraCoverages(); } catch (eAll) {}
+            }
+        }
+    }
+    return CAMERA_COVERAGE_COLOR;
+}
 
 function parseCameraCoverageMeters(val, fallbackM) {
     var fb = fallbackM != null ? fallbackM : CAMERA_COVERAGE_DEFAULT_M;
@@ -136,10 +183,11 @@ function updateCameraCoverage(cam) {
     var radiusM = getCameraCoverageRadiusM(cam);
     var lengthM = getCameraCoverageLengthM(cam);
     var shape = cam.properties.get('coverageShape') || 'circle';
+    var color = getCameraCoverageColor();
     var style = {
-        fillColor: CAMERA_COVERAGE_COLOR,
+        fillColor: color,
         fillOpacity: 0.14,
-        strokeColor: CAMERA_COVERAGE_COLOR,
+        strokeColor: color,
         strokeWidth: 2,
         strokeOpacity: 0.5,
         zIndex: 88,
@@ -270,7 +318,7 @@ function openCameraCoverageJoystickPanel() {
         rangeStep: 1,
         rangeUnit: 'м',
         rangeLabel: shape === 'sector' ? 'Дальность' : 'Радиус',
-        accent: CAMERA_COVERAGE_COLOR,
+        accent: getCameraCoverageColor(),
         hideCard: true,
         lockMap: true,
         restoreCard: true,
@@ -324,3 +372,9 @@ function setupCameraCoverageCardHandlers() {
     }
     syncCoverageParamsVisibility();
 }
+
+window.getCameraCoverageColor = getCameraCoverageColor;
+window.setCameraCoverageColor = setCameraCoverageColor;
+window.updateCameraCoverage = updateCameraCoverage;
+window.updateAllCameraCoverages = updateAllCameraCoverages;
+window.applyCameraCoverageVisibility = applyCameraCoverageVisibility;

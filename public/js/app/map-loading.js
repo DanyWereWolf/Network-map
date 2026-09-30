@@ -221,12 +221,13 @@ function finishMapInitialReveal() {
             if (status) status.textContent = 'Готово';
             hideAppEntranceOverlay();
             hideMapLoadingOverlay();
-            if (typeof isNetworkMapMobileViewOnly === 'function' && isNetworkMapMobileViewOnly()) {
-                if (myMap && myMap.container) {
-                    try { myMap.container.fitToViewport(); } catch (eFit) {}
-                }
-                if (typeof applyMapFilter === 'function') applyMapFilter();
+            if (myMap && myMap.container) {
+                try { myMap.container.fitToViewport(); } catch (eFit) {}
             }
+            try {
+                if (typeof applyMapFilter === 'function') applyMapFilter();
+                else if (typeof applyMapViewportUpdate === 'function') applyMapViewportUpdate();
+            } catch (eFilterReveal) {}
             if (!window.syncIsConnected && typeof showSyncRequiredOverlay === 'function') {
                 showSyncRequiredOverlay();
             }

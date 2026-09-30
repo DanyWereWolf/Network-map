@@ -500,6 +500,15 @@ function isOrgAdmin(user) {
     return !!(user && user.role === 'admin' && user.organizationId);
 }
 
+/** Число администраторов в организации (роль admin + organizationId). */
+function countOrgAdmins(organizationId, usersList) {
+    if (!organizationId) return 0;
+    var list = usersList || db.getUsers();
+    return list.filter(function(u) {
+        return u.role === 'admin' && u.organizationId && String(u.organizationId) === String(organizationId);
+    }).length;
+}
+
 function buildLoginUserPayload(user, organizationId, organization) {
     return {
         userId: user.id,
@@ -525,6 +534,13 @@ function completeUserLogin(req, res, user, organizationId, organization) {
     db.deleteSessionsForUser(user.id);
 
     if (organization && organization.status !== 'active') {
+        if (organization.status === 'pending') {
+            return res.json({
+                success: false,
+                error: 'Подтвердите e-mail по ссылке из письма — без этого организация ещё не активирована.',
+                code: 'email_not_verified'
+            });
+        }
         return res.json({ success: false, error: 'Организация приостановлена. Обратитесь к администратору сервиса.' });
     }
     if (organization && !isMainAdminAccount) {
@@ -908,6 +924,7 @@ app.get('/api/organizations', (req, res) => {
     const admin = getSessionUser(req);
     if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
     try {
+        try { db.purgeExpiredEmailVerificationTokens(); } catch (ePurge) { /* ignore */ }
         var list = db.getOrganizations().map(function(o) {
             var activeSessions = db.countActiveSessionsForOrganization(o.id);
             var limits = getMapObjectLimitPayload(o.id);
@@ -1099,6 +1116,67 @@ app.post('/api/support/message', (req, res) => {
         });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
+    }
+});
+
+/** Запрос организации на удаление персональных данных / данных организации (152-ФЗ). */
+app.post('/api/privacy/deletion-request', (req, res) => {
+    try {
+        var ip = getClientIp(req);
+        var rl = security.checkRateLimit('privacy-deletion:' + ip, { windowMs: 60 * 60 * 1000, maxAttempts: 5 });
+        if (!rl.ok) {
+            return res.status(429).json({
+                ok: false,
+                error: 'Слишком много запросов. Попробуйте позже или напишите на support@volsmap.ru.',
+                retryAfterSec: rl.retryAfterSec
+            });
+        }
+        var body = req.body || {};
+        var organizationName = String(body.organizationName || '').trim().slice(0, 200);
+        var email = String(body.email || '').trim().slice(0, 200);
+        var username = String(body.username || '').trim().slice(0, 80);
+        var comment = String(body.comment || '').trim().slice(0, 2000);
+        var confirmAuthorized = body.confirmAuthorized === true || body.confirmAuthorized === 'true' || body.confirmAuthorized === 1;
+        var visitorId = String(body.visitorId || '').trim().slice(0, 80);
+        if (!visitorId) {
+            visitorId = 'pd_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+        }
+        if (organizationName.length < 2) {
+            return res.status(400).json({ ok: false, error: 'Укажите название организации' });
+        }
+        if (!isValidContactEmail(email)) {
+            return res.status(400).json({ ok: false, error: 'Укажите корректный e-mail' });
+        }
+        if (username.length < 2) {
+            return res.status(400).json({ ok: false, error: 'Укажите имя пользователя администратора' });
+        }
+        if (!confirmAuthorized) {
+            return res.status(400).json({ ok: false, error: 'Нужно подтвердить полномочия на удаление' });
+        }
+        var textLines = [
+            '[ЗАПРОС НА УДАЛЕНИЕ ДАННЫХ ОРГАНИЗАЦИИ]',
+            'Организация: ' + organizationName,
+            'E-mail: ' + email,
+            'Логин администратора: ' + username,
+            'IP: ' + ip
+        ];
+        if (comment) textLines.push('Комментарий: ' + comment);
+        textLines.push('Заявитель подтвердил полномочия на удаление.');
+        var result = db.addSupportMessage({
+            visitorId: visitorId,
+            text: textLines.join('\n'),
+            from: 'visitor',
+            name: '[Удаление ПДн] ' + organizationName,
+            email: email,
+            page: 'data-deletion.html'
+        });
+        res.json({
+            ok: true,
+            threadId: result.thread.id,
+            message: 'Заявление принято. Мы проверим данные и свяжемся с вами по указанному e-mail.'
+        });
+    } catch (e) {
+        res.status(500).json({ ok: false, error: String(e.message) });
     }
 });
 
@@ -1583,6 +1661,13 @@ async function handleAuthRegister(req, res, body) {
     if (!organizationName || String(organizationName).trim().length < 3) return res.status(400).json({ success: false, error: 'Укажите название организации (не менее 3 символов)' });
     if (!password || password.length < 6) return res.status(400).json({ success: false, error: 'Пароль не менее 6 символов' });
     if (!contactEmail || !isValidContactEmail(String(contactEmail))) return res.status(400).json({ success: false, error: 'Укажите корректный e-mail для связи' });
+    var privacyConsent = body.privacyConsent === true || body.privacyConsent === 'true' || body.privacyConsent === 1;
+    if (!privacyConsent) {
+        return res.status(400).json({
+            success: false,
+            error: 'Необходимо согласие на обработку персональных данных'
+        });
+    }
     reloadServerConfig({ silent: true });
     if (!mail.isMailConfigured(serverConfig)) {
         return res.status(503).json({
@@ -1596,7 +1681,8 @@ async function handleAuthRegister(req, res, body) {
     var organizationId = db.addOrganization({
         name: String(organizationName).trim(),
         mapObjectLimitUnlocked: false,
-        status: 'active',
+        // Активируется только после подтверждения e-mail
+        status: 'pending',
         contactEmail: emailTrim
     });
     const newUser = {
@@ -1652,7 +1738,7 @@ async function handleAuthRegister(req, res, body) {
             needsVerification: true,
             sent: true,
             emailHint: emailHint,
-            message: 'Мы отправили ссылку для подтверждения на ' + emailHint + '. Подтвердите e-mail, затем войдите. Без подтверждения вход недоступен.'
+            message: 'Мы отправили ссылку для подтверждения на ' + emailHint + '. Подтвердите e-mail, затем войдите. Организация станет активной только после подтверждения.'
         });
     } catch (err) {
         console.error('[Auth] register verify-mail error for user', newUser.id, '-', err && err.message ? err.message : err);
@@ -1781,6 +1867,13 @@ app.post('/api/auth/verify-email', function(req, res) {
         var peekUser = usersPeek.find(function(u) { return String(u.id) === String(peek.userId); });
         if (peekUser && emailVerify.isEmailVerified(peekUser)) {
             emailVerify.consumeVerifyToken(token);
+            var peekOrgId = peekUser.organizationId || null;
+            if (peekOrgId) {
+                var peekOrg = db.getOrganization(peekOrgId);
+                if (peekOrg && peekOrg.status === 'pending') {
+                    db.updateOrganization(peekOrgId, { status: 'active' });
+                }
+            }
             return res.json({
                 success: true,
                 username: peekUser.username,
@@ -1803,11 +1896,19 @@ app.post('/api/auth/verify-email', function(req, res) {
     }
     users[i].emailVerified = true;
     db.setUsers(users);
+    var orgId = users[i].organizationId || null;
+    if (orgId) {
+        var org = db.getOrganization(orgId);
+        if (org && org.status === 'pending') {
+            db.updateOrganization(orgId, { status: 'active' });
+            console.log('[Auth] organization activated after email verify:', orgId);
+        }
+    }
     console.log('[Auth] email verified for user', users[i].id, '(' + users[i].username + ')');
     res.json({
         success: true,
         username: users[i].username,
-        message: 'E-mail подтверждён. Теперь вы можете войти.'
+        message: 'E-mail подтверждён. Организация активирована — теперь вы можете войти.'
     });
 });
 
@@ -2508,6 +2609,14 @@ app.put('/api/users/:userId', async (req, res) => {
     }
 
     if (targetIsMainAdmin && role !== undefined && role !== 'admin') return res.status(400).json({ error: 'Нельзя снять роль администратора с главного администратора' });
+    if (role !== undefined && users[i].role === 'admin' && role !== 'admin') {
+        if (String(admin.userId) === String(userId)) {
+            return res.status(400).json({ error: 'Нельзя снять с себя роль администратора' });
+        }
+        if (users[i].organizationId && countOrgAdmins(users[i].organizationId, users) <= 1) {
+            return res.status(400).json({ error: 'Нельзя снять роль с единственного администратора организации' });
+        }
+    }
     if (fullName !== undefined) { users[i].fullName = fullName; users[i].full_name = fullName; }
     if (email !== undefined) {
         var emailTrim = String(email).trim();
@@ -2552,6 +2661,9 @@ app.delete('/api/users/:userId', (req, res) => {
     }
     if (userId === admin.userId) return res.status(400).json({ error: 'Нельзя удалить свой аккаунт' });
     if (users[i].username === 'admin') return res.status(400).json({ error: 'Нельзя удалить главного администратора' });
+    if (users[i].role === 'admin' && users[i].organizationId && countOrgAdmins(users[i].organizationId, users) <= 1) {
+        return res.status(400).json({ error: 'Нельзя удалить единственного администратора организации' });
+    }
     const deleted = users[i];
     users.splice(i, 1);
     db.setUsers(users);
@@ -3238,7 +3350,7 @@ app.post('/api/settings', (req, res) => {
             delete toSave.lodThresholds;
         }
         if (Object.keys(toSave).length > 0) db.setSettings(toSave, orgId || undefined);
-        if (orgId && (toSave.collaboratorCursorStyle !== undefined || toSave.fiberMapColor !== undefined || toSave.fiberMapStrokeWidth !== undefined)) {
+        if (orgId && (toSave.collaboratorCursorStyle !== undefined || toSave.fiberMapColor !== undefined || toSave.fiberMapStrokeWidth !== undefined || toSave.cameraCoverageColor !== undefined || toSave.radioBridgeCoverageColor !== undefined)) {
             var orgSettings = db.getSettings(orgId);
             var broadcastPayload = {};
             if (toSave.collaboratorCursorStyle !== undefined) {
@@ -3247,6 +3359,12 @@ app.post('/api/settings', (req, res) => {
             if (toSave.fiberMapColor !== undefined || toSave.fiberMapStrokeWidth !== undefined) {
                 broadcastPayload.fiberMapColor = orgSettings.fiberMapColor;
                 broadcastPayload.fiberMapStrokeWidth = orgSettings.fiberMapStrokeWidth;
+            }
+            if (toSave.cameraCoverageColor !== undefined) {
+                broadcastPayload.cameraCoverageColor = orgSettings.cameraCoverageColor;
+            }
+            if (toSave.radioBridgeCoverageColor !== undefined) {
+                broadcastPayload.radioBridgeCoverageColor = orgSettings.radioBridgeCoverageColor;
             }
             broadcastOrgSettings(orgId, broadcastPayload);
         }
@@ -3624,6 +3742,9 @@ app.get('/robots.txt', (req, res) => {
 app.get('/sitemap.xml', (req, res) => {
     const base = getSiteBaseUrl(req);
     const loc = base ? (base + '/') : '/';
+    const privacyLoc = base ? (base + '/privacy.html') : '/privacy.html';
+    const deletionLoc = base ? (base + '/data-deletion.html') : '/data-deletion.html';
+    const newsLoc = base ? (base + '/news.html') : '/news.html';
     const xml =
         '<?xml version="1.0" encoding="UTF-8"?>\n' +
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
@@ -3631,6 +3752,21 @@ app.get('/sitemap.xml', (req, res) => {
         '    <loc>' + loc + '</loc>\n' +
         '    <changefreq>weekly</changefreq>\n' +
         '    <priority>1.0</priority>\n' +
+        '  </url>\n' +
+        '  <url>\n' +
+        '    <loc>' + privacyLoc + '</loc>\n' +
+        '    <changefreq>monthly</changefreq>\n' +
+        '    <priority>0.6</priority>\n' +
+        '  </url>\n' +
+        '  <url>\n' +
+        '    <loc>' + deletionLoc + '</loc>\n' +
+        '    <changefreq>monthly</changefreq>\n' +
+        '    <priority>0.5</priority>\n' +
+        '  </url>\n' +
+        '  <url>\n' +
+        '    <loc>' + newsLoc + '</loc>\n' +
+        '    <changefreq>weekly</changefreq>\n' +
+        '    <priority>0.7</priority>\n' +
         '  </url>\n' +
         '</urlset>\n';
     res.type('application/xml').send(xml);
@@ -3677,93 +3813,6 @@ app.get('/api/static-map-image', async (req, res) => {
         console.error('[PDF] static-map-image proxy failed:', eMap && eMap.message ? eMap.message : eMap, { ll, size, zoom });
         res.status(502).json({ error: 'Static map proxy failed' });
     }
-});
-
-/** Lo-fi radio: proxy for https://lofiradio.ru/ (Icecast live.lofiradio.ru). */
-var LOFI_RADIO_STATIONS = {
-    lofi: [
-        'https://live.lofiradio.ru/lofi_mp3_128'
-    ]
-};
-
-function proxyLofiRadioStream(res, urls, index, redirectsLeft) {
-    if (!urls || index >= urls.length) {
-        if (!res.headersSent) res.status(502).json({ error: 'Stream unavailable' });
-        return;
-    }
-    var left = redirectsLeft == null ? 4 : redirectsLeft;
-    var target;
-    try {
-        target = new URL(urls[index]);
-    } catch (eUrl) {
-        return proxyLofiRadioStream(res, urls, index + 1, left);
-    }
-    if (target.protocol !== 'http:' && target.protocol !== 'https:') {
-        return proxyLofiRadioStream(res, urls, index + 1, left);
-    }
-    var lib = target.protocol === 'https:' ? https : http;
-    var upstreamReq = lib.request({
-        protocol: target.protocol,
-        hostname: target.hostname,
-        port: target.port || (target.protocol === 'https:' ? 443 : 80),
-        path: target.pathname + target.search,
-        method: 'GET',
-        headers: {
-            'User-Agent': 'VolsmapLofiRadio/1.0',
-            'Accept': '*/*',
-            'Icy-MetaData': '0',
-            'Connection': 'keep-alive'
-        },
-        timeout: 20000
-    }, function(upstream) {
-        var code = upstream.statusCode || 0;
-        if (code >= 300 && code < 400 && upstream.headers.location && left > 0) {
-            upstream.resume();
-            var nextUrl;
-            try {
-                nextUrl = new URL(upstream.headers.location, target).href;
-            } catch (eLoc) {
-                return proxyLofiRadioStream(res, urls, index + 1, left);
-            }
-            return proxyLofiRadioStream(res, [nextUrl].concat(urls.slice(index + 1)), 0, left - 1);
-        }
-        if (code !== 200) {
-            upstream.resume();
-            return proxyLofiRadioStream(res, urls, index + 1, left);
-        }
-        if (res.headersSent) {
-            upstream.resume();
-            return;
-        }
-        res.status(200);
-        res.setHeader('Content-Type', upstream.headers['content-type'] || 'audio/mpeg');
-        res.setHeader('Cache-Control', 'no-store, no-cache');
-        res.setHeader('Accept-Ranges', 'none');
-        if (upstream.headers['icy-name']) res.setHeader('X-Lofi-Name', String(upstream.headers['icy-name']).slice(0, 120));
-        upstream.pipe(res);
-        res.on('close', function() {
-            try { upstream.destroy(); } catch (eDestroy) {}
-            try { upstreamReq.destroy(); } catch (eReq) {}
-        });
-    });
-    upstreamReq.on('timeout', function() {
-        try { upstreamReq.destroy(); } catch (eT) {}
-    });
-    upstreamReq.on('error', function() {
-        if (!res.headersSent) proxyLofiRadioStream(res, urls, index + 1, left);
-    });
-    upstreamReq.end();
-}
-
-app.get('/api/lofi-radio/:station', function(req, res) {
-    var station = String(req.params.station || '').trim().toLowerCase();
-    var urls = LOFI_RADIO_STATIONS[station];
-    if (!urls || !urls.length) {
-        return res.status(404).json({ error: 'Unknown station' });
-    }
-    req.setTimeout(0);
-    res.setTimeout(0);
-    proxyLofiRadioStream(res, urls, 0, 4);
 });
 
 // Лицевая страница по умолчанию — условия (pricing.html)

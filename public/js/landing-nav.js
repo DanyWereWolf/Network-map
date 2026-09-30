@@ -1,5 +1,6 @@
 /**
- * Шапка лендинга: если ссылки не помещаются — показываем кнопку «Разделы» и выпадающий список.
+ * Шапка лендинга: если ссылки не помещаются — кнопка «Разделы» и выпадающий список.
+ * На широкой оболочке меню всегда в строке (не прячем в «Разделы»).
  */
 (function() {
     var nav = document.getElementById('landingNav');
@@ -9,6 +10,7 @@
     if (!nav || !menu) return;
 
     var COLLAPSED_CLASS = 'landing-nav--menu-collapsed';
+    var WIDE_INLINE_MIN = 1100;
     var measureScheduled = false;
 
     function setMenuOpen(open) {
@@ -17,22 +19,43 @@
         document.body.style.overflow = open ? 'hidden' : '';
     }
 
-    function menuOverflows() {
-        var actions = nav.querySelector('.landing-nav-actions');
-        if (!actions) return menu.scrollWidth > menu.clientWidth + 2;
+    function shellWidth() {
+        var shell = nav.closest('.landing-shell') || nav.closest('.landing-root') || nav;
+        return shell.clientWidth || window.innerWidth || 0;
+    }
 
-        var menuRect = menu.getBoundingClientRect();
-        var actionsRect = actions.getBoundingClientRect();
-        if (menuRect.width < 8) return true;
-        if (menu.scrollWidth > menu.clientWidth + 2) return true;
-        return menuRect.right > actionsRect.left - 6;
+    function linksNaturalWidth() {
+        var total = 0;
+        var links = menu.querySelectorAll('a');
+        for (var i = 0; i < links.length; i++) {
+            total += links[i].scrollWidth;
+        }
+        // gap между пунктами (~8px) + внутренние отступы меню
+        total += Math.max(0, links.length - 1) * 8 + 16;
+        return total;
+    }
+
+    function menuOverflows() {
+        var left = nav.querySelector('.landing-nav-left');
+        var actions = nav.querySelector('.landing-nav-actions');
+        var navPad = 8;
+        var available = nav.clientWidth
+            - (left ? left.offsetWidth : 0)
+            - (actions ? actions.offsetWidth : 0)
+            - navPad * 2
+            - 20;
+        if (available < 160) return true;
+        return linksNaturalWidth() > available + 4;
     }
 
     function updateNavMode() {
+        var wide = shellWidth() >= WIDE_INLINE_MIN;
         var wasCollapsed = nav.classList.contains(COLLAPSED_CLASS);
+
+        // Для замера ссылок нужны в строке
         if (wasCollapsed) nav.classList.remove(COLLAPSED_CLASS);
 
-        var overflow = menuOverflows();
+        var overflow = wide ? false : menuOverflows();
 
         if (overflow) {
             nav.classList.add(COLLAPSED_CLASS);

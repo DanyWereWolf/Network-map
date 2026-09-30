@@ -2509,6 +2509,26 @@ function connectOltPortToOnu(oltObj, portNumber, onuObj, routeIds) {
     return true;
 }
 
+/**
+ * Одножильный feeder OLT ↔ кросс/муфта (кнопка «Подключить» на PON) —
+ * при «Отключить» удаляем кабель, иначе он остаётся в схеме кросса.
+ */
+function canDeleteOltFeederCableOnDisconnect(oltObj, hostObj, cableId) {
+    if (!oltObj || !cableId) return false;
+    var cable = objects.find(function(c) {
+        return c.properties && c.properties.get('type') === 'cable' &&
+            c.properties.get('uniqueId') === cableId;
+    });
+    if (!cable) return false;
+    var fiberCount = typeof getFiberCount === 'function' ? getFiberCount(cable) : 0;
+    if (fiberCount !== 1) return false;
+    var host = hostObj || getOltHostForCableEnd(oltObj, cable);
+    if (!host || !host.properties || !isFiberHostType(host.properties.get('type'))) return false;
+    var endInfo = typeof getOltAtHostCableEnd === 'function' ? getOltAtHostCableEnd(host, cableId) : null;
+    if (!endInfo || String(endInfo.oltId) !== String(getObjectUniqueId(oltObj))) return false;
+    return true;
+}
+
 function disconnectOltPonPort(oltObj, portNumber, opts) {
     opts = opts || {};
     if (!oltObj || portNumber == null) return false;
@@ -2555,10 +2575,24 @@ function disconnectOltPonPort(oltObj, portNumber, opts) {
     if (!crossObj) {
         crossObj = getOltPortFeederHost(oltObj, portNumber);
     }
+    if (canDeleteOltFeederCableOnDisconnect(oltObj, crossObj, cableId) &&
+        typeof deleteCableByUniqueId === 'function') {
+        if (crossObj && typeof removeOltConnectionLine === 'function') {
+            removeOltConnectionLine(crossObj, cableId, fiberNumber);
+        }
+        deleteCableByUniqueId(cableId, { skipSync: false, deferMapRefresh: false });
+        if (!opts.silent && typeof showSuccess === 'function') {
+            showSuccess('PON-порт ' + portNumber + ' отключён, feeder-кабель удалён.', 'OLT');
+        }
+        return true;
+    }
     if (crossObj) {
         setHostFiberAssignment(crossObj, 'oltConnections', cableId, fiberNumber, null);
         if (typeof removeOltConnectionLine === 'function') {
             removeOltConnectionLine(crossObj, cableId, fiberNumber);
+        }
+        if (typeof updateFiberPort === 'function' && fiberNumber != null) {
+            updateFiberPort(crossObj, cableId, fiberNumber, null);
         }
     }
     var portAssignments = Object.assign({}, oltObj.properties.get('portAssignments') || {});

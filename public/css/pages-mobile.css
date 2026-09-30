@@ -126,59 +126,23 @@
         font-size: 0.92rem;
     }
 
-    .landing-hero-badges {
-        gap: 6px;
-    }
-
-    .badge-pill {
-        font-size: 0.7rem;
-        padding: 4px 10px;
-    }
-
-    .hero-showcase-stats {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 6px;
-        padding: 10px;
-    }
-
-    .hero-capabilities-grid {
-        grid-template-columns: 1fr;
-        padding: 12px;
-        gap: 8px;
-    }
-
-    .hero-capability {
-        padding: 10px 11px;
-    }
-
-    .hero-stat-card {
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-        padding: 8px 6px;
-    }
-
-    .hero-stat-label {
-        font-size: 0.58rem;
-    }
-
-    .hero-stat-value {
-        font-size: 0.95rem;
+    .landing-stats {
+        margin-bottom: 28px;
+        padding-top: 18px;
     }
 
     .trust-strip {
-        padding: 14px 12px;
-        gap: 12px;
+        margin-bottom: 36px;
     }
 
-    .capability-card,
-    .about-card,
+    .capability-card {
+        padding-top: 18px;
+        padding-bottom: 18px;
+    }
+
     .contact-card {
-        padding: 14px;
-    }
-
-    .landing-faq {
-        padding: 16px 14px 6px;
+        padding-top: 16px;
+        padding-bottom: 16px;
     }
 
     .faq-item summary {
@@ -206,13 +170,13 @@
     }
 
     .landing-cta-band {
-        padding: 18px 16px;
-        margin-top: 32px;
+        padding: 22px 0;
+        margin-top: 36px;
         margin-bottom: 20px;
     }
 
     .landing-block {
-        margin-top: 32px;
+        margin-top: 36px;
     }
 
 }
@@ -232,19 +196,8 @@
         padding-bottom: 12px;
     }
 
-    .hero-showcase-stats {
-        grid-template-columns: 1fr;
-        gap: 8px;
-    }
-
-    .hero-stat-card {
-        flex-direction: row;
-        text-align: left;
-    }
-
-    .capability-section-title,
-    .landing-hero-title {
-        padding-left: 10px;
+    .capability-section-title {
+        letter-spacing: -0.03em;
     }
 
     .pricing-ribbon-wrap {
@@ -289,11 +242,11 @@
     }
 
     .landing-hero-title {
-        font-size: 1.35rem;
+        font-size: 1.05rem;
     }
 
-    .hero-line {
-        display: block;
+    .landing-hero-brand {
+        font-size: 1.55rem;
     }
 }
 
@@ -312,22 +265,17 @@
     }
 
     .landing-hero {
-        margin-top: 12px;
-        margin-bottom: 16px;
-        gap: 16px;
+        margin-top: 8px;
+        min-height: auto;
     }
 
-    .landing-hero-visual {
-        max-height: 42vh;
-        overflow: hidden;
+    .landing-hero-copy {
+        padding-top: 24px;
+        padding-bottom: 28px;
     }
 
-    .hero-showcase-map {
-        min-height: 100px;
-    }
-
-    .hero-map-svg {
-        min-height: 100px;
+    .landing-hero-map {
+        opacity: 0.5;
     }
 
 }
