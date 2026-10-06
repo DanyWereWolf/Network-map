@@ -921,32 +921,52 @@ function clearObjectCabinetId(obj) {
 
 function hidePlacemarkFromMap(obj) {
     if (!obj || !myMap) return;
-    try { myMap.geoObjects.remove(obj); } catch (e) {}
     var label = obj.properties && obj.properties.get('label');
-    if (label) try { myMap.geoObjects.remove(label); } catch (e2) {}
+    var objOnMap = isGeoObjectOnMap(obj);
+    var labelOnMap = !!label && isGeoObjectOnMap(label);
+    if (typeof MapPerf !== 'undefined' && MapPerf.mapRemove && (objOnMap || labelOnMap || (MapPerf.isMounted && MapPerf.isMounted(obj)))) {
+        MapPerf.mapRemove(obj);
+        return;
+    }
+    if (objOnMap) try { myMap.geoObjects.remove(obj); } catch (e) {}
+    if (labelOnMap) try { myMap.geoObjects.remove(label); } catch (e2) {}
 }
 
-function showCabinetMemberOnMap(obj) {
+function isCabinetVirtualizationActive() {
+    return typeof MapPerf !== 'undefined' && typeof MapPerf.shouldUseVirtualization === 'function' && MapPerf.shouldUseVirtualization();
+}
+
+/**
+ * opts.mountCtx — общий контекст монтирования (на больших картах объект попадает
+ * на карту только если он в зоне видимости); opts.skipConnectionLines — линии
+ * пересчитает вызывающий одним проходом.
+ */
+function showCabinetMemberOnMap(obj, opts) {
     if (!obj || !myMap || !obj.properties) return;
     if (getObjectCabinetId(obj)) return;
     var type = obj.properties.get('type');
     // Кроссы и узлы снова отрисовывает updateCrossDisplay / updateNodeDisplay.
     if (type === 'cross' || type === 'node') return;
+    opts = opts || {};
 
-    try {
-        if (myMap.geoObjects.indexOf(obj) === -1) myMap.geoObjects.add(obj);
-    } catch (e) {}
-    var label = obj.properties.get('label');
-    if (label) {
+    if (isCabinetVirtualizationActive() && MapPerf.mountObject) {
+        MapPerf.mountObject(obj, opts.mountCtx);
+    } else {
         try {
-            if (myMap.geoObjects.indexOf(label) === -1) myMap.geoObjects.add(label);
-        } catch (e2) {}
+            if (!isGeoObjectOnMap(obj)) myMap.geoObjects.add(obj);
+        } catch (e) {}
+        var label = obj.properties.get('label');
+        if (label) {
+            try {
+                if (!isGeoObjectOnMap(label)) myMap.geoObjects.add(label);
+            } catch (e2) {}
+        }
     }
     if (type === 'camera' && typeof refreshCameraMapPresentation === 'function') {
         refreshCameraMapPresentation(obj);
     }
     if (typeof attachHoverEventsToObject === 'function') attachHoverEventsToObject(obj);
-    if (typeof syncConnectionLinesForObject === 'function') {
+    if (!opts.skipConnectionLines && typeof syncConnectionLinesForObject === 'function') {
         syncConnectionLinesForObject(obj);
     }
 }
@@ -1060,19 +1080,29 @@ function updateCabinetDisplay(opts) {
 
     releaseUnsupportedCabinetMembers({ skipSave: !!opts.skipUnsupportedSave });
 
-    objects.forEach(function(obj) {
-        if (!obj || !obj.properties) return;
-        if (!canBeCabinetMember(obj.properties.get('type'))) return;
+    var showOpts = { skipConnectionLines: true, mountCtx: null };
+    if (isCabinetVirtualizationActive() && MapPerf.buildDefaultMountContext) {
+        try { showOpts.mountCtx = MapPerf.buildDefaultMountContext(); } catch (eCtx) {}
+    }
+    for (var oi = 0; oi < objects.length; oi++) {
+        var obj = objects[oi];
+        if (!obj || !obj.properties) continue;
+        if (!canBeCabinetMember(obj.properties.get('type'))) continue;
         if (getObjectCabinetId(obj)) {
             hidePlacemarkFromMap(obj);
         } else {
-            showCabinetMemberOnMap(obj);
+            showCabinetMemberOnMap(obj, showOpts);
         }
-    });
+    }
 
     getAllCabinets().forEach(function(cabinet) {
         updateCabinetLabel(cabinet);
         if (!myMap) return;
+        if (showOpts.mountCtx && MapPerf.mountObject) {
+            hidePlacemarkFromMap(cabinet);
+            MapPerf.mountObject(cabinet, showOpts.mountCtx);
+            return;
+        }
         try { myMap.geoObjects.remove(cabinet); } catch (e) {}
         var lbl = cabinet.properties.get('label');
         if (lbl) try { myMap.geoObjects.remove(lbl); } catch (e2) {}
@@ -1092,6 +1122,8 @@ function updateCabinetDisplay(opts) {
         }
     });
 
+    // opts.skipDependents: кроссы/узлы, фильтр и линии вызывающий обновит сам (загрузка карты).
+    if (opts.skipDependents) return;
     if (typeof updateCrossDisplay === 'function') updateCrossDisplay();
     if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
     if (typeof applyMapFilter === 'function') applyMapFilter();

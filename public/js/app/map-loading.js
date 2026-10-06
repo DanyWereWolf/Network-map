@@ -19,8 +19,25 @@ var _entranceExitStarted = false;
 var APP_ENTRANCE_MIN_MS = 2000;
 var APP_ENTRANCE_EXIT_MS = 620;
 
+/** Время на пачку импорта за один шаг: при первой загрузке экран закрыт оверлеем, можно больше. */
+var MAP_BULK_IMPORT_STEP_BUDGET_MS = 40;
+var MAP_UNDO_REDO_STEP_BUDGET_MS = 14;
+
 function isMapBulkImportActive() {
     return !!_mapBulkImportActive;
+}
+
+/** Следующий шаг пакетного импорта: rAF в видимой вкладке, setTimeout в фоне (rAF там стоит). */
+function scheduleMapImportStep(fn) {
+    if (typeof document !== 'undefined' && document.hidden) {
+        setTimeout(fn, 0);
+        return;
+    }
+    requestAnimationFrame(fn);
+}
+
+function mapImportNow() {
+    return typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
 }
 
 function mapHasOltObjects() {
@@ -191,6 +208,9 @@ function markMapTilesReady() {
 function markMapDataReady() {
     if (_mapDataReady) return;
     _mapDataReady = true;
+    if (typeof applyAutoPerfForMapSize === 'function' && Array.isArray(window.objects)) {
+        try { applyAutoPerfForMapSize(window.objects.length); } catch (eAuto) {}
+    }
     tryCompleteMapInitialLoad();
 }
 window.markMapDataReady = markMapDataReady;

@@ -177,6 +177,37 @@
         };
     }
 
+    /** Сколько объектов в видимой области допускается с подписями (дальше подписи скрываются). */
+    var LABEL_BUDGET_BY_MODE = { auto: 500, economy: 200, max: 1500, custom: 500 };
+
+    function getPerfLabelBudget() {
+        return LABEL_BUDGET_BY_MODE[settings.mode] || LABEL_BUDGET_BY_MODE.auto;
+    }
+
+    var BIG_MAP_OBJECTS = 10000;
+    var bigMapAutoLite = false;
+
+    /**
+     * Режим «Авто» на большой карте: без декоративного фона и анимаций карты.
+     * В настройки не сохраняется — пользователь может явно включить их или выбрать «Максимум».
+     */
+    function applyAutoPerfForMapSize(objectCount) {
+        var lite = settings.mode === 'auto' && objectCount >= BIG_MAP_OBJECTS;
+        if (lite === bigMapAutoLite) return;
+        bigMapAutoLite = lite;
+        if (lite) {
+            if (typeof global.setPlexusEnabled === 'function') {
+                try { global.setPlexusEnabled(false); } catch (e) {}
+            }
+            if (typeof global.applyMapAnimationsPreference === 'function') {
+                try { global.applyMapAnimationsPreference(false); } catch (e2) {}
+            }
+        } else {
+            applyPlexusPreference(isPlexusEnabled());
+            applyAnimationsPreference(!!settings.animations);
+        }
+    }
+
     function detectModeFromFlags(next) {
         var keys = ['auto', 'economy', 'max'];
         for (var i = 0; i < keys.length; i++) {
@@ -244,8 +275,10 @@
     }
 
     function applyPerfSideEffects() {
-        applyAnimationsPreference(!!settings.animations);
-        applyPlexusPreference(isPlexusEnabled());
+        var liteNow = settings.mode === 'auto' && bigMapAutoLite;
+        if (!liteNow) bigMapAutoLite = false;
+        applyAnimationsPreference(liteNow ? false : !!settings.animations);
+        applyPlexusPreference(liteNow ? false : isPlexusEnabled());
         applyConnectionLinesPreference();
         rebuildRadioCoveragesIfNeeded();
         try {
@@ -398,5 +431,7 @@
     global.isRadioCoverageEnabled = isRadioCoverageEnabled;
     global.isPlexusEnabled = isPlexusEnabled;
     global.getPerfVirtualizationThresholds = getPerfVirtualizationThresholds;
+    global.getPerfLabelBudget = getPerfLabelBudget;
+    global.applyAutoPerfForMapSize = applyAutoPerfForMapSize;
     global.initPerfSettingsControls = initPerfSettingsControls;
 })(typeof window !== 'undefined' ? window : this);

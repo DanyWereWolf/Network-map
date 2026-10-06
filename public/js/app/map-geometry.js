@@ -345,21 +345,32 @@ function findObjectsAtGeometry(refs, geometry, tolerance) {
     return points.length >= 2 ? points : null;
 }
 
+var _refsUidIndexCache = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+
+/** uid → первый объект с этим uid в refs; кэш на массив, сбрасывается при смене длины. */
+function getRefsUidIndex(refs) {
+    var cached = _refsUidIndexCache && _refsUidIndexCache.get(refs);
+    if (cached && cached.len === refs.length) return cached.map;
+    var map = new Map();
+    for (var i = 0; i < refs.length; i++) {
+        var o = refs[i];
+        if (!o || !o.properties) continue;
+        var uid = o.properties.get('uniqueId');
+        if (!map.has(uid)) map.set(uid, o);
+    }
+    if (_refsUidIndexCache) _refsUidIndexCache.set(refs, { len: refs.length, map: map });
+    return map;
+}
+
 /** Восстанавливает цепочку объектов маршрута кабеля: приоритет у routeUniqueIds (опоры/крепления), иначе по вершинам геометрии. */
 function buildCableRoutePointsFromData(refs, item, fromObj, toObj, coords) {
     if (!Array.isArray(refs) || !item) return null;
     if (Array.isArray(item.routeUniqueIds) && item.routeUniqueIds.length >= 2) {
         var route = [];
+        var uidIndex = getRefsUidIndex(refs);
         for (var ri = 0; ri < item.routeUniqueIds.length; ri++) {
             var ruid = item.routeUniqueIds[ri];
-            var found = null;
-            for (var r = 0; r < refs.length; r++) {
-                var o = refs[r];
-                if (o && o.properties && o.properties.get('uniqueId') === ruid) {
-                    found = o;
-                    break;
-                }
-            }
+            var found = uidIndex.get(ruid) || null;
             if (!found) {
                 route = null;
                 break;

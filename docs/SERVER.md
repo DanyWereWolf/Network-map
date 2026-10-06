@@ -117,7 +117,9 @@ app.use(express.static(PUBLIC_DIR));
 }
 ```
 
-Переменные окружения: `STORAGE`, `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`.  
+Переменные окружения: `STORAGE`, `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`.
+
+Ядра процессора: основной поток сервера один (данные карты в памяти, кластеризовать нельзя), остальные ядра отдаются пулу `worker_threads` (`CPU_POOL_SIZE`, по умолчанию «ядер − 1», потоки создаются по нагрузке, `0` — выключить) и пулу libuv для fs/crypto/argon2 (`UV_THREADPOOL_SIZE`, по умолчанию = числу ядер).  
 `MYSQL_MIRROR_JSON=1` — дополнительно писать `store.json` как зеркало.
 
 Cutover: остановить API → `npm run migrate:mysql` → `"storage": "mysql"` → старт API. Откат: `"storage": "json"` и восстановление `store.json` из `data/backups/full/`.

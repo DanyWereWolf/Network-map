@@ -465,8 +465,18 @@ function recordClientReport(user, body, meta) {
             if (n != null) byType[String(k).slice(0, 40)] = n;
         });
     }
+    var loadSteps = [];
+    if (Array.isArray(body.loadSteps)) {
+        body.loadSteps.slice(0, 30).forEach(function(s) {
+            if (!s || typeof s !== 'object') return;
+            var ms = num(s.ms, 1e8);
+            if (ms == null) return;
+            loadSteps.push({ name: String(s.name || '').slice(0, 60), ms: ms });
+        });
+    }
     var report = {
         at: now,
+        loadSteps: loadSteps,
         userId: user.userId,
         username: meta && meta.username ? String(meta.username) : null,
         organizationId: user.organizationId || null,

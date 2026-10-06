@@ -129,6 +129,7 @@
             mapLoadMs: mapLoadMs,
             lastImportMs: lastImport.ms,
             lastImportItems: lastImport.items,
+            loadSteps: Array.isArray(global.__mapLoadSteps) ? global.__mapLoadSteps : [],
             wsMessagesPerMin: perMinute(wsMessages),
             perfPreset: perf ? perf.mode : null,
             virtualization: typeof MapPerf !== 'undefined' && typeof MapPerf.shouldUseVirtualization === 'function' ? !!MapPerf.shouldUseVirtualization() : false,

@@ -66,6 +66,21 @@ function shouldUseViewportLimitedGroupDisplay(scopeMeta) {
     );
 }
 
+var _objectsMembership = null;
+
+/** Set из objects на текущий синхронный проход: проверка «объект ещё на карте» без objects.indexOf. */
+function isInObjectsArray(obj) {
+    if (!Array.isArray(objects)) return false;
+    var m = _objectsMembership;
+    if (!m || m.arr !== objects || m.len !== objects.length) {
+        m = _objectsMembership = { arr: objects, len: objects.length, set: new Set(objects) };
+        Promise.resolve().then(function() {
+            if (_objectsMembership === m) _objectsMembership = null;
+        });
+    }
+    return m.set.has(obj);
+}
+
 function collectViewportTypedObjects(type) {
     if (!myMap || typeof MapPerf === 'undefined' || typeof MapPerf.getExpandedBounds !== 'function' ||
         typeof MapPerf.querySpatialInBounds !== 'function') {
@@ -77,7 +92,7 @@ function collectViewportTypedObjects(type) {
     if (!Array.isArray(candidates)) return null;
     return candidates.filter(function(obj) {
         if (!obj || !obj.properties || obj.properties.get('type') !== type) return false;
-        if (!Array.isArray(objects) || objects.indexOf(obj) === -1) return false;
+        if (!isInObjectsArray(obj)) return false;
         return !(typeof getObjectCabinetId === 'function' && getObjectCabinetId(obj));
     });
 }
@@ -114,7 +129,7 @@ function collectTypedObjectsNearGroupKeys(type, keys) {
     function consider(obj) {
         if (!obj || !obj.properties || obj.properties.get('type') !== type) return;
         // Spatial может ещё держать ссылку на уже удалённый объект — не возвращать его.
-        if (!Array.isArray(objects) || objects.indexOf(obj) === -1) return;
+        if (!isInObjectsArray(obj)) return;
         if (typeof getObjectCabinetId === 'function' && getObjectCabinetId(obj)) return;
         var uid = obj.properties.get('uniqueId');
         if (seen) {
@@ -244,9 +259,9 @@ function updateCrossDisplay(scope) {
         crossGroupPlacemarkByKey.clear();
         const allCrosses = objects.filter(obj => obj.properties && obj.properties.get('type') === 'cross');
         allCrosses.forEach(cross => {
-            try { myMap.geoObjects.remove(cross); } catch (e) {}
+            if (isGeoObjectOnMap(cross)) try { myMap.geoObjects.remove(cross); } catch (e) {}
             const label = cross.properties.get('label');
-            if (label) try { myMap.geoObjects.remove(label); } catch (e) {}
+            if (label && isGeoObjectOnMap(label)) try { myMap.geoObjects.remove(label); } catch (e) {}
         });
     }
     const groupsToRender = keysOnly ? getCrossGroupsForKeys(parsed.keys) : getCrossGroupsForDisplay(parsed);
@@ -541,9 +556,9 @@ function updateNodeDisplay(scope) {
         nodeGroupPlacemarkByKey.clear();
         const allNodes = objects.filter(obj => obj.properties && obj.properties.get('type') === 'node');
         allNodes.forEach(node => {
-            try { myMap.geoObjects.remove(node); } catch (e) {}
+            if (isGeoObjectOnMap(node)) try { myMap.geoObjects.remove(node); } catch (e) {}
             const label = node.properties.get('label');
-            if (label) try { myMap.geoObjects.remove(label); } catch (e) {}
+            if (label && isGeoObjectOnMap(label)) try { myMap.geoObjects.remove(label); } catch (e) {}
         });
     }
     const mapFilterState = typeof getMapFilterState === 'function' ? getMapFilterState() : {};

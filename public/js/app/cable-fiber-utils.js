@@ -54,18 +54,13 @@ function getCablesThroughSupport(supportObj) {
     return direct;
 }
 
-function getConnectedCables(obj) {
+function buildCableConnectionMatcher(obj) {
     var objUid = obj && obj.properties ? getObjectUniqueId(obj) : null;
     var memberCabId = (typeof getObjectCabinetId === 'function' && obj) ? getObjectCabinetId(obj) : '';
     var routeMatch = typeof traceRouteObjectsMatch === 'function' ? traceRouteObjectsMatch : function(a, b) {
         return a === b || (a && b && getObjectUniqueId(a) === getObjectUniqueId(b));
     };
-    var scan = objects;
-    if (typeof MapPerf !== 'undefined' && MapPerf.getObjectsByType) {
-        var typed = MapPerf.getObjectsByType('cable');
-        if (Array.isArray(typed) && typed.length) scan = typed;
-    }
-    var direct = scan.filter(function(cable) {
+    return function(cable) {
         if (!cable.properties || cable.properties.get('type') !== 'cable') return false;
         var from = cable.properties.get('from');
         var to = cable.properties.get('to');
@@ -80,7 +75,16 @@ function getConnectedCables(obj) {
         }
         if (routeMatch(from, obj) || routeMatch(to, obj)) return true;
         return false;
-    });
+    };
+}
+
+function getConnectedCables(obj) {
+    var scan = objects;
+    if (typeof MapPerf !== 'undefined' && MapPerf.getObjectsByType) {
+        var typed = MapPerf.getObjectsByType('cable');
+        if (Array.isArray(typed) && typed.length) scan = typed;
+    }
+    var direct = scan.filter(buildCableConnectionMatcher(obj));
     // Стабильная сортировка по uniqueId кабеля, чтобы порядок не «прыгал» при обновлении (опоры, муфта, кросс)
     direct = direct.slice().sort(function(a, b) {
         var idA = a.properties && a.properties.get('uniqueId');
@@ -118,8 +122,17 @@ function getOtherEndOfCable(cable, oneEnd) {
 
 function crossHasFiberForConnection(crossObj, cableId, fiberNumber) {
     if (!crossObj || !cableId || fiberNumber == null) return false;
-    const cables = getConnectedCables(crossObj);
-    const cable = cables.find(c => c.properties && c.properties.get('uniqueId') === cableId);
+    var cable = null;
+    // Быстрый путь: кабель по uid из индекса + та же проверка подключения, что в getConnectedCables.
+    if (typeof MapPerf !== 'undefined' && MapPerf.getByUid) {
+        var byUid = MapPerf.getByUid(cableId, 'cable');
+        if (byUid && byUid.properties.get('uniqueId') === cableId &&
+            buildCableConnectionMatcher(crossObj)(byUid)) cable = byUid;
+    }
+    if (!cable) {
+        const cables = getConnectedCables(crossObj);
+        cable = cables.find(c => c.properties && c.properties.get('uniqueId') === cableId);
+    }
     if (!cable) return false;
     const n = getFiberCount(cable);
     return fiberNumber >= 1 && fiberNumber <= n;

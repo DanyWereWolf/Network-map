@@ -22,22 +22,43 @@
         region: []
     };
 
+    /** То же, что geoObjects.indexOf(obj) !== -1, но обычно за O(1) через getParent(). */
+    function isGeoObjectOnMap(obj) {
+        if (!obj || !global.myMap || !global.myMap.geoObjects) return false;
+        var coll = global.myMap.geoObjects;
+        if (typeof obj.getParent === 'function') {
+            try {
+                var parent = obj.getParent();
+                if (parent === coll) return true;
+                if (parent == null) return false;
+            } catch (e) {}
+        }
+        try { return coll.indexOf(obj) !== -1; } catch (e2) { return false; }
+    }
+
     function uidFromObj(obj) {
         if (!obj || !obj.properties) return null;
         var id = obj.properties.get('uniqueId');
         return id != null && id !== '' ? String(id) : null;
     }
 
+    var typeIndexed = new Set();
+    var spatialGen = 1;
+
     function addToTypeIndex(obj) {
         if (!obj || !obj.properties) return;
         var type = obj.properties.get('type');
         var bucket = objectsByType[type];
         if (!bucket) return;
-        if (bucket.indexOf(obj) === -1) bucket.push(obj);
+        if (typeIndexed.has(obj)) return;
+        typeIndexed.add(obj);
+        bucket.push(obj);
     }
 
     function removeFromTypeIndex(obj) {
         if (!obj || !obj.properties) return;
+        if (!typeIndexed.has(obj)) return;
+        typeIndexed.delete(obj);
         var type = obj.properties.get('type');
         var bucket = objectsByType[type];
         if (!bucket) return;
@@ -48,8 +69,10 @@
     function registerMapObject(obj) {
         var uid = uidFromObj(obj);
         if (!uid) return;
-        objectsById.set(uid, obj);
-        addToTypeIndex(obj);
+        if (objectsById.get(uid) !== obj) {
+            objectsById.set(uid, obj);
+            addToTypeIndex(obj);
+        }
         registerSpatial(obj);
     }
 
@@ -77,6 +100,9 @@
         spatialGrid.clear();
         mountedUids.clear();
         pinnedUids.clear();
+        typeIndexed.clear();
+        spatialGen++;
+        spatialMutations++;
         objectsByType.cable = [];
         objectsByType.cableLabel = [];
         objectsByType.region = [];
@@ -139,33 +165,46 @@
         return null;
     }
 
+    var spatialMutations = 0;
+
     function addToSpatialCell(key, obj) {
         var bucket = spatialGrid.get(key);
         if (!bucket) {
             bucket = [];
+            var comma = key.indexOf(',');
+            bucket.latCell = parseInt(key.slice(0, comma), 10);
+            bucket.lonCell = parseInt(key.slice(comma + 1), 10);
             spatialGrid.set(key, bucket);
         }
-        if (bucket.indexOf(obj) === -1) bucket.push(obj);
+        if (bucket.indexOf(obj) === -1) {
+            bucket.push(obj);
+            spatialMutations++;
+        }
     }
 
     function removeFromSpatialCell(key, obj) {
         var bucket = spatialGrid.get(key);
         if (!bucket) return;
         var idx = bucket.indexOf(obj);
-        if (idx !== -1) bucket.splice(idx, 1);
+        if (idx !== -1) {
+            bucket.splice(idx, 1);
+            spatialMutations++;
+        }
         if (!bucket.length) spatialGrid.delete(key);
     }
 
     function registerSpatial(obj) {
         if (!obj) return;
         var prev = obj._spatialCellKey;
-        if (prev) removeFromSpatialCell(prev, obj);
         var coord = getObjectAnchorCoord(obj);
+        var key = coord ? spatialCellKey(coord[0], coord[1]) : null;
+        if (prev && key === prev && obj._spatialGen === spatialGen) return;
+        if (prev) removeFromSpatialCell(prev, obj);
         if (!coord) {
             obj._spatialCellKey = null;
             return;
         }
-        var key = spatialCellKey(coord[0], coord[1]);
+        obj._spatialGen = spatialGen;
         obj._spatialCellKey = key;
         addToSpatialCell(key, obj);
     }
@@ -214,20 +253,70 @@
         var maxLonCell = Math.floor(bounds.maxLon / SPATIAL_GRID_CELL);
         var out = [];
         var seen = new Set();
+        function take(bucket) {
+            for (var i = 0; i < bucket.length; i++) {
+                var obj = bucket[i];
+                var uid = uidFromObj(obj);
+                if (uid && seen.has(uid)) continue;
+                if (uid) seen.add(uid);
+                out.push(obj);
+            }
+        }
+        var cellCount = (maxLatCell - minLatCell + 1) * (maxLonCell - minLonCell + 1);
+        if (cellCount > spatialGrid.size) {
+            // При сильном отдалении ячеек в области больше, чем заполненных — обходим только заполненные.
+            spatialGrid.forEach(function(bucket) {
+                if (bucket.latCell >= minLatCell && bucket.latCell <= maxLatCell &&
+                    bucket.lonCell >= minLonCell && bucket.lonCell <= maxLonCell) take(bucket);
+            });
+            return out;
+        }
         for (var latCell = minLatCell; latCell <= maxLatCell; latCell++) {
             for (var lonCell = minLonCell; lonCell <= maxLonCell; lonCell++) {
                 var bucket = spatialGrid.get(latCell + ',' + lonCell);
-                if (!bucket) continue;
-                for (var i = 0; i < bucket.length; i++) {
-                    var obj = bucket[i];
-                    var uid = uidFromObj(obj);
-                    if (uid && seen.has(uid)) continue;
-                    if (uid) seen.add(uid);
-                    out.push(obj);
-                }
+                if (bucket) take(bucket);
             }
         }
         return out;
+    }
+
+    var viewportCountCache = { key: '', gen: 0, count: 0 };
+
+    /** Примерное число объектов (без дублей не считаем) в границах; кэш по границам. */
+    function countObjectsInBounds(bounds) {
+        if (!bounds) return 0;
+        var key = bounds.minLat + ',' + bounds.minLon + ',' + bounds.maxLat + ',' + bounds.maxLon;
+        if (viewportCountCache.key === key && viewportCountCache.gen === spatialMutations) return viewportCountCache.count;
+        var minLatCell = Math.floor(bounds.minLat / SPATIAL_GRID_CELL);
+        var maxLatCell = Math.floor(bounds.maxLat / SPATIAL_GRID_CELL);
+        var minLonCell = Math.floor(bounds.minLon / SPATIAL_GRID_CELL);
+        var maxLonCell = Math.floor(bounds.maxLon / SPATIAL_GRID_CELL);
+        var count = 0;
+        var cellCount = (maxLatCell - minLatCell + 1) * (maxLonCell - minLonCell + 1);
+        if (cellCount > spatialGrid.size) {
+            spatialGrid.forEach(function(bucket) {
+                if (bucket.latCell >= minLatCell && bucket.latCell <= maxLatCell &&
+                    bucket.lonCell >= minLonCell && bucket.lonCell <= maxLonCell) count += bucket.length;
+            });
+        } else {
+            for (var latCell = minLatCell; latCell <= maxLatCell; latCell++) {
+                for (var lonCell = minLonCell; lonCell <= maxLonCell; lonCell++) {
+                    var bucket = spatialGrid.get(latCell + ',' + lonCell);
+                    if (bucket) count += bucket.length;
+                }
+            }
+        }
+        viewportCountCache = { key: key, gen: spatialMutations, count: count };
+        return count;
+    }
+
+    /** Слишком много объектов в видимой области, чтобы показывать подписи (DOM на каждую подпись). */
+    function isLabelDensityExceeded(map) {
+        var budget = typeof global.getPerfLabelBudget === 'function' ? global.getPerfLabelBudget() : 500;
+        if (!budget || spatialGrid.size === 0) return false;
+        var bounds = getExpandedBounds(map || global.myMap);
+        if (!bounds) return false;
+        return countObjectsInBounds(bounds) > budget;
     }
 
     function getExpandedBounds(map) {
@@ -429,12 +518,12 @@
         if (!uid || mountedUids.has(uid)) return;
         if (!shouldMountObject(obj, ctx)) return;
         try {
-            if (global.myMap.geoObjects.indexOf(obj) === -1) global.myMap.geoObjects.add(obj);
+            if (!isGeoObjectOnMap(obj)) global.myMap.geoObjects.add(obj);
             mountedUids.add(uid);
             var type = obj.properties && obj.properties.get('type');
             var label = obj.properties && obj.properties.get('label');
             if (label && shouldShowLabelForObject(obj, ctx)) {
-                if (global.myMap.geoObjects.indexOf(label) === -1) global.myMap.geoObjects.add(label);
+                if (!isGeoObjectOnMap(label)) global.myMap.geoObjects.add(label);
             }
             if (type === 'cable' && global.CableUnderground) {
                 try { global.CableUnderground.setOverlaysVisible(obj, true); } catch (eUg) {}
@@ -472,7 +561,7 @@
         if (!shouldUseVirtualization()) {
             if (global.myMap) {
                 try {
-                    if (global.myMap.geoObjects.indexOf(obj) === -1) global.myMap.geoObjects.add(obj);
+                    if (!isGeoObjectOnMap(obj)) global.myMap.geoObjects.add(obj);
                     var uid = uidFromObj(obj);
                     if (uid) mountedUids.add(uid);
                     var type = obj.properties && obj.properties.get('type');
@@ -495,10 +584,10 @@
         if (!obj) return;
         var uid = uidFromObj(obj);
         if (global.myMap) {
-            try { global.myMap.geoObjects.remove(obj); } catch (e) {}
+            try { if (isGeoObjectOnMap(obj)) global.myMap.geoObjects.remove(obj); } catch (e) {}
             var label = obj.properties && obj.properties.get('label');
             if (label) {
-                try { global.myMap.geoObjects.remove(label); } catch (e2) {}
+                try { if (isGeoObjectOnMap(label)) global.myMap.geoObjects.remove(label); } catch (e2) {}
             }
         }
         if (uid) {
@@ -544,7 +633,7 @@
             if (uid2 && pinnedUids.has(uid2)) continue;
             if (uid2 && mountedUids.has(uid2)) continue;
             try {
-                if (global.myMap.geoObjects.indexOf(o) === -1) continue;
+                if (!isGeoObjectOnMap(o)) continue;
                 global.myMap.geoObjects.remove(o);
                 var label = o.properties && o.properties.get('label');
                 if (label) {
@@ -617,9 +706,9 @@
             var showLabel = shouldShowLabelForObject(obj, ctx);
             try {
                 if (label.options) label.options.set('visible', showLabel);
-                if (showLabel && global.myMap.geoObjects.indexOf(label) === -1) {
+                if (showLabel && !isGeoObjectOnMap(label)) {
                     global.myMap.geoObjects.add(label);
-                } else if (!showLabel && global.myMap.geoObjects.indexOf(label) !== -1) {
+                } else if (!showLabel && isGeoObjectOnMap(label)) {
                     global.myMap.geoObjects.remove(label);
                 }
             } catch (eLbl) {}
@@ -650,7 +739,7 @@
             var obj = list[i];
             if (!obj || isExternallyManagedMapObject(obj)) continue;
             try {
-                if (global.myMap.geoObjects.indexOf(obj) !== -1) {
+                if (isGeoObjectOnMap(obj)) {
                     var uid = uidFromObj(obj);
                     if (uid) mountedUids.add(uid);
                 }
@@ -693,6 +782,8 @@
         }, CONNECTION_LINES_DEBOUNCE_MS);
     }
 
+    global.isGeoObjectOnMap = isGeoObjectOnMap;
+
     global.MapPerf = {
         registerMapObject: registerMapObject,
         unregisterMapObject: unregisterMapObject,
@@ -708,6 +799,8 @@
         scheduleConnectionLinesUpdate: scheduleConnectionLinesUpdate,
         querySpatialNearCoords: querySpatialNearCoords,
         querySpatialInBounds: querySpatialInBounds,
+        countObjectsInBounds: countObjectsInBounds,
+        isLabelDensityExceeded: isLabelDensityExceeded,
         updateSpatialPosition: updateSpatialPosition,
         mapAdd: mapAdd,
         mapRemove: mapRemove,

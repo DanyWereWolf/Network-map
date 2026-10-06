@@ -72,6 +72,75 @@ async function disassembleMapData(conn, orgId, items) {
     }
 }
 
+const DIFF_DELETE_CHUNK = 500;
+
+function chunkList(list, size) {
+    var out = [];
+    for (var i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+    return out;
+}
+
+/**
+ * Точечное обновление карты: удаляет строки затронутых объектов/кабелей во всех таблицах
+ * и вставляет их текущие версии. Объекты без uniqueId сюда не попадают (см. mysql-persist).
+ */
+async function applyMapDiff(conn, orgId, diff) {
+    var objUids = (diff.affectedObjectUids || []).slice();
+    if (diff.rewriteGenerated) {
+        const [genRows] = await conn.query(
+            "SELECT unique_id FROM map_objects WHERE org_id = ? AND type = ? AND JSON_EXTRACT(attrs_json, '$._generatedUniqueId') = TRUE",
+            [orgId, 'cableLabel']
+        );
+        (genRows || []).forEach(function (r) { objUids.push(r.unique_id); });
+    }
+    var cableUids = diff.affectedCableUids || [];
+    var chunks = chunkList(objUids, DIFF_DELETE_CHUNK);
+    for (var ci = 0; ci < chunks.length; ci++) {
+        var ids = chunks[ci];
+        var ph = ids.map(function () { return '?'; }).join(',');
+        var p1 = [orgId].concat(ids);
+        await conn.query(
+            'DELETE so FROM splitter_outputs so JOIN splitters s ON s.org_id = so.org_id AND s.splitter_id = so.splitter_id ' +
+            'WHERE s.org_id = ? AND (s.host_unique_id IN (' + ph + ') OR s.splitter_id IN (' + ph + '))',
+            [orgId].concat(ids, ids)
+        );
+        await conn.query(
+            'DELETE FROM splitters WHERE org_id = ? AND (host_unique_id IN (' + ph + ') OR splitter_id IN (' + ph + '))',
+            [orgId].concat(ids, ids)
+        );
+        var byColumn = [
+            ['map_objects', 'unique_id'], ['object_photos', 'object_unique_id'], ['node_switches', 'node_unique_id'],
+            ['fiber_splices', 'host_unique_id'], ['fiber_used', 'host_unique_id'], ['fiber_labels', 'host_unique_id'],
+            ['fiber_assignments', 'host_unique_id'], ['cross_fiber_ports', 'cross_unique_id'],
+            ['cross_port_patches', 'from_cross_id'], ['device_incoming_fibers', 'object_unique_id'],
+            ['olt_port_assignments', 'olt_unique_id']
+        ];
+        for (var bi = 0; bi < byColumn.length; bi++) {
+            await conn.query('DELETE FROM `' + byColumn[bi][0] + '` WHERE org_id = ? AND `' + byColumn[bi][1] + '` IN (' + ph + ')', p1);
+        }
+    }
+    var cChunks = chunkList(cableUids, DIFF_DELETE_CHUNK);
+    for (var cj = 0; cj < cChunks.length; cj++) {
+        var cids = cChunks[cj];
+        var cph = cids.map(function () { return '?'; }).join(',');
+        var cp = [orgId].concat(cids);
+        await conn.query('DELETE FROM map_cables WHERE org_id = ? AND unique_id IN (' + cph + ')', cp);
+        await conn.query('DELETE FROM cable_route_points WHERE org_id = ? AND cable_unique_id IN (' + cph + ')', cp);
+        await conn.query('DELETE FROM cable_underground_spans WHERE org_id = ? AND cable_unique_id IN (' + cph + ')', cp);
+    }
+    var items = diff.changedItems || [];
+    for (var i = 0; i < items.length; i++) {
+        var item = items[i];
+        if (item.type === 'cable') await insertCable(conn, orgId, item);
+        else await insertObject(conn, orgId, item, {});
+    }
+    var generated = diff.generatedItems || [];
+    for (var gi = 0; gi < generated.length; gi++) {
+        var g = generated[gi];
+        await insertObject(conn, orgId, Object.assign({}, g.item, { uniqueId: g.uid }), { generatedUid: true });
+    }
+}
+
 async function insertCable(conn, orgId, item) {
     var cableAttrs = pickCableAttrs(item);
     if (!Object.prototype.hasOwnProperty.call(item, 'revision')) cableAttrs._noRevision = true;
@@ -688,6 +757,7 @@ function indexBy(rows, key) {
 
 module.exports = {
     disassembleMapData,
+    applyMapDiff,
     assembleMapData,
     clearOrgMapRows,
     FIBER_HOST_TYPES

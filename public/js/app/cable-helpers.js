@@ -261,6 +261,22 @@ function applySerializedUndergroundToCable(cable, item, pointsArr) {
     applyCableRouteAndOverlays(cable, pts);
 }
 
+function setCableCoordsIfChanged(cable, coords) {
+    if (!cable || !cable.geometry || !coords) return;
+    var cur = null;
+    try { cur = cable.geometry.getCoordinates(); } catch (eCur) {}
+    if (cur && cur.length === coords.length) {
+        var same = true;
+        for (var i = 0; i < coords.length; i++) {
+            var a = cur[i];
+            var b = coords[i];
+            if (!a || !b || a[0] !== b[0] || a[1] !== b[1]) { same = false; break; }
+        }
+        if (same) return;
+    }
+    cable.geometry.setCoordinates(coords);
+}
+
 function repairCablesAfterImport() {
     if (!objects || !objects.length || !myMap) return;
     objects.forEach(function (cable) {
@@ -268,7 +284,7 @@ function repairCablesAfterImport() {
         try {
             // Через MapPerf: учитывает LOD/virtualization (не форсим raw add — иначе вспышка всех кабелей).
             if (typeof mapGeoAdd === 'function') mapGeoAdd(cable);
-            else if (myMap.geoObjects.indexOf(cable) === -1) myMap.geoObjects.add(cable);
+            else if (!isGeoObjectOnMap(cable)) myMap.geoObjects.add(cable);
         } catch (eAdd) {}
         var points = cable.properties.get('points');
         var spans = cable.properties.get('undergroundSpans') || [];
@@ -283,7 +299,7 @@ function repairCablesAfterImport() {
                 var lin = points.map(function (p) {
                     return p && p.geometry ? p.geometry.getCoordinates() : null;
                 }).filter(function (c) { return c && c.length >= 2; });
-                if (lin.length >= 2) cable.geometry.setCoordinates(lin);
+                if (lin.length >= 2) setCableCoordsIfChanged(cable, lin);
             } catch (eLin) {}
         }
         if (cable.options) {
@@ -334,7 +350,7 @@ function validateAndFixCableGeometryOnLoad() {
         }
         if (coords.length >= 2) {
             try {
-                cable.geometry.setCoordinates(coords);
+                setCableCoordsIfChanged(cable, coords);
             } catch (e) {}
         }
     });

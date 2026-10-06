@@ -624,17 +624,22 @@
         } catch (e) { return true; }
     }
 
-    function findObjectByUid(objects, uid) {
-        if (!uid || !Array.isArray(objects)) return null;
-        for (var i = 0; i < objects.length; i++) {
-            var o = objects[i];
-            if (o && o.properties && o.properties.get('uniqueId') === uid) return o;
-        }
-        return null;
-    }
-
     function syncConnectionLinesVisibility(objects, lineGroups) {
         if (!lineGroups) return;
+        var uidIndex = null;
+        function findObjectByUid(_list, uid) {
+            if (!uid || !Array.isArray(objects)) return null;
+            if (!uidIndex) {
+                uidIndex = new Map();
+                for (var i = 0; i < objects.length; i++) {
+                    var o = objects[i];
+                    if (!o || !o.properties) continue;
+                    var id = o.properties.get('uniqueId');
+                    if (id && !uidIndex.has(id)) uidIndex.set(id, o);
+                }
+            }
+            return uidIndex.get(uid) || null;
+        }
         var groups = [
             lineGroups.onuConnectionLines,
             lineGroups.oltConnectionLines,

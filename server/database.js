@@ -28,6 +28,8 @@ let mysqlInitialized = false;
 let mysqlPersistTimer = null;
 let mysqlPersistChain = Promise.resolve();
 let mysqlPersistDirty = false;
+let mysqlPersistState = null;
+let mysqlPersistStats = { count: 0, totalMs: 0, maxMs: 0, lastMs: 0, lastAt: 0, lastSections: [], lastRows: 0, lastStatements: 0, errors: 0, lastError: null };
 let jsonSaveTimer = null;
 let jsonSaveDirty = false;
 let jsonSaveChain = Promise.resolve();
@@ -237,7 +239,9 @@ async function initStorage() {
         const { runMigrations } = require('./db/migrate');
         const mysqlPersist = require('./db/mysql-persist');
         await runMigrations();
-        store = normalizeStoreShape(await mysqlPersist.hydrateStoreFromMysql());
+        var hydrated = await mysqlPersist.hydrateStoreFromMysql();
+        mysqlPersistState = mysqlPersist.primePersistState(hydrated);
+        store = normalizeStoreShape(hydrated);
         migrateToOrganizations();
         mysqlInitialized = true;
         initSchema();
@@ -276,12 +280,45 @@ async function flushMysqlPersist() {
     const snapshot = store;
     const mysqlPersist = require('./db/mysql-persist');
     mysqlPersistChain = mysqlPersistChain.then(async function () {
-        await mysqlPersist.persistStoreToMysql(snapshot, { skipRelationalMap: false });
+        if (!mysqlPersistState) mysqlPersistState = mysqlPersist.createPersistState();
+        var result = await mysqlPersist.persistStoreIncremental(snapshot, mysqlPersistState);
+        if (!result.sections.length) return;
+        var st = mysqlPersistStats;
+        st.count++;
+        st.totalMs += result.ms;
+        if (result.ms > st.maxMs) st.maxMs = result.ms;
+        st.lastMs = result.ms;
+        st.lastAt = Date.now();
+        st.lastSections = result.sections.slice(0, 20);
+        st.lastRows = result.rows;
+        st.lastStatements = result.statements;
+        if (result.ms >= 2000) {
+            console.warn('[DB] MySQL persist slow:', result.ms + 'ms', result.rows + ' rows', result.sections.join(', '));
+        }
     }).catch(function (e) {
         mysqlPersistDirty = true;
+        mysqlPersistStats.errors++;
+        mysqlPersistStats.lastError = e && e.message ? String(e.message) : String(e);
         console.error('[DB] MySQL persist error:', e && e.message ? e.message : e);
     });
     await mysqlPersistChain;
+}
+
+function getMysqlPersistStats() {
+    var st = mysqlPersistStats;
+    return {
+        enabled: isMysqlEnabled(),
+        count: st.count,
+        avgMs: st.count ? Math.round(st.totalMs / st.count) : 0,
+        maxMs: st.maxMs,
+        lastMs: st.lastMs,
+        lastAt: st.lastAt,
+        lastSections: st.lastSections,
+        lastRows: st.lastRows,
+        lastStatements: st.lastStatements,
+        errors: st.errors,
+        lastError: st.lastError
+    };
 }
 
 function writeJsonStoreFile(json, existingRaw, storeObj) {
@@ -1982,6 +2019,7 @@ function restoreFullStoreBackup(filename) {
     }
     allowDangerousSaveOnce = true;
     store = parsed;
+    mysqlPersistState = null;
     try {
         saveStore();
     } finally {
@@ -2012,7 +2050,9 @@ async function reloadStoreFromMysql() {
     if (!isMysqlEnabled()) return reloadStoreFromDisk();
     await flushMysqlPersist();
     const mysqlPersist = require('./db/mysql-persist');
-    store = normalizeStoreShape(await mysqlPersist.hydrateStoreFromMysql());
+    var hydrated = await mysqlPersist.hydrateStoreFromMysql();
+    mysqlPersistState = mysqlPersist.primePersistState(hydrated);
+    store = normalizeStoreShape(hydrated);
     migrateToOrganizations();
     mysqlInitialized = true;
     return store;
@@ -2715,6 +2755,7 @@ module.exports = {
     getDb,
     initStorage,
     flushMysqlPersist,
+    getMysqlPersistStats,
     flushJsonPersist,
     getStorageMode,
     isMysqlEnabled,

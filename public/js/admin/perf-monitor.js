@@ -189,6 +189,11 @@
         }
         var pool = s.gauges && s.gauges.cpuPool;
         if (pool && pool.queue > 2) out.push({ level: 'warn', text: 'Очередь пула потоков: ' + pool.queue + ' задач ждут обработки' });
+        var mp = s.gauges && s.gauges.mysqlPersist;
+        if (mp && mp.enabled) {
+            if (mp.errors > 0) out.push({ level: 'danger', text: 'Ошибки записи в MySQL: ' + mp.errors + (mp.lastError ? ' (' + mp.lastError + ')' : '') });
+            if (mp.lastMs >= 2000) out.push({ level: 'warn', text: 'Последняя запись в MySQL заняла ' + (mp.lastMs / 1000).toFixed(1) + ' с' });
+        }
         (data.maps || []).forEach(function(m) {
             (m.warnings || []).forEach(function(w) {
                 if (w.level === 'danger') out.push({ level: 'danger', text: m.name + ': ' + w.text });
@@ -226,6 +231,14 @@
             '</div>';
     }
 
+    function persistCard(mp) {
+        if (!mp || !mp.enabled) return '';
+        var lvl = mp.errors > 0 ? 'danger' : (mp.lastMs >= 2000 ? 'warn' : 'ok');
+        return card('Запись в MySQL', mp.count ? fmtMs(mp.lastMs) : '—',
+            'среднее ' + fmtMs(mp.avgMs) + ' · макс ' + fmtMs(mp.maxMs) + ' · записей ' + fmtNum(mp.count) +
+            (mp.errors ? ' · ошибок ' + fmtNum(mp.errors) : ''), lvl);
+    }
+
     function renderServerCards(s, http) {
         var el = $('perfServerCards');
         if (!el || !s) return;
@@ -250,8 +263,11 @@
             card('Запросов API в минуту', http ? fmtNum(http.perMin) : '—',
                 http ? 'всего ' + fmtNum(http.total) + ' · ошибок 5xx ' + fmtNum(http.errors) : '', ''),
             card('Пул потоков', pool.size ? (pool.busy + ' / ' + pool.size) : 'выкл.',
-                'занято · очередь ' + fmtNum(pool.queue || 0), pool.queue > 2 ? 'warn' : ''),
-            card('Работает без перезапуска', fmtUptime(s.uptimeSec), 'хранилище: ' + esc(g.storageMode || '—'), '')
+                'занято · очередь ' + fmtNum(pool.queue || 0) +
+                (pool.cores ? ' · ядер ' + pool.cores + ', потоков создано ' + fmtNum(pool.workers || 0) : ''),
+                pool.queue > 2 ? 'warn' : ''),
+            card('Работает без перезапуска', fmtUptime(s.uptimeSec), 'хранилище: ' + esc(g.storageMode || '—'), ''),
+            persistCard(g.mysqlPersist)
         ].join('');
     }
 
@@ -425,6 +441,11 @@
             var topTypes = Object.keys(c.objectsByType || {}).map(function(k) { return [k, c.objectsByType[k]]; })
                 .sort(function(x, y) { return y[1] - x[1]; }).slice(0, 4)
                 .map(function(p) { return p[0] + ': ' + p[1]; }).join(', ');
+            var steps = Array.isArray(c.loadSteps) ? c.loadSteps : [];
+            var stepsTitle = steps.map(function(s) { return s.name + ': ' + fmtMs(s.ms); }).join('\n');
+            var topSteps = steps.slice().sort(function(x, y) { return y.ms - x.ms; })
+                .filter(function(s) { return s.ms >= 300; }).slice(0, 2)
+                .map(function(s) { return s.name + ' ' + fmtMs(s.ms); }).join(', ');
             return '<tr>' +
                 '<td>' + esc(c.username || ('#' + c.userId)) + '</td>' +
                 '<td>' + esc(c.organizationName || '—') + '</td>' +
@@ -436,8 +457,10 @@
                 '<td title="' + esc(topTypes) + '">' + fmtNum(c.objects) + ' / ' + (c.mounted != null ? fmtNum(c.mounted) : '—') +
                     (c.virtualization ? '<div class="hint">виртуализация вкл.</div>' : '') + '</td>' +
                 '<td>' + lvlSpan(fmtNum(c.domNodes), level(c.domNodes, 15000, 40000)) + '</td>' +
-                '<td>' + lvlSpan(fmtMs(c.mapLoadMs), level(c.mapLoadMs, 8000, 20000)) +
-                    (c.lastImportMs != null ? '<div class="hint">импорт ' + fmtMs(c.lastImportMs) + '</div>' : '') + '</td>' +
+                '<td' + (stepsTitle ? ' title="' + esc(stepsTitle) + '"' : '') + '>' +
+                    lvlSpan(fmtMs(c.mapLoadMs), level(c.mapLoadMs, 8000, 20000)) +
+                    (c.lastImportMs ? '<div class="hint">импорт ' + fmtMs(c.lastImportMs) + '</div>' : '') +
+                    (topSteps ? '<div class="hint">' + esc(topSteps) + '</div>' : '') + '</td>' +
                 '<td>' + esc(presetNames[c.perfPreset] || c.perfPreset || '—') + '</td>' +
                 '<td><span title="' + esc(c.userAgent || '') + '">' + esc(shortUa(c.userAgent)) + '</span>' +
                     (device ? '<div class="hint">' + esc(device) + '</div>' : '') + '</td>' +

@@ -1,3 +1,4 @@
+require('./lib/threadpool');
 const express = require('express');
 const http = require('http');
 const https = require('https');
@@ -4112,6 +4113,9 @@ perfMonitor.registerGauge('storageMode', function() {
     return typeof db.getStorageMode === 'function' ? db.getStorageMode() : 'json';
 });
 perfMonitor.registerGauge('syncStatesInMemory', function() { return Object.keys(syncCurrentStateByOrg).length; });
+perfMonitor.registerGauge('mysqlPersist', function() {
+    return typeof db.getMysqlPersistStats === 'function' ? db.getMysqlPersistStats() : null;
+});
 
 function notifySessionRevokedForUser(userId, exceptToken) {
     if (userId == null || !wss) return;

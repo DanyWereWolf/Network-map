@@ -552,7 +552,9 @@ function attachHoverEventsToObject(obj) {
     if (!obj || !obj.events) return;
     const objType = obj.properties ? obj.properties.get('type') : null;
     if (!objType || objType === 'cableLabel' || objType === 'cableAerialOverlay') return;
-    
+    if (obj.__hoverEventsAttached) return;
+    obj.__hoverEventsAttached = true;
+
     function onMouseEnter(e) {
         const domEvent = e.get && e.get('domEvent');
         if (domEvent) {

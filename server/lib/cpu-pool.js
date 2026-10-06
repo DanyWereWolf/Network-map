@@ -4,22 +4,17 @@
  * Небольшой пул worker_threads для CPU-задач (stringify / clone),
  * чтобы не блокировать Express + WebSocket event loop.
  *
- * Размер: CPU_POOL_SIZE или min(4, max(1, floor(cpus/2))).
- * Отключить: CPU_POOL_SIZE=0
+ * Размер: CPU_POOL_SIZE или все ядра, кроме одного (на нём основной поток сервера).
+ * Потоки создаются по мере нагрузки, первый — сразу. Отключить: CPU_POOL_SIZE=0
  */
 const { Worker } = require('worker_threads');
-const os = require('os');
 const path = require('path');
+const { cpuCount } = require('./threadpool');
 
 const WORKER_PATH = path.join(__dirname, 'cpu-worker.js');
 
 function defaultPoolSize() {
-    var cpus = 1;
-    try {
-        var list = os.cpus();
-        if (list && list.length) cpus = list.length;
-    } catch (e) {}
-    return Math.max(1, Math.min(4, Math.floor(cpus / 2) || 1));
+    return Math.max(1, cpuCount() - 1);
 }
 
 function parsePoolSize() {
@@ -40,9 +35,14 @@ var destroyed = false;
 
 function ensureWorkers() {
     if (destroyed || POOL_SIZE <= 0) return;
-    while (workers.length < POOL_SIZE) {
-        spawnOne();
-    }
+    if (!workers.length) spawnOne();
+}
+
+/** Добавляет поток, если все заняты, есть очередь и лимит не исчерпан. */
+function growIfNeeded() {
+    if (destroyed || POOL_SIZE <= 0) return;
+    var toSpawn = Math.min(waitQueue.length - idle.length, POOL_SIZE - workers.length);
+    for (var i = 0; i < toSpawn; i++) spawnOne();
 }
 
 function spawnOne() {
@@ -87,6 +87,7 @@ function failBusyOrRecreate(worker, err) {
 }
 
 function pump() {
+    growIfNeeded();
     while (waitQueue.length && idle.length) {
         var job = waitQueue.shift();
         var worker = idle.pop();
@@ -167,6 +168,8 @@ function size() {
 function stats() {
     return {
         size: POOL_SIZE,
+        cores: cpuCount(),
+        libuvThreads: parseInt(process.env.UV_THREADPOOL_SIZE, 10) || 4,
         workers: workers.length,
         busy: Math.max(0, workers.length - idle.length),
         queue: waitQueue.length,
@@ -192,7 +195,8 @@ function destroy() {
 
 if (POOL_SIZE > 0) {
     ensureWorkers();
-    console.log('[CPU] worker pool:', POOL_SIZE, 'thread(s) (set CPU_POOL_SIZE to change, 0=off)');
+    console.log('[CPU] cores:', cpuCount(), '| worker pool: up to', POOL_SIZE, 'thread(s) | libuv pool:',
+        process.env.UV_THREADPOOL_SIZE || 4, '(CPU_POOL_SIZE / UV_THREADPOOL_SIZE to change, CPU_POOL_SIZE=0 = off)');
 }
 
 module.exports = {

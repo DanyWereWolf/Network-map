@@ -503,11 +503,15 @@ function migrateStandaloneSwitchesIntoNodes() {
     if (!Array.isArray(objects) || !myMap) return;
     var switches = objects.filter(function(o) { return o && o.properties && o.properties.get('type') === 'switch'; });
     if (switches.length === 0) return;
+    var nodeByUid = new Map();
+    objects.forEach(function(n) {
+        if (!n || !n.properties || n.properties.get('type') !== 'node') return;
+        var nuid = n.properties.get('uniqueId');
+        if (nuid != null && !nodeByUid.has(nuid)) nodeByUid.set(nuid, n);
+    });
     switches.forEach(function(sw) {
         var pid = sw.properties.get('parentNodeId');
-        var node = objects.find(function(n) {
-            return n && n.properties && n.properties.get('type') === 'node' && n.properties.get('uniqueId') === pid;
-        });
+        var node = pid != null ? nodeByUid.get(pid) : null;
         if (!node) return;
         var swUid = sw.properties.get('uniqueId') || ('sw-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6));
         var arr = getNodeAttachedSwitches(node).slice();
@@ -3528,6 +3532,9 @@ function setStatsGroupSum(elId, value) {
 
 function updateStats() {
     initStatsIcons();
+    if (typeof applyAutoPerfForMapSize === 'function' && Array.isArray(objects)) {
+        try { applyAutoPerfForMapSize(objects.length); } catch (eAutoPerf) {}
+    }
     var networkNodeCount = 0;
     var aggregationNodeCount = 0;
     var supportCount = 0;
@@ -5814,12 +5821,17 @@ function updateObjectLabel(placemark, name) {
         placemark.properties.set('label', label);
     } else {
         try {
-            if (label.options && typeof label.options.unset === 'function') {
+            if (label.options && typeof label.options.get === 'function' && label.options.get('iconContent') != null) {
                 label.options.unset('iconContent');
             }
         } catch (eClr) {}
-        label.properties.set({ iconContent: labelHtml });
-        label.geometry.setCoordinates(coords);
+        if (label.properties.get('iconContent') !== labelHtml) {
+            label.properties.set({ iconContent: labelHtml });
+        }
+        var labelCoords = label.geometry.getCoordinates();
+        if (!labelCoords || !coords || labelCoords[0] !== coords[0] || labelCoords[1] !== coords[1]) {
+            label.geometry.setCoordinates(coords);
+        }
     }
 }
 

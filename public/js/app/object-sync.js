@@ -209,7 +209,7 @@ function updateObjectLockMapBadge(obj, locked, lockInfo) {
             badge.geometry.setCoordinates(coords);
             badge.properties.set('iconContent', html);
             badge.properties.set('hintContent', who ? ('Редактирует: ' + who) : 'Объект занят');
-            if (myMap.geoObjects.indexOf(badge) === -1) myMap.geoObjects.add(badge);
+            if (!isGeoObjectOnMap(badge)) myMap.geoObjects.add(badge);
         } catch (eUp) {}
     }
 }
@@ -338,6 +338,7 @@ function syncPushCableUpdate(cable, immediate) {
     var data = serializeMapItemFromObject(cable);
     if (!data || !data.uniqueId) return false;
     var existsInSnapshot = false;
+    if (typeof flushPendingRemoteSnapshot === 'function') flushPendingRemoteSnapshot();
     if (Array.isArray(lastSavedState)) {
         for (var si = 0; si < lastSavedState.length; si++) {
             var it = lastSavedState[si];

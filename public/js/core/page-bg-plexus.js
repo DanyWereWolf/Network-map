@@ -7,6 +7,8 @@
     var MAIN_OPTS = { nodeCount: 80, maxDist: 170 };
     var AUTH_OPTS = { nodeCount: 90, maxDist: 185, lineOpacity: 0.15, nodeRadius: 1.7, speed: 0.32 };
     var activeInstances = [];
+    var FRAME_MIN_MS = 33;
+    var HIDDEN_RECHECK_MS = 500;
 
     function clampByte(n) {
         return Math.max(0, Math.min(255, Math.round(n)));
@@ -151,8 +153,38 @@
             draw();
         }
 
-        function tick() {
+        var lastFrameAt = 0;
+        var hiddenTimer = null;
+
+        function isCanvasVisible() {
+            if (document.hidden) return false;
+            // offsetParent === null — холст или панель скрыты (display:none); у fixed-элементов тоже null.
+            if (canvas.offsetParent === null && getComputedStyle(canvas).position !== 'fixed') return false;
+            return canvas.clientWidth > 0 && canvas.clientHeight > 0;
+        }
+
+        function scheduleTick() {
+            if (reducedMotion || !running) return;
+            requestAnimationFrame(tick);
+        }
+
+        function tick(now) {
             if (!running) return;
+            if (!isCanvasVisible()) {
+                // Скрытая панель: не крутим rAF каждый кадр, проверяем видимость редко.
+                if (!hiddenTimer) {
+                    hiddenTimer = setTimeout(function () {
+                        hiddenTimer = null;
+                        scheduleTick();
+                    }, HIDDEN_RECHECK_MS);
+                }
+                return;
+            }
+            if (typeof now === 'number' && now - lastFrameAt < FRAME_MIN_MS) {
+                scheduleTick();
+                return;
+            }
+            if (typeof now === 'number') lastFrameAt = now;
             if (!reducedMotion) {
                 var i, n;
                 for (i = 0; i < nodes.length; i++) {
@@ -166,7 +198,7 @@
                 }
             }
             draw();
-            if (!reducedMotion) requestAnimationFrame(tick);
+            scheduleTick();
         }
 
         resize();

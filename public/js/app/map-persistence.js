@@ -23,8 +23,8 @@ function serializeMapItemFromObject(obj) {
             const result = {
                 type: 'cable',
                 cableType: props.cableType,
-                from: objects.indexOf(fromObj),
-                to: objects.indexOf(toObj),
+                from: serializeObjectIndexOf(fromObj),
+                to: serializeObjectIndexOf(toObj),
                 geometry: cableGeom
             };
             if (fromObj && toObj && fromObj.properties && toObj.properties) {
@@ -317,8 +317,25 @@ function serializeMapItemFromObject(obj) {
         return result;
 }
 
+var _serializeObjectIndex = null;
+
+function serializeObjectIndexOf(obj) {
+    if (_serializeObjectIndex) {
+        var idx = _serializeObjectIndex.get(obj);
+        return idx === undefined ? -1 : idx;
+    }
+    return objects.indexOf(obj);
+}
+
 function getSerializedData() {
-    return objects.map(function(obj) { return serializeMapItemFromObject(obj); }).filter(Boolean);
+    var index = new Map();
+    for (var i = objects.length - 1; i >= 0; i--) index.set(objects[i], i);
+    _serializeObjectIndex = index;
+    try {
+        return objects.map(function(obj) { return serializeMapItemFromObject(obj); }).filter(Boolean);
+    } finally {
+        _serializeObjectIndex = null;
+    }
 }
 
 function cloneMapSnapshot(state) {
@@ -657,17 +674,30 @@ function clearUndoRedoStacks() {
     if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
 }
 
+// Полная сериализация карты дорогая: при потоке входящих правок пересобираем снимок не чаще раза
+// в REMOTE_SNAPSHOT_DEBOUNCE_MS, а перед любым чтением lastSavedState досчитываем его сразу.
+var REMOTE_SNAPSHOT_DEBOUNCE_MS = 400;
+
+function refreshSnapshotAfterRemoteChange() {
+    _remoteUndoInvalidateTimer = null;
+    if (inUndoRedo) return;
+    try {
+        lastSavedState = cloneMapSnapshot(getSerializedData());
+    } catch (eInv) {}
+    if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
+}
+
+function flushPendingRemoteSnapshot() {
+    if (!_remoteUndoInvalidateTimer) return;
+    clearTimeout(_remoteUndoInvalidateTimer);
+    refreshSnapshotAfterRemoteChange();
+}
+window.flushPendingRemoteSnapshot = flushPendingRemoteSnapshot;
+
 function invalidateUndoAfterRemoteChange() {
     clearUndoRedoStacks();
     if (_remoteUndoInvalidateTimer) clearTimeout(_remoteUndoInvalidateTimer);
-    _remoteUndoInvalidateTimer = setTimeout(function() {
-        _remoteUndoInvalidateTimer = null;
-        if (inUndoRedo) return;
-        try {
-            lastSavedState = cloneMapSnapshot(getSerializedData());
-        } catch (eInv) {}
-        if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
-    }, 0);
+    _remoteUndoInvalidateTimer = setTimeout(refreshSnapshotAfterRemoteChange, REMOTE_SNAPSHOT_DEBOUNCE_MS);
 }
 window.invalidateUndoAfterRemoteChange = invalidateUndoAfterRemoteChange;
 
@@ -703,6 +733,7 @@ function filterSnapshotByRemovedUids(snapshot, removeUniqueIds) {
 function saveData(opts) {
     opts = opts || {};
     if (currentModalObject && infoModalEditModeSession && !infoModalEditMode && !opts.fiberSchemeViewOnly) return;
+    flushPendingRemoteSnapshot();
     // Инкрементальный add: без полной сериализации и deep-clone всей карты (критично для INP).
     if (opts.addObject && !inUndoRedo && Array.isArray(lastSavedState) &&
         lastSavedState.length === objects.length - 1) {
@@ -757,6 +788,7 @@ function saveData(opts) {
 
 function performUndo() {
     if (!canEdit() || undoStack.length === 0 || inUndoRedo) return;
+    flushPendingRemoteSnapshot();
     var entry = unwrapUndoEntry(undoStack.pop());
     var stateToRestore = entry.state;
     var currentState = lastSavedState != null ? lastSavedState : getSerializedData();
@@ -778,6 +810,7 @@ function performUndo() {
 
 function performRedo() {
     if (!canEdit() || redoStack.length === 0 || inUndoRedo) return;
+    flushPendingRemoteSnapshot();
     var entry = unwrapUndoEntry(redoStack.pop());
     var stateToRestore = entry.state;
     var currentState = lastSavedState != null ? lastSavedState : getSerializedData();
@@ -1567,71 +1600,111 @@ function applyRemoteStateMerged(data) {
     var refs = [];
     var refIndexByDataIndex = {};
     var i, item, existing, created, label;
+    // uid → первый подходящий объект (как objects.find); созданные по ходу добавляются сразу.
+    var regionByUid = new Map();
+    var placemarkByUid = new Map();
+    function indexPlacemark(o) {
+        if (!o || !o.properties) return;
+        var t = o.properties.get('type');
+        if (!t || t === 'cable' || t === 'cableLabel') return;
+        var uid = o.properties.get('uniqueId');
+        if (!placemarkByUid.has(uid)) placemarkByUid.set(uid, o);
+        if (t === 'region' && !regionByUid.has(uid)) regionByUid.set(uid, o);
+    }
+    objects.forEach(indexPlacemark);
     for (i = 0; i < data.length; i++) {
         item = data[i];
         if (item.type === 'cable') continue;
         if (item.type === 'region') {
-            existing = objects.find(function(o) {
-                return o.properties && o.properties.get('type') === 'region' &&
-                    o.properties.get('uniqueId') === item.uniqueId;
-            });
+            existing = regionByUid.get(item.uniqueId);
             if (existing) {
                 populateRegionFromSerializedData(existing, item);
                 refs.push(existing);
             } else {
                 created = createRegionFromData(item);
-                if (created) refs.push(created);
+                if (created) {
+                    refs.push(created);
+                    indexPlacemark(created);
+                }
             }
             refIndexByDataIndex[i] = refs.length - 1;
             continue;
         }
-        existing = objects.find(function(o) {
-            var t = o.properties && o.properties.get('type');
-            return t && t !== 'cable' && t !== 'cableLabel' && o.properties.get('uniqueId') === item.uniqueId;
-        });
+        existing = placemarkByUid.get(item.uniqueId);
         if (existing) {
             populatePlacemarkFromSerializedData(existing, item);
             refs.push(existing);
         } else {
             created = createObjectFromData(item);
-            if (created) refs.push(created);
+            if (created) {
+                refs.push(created);
+                indexPlacemark(created);
+            }
         }
         refIndexByDataIndex[i] = refs.length - 1;
     }
 
+    var refsSet = new Set(refs);
     var toRemoveObjs = objects.filter(function(o) {
         var t = o.properties && o.properties.get('type');
         if (!t || t === 'cable' || t === 'cableLabel') return false;
-        return refs.indexOf(o) === -1;
+        return !refsSet.has(o);
     });
+    var toRemoveObjSet = new Set(toRemoveObjs);
     var toRemoveCables = objects.filter(function(o) {
         if (!o.properties || o.properties.get('type') !== 'cable') return false;
         if (!incomingCableIds[o.properties.get('uniqueId')]) return true;
         var from = o.properties.get('from');
         var to = o.properties.get('to');
-        return toRemoveObjs.indexOf(from) !== -1 || toRemoveObjs.indexOf(to) !== -1;
+        return toRemoveObjSet.has(from) || toRemoveObjSet.has(to);
     });
 
-    toRemoveCables.forEach(function(cable) {
-        myMap.geoObjects.remove(cable);
-        objects = objects.filter(function(o) { return o !== cable; });
+    var removedSet = new Set();
+    var cablesByEndpoint = new Map();
+    if (toRemoveObjs.length) {
+        objects.forEach(function(c) {
+            if (!c.properties || c.properties.get('type') !== 'cable') return;
+            [c.properties.get('from'), c.properties.get('to')].forEach(function(ep, k, arr) {
+                if (!toRemoveObjSet.has(ep) || (k === 1 && arr[0] === ep)) return;
+                if (!cablesByEndpoint.has(ep)) cablesByEndpoint.set(ep, []);
+                cablesByEndpoint.get(ep).push(c);
+            });
+        });
+    }
+    try {
+        toRemoveCables.forEach(function(cable) {
+            myMap.geoObjects.remove(cable);
+            removedSet.add(cable);
+        });
+        toRemoveObjs.forEach(function(obj) {
+            label = obj.properties.get('label');
+            if (label) { try { myMap.geoObjects.remove(label); } catch (e) {} }
+            if (obj.properties.get('type') === 'region' && window.MapRegions && MapRegions.removeRegionLabel) {
+                MapRegions.removeRegionLabel(obj, myMap);
+            }
+            (cablesByEndpoint.get(obj) || []).forEach(function(c) {
+                if (removedSet.has(c)) return;
+                myMap.geoObjects.remove(c);
+                removedSet.add(c);
+            });
+            myMap.geoObjects.remove(obj);
+            removedSet.add(obj);
+        });
+    } finally {
+        if (removedSet.size) objects = objects.filter(function(o) { return !removedSet.has(o); });
+    }
+
+    var refByUidMerge = new Map();
+    refs.forEach(function(r) {
+        if (!r || !r.properties) return;
+        var ru = r.properties.get('uniqueId');
+        if (!refByUidMerge.has(ru)) refByUidMerge.set(ru, r);
     });
-    toRemoveObjs.forEach(function(obj) {
-        label = obj.properties.get('label');
-        if (label) { try { myMap.geoObjects.remove(label); } catch (e) {} }
-        if (obj.properties.get('type') === 'region' && window.MapRegions && MapRegions.removeRegionLabel) {
-            MapRegions.removeRegionLabel(obj, myMap);
-        }
-        var cablesToRemove = objects.filter(function(c) {
-            return c.properties && c.properties.get('type') === 'cable' &&
-                (c.properties.get('from') === obj || c.properties.get('to') === obj);
-        });
-        cablesToRemove.forEach(function(c) {
-            myMap.geoObjects.remove(c);
-            objects = objects.filter(function(o) { return o !== c; });
-        });
-        myMap.geoObjects.remove(obj);
-        objects = objects.filter(function(o) { return o !== obj; });
+    var cableByUidMerge = new Map();
+    objects.forEach(function(o) {
+        if (!o.properties || o.properties.get('type') !== 'cable') return;
+        var cu = o.properties.get('uniqueId');
+        if (!cableByUidMerge.has(cu)) cableByUidMerge.set(cu, o);
     });
 
     incomingCables.forEach(function(item) {
@@ -1639,10 +1712,10 @@ function applyRemoteStateMerged(data) {
         var fromObj = null, toObj = null;
         
         if (item.fromUniqueId) {
-            fromObj = refs.find(function(r) { return r.properties && r.properties.get('uniqueId') === item.fromUniqueId; });
+            fromObj = refByUidMerge.get(item.fromUniqueId);
         }
         if (item.toUniqueId) {
-            toObj = refs.find(function(r) { return r.properties && r.properties.get('uniqueId') === item.toUniqueId; });
+            toObj = refByUidMerge.get(item.toUniqueId);
         }
         if (!fromObj || !toObj) {
             if (item.from != null && item.to != null) {
@@ -1672,9 +1745,7 @@ function applyRemoteStateMerged(data) {
         }
         if (!fromObj || !toObj) return;
         var itemCuMetaMerge = copperSerializedMetaFromItem(item);
-        var existingCable = objects.find(function(o) {
-            return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId;
-        });
+        var existingCable = cableByUidMerge.get(item.uniqueId);
         if (existingCable) {
             var routeMerged = buildCableRoutePointsFromData(refs, item, fromObj, toObj, coords);
             var pointsArr = routeMerged;
@@ -1703,6 +1774,7 @@ function applyRemoteStateMerged(data) {
             applySerializedCopperMetadataToCable(existingCable, item);
             applyImportedCableFiberProps(existingCable, item);
         } else {
+            var lenBeforeMergeAdd = objects.length;
             var points = buildCableRoutePointsFromData(refs, item, fromObj, toObj, coords);
             if (!points || points.length < 2) {
                 points = (coords && coords.length >= 2) ? findObjectsAtGeometry(refs, item.geometry) : null;
@@ -1714,9 +1786,15 @@ function applyRemoteStateMerged(data) {
             } else {
                 addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true, true, itemCuMetaMerge);
             }
-            var cable = objects.find(function(o) {
-                return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId;
-            });
+            var cable = null;
+            for (var nci = lenBeforeMergeAdd; nci < objects.length; nci++) {
+                var nco = objects[nci];
+                if (nco && nco.properties && nco.properties.get('type') === 'cable' && nco.properties.get('uniqueId') === item.uniqueId) {
+                    cable = nco;
+                    break;
+                }
+            }
+            if (cable && !cableByUidMerge.has(item.uniqueId)) cableByUidMerge.set(item.uniqueId, cable);
             if (cable) {
                 var ptNew = cable.properties.get('points');
                 if (Array.isArray(ptNew) && ptNew.length >= 2) {
@@ -1758,10 +1836,14 @@ function applyRemoteStateMerged(data) {
     }
 
     setTimeout(function() {
+        var cableByUidLater = new Map();
+        objects.forEach(function(o) {
+            if (!o.properties || o.properties.get('type') !== 'cable') return;
+            var lu = o.properties.get('uniqueId');
+            if (!cableByUidLater.has(lu)) cableByUidLater.set(lu, o);
+        });
         incomingCables.forEach(function(item) {
-            var cable = objects.find(function(o) {
-                return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId;
-            });
+            var cable = cableByUidLater.get(item.uniqueId);
             if (!cable || !cable.geometry) return;
             var pts = cable.properties.get('points');
             var ugItem = item.undergroundSpans;
@@ -1790,7 +1872,8 @@ function applyRemoteStateMerged(data) {
         lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
     }, 0);
 
-    selectedObjects = selectedObjects.filter(function(o) { return objects.indexOf(o) !== -1; });
+    var objectsSetAfterMerge = selectedObjects.length ? new Set(objects) : null;
+    selectedObjects = selectedObjects.filter(function(o) { return objectsSetAfterMerge.has(o); });
     selectedObjects.forEach(function(o) {
         var pulse = o.properties && o.properties.get('selectionPulse');
         if (!pulse && o.geometry) updateSelectionPulsePosition(o);
@@ -1822,7 +1905,7 @@ function refreshRemoteObjectVisuals(obj) {
     var label = obj.properties.get('label');
     if (label) {
         try {
-            if (myMap.geoObjects.indexOf(label) === -1) myMap.geoObjects.add(label);
+            if (!isGeoObjectOnMap(label)) myMap.geoObjects.add(label);
         } catch (e) {}
     }
     var lockUid = typeof getObjectUniqueId === 'function' ? getObjectUniqueId(obj) : null;
@@ -1836,10 +1919,6 @@ function refreshRemoteObjectVisuals(obj) {
 
 function applyOperationToMap(op) {
     if (!op || !op.type) return;
-    var objCount = 0;
-    objects.forEach(function(o) {
-        if (o.properties && o.properties.get('type') !== 'cable' && o.properties.get('type') !== 'cableLabel') objCount++;
-    });
     if (op.type === 'add_object' && op.data) {
         var addUid = op.data.uniqueId;
         if (addUid != null && addUid !== '') {
@@ -1861,6 +1940,10 @@ function applyOperationToMap(op) {
         }
         var newObj = createObjectFromData(op.data, { skipAddToObjects: true });
         if (!newObj) return;
+        var objCount = 0;
+        objects.forEach(function(o) {
+            if (o.properties && o.properties.get('type') !== 'cable' && o.properties.get('type') !== 'cableLabel') objCount++;
+        });
         objects.splice(objCount, 0, newObj);
         mapPerfRegister(newObj);
         if (newObj.properties.get('type') !== 'cross' && newObj.properties.get('type') !== 'node') mapGeoAdd(newObj);
@@ -1991,9 +2074,14 @@ function applyOperationToMap(op) {
 window.applyOperationToMap = applyOperationToMap;
 
 function ensureNodeLabelsVisible() {
-    var zoom = (myMap && typeof myMap.getZoom === 'function') ? myMap.getZoom() : 16;
-    var thr = (typeof getLodThresholds === 'function') ? getLodThresholds() : { labels: 16 };
-    var hideLabels = typeof zoom === 'number' && zoom < thr.labels;
+    var hideLabels;
+    if (typeof getExpertZoomFlags === 'function') {
+        hideLabels = !!getExpertZoomFlags().hideLabels;
+    } else {
+        var zoom = (myMap && typeof myMap.getZoom === 'function') ? myMap.getZoom() : 16;
+        var thr = (typeof getLodThresholds === 'function') ? getLodThresholds() : { labels: 16 };
+        hideLabels = typeof zoom === 'number' && zoom < thr.labels;
+    }
     objects.forEach(obj => {
         if (obj.properties) {
             const type = obj.properties.get('type');
@@ -2004,7 +2092,7 @@ function ensureNodeLabelsVisible() {
             if (label && !hideLabels) {
                 if (type === 'cross' || type === 'node') {
                     try {
-                        if (myMap.geoObjects.indexOf(obj) !== -1 && myMap.geoObjects.indexOf(label) === -1) {
+                        if (isGeoObjectOnMap(obj) && !isGeoObjectOnMap(label)) {
                             myMap.geoObjects.add(label);
                         }
                     } catch (eCn) {}
@@ -2101,7 +2189,7 @@ function importDataRunOneCable(item, objectRefs, refIndex, cableByUid) {
 
     var itemCuMeta = copperSerializedMetaFromItem(item);
     var existingCableImport = (item.uniqueId != null && cableByUid[item.uniqueId]) || null;
-    if (!existingCableImport && item.uniqueId != null) {
+    if (!existingCableImport && item.uniqueId != null && !refIndex.cablesPrefilled) {
         existingCableImport = objects.find(function(o) {
             return o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === item.uniqueId;
         }) || null;
@@ -2134,6 +2222,7 @@ function importDataRunOneCable(item, objectRefs, refIndex, cableByUid) {
         applyImportedCableFiberProps(existingCableImport, item);
         return;
     }
+    var objectsLenBeforeAdd = objects.length;
     var routePts = buildCableRoutePointsFromData(refsOnly, item, fromObj, toObj, coords);
     if (routePts && routePts.length >= 2) {
         addCable(routePts[0], routePts, item.cableType, item.uniqueId, undefined, true, true, itemCuMeta);
@@ -2147,11 +2236,20 @@ function importDataRunOneCable(item, objectRefs, refIndex, cableByUid) {
             addCable(fromObj, toObj, item.cableType, item.uniqueId, undefined, true, true, itemCuMeta);
         }
     }
-    var cable = (item.uniqueId != null && cableByUid[item.uniqueId]) || objects.find(function(obj) {
-        return obj.properties &&
-            obj.properties.get('type') === 'cable' &&
-            obj.properties.get('uniqueId') === item.uniqueId;
-    });
+    var cable = (item.uniqueId != null && cableByUid[item.uniqueId]) || null;
+    if (!cable) {
+        // Существующих кабелей с этим uid нет (проверено выше) — новый кабель addCable дописал в конец objects.
+        var scanFrom = refIndex.cablesPrefilled ? objectsLenBeforeAdd : 0;
+        for (var ci = scanFrom; ci < objects.length; ci++) {
+            var cObj = objects[ci];
+            if (cObj && cObj.properties &&
+                cObj.properties.get('type') === 'cable' &&
+                cObj.properties.get('uniqueId') === item.uniqueId) {
+                cable = cObj;
+                break;
+            }
+        }
+    }
     if (cable) {
         if (item.uniqueId != null) cableByUid[item.uniqueId] = cable;
         var ptList = cable.properties.get('points');
@@ -2178,6 +2276,15 @@ function importDataRunOneCable(item, objectRefs, refIndex, cableByUid) {
 function importDataRunCables(data, objectRefs, onDone) {
     var refIndex = buildImportRefIndex(objectRefs);
     var cableByUid = Object.create(null);
+    if (Array.isArray(objects)) {
+        for (var eci = 0; eci < objects.length; eci++) {
+            var eo = objects[eci];
+            if (!eo || !eo.properties || eo.properties.get('type') !== 'cable') continue;
+            var eUid = eo.properties.get('uniqueId');
+            if (eUid != null && !(eUid in cableByUid)) cableByUid[eUid] = eo;
+        }
+        refIndex.cablesPrefilled = true;
+    }
     var cableItems = [];
     if (Array.isArray(data)) {
         for (var di = 0; di < data.length; di++) {
@@ -2200,10 +2307,13 @@ function importDataRunCables(data, objectRefs, onDone) {
     }
     var cableIdx = 0;
     var cableBatchSize = typeof MAP_BULK_IMPORT_CABLE_BATCH_SIZE === 'number' ? MAP_BULK_IMPORT_CABLE_BATCH_SIZE : 40;
+    var cableStepBudgetMs = typeof MAP_BULK_IMPORT_STEP_BUDGET_MS === 'number' ? MAP_BULK_IMPORT_STEP_BUDGET_MS : 16;
     function importCableBatch() {
         try {
-            var end = Math.min(cableIdx + cableBatchSize, cableItems.length);
-            for (; cableIdx < end; cableIdx++) {
+            var stepStart = mapImportNow();
+            var minEnd = Math.min(cableIdx + cableBatchSize, cableItems.length);
+            for (; cableIdx < cableItems.length; cableIdx++) {
+                if (cableIdx >= minEnd && (cableIdx & 7) === 0 && mapImportNow() - stepStart >= cableStepBudgetMs) break;
                 importDataRunOneCable(cableItems[cableIdx], objectRefs, refIndex, cableByUid);
             }
         } catch (batchCableErr) {
@@ -2214,12 +2324,12 @@ function importDataRunCables(data, objectRefs, onDone) {
             setMapLoadingOverlayText('Прокладка кабелей… ' + cableIdx + ' / ' + cableItems.length);
         }
         if (cableIdx < cableItems.length) {
-            requestAnimationFrame(importCableBatch);
+            scheduleMapImportStep(importCableBatch);
             return;
         }
         if (typeof onDone === 'function') onDone();
     }
-    requestAnimationFrame(importCableBatch);
+    scheduleMapImportStep(importCableBatch);
 }
 
 function importDataPostProcess(opts, onDone) {
@@ -2314,7 +2424,10 @@ function importDataPostProcess(opts, onDone) {
                 }
             },
             function() {
-                if (typeof updateCabinetDisplay === 'function') updateCabinetDisplay();
+                // Состав ящиков синхронизирован в шаге 1; кроссы/узлы, фильтр и линии — отдельными шагами.
+                if (typeof updateCabinetDisplay === 'function') {
+                    updateCabinetDisplay({ skipMemberSync: true, skipDependents: true });
+                }
             },
             function() {
                 migrateStandaloneSwitchesIntoNodes();
@@ -2372,16 +2485,38 @@ function importDataPostProcess(opts, onDone) {
                 }, 0);
             }
         ];
+        var postStepNames = [
+            'кабели и ящики', 'визуализация кабелей', 'кроссы', 'узлы', 'ящики',
+            'миграции свитчей', 'порты и регионы', 'регионы на фон', 'подписи регионов',
+            'z-index кабелей', 'фильтр', 'линии связей'
+        ];
+        var stepTimings = [];
+        var postStart = mapImportNow();
+        var baseText = opts && opts.bulkImport ? 'Финализация импорта…' : 'Подготовка карты…';
         var stepIdx = 0;
         function runPostStep() {
             if (stepIdx >= postSteps.length) {
+                window.__mapLoadSteps = stepTimings;
+                try {
+                    console.info('[MapLoad] подготовка карты: ' + Math.round(mapImportNow() - postStart) + ' мс', stepTimings);
+                } catch (eLog) {}
                 finish();
                 return;
             }
-            postSteps[stepIdx++]();
-            requestAnimationFrame(runPostStep);
+            var idx = stepIdx++;
+            var t0 = mapImportNow();
+            try {
+                postSteps[idx]();
+            } catch (eStep) {
+                try { console.error('[MapLoad] шаг «' + postStepNames[idx] + '»', eStep); } catch (eLog2) {}
+            }
+            stepTimings.push({ name: postStepNames[idx] || ('шаг ' + (idx + 1)), ms: Math.round(mapImportNow() - t0) });
+            if (typeof setMapLoadingOverlayText === 'function') {
+                setMapLoadingOverlayText(baseText + ' (' + Math.min(stepIdx + 1, postSteps.length) + '/' + postSteps.length + ')');
+            }
+            scheduleMapImportStep(runPostStep);
         }
-        requestAnimationFrame(runPostStep);
+        scheduleMapImportStep(runPostStep);
         return;
     }
     if (opts && opts.undoRedo) requestAnimationFrame(work);
@@ -2430,10 +2565,13 @@ function importData(data, opts, done) {
         var placemarkTotal = 0;
         data.forEach(function(it) { if (it && it.type !== 'cable' && it.type !== 'cableLabel') placemarkTotal++; });
 
+        var stepBudgetMs = undoRedo ? MAP_UNDO_REDO_STEP_BUDGET_MS : MAP_BULK_IMPORT_STEP_BUDGET_MS;
         function importPlacemarkBatch() {
             try {
-                var end = Math.min(idx + importBatchSize, data.length);
-                for (; idx < end; idx++) {
+                var stepStart = mapImportNow();
+                var minEnd = Math.min(idx + importBatchSize, data.length);
+                for (; idx < data.length; idx++) {
+                    if (idx >= minEnd && (idx & 15) === 0 && mapImportNow() - stepStart >= stepBudgetMs) break;
                     var item = data[idx];
                     if (!item) continue;
                     if (item.type === 'cable' || item.type === 'cableLabel') {
@@ -2456,13 +2594,13 @@ function importData(data, opts, done) {
                 setMapLoadingOverlayText(progressText);
             }
             if (idx < data.length) {
-                requestAnimationFrame(importPlacemarkBatch);
+                scheduleMapImportStep(importPlacemarkBatch);
                 return;
             }
             if (typeof setMapLoadingOverlayText === 'function') {
                 setMapLoadingOverlayText(undoRedo ? 'Восстановление кабелей…' : 'Прокладка кабелей…');
             }
-            requestAnimationFrame(function() {
+            scheduleMapImportStep(function() {
                 importDataRunCables(data, objectRefs, function(err) {
                     if (err) {
                         failImport(err);
@@ -2472,7 +2610,7 @@ function importData(data, opts, done) {
                 });
             });
         }
-        requestAnimationFrame(importPlacemarkBatch);
+        scheduleMapImportStep(importPlacemarkBatch);
         return;
     }
 
@@ -3755,7 +3893,7 @@ function ensurePdfPlacemarkOnMap(obj) {
                 hideRegions: false
             });
         }
-        if (myMap.geoObjects.indexOf(obj) === -1) {
+        if (!isGeoObjectOnMap(obj)) {
             myMap.geoObjects.add(obj);
         }
         if (obj.options) obj.options.set('visible', true);
@@ -3766,7 +3904,7 @@ function ensurePdfPlacemarkOnMap(obj) {
                     label.geometry.setCoordinates(obj.geometry.getCoordinates());
                 }
             } catch (eCoords) {}
-            if (myMap.geoObjects.indexOf(label) === -1) myMap.geoObjects.add(label);
+            if (!isGeoObjectOnMap(label)) myMap.geoObjects.add(label);
             if (label.options) label.options.set('visible', true);
         }
     } catch (eMount) {}
@@ -4163,11 +4301,11 @@ function prepareMapVisibilityForPdfCapture(boundsRect, opts) {
             }
             if (!showAll && !isLiveObjectInPdfBounds(pm, boundsRect)) return;
             try {
-                if (myMap && myMap.geoObjects.indexOf(pm) === -1) myMap.geoObjects.add(pm);
+                if (myMap && !isGeoObjectOnMap(pm)) myMap.geoObjects.add(pm);
                 pm.options.set('visible', true);
                 var lbl = pm.properties && pm.properties.get('crossGroupLabel');
                 if (lbl) {
-                    if (myMap && myMap.geoObjects.indexOf(lbl) === -1) myMap.geoObjects.add(lbl);
+                    if (myMap && !isGeoObjectOnMap(lbl)) myMap.geoObjects.add(lbl);
                     if (lbl.options) lbl.options.set('visible', true);
                 }
             } catch (eCross) {}
@@ -4186,11 +4324,11 @@ function prepareMapVisibilityForPdfCapture(boundsRect, opts) {
             }
             if (!showAll && !isLiveObjectInPdfBounds(pm, boundsRect)) return;
             try {
-                if (myMap && myMap.geoObjects.indexOf(pm) === -1) myMap.geoObjects.add(pm);
+                if (myMap && !isGeoObjectOnMap(pm)) myMap.geoObjects.add(pm);
                 pm.options.set('visible', true);
                 var lbl = pm.properties && pm.properties.get('nodeGroupLabel');
                 if (lbl) {
-                    if (myMap && myMap.geoObjects.indexOf(lbl) === -1) myMap.geoObjects.add(lbl);
+                    if (myMap && !isGeoObjectOnMap(lbl)) myMap.geoObjects.add(lbl);
                     if (lbl.options) lbl.options.set('visible', true);
                 }
             } catch (eNode) {}

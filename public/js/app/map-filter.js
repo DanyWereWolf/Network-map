@@ -391,7 +391,7 @@ function applyExpertZoomVisibility() {
                 var type = obj.properties.get('type');
                 if (type !== 'cross' && type !== 'node') return;
                 try {
-                    if (myMap.geoObjects.indexOf(obj) !== -1) obj.options.set('visible', false);
+                    if (isGeoObjectOnMap(obj)) obj.options.set('visible', false);
                 } catch (eCn) {}
             });
         } else {
@@ -444,10 +444,21 @@ function applyExpertZoomVisibility() {
 function getExpertZoomFlags() {
     var zoom = (myMap && typeof myMap.getZoom === 'function') ? myMap.getZoom() : 16;
     var thr = getLodThresholds();
+    var hideObjects = typeof zoom === 'number' && zoom < thr.objects;
+    var hideLabels = typeof zoom === 'number' && zoom < thr.labels;
+    var labelsByDensity = false;
+    // Тысячи HTML-подписей в окне карты убивают FPS: при превышении лимита показываем только иконки.
+    if (!hideLabels && !hideObjects && !window._mapPdfExportCaptureActive &&
+        typeof MapPerf !== 'undefined' && MapPerf.isLabelDensityExceeded &&
+        MapPerf.shouldUseVirtualization && MapPerf.shouldUseVirtualization()) {
+        labelsByDensity = MapPerf.isLabelDensityExceeded(myMap);
+        hideLabels = labelsByDensity;
+    }
     return {
         zoom: zoom,
-        hideLabels: typeof zoom === 'number' && zoom < thr.labels,
-        hideObjects: typeof zoom === 'number' && zoom < thr.objects
+        hideLabels: hideLabels,
+        hideObjects: hideObjects,
+        labelsHiddenByDensity: labelsByDensity
     };
 }
 
@@ -462,7 +473,7 @@ function applyGroupPlacemarkFilterVisibility(filter, zoomFlags) {
         if (lbl) {
             var lblVisible = v && !hideLabels;
             try {
-                if (lblVisible && myMap && myMap.geoObjects.indexOf(lbl) === -1) myMap.geoObjects.add(lbl);
+                if (lblVisible && myMap && !isGeoObjectOnMap(lbl)) myMap.geoObjects.add(lbl);
                 if (lbl.options) lbl.options.set('visible', lblVisible);
             } catch (eLbl) {}
         }
@@ -478,7 +489,7 @@ function applyGroupPlacemarkFilterVisibility(filter, zoomFlags) {
         if (lbl) {
             var nodeLblVisible = visible && !hideLabels;
             try {
-                if (nodeLblVisible && myMap && myMap.geoObjects.indexOf(lbl) === -1) myMap.geoObjects.add(lbl);
+                if (nodeLblVisible && myMap && !isGeoObjectOnMap(lbl)) myMap.geoObjects.add(lbl);
                 if (lbl.options) lbl.options.set('visible', nodeLblVisible);
             } catch (eLbl) {}
         }
@@ -498,14 +509,14 @@ function applyCrossNodeLabelVisibility(filter, zoomFlags) {
         var label = obj.properties.get('label');
         if (!label) return;
         var onMap = false;
-        try { onMap = myMap.geoObjects.indexOf(obj) !== -1; } catch (e) { onMap = false; }
+        try { onMap = isGeoObjectOnMap(obj); } catch (e) { onMap = false; }
         if (!onMap) return;
         var filterVisible = obj.properties.get('_mapFilterVisible');
         var showLabel = filterVisible !== false && !hideLabels;
         if (type === 'cross') showLabel = showLabel && showCross;
         if (type === 'node') showLabel = showLabel && showNode;
         try {
-            if (showLabel && myMap.geoObjects.indexOf(label) === -1) myMap.geoObjects.add(label);
+            if (showLabel && !isGeoObjectOnMap(label)) myMap.geoObjects.add(label);
             if (label.options) label.options.set('visible', showLabel);
         } catch (e2) {}
     });
@@ -567,7 +578,7 @@ function restoreExternallyManagedObjectVisibility(filter, zoomFlags) {
         var type = obj.properties.get('type');
         if (type !== 'cross' && type !== 'node') return;
         try {
-            if (myMap.geoObjects.indexOf(obj) === -1) return;
+            if (!isGeoObjectOnMap(obj)) return;
         } catch (eIdx) { return; }
         var show = obj.properties.get('_mapFilterVisible') !== false;
         if (type === 'cross' && filter.cross === false) show = false;
@@ -725,7 +736,7 @@ function ensureObjectLabelOnMap(obj) {
     } catch (eCoords) {}
     try {
         if (!hideLabels) {
-            if (myMap.geoObjects.indexOf(label) === -1) myMap.geoObjects.add(label);
+            if (!isGeoObjectOnMap(label)) myMap.geoObjects.add(label);
             if (label.options) label.options.set('visible', true);
         } else if (label.options) {
             label.options.set('visible', false);
