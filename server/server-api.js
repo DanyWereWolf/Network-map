@@ -646,9 +646,12 @@ app.post('/api/import/ned', express.raw({ type: '*/*', limit: '120mb' }), async 
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
     if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
-    if (!nedImport.converterAvailable()) {
+    try {
+        await nedImport.ensureConverterReady();
+    } catch (e) {
+        console.error('[ned-import]', e && e.message ? e.message : e);
         return res.status(503).json({
-            error: 'Конвертер NeD не собран. Выполните: dotnet build tools/ned-import/NedToNetworkMap -c Release'
+            error: 'Не удалось подготовить конвертер NeD: ' + String(e && e.message ? e.message : e)
         });
     }
     try {
@@ -4870,6 +4873,7 @@ db.initStorage().then(function () {
         }
         if (db.createDailyBackup) console.log('Резервные копии: ежедневно в data/backups/, хранятся 30 дней.');
         logServerConfigWarnings();
+        nedImport.prepareInBackground();
         if (mail.isMailConfigured(serverConfig) && mail.verifySmtp) {
             mail.verifySmtp(serverConfig).then(function(result) {
                 if (result.ok) {

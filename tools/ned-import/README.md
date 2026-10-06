@@ -4,16 +4,20 @@
 
 ## Сборка
 
-Нужен [.NET SDK](https://dotnet.microsoft.com/) 9/10:
+Собранный конвертер хранится в репозитории: `tools/ned-import/dist`. После правок в исходниках
+пересоберите его ([.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)) и закоммитьте `dist`:
 
 ```bash
-dotnet build tools/ned-import/NedToNetworkMap -c Release
+npm run ned:build
 ```
+
+Для запуска нужен только .NET Runtime 10. Если на машине с сервером его нет, `server-api`
+при старте сам скачивает runtime (~37 МБ) в `tools/.dotnet`; права администратора не нужны.
 
 ## CLI
 
 ```bash
-dotnet tools/ned-import/NedToNetworkMap/bin/Release/net10.0/NedToNetworkMap.dll "путь\к\проекту.ned" out.json
+dotnet tools/ned-import/dist/NedToNetworkMap.dll "путь\к\проекту.ned" out.json
 ```
 
 Или через npm:
@@ -26,13 +30,13 @@ npm run ned:convert -- "путь\к\проекту.ned" tools/ned-import/out.jso
 
 ## Импорт из UI
 
-После сборки конвертера API принимает `.ned` напрямую:
+API принимает `.ned` напрямую:
 
 1. Войти как администратор организации
 2. **Файлы → Импорт** → выбрать `.ned`
 3. Сервер вызывает конвертер (`POST /api/import/ned`) и подставляет JSON в карту
 
-Требуется `dotnet` в PATH на машине, где крутится `server-api`.
+.NET Runtime 10 ищется в `tools/.dotnet` и в PATH; если его нет, он скачивается автоматически.
 
 ## Что переносится
 

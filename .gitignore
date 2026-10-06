@@ -28,6 +28,8 @@ tools/ned-import/_probe/
 tools/ned-import/out*.json
 tools/ned-import/NedToNetworkMap/bin/
 tools/ned-import/NedToNetworkMap/obj/
+!tools/ned-import/dist/
+tools/.dotnet/
 
 # База данных (локальная)
 data/
