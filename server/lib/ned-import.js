@@ -9,20 +9,33 @@
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const https = require('https');
 const { spawn, spawnSync } = require('child_process');
-const { Readable, Transform } = require('stream');
+const { Transform } = require('stream');
 const { pipeline } = require('stream/promises');
 
 const ROOT_DIR = path.join(__dirname, '..', '..');
 const PROJECT_DIR = path.join(ROOT_DIR, 'tools', 'ned-import', 'NedToNetworkMap');
 const DIST_DLL = path.join(ROOT_DIR, 'tools', 'ned-import', 'dist', 'NedToNetworkMap.dll');
 const BIN_DLL = path.join(PROJECT_DIR, 'bin', 'Release', 'net10.0', 'NedToNetworkMap.dll');
-const LOCAL_DOTNET_DIR = path.join(ROOT_DIR, 'tools', '.dotnet');
+const LOCAL_DOTNET_DIR = pickLocalDotnetDir();
 const IS_WIN = process.platform === 'win32';
 const LOCAL_DOTNET_EXE = path.join(LOCAL_DOTNET_DIR, IS_WIN ? 'dotnet.exe' : 'dotnet');
 const REQUIRED_MAJOR = 10;
 
 let readyPromise = null;
+
+/** tools/.dotnet, а если папка проекта недоступна на запись — домашняя папка пользователя сервера. */
+function pickLocalDotnetDir() {
+    const inRepo = path.join(ROOT_DIR, 'tools', '.dotnet');
+    if (fs.existsSync(inRepo)) return inRepo;
+    try {
+        fs.accessSync(path.join(ROOT_DIR, 'tools'), fs.constants.W_OK);
+        return inRepo;
+    } catch (_) {
+        return path.join(os.homedir(), '.network-map', 'dotnet');
+    }
+}
 
 function dotnetEnv(exe) {
     const env = Object.assign({}, process.env, {
@@ -90,10 +103,36 @@ function runtimeArchiveUrl() {
         (IS_WIN ? '.zip' : '.tar.gz');
 }
 
+function httpGet(url, redirectsLeft) {
+    return new Promise(function(resolve, reject) {
+        const req = https.get(url, function(res) {
+            const code = res.statusCode || 0;
+            if (code >= 300 && code < 400 && res.headers.location) {
+                res.resume();
+                if (redirectsLeft <= 0) {
+                    reject(new Error('Слишком много перенаправлений при загрузке .NET Runtime'));
+                    return;
+                }
+                resolve(httpGet(new URL(res.headers.location, url).toString(), redirectsLeft - 1));
+                return;
+            }
+            if (code !== 200) {
+                res.resume();
+                reject(new Error('Не удалось скачать .NET Runtime (HTTP ' + code + ')'));
+                return;
+            }
+            resolve(res);
+        });
+        req.setTimeout(60000, function() {
+            req.destroy(new Error('Нет ответа от сервера загрузки .NET Runtime'));
+        });
+        req.on('error', reject);
+    });
+}
+
 async function downloadWithProgress(url, dest) {
-    const res = await fetch(url, { redirect: 'follow' });
-    if (!res.ok || !res.body) throw new Error('Не удалось скачать .NET Runtime (HTTP ' + res.status + ')');
-    const total = Number(res.headers.get('content-length')) || 0;
+    const res = await httpGet(url, 10);
+    const total = Number(res.headers['content-length']) || 0;
     let received = 0;
     let lastStep = -1;
     const progress = new Transform({
@@ -110,7 +149,7 @@ async function downloadWithProgress(url, dest) {
             cb(null, chunk);
         }
     });
-    await pipeline(Readable.fromWeb(res.body), progress, fs.createWriteStream(dest));
+    await pipeline(res, progress, fs.createWriteStream(dest));
 }
 
 async function extractArchive(archive, destDir) {
