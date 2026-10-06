@@ -44,13 +44,13 @@
             if (closeBtn) {
                 closeBtn.addEventListener('click', function() {
                     if (activeOptions && activeOptions.allowCloseButton === false) return;
-                    hide(true);
+                    hide(true, true);
                 });
             }
             modal.addEventListener('click', function(e) {
                 if (e.target !== modal) return;
                 if (activeOptions && activeOptions.closeOnBackdrop === false) return;
-                hide(true);
+                hide(true, true);
             });
         }
         return modal;
@@ -61,7 +61,8 @@
         return !!(m && m.style.display && m.style.display !== 'none');
     }
 
-    function hide(cancelled) {
+    /** dismissed — закрыто крестиком / Esc / кликом по фону (а не кнопкой «Отмена»). */
+    function hide(cancelled, dismissed) {
         detachEscapeBlock();
         if (escapeHandler) {
             document.removeEventListener('keydown', escapeHandler);
@@ -72,11 +73,16 @@
             m.style.display = 'none';
             m.classList.remove('confirm-modal--open');
         }
+        var opts = activeOptions;
         activeOptions = null;
         if (resolveFn) {
             var r = resolveFn;
             resolveFn = null;
-            r(!cancelled);
+            if (dismissed && opts && Object.prototype.hasOwnProperty.call(opts, 'dismissValue')) {
+                r(opts.dismissValue);
+            } else {
+                r(!cancelled);
+            }
         }
     }
 
@@ -118,7 +124,7 @@
         var closeOnEscape = options.closeOnEscape !== false;
         if (closeOnEscape) {
             escapeHandler = function(e) {
-                if (e.key === 'Escape') hide(true);
+                if (e.key === 'Escape') hide(true, true);
             };
             document.addEventListener('keydown', escapeHandler);
         } else {
@@ -134,6 +140,6 @@
     window.isConfirmModalOpen = isConfirmOpen;
     window.isConfirmModalBlockingEscape = isEscapeBlockActive;
     window.cancelConfirmModal = function() {
-        if (isConfirmOpen()) hide(true);
+        if (isConfirmOpen()) hide(true, true);
     };
 })();

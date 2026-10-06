@@ -827,6 +827,8 @@ function updateUndoRedoButtons() {
 
 function applyMapStartFromSettings(mapStart, force) {
     if (!mapStart || !Array.isArray(mapStart.center) || mapStart.center.length < 2) return false;
+    // После импорта NeD по координатам карта открыта на новых объектах — не уводим её на начальную точку.
+    if (window._mapFocusOnceActive) return false;
     if (!force && window._mapStartApplied) return false;
     if (typeof myMap === 'undefined' || !myMap) {
         window._pendingMapStart = mapStart;

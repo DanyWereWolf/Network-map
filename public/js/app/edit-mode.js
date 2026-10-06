@@ -133,6 +133,39 @@ function remapImportUniqueIds(data) {
     return data;
 }
 
+var MAP_FOCUS_ONCE_KEY = 'volsmap.mapFocusOnce';
+
+/**
+ * Охват координат импорта: центр и границы по 2–98 перцентилям (без выбросов).
+ * null, если координаты не похожи на реальные WGS84.
+ */
+function getImportGeoExtent(data) {
+    if (!Array.isArray(data)) return null;
+    var lats = [], lons = [];
+    function walk(geom) {
+        if (!Array.isArray(geom) || geom.length === 0) return;
+        if (typeof geom[0] === 'number') {
+            var lat = Number(geom[0]), lon = Number(geom[1]);
+            if (isFinite(lat) && isFinite(lon)) { lats.push(lat); lons.push(lon); }
+            return;
+        }
+        for (var i = 0; i < geom.length; i++) walk(geom[i]);
+    }
+    data.forEach(function(item) { if (item) walk(item.geometry); });
+    if (lats.length === 0) return null;
+    lats.sort(function(a, b) { return a - b; });
+    lons.sort(function(a, b) { return a - b; });
+    function q(arr, p) { return arr[Math.min(arr.length - 1, Math.floor(arr.length * p))]; }
+    var south = q(lats, 0.02), north = q(lats, 0.98), west = q(lons, 0.02), east = q(lons, 0.98);
+    if (south < -85 || north > 85 || west < -180 || east > 180) return null;
+    if (Math.abs(q(lats, 0.5)) < 0.5 && Math.abs(q(lons, 0.5)) < 0.5) return null;
+    if (north - south > 5 || east - west > 5) return null;
+    return {
+        center: [(south + north) / 2, (west + east) / 2],
+        bounds: [[south, west], [north, east]]
+    };
+}
+
 /** Сдвинуть все geometry так, чтобы центроид совпал с targetCenter [lat, lon]. */
 function shiftMapDataToCenter(data, targetCenter) {
     if (!Array.isArray(data) || !targetCenter || targetCenter.length < 2) return data;
@@ -327,25 +360,49 @@ function handleFileImport(e) {
                 showError('Конвертер NeD не вернул объектов.', 'Импорт NeD');
                 return;
             }
-            if (!(await showConfirm(
-                'Вставить ' + data.length + ' объектов в центр текущего вида карты? Существующие объекты не будут удалены.',
-                'Импорт NeD',
-                { confirmText: 'Вставить' }
-            ))) {
-                return;
+            var extent = getImportGeoExtent(data);
+            var useOriginalCoords;
+            if (extent) {
+                var choice = await showConfirm(
+                    'Вставить ' + data.length + ' объектов? Существующие объекты не будут удалены.\n\n' +
+                    'По координатам NeD — объекты встанут на свои реальные места (центр: ' +
+                    extent.center[0].toFixed(4) + ', ' + extent.center[1].toFixed(4) + ').\n' +
+                    'В центр вида — вся схема будет перенесена в центр текущего вида карты.',
+                    'Импорт NeD',
+                    { confirmText: 'По координатам NeD', cancelText: 'В центр вида', dismissValue: null, avatarEmotion: 'question' }
+                );
+                if (choice === null) return;
+                useOriginalCoords = choice === true;
+            } else {
+                if (!(await showConfirm(
+                    'В файле нет географических координат, поэтому ' + data.length +
+                    ' объектов будут вставлены в центр текущего вида карты. Существующие объекты не будут удалены.',
+                    'Импорт NeD',
+                    { confirmText: 'Вставить' }
+                ))) {
+                    return;
+                }
+                useOriginalCoords = false;
             }
-            if (typeof myMap === 'undefined' || !myMap || typeof myMap.getCenter !== 'function') {
+            if (!useOriginalCoords && (typeof myMap === 'undefined' || !myMap || typeof myMap.getCenter !== 'function')) {
                 throw new Error('Карта не готова. Откройте карту и повторите импорт.');
             }
             remapImportUniqueIds(data);
-            shiftMapDataToCenter(data, myMap.getCenter());
+            if (useOriginalCoords) {
+                try {
+                    sessionStorage.setItem(MAP_FOCUS_ONCE_KEY, JSON.stringify({ bounds: extent.bounds }));
+                } catch (eStore) { /* без фокуса карта откроется на начальной точке */ }
+            } else {
+                shiftMapDataToCenter(data, myMap.getCenter());
+            }
             await runImportData(
                 data,
                 { merge: true },
-                'NeD вставлено: ' + data.length + ' объектов (центр вида)',
+                'NeD вставлено: ' + data.length + ' объектов' + (useOriginalCoords ? ' (по координатам NeD)' : ' (центр вида)'),
                 'ned'
             );
         } catch (error) {
+            try { sessionStorage.removeItem(MAP_FOCUS_ONCE_KEY); } catch (eClear) { /* ignore */ }
             console.error('Ошибка импорта NeD:', error);
             showError(
                 error && error.message ? error.message : 'Не удалось импортировать .ned',

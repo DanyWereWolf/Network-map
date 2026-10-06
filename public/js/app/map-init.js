@@ -8,6 +8,11 @@ function init() {
         initialCenter = window._pendingMapStart.center;
         initialZoom = window._pendingMapStart.zoom || 16;
     }
+    var focusOnce = null;
+    try {
+        focusOnce = JSON.parse(sessionStorage.getItem('volsmap.mapFocusOnce') || 'null');
+        sessionStorage.removeItem('volsmap.mapFocusOnce');
+    } catch (eFocus) { focusOnce = null; }
     myMap = new ymaps.Map('map', {
         center: initialCenter,
         zoom: initialZoom,
@@ -16,6 +21,12 @@ function init() {
     if (window._pendingMapStart) {
         window._mapStartApplied = true;
         window._pendingMapStart = null;
+    }
+    if (focusOnce && Array.isArray(focusOnce.bounds) && focusOnce.bounds.length === 2) {
+        try {
+            myMap.setBounds(focusOnce.bounds, { checkZoomRange: true, zoomMargin: 40 });
+            window._mapFocusOnceActive = true;
+        } catch (eBounds) { /* остаётся начальная точка */ }
     }
     
     try { myMap.controls.remove('searchControl'); } catch (e) {}
