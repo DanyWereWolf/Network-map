@@ -60,22 +60,22 @@ const PHASES = {
             },
             {
                 file: 'public/js/app/fiber-modal-handlers.js',
-                header: '/**\n * Обработчики сращивания жил в модалке кросса/муфты.\n */\n',
+                header: '/**\n * Обработчики сращивания волокон в модалке кросса/муфты.\n */\n',
                 ranges: [[5116, 6421]]
             },
             {
                 file: 'public/js/app/fiber-labels.js',
-                header: '/**\n * Подписи жил и сращиваний на схеме.\n */\n',
+                header: '/**\n * Подписи волокон и сращиваний на схеме.\n */\n',
                 ranges: [[6423, 7051]]
             },
             {
                 file: 'public/js/app/fiber-trace.js',
-                header: '/**\n * Трассировка жил и модальное окно трассировки.\n */\n',
+                header: '/**\n * Трассировка волокон и модальное окно трассировки.\n */\n',
                 ranges: [[7084, 8973]]
             },
             {
                 file: 'public/js/app/fiber-routing-modals.js',
-                header: '/**\n * Модалки назначения жил: узел, ONU, сплиттер, GPON-маршрут.\n */\n',
+                header: '/**\n * Модалки назначения волокон: узел, ONU, сплиттер, GPON-маршрут.\n */\n',
                 ranges: [[8975, 9813]]
             }
         ],
@@ -98,12 +98,12 @@ const PHASES = {
             },
             {
                 file: 'public/js/app/fiber-routing-map.js',
-                header: '/**\n * Прокладка GPON-жил и сплиттер-маршрутов по карте.\n */\n',
+                header: '/**\n * Прокладка GPON-волокон и сплиттер-маршрутов по карте.\n */\n',
                 ranges: [[105, 395]]
             },
             {
                 file: 'public/js/app/gpon-connect-modals.js',
-                header: '/**\n * Модалки подключения жил к OLT, ONU, узлу.\n */\n',
+                header: '/**\n * Модалки подключения волокон к OLT, ONU, узлу.\n */\n',
                 ranges: [[396, 803]]
             },
             {
@@ -118,7 +118,7 @@ const PHASES = {
             },
             {
                 file: 'public/js/app/fiber-selection-ui.js',
-                header: '/**\n * Панель выбора жилы для сращивания.\n */\n',
+                header: '/**\n * Панель выбора волокна для сращивания.\n */\n',
                 ranges: [[2396, 2470]]
             },
             {
@@ -128,7 +128,7 @@ const PHASES = {
             },
             {
                 file: 'public/js/app/cable-fiber-utils.js',
-                header: '/**\n * Жилы кабеля: usedFibers, группы, связанные кабели.\n */\n',
+                header: '/**\n * Волокна кабеля: usedFibers, группы, связанные кабели.\n */\n',
                 ranges: [[2709, 2840]]
             },
             {
@@ -148,7 +148,7 @@ const PHASES = {
             },
             {
                 file: 'public/js/app/fiber-workspace.js',
-                header: '/**\n * Рабочее место жил: SVG-схема, sidebar, раскладка.\n */\n',
+                header: '/**\n * Рабочее место волокон: SVG-схема, sidebar, раскладка.\n */\n',
                 ranges: [[4359, 5827]]
             }
         ],

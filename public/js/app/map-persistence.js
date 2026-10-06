@@ -1405,6 +1405,8 @@ var _lastMapLoadedOrgId = null;
 var MAP_SYNC_RELOAD_DEDUP_MS = 2500;
 
 function shouldSkipSyncMapRefresh(organizationId) {
+    // Импортёр сам делает location.reload после POST /api/map — не гоняем forceFull apply.
+    if (typeof window !== 'undefined' && window._skipMapRefreshUntilReload) return true;
     // Пока идёт первичная/текущая apply из /api/map — hello map_refresh не нужен.
     if (_mapInitialLoadPending || _mapApplyInProgress) return true;
     if (!_lastMapLoadedFromApiAt) return false;
@@ -1440,7 +1442,11 @@ function reloadMapFromApi(meta) {
                 if (typeof currentUser !== 'undefined' && currentUser && currentUser.organizationId != null) {
                     window._mapOrgIdLoaded = String(currentUser.organizationId);
                 }
-                applyRemoteState(body.data, { fromApi: true, organizationId: body.organizationId || meta.organizationId });
+                applyRemoteState(body.data, {
+                    fromApi: true,
+                    organizationId: body.organizationId || meta.organizationId,
+                    forceFull: !!meta.forceFull
+                });
             })
             .catch(function() {});
     }, delay);
@@ -1461,9 +1467,12 @@ function applyRemoteState(data, meta) {
     if (_mapDataReady && !_mapInitialLoadPending) {
         clearUndoRedoStacks();
     }
-    // После первичной загрузки всегда merge: иначе map_refresh = clearMap+importData
+    // После первичной загрузки обычно merge: иначе map_refresh = clearMap+importData
     // (ощущение «перезагрузки страницы» при чужом удалении/full state).
-    var preferMerge = meta.merge === true || (_mapDataReady && !_mapInitialLoadPending && objects && objects.length > 0);
+    // forceFull — импорт/восстановление: полная пересборка карты организации.
+    var preferMerge = !meta.forceFull && (
+        meta.merge === true || (_mapDataReady && !_mapInitialLoadPending && objects && objects.length > 0)
+    );
     if (preferMerge) {
         try {
             if (data.length === 0) {
@@ -2234,7 +2243,10 @@ function importDataPostProcess(opts, onDone) {
         }
         if (window.EmbeddedSplitters && typeof EmbeddedSplitters.syncAllInputs === 'function') {
             objects.forEach(function(obj) {
-                if (EmbeddedSplitters.isHost(obj)) EmbeddedSplitters.syncAllInputs(obj);
+                if (!EmbeddedSplitters.isHost(obj)) return;
+                var emb = obj.properties && obj.properties.get('embeddedSplitters');
+                if (!emb || !emb.length) return;
+                EmbeddedSplitters.syncAllInputs(obj);
             });
         }
         if (migrateNodeLevelSwitchMetaToAttached() && !(opts && opts.skipSave)) saveData();
@@ -2309,7 +2321,10 @@ function importDataPostProcess(opts, onDone) {
                 }
                 if (window.EmbeddedSplitters && typeof EmbeddedSplitters.syncAllInputs === 'function') {
                     objects.forEach(function(obj) {
-                        if (EmbeddedSplitters.isHost(obj)) EmbeddedSplitters.syncAllInputs(obj);
+                        if (!EmbeddedSplitters.isHost(obj)) return;
+                        var emb = obj.properties && obj.properties.get('embeddedSplitters');
+                        if (!emb || !emb.length) return;
+                        EmbeddedSplitters.syncAllInputs(obj);
                     });
                 }
             },
@@ -2378,7 +2393,10 @@ function importData(data, opts, done) {
     var useBulk = !!opts.bulkImport || undoRedo || (Array.isArray(data) && data.length >= bulkMinItems);
     var importBatchSize = undoRedo ? MAP_UNDO_REDO_BATCH_SIZE : MAP_BULK_IMPORT_BATCH_SIZE;
     _mapBulkImportActive = useBulk;
-    clearMap(opts || {});
+    // merge: добавить к текущей карте без очистки (импорт NeD и т.п.)
+    if (!opts.merge) {
+        clearMap(opts || {});
+    }
     importDataAssignUniqueIds(data);
 
     function completeImport(err) {
@@ -3055,7 +3073,7 @@ function createObjectFromData(data, opts, createOpts) {
                 return;
             }
             if (type === 'node') {
-                showError('Узел сети нельзя использовать для прокладки кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
+                showError('Узел сети нельзя использовать для прокладки кабеля. Узлы подключаются только через волокна оптического кросса.', 'Недопустимое действие');
                 return;
             }
             return;

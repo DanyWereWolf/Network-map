@@ -1,5 +1,5 @@
 /**
- * Типы кабелей и цвета маршрутов жил — единый источник для карты, сайдбара и легенды.
+ * Типы кабелей и цвета маршрутов волокон — единый источник для карты, сайдбара и легенды.
  */
 (function(global) {
     var FIBER_MAP_COLOR = '#16a34a';
@@ -7,10 +7,10 @@
 
     var CABLE_TYPES = [
         { id: 'fiber', label: 'ВОЛС', short: 'ВОЛС', color: FIBER_MAP_COLOR, width: FIBER_MAP_WIDTH, tone: 'fiber' },
-        { id: 'fiber4', label: 'ВОЛС 4 жилы', short: '4 жилы', color: FIBER_MAP_COLOR, width: FIBER_MAP_WIDTH, tone: 'fiber4', layViaUi: false },
-        { id: 'fiber8', label: 'ВОЛС 8 жил', short: '8 жил', color: FIBER_MAP_COLOR, width: FIBER_MAP_WIDTH, tone: 'fiber8', layViaUi: false },
-        { id: 'fiber16', label: 'ВОЛС 16 жил', short: '16 жил', color: FIBER_MAP_COLOR, width: FIBER_MAP_WIDTH, tone: 'fiber16', layViaUi: false },
-        { id: 'fiber24', label: 'ВОЛС 24 жилы', short: '24 жилы', color: FIBER_MAP_COLOR, width: FIBER_MAP_WIDTH, tone: 'fiber24', layViaUi: false },
+        { id: 'fiber4', label: 'ВОЛС 4 волокна', short: '4 волокна', color: FIBER_MAP_COLOR, width: FIBER_MAP_WIDTH, tone: 'fiber4', layViaUi: false },
+        { id: 'fiber8', label: 'ВОЛС 8 волокон', short: '8 волокон', color: FIBER_MAP_COLOR, width: FIBER_MAP_WIDTH, tone: 'fiber8', layViaUi: false },
+        { id: 'fiber16', label: 'ВОЛС 16 волокон', short: '16 волокон', color: FIBER_MAP_COLOR, width: FIBER_MAP_WIDTH, tone: 'fiber16', layViaUi: false },
+        { id: 'fiber24', label: 'ВОЛС 24 волокна', short: '24 волокна', color: FIBER_MAP_COLOR, width: FIBER_MAP_WIDTH, tone: 'fiber24', layViaUi: false },
         { id: 'copper', label: 'Медный кабель', short: 'Медь', color: '#b45309', width: 3, tone: 'copper', layViaUi: false }
     ];
 
@@ -34,11 +34,11 @@
     }
 
     var FIBER_ROUTE_LEGEND = [
-        { color: '#22c55e', label: 'Кросс / муфта → узел или ONU', tag: 'жила' },
-        { color: '#0ea5e9', label: 'Кросс / муфта → OLT', tag: 'жила' },
+        { color: '#22c55e', label: 'Кросс / муфта → узел или ONU', tag: 'волокно' },
+        { color: '#0ea5e9', label: 'Кросс / муфта → OLT', tag: 'волокно' },
         { color: '#06b6d4', label: 'Wi‑Fi радиомост (P2P / P2MP)', tag: 'радио' },
-        { color: '#14b8a6', label: 'Кросс / муфта → медиаконвертер', tag: 'жила' },
-        { color: '#3b82f6', label: 'Кросс / муфта → сплиттер (вход)', tag: 'жила' },
+        { color: '#14b8a6', label: 'Кросс / муфта → медиаконвертер', tag: 'волокно' },
+        { color: '#3b82f6', label: 'Кросс / муфта → сплиттер (вход)', tag: 'волокно' },
         { color: '#a855f7', label: 'Сплиттер → ONU (выход)', tag: 'выход' },
         { color: '#f97316', label: 'Сплиттер → сплиттер (выход)', tag: 'выход' }
     ];
@@ -65,13 +65,13 @@
     function renderSidebarLegend(containerId) {
         var root = document.getElementById(containerId || 'legend-content');
         if (!root) return;
-        var target = root.querySelector('.accordion-content-inner') || root;
+        var target = root.querySelector('.info-dock-legend-inner, .accordion-content-inner') || root;
 
         var html = '';
 
         html += '<div class="legend-group">';
         html += '<p class="legend-group-title">Магистраль (ВОЛС)</p>';
-        html += '<p class="legend-group-hint">На карте все ВОЛС одного вида (цвет и толщину задают в настройках темы); число жил и цвета жил — при прокладке и в карточке кабеля</p>';
+        html += '<p class="legend-group-hint">На карте все ВОЛС одного вида (цвет и толщину задают в настройках темы); число волокон и цвета волокон — при прокладке и в карточке кабеля</p>';
         html += '<div class="legend-item legend-item--cable">' +
             '<span class="legend-line legend-line--solid" style="--legend-color:var(--fiber-map-line);--legend-width:' + (FIBER_MAP_WIDTH + 1) + 'px" aria-hidden="true"></span>' +
             '<span class="legend-text">ВОЛС</span></div>';
@@ -100,8 +100,8 @@
         }
 
         html += '<div class="legend-group">';
-        html += '<p class="legend-group-title">Маршруты жил (пунктир)</p>';
-        html += '<p class="legend-group-hint">Отображаются при подключении жил в карточках кросса и муфты</p>';
+        html += '<p class="legend-group-title">Маршруты волокон (пунктир)</p>';
+        html += '<p class="legend-group-hint">Отображаются при подключении волокон в карточках кросса и муфты</p>';
         FIBER_ROUTE_LEGEND.forEach(function(r) {
             html += '<div class="legend-item legend-item--route">' +
                 '<span class="legend-line legend-line--dash" style="--legend-color:' + r.color + '" aria-hidden="true"></span>' +

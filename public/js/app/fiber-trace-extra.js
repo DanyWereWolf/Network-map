@@ -181,7 +181,7 @@ function traceFromNodeSplitter(nodeObj, splitterId, outputIndex) {
                 }
                 if (ctl && ctl.yield && (pi % 2 === 1 || paths.length > 6)) await ctl.yield(0);
             }
-            if (ctl && ctl.setProgress) ctl.setProgress('Строим схему жил…', 'Кассеты, сварки и ветки', 70);
+            if (ctl && ctl.setProgress) ctl.setProgress('Строим схему волокон…', 'Кассеты, сварки и ветки', 70);
             if (ctl && ctl.yield) await ctl.yield(24);
             if (ctl && ctl.isCancelled && ctl.isCancelled()) return;
             bodyHtml = (typeof appendFiberTraceExtrasHtmlAsync === 'function')
@@ -579,17 +579,17 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
         } else if (item.type === 'onuConnection') {
             var onuConnObjId = item.onu ? getObjectUniqueId(item.onu) : null;
             var onuConnShowBtn = onuConnObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(onuConnObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
-            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">🔌</span><div class="trace-path-block trace-path-object"><span>🔌 Вывод на ONU: Жила ' + item.fiberNumber + ' → ' + escapeHtml(item.onuName) + '</span>' + onuConnShowBtn + '</div></div>';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">🔌</span><div class="trace-path-block trace-path-object"><span>🔌 Вывод на ONU: Волокно ' + item.fiberNumber + ' → ' + escapeHtml(item.onuName) + '</span>' + onuConnShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'mediaConverterConnection') {
             var mcConnObjId = item.mediaConverter ? getObjectUniqueId(item.mediaConverter) : null;
             var mcConnShowBtn = mcConnObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(mcConnObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
-            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">⇄</span><div class="trace-path-block trace-path-object"><span>⇄ Вывод на медиаконвертер: Жила ' + item.fiberNumber + ' → ' + escapeHtml(item.mediaConverterName || 'Медиаконвертер') + '</span>' + mcConnShowBtn + '</div></div>';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">⇄</span><div class="trace-path-block trace-path-object"><span>⇄ Вывод на медиаконвертер: Волокно ' + item.fiberNumber + ' → ' + escapeHtml(item.mediaConverterName || 'Медиаконвертер') + '</span>' + mcConnShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'radioBridgeConnection') {
             var rbConnObjId = item.radioBridge ? getObjectUniqueId(item.radioBridge) : null;
             var rbConnShowBtn = rbConnObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(rbConnObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
-            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">◎</span><div class="trace-path-block trace-path-object"><span>◎ Вывод на радиомост: Жила ' + item.fiberNumber + ' → ' + escapeHtml(item.radioBridgeName || 'Радиомост') + '</span>' + rbConnShowBtn + '</div></div>';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">◎</span><div class="trace-path-block trace-path-object"><span>◎ Вывод на радиомост: Волокно ' + item.fiberNumber + ' → ' + escapeHtml(item.radioBridgeName || 'Радиомост') + '</span>' + rbConnShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'cable') {
             var cableObjId = item.cable ? getObjectUniqueId(item.cable) : null;
@@ -603,7 +603,7 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
             var fiberTextColor = (fiberColor === '#FFFFFF' || fiberColor === '#FFFACD' || fiberColor === '#FFFF00') ? '#000' : '#fff';
             var waypointsHtml = (item.waypoints && window.FiberTrace && FiberTrace.renderWaypointsInlineHtml) ? FiberTrace.renderWaypointsInlineHtml(item.waypoints) : '';
             var segLenHtml = (item.segmentLengthM != null) ? '<span class="trace-item-len">~' + item.segmentLengthM + ' м</span>' : '';
-            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-cable">➡</span><div class="trace-path-block trace-path-cable" style="border-left-color: ' + fiberColor + ';"><div style="display: flex; align-items: center; flex-wrap: wrap; gap: 4px;"><span>📡 ' + escapeHtml(item.cableName) + '</span><span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 16px; height: 16px; border-radius: 50%; background: ' + fiberColor + '; border: 1px solid #333; display: inline-block;"></span><span style="background: ' + fiberColor + '; color: ' + fiberTextColor + '; padding: 2px 8px; border-radius: 4px; font-weight: 600;">Жила ' + item.fiberNumber + (fiberName ? ': ' + fiberName : '') + '</span></span>' + segLenHtml + waypointsHtml + '</div>' + cableShowBtn + '</div></div>';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-cable">➡</span><div class="trace-path-block trace-path-cable" style="border-left-color: ' + fiberColor + ';"><div style="display: flex; align-items: center; flex-wrap: wrap; gap: 4px;"><span>📡 ' + escapeHtml(item.cableName) + '</span><span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 16px; height: 16px; border-radius: 50%; background: ' + fiberColor + '; border: 1px solid #333; display: inline-block;"></span><span style="background: ' + fiberColor + '; color: ' + fiberTextColor + '; padding: 2px 8px; border-radius: 4px; font-weight: 600;">Волокно ' + item.fiberNumber + (fiberName ? ': ' + fiberName : '') + '</span></span>' + segLenHtml + waypointsHtml + '</div>' + cableShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'connection') {
             var fromCableTrace = item.fromCable || (item.fromCableId ? objects.find(function(o) { return o.properties && o.properties.get('uniqueId') === item.fromCableId; }) : null);
@@ -620,18 +620,18 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
             var toFiberName = toFiber ? toFiber.name : '';
             var fromLabelText = item.fromLabel ? ' [' + escapeHtml(item.fromLabel) + ']' : '';
             var toLabelText = item.toLabel ? ' [' + escapeHtml(item.toLabel) + ']' : '';
-            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-connection">⚡</span><div class="trace-path-block trace-path-connection"><div style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px;"><span>🔗 Соединение:</span><span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 14px; height: 14px; border-radius: 50%; background: ' + fromColor + '; border: 1px solid #333;"></span><span style="background: ' + fromColor + '; color: ' + fromTextColor + '; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.8rem;">Ж' + item.fromFiberNumber + (fromFiberName ? ' (' + fromFiberName + ')' : '') + '</span></span>' + (fromLabelText ? '<span style="color: var(--accent-primary); font-weight: 500; font-size: 0.8rem;">' + fromLabelText + '</span>' : '') + '<span style="font-size: 1rem;">→</span><span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 14px; height: 14px; border-radius: 50%; background: ' + toColor + '; border: 1px solid #333;"></span><span style="background: ' + toColor + '; color: ' + toTextColor + '; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.8rem;">Ж' + item.toFiberNumber + (toFiberName ? ' (' + toFiberName + ')' : '') + '</span></span>' + (toLabelText ? '<span style="color: var(--accent-primary); font-weight: 500; font-size: 0.8rem;">' + toLabelText + '</span>' : '') + '</div></div></div>';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-connection">⚡</span><div class="trace-path-block trace-path-connection"><div style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px;"><span>🔗 Соединение:</span><span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 14px; height: 14px; border-radius: 50%; background: ' + fromColor + '; border: 1px solid #333;"></span><span style="background: ' + fromColor + '; color: ' + fromTextColor + '; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.8rem;">В' + item.fromFiberNumber + (fromFiberName ? ' (' + fromFiberName + ')' : '') + '</span></span>' + (fromLabelText ? '<span style="color: var(--accent-primary); font-weight: 500; font-size: 0.8rem;">' + fromLabelText + '</span>' : '') + '<span style="font-size: 1rem;">→</span><span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 14px; height: 14px; border-radius: 50%; background: ' + toColor + '; border: 1px solid #333;"></span><span style="background: ' + toColor + '; color: ' + toTextColor + '; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.8rem;">В' + item.toFiberNumber + (toFiberName ? ' (' + toFiberName + ')' : '') + '</span></span>' + (toLabelText ? '<span style="color: var(--accent-primary); font-weight: 500; font-size: 0.8rem;">' + toLabelText + '</span>' : '') + '</div></div></div>';
             stepNumber++;
         } else if (item.type === 'nodeConnection') {
             var nodeConnObjId = item.node ? getObjectUniqueId(item.node) : null;
             var nodeConnShowBtn = nodeConnObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(nodeConnObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
-            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">🔌</span><div class="trace-path-block trace-path-object"><span>🔌 Вывод на узел: Жила ' + item.fiberNumber + ' → ' + escapeHtml(item.nodeName) + '</span>' + nodeConnShowBtn + '</div></div>';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-object">🔌</span><div class="trace-path-block trace-path-object"><span>🔌 Вывод на узел: Волокно ' + item.fiberNumber + ' → ' + escapeHtml(item.nodeName) + '</span>' + nodeConnShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'splitterConnection') {
             var spObjId = item.splitter ? getObjectUniqueId(item.splitter) : null;
             var spShowBtn = spObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(spObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
             var spName = item.splitter && item.splitter.properties ? (item.splitter.properties.get('name') || 'Сплиттер') : 'Сплиттер';
-            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-connection">🔀</span><div class="trace-path-block trace-path-connection"><div><span>→ Жила идёт на сплиттер «' + escapeHtml(spName) + '»</span><span class="trace-path-muted">(жила ' + item.fiberNumber + ')</span></div>' + spShowBtn + '</div></div>';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-connection">🔀</span><div class="trace-path-block trace-path-connection"><div><span>→ Волокно идёт на сплиттер «' + escapeHtml(spName) + '»</span><span class="trace-path-muted">(волокно ' + item.fiberNumber + ')</span></div>' + spShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'splitterOutputToOnu') {
             var spOutOnuId = item.onuObj ? getObjectUniqueId(item.onuObj) : null;
@@ -659,7 +659,7 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
             var oltObjId = item.olt ? getObjectUniqueId(item.olt) : null;
             var oltShowBtn = oltObjId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(oltObjId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
             var oltPortText = item.incoming ? 'приход' : formatOltPortDisplay(item.portNumber, item.portLabel || (item.olt ? getOltPortLabel(item.olt, item.portNumber) : ''));
-            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-olt">🔌</span><div class="trace-path-block trace-path-olt"><div><span>📶 Подключено к OLT «' + escapeHtml(item.oltName || 'OLT') + '», ' + escapeHtml(String(oltPortText)) + '</span><span class="trace-path-muted">(жила ' + item.fiberNumber + ')</span></div>' + oltShowBtn + '</div></div>';
+            html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-olt">🔌</span><div class="trace-path-block trace-path-olt"><div><span>📶 Подключено к OLT «' + escapeHtml(item.oltName || 'OLT') + '», ' + escapeHtml(String(oltPortText)) + '</span><span class="trace-path-muted">(волокно ' + item.fiberNumber + ')</span></div>' + oltShowBtn + '</div></div>';
             stepNumber++;
         } else if (item.type === 'crossPortPatch') {
             var fromCrossId = item.fromCross ? getObjectUniqueId(item.fromCross) : null;
@@ -1399,7 +1399,7 @@ function showFiberTraceFromOLTPort(oltObj, oltName, portNumber, startObj, cableI
             }
             if (ctl && ctl.yield && (pi % 2 === 1 || displayPaths.length > 6)) await ctl.yield(0);
         }
-        if (ctl && ctl.setProgress) ctl.setProgress('Строим схему жил…', 'Кассеты, сварки и ветки сплиттеров', 70);
+        if (ctl && ctl.setProgress) ctl.setProgress('Строим схему волокон…', 'Кассеты, сварки и ветки сплиттеров', 70);
         if (ctl && ctl.yield) await ctl.yield(24);
         if (ctl && ctl.isCancelled && ctl.isCancelled()) return;
         bodyHtml = (typeof appendFiberTraceExtrasHtmlAsync === 'function')
@@ -1524,7 +1524,7 @@ function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeO
     var hostTypeTitle = startCrossObj && startCrossObj.properties ? startCrossObj.properties.get('type') : '';
     var titleHost = isCrossLikeHostType(hostTypeTitle) ? 'кросса' : (isSleeveLikeHostType(hostTypeTitle) ? 'муфты' : 'объекта');
     var fiberColorName = resolveFiberDisplayNameForTrace(cableId, fiberNumber);
-    var fiberLabel = 'жила ' + fiberNumber + (fiberColorName ? ' («' + fiberColorName + '»)' : '');
+    var fiberLabel = 'волокно ' + fiberNumber + (fiberColorName ? ' («' + fiberColorName + '»)' : '');
     var loadingSubtitle = fiberLabel.charAt(0).toUpperCase() + fiberLabel.slice(1);
     if (startNodeObj) {
         loadingSubtitle = 'От узла «' + (startNodeObj.properties.get('name') || 'Узел') + '» · ' + fiberLabel;
@@ -1604,7 +1604,7 @@ function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeO
                 bodyHtml += pathHtmlSingle.html;
             }
 
-            if (ctl && ctl.setProgress) ctl.setProgress('Строим схему жил…', 'Кассеты, сварки и ветки сплиттеров', 70);
+            if (ctl && ctl.setProgress) ctl.setProgress('Строим схему волокон…', 'Кассеты, сварки и ветки сплиттеров', 70);
             if (ctl && ctl.yield) await ctl.yield(24);
             if (ctl && ctl.isCancelled && ctl.isCancelled()) return;
 

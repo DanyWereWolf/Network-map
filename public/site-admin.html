@@ -1481,7 +1481,7 @@
                             <div class="analytics-section-grid analytics-section-grid--2">
                                 <div class="analytics-card">
                                     <div class="analytics-title">Источники входа</div>
-                                    <div class="source-cloud" id="visitSourcesChart"></div>
+                                    <div class="rank-chart source-rank" id="visitSourcesChart"></div>
                                 </div>
                                 <div class="analytics-card">
                                     <div class="analytics-title">Последние входы</div>
@@ -2753,23 +2753,24 @@
             var sourceChart = document.getElementById('visitSourcesChart');
             if (sourceChart) {
                 sourceChart.innerHTML = '';
+                sourceChart.className = 'rank-chart source-rank';
                 var sources = (data && Array.isArray(data.topSources)) ? data.topSources : [];
                 if (!sources.length) {
                     sourceChart.innerHTML = '<div class="hint">Пока нет данных по источникам</div>';
                 } else {
                     var max = sources[0].count || 1;
+                    var tones = ['tone-a', 'tone-b', 'tone-c', 'tone-d'];
                     sources.forEach(function(item, idx) {
                         var count = item.count || 0;
-                        var weight = Math.max(0.55, count / max);
-                        var chip = document.createElement('button');
-                        chip.type = 'button';
-                        chip.className = 'source-chip tone-' + ((idx % 4) + 1);
-                        chip.style.setProperty('--chip-scale', String(0.9 + weight * 0.35));
-                        chip.title = (item.source || 'unknown') + ': ' + count;
-                        chip.innerHTML =
-                            '<span class="source-chip-label">' + escapeHtml(compactLabel(item.source || 'unknown', 28)) + '</span>' +
-                            '<strong class="source-chip-count">' + count + '</strong>';
-                        sourceChart.appendChild(chip);
+                        var src = item.source || 'unknown';
+                        appendRankRow(sourceChart, {
+                            rank: idx + 1,
+                            label: compactLabel(src, 36),
+                            title: src + ': ' + count,
+                            value: count,
+                            pct: max > 0 ? (count / max) * 100 : 0,
+                            tone: tones[idx % tones.length]
+                        });
                     });
                 }
             }

@@ -22,7 +22,9 @@
     "setup:mysql": "node scripts/configure-mysql-storage.js",
     "test:mysql-parity": "node scripts/mysql-parity-test.js",
     "backup:mysql": "node scripts/mysql-backup.js",
-    "restore:mysql": "node scripts/mysql-restore.js"
+    "restore:mysql": "node scripts/mysql-restore.js",
+    "ned:build": "dotnet build tools/ned-import/NedToNetworkMap -c Release",
+    "ned:convert": "dotnet tools/ned-import/NedToNetworkMap/bin/Release/net10.0/NedToNetworkMap.dll"
   },
   "dependencies": {
     "argon2": "^0.44.0",

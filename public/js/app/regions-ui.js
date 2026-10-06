@@ -96,16 +96,22 @@ function hideRegionDrawBar() {
     document.body.classList.remove('underground-draw-active');
 }
 
+var REGION_DRAW_BTN_IDLE_HTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon></svg><span class="btn-draw-region-text">Нарисовать регион</span>';
+var REGION_DRAW_BTN_ACTIVE_HTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span class="btn-draw-region-text">Завершить рисование</span>';
+
+function syncRegionDrawButtons(active) {
+    var btn = document.getElementById('drawRegionBtn');
+    if (!btn) return;
+    btn.classList.toggle('btn-add-object--placement', !!active);
+    btn.innerHTML = active ? REGION_DRAW_BTN_ACTIVE_HTML : REGION_DRAW_BTN_IDLE_HTML;
+}
+
 function resetRegionDrawUi() {
     regionDrawMode = false;
     regionDrawCoords = [];
     removeRegionDrawPreview();
     hideRegionDrawBar();
-    var btn = document.getElementById('drawRegionBtn');
-    if (btn) {
-        btn.classList.remove('btn-add-object--placement');
-        btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon></svg><span class="btn-draw-region-text">Нарисовать регион</span>';
-    }
+    syncRegionDrawButtons(false);
     if (myMap && myMap.container) {
         var mapEl = myMap.container.getElement();
         mapEl.style.cursor = '';
@@ -208,11 +214,7 @@ function startRegionDraw() {
     regionDrawCoords = [];
     removeRegionDrawPreview();
     showRegionDrawBar('create');
-    var btn = document.getElementById('drawRegionBtn');
-    if (btn) {
-        btn.classList.add('btn-add-object--placement');
-        btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span class="btn-draw-region-text">Завершить рисование</span>';
-    }
+    syncRegionDrawButtons(true);
     if (myMap && myMap.container) {
         var mapEl = myMap.container.getElement();
         mapEl.style.cursor = 'crosshair';
@@ -367,11 +369,9 @@ function setRegionFillVisible(regionObj, visible, opts) {
 
 function renderRegionsSidebarList() {
     var root = document.getElementById('regionsList');
-    var badge = document.getElementById('regionsCountBadge');
     if (!root || !window.MapRegions) return;
     var regions = MapRegions.getAllRegions(objects);
     var editable = isEditMode && canEdit();
-    if (badge) badge.textContent = regions.length ? String(regions.length) : '';
     if (!regions.length) {
         root.innerHTML = (typeof AppMotion !== 'undefined' && AppMotion.emptyStateHtml)
             ? AppMotion.emptyStateHtml({
@@ -534,8 +534,13 @@ function showRegionEditModalBody(regionObj) {
 
 function setupRegionControls() {
     var drawBtn = document.getElementById('drawRegionBtn');
-    if (drawBtn) {
+    if (drawBtn && !drawBtn._regionDrawBound) {
+        drawBtn._regionDrawBound = true;
         drawBtn.addEventListener('click', function() {
+            if (!isEditMode || !canEdit()) {
+                if (typeof showInfo === 'function') showInfo('Включите режим «Редактирование»', 'Режим');
+                return;
+            }
             if (regionDrawMode) finishRegionDraw();
             else startRegionDraw();
         });

@@ -1,5 +1,5 @@
 /**
- * Трассировка жил и модальное окно трассировки.
+ * Трассировка волокон и модальное окно трассировки.
  */
 function getCableRoutePointsForTrace(cable) {
     if (!cable || !cable.properties) return null;
@@ -148,7 +148,7 @@ function tryAdvanceTraceAlongCableRoute(path, hostOnRoute, previousObject, curre
     return { previousObject: hostOnRoute, currentObject: nextPt };
 }
 
-/** Другие узлы на той же жиле того же кабеля (кросс на противоположном конце магистрали). */
+/** Другие узлы на том же волокне того же кабеля (кросс на противоположном конце магистрали). */
 function findPeerNodeTargetsOnCable(startCross, cableId, fiberNumber, originNodeId) {
     var peers = [];
     var startUid = getObjectUniqueId(startCross);
@@ -507,9 +507,9 @@ function mergeTraceOptions(base, extra) {
 }
 
 /**
- * Путь уже содержит выход с этого сплиттера на данную жилу —
+ * Путь уже содержит выход с этого сплиттера на данное волокно —
  * обратный hop в сплиттер ломал бы трассу (петля visited).
- * splitterObj=null — любой недавний cable-шаг с этой жилой после сплиттера.
+ * splitterObj=null — любой недавний cable-шаг с этим волокном после сплиттера.
  */
 function pathRecentlyEgressedSplitterOutput(path, splitterObj, cableId, fiberNumber) {
     if (!path || !path.length || !cableId) return false;
@@ -715,7 +715,7 @@ function buildHostLocalTerminalPath(startObject, cableId, fiberNumber) {
     var nodeTrace = tryHandleHostNodeConnectionTrace(path, startObject, cableId, fiberNumber, null, null, null);
     if (nodeTrace && nodeTrace.action === 'break' && path.length > 1) return path;
 
-    // Сплиттер на этой жиле → выходы (ONU / порт / каскад)
+    // Сплиттер на этом волокне → выходы (ONU / порт / каскад)
     var spHit = typeof findSplitterOnHostFiber === 'function'
         ? findSplitterOnHostFiber(startObject, cableId, fiberNumber, null)
         : null;
@@ -743,7 +743,7 @@ function buildHostLocalTerminalPath(startObject, cableId, fiberNumber) {
         return path.length > 1 ? path : null;
     }
 
-    // OLT на жиле — только логическое назначение, не физический feeder (иначе схема
+    // OLT на волокне — только логическое назначение, не физический feeder (иначе схема
     // показывает «кросс→OLT» вместо сети вниз к ONU).
     var oltDirect = typeof getHostFiberMapEntry === 'function'
         ? getHostFiberMapEntry(startObject, 'oltConnections', cableId, fiberNumber)
@@ -890,7 +890,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
             nextObject = currentObject;
         } else {
             // Ранний вход в сплиттер/сварку только при трассировке «к ONU» / от OLT вниз.
-            // Иначе ломается обычная трассировка жилы с кросса/муфты по выбранному кабелю.
+            // Иначе ломается обычная трассировка волокна с кросса/муфты по выбранному кабелю.
             if (traceOptions.traceTowardOnu) {
                 var hostTowardType = currentObject.properties.get('type');
                 if (isFiberHostType(hostTowardType)) {
@@ -978,7 +978,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
                             continue;
                         }
                     }
-                    // ONU/МК/РМ на этой жиле (без targetOnuId тоже)
+                    // ONU/МК/РМ на этом волокне (без targetOnuId тоже)
                     if (tryAppendHostDropTerminals(path, currentObject, currentCableId, currentFiberNumber)) {
                         break;
                     }
@@ -993,7 +993,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
                         }
                         break;
                     }
-                    // Жилы на том же порту панели (логические «мейты») — продолжить как сварку
+                    // Волокна на том же порту панели (логические «мейты») — продолжить как сварку
                     if (hostTowardType === 'cross' && typeof getCrossPortMateFibers === 'function') {
                         var matesEarly = getCrossPortMateFibers(currentObject, currentCableId, currentFiberNumber);
                         if (matesEarly && matesEarly.length) {
@@ -1260,7 +1260,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
                 });
                 break;
             }
-            // Свободная жила на OLT: сварка на другой кабель (к муфте) — не обрывать
+            // Свободное волокно на OLT: сварка на другой кабель (к муфте) — не обрывать
             var oltFiberKey = String(currentCableId) + '-' + String(currentFiberNumber);
             if (!visitedFibers.has(oltFiberKey)) {
                 visitedFibers.add(oltFiberKey);
@@ -1352,7 +1352,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
                     break;
                 }
                 var oltConnAtSlot = getFiberOltAssignment(nextObject, currentCableId, currentFiberNumber);
-                // «OLT по сети» — не конец трассы: жила может уходить сваркой на другой кабель (к муфте)
+                // «OLT по сети» — не конец трассы: волокно может уходить сваркой на другой кабель (к муфте)
                 if (oltConnAtSlot && oltConnAtSlot.oltId && !traceOptions.traceTowardOnu &&
                     !oltConnAtSlot.inheritedFromNetwork && !oltConnAtSlot.physicalCableOnly) {
                     var oltObjFromConn = objects.find(function(o) {
@@ -1429,7 +1429,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
                 if (!spOutRev && objType === 'cross' && typeof findSplitterOutputAtHostByLogicalFiber === 'function') {
                     spOutRev = findSplitterOutputAtHostByLogicalFiber(nextObject, currentCableId, currentFiberNumber);
                 }
-                // Уже вышли с этого выхода сплиттера на эту жилу — не разворачиваться обратно
+                // Уже вышли с этого выхода сплиттера на это волокно — не разворачиваться обратно
                 if (spOutRev && spOutRev.splitterObj &&
                     (traceOptions.fromSplitterOutputEgress ||
                         pathRecentlyEgressedSplitterOutput(path, spOutRev.splitterObj, currentCableId, currentFiberNumber))) {
@@ -1484,7 +1484,7 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
                     afterSplitterInputBranch = true;
                     continue;
                 }
-                // После выхода сплиттера на жилу: идём на другой конец кабеля (не обрываем трассу)
+                // После выхода сплиттера на волокно: идём на другой конец кабеля (не обрываем трассу)
                 if (currentCable && (traceOptions.fromSplitterOutputEgress ||
                         pathRecentlyEgressedSplitterOutput(path, null, currentCableId, currentFiberNumber))) {
                     var remoteAfterOut = getOtherEnd(currentCable, nextObject, previousObject);
@@ -2349,7 +2349,7 @@ function traceFiberPath(startCableId, startFiberNumber) {
 
 function showFiberTrace(cableId, fiberNumber) {
     runFiberTraceWithLoading({
-        title: 'Трассировка · жила ' + fiberNumber,
+        title: 'Трассировка · волокно ' + fiberNumber,
         subtitle: 'Маршрут по кабелю'
     }, function(ctl) {
         return (async function() {
@@ -2361,7 +2361,7 @@ function showFiberTrace(cableId, fiberNumber) {
                 failFiberTraceLoading('Ошибка трассировки: ' + result.error, false);
                 return;
             }
-            if (ctl && ctl.setProgress) ctl.setProgress('Строим схему жил…', 'Кассеты и сварки', 70);
+            if (ctl && ctl.setProgress) ctl.setProgress('Строим схему волокон…', 'Кассеты и сварки', 70);
             if (ctl && ctl.yield) await ctl.yield(24);
             if (ctl && ctl.isCancelled && ctl.isCancelled()) return;
             var path = result.path;
@@ -2373,7 +2373,7 @@ function showFiberTrace(cableId, fiberNumber) {
             if (ctl && ctl.yield) await ctl.yield(20);
             if (ctl && ctl.isCancelled && ctl.isCancelled()) return;
             openFiberTraceModal({
-                title: 'Трассировка · жила ' + fiberNumber,
+                title: 'Трассировка · волокно ' + fiberNumber,
                 subtitle: 'Маршрут по кабелю',
                 bodyHtml: bodyHtml,
                 paths: [path]
@@ -2840,7 +2840,7 @@ function showNodeSelectionDialog(crossObj, cableId, fiberNumber) {
     if (crossObj && cableId != null && fiberNumber != null) {
         var existingNode = getHostAssignment(crossObj, 'nodeConnections', cableId, fiberNumber);
         if (existingNode && existingNode.nodeId) {
-            showWarning('Жила уже подключена к узлу.', 'Жила занята');
+            showWarning('Волокно уже подключено к узлу.', 'Волокно занято');
             return;
         }
     }
@@ -2864,7 +2864,7 @@ function showNodeSelectionDialog(crossObj, cableId, fiberNumber) {
     const fiberInfo = document.getElementById('nodeSelectionFiberInfo');
     const searchInput = document.getElementById('nodeSearchInput');
 
-    fiberInfo.textContent = `Подключение жилы #${fiberNumber} к узлу: выберите узел, затем свободный оптический порт на коммутаторе.`;
+    fiberInfo.textContent = `Подключение волокна #${fiberNumber} к узлу: выберите узел, затем свободный оптический порт на коммутаторе.`;
 
     searchInput.value = '';
 
@@ -2981,7 +2981,7 @@ function renderNodeSfpPortSelectionUI() {
     var htmlSfp = '<div style="padding: 8px 0;">';
     var sfpHint = d.mode === 'splitterOutputNode'
         ? 'Выход сплиттера подключается к выбранному SFP-порту коммутатора.'
-        : 'Жила с кросса занимает выбранный SFP-порт на коммутаторе.';
+        : 'Волокно с кросса занимает выбранный SFP-порт на коммутаторе.';
     htmlSfp += '<p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 12px;">Узел: <strong>' + nodeName + '</strong>. ' + sfpHint + '</p>';
     htmlSfp += '<div class="form-group" style="margin-bottom: 12px;"><label for="nodeFiberSfpSelect" style="font-size: 0.8125rem;">Порт коммутатора (SFP)</label>';
     htmlSfp += '<select id="nodeFiberSfpSelect" class="form-select">' + selOpts + '</select></div>';
@@ -3029,7 +3029,7 @@ function closeNodeSelectionModal() {
     var searchGroup = searchInput && searchInput.closest('.form-group');
     if (searchGroup) searchGroup.style.display = '';
     var title = modal && modal.querySelector('.group-balloon-title');
-    if (title) title.textContent = 'Подключение жилы к узлу';
+    if (title) title.textContent = 'Подключение волокна к узлу';
     var labels = modal ? modal.querySelectorAll('.modal-body .form-group > label') : [];
     if (labels[0]) labels[0].textContent = 'Поиск узла';
     if (labels[1]) labels[1].textContent = 'Выберите узел';
@@ -3073,12 +3073,12 @@ function setFiberTargetSelectionModalMode(mode) {
     var title = modal.querySelector('.group-balloon-title');
     var labels = modal.querySelectorAll('.modal-body .form-group > label');
     var searchInput = document.getElementById('onuSearchInput');
-    var titleText = 'Подключение жилы к ONU';
+    var titleText = 'Подключение волокна к ONU';
     var searchLabel = 'Поиск ONU';
     var listLabel = 'Выберите ONU';
     var placeholder = 'Введите имя ONU...';
     if (mode === 'mediaConverter') {
-        titleText = 'Подключение жилы к медиаконвертеру';
+        titleText = 'Подключение волокна к медиаконвертеру';
         searchLabel = 'Поиск медиаконвертера';
         listLabel = 'Выберите медиаконвертер';
         placeholder = 'Введите название медиаконвертера...';
@@ -3101,17 +3101,17 @@ function showOnuSelectionDialog(sleeveObj, cableId, fiberNumber) {
     }
     var existingOnu = getHostAssignment(sleeveObj, 'onuConnections', cableId, fiberNumber);
     if (existingOnu && existingOnu.onuId) {
-        showWarning('Жила уже подключена к ONU.', 'Жила занята');
+        showWarning('Волокно уже подключено к ONU.', 'Волокно занято');
         return;
     }
     var existingMc = getHostAssignment(sleeveObj, 'mediaConverterConnections', cableId, fiberNumber);
     if (existingMc && existingMc.mediaConverterId) {
-        showWarning('Жила уже подключена к медиаконвертеру.', 'Жила занята');
+        showWarning('Волокно уже подключено к медиаконвертеру.', 'Волокно занято');
         return;
     }
     var existingRbOnu = getHostAssignment(sleeveObj, 'radioBridgeConnections', cableId, fiberNumber);
     if (existingRbOnu && existingRbOnu.radioBridgeId) {
-        showWarning('Жила уже подключена к радиомосту.', 'Жила занята');
+        showWarning('Волокно уже подключено к радиомосту.', 'Волокно занято');
         return;
     }
     const onus = getAvailableOnus();
@@ -3128,7 +3128,7 @@ function showOnuSelectionDialog(sleeveObj, cableId, fiberNumber) {
     const fiberInfo = document.getElementById('onuSelectionFiberInfo');
     const searchInput = document.getElementById('onuSearchInput');
     setFiberTargetSelectionModalMode('onu');
-    if (fiberInfo) fiberInfo.textContent = 'Подключение жилы #' + fiberNumber + ' к ONU';
+    if (fiberInfo) fiberInfo.textContent = 'Подключение волокна #' + fiberNumber + ' к ONU';
     if (searchInput) searchInput.value = '';
     renderOnuList('');
     if (modal) modal.style.display = 'block';
@@ -3141,22 +3141,22 @@ function showMediaConverterSelectionDialog(sleeveObj, cableId, fiberNumber) {
     const usageOptsMcDlg = isCrossLikeHostType(stMcDlg) ? { atCrossId: placeId } : { atSleeveId: placeId };
     const usage = getFiberUsage(cableId, fiberNumber, usageOptsMcDlg);
     if (usage.used) {
-        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
+        showError('Это волокно уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободное волокно.', 'Волокно занято');
         return;
     }
     var existingMcDlg = getHostAssignment(sleeveObj, 'mediaConverterConnections', cableId, fiberNumber);
     if (existingMcDlg && existingMcDlg.mediaConverterId) {
-        showWarning('Жила уже подключена к медиаконвертеру.', 'Жила занята');
+        showWarning('Волокно уже подключено к медиаконвертеру.', 'Волокно занято');
         return;
     }
     var existingOnuDlg = getHostAssignment(sleeveObj, 'onuConnections', cableId, fiberNumber);
     if (existingOnuDlg && existingOnuDlg.onuId) {
-        showWarning('Жила уже подключена к ONU.', 'Жила занята');
+        showWarning('Волокно уже подключено к ONU.', 'Волокно занято');
         return;
     }
     var existingRbDlg = getHostAssignment(sleeveObj, 'radioBridgeConnections', cableId, fiberNumber);
     if (existingRbDlg && existingRbDlg.radioBridgeId) {
-        showWarning('Жила уже подключена к радиомосту.', 'Жила занята');
+        showWarning('Волокно уже подключено к радиомосту.', 'Волокно занято');
         return;
     }
     const mcs = getAvailableMediaConverters();
@@ -3169,7 +3169,7 @@ function showMediaConverterSelectionDialog(sleeveObj, cableId, fiberNumber) {
     const fiberInfo = document.getElementById('onuSelectionFiberInfo');
     const searchInput = document.getElementById('onuSearchInput');
     setFiberTargetSelectionModalMode('mediaConverter');
-    if (fiberInfo) fiberInfo.textContent = 'Подключение жилы #' + fiberNumber + ' к медиаконвертеру';
+    if (fiberInfo) fiberInfo.textContent = 'Подключение волокна #' + fiberNumber + ' к медиаконвертеру';
     if (searchInput) searchInput.value = '';
     renderOnuList('');
     if (modal) modal.style.display = 'block';
@@ -3182,22 +3182,22 @@ function showRadioBridgeSelectionDialog(sleeveObj, cableId, fiberNumber) {
     const usageOptsRbDlg = isCrossLikeHostType(stRbDlg) ? { atCrossId: placeId } : { atSleeveId: placeId };
     const usage = getFiberUsage(cableId, fiberNumber, usageOptsRbDlg);
     if (usage.used) {
-        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
+        showError('Это волокно уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободное волокно.', 'Волокно занято');
         return;
     }
     var existingRbDlg = getHostAssignment(sleeveObj, 'radioBridgeConnections', cableId, fiberNumber);
     if (existingRbDlg && existingRbDlg.radioBridgeId) {
-        showWarning('Жила уже подключена к радиомосту.', 'Жила занята');
+        showWarning('Волокно уже подключено к радиомосту.', 'Волокно занято');
         return;
     }
     var existingMcDlg = getHostAssignment(sleeveObj, 'mediaConverterConnections', cableId, fiberNumber);
     if (existingMcDlg && existingMcDlg.mediaConverterId) {
-        showWarning('Жила уже подключена к медиаконвертеру.', 'Жила занята');
+        showWarning('Волокно уже подключено к медиаконвертеру.', 'Волокно занято');
         return;
     }
     var existingOnuDlg = getHostAssignment(sleeveObj, 'onuConnections', cableId, fiberNumber);
     if (existingOnuDlg && existingOnuDlg.onuId) {
-        showWarning('Жила уже подключена к ONU.', 'Жила занята');
+        showWarning('Волокно уже подключено к ONU.', 'Волокно занято');
         return;
     }
     const rbs = typeof getAvailableRadioBridgesForFiber === 'function'
@@ -3212,7 +3212,7 @@ function showRadioBridgeSelectionDialog(sleeveObj, cableId, fiberNumber) {
     const fiberInfo = document.getElementById('onuSelectionFiberInfo');
     const searchInput = document.getElementById('onuSearchInput');
     setFiberTargetSelectionModalMode('radioBridge');
-    if (fiberInfo) fiberInfo.textContent = 'Прокладка одножильного кабеля от жилы #' + fiberNumber + ' к радиомосту';
+    if (fiberInfo) fiberInfo.textContent = 'Прокладка одноволоконного кабеля от волокна #' + fiberNumber + ' к радиомосту';
     if (searchInput) searchInput.value = '';
     renderOnuList('');
     if (modal) modal.style.display = 'block';

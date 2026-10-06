@@ -231,8 +231,18 @@ function finishMapInitialReveal() {
             if (!window.syncIsConnected && typeof showSyncRequiredOverlay === 'function') {
                 showSyncRequiredOverlay();
             }
+            scheduleWelcomeAfterMapReady();
         });
     });
+}
+
+function scheduleWelcomeAfterMapReady() {
+    if (window.VolsmapEmbed && VolsmapEmbed.isEmbed && VolsmapEmbed.isEmbed()) return;
+    var delay = Math.max(120, (APP_ENTRANCE_EXIT_MS || 620) + 80);
+    setTimeout(function() {
+        var resuming = typeof resumeOnboardingTourIfNeeded === 'function' && resumeOnboardingTourIfNeeded();
+        if (!resuming && typeof initWelcomeModal === 'function') initWelcomeModal();
+    }, delay);
 }
 
 function tryCompleteMapInitialLoad() {

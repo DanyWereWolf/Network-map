@@ -349,9 +349,9 @@ function setupEventListeners() {
                     return;
                 }
             }
-            if (splitterFiberRoutingMode) { cancelSplitterFiberRouting(); showInfo('Прокладка жилы отменена.', 'Отмена'); e.preventDefault(); return; }
+            if (splitterFiberRoutingMode) { cancelSplitterFiberRouting(); showInfo('Прокладка волокна отменена.', 'Отмена'); e.preventDefault(); return; }
             if (radioBridgeRoutingMode && typeof cancelRadioBridgeRouting === 'function') { cancelRadioBridgeRouting(); showInfo('Прокладка радиолинка отменена.', 'Отмена'); e.preventDefault(); return; }
-            if (fiberRoutingMode) { cancelFiberRouting(); showInfo('Прокладка жилы отменена.', 'Отмена'); e.preventDefault(); return; }
+            if (fiberRoutingMode) { cancelFiberRouting(); showInfo('Прокладка волокна отменена.', 'Отмена'); e.preventDefault(); return; }
             if (cableSplitMode) { cancelCableSplitMode(); showInfo('Установка муфты отменена.', 'Отмена'); e.preventDefault(); return; }
             if (objectPlacementMode) { cancelObjectPlacement(); e.preventDefault(); return; }
             if (cableUndergroundEditMode) {
@@ -379,6 +379,7 @@ function setupEventListeners() {
     setupObjectTypePicker();
     setupCableTypePicker();
     setupObjectPlacementCoordsControls();
+    if (typeof setupSupportAutonumberControls === 'function') setupSupportAutonumberControls();
 
     const objectTypeSelect = document.getElementById('objectType');
     if (objectTypeSelect) {
@@ -415,6 +416,17 @@ function setupEventListeners() {
             }
             const cabinetSettingsGroup = document.getElementById('cabinetSettingsGroup');
             if (cabinetSettingsGroup) cabinetSettingsGroup.style.display = type === 'cabinet' ? 'block' : 'none';
+            const supportAutonumberGroup = document.getElementById('supportAutonumberGroup');
+            if (supportAutonumberGroup) supportAutonumberGroup.style.display = type === 'support' ? 'block' : 'none';
+            if (type === 'support') {
+                if (typeof refreshSupportAutonumberUi === 'function') refreshSupportAutonumberUi();
+            } else {
+                const nameInputReset = document.getElementById('objectName');
+                if (nameInputReset) {
+                    nameInputReset.readOnly = false;
+                    nameInputReset.classList.remove('object-name--autonumber');
+                }
+            }
             if (nameInputGroup) {
                 const nameLabel = nameInputGroup.querySelector('label');
                 if (nameLabel) {

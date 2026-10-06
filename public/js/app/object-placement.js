@@ -12,6 +12,136 @@ function getPlacementObjectName() {
     return (inp ? inp.value.trim() : '') || currentPlacementName || '';
 }
 
+var SUPPORT_AUTONUMBER_ENABLED_KEY = 'networkMap_supportAutonumber';
+var SUPPORT_AUTONUMBER_NEXT_KEY = 'networkMap_supportNextNumber';
+var SUPPORT_AUTONUMBER_PREFIX_KEY = 'networkMap_supportAutonumberPrefix';
+var SUPPORT_AUTONUMBER_DEFAULT_PREFIX = '№ ';
+
+function isSupportAutonumberEnabled() {
+    var el = document.getElementById('supportAutonumberEnabled');
+    return !!(el && el.checked);
+}
+
+function getSupportAutonumberPrefix() {
+    var el = document.getElementById('supportAutonumberPrefix');
+    if (!el) return SUPPORT_AUTONUMBER_DEFAULT_PREFIX;
+    return el.value;
+}
+
+function formatSupportAutonumberLabel(n) {
+    if (!Number.isFinite(n) || n < 1) n = 1;
+    return getSupportAutonumberPrefix() + String(n);
+}
+
+function getSuggestedSupportNextNumber() {
+    var max = 0;
+    var prefix = getSupportAutonumberPrefix();
+    if (typeof objects !== 'undefined' && Array.isArray(objects)) {
+        for (var i = 0; i < objects.length; i++) {
+            var obj = objects[i];
+            if (!obj || !obj.properties || obj.properties.get('type') !== 'support') continue;
+            var name = (obj.properties.get('name') || '');
+            if (!name) continue;
+            var numPart = name;
+            if (prefix && name.indexOf(prefix) === 0) {
+                numPart = name.slice(prefix.length);
+            }
+            var m = String(numPart).trim().match(/^(\d+)$/) || String(name).trim().match(/(\d+)\s*$/);
+            if (!m) continue;
+            var n = parseInt(m[1], 10);
+            if (Number.isFinite(n) && n > max) max = n;
+        }
+    }
+    return max + 1;
+}
+
+function getSupportAutonumberNext() {
+    var el = document.getElementById('supportAutonumberStart');
+    var n = el ? parseInt(el.value, 10) : NaN;
+    if (!Number.isFinite(n) || n < 1) n = 1;
+    return n;
+}
+
+function setSupportAutonumberNext(n) {
+    if (!Number.isFinite(n) || n < 1) n = 1;
+    var el = document.getElementById('supportAutonumberStart');
+    if (el) el.value = String(n);
+    try { localStorage.setItem(SUPPORT_AUTONUMBER_NEXT_KEY, String(n)); } catch (e) {}
+    syncSupportAutonumberNamePreview();
+}
+
+function syncSupportAutonumberNamePreview() {
+    if (!isSupportAutonumberEnabled()) return;
+    var nameEl = document.getElementById('objectName');
+    if (nameEl) nameEl.value = formatSupportAutonumberLabel(getSupportAutonumberNext());
+}
+
+function refreshSupportAutonumberUi() {
+    var enabledEl = document.getElementById('supportAutonumberEnabled');
+    var wrap = document.getElementById('supportAutonumberStartWrap');
+    var nameEl = document.getElementById('objectName');
+    var on = !!(enabledEl && enabledEl.checked);
+    if (wrap) wrap.hidden = !on;
+    if (nameEl) {
+        nameEl.readOnly = on;
+        nameEl.classList.toggle('object-name--autonumber', on);
+        if (on) nameEl.value = formatSupportAutonumberLabel(getSupportAutonumberNext());
+    }
+    try { localStorage.setItem(SUPPORT_AUTONUMBER_ENABLED_KEY, on ? '1' : '0'); } catch (e) {}
+}
+
+function setupSupportAutonumberControls() {
+    var enabledEl = document.getElementById('supportAutonumberEnabled');
+    var startEl = document.getElementById('supportAutonumberStart');
+    var prefixEl = document.getElementById('supportAutonumberPrefix');
+    if (!enabledEl || !startEl || enabledEl._supportAutonumberBound) return;
+    enabledEl._supportAutonumberBound = true;
+
+    try {
+        if (localStorage.getItem(SUPPORT_AUTONUMBER_ENABLED_KEY) === '1') enabledEl.checked = true;
+        var stored = localStorage.getItem(SUPPORT_AUTONUMBER_NEXT_KEY);
+        if (stored && /^\d+$/.test(stored)) {
+            startEl.value = stored;
+        }
+        var storedPrefix = localStorage.getItem(SUPPORT_AUTONUMBER_PREFIX_KEY);
+        if (prefixEl && storedPrefix !== null) {
+            prefixEl.value = storedPrefix;
+        }
+    } catch (e) {}
+
+    enabledEl.addEventListener('change', function() {
+        if (enabledEl.checked) {
+            try {
+                if (!localStorage.getItem(SUPPORT_AUTONUMBER_NEXT_KEY)) {
+                    startEl.value = String(getSuggestedSupportNextNumber());
+                }
+            } catch (eSuggest) {
+                startEl.value = String(getSuggestedSupportNextNumber());
+            }
+            try { localStorage.setItem(SUPPORT_AUTONUMBER_NEXT_KEY, String(getSupportAutonumberNext())); } catch (eSave) {}
+        }
+        refreshSupportAutonumberUi();
+    });
+
+    startEl.addEventListener('input', function() {
+        var n = getSupportAutonumberNext();
+        try { localStorage.setItem(SUPPORT_AUTONUMBER_NEXT_KEY, String(n)); } catch (e) {}
+        syncSupportAutonumberNamePreview();
+    });
+
+    if (prefixEl) {
+        prefixEl.addEventListener('input', function() {
+            try { localStorage.setItem(SUPPORT_AUTONUMBER_PREFIX_KEY, prefixEl.value); } catch (e) {}
+            syncSupportAutonumberNamePreview();
+        });
+    }
+
+    refreshSupportAutonumberUi();
+}
+
+window.refreshSupportAutonumberUi = refreshSupportAutonumberUi;
+window.setupSupportAutonumberControls = setupSupportAutonumberControls;
+
 function normalizeObjectPlacementCoords(lat, lon) {
     lat = Number(typeof lat === 'string' ? lat.trim().replace(',', '.') : lat);
     lon = Number(typeof lon === 'string' ? lon.trim().replace(',', '.') : lon);
@@ -330,9 +460,19 @@ function placeObjectAtCoords(coords) {
         if (!createObject(type, name || '', coords, { crossType: crossType, crossPorts: crossPorts, crossCopperPorts: crossCopperPortsPl })) return false;
         currentPlacementName = name || '';
     } else if (type === 'support' || type === 'attachment') {
-        const name = document.getElementById('objectName').value.trim();
+        var name;
+        var usedSupportAutonumber = false;
+        if (type === 'support' && isSupportAutonumberEnabled()) {
+            name = formatSupportAutonumberLabel(getSupportAutonumberNext());
+            usedSupportAutonumber = true;
+        } else {
+            name = document.getElementById('objectName').value.trim();
+        }
         var waypointPm = createObject(type, name || '', coords);
         if (!waypointPm) return false;
+        if (usedSupportAutonumber) {
+            setSupportAutonumberNext(getSupportAutonumberNext() + 1);
+        }
         if (typeof tryAttachWaypointToNearbyCables === 'function') {
             tryAttachWaypointToNearbyCables(waypointPm, { snap: true, persist: true });
         }
@@ -600,6 +740,109 @@ function cancelObjectPlacement() {
     syncMapPanLockForEditTools();
 }
 
+/**
+ * Включить размещение кликом по карте (после выбора инструмента).
+ * Не использует форму координат — только клик.
+ * @returns {boolean} удалось ли включить режим
+ */
+function startClickPlacementMode(opts) {
+    opts = opts || {};
+    try {
+        if (typeof isNetworkMapMobileViewOnly === 'function' && isNetworkMapMobileViewOnly()) {
+            return false;
+        }
+        if (!isEditMode) {
+            if (typeof showInfo === 'function') showInfo('Включите режим «Редактирование»', 'Режим');
+            return false;
+        }
+
+        clearShowOnMapHighlight();
+
+        if (currentCableTool) {
+            currentCableTool = false;
+            var cableBtn = document.getElementById('addCable');
+            if (cableBtn) {
+                cableBtn.classList.remove('btn-add-object--placement');
+                cableBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><line x1="12" y1="2" x2="12" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line></svg><span class="btn-lay-cable-text">Проложить кабель</span>';
+                cableBtn.style.background = '';
+            }
+            clearSelection();
+            removeCablePreview();
+            cableSource = null;
+            cableSourceCopperSwitchId = null;
+            cableWaypoints = [];
+            cancelUndergroundSpanEdit();
+            resetCableUndergroundLayingState(false);
+            resetCableUndergroundPendingSpans();
+            pendingCopperPortPreset = null;
+            pendingCopperRouteFinish = null;
+            if (typeof finishOltPortCableLayingSession === 'function') finishOltPortCableLayingSession();
+            if (typeof finishRadioBridgePortCableLayingSession === 'function') finishRadioBridgePortCableLayingSession();
+            copperCableLayingActive = false;
+        }
+
+        if (typeof splitterFiberRoutingMode !== 'undefined' && splitterFiberRoutingMode && typeof cancelSplitterFiberRouting === 'function') {
+            cancelSplitterFiberRouting();
+        }
+        if (typeof radioBridgeRoutingMode !== 'undefined' && radioBridgeRoutingMode && typeof cancelRadioBridgeRouting === 'function') {
+            cancelRadioBridgeRouting();
+        }
+        if (typeof fiberRoutingMode !== 'undefined' && fiberRoutingMode && typeof cancelFiberRouting === 'function') {
+            cancelFiberRouting();
+        }
+        if (typeof regionDrawMode !== 'undefined' && regionDrawMode && typeof cancelRegionDraw === 'function') {
+            cancelRegionDraw();
+        }
+
+        var objectTypeEl = document.getElementById('objectType');
+        if (!objectTypeEl) return false;
+        var type = objectTypeEl.value;
+
+        if (type === 'node' || type === 'cross') {
+            var nameEl = document.getElementById('objectName');
+            var name = nameEl && nameEl.value ? nameEl.value.trim() : '';
+            if (!name) {
+                if (objectPlacementMode) cancelObjectPlacement();
+                if (opts.showNameHint !== false && typeof showWarning === 'function') {
+                    showWarning(type === 'cross' ? 'Введите имя кросса, затем кликните по карте' : 'Введите имя узла, затем кликните по карте', 'Требуется имя');
+                }
+                if (nameEl) {
+                    try { nameEl.focus(); } catch (eFocus) {}
+                }
+                return false;
+            }
+            currentPlacementName = name;
+            if (type === 'node') {
+                var nodeKindSelect = document.getElementById('nodeKind');
+                currentPlacementNodeKind = nodeKindSelect ? nodeKindSelect.value : 'network';
+            }
+        } else {
+            currentPlacementName = (document.getElementById('objectName') && document.getElementById('objectName').value.trim()) || '';
+        }
+
+        // Форма координат не должна мешать клику по карте
+        clearObjectPlacementCoordsForm();
+
+        objectPlacementMode = true;
+        currentPlacementType = type;
+        if (myMap && myMap.container) {
+            var mapEl = myMap.container.getElement();
+            if (mapEl) {
+                mapEl.style.cursor = 'crosshair';
+                mapEl.classList.add('map-crosshair-active');
+            }
+        }
+        setAddObjectButtonPlacementMode(true);
+        return true;
+    } finally {
+        if (typeof syncMapPanLockForEditTools === 'function') syncMapPanLockForEditTools();
+    }
+}
+
+window.startClickPlacementMode = startClickPlacementMode;
+window.handleAddObject = handleAddObject;
+window.cancelObjectPlacement = cancelObjectPlacement;
+
 var OBJECT_TYPE_STORAGE_KEY = 'networkMap_objectType';
 var CABLE_TYPE_STORAGE_KEY = 'networkMap_cableType';
 var OBJECT_TYPE_LABELS = {
@@ -637,14 +880,23 @@ var OBJECT_TYPE_CHIP_ICONS = {
 
 function ensureObjectTypeChipIcons() {
     document.querySelectorAll('.object-type-chip[data-type]').forEach(function(chip) {
-        if (chip.querySelector('.object-type-chip__icon')) return;
+        var isEditTool = chip.classList.contains('edit-tool-chip');
+        if (chip.querySelector('.object-type-chip__icon')) {
+            if (isEditTool) {
+                var existingLabel = (chip.querySelector('.object-type-chip__label') && chip.querySelector('.object-type-chip__label').textContent || '').trim()
+                    || chip.getAttribute('aria-label')
+                    || '';
+                if (existingLabel) chip.setAttribute('title', existingLabel);
+            }
+            return;
+        }
         var type = chip.getAttribute('data-type');
         var icon = OBJECT_TYPE_CHIP_ICONS[type];
         if (!icon) return;
         var label = (OBJECT_TYPE_LABELS[type] || chip.getAttribute('aria-label') || chip.getAttribute('title') || chip.textContent || '').trim();
         if (label) {
-            chip.setAttribute('title', label);
             chip.setAttribute('aria-label', label);
+            chip.setAttribute('title', label);
         }
         chip.innerHTML =
             '<span class="object-type-chip__icon" aria-hidden="true">' + icon + '</span>' +
@@ -739,7 +991,15 @@ function syncObjectTypePickerUI() {
     });
     var propsSub = document.getElementById('propertiesPanelSub');
     if (propsSub && !propsSub.hidden && document.body.classList.contains('properties-open')) {
-        propsSub.textContent = 'Клик по карте — поставить: ' + getObjectTypeLabel(val);
+        var needsName = (val === 'node' || val === 'cross');
+        var nameVal = (document.getElementById('objectName') && document.getElementById('objectName').value.trim()) || '';
+        if (needsName && !nameVal) {
+            propsSub.textContent = val === 'cross'
+                ? 'Введите имя кросса, затем кликните по карте'
+                : 'Введите имя узла, затем кликните по карте';
+        } else {
+            propsSub.textContent = 'Кликните по карте, чтобы поставить: ' + getObjectTypeLabel(val);
+        }
     }
 }
 
@@ -880,7 +1140,7 @@ function isMapPanLockedForCableTool() {
     return false;
 }
 
-/** На touch при прокладке GPON-жилы (OLT, ONU, сплиттер) pan отключён; на мыши — ЛКМ перетаскивает карту. */
+/** На touch при прокладке GPON-волокна (OLT, ONU, сплиттер) pan отключён; на мыши — ЛКМ перетаскивает карту. */
 function isMapPanLockedForFiberRouting() {
     if (!fiberRoutingMode && !splitterFiberRoutingMode && !radioBridgeRoutingMode) return false;
     try {
@@ -898,7 +1158,7 @@ function isMapPanDragTrackingActive() {
  * На сенсорных экранах поведение «перетаскивание» карты перехватывает движение пальца,
  * из‑за чего не срабатывает предпросмотр кабеля / «фантом» при размещении объектов.
  * Пока активны эти режимы, отключаем pan (drag); масштаб жестами и кнопками зума сохраняется.
- * На мыши в размещении объектов, прокладке кабеля и GPON-жил pan (ЛКМ + перетаскивание) включён; клик после pan не ставит точку.
+ * На мыши в размещении объектов, прокладке кабеля и GPON-волокон pan (ЛКМ + перетаскивание) включён; клик после pan не ставит точку.
  */
 function syncMapPanLockForEditTools() {
     if (!myMap || !myMap.behaviors) return;

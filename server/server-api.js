@@ -22,6 +22,7 @@ const updateBroadcast = require('./lib/update-broadcast');
 const passwords = require('./lib/password');
 const cpuPool = require('./lib/cpu-pool');
 const zabbixClient = require('./lib/zabbix-client');
+const nedImport = require('./lib/ned-import');
 
 /** Блокировка параллельных массовых рассылок. */
 var updateBroadcastInFlight = false;
@@ -640,6 +641,26 @@ app.get('/api/map', (req, res) => {
     }
 });
 
+/** Конвертация .ned (NeD) → JSON карты. Тело: raw bytes, Content-Type: application/octet-stream */
+app.post('/api/import/ned', express.raw({ type: '*/*', limit: '120mb' }), async function(req, res) {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+    if (!nedImport.converterAvailable()) {
+        return res.status(503).json({
+            error: 'Конвертер NeD не собран. Выполните: dotnet build tools/ned-import/NedToNetworkMap -c Release'
+        });
+    }
+    try {
+        const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
+        const data = await nedImport.convertNedBuffer(buf);
+        res.json({ ok: true, count: data.length, data: data });
+    } catch (e) {
+        console.error('[ned-import]', e && e.message ? e.message : e);
+        res.status(500).json({ error: String(e && e.message ? e.message : e) });
+    }
+});
+
 app.post('/api/map', (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
@@ -670,6 +691,34 @@ app.post('/api/map', (req, res) => {
             });
         }
         db.setMapData(orgId, data, { allowShrink: allowShrink });
+        // Как при восстановлении бэкапа: живой sync-кэш = новая карта, иначе GET /api/map
+        // отдаст старое состояние до debounce, и F5/reload после импорта «откатит» объекты.
+        try {
+            var syncKey = normalizeSyncOrgId(orgId);
+            if (syncKey) {
+                if (mapDbSaveTimersByOrg[syncKey]) {
+                    clearTimeout(mapDbSaveTimersByOrg[syncKey]);
+                    mapDbSaveTimersByOrg[syncKey] = null;
+                }
+                syncCurrentStateByOrg[syncKey] = {
+                    clientId: 'api-map-save',
+                    data: cpuPool.deepCloneSync(data)
+                };
+                try {
+                    syncStateFingerprintByOrg[syncKey] = fingerprintMapData(data);
+                } catch (eFp) {}
+                var refreshPayload = { type: 'map_refresh', organizationId: syncKey, forceFull: true };
+                var gnSave = syncGroupNamesByOrg[syncKey] || syncGroupNames;
+                if (gnSave && (gnSave.cross || gnSave.node)) refreshPayload.groupNames = gnSave;
+                wss.clients.forEach(function(client) {
+                    if (client.readyState === WebSocket.OPEN && syncOrgIdsEqual(client.orgId, syncKey)) {
+                        try { client.send(JSON.stringify(refreshPayload)); } catch (eSend) {}
+                    }
+                });
+            }
+        } catch (eSync) {
+            console.warn('[API] map save sync refresh failed:', eSync && eSync.message ? eSync.message : eSync);
+        }
         res.json({ ok: true, mapLimits: getMapObjectLimitPayload(orgId) });
     } catch (e) {
         var status = (e && e.code === 'MAP_DANGEROUS_SHRINK') ? 400 : 500;

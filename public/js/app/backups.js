@@ -8,13 +8,13 @@ function setupBackupsSection() {
 
     refreshBtn.addEventListener('click', loadBackupsList);
 
-    document.querySelectorAll('.accordion-header').forEach(header => {
-        if (header.getAttribute('data-accordion') === 'backups') {
-            header.addEventListener('click', function() {
-                setTimeout(loadBackupsList, 150);
-            });
-        }
-    });
+    var dataSection = document.getElementById('infoDockDataSection');
+    if (dataSection && !dataSection._backupsToggleBound) {
+        dataSection._backupsToggleBound = true;
+        dataSection.addEventListener('toggle', function() {
+            if (dataSection.open) setTimeout(loadBackupsList, 150);
+        });
+    }
 }
 
 var MONTH_NAMES = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];

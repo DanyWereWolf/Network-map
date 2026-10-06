@@ -1,5 +1,5 @@
 /**
- * Прокладка GPON-жил и сплиттер-маршрутов по карте.
+ * Прокладка GPON-волокон и сплиттер-маршрутов по карте.
  */
 function getGponFiberRoutingSourceAnchor(data) {
     if (!data) return null;
@@ -383,7 +383,7 @@ function startFiberRouting(sleeveObj, cableId, fiberNumber, targetType, targetOb
     fiberRoutingWaypoints = [];
     var sleeveName = sleeveObj.properties.get('name') || (sleeveObj.properties.get('type') === 'cross' ? 'Кросс' : 'Муфта');
     var targetName = getFiberRoutingTargetLabel(targetType, targetObj);
-    showInfo('Режим прокладки жилы: ' + sleeveName + ' → ' + targetName + '. Кликайте по опорам и креплениям для маршрута, затем кликните по целевому объекту (фиолетовая пульсирующая обводка) для завершения. Нажмите Escape для отмены.', 'Прокладка жилы');
+    showInfo('Режим прокладки волокна: ' + sleeveName + ' → ' + targetName + '. Кликайте по опорам и креплениям для маршрута, затем кликните по целевому объекту (фиолетовая пульсирующая обводка) для завершения. Нажмите Escape для отмены.', 'Прокладка волокна');
     selectObject(sleeveObj);
     applyGponRoutingMapHighlight(sleeveObj, targetObj);
     syncMapPanLockForEditTools();

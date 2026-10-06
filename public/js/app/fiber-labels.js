@@ -1,5 +1,5 @@
 /**
- * Подписи жил и сращиваний на схеме.
+ * Подписи волокон и сращиваний на схеме.
  */
 function resolveFiberConnectionLabel(conn, fiberLabels) {
     if (!conn) return '';
@@ -13,7 +13,7 @@ function resolveFiberConnectionLabel(conn, fiberLabels) {
     return fromL || toL || '';
 }
 
-/** Перенос подписей с жил на объекты сращиваний (старые данные). */
+/** Перенос подписей с волокон на объекты сращиваний (старые данные). */
 function syncFiberConnectionLabelsFromLegacy(sleeveObj) {
     const fiberConnections = sleeveObj.properties.get('fiberConnections') || [];
     const fiberLabels = sleeveObj.properties.get('fiberLabels') || {};
@@ -311,21 +311,62 @@ function updateFiberConnectionLabel(sleeveObj, connIndex, label) {
     }
 }
 
-/** Цвет/название жилы по кабелю и номеру. */
+/** Цвет/название волокна по кабелю и номеру. */
 function getFiberMetaForDesc(cableId, fiberNumber) {
-    if (!cableId || fiberNumber == null || typeof objects === 'undefined' || !objects) return null;
-    var cable = objects.find(function(o) {
-        return o && o.properties && o.properties.get('type') === 'cable' && o.properties.get('uniqueId') === cableId;
-    });
-    if (!cable || typeof getFiberColors !== 'function') return null;
-    var fibers = getFiberColors(cable);
     var n = parseInt(fiberNumber, 10);
-    return fibers.find(function(f) { return f.number === n; }) || null;
+    if (isNaN(n) || n < 1) return null;
+
+    function standardMeta(num) {
+        if (window.FiberCableConfig && typeof window.FiberCableConfig.buildStandardPalette === 'function') {
+            var pal = window.FiberCableConfig.buildStandardPalette(Math.max(num, 12));
+            var hit = pal.find(function(f) { return f.number === num; });
+            if (hit) return hit;
+        }
+        // ITU-T порядок на случай, если FiberCableConfig ещё не загружен
+        var base = [
+            { name: 'Синий', color: '#0000FF' }, { name: 'Оранжевый', color: '#FF8C00' },
+            { name: 'Зеленый', color: '#00FF00' }, { name: 'Коричневый', color: '#8B4513' },
+            { name: 'Серый', color: '#808080' }, { name: 'Белый', color: '#FFFFFF' },
+            { name: 'Красный', color: '#FF0000' }, { name: 'Черный', color: '#000000' },
+            { name: 'Желтый', color: '#FFFF00' }, { name: 'Фиолетовый', color: '#800080' },
+            { name: 'Розовый', color: '#FFC0CB' }, { name: 'Бирюзовый', color: '#00CED1' }
+        ];
+        var b = base[(num - 1) % 12];
+        var ring = num > 12;
+        return {
+            number: num,
+            name: ring ? b.name + ' (с черн. кольцом)' : b.name,
+            color: b.color,
+            hasBlackRing: ring
+        };
+    }
+
+    var cable = null;
+    if (typeof findCableByUniqueId === 'function') {
+        cable = findCableByUniqueId(cableId);
+    }
+    if (!cable && typeof objects !== 'undefined' && objects) {
+        var uid = cableId != null ? String(cableId) : '';
+        cable = objects.find(function(o) {
+            return o && o.properties && o.properties.get('type') === 'cable' &&
+                String(o.properties.get('uniqueId')) === uid;
+        }) || null;
+    }
+    if (cable && typeof getFiberColors === 'function') {
+        var fibers = getFiberColors(cable) || [];
+        var found = fibers.find(function(f) { return f.number === n; });
+        if (found && found.color) return found;
+        // Кабель есть, но палитра короче номера волокна (импорт / fiberCount) —
+        // всё равно показываем стандартный цвет по номеру, не серый.
+        return standardMeta(n);
+    }
+    // Кабель не найден (битая ссылка в fiberConnections) — цвет по номеру волокна
+    return standardMeta(n);
 }
 
 function fiberColorNameForDesc(meta, fiberNumber) {
     if (meta && meta.name) return String(meta.name).trim().toLowerCase();
-    return fiberNumber != null ? ('жила ' + fiberNumber) : '';
+    return fiberNumber != null ? ('волокно ' + fiberNumber) : '';
 }
 
 function defaultCableNameForFiberDesc(cableId, hostObj) {
@@ -335,7 +376,7 @@ function defaultCableNameForFiberDesc(cableId, hostObj) {
     return cableId ? String(cableId).substring(0, 12) + '…' : 'Кабель';
 }
 
-/** Стороны сращивания с учётом perspective (с какой жилы смотреть). */
+/** Стороны сращивания с учётом perspective (с какого волокна смотреть). */
 function resolveFiberConnectionEnds(conn, opts) {
     opts = opts || {};
     if (!conn || !conn.from || !conn.to) return null;
@@ -362,7 +403,7 @@ function resolveFiberConnCableName(cableId, cableNameById, hostObj) {
 
 /**
  * Структурированное описание сращивания (UI / PDF):
- * стороны с цветом жилы, без текстовых имён цвета.
+ * стороны с цветом волокна, без текстовых имён цвета.
  */
 function buildFiberConnectionDescParts(conn, cableNameById, opts) {
     opts = opts || {};
@@ -388,14 +429,14 @@ function buildFiberConnectionDescParts(conn, cableNameById, opts) {
             colorName: fiberColorNameForDesc(toMeta, ends.to.fiberNumber),
             hasBlackRing: !!(toMeta && toMeta.hasBlackRing)
         },
-        join: 'соединена с'
+        join: 'соединено с'
     };
 }
 
 /**
  * Текстовое описание сращивания (подсказки, plain):
- * «Кабель А Ж1 соединена с Кабель Б Ж4»
- * opts.includeColorNames — добавить «, цвет жил Ж1(синий) с Ж4(красный)» для plain-текста.
+ * «Кабель А В1 соединено с Кабель Б В4»
+ * opts.includeColorNames — добавить «, цвет волокон В1(синий) с В4(красный)» для plain-текста.
  */
 function formatFiberConnectionDesc(conn, cableNameById, opts) {
     opts = opts || {};
@@ -403,13 +444,13 @@ function formatFiberConnectionDesc(conn, cableNameById, opts) {
     if (!parts) return '';
     var fromNum = parts.from.fiberNumber;
     var toNum = parts.to.fiberNumber;
-    var line = parts.from.cableName + ' Ж' + fromNum + ' ' + parts.join + ' ' +
-        parts.to.cableName + ' Ж' + toNum;
+    var line = parts.from.cableName + ' В' + fromNum + ' ' + parts.join + ' ' +
+        parts.to.cableName + ' В' + toNum;
     if (opts.includeColorNames) {
         var fromColor = parts.from.colorName;
         var toColor = parts.to.colorName;
         if (fromColor || toColor) {
-            line += ', цвет жил Ж' + fromNum + '(' + fromColor + ') с Ж' + toNum + '(' + toColor + ')';
+            line += ', цвет волокон В' + fromNum + '(' + fromColor + ') с В' + toNum + '(' + toColor + ')';
         }
     }
     return line;
@@ -419,7 +460,7 @@ function fiberDescSwatchHtml(meta, fiberNumber, esc) {
     var color = (meta && meta.color) ? String(meta.color) : '#94a3b8';
     var name = fiberColorNameForDesc(meta, fiberNumber);
     var ring = meta && meta.hasBlackRing;
-    var title = name ? ('Ж' + fiberNumber + ' · ' + name) : ('Ж' + fiberNumber);
+    var title = name ? ('В' + fiberNumber + ' · ' + name) : ('В' + fiberNumber);
     return '<span class="fiber-desc-swatch' + (ring ? ' fiber-desc-swatch--ring' : '') +
         '" style="background-color:' + esc(color) + '" title="' + esc(title) + '" aria-label="' + esc(title) + '"></span>';
 }
@@ -432,13 +473,13 @@ function fiberDescSideHtml(cableName, fiberNumber, meta, esc) {
     return '<span class="fiber-desc-side">' +
         fiberDescSwatchHtml(meta, fiberNumber, esc) +
         '<span class="fiber-desc-cable">' + esc(cableName) + '</span>' +
-        '<span class="fiber-desc-fiber-badge" style="background-color:' + esc(color) + ';color:' + textOn + ';" title="' + esc(name || ('Ж' + fiberNumber)) + '">Ж' + fiberNumber + '</span>' +
+        '<span class="fiber-desc-fiber-badge" style="background-color:' + esc(color) + ';color:' + textOn + ';" title="' + esc(name || ('В' + fiberNumber)) + '">В' + fiberNumber + '</span>' +
         '</span>';
 }
 
 /**
- * HTML-описание сращивания с визуальными цветами жил.
- * «[●] Кабель А [Ж1] соединена с [●] Кабель Б [Ж4]»
+ * HTML-описание сращивания с визуальными цветами волокон.
+ * «[●] Кабель А [В1] соединено с [●] Кабель Б [В4]»
  */
 function buildFiberConnectionDescHtml(conn, cableNameById, opts) {
     opts = opts || {};
@@ -629,7 +670,7 @@ function selectCrossPortLinkForLabel(hostObj, linkMeta, opts) {
         bar.hidden = false;
         bar.setAttribute('aria-hidden', 'false');
     }
-    if (titleEl) titleEl.textContent = 'Подпись жилы на порту';
+    if (titleEl) titleEl.textContent = 'Подпись волокна на порту';
     if (descEl) descEl.textContent = desc;
     if (gotoBtn) gotoBtn.style.display = 'none';
     if (deleteBtn) deleteBtn.textContent = 'Снять с порта';
@@ -1077,7 +1118,7 @@ function fiberSchemePathMidpoint(pathD) {
     return { x: 0, y: 0 };
 }
 
-/** Точка подписи на линии жилы → порт кросса (горизонтальный участок). */
+/** Точка подписи на линии волокна → порт кросса (горизонтальный участок). */
 function fiberSchemeCrossLinkLabelPoint(fx, fy, px, py, opts) {
     opts = opts || {};
     if (opts.isTop) {

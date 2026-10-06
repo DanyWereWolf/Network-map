@@ -26,7 +26,7 @@ async function updateCableFiberSettings(cableUniqueId, fiberCount, fiberPalette,
         var lost = countConnectionsLostOnCableFiberReduction(cableUniqueId, newCount);
         var ok = await showConfirm(
             formatCableFiberReductionLossMessage(oldCount, newCount, lost),
-            'Изменение числа жил',
+            'Изменение числа волокон',
             {
                 confirmText: 'Применить',
                 cancelText: 'Отмена',
@@ -121,7 +121,7 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
             var obj = points[idx];
             var pt = obj && obj.properties ? obj.properties.get('type') : null;
             if (pt === 'node') {
-                if (!skipSync) showError('Узел сети не может быть промежуточной точкой кабеля. Узлы подключаются только через жилы оптического кросса.', 'Недопустимое действие');
+                if (!skipSync) showError('Узел сети не может быть промежуточной точкой кабеля. Узлы подключаются только через волокна оптического кросса.', 'Недопустимое действие');
                 return false;
             }
             if (pt === 'splitter' || pt === 'onu' || pt === 'camera' || pt === 'mediaConverter') {

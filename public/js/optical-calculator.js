@@ -742,7 +742,7 @@
                 pushObj(step.onu);
             }
 
-            // Fallback: сплиттер на жиле кросса/муфты (в т.ч. embedded).
+            // Fallback: сплиттер на волокне кросса/муфты (в т.ч. embedded).
             var hostCand = step.object || step.sleeve || lastHost;
             if (hostCand && hostCand.properties && lastCableId != null && lastFiberNumber != null) {
                 var objType = hostCand.properties.get('type');
@@ -1097,7 +1097,7 @@
     function collectSignalResultsFromOltPort(oltObj, portNumber) {
         var portAssignments = oltObj.properties.get('portAssignments') || {};
         var ass = portAssignments[String(portNumber)];
-        if (!ass) return { error: 'На этот порт не назначена жила' };
+        if (!ass) return { error: 'На этот порт не назначено волокно' };
 
         var startObj = oltObj;
         if (ass.crossId != null) {

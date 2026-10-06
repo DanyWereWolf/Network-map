@@ -1113,13 +1113,30 @@ body.page-with-bg:has(.admin-shell) {
     background: linear-gradient(90deg, #dc2626, #f87171);
 }
 
-/* Source cloud */
-.source-cloud {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-content: flex-start;
-    min-height: 120px;
+/* Источники входа — список, без scale-чипов (они наезжали друг на друга) */
+.source-rank {
+    min-width: 0;
+    min-height: 0;
+    max-height: min(320px, 42vh);
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    padding: 2px 6px 2px 0;
+    gap: 12px;
+}
+
+.source-rank .rank-row {
+    min-width: 0;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(15, 23, 42, 0.06);
+    background: linear-gradient(135deg, rgba(240, 253, 250, 0.45), rgba(255, 255, 255, 0.92));
+}
+
+.source-rank .rank-row-label {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.76rem;
+    letter-spacing: -0.01em;
 }
 
 .admin-shell .visit-list {
@@ -1129,60 +1146,6 @@ body.page-with-bg:has(.admin-shell) {
     overscroll-behavior: contain;
     padding: 2px 6px 2px 0;
     margin-right: -2px;
-}
-
-.source-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    border-radius: 8px;
-    border: 1px solid rgba(15, 118, 110, 0.2);
-    background: linear-gradient(135deg, rgba(240, 253, 250, 0.95), #fff);
-    color: var(--admin-ink);
-    font: inherit;
-    cursor: default;
-    transform: scale(var(--chip-scale, 1));
-    transform-origin: center left;
-    transition: border-color 0.15s, box-shadow 0.15s;
-}
-
-.source-chip:hover {
-    border-color: rgba(15, 118, 110, 0.4);
-    box-shadow: 0 6px 16px rgba(15, 118, 110, 0.1);
-}
-
-.source-chip-label {
-    font-size: 0.78rem;
-    font-weight: 600;
-    max-width: 180px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.source-chip-count {
-    font-family: var(--admin-display);
-    font-size: 0.8rem;
-    color: var(--admin-brand);
-}
-
-.source-chip.tone-2 {
-    border-color: rgba(8, 145, 178, 0.25);
-    background: linear-gradient(135deg, rgba(236, 254, 255, 0.95), #fff);
-}
-
-.source-chip.tone-2 .source-chip-count { color: #0e7490; }
-
-.source-chip.tone-3 {
-    border-color: rgba(194, 65, 12, 0.22);
-    background: linear-gradient(135deg, rgba(255, 247, 237, 0.95), #fff);
-}
-
-.source-chip.tone-3 .source-chip-count { color: #c2410c; }
-
-.source-chip.tone-4 {
-    border-color: rgba(20, 184, 166, 0.25);
 }
 
 [data-theme="dark"] .col-bar-wrap {
@@ -1205,18 +1168,9 @@ body.page-with-bg:has(.admin-shell) {
 [data-theme="dark"] .risk-tile--info strong { color: #5eead4; }
 [data-theme="dark"] .risk-tile--muted strong { color: #cbd5e1; }
 
-[data-theme="dark"] .source-chip {
-    background: linear-gradient(135deg, rgba(15, 118, 110, 0.16), rgba(15, 23, 42, 0.85));
-    border-color: rgba(45, 212, 191, 0.22);
-    color: #e2e8f0;
-}
-
-[data-theme="dark"] .source-chip.tone-2 {
-    background: linear-gradient(135deg, rgba(8, 145, 178, 0.16), rgba(15, 23, 42, 0.85));
-}
-
-[data-theme="dark"] .source-chip.tone-3 {
-    background: linear-gradient(135deg, rgba(194, 65, 12, 0.18), rgba(15, 23, 42, 0.85));
+[data-theme="dark"] .source-rank .rank-row {
+    background: linear-gradient(135deg, rgba(15, 118, 110, 0.12), rgba(15, 23, 42, 0.72));
+    border-color: rgba(148, 163, 184, 0.12);
 }
 
 [data-theme="dark"] .rank-row:nth-child(-n+3) .rank-row-index {

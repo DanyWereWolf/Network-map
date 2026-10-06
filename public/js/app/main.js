@@ -28,10 +28,6 @@ function startMapApp() {
     startMapLoadSafetyTimeout();
 
     initUserUI();
-    if (!(window.VolsmapEmbed && VolsmapEmbed.isEmbed && VolsmapEmbed.isEmbed())) {
-        initWelcomeModal();
-        resumeOnboardingTourIfNeeded();
-    }
     document.addEventListener('keydown', function(e) {
         if (e.key !== 'Escape') return;
         var wm = document.getElementById('welcomeModal');

@@ -51,7 +51,7 @@
 | **sync.js** | WebSocket: state/op, курсоры, блокировки, список «В сети» |
 | **groups.js** | Имена групп кроссов/узлов, `groupKey(coords)` |
 | **history.js** | Журнал изменений (модалка) |
-| **fiber-cable-config.js** | Палитры и конфигурация жил ВОЛС |
+| **fiber-cable-config.js** | Палитры и конфигурация волокон ВОЛС |
 | **map-legend.js** | Легенда типов на карте |
 | **landing-nav.js** | Меню лендинга |
 | **news-page.js** | Страница `news.html` |

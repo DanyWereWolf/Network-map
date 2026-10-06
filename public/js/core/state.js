@@ -23,7 +23,7 @@ var pendingCopperPortPreset = null;
 var pendingCopperRouteFinish = null;
 /** Прокладка меди только с портов коммутатора/кросса (не из списка типа кабеля) */
 var copperCableLayingActive = false;
-/** Прокладка одножильного feeder с PON-порта OLT в муфту/кросс */
+/** Прокладка одноволоконного feeder с PON-порта OLT в муфту/кросс */
 var pendingOltPortPreset = null;
 /** Результат apply PON до add_cable — финализация после sync */
 var pendingOltPortPresetResult = null;

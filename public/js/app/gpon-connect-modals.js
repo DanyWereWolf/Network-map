@@ -1,11 +1,11 @@
 /**
- * Модалки подключения жил к OLT, ONU, узлу.
+ * Модалки подключения волокон к OLT, ONU, узлу.
  */
 function showSplitterOutputSplitterDialog(splitterObj, outIdx) {
     syncSplitterInputFromHost(splitterObj);
     var effectiveInput = getSplitterRootInputFiber(splitterObj);
     if (!effectiveInput) {
-        showWarning('Сначала подключите входную жилу к сплиттеру с муфты или кросса.', 'Нет входа');
+        showWarning('Сначала подключите входное волокно к сплиттеру с муфты или кросса.', 'Нет входа');
         return;
     }
     var outsSp = splitterObj.properties.get('outputConnections') || [];
@@ -135,7 +135,7 @@ function showSplitterOutputHostDialog(splitterObj, outIdx) {
     syncSplitterInputFromHost(splitterObj);
     var effectiveInput = getSplitterRootInputFiber(splitterObj);
     if (!effectiveInput) {
-        showWarning('Сначала подключите входную жилу к сплиттеру с муфты или кросса.', 'Нет входа');
+        showWarning('Сначала подключите входное волокно к сплиттеру с муфты или кросса.', 'Нет входа');
         return;
     }
     var outsHost = splitterObj.properties.get('outputConnections') || [];
@@ -175,11 +175,11 @@ function renderSplitterOutputHostModal() {
     var hintEl = document.getElementById('splitterOutputHostHint');
     if (!listEl) return;
     if (titleEl) {
-        titleEl.textContent = data.phase === 'fiber' ? 'Выбор жилы в муфте/кроссе' : 'Выбор муфты или кросса';
+        titleEl.textContent = data.phase === 'fiber' ? 'Выбор волокна в муфте/кроссе' : 'Выбор муфты или кросса';
     }
     if (hintEl) {
         hintEl.textContent = data.phase === 'fiber'
-            ? 'Выберите свободную жилу — от неё продолжится трассировка по сети.'
+            ? 'Выберите свободное волокно — от неё продолжится трассировка по сети.'
             : 'Выберите муфту или кросс, куда пойдёт выход сплиттера.';
     }
     listEl.innerHTML = '';
@@ -204,7 +204,7 @@ function renderSplitterOutputHostModal() {
     var splitterId = getObjectUniqueId(data.splitterObj);
     var fibers = getAvailableFibersAtHostForSplitterOutput(host, splitterId, data.outIdx);
     if (!fibers.length) {
-        listEl.innerHTML = '<div class="node-list-empty"><p>Нет свободных жил в выбранной муфте/кроссе.</p></div>';
+        listEl.innerHTML = '<div class="node-list-empty"><p>Нет свободных волокон в выбранной муфте/кроссе.</p></div>';
         return;
     }
     fibers.forEach(function(opt, idx) {
@@ -385,13 +385,13 @@ function showOltSelectionDialog(sleeveObj, cableId, fiberNumber) {
         : { type: 'oltIncoming', atSleeveId: placeId };
     const usage = getFiberUsage(cableId, fiberNumber, opts);
     if (usage.used) {
-        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
+        showError('Это волокно уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободное волокно.', 'Волокно занято');
         return;
     }
     if (typeof getFiberOltRealAssignment === 'function') {
         var existingOltDlg = getFiberOltRealAssignment(sleeveObj, cableId, fiberNumber);
         if (existingOltDlg && existingOltDlg.oltId) {
-            showWarning('Жила уже связана с OLT.', 'Жила занята');
+            showWarning('Волокно уже связано с OLT.', 'Волокно занято');
             return;
         }
     }
@@ -411,7 +411,7 @@ function showOltSelectionDialog(sleeveObj, cableId, fiberNumber) {
     const fiberInfo = document.getElementById('oltSelectionFiberInfo');
     const oltSelect = document.getElementById('oltSelectSelect');
     const confirmBtn = document.getElementById('confirmOltSelection');
-    if (fiberInfo) fiberInfo.textContent = 'Подключение жилы #' + fiberNumber + ' как приход в uplink SFP OLT';
+    if (fiberInfo) fiberInfo.textContent = 'Подключение волокна #' + fiberNumber + ' как приход в uplink SFP OLT';
     if (oltSelect) {
         oltSelect.innerHTML = '<option value="">— выберите OLT</option>';
         olts.forEach((olt, idx) => {
@@ -443,7 +443,7 @@ function connectFiberToOltWithRoute(sleeveObj, cableId, fiberNumber, oltObj, rou
     if (isCrossLikeHostType(t)) opts.atCrossId = placeId; else opts.atSleeveId = placeId;
     const usage = getFiberUsage(cableId, fiberNumber, opts);
     if (usage.used) {
-        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
+        showError('Это волокно уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободное волокно.', 'Волокно занято');
         return;
     }
     var portIdx = parseInt(uplinkPortIndex, 10);
@@ -474,7 +474,7 @@ function connectFiberToOltWithRoute(sleeveObj, cableId, fiberNumber, oltObj, rou
         });
         if (existingPlace && getObjectUniqueId(existingPlace) !== currentPlaceId) {
             var placeName = existingPlace.properties.get('name') || (existingPlace.properties.get('type') === 'cross' ? 'кросс' : 'муфта');
-            showError('Приход для этого OLT уже задан с другого места («' + escapeHtml(placeName) + '»). Подключение приходящей жилы возможно только с одного кросса или муфты.', 'OLT уже подключён');
+            showError('Приход для этого OLT уже задан с другого места («' + escapeHtml(placeName) + '»). Подключение приходящего волокна возможно только с одного кросса или муфты.', 'OLT уже подключён');
             return;
         }
     }
@@ -669,7 +669,7 @@ function showOltCrossPortConnectDialog(oltObj, portNumber) {
     }
     var mapCrosses = typeof getMapCrossObjects === 'function' ? getMapCrossObjects() : [];
     if (!mapCrosses.length) {
-        showWarning('На карте нет кроссов. Добавьте оптический кросс, назначьте жилы на порты панели и повторите подключение.', 'Нет кроссов');
+        showWarning('На карте нет кроссов. Добавьте оптический кросс, назначьте волокна на порты панели и повторите подключение.', 'Нет кроссов');
         return;
     }
     nodeSelectionModalData = {
@@ -688,7 +688,7 @@ function showOltCrossPortConnectDialog(oltObj, portNumber) {
         : ('порт ' + portNumber);
     setOltCrossSelectionModalChrome('Подключение PON-порта к кроссу', 'Выберите кросс', 'Введите имя кросса...');
     if (fiberInfo) {
-        fiberInfo.textContent = 'PON ' + portLbl + ': выберите кросс и порт с жилой — кабель OLT ↔ кросс не нужен, на карте появится линия.';
+        fiberInfo.textContent = 'PON ' + portLbl + ': выберите кросс и порт с волокном — кабель OLT ↔ кросс не нужен, на карте появится линия.';
     }
     if (searchInput) searchInput.value = '';
     var searchGroup = searchInput && searchInput.closest('.form-group');
@@ -750,9 +750,9 @@ function selectOltCrossForOltPortByUid(crossUid) {
         } else if (!allOpts.length) {
             showError('На кроссе «' + crossName + '» все порты панели заняты другими PON-портами OLT. Выберите другой кросс.', 'Нет портов');
         } else if (hasAssignedFibers) {
-            showError('На кроссе «' + crossName + '» жилы на портах недоступны для PON (порт занят, приход OLT или жила на другом OLT). Попробуйте порты 2–4 или отключите приход с порта 1.', 'Нет свободных жил');
+            showError('На кроссе «' + crossName + '» волокна на портах недоступны для PON (порт занят, приход OLT или волокно на другом OLT). Попробуйте порты 2–4 или отключите приход с порта 1.', 'Нет свободных волокон');
         } else {
-            showError('На кроссе «' + crossName + '» нет портов с жилами. Назначьте жилу на порт в карточке кросса.', 'Нет портов');
+            showError('На кроссе «' + crossName + '» нет портов с волокнами. Назначьте волокно на порт в карточке кросса.', 'Нет портов');
         }
         return;
     }
@@ -781,7 +781,7 @@ function renderOltCrossPortSelectionUI() {
         return '<option value="' + idx + '">' + escapeHtml(o.label) + '</option>';
     }).join('');
     var html = '<div style="padding: 8px 0;">';
-    html += '<p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 12px;">Кросс: <strong>' + crossName + '</strong>. Выберите порт с назначенной жилой — связь логическая, физический кабель до OLT не требуется.</p>';
+    html += '<p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 12px;">Кросс: <strong>' + crossName + '</strong>. Выберите порт с назначенным волокном — связь логическая, физический кабель до OLT не требуется.</p>';
     html += '<div class="form-group" style="margin-bottom: 12px;"><label for="oltCrossPortSelect" style="font-size: 0.8125rem;">Порт кросса</label>';
     html += '<select id="oltCrossPortSelect" class="form-select">' + selOpts + '</select></div>';
     html += '<div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;">';
@@ -921,9 +921,9 @@ function confirmOltCrossPortConnect() {
         ? getOltSpliceTargetsOnCrossPort(crossObj, opt.portNumber) : [];
     if (!spliceTargets.length) {
         if (typeof getCrossPortFiberKeys === 'function' && getCrossPortFiberKeys(crossObj, opt.portNumber).length) {
-            showError('Жила на этом порту уже занята другим PON-портом OLT. Выберите другой порт.', 'Порт недоступен');
+            showError('Волокно на этом порту уже занято другим PON-портом OLT. Выберите другой порт.', 'Порт недоступен');
         } else {
-            showError('Порт пустой. Сначала назначьте жилу на этот порт в карточке кросса.', 'Нет жилы');
+            showError('Порт пустой. Сначала назначьте волокно на этот порт в карточке кросса.', 'Нет волокна');
         }
         return;
     }

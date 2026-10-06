@@ -66,7 +66,11 @@
         var connecting = !connected && errorText === 'Подключение…';
         var label = connected ? 'Подключено' : (errorText || 'Отключено');
         if (statusEl) {
-            statusEl.className = 'sync-status ' + (connected ? 'sync-connected' : (connecting ? 'sync-connecting' : 'sync-disconnected'));
+            var stateClass = connected ? 'sync-connected' : (connecting ? 'sync-connecting' : 'sync-disconnected');
+            var keepClasses = [];
+            if (statusEl.classList.contains('info-dock-sync-status')) keepClasses.push('info-dock-sync-status');
+            if (statusEl.classList.contains('info-dock-sync-pill')) keepClasses.push('info-dock-sync-pill');
+            statusEl.className = ['sync-status', stateClass].concat(keepClasses).join(' ');
             var textNode = statusEl.querySelector('.sync-status-text');
             var dot = statusEl.querySelector('.sync-status-dot');
             if (!textNode || !dot) {
@@ -573,7 +577,11 @@
                         return;
                     }
                     if (typeof window.reloadMapFromApi === 'function') {
-                        window.reloadMapFromApi({ organizationId: msg.organizationId, immediate: true });
+                        window.reloadMapFromApi({
+                            organizationId: msg.organizationId,
+                            immediate: true,
+                            forceFull: !!msg.forceFull
+                        });
                     }
                     return;
                 }

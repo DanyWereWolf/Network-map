@@ -32,8 +32,8 @@ ActionNames[ActionTypes.CREATE_CABLE] = 'Прокладка кабеля';
 ActionNames[ActionTypes.DELETE_CABLE] = 'Удаление кабеля';
 ActionNames[ActionTypes.EDIT_CABLE] = 'Редактирование кабеля';
 ActionNames[ActionTypes.MERGE_CABLES] = 'Объединение кабелей';
-ActionNames[ActionTypes.CONNECT_FIBERS] = 'Соединение жил';
-ActionNames[ActionTypes.DISCONNECT_FIBERS] = 'Разъединение жил';
+ActionNames[ActionTypes.CONNECT_FIBERS] = 'Соединение волокон';
+ActionNames[ActionTypes.DISCONNECT_FIBERS] = 'Разъединение волокон';
 ActionNames[ActionTypes.CONNECT_TO_NODE] = 'Подключение к узлу';
 ActionNames[ActionTypes.DISCONNECT_FROM_NODE] = 'Отключение от узла';
 ActionNames[ActionTypes.IMPORT_DATA] = 'Импорт данных';
@@ -88,7 +88,7 @@ var HistoryCategories = {
 var HistoryActionGroups = [
     { label: 'Объекты на карте', types: HistoryCategories.map },
     { label: 'Кабели', types: HistoryCategories.cable },
-    { label: 'Жилы и подключения', types: HistoryCategories.fiber },
+    { label: 'Волокна и подключения', types: HistoryCategories.fiber },
     { label: 'Пользователи', types: HistoryCategories.users }
 ];
 
@@ -162,15 +162,43 @@ function clearHistory() {
 
 function updateHistoryBadge() {
     var badge = document.getElementById('historyBadge');
-    if (badge) {
-        var history = getHistory();
-        var lastSeenAt = getLastHistorySeenAt();
-        var unreadCount = lastSeenAt
-            ? history.filter(function(h) { return new Date(h.timestamp) > lastSeenAt; }).length
-            : history.length;
-        var displayCount = unreadCount > 999 ? '999+' : unreadCount;
-        badge.textContent = displayCount;
-        badge.style.display = unreadCount > 0 ? 'flex' : 'none';
+    var btn = document.getElementById('historyBtn');
+    if (!badge) return;
+
+    var history = getHistory();
+    var lastSeenAt = getLastHistorySeenAt();
+    var unreadCount = lastSeenAt
+        ? history.filter(function(h) { return new Date(h.timestamp) > lastSeenAt; }).length
+        : history.length;
+    var displayCount = unreadCount > 999 ? '999+' : String(unreadCount);
+    var wasVisible = badge.style.display !== 'none' && badge.style.display !== '';
+    var prevCount = badge.textContent;
+    var hasUnread = unreadCount > 0;
+
+    badge.textContent = displayCount;
+    badge.style.display = hasUnread ? 'flex' : 'none';
+    badge.setAttribute('aria-hidden', hasUnread ? 'false' : 'true');
+
+    if (btn) {
+        btn.classList.toggle('user-menu-btn--has-notify', hasUnread);
+        btn.setAttribute(
+            'title',
+            hasUnread
+                ? 'Журнал изменений · ' + displayCount + ' новых'
+                : 'Журнал изменений'
+        );
+        btn.setAttribute(
+            'aria-label',
+            hasUnread
+                ? 'Журнал изменений, ' + displayCount + ' непрочитанных'
+                : 'Журнал изменений'
+        );
+    }
+
+    if (hasUnread && (prevCount !== displayCount || !wasVisible)) {
+        badge.classList.remove('is-bump');
+        void badge.offsetWidth;
+        badge.classList.add('is-bump');
     }
 }
 
@@ -221,7 +249,7 @@ function getHistoryActionTone(actionType) {
 function getHistoryCategoryLabel(category) {
     if (category === 'map') return 'Карта';
     if (category === 'cable') return 'Кабели';
-    if (category === 'fiber') return 'Жилы';
+    if (category === 'fiber') return 'Волокна';
     if (category === 'users') return 'Пользователи';
     return '';
 }
@@ -321,13 +349,13 @@ function formatHistoryDetails(entry) {
         case ActionTypes.DELETE_CABLE:
             return (d.cableType || 'Кабель') + ': ' + (d.from || '?') + ' → ' + (d.to || '?');
         case ActionTypes.CONNECT_FIBERS:
-            return 'Жила ' + (d.fromFiber || '?') + ' → Жила ' + (d.toFiber || '?');
+            return 'Волокно ' + (d.fromFiber || '?') + ' → Волокно ' + (d.toFiber || '?');
         case ActionTypes.DISCONNECT_FIBERS:
-            return 'Жила ' + (d.fromFiber || '?') + ' ↔ Жила ' + (d.toFiber || '?');
+            return 'Волокно ' + (d.fromFiber || '?') + ' ↔ Волокно ' + (d.toFiber || '?');
         case ActionTypes.CONNECT_TO_NODE:
-            return 'Жила ' + (d.fiberNumber || '?') + ' → ' + (d.nodeName || 'узел');
+            return 'Волокно ' + (d.fiberNumber || '?') + ' → ' + (d.nodeName || 'узел');
         case ActionTypes.DISCONNECT_FROM_NODE:
-            return 'Жила ' + (d.fiberNumber || '?') + ' от ' + (d.nodeName || 'узла');
+            return 'Волокно ' + (d.fiberNumber || '?') + ' от ' + (d.nodeName || 'узла');
         case ActionTypes.IMPORT_DATA:
         case ActionTypes.EXPORT_DATA:
             return (d.count || 0) + ' объектов';

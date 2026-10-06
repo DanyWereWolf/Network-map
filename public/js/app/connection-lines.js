@@ -13,7 +13,7 @@ function connectFiberToNode(crossObj, cableId, fiberNumber, nodeObj, switchId, s
     const crossId = crossObj.properties.get('uniqueId');
     const usage = getFiberUsage(cableId, fiberNumber, getNodeConnFiberUsageExclude(crossObj));
     if (usage.used) {
-        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
+        showError('Это волокно уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободное волокно.', 'Волокно занято');
         return;
     }
     if (!switchId || switchPort == null || isNaN(parseInt(switchPort, 10))) {
@@ -32,12 +32,12 @@ function connectFiberToNode(crossObj, cableId, fiberNumber, nodeObj, switchId, s
         return;
     }
     if (!isSwitchPortSfpFiberType(typesAtt[portNum - 1])) {
-        showError('К кроссу или муфте можно подключить жилу только в оптический порт коммутатора (SFP, SFP+, QSFP, Комбо).', 'Тип порта');
+        showError('К кроссу или муфте можно подключить волокно только в оптический порт коммутатора (SFP, SFP+, QSFP, Комбо).', 'Тип порта');
         return;
     }
     var fusAtt = swAtt.fiberPortUsage || {};
     if (fusAtt[String(portNum)]) {
-        showError('Выбранный SFP-порт уже занят другой жилой. Выберите другой порт.', 'Порт занят');
+        showError('Выбранный SFP-порт уже занят другим волокном. Выберите другой порт.', 'Порт занят');
         return;
     }
     var cupAtt = swAtt.copperPortUsage || {};
@@ -131,12 +131,12 @@ function connectFiberToOnuWithRoute(sleeveObj, cableId, fiberNumber, onuObj, rou
     const sleeveId = sleeveObj.properties.get('uniqueId');
     const onuId = getObjectUniqueId(onuObj);
     if (isOnuUsedInNetwork(onuId)) {
-        showError('Это ONU уже подключено к сети. Сначала отключите его от текущей жилы или выхода сплиттера.', 'ONU занято');
+        showError('Это ONU уже подключено к сети. Сначала отключите его от текущего волокна или выхода сплиттера.', 'ONU занято');
         return;
     }
     const usage = getFiberUsage(cableId, fiberNumber, { type: 'onuConn', sleeveId: sleeveId, onuId: onuId, atSleeveId: sleeveId });
     if (usage.used) {
-        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
+        showError('Это волокно уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободное волокно.', 'Волокно занято');
         return;
     }
     let onuConnections = sleeveObj.properties.get('onuConnections');
@@ -170,7 +170,7 @@ function connectFiberToMediaConverterWithRoute(sleeveObj, cableId, fiberNumber, 
     }
     const usage = getFiberUsage(cableId, fiberNumber, usageOptsMc);
     if (usage.used) {
-        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
+        showError('Это волокно уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободное волокно.', 'Волокно занято');
         return;
     }
     let mcConnections = sleeveObj.properties.get('mediaConverterConnections');
@@ -225,7 +225,7 @@ function connectFiberToRadioBridgeWithRoute(sleeveObj, cableId, fiberNumber, rbO
     }
     const usage = getFiberUsage(cableId, fiberNumber, usageOptsRb);
     if (usage.used) {
-        showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободную жилу.', 'Жила занята');
+        showError('Это волокно уже используется: ' + (usage.where || 'другое назначение') + '. Выберите свободное волокно.', 'Волокно занято');
         return;
     }
     let rbConnections = sleeveObj.properties.get('radioBridgeConnections');
@@ -386,7 +386,7 @@ function createNodeConnectionLine(crossObj, nodeObj, cableId, fiberNumber) {
             '<button type="button" class="group-balloon-close" title="Закрыть" onclick="myMap.balloon.close()">&times;</button>' +
             '</div>' +
             '<div class="node-selection-body" style="padding: 16px 14px;">' +
-            'Жила ' + fiberNum + '<br>→ ' + escapeHtml(name) +
+            'Волокно ' + fiberNum + '<br>→ ' + escapeHtml(name) +
             '</div></div>';
         myMap.balloon.open(coords, balloonHtml, { maxWidth: 320, closeButton: false });
     });

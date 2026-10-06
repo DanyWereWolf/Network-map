@@ -1,5 +1,5 @@
 /**
- * Жилы кабеля: usedFibers, группы, связанные кабели.
+ * Волокна кабеля: usedFibers, группы, связанные кабели.
  */
 function removeCableFromUsedFibers(obj, cableUniqueId) {
     let usedFibersData = obj.properties.get('usedFibers');
@@ -60,7 +60,12 @@ function getConnectedCables(obj) {
     var routeMatch = typeof traceRouteObjectsMatch === 'function' ? traceRouteObjectsMatch : function(a, b) {
         return a === b || (a && b && getObjectUniqueId(a) === getObjectUniqueId(b));
     };
-    var direct = objects.filter(function(cable) {
+    var scan = objects;
+    if (typeof MapPerf !== 'undefined' && MapPerf.getObjectsByType) {
+        var typed = MapPerf.getObjectsByType('cable');
+        if (Array.isArray(typed) && typed.length) scan = typed;
+    }
+    var direct = scan.filter(function(cable) {
         if (!cable.properties || cable.properties.get('type') !== 'cable') return false;
         var from = cable.properties.get('from');
         var to = cable.properties.get('to');
@@ -172,6 +177,8 @@ function isFiberPortSplicedAtHost(crossObj, cableId, fiberNumber) {
 
 function isFiberSplicedAtHost(hostObj, cableId, fiberNumber) {
     if (!hostObj || !cableId || fiberNumber == null) return false;
+    var idx = getHostFiberConnIndex(hostObj);
+    if (idx) return idx.splicedKeys.has(String(cableId) + '-' + Number(fiberNumber));
     const fiberConnections = hostObj.properties.get('fiberConnections') || [];
     const fn = Number(fiberNumber);
     const cid = String(cableId);
@@ -185,8 +192,57 @@ function isFiberConnectedAtHost(hostObj, cableId, fiberNumber) {
     return isFiberSplicedAtHost(hostObj, cableId, fiberNumber);
 }
 
+/** Индекс fiberConnections хоста: O(1) проверка сращения и соседей. */
+function buildFiberConnIndex(fiberConnections) {
+    var splicedKeys = new Set();
+    var connByFiber = new Map();
+    var neighbors = new Map();
+    (fiberConnections || []).forEach(function(conn) {
+        if (!conn || !conn.from || !conn.to) return;
+        var fk = String(conn.from.cableId) + '-' + Number(conn.from.fiberNumber);
+        var tk = String(conn.to.cableId) + '-' + Number(conn.to.fiberNumber);
+        splicedKeys.add(fk);
+        splicedKeys.add(tk);
+        if (!connByFiber.has(fk)) connByFiber.set(fk, conn);
+        if (!connByFiber.has(tk)) connByFiber.set(tk, conn);
+        if (!neighbors.has(fk)) neighbors.set(fk, []);
+        if (!neighbors.has(tk)) neighbors.set(tk, []);
+        neighbors.get(fk).push({ cableId: conn.to.cableId, fiberNumber: Number(conn.to.fiberNumber) });
+        neighbors.get(tk).push({ cableId: conn.from.cableId, fiberNumber: Number(conn.from.fiberNumber) });
+    });
+    return { splicedKeys: splicedKeys, connByFiber: connByFiber, neighbors: neighbors };
+}
+
+function getHostFiberConnIndex(hostObj) {
+    if (!hostObj || !hostObj.properties) return null;
+    var fc = hostObj.properties.get('fiberConnections') || [];
+    var idx = hostObj._fiberConnIndex;
+    if (idx && idx._srcLen === fc.length) return idx;
+    idx = buildFiberConnIndex(fc);
+    idx._srcLen = fc.length;
+    hostObj._fiberConnIndex = idx;
+    return idx;
+}
+
+function invalidateHostFiberConnIndex(hostObj) {
+    if (!hostObj) return;
+    delete hostObj._fiberConnIndex;
+    if (typeof clearFiberHostLookupCaches === 'function') {
+        clearFiberHostLookupCaches(hostObj);
+    } else if (hostObj._fiberSignalCache) {
+        try { hostObj._fiberSignalCache.clear(); } catch (e) { delete hostObj._fiberSignalCache; }
+    }
+}
+window.buildFiberConnIndex = buildFiberConnIndex;
+window.getHostFiberConnIndex = getHostFiberConnIndex;
+window.invalidateHostFiberConnIndex = invalidateHostFiberConnIndex;
+
 function getFiberNeighborsAtHost(hostObj, cableId, fiberNumber) {
     if (!hostObj || !cableId || fiberNumber == null) return [];
+    var idx = getHostFiberConnIndex(hostObj);
+    if (idx) {
+        return (idx.neighbors.get(String(cableId) + '-' + Number(fiberNumber)) || []).slice();
+    }
     const neighbors = [];
     const connections = hostObj.properties.get('fiberConnections') || [];
     const fn = Number(fiberNumber);
@@ -232,25 +288,65 @@ function getTotalUsedPortsInCross(crossObj) {
     return usedPortNums.size;
 }
 
+/**
+ * Сколько волокон реально занято в муфте/кассете: сращивания, явная отметка «исп.»,
+ * выводы на узел/OLT/ONU/МК/РМ/сплиттер. Просто пришедший кабель без связей не считается занятым.
+ */
 function getTotalUsedFibersInSleeve(sleeveObj) {
     if (!sleeveObj || !sleeveObj.properties || !isSleeveLikeHostType(sleeveObj.properties.get('type'))) {
         return 0;
     }
 
-    let totalFibers = 0;
-    objects.forEach(obj => {
-        if (obj.properties && obj.properties.get('type') === 'cable') {
-            const fromObj = obj.properties.get('from');
-            const toObj = obj.properties.get('to');
+    var used = Object.create(null);
 
-            if ((fromObj && fromObj === sleeveObj) || (toObj && toObj === sleeveObj)) {
-                const cableType = obj.properties.get('cableType');
-                const fiberCount = getFiberCount(cableType);
-                totalFibers += fiberCount;
+    function mark(cableId, fiberNumber) {
+        if (cableId == null || cableId === '' || fiberNumber == null) return;
+        var n = Number(fiberNumber);
+        if (!isFinite(n)) return;
+        used[String(cableId) + '-' + n] = true;
+    }
+
+    var usedFibersData = sleeveObj.properties.get('usedFibers') || {};
+    Object.keys(usedFibersData).forEach(function(cableId) {
+        var arr = usedFibersData[cableId];
+        if (!Array.isArray(arr)) return;
+        for (var i = 0; i < arr.length; i++) mark(cableId, arr[i]);
+    });
+
+    var conns = sleeveObj.properties.get('fiberConnections') || [];
+    for (var ci = 0; ci < conns.length; ci++) {
+        var conn = conns[ci];
+        if (!conn) continue;
+        if (conn.from) mark(conn.from.cableId, conn.from.fiberNumber);
+        if (conn.to) mark(conn.to.cableId, conn.to.fiberNumber);
+    }
+
+    ['nodeConnections', 'oltConnections', 'onuConnections', 'mediaConverterConnections',
+        'radioBridgeConnections', 'splitterConnections'].forEach(function(prop) {
+        var map = sleeveObj.properties.get(prop) || {};
+        Object.keys(map).forEach(function(key) {
+            if (map[key]) used[key] = true;
+        });
+    });
+
+    if (window.EmbeddedSplitters && typeof EmbeddedSplitters.getList === 'function') {
+        var list = EmbeddedSplitters.getList(sleeveObj) || [];
+        for (var si = 0; si < list.length; si++) {
+            var rec = list[si];
+            if (!rec) continue;
+            if (rec.inputCableId != null && rec.inputFiberNumber != null) {
+                mark(rec.inputCableId, rec.inputFiberNumber);
+            }
+            var outs = rec.outputConnections || [];
+            for (var oi = 0; oi < outs.length; oi++) {
+                var out = outs[oi];
+                if (out && out.cableId != null && out.fiberNumber != null) {
+                    mark(out.cableId, out.fiberNumber);
+                }
             }
         }
-    });
-    
-    return totalFibers;
+    }
+
+    return Object.keys(used).length;
 }
 

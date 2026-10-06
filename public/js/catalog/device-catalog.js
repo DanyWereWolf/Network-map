@@ -868,7 +868,7 @@ var DEVICE_CATALOG_TAB_META = {
     },
     cable: {
         label: 'Кабели',
-        desc: 'Марки и модели оптического кабеля. Для каждой модели можно задать число жил и цвета — они подставятся при прокладке и в карточке кабеля.'
+        desc: 'Марки и модели оптического кабеля. Для каждой модели можно задать число волокон и цвета — они подставятся при прокладке и в карточке кабеля.'
     },
     sfp: {
         label: 'SFP / SFP+',
@@ -2085,7 +2085,7 @@ function openCableCatalogEntryPaletteEditor() {
         ? _cableEntryPendingFiber.palette
         : null;
     window.FiberCableConfig.openFiberPaletteEditor({
-        title: 'Цвета жил — новая модель кабеля',
+        title: 'Цвета волокон — новая модель кабеля',
         fiberCount: fc,
         palette: palette || window.FiberCableConfig.buildStandardPalette(fc),
         onSave: function(r) {
@@ -2111,14 +2111,14 @@ function openCableCatalogPaletteEditor(manufacturer, model, fiberCountOverride) 
         ? settings.fiberPalette
         : window.FiberCableConfig.buildStandardPalette(fc);
     window.FiberCableConfig.openFiberPaletteEditor({
-        title: 'Цвета жил — ' + getCableProductLabel(mfr, mod),
+        title: 'Цвета волокон — ' + getCableProductLabel(mfr, mod),
         fiberCount: fc,
         palette: palette,
         onSave: function(r) {
             setCableModelFiberCount(mfr, mod, r.fiberCount);
             setCableModelFiberPalette(mfr, mod, r.palette);
             renderDeviceCatalogList();
-            if (typeof showInfo === 'function') showInfo('Настройки жил сохранены', '');
+            if (typeof showInfo === 'function') showInfo('Настройки волокон сохранены', '');
         }
     });
 }
@@ -3294,10 +3294,10 @@ function renderDeviceCatalogList() {
                 var cableSettings = getCableModelFiberSettings(mfr, mod);
                 var cableFc = cableSettings && cableSettings.fiberCount ? cableSettings.fiberCount : '';
                 var cableFcHint = inferCableModelFiberCount(mod);
-                html += '<label class="device-catalog-ports-label" title="Число жил по умолчанию при прокладке">Жил<input type="number" class="form-input device-catalog-ports-input cable-catalog-fiber-count" min="1" max="96" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" value="' + (cableFc !== '' ? String(cableFc) : '') + '" placeholder="' + (cableFcHint != null ? String(cableFcHint) : '—') + '" aria-label="Жил по умолчанию"></label>';
+                html += '<label class="device-catalog-ports-label" title="Число волокон по умолчанию при прокладке">Волокон<input type="number" class="form-input device-catalog-ports-input cable-catalog-fiber-count" min="1" max="96" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" value="' + (cableFc !== '' ? String(cableFc) : '') + '" placeholder="' + (cableFcHint != null ? String(cableFcHint) : '—') + '" aria-label="Волокон по умолчанию"></label>';
                 html += getDeviceCatalogPaletteBtnHtml(
                     cableModelHasCustomPalette(mfr, mod) ? ' device-catalog-cable-palette-btn--custom' : '',
-                    'data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" title="Настроить цвета жил"'
+                    'data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" title="Настроить цвета волокон"'
                 );
             }
             html += '<button type="button" class="device-catalog-remove-model" data-mfr="' + escapeHtml(mfr) + '" data-model="' + escapeHtml(mod) + '" title="Удалить модель" aria-label="Удалить модель">×</button>';

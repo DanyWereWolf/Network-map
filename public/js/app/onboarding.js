@@ -4,7 +4,7 @@
 var WELCOME_DISMISSED_KEY = 'networkMap_welcomeDismissed';
 var ONBOARDING_COMPLETED_KEY = 'networkMap_onboardingCompleted';
 var ONBOARDING_PROGRESS_KEY = 'networkMap_onboardingProgress';
-var ONBOARDING_VERSION = 3;
+var ONBOARDING_VERSION = 4;
 var onboardingState = null;
 
 function getWelcomeDismissedKeyForCurrentUser() {
@@ -95,37 +95,47 @@ function isOnboardingEditStepsAllowed() {
     return !!(editBtn && editBtn.style.display !== 'none');
 }
 
-function openOnboardingAccordion(name) {
-    var header = document.querySelector('[data-accordion="' + name + '"]');
-    if (!header) return;
-    var section = header.parentElement;
-    if (!section) return;
-    document.querySelectorAll('.accordion-section').forEach(function(s) {
-        s.classList.remove('active');
-    });
-    section.classList.add('active');
-    var cat = section.closest('.sidebar-category');
-    if (cat) {
-        cat.classList.add('is-open');
-        var catBtn = cat.querySelector('.sidebar-category-header');
-        if (catBtn) catBtn.setAttribute('aria-expanded', 'true');
-    }
-}
-
-function ensureSidebarVisibleForOnboarding() {
-    if (!document.body.classList.contains('sidebar-collapsed')) return;
-    document.body.classList.remove('sidebar-collapsed');
-    var toggleBtn = document.getElementById('sidebarToggle');
-    if (toggleBtn) {
-        toggleBtn.setAttribute('aria-expanded', 'true');
-        toggleBtn.setAttribute('aria-label', 'Скрыть панель');
-        toggleBtn.setAttribute('title', 'Скрыть панель');
-    }
+function fitMapForOnboarding() {
     if (typeof myMap !== 'undefined' && myMap && myMap.container) {
         setTimeout(function() {
             try { myMap.container.fitToViewport(); } catch (e) {}
         }, 300);
     }
+}
+
+function ensureInfoDockVisibleForOnboarding() {
+    if (!document.body.classList.contains('info-dock-collapsed')) return;
+    document.body.classList.remove('info-dock-collapsed');
+    var toggleBtn = document.getElementById('infoDockToggle');
+    if (toggleBtn) {
+        toggleBtn.setAttribute('aria-expanded', 'true');
+        toggleBtn.setAttribute('aria-label', 'Скрыть панель карты');
+        toggleBtn.setAttribute('title', 'Скрыть панель');
+    }
+    try { localStorage.setItem('infoDockCollapsed', '0'); } catch (e) {}
+    fitMapForOnboarding();
+}
+
+function openOnboardingInfoDockSection(sectionId) {
+    ensureInfoDockVisibleForOnboarding();
+    var section = document.getElementById(sectionId);
+    if (!section) return;
+    section.open = true;
+}
+
+function ensurePropertiesPanelVisibleForOnboarding(which, opts) {
+    document.body.classList.remove('sidebar-collapsed');
+    if (typeof openToolProps === 'function') {
+        openToolProps(which || 'object', opts || { activateMap: false });
+    } else {
+        document.body.classList.add('properties-open');
+        var panel = document.getElementById('sidebar');
+        if (panel) {
+            panel.classList.add('is-filled');
+            panel.classList.remove('properties-panel--empty');
+        }
+    }
+    fitMapForOnboarding();
 }
 
 function closeHistoryModalIfOpen() {
@@ -140,15 +150,15 @@ function getOnboardingSteps() {
     var steps = [
         {
             title: 'Добро пожаловать!',
-            text: 'Это карта вашей организации: узлы, кабели, кроссы, муфты и GPON. Сейчас пройдём по основным элементам интерфейса.',
+            text: 'Это карта вашей организации: узлы, кабели, кроссы, муфты и GPON. Сейчас коротко покажем новый интерфейс.',
             hint: 'Примерное время — около 3 минут. Можно прервать и продолжить позже.'
         },
         {
-            selector: '#sidebar',
-            title: 'Боковая панель',
-            text: 'Здесь режим работы, добавление объектов и кабелей, фильтры и статистика.',
-            hint: 'Свернуть панель можно кнопкой-закладкой на правом краю экрана.',
-            prepare: ensureSidebarVisibleForOnboarding,
+            selector: '#infoDock',
+            title: 'Панель карты',
+            text: 'Слева — режим работы, видимость типов, вид карты, настройки и легенда.',
+            hint: 'Свернуть панель можно закладкой на левом краю экрана.',
+            prepare: ensureInfoDockVisibleForOnboarding,
             preferredPlacement: 'right'
         },
         {
@@ -161,7 +171,7 @@ function getOnboardingSteps() {
         {
             selector: '#map',
             title: 'Навигация по карте',
-            text: 'Колёсико — масштаб, перетаскивание — сдвиг. Клик по объекту откроет карточку; по кроссу или муфте — рабочее место жил.',
+            text: 'Колёсико — масштаб, перетаскивание — сдвиг. Клик по объекту откроет карточку; по кроссу или муфте — рабочее место волокон.',
             preferredPlacement: 'left'
         }
     ];
@@ -169,11 +179,12 @@ function getOnboardingSteps() {
     if (isOnboardingEditStepsAllowed()) {
         steps.push(
             {
-                selector: '#editMode',
+                selector: '.mode-switcher',
                 title: 'Режим редактирования',
-                text: 'Переключитесь в «Редактирование», чтобы добавлять и менять объекты на карте.',
+                text: 'В левой панели включите «Редактирование» — сверху появится панель инструментов.',
                 requireAction: true,
-                prepare: ensureSidebarVisibleForOnboarding,
+                prepare: ensureInfoDockVisibleForOnboarding,
+                preferredPlacement: 'right',
                 isComplete: function() {
                     if (typeof isEditMode !== 'undefined' && isEditMode) return true;
                     var editBtn = document.getElementById('editMode');
@@ -181,57 +192,50 @@ function getOnboardingSteps() {
                 }
             },
             {
-                selector: '.object-type-picker',
-                title: 'Выбор типа объекта',
-                text: 'Выберите тип в списке — например, опору или узел. При необходимости заполните параметры ниже.',
+                selector: '#editToolbar',
+                title: 'Инструменты',
+                text: 'Сверху — типы объектов, кабель и регионы. Выберите тип (например, опору) — справа откроются параметры.',
                 requireAction: true,
-                prepare: function() {
-                    ensureSidebarVisibleForOnboarding();
-                    openOnboardingAccordion('objects');
-                },
+                preferredPlacement: 'bottom',
+                disableAutoScroll: true,
                 isComplete: function(step) {
-                    var select = document.getElementById('objectType');
-                    if (!select) return false;
-                    return !!String(select.value || '') && !!step._interacted;
+                    return !!step._interacted;
                 },
                 setup: function(step) {
-                    var select = document.getElementById('objectType');
-                    var picker = document.querySelector('.object-type-picker');
+                    var strip = document.getElementById('editToolsStrip');
                     step._interacted = false;
-                    if (!select || !picker) return null;
-                    var onChange = function() { step._interacted = true; };
+                    if (!strip) return null;
                     var onClick = function(e) {
-                        var chip = e.target && e.target.closest ? e.target.closest('.object-type-chip') : null;
-                        if (chip) step._interacted = true;
+                        var chip = e.target && e.target.closest
+                            ? e.target.closest('.edit-tool-chip[data-edit-tool="object"], .object-type-chip[data-type]')
+                            : null;
+                        if (chip && strip.contains(chip)) step._interacted = true;
                     };
-                    select.addEventListener('change', onChange);
-                    picker.addEventListener('click', onClick);
+                    strip.addEventListener('click', onClick);
                     return function() {
-                        select.removeEventListener('change', onChange);
-                        picker.removeEventListener('click', onClick);
+                        strip.removeEventListener('click', onClick);
                     };
                 }
             },
             {
-                selector: '#addObject',
-                title: 'Добавление на карту',
-                text: 'Нажмите «Добавить на карту» — курсор перейдёт в режим размещения.',
-                preferredPlacement: 'right',
-                requireAction: true,
+                selector: '#sidebar',
+                title: 'Параметры инструмента',
+                text: 'Справа — имя и настройки выбранного типа. Для большинства объектов размещение уже активно.',
+                hint: 'У узла и кросса сначала введите имя, затем кликните по карте.',
+                preferredPlacement: 'left',
                 prepare: function() {
-                    ensureSidebarVisibleForOnboarding();
-                    openOnboardingAccordion('objects');
-                },
-                isComplete: function() {
-                    var addBtn = document.getElementById('addObject');
-                    return !!(addBtn && addBtn.classList.contains('btn-add-object--placement'));
+                    ensurePropertiesPanelVisibleForOnboarding('object', { activateMap: true });
                 }
             },
             {
                 selector: '#map',
                 title: 'Размещение объекта',
-                text: 'Кликните по карте в нужном месте — объект появится на карте и сохранится для команды.',
+                text: 'Кликните по карте в нужном месте — объект появится и сохранится для команды.',
                 requireAction: true,
+                preferredPlacement: 'left',
+                prepare: function() {
+                    ensurePropertiesPanelVisibleForOnboarding('object', { activateMap: true });
+                },
                 setup: function(step) {
                     step._objectsCountBefore = Array.isArray(objects) ? objects.length : 0;
                     step._mapLimitCountBefore = (typeof mapLimitsCache === 'object' && mapLimitsCache && mapLimitsCache.count != null)
@@ -246,22 +250,24 @@ function getOnboardingSteps() {
                 }
             },
             {
-                selector: '[data-accordion="cables"]',
+                selector: '.edit-tool-chip--cable',
                 title: 'Прокладка кабелей',
-                text: 'В разделе «Кабели» выберите тип линии и проложите маршрут по опорам и колодцам. Медные линии — из карточки узла или медиаконвертера.',
+                text: 'Инструмент «Кабель» открывает параметры справа. Кликайте по опорам и колодцам, чтобы проложить ВОЛС.',
+                hint: 'Медные линии — из карточки узла, медиаконвертера или радиомоста.',
+                preferredPlacement: 'bottom',
+                disableAutoScroll: true,
                 prepare: function() {
-                    ensureSidebarVisibleForOnboarding();
-                    openOnboardingAccordion('cables');
-                },
-                preferredPlacement: 'right'
+                    ensurePropertiesPanelVisibleForOnboarding('cable', { activateMap: false });
+                }
             }
         );
     } else {
         steps.push({
             selector: '#viewMode',
             title: 'Режим просмотра',
-            text: 'Вы работаете в режиме просмотра: карту можно изучать и трассировать, а изменения доступны администраторам организации.',
-            prepare: ensureSidebarVisibleForOnboarding
+            text: 'Вы в режиме просмотра: карту можно изучать и трассировать. Изменения доступны администраторам организации.',
+            prepare: ensureInfoDockVisibleForOnboarding,
+            preferredPlacement: 'right'
         });
     }
 
@@ -269,10 +275,9 @@ function getOnboardingSteps() {
         {
             selector: '#mapFilterBadge',
             title: 'Видимость объектов',
-            text: 'Скройте лишние типы, чтобы не перегружать карту. При отдалении мелкие подписи скрываются — приблизьте для деталей.',
+            text: 'В разделе «Видимость» скройте лишние типы, чтобы не перегружать карту. При отдалении мелкие подписи скрываются.',
             prepare: function() {
-                ensureSidebarVisibleForOnboarding();
-                openOnboardingAccordion('mapfilter');
+                openOnboardingInfoDockSection('infoDockMapSection');
             },
             preferredPlacement: 'right'
         },
@@ -347,6 +352,62 @@ function clearOnboardingHighlight() {
     updateOnboardingSpotlight(null);
 }
 
+function resolveOnboardingStepTarget(step) {
+    if (!step || !step.selector) return null;
+    try {
+        return document.querySelector(step.selector);
+    } catch (e) {
+        return null;
+    }
+}
+
+function refreshOnboardingTargetHighlight(step) {
+    if (!onboardingState || onboardingState.completing) return null;
+    var target = resolveOnboardingStepTarget(step);
+    if (onboardingState.activeTarget && onboardingState.activeTarget !== target) {
+        onboardingState.activeTarget.classList.remove('onboarding-highlight');
+    }
+    onboardingState.activeTarget = target || null;
+    if (target) target.classList.add('onboarding-highlight');
+    return target;
+}
+
+function repositionOnboardingUi() {
+    if (!onboardingState || onboardingState.completing) return;
+    var step = onboardingState.steps[onboardingState.index];
+    if (!step) return;
+    var target = refreshOnboardingTargetHighlight(step);
+    positionOnboardingCard(onboardingState.card, target, step);
+}
+
+function scheduleOnboardingReposition() {
+    if (!onboardingState || onboardingState.completing) return;
+    if (onboardingState._repositionTimers) {
+        onboardingState._repositionTimers.forEach(function(id) {
+            clearTimeout(id);
+        });
+    }
+    onboardingState._repositionTimers = [];
+
+    var run = function() {
+        repositionOnboardingUi();
+    };
+
+    if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(function() {
+            run();
+            requestAnimationFrame(run);
+        });
+    } else {
+        run();
+    }
+
+    // Панель инструментов / props сдвигают layout после click — догоняем после reflow.
+    [50, 120, 280, 450].forEach(function(ms) {
+        onboardingState._repositionTimers.push(setTimeout(run, ms));
+    });
+}
+
 function updateOnboardingSpotlight(target) {
     if (!onboardingState || !onboardingState.spotlightEl) return;
     var spot = onboardingState.spotlightEl;
@@ -383,6 +444,12 @@ function removeOnboardingSpotlightEl() {
 
 function stopOnboardingTour(markCompleted) {
     if (!onboardingState) return;
+    if (onboardingState._repositionTimers) {
+        onboardingState._repositionTimers.forEach(function(id) {
+            clearTimeout(id);
+        });
+        onboardingState._repositionTimers = null;
+    }
     if (typeof onboardingState.stepCleanup === 'function') {
         try { onboardingState.stepCleanup(); } catch (e) {}
     }
@@ -513,19 +580,15 @@ function renderOnboardingStep() {
         try { step.prepare(step); } catch (e) {}
     }
 
-    var target = step.selector ? document.querySelector(step.selector) : null;
-    onboardingState.activeTarget = target || null;
+    var target = refreshOnboardingTargetHighlight(step);
 
     if (target && typeof target.scrollIntoView === 'function' && !step.disableAutoScroll) {
         target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-        target.classList.add('onboarding-highlight');
-    } else if (target) {
-        target.classList.add('onboarding-highlight');
     }
 
     var stepNum = onboardingState.index + 1;
     var stepTotal = onboardingState.steps.length;
-    onboardingState.stepEl.textContent = 'Шаг ' + String(stepNum) + ' из ' + String(stepTotal);
+    onboardingState.stepEl.textContent = String(stepNum) + ' / ' + String(stepTotal);
     onboardingState.titleEl.textContent = step.title;
     onboardingState.textEl.textContent = step.text;
 
@@ -578,6 +641,7 @@ function renderOnboardingStep() {
     evaluateOnboardingStepCompletion();
 
     positionOnboardingCard(onboardingState.card, target, step);
+    scheduleOnboardingReposition();
 }
 
 function evaluateOnboardingStepCompletion() {
@@ -618,6 +682,7 @@ function showOnboardingCompletionAndFinish() {
     clearOnboardingHighlight();
     if (onboardingState.spotlightEl) onboardingState.spotlightEl.style.display = 'none';
     if (onboardingState.actionsEl) onboardingState.actionsEl.style.display = 'none';
+    if (onboardingState.metaEl) onboardingState.metaEl.hidden = true;
     if (onboardingState.hintEl) onboardingState.hintEl.hidden = true;
     if (onboardingState.progressFill) onboardingState.progressFill.style.width = '100%';
     onboardingState.card.classList.add('onboarding-card--complete');
@@ -632,7 +697,7 @@ function showOnboardingCompletionAndFinish() {
             onboardingState.avatarEl.src = 'icons/assistant/vola-sparkle.png';
         }
     }
-    onboardingState.stepEl.textContent = 'Обучение завершено';
+    onboardingState.stepEl.textContent = '';
     onboardingState.titleEl.textContent = 'Отлично!';
     onboardingState.textEl.textContent = 'Вы прошли основы работы с картой. Подробные инструкции — в справке в шапке, обучение можно повторить оттуда же.';
     onboardingState.statusEl.classList.add('onboarding-status--done');
@@ -664,26 +729,44 @@ function startOnboardingTour(options) {
     overlay.setAttribute('aria-label', 'Интерактивное обучение');
 
     var card = document.createElement('div');
-    card.className = 'onboarding-card';
+    card.className = 'onboarding-card panel-glass';
 
-    var header = document.createElement('div');
-    header.className = 'onboarding-header';
+    var cardBg = document.createElement('div');
+    cardBg.className = 'panel-glass-bg';
+    cardBg.setAttribute('aria-hidden', 'true');
+    var cardGradient = document.createElement('div');
+    cardGradient.className = 'panel-glass-gradient';
+    var cardCanvas = document.createElement('canvas');
+    cardCanvas.className = 'panel-plexus-canvas';
+    cardBg.appendChild(cardGradient);
+    cardBg.appendChild(cardCanvas);
+
+    var hero = document.createElement('div');
+    hero.className = 'onboarding-hero';
+    var avatarStage = document.createElement('div');
+    avatarStage.className = 'onboarding-avatar-stage';
+    var avatarGlow = document.createElement('span');
+    avatarGlow.className = 'onboarding-avatar-glow';
+    avatarGlow.setAttribute('aria-hidden', 'true');
     var avatar = document.createElement('img');
     avatar.className = 'onboarding-avatar';
     avatar.src = window.AssistantAvatars
         ? AssistantAvatars.getSrc('cheer')
         : 'icons/assistant/vola-cheer.png';
-    avatar.alt = '';
-    avatar.setAttribute('aria-hidden', 'true');
-    var headerText = document.createElement('div');
-    headerText.className = 'onboarding-header-text';
-    var headerLabel = document.createElement('p');
-    headerLabel.className = 'onboarding-header-label';
-    headerLabel.textContent = 'Вола · обучение';
-    headerText.appendChild(headerLabel);
-    header.appendChild(avatar);
-    header.appendChild(headerText);
+    avatar.alt = 'Вола';
+    avatar.decoding = 'async';
+    avatarStage.appendChild(avatarGlow);
+    avatarStage.appendChild(avatar);
+    var heroLabel = document.createElement('p');
+    heroLabel.className = 'onboarding-hero-label';
+    heroLabel.textContent = 'Вола · обучение';
+    hero.appendChild(avatarStage);
+    hero.appendChild(heroLabel);
 
+    var meta = document.createElement('div');
+    meta.className = 'onboarding-meta';
+    var stepEl = document.createElement('p');
+    stepEl.className = 'onboarding-step';
     var progressBar = document.createElement('div');
     progressBar.className = 'onboarding-progress';
     progressBar.setAttribute('role', 'progressbar');
@@ -693,9 +776,11 @@ function startOnboardingTour(options) {
     var progressFill = document.createElement('div');
     progressFill.className = 'onboarding-progress-fill';
     progressBar.appendChild(progressFill);
+    meta.appendChild(stepEl);
+    meta.appendChild(progressBar);
 
-    var stepEl = document.createElement('p');
-    stepEl.className = 'onboarding-step';
+    var bubble = document.createElement('div');
+    bubble.className = 'onboarding-bubble';
     var titleEl = document.createElement('h3');
     titleEl.className = 'onboarding-title';
     var textEl = document.createElement('p');
@@ -705,24 +790,28 @@ function startOnboardingTour(options) {
     hintEl.hidden = true;
     var statusEl = document.createElement('p');
     statusEl.className = 'onboarding-status';
+    bubble.appendChild(titleEl);
+    bubble.appendChild(textEl);
+    bubble.appendChild(hintEl);
+    bubble.appendChild(statusEl);
 
     var actions = document.createElement('div');
     actions.className = 'onboarding-actions';
 
     var skipBtn = document.createElement('button');
     skipBtn.type = 'button';
-    skipBtn.className = 'btn-secondary onboarding-skip-btn';
-    skipBtn.textContent = 'Продолжить позже';
+    skipBtn.className = 'btn-secondary onboarding-btn onboarding-skip-btn';
+    skipBtn.textContent = 'Позже';
     skipBtn.title = 'Esc — продолжить позже';
 
     var prevBtn = document.createElement('button');
     prevBtn.type = 'button';
-    prevBtn.className = 'btn-secondary';
+    prevBtn.className = 'btn-secondary onboarding-btn';
     prevBtn.textContent = 'Назад';
 
     var nextBtn = document.createElement('button');
     nextBtn.type = 'button';
-    nextBtn.className = 'btn-primary';
+    nextBtn.className = 'btn-primary onboarding-btn onboarding-next-btn';
     nextBtn.textContent = 'Далее';
     nextBtn.title = 'Enter — следующий шаг';
 
@@ -734,17 +823,20 @@ function startOnboardingTour(options) {
     spotlight.className = 'onboarding-spotlight';
     spotlight.setAttribute('aria-hidden', 'true');
 
-    card.appendChild(header);
-    card.appendChild(progressBar);
-    card.appendChild(stepEl);
-    card.appendChild(titleEl);
-    card.appendChild(textEl);
-    card.appendChild(hintEl);
-    card.appendChild(statusEl);
+    card.appendChild(cardBg);
+    card.appendChild(hero);
+    card.appendChild(meta);
+    card.appendChild(bubble);
     card.appendChild(actions);
     overlay.appendChild(spotlight);
     overlay.appendChild(card);
     document.body.appendChild(overlay);
+
+    if (typeof window.initPanelPlexusCanvases === 'function') {
+        requestAnimationFrame(function() {
+            window.initPanelPlexusCanvases(card);
+        });
+    }
 
     onboardingState = {
         index: (resumeIndex != null ? resumeIndex : 0),
@@ -755,6 +847,7 @@ function startOnboardingTour(options) {
         spotlightEl: spotlight,
         progressBar: progressBar,
         progressFill: progressFill,
+        metaEl: meta,
         stepEl: stepEl,
         titleEl: titleEl,
         textEl: textEl,
@@ -769,8 +862,7 @@ function startOnboardingTour(options) {
         completing: false,
         reposition: function() {
             if (!onboardingState || onboardingState.completing) return;
-            var currentStep = onboardingState.steps[onboardingState.index];
-            positionOnboardingCard(onboardingState.card, onboardingState.activeTarget, currentStep);
+            repositionOnboardingUi();
         }
     };
 
@@ -828,9 +920,10 @@ function startOnboardingTour(options) {
 
     var onAnyProgressSignal = function() {
         // Дожидаемся завершения штатных обработчиков UI (переключение режимов и т.п.)
-        // и только потом проверяем выполнение шага.
+        // и только потом проверяем выполнение шага + позицию подсветки после сдвига layout.
         setTimeout(function() {
             evaluateOnboardingStepCompletion();
+            scheduleOnboardingReposition();
         }, 0);
     };
     document.addEventListener('click', onAnyProgressSignal);
@@ -859,15 +952,16 @@ window.isOnboardingAllowedForCurrentDevice = isOnboardingAllowedForCurrentDevice
 window.isOnboardingEditStepsAllowed = isOnboardingEditStepsAllowed;
 
 function resumeOnboardingTourIfNeeded() {
-    if (!isOnboardingAllowedForCurrentDevice()) return;
-    if (hasOnboardingCompleted()) return;
+    if (!isOnboardingAllowedForCurrentDevice()) return false;
+    if (hasOnboardingCompleted()) return false;
     var idx = getSavedOnboardingProgressIndex(getOnboardingSteps().length);
-    if (idx == null) return;
+    if (idx == null) return false;
     var wm = document.getElementById('welcomeModal');
     if (wm && wm.style.display !== 'none') closeWelcomeModal();
     setTimeout(function() {
         startOnboardingTour({ resumeFromSaved: true });
     }, 140);
+    return true;
 }
 
 function closeWelcomeModal() {
@@ -881,10 +975,11 @@ function closeWelcomeModal() {
 
 function initWelcomeModal() {
     var wm = document.getElementById('welcomeModal');
-    if (!wm) return;
+    if (!wm || wm._welcomeBound) return;
     try {
         if (localStorage.getItem(getWelcomeDismissedKeyForCurrentUser())) return;
     } catch (e) {}
+    wm._welcomeBound = true;
     var showWelcome = function() {
         wm.style.display = 'flex';
         wm.classList.add('modal--centered');

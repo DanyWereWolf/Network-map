@@ -103,7 +103,7 @@ function buildMapHoverMetaRows(obj, type) {
             push('Тип', getCableDescription(p.get('cableType'), obj));
         }
         var fibers = p.get('fiberCount') || p.get('fibers');
-        if (fibers) push('Жил', fibers);
+        if (fibers) push('Волокон', fibers);
         return rows.join('');
     }
     var mfr = (p.get('manufacturer') || '').trim();

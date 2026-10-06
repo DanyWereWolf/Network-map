@@ -28,6 +28,24 @@
         }
     }
 
+    function startCableLayingTool() {
+        if (typeof isEditMode !== 'undefined' && !isEditMode) {
+            if (typeof showInfo === 'function') showInfo('Включите режим «Редактирование»', 'Режим');
+            return;
+        }
+        if (typeof objectPlacementMode !== 'undefined' && objectPlacementMode && typeof cancelObjectPlacement === 'function') {
+            cancelObjectPlacement();
+        }
+        if (typeof regionDrawMode !== 'undefined' && regionDrawMode && typeof cancelRegionDraw === 'function') {
+            cancelRegionDraw();
+        }
+        if (typeof currentCableTool !== 'undefined' && currentCableTool) {
+            return;
+        }
+        var addCableBtn = document.getElementById('addCable');
+        if (addCableBtn) addCableBtn.click();
+    }
+
     function activateMapTool(which) {
         if (typeof isEditMode !== 'undefined' && !isEditMode) {
             if (typeof showInfo === 'function') showInfo('Включите режим «Редактирование»', 'Режим');
@@ -35,47 +53,29 @@
         }
 
         if (which === 'object') {
-            if (typeof regionDrawMode !== 'undefined' && regionDrawMode && typeof cancelRegionDraw === 'function') {
-                cancelRegionDraw();
+            if (typeof startClickPlacementMode === 'function') {
+                startClickPlacementMode({ showNameHint: true });
+            } else if (typeof handleAddObject === 'function') {
+                handleAddObject();
             }
-            var sel = document.getElementById('objectType');
-            var type = sel ? sel.value : '';
-            if (type === 'node' || type === 'cross') {
-                var nameEl = document.getElementById('objectName');
-                var name = nameEl && nameEl.value ? nameEl.value.trim() : '';
-                if (!name) {
-                    if (typeof currentCableTool !== 'undefined' && currentCableTool) {
-                        var cableBtn = document.getElementById('addCable');
-                        if (cableBtn) cableBtn.click();
-                    }
-                    if (typeof objectPlacementMode !== 'undefined' && objectPlacementMode && typeof cancelObjectPlacement === 'function') {
-                        cancelObjectPlacement();
-                    }
-                    return;
-                }
-            }
-            if (typeof handleAddObject === 'function') handleAddObject();
             return;
         }
 
         if (which === 'cable') {
-            if (typeof regionDrawMode !== 'undefined' && regionDrawMode && typeof cancelRegionDraw === 'function') {
-                cancelRegionDraw();
-            }
-            if (typeof currentCableTool === 'undefined' || !currentCableTool) {
-                var addCableBtn = document.getElementById('addCable');
-                if (addCableBtn) addCableBtn.click();
-            } else if (typeof objectPlacementMode !== 'undefined' && objectPlacementMode && typeof cancelObjectPlacement === 'function') {
-                cancelObjectPlacement();
-            }
+            startCableLayingTool();
             return;
         }
 
         if (which === 'region') {
+            if (typeof objectPlacementMode !== 'undefined' && objectPlacementMode && typeof cancelObjectPlacement === 'function') {
+                cancelObjectPlacement();
+            }
+            if (typeof currentCableTool !== 'undefined' && currentCableTool) {
+                var cableBtn = document.getElementById('addCable');
+                if (cableBtn) cableBtn.click();
+            }
             if (typeof regionDrawMode === 'undefined' || !regionDrawMode) {
                 if (typeof startRegionDraw === 'function') startRegionDraw();
-            } else if (typeof objectPlacementMode !== 'undefined' && objectPlacementMode && typeof cancelObjectPlacement === 'function') {
-                cancelObjectPlacement();
             }
         }
     }
@@ -121,17 +121,27 @@
         if (sub) {
             if (which === 'object') {
                 var sel = document.getElementById('objectType');
+                var type = sel ? sel.value : '';
                 var label = (typeof getObjectTypeLabel === 'function' && sel)
                     ? getObjectTypeLabel(sel.value)
                     : ((sel && sel.options[sel.selectedIndex] && sel.options[sel.selectedIndex].text) || '');
-                sub.hidden = !label;
-                sub.textContent = label ? ('Клик по карте — поставить: ' + label) : '';
+                var needsName = (type === 'node' || type === 'cross');
+                var nameVal = (document.getElementById('objectName') && document.getElementById('objectName').value.trim()) || '';
+                if (needsName && !nameVal) {
+                    sub.hidden = false;
+                    sub.textContent = type === 'cross'
+                        ? 'Введите имя кросса, затем кликните по карте'
+                        : 'Введите имя узла, затем кликните по карте';
+                } else {
+                    sub.hidden = !label;
+                    sub.textContent = label ? ('Кликните по карте, чтобы поставить: ' + label) : '';
+                }
             } else if (which === 'cable') {
                 sub.hidden = false;
                 sub.textContent = 'Кликайте по карте или объектам, чтобы проложить кабель';
             } else if (which === 'region') {
                 sub.hidden = false;
-                sub.textContent = 'Кликайте по карте, чтобы нарисовать контур региона';
+                sub.textContent = 'Список регионов и рисование контура';
             } else {
                 sub.hidden = true;
                 sub.textContent = '';
@@ -164,18 +174,14 @@
 
         if (which === 'object' && typeof syncObjectTypePickerUI === 'function') {
             syncObjectTypePickerUI();
-            if (typeof getObjectTypeLabel === 'function') {
-                var sel2 = document.getElementById('objectType');
-                var sub = document.getElementById('propertiesPanelSub');
-                if (sub && sel2) {
-                    sub.hidden = false;
-                    sub.textContent = 'Клик по карте — поставить: ' + getObjectTypeLabel(sel2.value);
-                }
-            }
         }
 
         if (opts.activateMap !== false) {
             activateMapTool(which);
+            if (which === 'object') showToolPropsSection('object');
+        }
+        if (which === 'region' && typeof renderRegionsSidebarList === 'function') {
+            renderRegionsSidebarList();
         }
     }
 
@@ -230,9 +236,14 @@
                 var type = sel ? sel.value : '';
                 if (type !== 'node' && type !== 'cross') return;
                 if (!nameInput.value || !nameInput.value.trim()) return;
-                if (typeof objectPlacementMode !== 'undefined' && objectPlacementMode) return;
+                if (typeof objectPlacementMode !== 'undefined' && objectPlacementMode) {
+                    currentPlacementName = nameInput.value.trim();
+                    return;
+                }
                 activateMapTool('object');
+                showToolPropsSection('object');
             }
+            nameInput.addEventListener('input', tryActivateNamedObject);
             nameInput.addEventListener('change', tryActivateNamedObject);
             nameInput.addEventListener('keydown', function (ev) {
                 if (ev.key === 'Enter') tryActivateNamedObject();
@@ -251,10 +262,45 @@
         }
     }
 
+    function setupInfoDockSections() {
+        var dock = document.getElementById('infoDock');
+        if (!dock || dock._infoDockSectionsBound) return;
+        dock._infoDockSectionsBound = true;
+
+        var sections = Array.prototype.slice.call(dock.querySelectorAll('details.info-dock-section'));
+
+        function collapseAllSections() {
+            sections.forEach(function (section) {
+                section.removeAttribute('open');
+            });
+        }
+
+        // Гасим восстановленные браузером open (история / session restore).
+        collapseAllSections();
+        requestAnimationFrame(function () {
+            collapseAllSections();
+            setTimeout(collapseAllSections, 0);
+        });
+        window.addEventListener('pageshow', function (ev) {
+            if (ev.persisted) collapseAllSections();
+        });
+
+        sections.forEach(function (section) {
+            section.addEventListener('toggle', function () {
+                if (!section.open) return;
+                sections.forEach(function (other) {
+                    if (other !== section && other.open) other.removeAttribute('open');
+                });
+            });
+        });
+    }
+
     function setupInfoDock() {
         var dock = document.getElementById('infoDock');
         if (!dock || dock._infoDockBound) return;
         dock._infoDockBound = true;
+
+        setupInfoDockSections();
 
         var toggleBtn = document.getElementById('infoDockToggle');
         if (toggleBtn && !toggleBtn._infoDockToggleBound) {
@@ -269,7 +315,7 @@
             toggleBtn.addEventListener('click', function () {
                 var collapsed = document.body.classList.toggle('info-dock-collapsed');
                 toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-                toggleBtn.setAttribute('aria-label', collapsed ? 'Показать информационную панель' : 'Скрыть информационную панель');
+                toggleBtn.setAttribute('aria-label', collapsed ? 'Показать панель карты' : 'Скрыть панель карты');
                 toggleBtn.setAttribute('title', collapsed ? 'Показать панель' : 'Скрыть панель');
                 try { localStorage.setItem(INFO_DOCK_COLLAPSED_KEY, collapsed ? '1' : '0'); } catch (err) {}
                 fitMapSoon();

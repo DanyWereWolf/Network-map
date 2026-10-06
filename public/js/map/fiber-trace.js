@@ -1,5 +1,5 @@
 /**
- * Утилиты трассировки оптических жил: сжатие маршрута, статус, подсветка на карте.
+ * Утилиты трассировки оптических волокон: сжатие маршрута, статус, подсветка на карте.
  */
 (function (global) {
     'use strict';
@@ -717,7 +717,7 @@
         var cables = collectCablesFromPaths(paths);
         if (!cables.length) return '';
         var html = '<div class="trace-free-fibers">';
-        html += '<div class="trace-free-fibers-title">Свободные жилы на трассе</div>';
+        html += '<div class="trace-free-fibers-title">Свободные волокна на трассе</div>';
         html += '<div class="trace-free-fibers-list">';
         var anyFree = false;
         cables.forEach(function (entry, idx) {
@@ -733,12 +733,12 @@
             if (freeCount) {
                 html += '<div class="trace-free-fibers-nums">' + esc(preview) + '</div>';
             } else {
-                html += '<div class="trace-free-fibers-nums trace-free-fibers-nums--empty">Нет свободных жил</div>';
+                html += '<div class="trace-free-fibers-nums trace-free-fibers-nums--empty">Нет свободных волокон</div>';
             }
             html += '</details>';
         });
         if (!anyFree) {
-            html += '<div class="trace-free-fibers-hint">На кабелях маршрута свободных жил нет</div>';
+            html += '<div class="trace-free-fibers-hint">На кабелях маршрута свободных волокон нет</div>';
         }
         html += '</div></div>';
         return html;
@@ -748,46 +748,90 @@
         if (!hostObj || !hostObj.properties) {
             return { kind: 'end', label: 'конец' };
         }
+        var neighbors = typeof global.getFiberNeighborsAtHost === 'function'
+            ? (global.getFiberNeighborsAtHost(hostObj, cableId, fiberNumber) || [])
+            : [];
         var splicePeer = null;
-        if (typeof global.getSplicedFiberGroup === 'function') {
-            var group = global.getSplicedFiberGroup(hostObj, cableId, fiberNumber) || [];
-            for (var gi = 0; gi < group.length; gi++) {
-                var g = group[gi];
-                if (g.cableId !== cableId || Number(g.fiberNumber) !== Number(fiberNumber)) {
-                    splicePeer = g;
+
+        // 1) Прямой сосед на следующем кабеле трассы — приоритет
+        if (nextCableId) {
+            for (var ni = 0; ni < neighbors.length; ni++) {
+                if (String(neighbors[ni].cableId) === String(nextCableId)) {
+                    splicePeer = neighbors[ni];
                     break;
                 }
             }
-        } else {
+        }
+        // 2) Любой прямой сосед (без BFS по всей группе сварок)
+        if (!splicePeer && neighbors.length) {
+            splicePeer = neighbors[0];
+        }
+        // 3) Fallback: группа сращений, но предпочитаем peer на nextCableId
+        if (!splicePeer && typeof global.getSplicedFiberGroup === 'function') {
+            var group = global.getSplicedFiberGroup(hostObj, cableId, fiberNumber) || [];
+            var fallbackPeer = null;
+            for (var gi = 0; gi < group.length; gi++) {
+                var g = group[gi];
+                if (String(g.cableId) === String(cableId) && Number(g.fiberNumber) === Number(fiberNumber)) {
+                    continue;
+                }
+                if (nextCableId && String(g.cableId) === String(nextCableId)) {
+                    splicePeer = g;
+                    break;
+                }
+                if (!fallbackPeer) fallbackPeer = g;
+            }
+            if (!splicePeer) splicePeer = fallbackPeer;
+        } else if (!splicePeer) {
             var conns = hostObj.properties.get('fiberConnections') || [];
             var fnFate = Number(fiberNumber);
             for (var ci = 0; ci < conns.length; ci++) {
                 var c = conns[ci];
                 if (!c || !c.from || !c.to) continue;
+                var peer = null;
                 if (String(c.from.cableId) === String(cableId) && Number(c.from.fiberNumber) === fnFate) {
-                    splicePeer = { cableId: c.to.cableId, fiberNumber: Number(c.to.fiberNumber) };
+                    peer = { cableId: c.to.cableId, fiberNumber: Number(c.to.fiberNumber) };
+                } else if (String(c.to.cableId) === String(cableId) && Number(c.to.fiberNumber) === fnFate) {
+                    peer = { cableId: c.from.cableId, fiberNumber: Number(c.from.fiberNumber) };
+                }
+                if (!peer) continue;
+                if (nextCableId && String(peer.cableId) === String(nextCableId)) {
+                    splicePeer = peer;
                     break;
                 }
-                if (String(c.to.cableId) === String(cableId) && Number(c.to.fiberNumber) === fnFate) {
-                    splicePeer = { cableId: c.from.cableId, fiberNumber: Number(c.from.fiberNumber) };
-                    break;
-                }
+                if (!splicePeer) splicePeer = peer;
             }
         }
-        if (splicePeer) {
-            if (nextCableId && String(splicePeer.cableId) === String(nextCableId)) {
+
+        if (splicePeer || nextCableId) {
+            // Трасса уже знает следующий hop — не рисуем «ветку» на первого попавшегося peer
+            // (иначе после NeD/группы сварок появляется лишний cyan-кабель и пересечения).
+            if (nextCableId) {
+                var peerFiber = fiberNumber;
+                if (splicePeer && String(splicePeer.cableId) === String(nextCableId)) {
+                    peerFiber = splicePeer.fiberNumber;
+                } else if (neighbors.length) {
+                    for (var nj = 0; nj < neighbors.length; nj++) {
+                        if (String(neighbors[nj].cableId) === String(nextCableId)) {
+                            peerFiber = neighbors[nj].fiberNumber;
+                            break;
+                        }
+                    }
+                }
                 return {
                     kind: 'continue',
-                    label: '→ ж' + splicePeer.fiberNumber,
-                    peerCableId: splicePeer.cableId,
-                    peerFiber: splicePeer.fiberNumber
+                    label: '→ ж' + peerFiber,
+                    peerCableId: nextCableId,
+                    peerFiber: peerFiber
                 };
             }
             var peerCableName = '';
             if (Array.isArray(global.objects)) {
-                var peerCab = global.objects.find(function (o) {
-                    return o.properties && o.properties.get('type') === 'cable' && getUid(o) === splicePeer.cableId;
-                });
+                var peerCab = (typeof global.findCableByUniqueId === 'function')
+                    ? global.findCableByUniqueId(splicePeer.cableId)
+                    : global.objects.find(function (o) {
+                        return o.properties && o.properties.get('type') === 'cable' && getUid(o) === splicePeer.cableId;
+                    });
                 if (peerCab) {
                     peerCableName = peerCab.properties.get('cableName') ||
                         (typeof global.getCableDescription === 'function'
@@ -823,7 +867,7 @@
 
         if (typeof global.getFiberUsage === 'function') {
             var usage = global.getFiberUsage(cableId, fiberNumber);
-            if (usage && usage.used) return { kind: 'end', label: usage.where || 'занята' };
+            if (usage && usage.used) return { kind: 'end', label: usage.where || 'занято' };
         }
         return { kind: 'free', label: 'свободна' };
     }
@@ -982,7 +1026,7 @@
                             : 'Кабель'))
                     : 'Кабель';
                 if (item.fromNode) {
-                    // Узел сети → кросс по жиле
+                    // Узел сети → кросс по волокну
                     pendingNodeLink = {
                         fromNode: true,
                         cableId: item.cableId,
@@ -1145,7 +1189,7 @@
             total = Number(segment.fiberCount);
         }
 
-        // Узел↔кросс / вход сплиттера: если есть реальный кабель — показать ВСЕ жилы
+        // Узел↔кросс / вход сплиттера: если есть реальный кабель — показать ВСЕ волокна
         if (segment.kind === 'nodeLink') {
             var linkCable = cable || findSchematicCableById(segment.cableId);
             var linkTotal = 0;
@@ -1224,12 +1268,17 @@
                         }
                     }
                     // Трасса через кросс/муфту на следующий кабель — всегда continue,
-                    // даже если fate=end (соед. «сплиттер» без явной сварки в данных)
+                    // даже если fate=end/branch (ложный peer из группы сварок / NeD)
                     if (row.traced && nextCableId && row.fate &&
-                        (row.fate.kind === 'end' || row.fate.kind === 'free')) {
+                        (row.fate.kind === 'end' || row.fate.kind === 'free' || row.fate.kind === 'branch')) {
                         var peerF = nextSeg && nextSeg.tracedFiber != null
                             ? nextSeg.tracedFiber
                             : row.number;
+                        if (row.fate.kind === 'branch' && row.fate.peerCableId &&
+                            String(row.fate.peerCableId) === String(nextCableId) &&
+                            row.fate.peerFiber != null) {
+                            peerF = row.fate.peerFiber;
+                        }
                         row.fate = {
                             kind: 'continue',
                             label: '→ ж' + peerF,
@@ -1237,7 +1286,7 @@
                             peerFiber: peerF
                         };
                     }
-                    // На кроссе, если жила уходит на узел (nodeConnections) — явно пометить
+                    // На кроссе, если волокно уходит на узел (nodeConnections) — явно пометить
                     if (row.traced && toHost && toHost.type === 'cross' && row.fate && row.fate.kind === 'end' &&
                         row.fate.label && row.fate.label.indexOf('узел') === 0) {
                         row.fate.label = 'на узел';
@@ -1325,7 +1374,7 @@
 
     /**
      * Синхронизация сегмента сплиттера с outputConnections по cableId:
-     * жила и номер выхода — из данных, не из чужой трассы / fromSplitterOutput цели.
+     * волокно и номер выхода — из данных, не из чужой трассы / fromSplitterOutput цели.
      */
     function syncSplitterSegmentToOutputConn(seg, fromNode) {
         if (!seg || !seg.cableId || !fromNode || fromNode.type !== 'splitter') return false;
@@ -1390,7 +1439,7 @@
             if (c.mediaConverterId && tid === c.mediaConverterId) return i;
             if (c.nodeId && tid === c.nodeId) return i;
             if (c.splitterId && tid === c.splitterId) return i;
-            // Кабель: сначала точное совпадение жилы, иначе — только если жила не задана
+            // Кабель: сначала точное совпадение волокна, иначе — только если волокно не задана
             if (c.cableId && hintCableId && String(c.cableId) === String(hintCableId)) {
                 if (hintFiber != null && c.fiberNumber != null &&
                     Number(c.fiberNumber) === Number(hintFiber)) {
@@ -1424,7 +1473,7 @@
             .replace(/"/g, '&quot;');
     }
 
-    /** Убрать A→C только если это тот же ход жилы через B (A→B и B→C с той же ж). */
+    /** Убрать A→C только если это тот же ход волокна через B (A→B и B→C с той же ж). */
     function pruneTransitiveSchematicSegments(segments) {
         if (!segments || segments.length < 2) return segments || [];
         var byFrom = {};
@@ -1446,7 +1495,7 @@
                 for (var j = 0; j < midOut.length; j++) {
                     var next = segments[midOut[j]];
                     if (next.toIdx !== s.toIdx) continue;
-                    // A→B→C и A→C с той же жилой на первом шаге — короткий дубль
+                    // A→B→C и A→C с той же волокном на первом шаге — короткий дубль
                     drop[si] = true;
                     return;
                 }
@@ -1551,7 +1600,7 @@
                     existing.splitterOutputIndex = meta.outIndex;
                     existing.linkLabel = outLabel;
                     if (meta.crossPort != null) existing.crossPort = meta.crossPort;
-                    // Жилу трассы не перетирать выдуманным отводом
+                    // Волокно трассы не перетирать выдуманным отводом
                     if (meta.fiber != null && (onPath || existing.tracedFiber == null)) {
                         if (onPath || existing.onTracePath !== false) {
                             existing.tracedFiber = meta.fiber;
@@ -1572,7 +1621,7 @@
                 cableName: meta.label || outLabel,
                 cable: null,
                 lengthM: null,
-                // Только hop из реальной трассы подсвечиваем как трассируемую жилу
+                // Только hop из реальной трассы подсвечиваем как трассируемое волокно
                 tracedFiber: (onPath && meta.fiber != null) ? meta.fiber : null,
                 tapFiber: (!onPath && meta.fiber != null) ? meta.fiber : null,
                 fiberCount: 1,
@@ -1729,7 +1778,7 @@
     }
 
     /**
-     * После входа в кросс/муфту: жилы со сваркой на другой кабель → добавить дальний конец
+     * После входа в кросс/муфту: волокна со сваркой на другой кабель → добавить дальний конец
      * (муфта/кросс), иначе на схеме только подпись «ушла в другой кабель» без узла.
      */
     function enrichSchematicModelFromHostSplices(model) {
@@ -1820,15 +1869,28 @@
                 if (added >= maxAdd) break;
                 var fiber = fibers[fi];
                 if (!fiber || !fiber.fate) continue;
-                // Только трассируемая жила: иначе схема обрастает чужими ветками и красится cyan
+                // Только трассируемое волокно: иначе схема обрастает чужими ветками и красится cyan
                 if (!fiber.traced) continue;
                 var fate = fiber.fate;
-                if (fate.kind !== 'branch' && fate.kind !== 'continue') continue;
+                // continue уже есть в цепочке трассы — не дорисовываем параллельный кабель
+                if (fate.kind !== 'branch') continue;
                 if (!fate.peerCableId) continue;
                 if (String(fate.peerCableId) === String(seg.cableId)) continue;
                 if (hasCableEdge(seg.toIdx, fate.peerCableId)) continue;
 
-                // Не дублировать уже существующий hop трассы с этой жилой
+                // Если с хоста трасса уже уходит другим кабелем — боковую сварку не раздуваем в отдельную cyan-ленту
+                var hasOutOnPath = false;
+                for (var oj0 = 0; oj0 < model.segments.length; oj0++) {
+                    var os0 = model.segments[oj0];
+                    if (!os0 || os0.fromIdx !== seg.toIdx || !os0.cableId) continue;
+                    if (os0.kind === 'nodeLink') continue;
+                    if (os0.onTracePath === false) continue;
+                    hasOutOnPath = true;
+                    break;
+                }
+                if (hasOutOnPath) continue;
+
+                // Не дублировать уже существующий hop трассы с этим волокном
                 var alreadyOut = false;
                 for (var oj = 0; oj < model.segments.length; oj++) {
                     var os = model.segments[oj];
@@ -2188,7 +2250,7 @@
                 cap = cols.length;
             }
             if (!cap) cap = Number(seg.fiberCount) || 0;
-            // Если в сегменте меньше жил, чем ёмкость кабеля — пересобрать
+            // Если в сегменте меньше волокон, чем ёмкость кабеля — пересобрать
             if (cap > 1 && seg.fibers.length < cap) needRebuild = true;
         }
         if (needRebuild) {
@@ -2215,11 +2277,11 @@
     }
 
     /**
-     * Кассета жил: активные жилы + куда уходят; свободные — компактной сводкой.
+     * Кассета волокон: активные волокна + куда уходят; свободные — компактной сводкой.
      */
     function appendTreeFiberRibbon(parts, x0, x1, yMid, seg, toNode, nextCableId, embedded) {
         if (!seg) return null;
-        // nodeLink без кабеля — не кассета; с cableId (вход сплиттера и т.п.) — показываем жилы
+        // nodeLink без кабеля — не кассета; с cableId (вход сплиттера и т.п.) — показываем волокна
         if (seg.kind === 'nodeLink' && !seg.cableId) return null;
         var fibers = ensureSchematicSegmentFibers(seg, toNode, nextCableId);
         var meta = schematicSegmentTracedFiberMeta(seg);
@@ -2233,7 +2295,7 @@
         active.forEach(function (f) {
             if (f && f.fate && f.fate.kind === 'free' && !f.traced) freeCount++;
         });
-        // сортируем по номеру жилы — показываем ВСЕ (1…N), включая свободные
+        // сортируем по номеру волокна — показываем ВСЕ (1…N), включая свободные
         active.sort(function (a, b) {
             return (Number(a.number) || 0) - (Number(b.number) || 0);
         });
@@ -2353,7 +2415,7 @@
         }
         parts.push('</g>');
 
-        // laneY по номеру жилы — для сварок (включая свёрнутые свободные)
+        // laneY по номеру волокна — для сварок (включая свёрнутые свободные)
         var laneMap = {};
         function virtualLaneY(num) {
             var fn = Math.max(1, Number(num) || 1);
@@ -2480,7 +2542,7 @@
         }
         function resolveOiForSeg(seg) {
             if (!seg) return null;
-            // Кабель → всегда сверить с outputConnections (не доверять старому индексу/жиле)
+            // Кабель → всегда сверить с outputConnections (не доверять старому индексу/волокне)
             if (seg.cableId) {
                 syncSplitterSegmentToOutputConn(seg, node);
                 if (seg.splitterOutputIndex != null && isFinite(Number(seg.splitterOutputIndex))) {
@@ -2570,7 +2632,7 @@
         if (bandH < 14) bandH = 14;
         var yMid = y + headH + 2 + (h - headH - 16) / 2;
         var yTop = yMid - bandH / 2;
-        // COM слева; выходы начинаются правее — не путать с «ж1 / порт 1»
+        // COM слева; выходы начинаются правее — не путать с «в1 / порт 1»
         var comX = x + 14;
         var comY = yMid;
         var xa = x + 44;
@@ -2660,7 +2722,7 @@
     }
 
     /**
-     * Цвет жилы, вошедшей в сплиттер (COM). У сплиттера своей палитры нет —
+     * Цвет волокна, вошедшей в сплиттер (COM). У сплиттера своей палитры нет —
      * все порты/выходы наследуют этот цвет.
      */
     function resolveSchematicSplitterInputColor(model, splitterIdx) {
@@ -2711,7 +2773,7 @@
         return best ? schematicNormalizeFiberColor(best) : null;
     }
 
-    /** Перекрасить все исходящие жилы сплиттера в цвет входа (несколько проходов для каскада). */
+    /** Перекрасить все исходящие волокна сплиттера в цвет входа (несколько проходов для каскада). */
     function paintSchematicSplitterInheritedColors(model) {
         if (!model || !model.nodes) return;
         var splitterCount = 0;
@@ -2735,7 +2797,7 @@
                         var oc = outs[seg.splitterOutputIndex];
                         if (oc && oc.fiberNumber != null) tap = Number(oc.fiberNumber);
                     }
-                    // Только жила посадки наследует цвет COM — не весь кабель
+                    // Только волокно посадки наследует цвет COM — не весь кабель
                     if (tap == null) return;
                     var fibers = ensureSchematicSegmentFibers(seg, model.nodes[seg.toIdx], null) || [];
                     fibers.forEach(function (f) {
@@ -2748,8 +2810,8 @@
 
     /**
      * Мосты кабелей между блоками.
-     * — в кросс/муфту: посадка на жилу исходящей кассеты (сварка жN→жM)
-     * — в сплиттер: только жилы, реально входящие (не веер свободных)
+     * — в кросс/муфту: посадка на волокно исходящей кассеты (сварка жN→жM)
+     * — в сплиттер: только волокна, реально входящие (не веер свободных)
      * — в ONU/МК/узел: никогда не кассета на N портов
      */
     function appendTreeFiberSplices(parts, model, nodeCX, nodeCY, nodeLeft, nodeRight, nodeH, nodeIsUnit, nodeUnitH, nodeIsSplitterPorts, arrowMarkerId) {
@@ -2790,7 +2852,7 @@
 
             var g = seg._ribbonGeom;
             var fromNodeSp = model.nodes[fi];
-            // Сплиттер→муфта/кросс: жила только из outputConnections (не чужой tracedFiber трассы)
+            // Сплиттер→муфта/кросс: волокно только из outputConnections (не чужой tracedFiber трассы)
             if (fromNodeSp && fromNodeSp.type === 'splitter' && nodeIsSplitterPorts[fi]) {
                 syncSplitterSegmentToOutputConn(seg, fromNodeSp);
                 if (g._tapFiber != null) {
@@ -2807,7 +2869,7 @@
             }
             var toNode = model.nodes[ti];
             if (isSchematicSinglePortEndpoint(toNode)) {
-                // ONU и т.п. — одна жила (трасса), не 8 портов
+                // ONU и т.п. — одно волокно (трасса), не 8 портов
                 var fibersEp = ensureSchematicSegmentFibers(seg, toNode, null) || [];
                 var tracedEp = null;
                 for (var ei = 0; ei < fibersEp.length; ei++) {
@@ -2838,7 +2900,7 @@
             if (!nodeIsUnit[ti] && !nodeIsSplitterPorts[ti]) return;
 
             var toSplitter = toNode && toNode.type === 'splitter';
-            // На каждый сплиттер — ровно один вход (не ж1 и ж8 сразу)
+            // На каждый сплиттер — ровно один вход (не в1 и в8 сразу)
             if (toSplitter && splitterInputDone[ti]) return;
 
             var patch = isSchematicPatchHost(toNode);
@@ -2901,7 +2963,7 @@
             var cxGap = (xLeave + xEnter) / 2;
             var curveMaxY = cy;
 
-            // Одна трассовая жила в сплиттер
+            // Одна трассовое волокно в сплиттер
             var tracedFiber = null;
             if (toSplitter) {
                 for (var tf = 0; tf < sorted.length; tf++) {
@@ -2945,7 +3007,7 @@
                     '" y="' + (iby - 7.5) + '" width="' + ibTw + '" height="15" rx="7"/>');
                 parts.push('<text class="trace-sch-tree-edge-text" x="' + ibx + '" y="' + (iby + 3.5) +
                     '" text-anchor="middle">' + schematicSvgEsc(inBadge) + '</text>');
-                // остальные жилы — короткий хвост у края кросса
+                // остальные волокна — короткий хвост у края кросса
                 sorted.forEach(function (fiber) {
                     if (!fiber || Number(fiber.number) === Number(tracedFiber.number)) return;
                     var yStub = g.laneY[Number(fiber.number)];
@@ -2967,12 +3029,12 @@
 
             drawOrder.forEach(function (fiber) {
                 if (!fiber) return;
-                // Выдуманные отводы (не из трассы) не красить как трассируемую жилу
+                // Выдуманные отводы (не из трассы) не красить как трассируемое волокно
                 var segOnPath = seg.onTracePath !== false && !seg.invented;
                 var isTraced = segOnPath && (
                     !!fiber.traced || (seg.tracedFiber != null && Number(seg.tracedFiber) === Number(fiber.number))
                 );
-                // Со сплиттера на муфту/кросс — только жила выхода (ж4 / ж2), без чужих сварок кассеты
+                // Со сплиттера на муфту/кросс — только волокно выхода (в4 / в2), без чужих сварок кассеты
                 if (fromIsSplitterPorts && !isTraced) return;
                 var fate = fiber.fate;
                 var isFree = !!(fate && fate.kind === 'free' && !isTraced);
@@ -2996,12 +3058,12 @@
                     peerFiber = Number(fate.peerFiber);
                 } else if (isTraced && outRibbon && outRibbon.laneY[Number(fiber.number)] != null) {
                     // Та же жN на исходящей кассете — не подменять чужим outSeg.tracedFiber
-                    // (иначе сплиттер1→ж4 и сплиттер2→ж2 оба садились на ж2 трассы)
+                    // (иначе сплиттер1→в4 и сплиттер2→в2 оба садились на в2 трассы)
                     peerFiber = Number(fiber.number);
                     peerOnOut = true;
                 } else if (isTraced && outSeg && outSeg.tracedFiber != null &&
                     Number(fiber.number) === Number(outSeg.tracedFiber) && outRibbon) {
-                    // Продолжение той же трассовой жилы, если совпадает номер
+                    // Продолжение той же трассового волокна, если совпадает номер
                     peerFiber = Number(outSeg.tracedFiber);
                     peerOnOut = true;
                 }
@@ -3024,7 +3086,7 @@
                 var y2;
                 if (outRibbon) {
                     y2 = outRibbon.laneY[peerFiber];
-                    if (y2 == null) return; // нет такой жилы на исходящей кассете
+                    if (y2 == null) return; // нет такого волокна на исходящей кассете
                 } else {
                     y2 = y1;
                 }
@@ -3086,7 +3148,7 @@
     }
 
     function pushTreeEdgeBadge(badgeParts, xLeft, xRight, yLine, text, fiberMeta, extraClass) {
-        // Для кабелей с кассетой жил подпись уже под кассетой
+        // Для кабелей с кассетой волокон подпись уже под кассетой
         if (fiberMeta && fiberMeta._bandH) return;
         if (!text) return;
         var t = String(text || '');
@@ -3322,7 +3384,7 @@
                 }, ctl, {
                     budgetMs: 8,
                     label: 'Рисуем схему…',
-                    hintPrefix: 'Готовим жилы',
+                    hintPrefix: 'Готовим волокна',
                     progressFrom: 91,
                     progressTo: 95
                 });
@@ -3382,7 +3444,7 @@
         parts.push('<svg class="trace-schematic-svg" viewBox="0 0 ' + width + ' ' + height +
             '" width="' + width + '" height="' + height +
             '" data-base-w="' + width + '" data-base-h="' + height +
-            '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Схема трассы жил">');
+            '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Схема трассы волокон">');
 
         parts.push('<rect class="trace-sch-band" x="' + padX + '" y="' + padTop +
             '" width="' + (width - padX * 2) + '" height="' + fiberH + '" rx="10"/>');
@@ -3661,7 +3723,7 @@
                     nodeUnitW[i] = smallNodeW;
                 }
             }
-            // Сплиттер всегда — кассета логических выходов 1…N (не жилы исходящего кабеля)
+            // Сплиттер всегда — кассета логических выходов 1…N (не волокна исходящего кабеля)
             if (model.nodes[i] && model.nodes[i].type === 'splitter') {
                 var ratioSp = schematicSplitterRatio(model.nodes[i]);
                 var portsH = headH + estimateTreeSplitterPortsH(ratioSp) + 6;
@@ -4004,7 +4066,7 @@
             });
         }
 
-        // Сплиттер без своей палитры: все жилы = цвет входа (COM)
+        // Сплиттер без своей палитры: все волокна = цвет входа (COM)
         paintSchematicSplitterInheritedColors(model);
 
         yield { hint: 'Рисуем узлы схемы', pct: null, waitMs: 0 };
@@ -4029,7 +4091,7 @@
                     usedOuts,
                     node._splitterInheritColor || '#06b6d4'
                 );
-                // Для кабеля после сплиттера — выход с ПОРТА вых.N, не «жила N → порт N»
+                // Для кабеля после сплиттера — выход с ПОРТА вых.N, не «волокно N → порт N»
                 (model.segments || []).forEach(function (outCab) {
                     if (!outCab || outCab.fromIdx !== ni) return;
                     if (outCab.kind === 'nodeLink' && !outCab.cableId) return;
@@ -4087,7 +4149,7 @@
                             outCab.tracedFiber = null;
                         }
                     }
-                    // Все жилы этого кабеля выходят с одного порта сплиттера (вых.N)
+                    // Все волокна этого кабеля выходят с одного порта сплиттера (вых.N)
                     fibersOut.forEach(function (f) {
                         if (!f) return;
                         laneMap[Number(f.number)] = leaveY;
@@ -4292,7 +4354,7 @@
                 inSegs.push(sg1);
             }
             if (!inSegs.length) continue;
-            // Кассета по любому входящему; посадки — по каждому входу со своей жилой
+            // Кассета по любому входящему; посадки — по каждому входу со своим волокном
             inSegs.sort(function (a, b) {
                 var da = layout.depth[a.fromIdx] != null ? layout.depth[a.fromIdx] : 0;
                 var db = layout.depth[b.fromIdx] != null ? layout.depth[b.fromIdx] : 0;
@@ -4434,7 +4496,7 @@
                 return true;
             }
 
-            // Мосты по входящим сегментам (жила из outputConnections сплиттера)
+            // Мосты по входящим сегментам (волокно из outputConnections сплиттера)
             inSegs.forEach(function (iseg) {
                 var fromN = model.nodes[iseg.fromIdx];
                 var tap = resolveSchematicSegTapFiber(iseg, fromN);
@@ -4595,7 +4657,7 @@
         var html = '<div class="trace-schematic' + (isTree ? ' trace-schematic--tree' : '') + '">';
         html += '<div class="trace-schematic-head">';
         html += '<div class="trace-schematic-title-row">';
-        html += '<div class="trace-schematic-title">Схема жил</div>';
+        html += '<div class="trace-schematic-title">Схема волокон</div>';
         if (model.merged && model.branchCount > 1) {
             html += '<div class="trace-schematic-branch-hint" title="Все найденные окончания на одной схеме">одна схема · ' +
                 model.branchCount + ' оконч.</div>';
@@ -4625,13 +4687,13 @@
             html += '<span class="trace-sch-leg trace-sch-leg--host">кросс / муфта</span>';
             html += '<span class="trace-sch-leg trace-sch-leg--splitter">сплиттер</span>';
             html += '<span class="trace-sch-leg trace-sch-leg--onu">ONU</span>';
-            html += '<span class="trace-sch-leg trace-sch-leg--traced">трассируемая жила</span>';
-            html += '<span class="trace-sch-leg trace-sch-leg--used">остальные жилы</span>';
+            html += '<span class="trace-sch-leg trace-sch-leg--traced">трассируемое волокно</span>';
+            html += '<span class="trace-sch-leg trace-sch-leg--used">остальные волокна</span>';
             html += '</div>';
         } else {
             html += '<div class="trace-schematic-legend">';
             html += '<span class="trace-sch-leg trace-sch-leg--traced">трассируемая</span>';
-            html += '<span class="trace-sch-leg trace-sch-leg--used">занята / сварка</span>';
+            html += '<span class="trace-sch-leg trace-sch-leg--used">занято / сварка</span>';
             html += '<span class="trace-sch-leg trace-sch-leg--free">свободна</span>';
             html += '<span class="trace-sch-leg trace-sch-leg--branch">ушла в другой кабель</span>';
             html += '</div>';
@@ -4649,12 +4711,12 @@
         html += '</div></div>';
         html += '</div>';
         if (isTree) {
-            html += '<p class="trace-schematic-hint">На кабеле в кросс/муфту — все жилы и куда каждая уходит (сварка / ONU / сплиттер / свободна). Ветки от сплиттера — отдельные отводы (вых.N), без общей вертикальной линии. Ctrl+колёсико — масштаб.</p>';
+            html += '<p class="trace-schematic-hint">На кабеле в кросс/муфту — все волокна и куда каждая уходит (сварка / ONU / сплиттер / свободна). Ветки от сплиттера — отдельные отводы (вых.N), без общей вертикальной линии. Ctrl+колёсико — масштаб.</p>';
         } else {
             var maxF = 0;
             model.segments.forEach(function (s) { if (s.fiberCount > maxF) maxF = s.fiberCount; });
-            var compactNote = maxF > 48 ? ' На кабелях &gt;48 жил свободные линии скрыты для читаемости.' : '';
-            html += '<p class="trace-schematic-hint">Прямые параллельные линии — жилы кабеля. Голубая с точками — трассируемая. Пунктир — свободна. Ответвление вниз — сварка в другой кабель. Ctrl+колёсико — масштаб.' + compactNote + '</p>';
+            var compactNote = maxF > 48 ? ' На кабелях &gt;48 волокон свободные линии скрыты для читаемости.' : '';
+            html += '<p class="trace-schematic-hint">Прямые параллельные линии — волокна кабеля. Голубая с точками — трассируемая. Пунктир — свободна. Ответвление вниз — сварка в другой кабель. Ctrl+колёсико — масштаб.' + compactNote + '</p>';
         }
         html += '</div>';
         return html;
@@ -4880,7 +4942,7 @@
     function runSchematicWorkSlices(total, workAtIndex, ctl, opts) {
         opts = opts || {};
         var budgetMs = opts.budgetMs != null ? opts.budgetMs : 12;
-        var label = opts.label || 'Строим схему жил…';
+        var label = opts.label || 'Строим схему волокон…';
         var hintPrefix = opts.hintPrefix || 'Шаг';
         var progressFrom = opts.progressFrom != null ? opts.progressFrom : 70;
         var progressTo = opts.progressTo != null ? opts.progressTo : 90;
@@ -4940,28 +5002,28 @@
         return (async function () {
             if (!model) return null;
             if (ctl && ctl.setProgress) {
-                ctl.setProgress('Строим схему жил…', 'Убираем лишние связи', 82);
+                ctl.setProgress('Строим схему волокон…', 'Убираем лишние связи', 82);
             }
             await yieldSchematicBuild(8);
             if (ctl && ctl.isCancelled && ctl.isCancelled()) return null;
             model.segments = pruneTransitiveSchematicSegments(model.segments || []);
 
             if (ctl && ctl.setProgress) {
-                ctl.setProgress('Строим схему жил…', 'Подписываем выходы сплиттеров', 85);
+                ctl.setProgress('Строим схему волокон…', 'Подписываем выходы сплиттеров', 85);
             }
             await yieldSchematicBuild(8);
             if (ctl && ctl.isCancelled && ctl.isCancelled()) return null;
             enrichSchematicModelFromSplitterOutputs(model);
 
             if (ctl && ctl.setProgress) {
-                ctl.setProgress('Строим схему жил…', 'Добавляем сварки', 88);
+                ctl.setProgress('Строим схему волокон…', 'Добавляем сварки', 88);
             }
             await yieldSchematicBuild(8);
             if (ctl && ctl.isCancelled && ctl.isCancelled()) return null;
             enrichSchematicModelFromHostSplices(model);
 
             if (ctl && ctl.setProgress) {
-                ctl.setProgress('Строим схему жил…', 'Чистим дубликаты', 90);
+                ctl.setProgress('Строим схему волокон…', 'Чистим дубликаты', 90);
             }
             await yieldSchematicBuild(8);
             if (ctl && ctl.isCancelled && ctl.isCancelled()) return null;
@@ -5063,7 +5125,7 @@
         var head = '<div class="trace-schematic' + (isTree ? ' trace-schematic--tree' : '') + '">';
         head += '<div class="trace-schematic-head">';
         head += '<div class="trace-schematic-title-row">';
-        head += '<div class="trace-schematic-title">Схема жил</div>';
+        head += '<div class="trace-schematic-title">Схема волокон</div>';
         if (model.merged && model.branchCount > 1) {
             head += '<div class="trace-schematic-branch-hint" title="Все найденные окончания на одной схеме">одна схема · ' +
                 model.branchCount + ' оконч.</div>';
@@ -5080,13 +5142,13 @@
             head += '<span class="trace-sch-leg trace-sch-leg--host">кросс / муфта</span>';
             head += '<span class="trace-sch-leg trace-sch-leg--splitter">сплиттер</span>';
             head += '<span class="trace-sch-leg trace-sch-leg--onu">ONU</span>';
-            head += '<span class="trace-sch-leg trace-sch-leg--traced">трассируемая жила</span>';
-            head += '<span class="trace-sch-leg trace-sch-leg--used">остальные жилы</span>';
+            head += '<span class="trace-sch-leg trace-sch-leg--traced">трассируемое волокно</span>';
+            head += '<span class="trace-sch-leg trace-sch-leg--used">остальные волокна</span>';
             head += '</div>';
         } else {
             head += '<div class="trace-schematic-legend">';
             head += '<span class="trace-sch-leg trace-sch-leg--traced">трассируемая</span>';
-            head += '<span class="trace-sch-leg trace-sch-leg--used">занята / сварка</span>';
+            head += '<span class="trace-sch-leg trace-sch-leg--used">занято / сварка</span>';
             head += '<span class="trace-sch-leg trace-sch-leg--free">свободна</span>';
             head += '<span class="trace-sch-leg trace-sch-leg--branch">ушла в другой кабель</span>';
             head += '</div>';
@@ -5102,9 +5164,9 @@
         var midClose = '</div></div></div>';
         var foot = '';
         if (isTree) {
-            foot = '<p class="trace-schematic-hint">На кабеле в кросс/муфту — все жилы и куда каждая уходит (сварка / ONU / сплиттер / свободна). Ветки от сплиттера — отдельные отводы (вых.N), без общей вертикальной линии. Ctrl+колёсико — масштаб.</p>';
+            foot = '<p class="trace-schematic-hint">На кабеле в кросс/муфту — все волокна и куда каждая уходит (сварка / ONU / сплиттер / свободна). Ветки от сплиттера — отдельные отводы (вых.N), без общей вертикальной линии. Ctrl+колёсико — масштаб.</p>';
         } else {
-            foot = '<p class="trace-schematic-hint">Прямые параллельные линии — жилы кабеля. Голубая с точками — трассируемая. Пунктир — свободна. Ответвление вниз — сварка в другой кабель. Ctrl+колёсико — масштаб.</p>';
+            foot = '<p class="trace-schematic-hint">Прямые параллельные линии — волокна кабеля. Голубая с точками — трассируемая. Пунктир — свободна. Ответвление вниз — сварка в другой кабель. Ctrl+колёсико — масштаб.</p>';
         }
         foot += '</div>';
         return { head: head, midOpen: midOpen, midClose: midClose, foot: foot, isTree: isTree };
@@ -5121,7 +5183,7 @@
 
             if (ctl && ctl.setProgress) {
                 ctl.setProgress(
-                    'Строим схему жил…',
+                    'Строим схему волокон…',
                     'Веток к отрисовке: ' + chosen.length,
                     68
                 );
@@ -5132,7 +5194,7 @@
             var model = null;
             if (chosen.length === 1) {
                 if (ctl && ctl.setProgress) {
-                    ctl.setProgress('Строим схему жил…', 'Собираем узлы маршрута', 74);
+                    ctl.setProgress('Строим схему волокон…', 'Собираем узлы маршрута', 74);
                 }
                 await yieldSchematicBuild(12);
                 if (ctl && ctl.isCancelled && ctl.isCancelled()) return '';
@@ -5190,7 +5252,7 @@
                     });
                 }, ctl, {
                     budgetMs: 10,
-                    label: 'Строим схему жил…',
+                    label: 'Строим схему волокон…',
                     hintPrefix: 'Ветка',
                     progressFrom: 70,
                     progressTo: 82
@@ -5396,7 +5458,7 @@
                 }).join(' → ') + ']';
             }
             var len = (item.segmentLengthM != null) ? (' ~' + item.segmentLengthM + ' м') : '';
-            return '  → Кабель «' + (item.cableName || 'кабель') + '», жила ' + item.fiberNumber + len + wp;
+            return '  → Кабель «' + (item.cableName || 'кабель') + '», волокно ' + item.fiberNumber + len + wp;
         }
         if (item.type === 'connection') {
             return '  ↔ Сварка: ж' + item.fromFiberNumber + (item.fromLabel ? ' [' + item.fromLabel + ']' : '') +
@@ -5404,22 +5466,22 @@
         }
         if (item.type === 'nodeConnection') {
             if (item.fromNode) {
-                return '  🔌 → Кросс «' + (item.nodeName || 'Кросс') + '», жила ' + item.fiberNumber;
+                return '  🔌 → Кросс «' + (item.nodeName || 'Кросс') + '», волокно ' + item.fiberNumber;
             }
-            return '  🔌 Вывод на узел «' + (item.nodeName || 'Узел') + '», жила ' + item.fiberNumber;
+            return '  🔌 Вывод на узел «' + (item.nodeName || 'Узел') + '», волокно ' + item.fiberNumber;
         }
         if (item.type === 'onuConnection') {
-            return '  🔌 Вывод на ONU «' + (item.onuName || 'ONU') + '», жила ' + item.fiberNumber;
+            return '  🔌 Вывод на ONU «' + (item.onuName || 'ONU') + '», волокно ' + item.fiberNumber;
         }
         if (item.type === 'mediaConverterConnection') {
-            return '  ⇄ Медиаконвертер «' + (item.mediaConverterName || 'МК') + '», жила ' + item.fiberNumber;
+            return '  ⇄ Медиаконвертер «' + (item.mediaConverterName || 'МК') + '», волокно ' + item.fiberNumber;
         }
         if (item.type === 'radioBridgeConnection') {
-            return '  ◎ Радиомост «' + (item.radioBridgeName || 'РМ') + '», жила ' + item.fiberNumber;
+            return '  ◎ Радиомост «' + (item.radioBridgeName || 'РМ') + '», волокно ' + item.fiberNumber;
         }
         if (item.type === 'splitterConnection') {
             var spN = item.splitter && item.splitter.properties ? (item.splitter.properties.get('name') || 'Сплиттер') : 'Сплиттер';
-            return '  🔀 На сплиттер «' + spN + '», жила ' + item.fiberNumber;
+            return '  🔀 На сплиттер «' + spN + '», волокно ' + item.fiberNumber;
         }
         if (item.type === 'splitterOutputToOnu') {
             return '  🔀 → ONU «' + (item.onuName || 'ONU') + '»';
@@ -5437,7 +5499,7 @@
         }
         if (item.type === 'splitterOutputToHost') {
             var hostN = item.host && item.host.properties ? (item.host.properties.get('name') || 'Муфта/кросс') : 'Муфта/кросс';
-            return '  🔀 → «' + hostN + '», жила ' + (item.fiberNumber != null ? item.fiberNumber : '?');
+            return '  🔀 → «' + hostN + '», волокно ' + (item.fiberNumber != null ? item.fiberNumber : '?');
         }
         if (item.type === 'splitterOutputToCrossPort') {
             return '  🔀 → порт ' + item.crossPort + ' («' + (item.crossName || 'Кросс') + '»)';
@@ -5446,7 +5508,7 @@
             var portLabel = item.incoming ? 'приход' : (typeof formatOltPortDisplay === 'function'
                 ? formatOltPortDisplay(item.portNumber, item.portLabel || (item.olt && typeof getOltPortLabel === 'function' ? getOltPortLabel(item.olt, item.portNumber) : ''))
                 : ('порт ' + item.portNumber));
-            return '  📶 OLT «' + (item.oltName || 'OLT') + '», ' + portLabel + ', жила ' + item.fiberNumber;
+            return '  📶 OLT «' + (item.oltName || 'OLT') + '», ' + portLabel + ', волокно ' + item.fiberNumber;
         }
         return '';
     }
@@ -5651,7 +5713,7 @@
     }
 
     function renderFiberChip(fiberNumber, meta, compact) {
-        var label = 'Ж' + fiberNumber + (meta.name && !compact ? ' ' + meta.name : '');
+        var label = 'В' + fiberNumber + (meta.name && !compact ? ' ' + meta.name : '');
         return '<span class="trace-fiber-chip" style="--fiber-color:' + meta.color + ';--fiber-text:' + meta.textColor + '">' + esc(label) + '</span>';
     }
 
@@ -5970,7 +6032,7 @@
             var pageH = doc.internal.pageSize.getHeight();
             var margin = 18;
             var headerH = 22;
-            var title = 'Схема трассы жил';
+            var title = 'Схема трассы волокон';
             var metricsEl = root.querySelector('.trace-schematic-metrics');
             var metricsTxt = metricsEl ? metricsEl.textContent.replace(/\s+/g, ' ').trim() : '';
             var dateTxt = new Date().toLocaleString();
@@ -6112,7 +6174,7 @@
             bar.className = 'trace-modal-pdf-bar';
             bar.innerHTML =
                 '<div class="trace-modal-pdf-bar__text">' +
-                '<strong>Схема жил</strong>' +
+                '<strong>Схема волокон</strong>' +
                 '<span>Экспорт трассы в PDF</span>' +
                 '</div>' +
                 '<button type="button" class="trace-sch-export-pdf trace-modal-pdf-btn" title="Скачать схему трассы в PDF">' +
@@ -6127,7 +6189,7 @@
                 var root = (schematicContainer || modal).querySelector('.trace-schematic');
                 if (!root) {
                     if (typeof global.showWarning === 'function') {
-                        global.showWarning('Схема жил не найдена на странице трассы', 'Экспорт');
+                        global.showWarning('Схема волокон не найдена на странице трассы', 'Экспорт');
                     }
                     return;
                 }

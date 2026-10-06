@@ -23,7 +23,7 @@ function isCrossPortPatched(crossObj, portNum) {
     return !!getCrossPortPatch(crossObj, portNum);
 }
 
-/** Жила на порту, который кроссирован с другим кроссом — только трассировка через патч. */
+/** Волокно на порту, который кроссирован с другим кроссом — только трассировка через патч. */
 function isFiberCrossPatchLocked(crossObj, cableId, fiberNumber) {
     if (!crossObj || !cableId || fiberNumber == null) return false;
     if (typeof getCrossPortForFiber !== 'function') return false;
@@ -35,7 +35,7 @@ function isFiberCrossPatchLocked(crossObj, cableId, fiberNumber) {
 function blockIfFiberCrossPatchLocked(crossObj, cableId, fiberNumber) {
     if (!isFiberCrossPatchLocked(crossObj, cableId, fiberNumber)) return false;
     if (typeof showToast === 'function') {
-        showToast('Жила на кроссированном порту — подключение к узлу, OLT, ONU и МК недоступно', 'warning');
+        showToast('Волокно на кроссированном порту — подключение к узлу, OLT, ONU и МК недоступно', 'warning');
     }
     return true;
 }
@@ -70,12 +70,12 @@ function getCrossPortVisualMeta(crossObj, portNum, opts) {
     var fiberKeys = typeof getCrossPortFiberKeys === 'function' ? getCrossPortFiberKeys(crossObj, portNum) : [];
     var spOnPort = typeof findSplitterOutputOnCrossPort === 'function' ? findSplitterOutputOnCrossPort(crossObj, portNum) : null;
     if (fiberKeys.length) {
-        var fiberLabel = fiberKeys.length > 1 ? ('жил: ' + fiberKeys.length) : 'жила на порту';
+        var fiberLabel = fiberKeys.length > 1 ? ('волокон: ' + fiberKeys.length) : 'волокно на порту';
         if (spOnPort) fiberLabel = 'сплиттер → ' + fiberLabel;
         return {
             state: 'fiber',
             stateLabel: fiberLabel,
-            shortLabel: spOnPort ? 'сплиттер' : 'жила',
+            shortLabel: spOnPort ? 'сплиттер' : 'волокно',
             optionSuffix: '',
             selectDisabled: isCrossPortOptionDisabledForFiber(crossObj, portNum, opts.cableId, opts.fiberNumber)
         };
@@ -164,7 +164,7 @@ function buildCrossPortTableRowHtml(crossObj, crossPorts, cableId, fiberNumber, 
         ? '<span class="fiber-port-state fiber-port-state--' + meta.state + '">' + escapeHtml(meta.stateLabel) + '</span>'
         : '';
     var portDisc = (isEditMode && portNum && !isNaN(portNum))
-        ? '<button type="button" class="fiber-port-row__disconnect btn-disconnect-fiber-port" data-cable-id="' + escapeHtml(cableId) + '" data-fiber-number="' + fiberNumber + '" title="Снять жилу с порта">✕</button>'
+        ? '<button type="button" class="fiber-port-row__disconnect btn-disconnect-fiber-port" data-cable-id="' + escapeHtml(cableId) + '" data-fiber-number="' + fiberNumber + '" title="Снять волокно с порта">✕</button>'
         : '';
     var selectTitle = signalTitle ? ('Порт кросса · ' + signalTitle) : 'Порт кросса';
     return '<div class="' + rowClass + '"' + (signalTitle ? ' title="' + escapeHtml(signalTitle) + '"' : '') + '>' +
@@ -208,7 +208,7 @@ function getConnectableCrossPortsForPatch(crossObj, sourceCross, sourcePort) {
     for (var p = 1; p <= crossPorts; p++) {
         if (!isCrossPortAvailableForPatch(crossObj, p)) continue;
         var fiberKeys = typeof getCrossPortFiberKeys === 'function' ? getCrossPortFiberKeys(crossObj, p) : [];
-        var fiberHint = fiberKeys.length ? ' · жила на порту' : '';
+        var fiberHint = fiberKeys.length ? ' · волокно на порту' : '';
         options.push({
             portNumber: p,
             label: 'Порт ' + p + fiberHint
@@ -364,7 +364,7 @@ function startCrossPortPatchFromScheme(crossObj, portNumber, opts) {
         return;
     }
     if (!isCrossPortAvailableForPatch(crossObj, portNumber)) {
-        if (typeof showError === 'function') showError('Порт ' + portNumber + ' занят (кроссировка, PON или жила).', 'Порт недоступен');
+        if (typeof showError === 'function') showError('Порт ' + portNumber + ' занят (кроссировка, PON или волокно).', 'Порт недоступен');
         return;
     }
     if (typeof clearAllSchemeSplitterPicks === 'function') clearAllSchemeSplitterPicks();
@@ -628,7 +628,7 @@ function buildCrossPortPatchRowHtml(hostObj, portNum, isEditMode) {
         statusText = 'PON OLT';
         statusClass = 'cross-port-patch-status--busy';
     } else if (fiberKeys.length) {
-        statusText = spOnPort ? 'сплиттер → порт' : 'жила на порту';
+        statusText = spOnPort ? 'сплиттер → порт' : 'волокно на порту';
         statusClass = 'cross-port-patch-status--fiber';
     } else if (spOnPort) {
         statusText = 'сплиттер → порт';
@@ -662,7 +662,7 @@ function buildCrossPortPatchTableHtml(hostObj, crossPorts, isEditMode) {
         rows += buildCrossPortPatchRowHtml(hostObj, p, isEditMode);
     }
     var hint = isEditMode
-        ? 'Соедините порт этого кросса с портом другого кросса. Трассировка жилы пройдёт через кроссировку.'
+        ? 'Соедините порт этого кросса с портом другого кросса. Трассировка волокна пройдёт через кроссировку.'
         : 'Логические соединения портов панели с другими кроссами.';
     return '<div class="cross-port-patch-section">' +
         '<h4 class="fiber-ws-panel-title fiber-ws-panel-title--table">Кроссировка портов</h4>' +
@@ -670,7 +670,7 @@ function buildCrossPortPatchTableHtml(hostObj, crossPorts, isEditMode) {
         '<div class="cross-port-patch-table-wrap">' +
         '<table class="cross-port-patch-table">' +
         '<thead><tr>' +
-        '<th>Порт</th><th>Статус</th><th>Жила</th><th>Соединение</th>' + (isEditMode ? '<th></th>' : '') +
+        '<th>Порт</th><th>Статус</th><th>Волокно</th><th>Соединение</th>' + (isEditMode ? '<th></th>' : '') +
         '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
 }
 

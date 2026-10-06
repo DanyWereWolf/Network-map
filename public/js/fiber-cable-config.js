@@ -1,4 +1,4 @@
-/** ВОЛС: вид линии на карте (цвет/толщина организации) и настраиваемые жилы. */
+/** ВОЛС: вид линии на карте (цвет/толщина организации) и настраиваемые волокна. */
 (function(global) {
     var MAP_FIBER_COLOR = '#16a34a';
     var MAP_FIBER_WIDTH = 3;
@@ -11,7 +11,7 @@
     var LAY_MODULE_COUNT_KEY = 'networkMap_layModuleCount';
     var MODULE_SIZE_PRESETS = [4, 6, 8, 12, 16];
     var DEFAULT_FIBERS_PER_MODULE = 12;
-    /** Типовые многомодульные ВОЛС (модули × жил в модуле), ёмкостью до 96. */
+    /** Типовые многомодульные ВОЛС (модули × волокон в модуле), ёмкостью до 96. */
     var MODULAR_CABLE_PRESETS = [
         { id: '2x6', modules: 2, perModule: 6, label: '2×6' },
         { id: '2x12', modules: 2, perModule: 12, label: '2×12' },
@@ -30,7 +30,7 @@
         '#64748b', '#e11d48', '#7c3aed', '#0891b2',
         '#ca8a04', '#334155', '#db2777', '#0d9488'
     ];
-    var LEGACY_TYPE_COUNTS = { fiber4: 4, fiber8: 8, fiber16: 16, fiber24: 24 };
+    var LEGACY_TYPE_COUNTS = { fiber4: 4, fiber8: 8, fiber12: 12, fiber16: 16, fiber24: 24, fiber48: 48 };
     var BASE_COLORS = [
         { name: 'Синий', color: '#0000FF' }, { name: 'Оранжевый', color: '#FF8C00' },
         { name: 'Зеленый', color: '#00FF00' }, { name: 'Коричневый', color: '#8B4513' },
@@ -46,7 +46,10 @@
     }
 
     function isOpticalCableType(type) {
-        return type && type !== 'copper' && (type === 'fiber' || type === 'fiberModular' || !!LEGACY_TYPE_COUNTS[type]);
+        if (!type || type === 'copper') return false;
+        if (type === 'fiber' || type === 'fiberModular' || !!LEGACY_TYPE_COUNTS[type]) return true;
+        // Импорт NeD и т.п.: fiber32, fiber96…
+        return /^fiber\d+$/.test(String(type));
     }
 
     function isModularCableType(type) {
@@ -54,7 +57,13 @@
     }
 
     function countFromLegacyType(type) {
-        return LEGACY_TYPE_COUNTS[type] || 0;
+        if (LEGACY_TYPE_COUNTS[type]) return LEGACY_TYPE_COUNTS[type];
+        var m = String(type || '').match(/^fiber(\d+)$/);
+        if (m) {
+            var n = parseInt(m[1], 10);
+            if (!isNaN(n) && n > 0) return Math.min(MAX_FIBERS, n);
+        }
+        return 0;
     }
 
     function buildStandardPalette(count) {
@@ -78,7 +87,7 @@
         if (isNaN(num) || num < 1) num = index + 1;
         return {
             number: num,
-            name: (f && f.name) ? String(f.name) : 'Жила ' + num,
+            name: (f && f.name) ? String(f.name) : 'Волокно ' + num,
             color: (f && f.color) ? String(f.color) : '#888888',
             hasBlackRing: !!(f && f.hasBlackRing)
         };
@@ -144,10 +153,10 @@
     function pluralFibers(n) {
         var m = Math.abs(n) % 100;
         var m10 = m % 10;
-        if (m > 10 && m < 20) return 'жил';
-        if (m10 === 1) return 'жила';
-        if (m10 >= 2 && m10 <= 4) return 'жилы';
-        return 'жил';
+        if (m > 10 && m < 20) return 'волокон';
+        if (m10 === 1) return 'волокно';
+        if (m10 >= 2 && m10 <= 4) return 'волокна';
+        return 'волокон';
     }
 
     function getCableLabel(cableOrType, cableMaybe) {
@@ -409,17 +418,17 @@
         html += '<div class="cable-modular-config__row">';
         html += '<label class="cable-fiber-lay-label" for="' + idPrefix + 'Modules">Модулей</label>';
         html += '<input type="number" id="' + idPrefix + 'Modules" class="form-input cable-modular-count-input" min="1" max="24" value="' + totals.modules + '" aria-label="Число модулей">';
-        html += '<label class="cable-fiber-lay-label" for="' + idPrefix + 'PerModule">Жил в модуле</label>';
-        html += '<input type="number" id="' + idPrefix + 'PerModule" class="form-input cable-modular-count-input" min="2" max="24" value="' + totals.perModule + '" aria-label="Жил в модуле">';
-        html += '<span class="cable-modular-config__total" id="' + idPrefix + 'Total">' + totals.fiberCount + ' жил</span>';
+        html += '<label class="cable-fiber-lay-label" for="' + idPrefix + 'PerModule">Волокон в модуле</label>';
+        html += '<input type="number" id="' + idPrefix + 'PerModule" class="form-input cable-modular-count-input" min="2" max="24" value="' + totals.perModule + '" aria-label="Волокон в модуле">';
+        html += '<span class="cable-modular-config__total" id="' + idPrefix + 'Total">' + totals.fiberCount + ' волокон</span>';
         html += '</div>';
         html += '<div class="cable-modular-presets" role="group" aria-label="Готовые конфигурации модульного кабеля">';
         MODULAR_CABLE_PRESETS.forEach(function(p) {
             var active = p.modules === totals.modules && p.perModule === totals.perModule;
-            html += '<button type="button" class="cable-modular-preset' + (active ? ' cable-modular-preset--active' : '') + '" data-modules="' + p.modules + '" data-per-module="' + p.perModule + '" title="' + p.modules + ' модулей × ' + p.perModule + ' жил = ' + (p.modules * p.perModule) + '">' + p.label + ' <em>(' + (p.modules * p.perModule) + ')</em></button>';
+            html += '<button type="button" class="cable-modular-preset' + (active ? ' cable-modular-preset--active' : '') + '" data-modules="' + p.modules + '" data-per-module="' + p.perModule + '" title="' + p.modules + ' модулей × ' + p.perModule + ' волокон = ' + (p.modules * p.perModule) + '">' + p.label + ' <em>(' + (p.modules * p.perModule) + ')</em></button>';
         });
         html += '</div>';
-        html += '<p class="object-card-hint cable-modular-config__hint">Один кабель на схеме; модули выделяются рамками вокруг групп жил.</p>';
+        html += '<p class="object-card-hint cable-modular-config__hint">Один кабель на схеме; модули выделяются рамками вокруг групп волокон.</p>';
         html += '</div>';
         return html;
     }
@@ -437,7 +446,7 @@
         var totEl = document.getElementById(idPrefix + 'Total');
         if (modEl) modEl.value = String(totals.modules);
         if (perEl) perEl.value = String(totals.perModule);
-        if (totEl) totEl.textContent = totals.fiberCount + ' жил';
+        if (totEl) totEl.textContent = totals.fiberCount + ' волокон';
         var root = document.getElementById(idPrefix + 'Root');
         if (root) {
             root.querySelectorAll('.cable-modular-preset').forEach(function(btn) {
@@ -484,7 +493,7 @@
     }
 
     /**
-     * Группирует жилы по модулям.
+     * Группирует волокна по модулям.
      * @returns {{ moduleIndex:number, moduleNumber:number, color:string, fibers:array }[]}
      */
     function groupFibersByModules(fibers, fibersPerModule) {
@@ -698,7 +707,7 @@
         options = options || {};
         var c = getLayFiberCount();
         openFiberPaletteEditor({
-            title: options.title || 'Цвета жил для прокладки',
+            title: options.title || 'Цвета волокон для прокладки',
             fiberCount: c,
             palette: getLayFiberPalette() || buildStandardPalette(c),
             onSave: function(r) {
@@ -763,7 +772,7 @@
             if (working.length >= MAX_FIBERS) return;
             working.push({
                 number: working.length + 1,
-                name: 'Жила ' + (working.length + 1),
+                name: 'Волокно ' + (working.length + 1),
                 color: '#94a3b8',
                 hasBlackRing: false
             });
@@ -801,7 +810,7 @@
                 '<input type="text" class="form-input fiber-palette-row__name" value="' + esc(f.name) + '" placeholder="Название">' +
                 '<label class="fiber-palette-row__ring"><input type="checkbox" class="fiber-palette-row__ring-cb"' +
                 (f.hasBlackRing ? ' checked' : '') + '> кольцо</label>' +
-                '<button type="button" class="fiber-palette-row__remove btn-delete-cable" title="Удалить" aria-label="Удалить жилу">&times;</button></div>';
+                '<button type="button" class="fiber-palette-row__remove btn-delete-cable" title="Удалить" aria-label="Удалить волокно">&times;</button></div>';
         }).join('');
         list.querySelectorAll('.fiber-palette-row__color').forEach(function(inp) {
             inp.addEventListener('input', function() {
@@ -858,7 +867,7 @@
         _paletteEditorState.onSave = options.onSave || null;
 
         var titleEl = document.getElementById('fiberPaletteModalTitle');
-        if (titleEl) titleEl.textContent = options.title || 'Цвета жил кабеля';
+        if (titleEl) titleEl.textContent = options.title || 'Цвета волокон кабеля';
 
         var countInput = document.getElementById('fiberPaletteCountInput');
         if (countInput) {
@@ -982,6 +991,7 @@
         LEGACY_TYPE_COUNTS: LEGACY_TYPE_COUNTS,
         isOpticalCableType: isOpticalCableType,
         isModularCableType: isModularCableType,
+        countFromLegacyType: countFromLegacyType,
         buildStandardPalette: buildStandardPalette,
         getFiberCount: getFiberCount,
         getFiberCountFromCable: getFiberCountFromCable,

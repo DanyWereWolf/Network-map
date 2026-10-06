@@ -22,6 +22,13 @@ Thumbs.db
 *.tmp
 *.temp
 
+# NeD import tooling (extracts / large converted dumps)
+tools/ned-import/_ned_extract/
+tools/ned-import/_probe/
+tools/ned-import/out*.json
+tools/ned-import/NedToNetworkMap/bin/
+tools/ned-import/NedToNetworkMap/obj/
+
 # База данных (локальная)
 data/
 

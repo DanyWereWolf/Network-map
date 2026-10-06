@@ -1,5 +1,5 @@
 /**
- * Панель выбора жилы для сращивания.
+ * Панель выбора волокна для сращивания.
  */
 function updateFiberSelectionUI() {
     const bar = document.getElementById('fiber-selection-bar');
@@ -14,9 +14,9 @@ function updateFiberSelectionUI() {
                 ? ' Или кликните <strong>сплиттер на схеме</strong> (карточка или «вх») для подключения входа.'
                 : '';
             var crossHint = (currentModalObject && isCrossLikeHostType(currentModalObject.properties.get('type')))
-                ? ' Или кликните <strong>порт кросса</strong> внизу схемы (только для несращённых жил).'
+                ? ' Или кликните <strong>порт кросса</strong> внизу схемы (только для несращённых волокон).'
                 : '';
-            bar.innerHTML = '<span class="fiber-selection-text">Выбрана жила: кабель ' + escapeHtml(shortId) + ', жила ' + sc.fiberNumber + '. Выберите вторую жилу в другом кабеле (в таблице или в схеме).' + splitterHint + crossHint + '</span> ' +
+            bar.innerHTML = '<span class="fiber-selection-text">Выбрано волокно: кабель ' + escapeHtml(shortId) + ', волокно ' + sc.fiberNumber + '. Выберите второе волокно в другом кабеле (в таблице или в схеме).' + splitterHint + crossHint + '</span> ' +
                 '<button type="button" class="fiber-selection-cancel" id="fiberSelectionCancelBtn">Отменить выбор</button>';
             const cancelBtn = document.getElementById('fiberSelectionCancelBtn');
             if (cancelBtn) cancelBtn.addEventListener('click', function() { resetFiberSelection(); });

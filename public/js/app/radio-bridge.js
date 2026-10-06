@@ -409,7 +409,7 @@ function validatePendingRadioBridgePortCableEndpoint(endpointObj) {
         }
         if (!isRadioBridgePortOptical(endpointObj)) {
             if (typeof showError === 'function') {
-                showError('Подключение оптической жилой возможно только к радиомосту с портом SFP.', 'Тип порта');
+                showError('Подключение оптическим волокном возможно только к радиомосту с портом SFP.', 'Тип порта');
             }
             return false;
         }
@@ -494,7 +494,7 @@ function spliceFibersAtHost(hostObj, cableIdA, fiberA, cableIdB, fiberB) {
         var conflict = getSpliceAssignmentConflict(hostObj, cableIdA, fiberA, cableIdB, fiberB);
         if (conflict) {
             if (typeof showError === 'function') {
-                showError('Нельзя сращить жилы: на них разные назначения (' + conflict.label + ').', 'Сращивание');
+                showError('Нельзя сращить волокна: на них разные назначения (' + conflict.label + ').', 'Сращивание');
             }
             return false;
         }
@@ -537,7 +537,7 @@ function assignRadioBridgePortFeederCable(rbObj, cableId, fiberNumber, hostObj, 
     }
     var usage = typeof getFiberUsage === 'function' ? getFiberUsage(cableId, fiberNumber, usageOpts) : { used: false };
     if (usage.used) {
-        if (typeof showError === 'function') showError('Жила кабеля уже используется: ' + (usage.where || 'другое назначение') + '.', 'Жила занята');
+        if (typeof showError === 'function') showError('Волокно кабеля уже используется: ' + (usage.where || 'другое назначение') + '.', 'Волокно занято');
         return false;
     }
     var key = cableId + '-' + fiberNumber;
@@ -636,7 +636,7 @@ function tryApplyRadioBridgeHostToRbPresetOnCableCreated(points, cable) {
     if (typeof showObjectInfo === 'function') showObjectInfo(ends.hostObj);
     if (typeof showSuccess === 'function') {
         var rbName = ends.rbObj.properties.get('name') || 'Радиомост';
-        showSuccess('Одножильный кабель проложен до радиомоста «' + rbName + '».', 'Подключение');
+        showSuccess('Одноволоконный кабель проложен до радиомоста «' + rbName + '».', 'Подключение');
     }
     return true;
 }
@@ -648,7 +648,7 @@ function startHostFiberToRadioBridgeCable(hostObj, sourceCableId, sourceFiberNum
     if (rbObj.properties.get('type') !== 'radioBridge') return;
     if (!isRadioBridgePortOptical(rbObj)) {
         if (typeof showError === 'function') {
-            showError('Подключение оптической жилой возможно только к радиомосту с портом SFP.', 'Тип порта');
+            showError('Подключение оптическим волокном возможно только к радиомосту с портом SFP.', 'Тип порта');
         }
         return;
     }
@@ -663,14 +663,14 @@ function startHostFiberToRadioBridgeCable(hostObj, sourceCableId, sourceFiberNum
         ? getFiberUsage(sourceCableId, sourceFiberNumber, usageOpts) : { used: false };
     if (usage.used) {
         if (typeof showError === 'function') {
-            showError('Эта жила уже используется: ' + (usage.where || 'другое назначение') + '.', 'Жила занята');
+            showError('Это волокно уже используется: ' + (usage.where || 'другое назначение') + '.', 'Волокно занято');
         }
         return;
     }
     var existingRb = typeof getHostAssignment === 'function'
         ? getHostAssignment(hostObj, 'radioBridgeConnections', sourceCableId, sourceFiberNumber) : null;
     if (existingRb && existingRb.radioBridgeId) {
-        if (typeof showWarning === 'function') showWarning('Жила уже подключена к радиомосту.', 'Жила занята');
+        if (typeof showWarning === 'function') showWarning('Волокно уже подключено к радиомосту.', 'Волокно занято');
         return;
     }
     prepareRadioBridgeCableLayingSession();
@@ -704,7 +704,7 @@ function startHostFiberToRadioBridgeCable(hostObj, sourceCableId, sourceFiberNum
     currentModalObject = null;
     var rbName = rbObj.properties.get('name') || 'Радиомост';
     if (typeof showInfo === 'function') {
-        showInfo('Прокладка одножильного кабеля к радиомосту «' + rbName + '»: кликайте по опорам и креплениям, затем выберите радиомост на карте. Escape — отмена.', 'Подключение');
+        showInfo('Прокладка одноволоконного кабеля к радиомосту «' + rbName + '»: кликайте по опорам и креплениям, затем выберите радиомост на карте. Escape — отмена.', 'Подключение');
     }
 }
 
@@ -1964,7 +1964,7 @@ function buildRadioBridgeCardContent(obj, isEdit, name) {
             return c.properties && c.properties.get('type') === 'cable' && (c.properties.get('uniqueId') || '') === incomingFiber.cableId;
         });
         var incDesc = incCable ? (incCable.properties.get('cableName') || (typeof getCableDescription === 'function' ? getCableDescription(incCable.properties.get('cableType')) : 'Кабель')) : String(incomingFiber.cableId).substring(0, 12) + '…';
-        html += '<span class="node-port-state-connected">Оптика: ' + escapeHtml(incDesc) + ', жила ' + incomingFiber.fiberNumber + '</span>';
+        html += '<span class="node-port-state-connected">Оптика: ' + escapeHtml(incDesc) + ', волокно ' + incomingFiber.fiberNumber + '</span>';
     } else if (!isOpticalPort && cnameRb) {
         html += '<span class="node-port-state-connected">Медь: ' + escapeHtml(cnameRb) + '</span>';
     } else if (isEdit) {

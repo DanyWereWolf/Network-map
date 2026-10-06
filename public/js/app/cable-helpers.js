@@ -1,6 +1,27 @@
 /**
  * Вспомогательные функции кабелей и меди.
  */
+function findCableByUniqueId(cableId) {
+    if (cableId == null || cableId === '') return null;
+    var uid = String(cableId);
+    if (typeof MapPerf !== 'undefined' && MapPerf.getByUid) {
+        var hit = MapPerf.getByUid(uid, 'cable');
+        if (hit) return hit;
+        // Иногда uid без type-фильтра (если индекс не различает тип)
+        hit = MapPerf.getByUid(uid);
+        if (hit && hit.properties && hit.properties.get('type') === 'cable') return hit;
+    }
+    if (typeof objects === 'undefined' || !Array.isArray(objects)) return null;
+    for (var i = 0; i < objects.length; i++) {
+        var c = objects[i];
+        if (c && c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === uid) {
+            return c;
+        }
+    }
+    return null;
+}
+window.findCableByUniqueId = findCableByUniqueId;
+
 function markFiberAsUsed(obj, cableId, fiberNumber) {
     let usedFibersData = obj.properties.get('usedFibers');
     if (!usedFibersData) {
@@ -39,12 +60,12 @@ function getFiberRoutingPreviewStroke(targetType) {
 }
 
 /**
- * Проверяет, занята ли жила (cableId + fiberNumber) где-либо: порт OLT, подключение к узлу/ONU/медиаконвертеру,
- * вход/выход сплиттера. exclude — контекст текущего назначения (чтобы не считать «занятой» ту же жилу при замене).
- * atCrossId/atSleeveId — проверять использование только в этом кроссе/муфте (жила имеет два конца,
+ * Проверяет, занята ли волокно (cableId + fiberNumber) где-либо: порт OLT, подключение к узлу/ONU/медиаконвертеру,
+ * вход/выход сплиттера. exclude — контекст текущего назначения (чтобы не считать «занятой» ту же волокно при замене).
+ * atCrossId/atSleeveId — проверять использование только в этом кроссе/муфте (волокно имеет два конца,
  * подключение на одном конце не блокирует использование другого).
- * Назначение на OLT (oltPort / oltIncoming) не блокируется ответвлениями GPON (ONU, сплиттер) на той же жиле.
- * Назначение ONU/сплиттера (onuConn / splitterInput) не блокируется OLT на той же жиле (GPON feeder).
+ * Назначение на OLT (oltPort / oltIncoming) не блокируется ответвлениями GPON (ONU, сплиттер) на том же волокне.
+ * Назначение ONU/сплиттера (onuConn / splitterInput) не блокируется OLT на том же волокне (GPON feeder).
  * @param {string} cableId
  * @param {number} fiberNumber
  * @param {{ type?: string, oltId?: string, portNumber?: number, splitterId?: string, outputIndex?: number, crossId?: string, sleeveId?: string, atCrossId?: string, atSleeveId?: string }} exclude
@@ -87,7 +108,7 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
                 isFiberCrossPatchLocked(obj, cableId, fiberNumber)) {
                 if (exclude && exclude.type === 'fiberConnection' && exclude.crossId === uid) continue;
                 if (exclude && exclude.type === 'crossPortPatch' && exclude.crossId === uid) continue;
-                return { used: true, where: 'жила на кроссированном порту' };
+                return { used: true, where: 'волокно на кроссированном порту' };
             }
             const fiberConnections = obj.properties.get('fiberConnections') || [];
             const isConnected = fiberConnections.some(conn =>
@@ -98,7 +119,7 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
                 if (exclude && exclude.type === 'fiberConnection' && (exclude.crossId === uid || exclude.sleeveId === uid)) continue;
                 if (exclude && exclude.type === 'oltPort') continue;
                 if (isGponBranchAssignmentExclude(exclude)) continue;
-                return { used: true, where: 'соединение жил в ' + (t === 'cross' ? 'кроссе' : (t === 'spliceCassette' ? 'сплайс-кассете' : 'муфте')) };
+                return { used: true, where: 'соединение волокон в ' + (t === 'cross' ? 'кроссе' : (t === 'spliceCassette' ? 'сплайс-кассете' : 'муфте')) };
             }
             
             var nodeAss = getHostAssignment(obj, 'nodeConnections', cableId, fiberNumber);

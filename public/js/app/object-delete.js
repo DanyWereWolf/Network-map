@@ -41,7 +41,7 @@ function getDeleteObjectConfirmDetails(obj) {
             if (Object.keys(oltConnDel).length) gponParts.push('OLT');
             if (Object.keys(splitterConnDel).length) gponParts.push('сплиттер');
             if (Object.keys(onuConnDel).length) gponParts.push('ONU');
-            if (fiberConnDel.length) gponParts.push('сращивания жил');
+            if (fiberConnDel.length) gponParts.push('сращивания волокон');
             if (!gponParts.length) gponParts.push('кабели GPON');
             message = 'В ' + hostDelPrep + ' есть GPON-подключения (' + gponParts.join(', ') + ').\n' +
                 'Объект будет удалён вместе со всеми связями (сплиттеры, ONU, линии на карте).\n\nУдалить?';

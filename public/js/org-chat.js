@@ -765,13 +765,35 @@
 
     function updateUnreadBadge() {
         var badge = document.getElementById('orgChatBadge');
+        var btn = document.getElementById('orgChatBtn');
         if (!badge) return;
         if (unreadCount > 0 && !panelOpen) {
-            badge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
+            var displayCount = unreadCount > 99 ? '99+' : String(unreadCount);
+            var wasVisible = badge.style.display !== 'none';
+            var prevCount = badge.textContent;
+            badge.textContent = displayCount;
             badge.style.display = '';
+            badge.setAttribute('aria-hidden', 'false');
+            if (btn) {
+                btn.classList.add('user-menu-btn--has-notify', 'user-menu-btn--has-notify-chat');
+                btn.setAttribute('title', 'Чат организации · ' + displayCount + ' новых');
+                btn.setAttribute('aria-label', 'Чат организации, ' + displayCount + ' непрочитанных');
+            }
+            if (prevCount !== displayCount || !wasVisible) {
+                badge.classList.remove('is-bump');
+                void badge.offsetWidth;
+                badge.classList.add('is-bump');
+            }
         } else {
             badge.style.display = 'none';
             badge.textContent = '';
+            badge.classList.remove('is-bump');
+            badge.setAttribute('aria-hidden', 'true');
+            if (btn) {
+                btn.classList.remove('user-menu-btn--has-notify', 'user-menu-btn--has-notify-chat');
+                btn.setAttribute('title', 'Чат организации');
+                btn.setAttribute('aria-label', 'Чат организации');
+            }
         }
     }
 
