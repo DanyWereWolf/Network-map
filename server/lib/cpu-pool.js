@@ -164,6 +164,16 @@ function size() {
     return POOL_SIZE;
 }
 
+function stats() {
+    return {
+        size: POOL_SIZE,
+        workers: workers.length,
+        busy: Math.max(0, workers.length - idle.length),
+        queue: waitQueue.length,
+        pending: pending.size
+    };
+}
+
 function destroy() {
     destroyed = true;
     waitQueue.splice(0).forEach(function (job) {
@@ -193,5 +203,6 @@ module.exports = {
     deepCloneSync: deepCloneSync,
     isEnabled: isEnabled,
     size: size,
+    stats: stats,
     destroy: destroy
 };

@@ -2470,3 +2470,243 @@ body.page-with-bg:has(.admin-shell) {
         align-items: stretch;
     }
 }
+
+/* ---------- Вкладка «Нагрузка» ---------- */
+
+.perf-toolbar {
+    margin-bottom: 14px;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.perf-auto {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    color: var(--admin-ink-soft);
+    cursor: pointer;
+}
+
+.perf-h {
+    font-size: 0.95rem;
+    margin: 22px 0 10px;
+}
+
+.perf-alerts {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.perf-alert {
+    padding: 8px 12px;
+    border-radius: var(--admin-radius-sm);
+    border-left: 3px solid var(--admin-muted);
+    font-size: 0.84rem;
+    background: var(--admin-surface);
+    color: var(--admin-ink);
+}
+
+.perf-alert--ok {
+    border-left-color: var(--admin-ok);
+    background: var(--admin-ok-soft);
+}
+
+.perf-alert--warn {
+    border-left-color: var(--admin-warn);
+    background: rgba(217, 119, 6, 0.1);
+}
+
+.perf-alert--danger {
+    border-left-color: var(--admin-danger);
+    background: var(--admin-danger-soft);
+}
+
+.perf-lvl--ok {
+    color: var(--admin-ok);
+}
+
+.perf-lvl--warn {
+    color: var(--admin-warn);
+}
+
+.perf-lvl--danger {
+    color: var(--admin-danger);
+    font-weight: 600;
+}
+
+.perf-charts {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+}
+
+.perf-chart .analytics-title .hint {
+    font-weight: 400;
+    margin-left: 4px;
+}
+
+.perf-spark {
+    display: block;
+    width: 100%;
+    height: 70px;
+    margin-top: 6px;
+}
+
+.perf-spark-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 6px;
+    font-size: 0.74rem;
+    color: var(--admin-muted);
+}
+
+.perf-spark-meta strong {
+    color: var(--admin-ink);
+}
+
+.perf-table-wrap {
+    max-height: 520px;
+}
+
+.perf-table td {
+    vertical-align: top;
+    font-size: 0.82rem;
+}
+
+.perf-table .hint {
+    font-size: 0.72rem;
+    margin: 2px 0 0;
+}
+
+.perf-map-row {
+    cursor: pointer;
+}
+
+.perf-map-row.is-open {
+    background: var(--admin-brand-soft);
+}
+
+.perf-caret {
+    display: inline-block;
+    width: 12px;
+    color: var(--admin-muted);
+}
+
+.perf-type-cell {
+    min-width: 200px;
+}
+
+.perf-bar {
+    display: flex;
+    height: 10px;
+    border-radius: 5px;
+    overflow: hidden;
+    background: var(--admin-line);
+}
+
+.perf-bar-seg {
+    display: block;
+    height: 100%;
+}
+
+.perf-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    margin-top: 4px;
+    font-size: 0.72rem;
+    color: var(--admin-muted);
+}
+
+.perf-legend-item i,
+.perf-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    margin-right: 4px;
+    vertical-align: middle;
+}
+
+.perf-mini-bar {
+    display: inline-block;
+    width: 70px;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--admin-line);
+    overflow: hidden;
+    vertical-align: middle;
+}
+
+.perf-mini-bar span {
+    display: block;
+    height: 100%;
+    background: var(--admin-brand);
+}
+
+.perf-details {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 18px;
+    padding: 8px 4px 12px;
+}
+
+.perf-subtable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+
+.perf-subtable th,
+.perf-subtable td {
+    padding: 4px 6px;
+    text-align: left;
+    border-bottom: 1px solid var(--admin-line);
+}
+
+.perf-subtable th {
+    color: var(--admin-muted);
+    font-weight: 500;
+}
+
+.perf-facts li {
+    font-size: 0.8rem;
+}
+
+.perf-warn-list {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 0.8rem;
+}
+
+.perf-warn--danger {
+    color: var(--admin-danger);
+}
+
+.perf-warn--warn {
+    color: var(--admin-warn);
+}
+
+.perf-code {
+    font-size: 0.76rem;
+    word-break: break-all;
+}
+
+.perf-two-col {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: 18px;
+}
+
+@media (max-width: 1100px) {
+    .perf-two-col,
+    .perf-details {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

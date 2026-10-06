@@ -1283,6 +1283,11 @@
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
                                 <span class="admin-nav-label">База данных</span>
                             </button>
+                            <button type="button" class="admin-nav-item" role="tab" data-tab="perf" id="nav-perf">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                                <span class="admin-nav-label">Нагрузка</span>
+                                <span class="admin-nav-badge" id="perfTabBadge" aria-hidden="true"></span>
+                            </button>
 
                             <span class="admin-nav-group-label admin-nav-group-label--spaced">Контент</span>
                             <button type="button" class="admin-nav-item" role="tab" data-tab="showcase" id="nav-showcase">
@@ -1732,6 +1737,127 @@
                                 <tr><td colspan="4" class="hint">Загрузка…</td></tr>
                             </tbody>
                         </table>
+                    </div>
+                </section>
+
+                <!-- Нагрузка: сервер, карты, API, синхронизация, браузеры -->
+                <section id="tab-perf" class="tab-content tab-perf">
+                    <div class="panel-head">
+                        <details class="panel-help">
+                            <summary>Справка по разделу</summary>
+                            <ul class="fact-list">
+                                <li>Метрики собираются в памяти сервера с момента последнего запуска; история графиков — за последний час (точка каждые 10 с).</li>
+                                <li><strong>Задержка event loop</strong> — главный признак перегрузки Node.js: при p99 выше ~100 мс сервер начинает «подвисать» для всех пользователей.</li>
+                                <li><strong>Карты</strong> отсортированы по объёму данных. «Вес по типам» показывает, какие объекты занимают больше всего места (а значит, дольше грузятся, сохраняются и рисуются).</li>
+                                <li><strong>Браузеры</strong> присылают замеры раз в 2 минуты: FPS, долгие задачи (&gt;50 мс), память, число объектов и сколько из них реально отрисовано.</li>
+                                <li>Состав карт пересчитывается не чаще раза в минуту; кнопка «Пересчитать карты» делает это принудительно.</li>
+                            </ul>
+                        </details>
+                    </div>
+                    <div class="field-row perf-toolbar">
+                        <button type="button" class="btn-sm" id="perfRefreshBtn">Обновить</button>
+                        <button type="button" class="btn-sm" id="perfForceBtn" title="Пересчитать состав и объём всех карт сейчас">Пересчитать карты</button>
+                        <label class="perf-auto"><input type="checkbox" id="perfAutoRefresh" checked> Автообновление (10 с)</label>
+                        <span class="hint" id="perfStatus" style="margin:0;"></span>
+                    </div>
+
+                    <div id="perfAlerts" class="perf-alerts"></div>
+
+                    <h3 class="panel-title perf-h">Сервер</h3>
+                    <div class="cards-row" id="perfServerCards"></div>
+                    <div class="perf-charts" id="perfCharts"></div>
+                    <p class="hint" id="perfServerMeta"></p>
+
+                    <h3 class="panel-title perf-h">Карты организаций</h3>
+                    <p class="hint">Нажмите на строку, чтобы увидеть вес по всем типам объектов и самые тяжёлые объекты.</p>
+                    <div class="table-wrap table-wrap--scroll perf-table-wrap">
+                        <table class="perf-table">
+                            <thead>
+                                <tr>
+                                    <th>Организация</th>
+                                    <th>Объём</th>
+                                    <th>Записей</th>
+                                    <th>Вес по типам</th>
+                                    <th>Точек трасс</th>
+                                    <th>Онлайн / WS</th>
+                                    <th>Операций/мин</th>
+                                    <th>Сохранение</th>
+                                    <th>Трафик 5 мин</th>
+                                    <th>Проблемы</th>
+                                </tr>
+                            </thead>
+                            <tbody id="perfMapsBody">
+                                <tr><td colspan="10" class="hint">Загрузка…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <h3 class="panel-title perf-h">Браузеры пользователей</h3>
+                    <p class="hint">Последние замеры с открытых карт за 30 минут. Сначала самые медленные.</p>
+                    <div class="table-wrap table-wrap--scroll perf-table-wrap">
+                        <table class="perf-table">
+                            <thead>
+                                <tr>
+                                    <th>Пользователь</th>
+                                    <th>Организация</th>
+                                    <th>FPS сред / мин</th>
+                                    <th>Долгие задачи</th>
+                                    <th>Память JS</th>
+                                    <th>Объекты / отрисовано</th>
+                                    <th>DOM</th>
+                                    <th>Загрузка карты</th>
+                                    <th>Режим</th>
+                                    <th>Устройство</th>
+                                    <th>Когда</th>
+                                </tr>
+                            </thead>
+                            <tbody id="perfClientsBody">
+                                <tr><td colspan="11" class="hint">Нет данных</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="perf-two-col">
+                        <div>
+                            <h3 class="panel-title perf-h">API: самые затратные запросы</h3>
+                            <p class="hint" id="perfHttpMeta"></p>
+                            <div class="table-wrap table-wrap--scroll perf-table-wrap">
+                                <table class="perf-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Запрос</th>
+                                            <th>Всего</th>
+                                            <th>/мин</th>
+                                            <th>Сред.</th>
+                                            <th>p95</th>
+                                            <th>Макс.</th>
+                                            <th>Суммарно</th>
+                                            <th>Ошибки</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="perfHttpBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="panel-title perf-h">Синхронизация (WebSocket)</h3>
+                            <p class="hint" id="perfWsMeta"></p>
+                            <div class="table-wrap table-wrap--scroll perf-table-wrap">
+                                <table class="perf-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Тип сообщения</th>
+                                            <th>Всего</th>
+                                            <th>/мин</th>
+                                            <th>Объём</th>
+                                            <th>Обработка сред.</th>
+                                            <th>Макс.</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="perfWsBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </section>
 
@@ -2215,6 +2341,7 @@
             overview: 'Обзор',
             organizations: 'Организации',
             database: 'База данных',
+            perf: 'Нагрузка',
             showcase: 'Витрина',
             maintenance: 'Уведомления',
             broadcast: 'Рассылка',
@@ -2271,6 +2398,7 @@
                 if (typeof window.adminLoadStoreBackups === 'function') window.adminLoadStoreBackups();
                 if (typeof window.adminLoadMysqlDumps === 'function') window.adminLoadMysqlDumps();
             }
+            if (typeof window.adminPerfSetActive === 'function') window.adminPerfSetActive(name === 'perf');
         };
 
         document.addEventListener('click', function(e) {
@@ -4659,6 +4787,7 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js"></script>
     <script src="js/admin/news-editor.js"></script>
+    <script src="js/admin/perf-monitor.js"></script>
     <script src="js/core/page-bg-plexus.js"></script>
     <script src="js/core/cookie-consent.js"></script>
     <script src="js/core/maintenance-notice.js"></script>

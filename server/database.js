@@ -1068,6 +1068,7 @@ function mapObjectTypeLabel(type) {
         case 'cabinet': return 'Ящик';
         case 'region': return 'Регион';
         case 'cable': return 'Кабель';
+        case 'cableLabel': return 'Подпись кабеля';
         default: return type ? String(type) : 'Объект';
     }
 }
@@ -2782,6 +2783,7 @@ module.exports = {
     countActualMapObjectsInArray,
     countMapObjectsForOrganization,
     getMapObjectTypeCounts,
+    mapObjectTypeLabel,
     getOrganizationMonitorStats,
     getPlatformTopObjectTypes,
     addVisitLog,

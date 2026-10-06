@@ -23,6 +23,7 @@ const passwords = require('./lib/password');
 const cpuPool = require('./lib/cpu-pool');
 const zabbixClient = require('./lib/zabbix-client');
 const nedImport = require('./lib/ned-import');
+const perfMonitor = require('./lib/perf-monitor');
 
 /** Блокировка параллельных массовых рассылок. */
 var updateBroadcastInFlight = false;
@@ -256,6 +257,8 @@ function validateMapDataObjectLimit(orgId, data) {
     return { ok: true, count: count, limit: limit, unlocked: false };
 }
 
+perfMonitor.wrapMapSave(db);
+app.use(perfMonitor.httpMiddleware);
 app.use(cors({ origin: true, credentials: true }));
 // 50mb: карты 10k+ объектов / фото в payload; 10mb часто мало и провоцирует обрывы/ретраи.
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '50mb' }));
@@ -1648,6 +1651,7 @@ app.delete('/api/organizations/:id', (req, res) => {
     if (!org) return res.status(404).json({ error: 'Организация не найдена' });
     try {
         db.deleteOrganization(orgId);
+        perfMonitor.forgetOrg(org.id);
         try { chatMedia.removeOrgStorage(orgId); } catch (e) {}
         try { objectMedia.removeOrgStorage(orgId); } catch (e) {}
         // Отключаем WebSocket‑клиентов удалённой организации
@@ -3611,6 +3615,91 @@ app.get('/api/health', (req, res) => res.json({
     db: (db.getStorageMode && db.getStorageMode()) || 'json'
 }));
 
+app.post('/api/perf/client', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user || user.userId == null) return res.status(401).json({ error: 'Требуется авторизация' });
+    var result = perfMonitor.recordClientReport(user, req.body, {
+        username: user.fullName || user.username,
+        organizationName: user.organization && user.organization.name,
+        userAgent: req.headers['user-agent']
+    });
+    if (!result.ok) return res.status(400).json({ error: 'Некорректные данные' });
+    res.json({ ok: true });
+});
+
+function buildPerfMapWarnings(analysis, load, online) {
+    var warnings = [];
+    var mb = analysis.bytes / 1048576;
+    var objectCount = 0;
+    analysis.byType.forEach(function(t) {
+        if (t.type !== 'cable' && t.type !== 'cableLabel') objectCount += t.count;
+    });
+    if (mb >= 20) warnings.push({ level: 'danger', text: 'Очень большой объём данных карты (' + mb.toFixed(1) + ' МБ): долгая загрузка, сохранение и синхронизация' });
+    else if (mb >= 8) warnings.push({ level: 'warn', text: 'Большой объём данных карты (' + mb.toFixed(1) + ' МБ)' });
+    if (analysis.bytes > 0 && analysis.photosBytes / analysis.bytes >= 0.25 && analysis.photosBytes > 1048576) {
+        warnings.push({ level: 'warn', text: 'Фото занимают ' + Math.round(analysis.photosBytes / analysis.bytes * 100) + '% данных карты' });
+    }
+    if (objectCount >= 10000) warnings.push({ level: 'danger', text: 'Очень много объектов (' + objectCount + '): на слабых ПК рекомендуйте режим «Эконом»' });
+    else if (objectCount >= 4000) warnings.push({ level: 'warn', text: 'Много объектов (' + objectCount + ')' });
+    if (analysis.cablePoints >= 100000) warnings.push({ level: 'danger', text: 'Очень детальные трассы кабелей (' + analysis.cablePoints + ' точек)' });
+    else if (analysis.cablePoints >= 30000) warnings.push({ level: 'warn', text: 'Много точек в трассах кабелей (' + analysis.cablePoints + ')' });
+    if (analysis.fiberSplices >= 50000) warnings.push({ level: 'warn', text: 'Много сварок волокон (' + analysis.fiberSplices + ')' });
+    if (load.saves.p95Ms >= 500) warnings.push({ level: 'danger', text: 'Медленное сохранение карты (p95 ' + load.saves.p95Ms + ' мс) — блокирует сервер' });
+    else if (load.saves.p95Ms >= 150) warnings.push({ level: 'warn', text: 'Сохранение карты занимает ' + load.saves.p95Ms + ' мс (p95)' });
+    if (load.opsPerMin >= 120) warnings.push({ level: 'warn', text: 'Высокая частота изменений: ' + load.opsPerMin + ' операций/мин' });
+    if (load.statesPer15m >= 10) warnings.push({ level: 'warn', text: 'Частая полная перезапись карты клиентами (' + load.statesPer15m + ' за 15 мин)' });
+    if (online >= 2 && mb >= 5 && load.wsOutKb5m >= 20480) {
+        warnings.push({ level: 'warn', text: 'Большой исходящий трафик синхронизации: ' + Math.round(load.wsOutKb5m / 1024) + ' МБ за 5 мин' });
+    }
+    return warnings;
+}
+
+app.get('/api/admin/perf', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    try {
+        var force = req.query && (req.query.force === '1' || req.query.force === 'true');
+        var wsByOrg = Object.create(null);
+        wss.clients.forEach(function(client) {
+            if (client.readyState !== WebSocket.OPEN) return;
+            var key = client.orgId != null ? String(client.orgId) : '';
+            wsByOrg[key] = (wsByOrg[key] || 0) + 1;
+        });
+        var maps = db.getOrganizations().map(function(org) {
+            var key = String(org.id);
+            var inMemory = syncCurrentStateByOrg[key];
+            var data = inMemory && Array.isArray(inMemory.data) ? inMemory.data : (db.getMapData(org.id) || []);
+            var analysis = perfMonitor.getMapAnalysis(org.id, data, db.mapObjectTypeLabel, force);
+            var load = perfMonitor.getOrgLoad(org.id);
+            var online = db.countActiveSessionsForOrganization ? db.countActiveSessionsForOrganization(org.id) : 0;
+            return {
+                orgId: org.id,
+                name: org.name || String(org.id),
+                status: org.status || 'active',
+                online: online,
+                wsClients: wsByOrg[key] || 0,
+                inMemory: !!inMemory,
+                analysis: analysis,
+                load: load,
+                warnings: buildPerfMapWarnings(analysis, load, online)
+            };
+        }).sort(function(a, b) { return b.analysis.bytes - a.analysis.bytes; });
+        res.json({
+            generatedAt: Date.now(),
+            server: perfMonitor.getServerSnapshot(),
+            history: perfMonitor.getHistory(),
+            http: perfMonitor.getHttpSnapshot(30),
+            wsTypes: perfMonitor.getWsSnapshot(),
+            wsUnassigned: wsByOrg[''] || 0,
+            maps: maps,
+            clients: perfMonitor.listClientReports()
+        });
+    } catch (e) {
+        console.error('[Perf] admin snapshot failed:', e && e.stack ? e.stack : e);
+        res.status(500).json({ error: String(e && e.message ? e.message : e) });
+    }
+});
+
 const DEFAULT_PUBLIC_SITE_URL = 'https://volsmap.ru';
 
 const PDF_FONT_ROOT_CANDIDATES = [
@@ -4017,6 +4106,12 @@ const wss = new WebSocket.Server({ server, path: '/sync' });
 const syncClientNames = new Map();
 const syncClientUserIds = new Map();
 const syncClientOrgIds = new Map();
+perfMonitor.registerGauge('wsClients', function() { return wss.clients.size; });
+perfMonitor.registerGauge('cpuPool', function() { return cpuPool.stats(); });
+perfMonitor.registerGauge('storageMode', function() {
+    return typeof db.getStorageMode === 'function' ? db.getStorageMode() : 'json';
+});
+perfMonitor.registerGauge('syncStatesInMemory', function() { return Object.keys(syncCurrentStateByOrg).length; });
 
 function notifySessionRevokedForUser(userId, exceptToken) {
     if (userId == null || !wss) return;
@@ -4480,6 +4575,7 @@ wss.on('connection', (ws, req) => {
     ws.clientId = clientId;
     ws.orgId = null;
     ws.connectedAt = Date.now();
+    perfMonitor.instrumentWs(ws);
     syncClientNames.set(clientId, 'Участник');
     setImmediate(function() { broadcastSyncClients(); });
     ws.send(JSON.stringify({ type: 'yourId', clientId: clientId }));
@@ -4488,8 +4584,11 @@ wss.on('connection', (ws, req) => {
         const str = raw.toString();
         if (str.length > 15 * 1024 * 1024) return;
         setImmediate(function() {
+        var perfT0 = performance.now();
+        var perfMsgType = 'invalid';
         try {
             const msg = JSON.parse(str);
+            perfMsgType = msg && msg.type;
             if (msg.type === 'cursor') {
                 // Курсоры частые — не гоняем проверку сессии на каждое сообщение.
                 var pos = msg.position;
@@ -4708,7 +4807,10 @@ wss.on('connection', (ws, req) => {
                     }
                 });
             }
-        } catch (e) {}
+        } catch (e) {
+        } finally {
+            perfMonitor.recordWsMessage(ws.orgId, perfMsgType, str.length, performance.now() - perfT0);
+        }
         });
     });
     ws.on('close', function() {

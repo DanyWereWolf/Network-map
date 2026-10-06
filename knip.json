@@ -20,6 +20,8 @@
     "public/js/map-legend.js",
     "public/js/app/main.js",
     "public/js/sync.js",
+    "public/js/core/perf-reporter.js",
+    "public/js/admin/perf-monitor.js",
     "public/js/landing-nav.js",
     "public/js/core/page-bg-plexus.js",
     "public/js/core/cookie-consent.js",

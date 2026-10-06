@@ -458,6 +458,7 @@
         };
         ws.onmessage = function(event) {
             var raw = event.data;
+            if (window.PerfReporter) window.PerfReporter.countWsMessage();
             var tick = typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame : function(f) { setTimeout(f, 0); };
             tick(function() {
             try {

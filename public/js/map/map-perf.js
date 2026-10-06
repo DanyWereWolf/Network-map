@@ -725,6 +725,9 @@
         getObjectsByType: function(type) {
             return objectsByType[type] || null;
         },
+        getMountedCount: function() {
+            return mountedUids.size;
+        },
         ZOOM_SHOW_CONNECTION_LINES: ZOOM_SHOW_CONNECTION_LINES,
         VIEWPORT_CULL_MIN_OBJECTS: VIEWPORT_CULL_MIN_OBJECTS,
         VIRTUALIZATION_MIN_OBJECTS: VIRTUALIZATION_MIN_OBJECTS
