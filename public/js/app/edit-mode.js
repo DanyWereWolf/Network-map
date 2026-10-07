@@ -159,7 +159,8 @@ function getImportGeoExtent(data) {
     var south = q(lats, 0.02), north = q(lats, 0.98), west = q(lons, 0.02), east = q(lons, 0.98);
     if (south < -85 || north > 85 || west < -180 || east > 180) return null;
     if (Math.abs(q(lats, 0.5)) < 0.5 && Math.abs(q(lons, 0.5)) < 0.5) return null;
-    if (north - south > 5 || east - west > 5) return null;
+    // Крупный город / область: до ~10° (~1100 км). Больше — скорее битые координаты.
+    if (north - south > 10 || east - west > 10) return null;
     return {
         center: [(south + north) / 2, (west + east) / 2],
         bounds: [[south, west], [north, east]]

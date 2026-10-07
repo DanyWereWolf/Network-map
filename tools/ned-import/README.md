@@ -42,17 +42,26 @@ API принимает `.ned` напрямую:
 
 | NeD | Network-map |
 |-----|-------------|
-| `ndCrossingPoint` | `node` |
+| `ndCrossingPoint` | `node`, если нет муфты/кросса; иначе точка не дублируется |
 | `ndCableBox` | `sleeve` |
 | `ndOpticCross` | `cross` (свои координаты или точка родителя) |
-| `ndSplitter` | `embeddedSplitters[]` внутри родительской муфты/кросса (`splitRatio` из выходов / `1/N`) |
+| `ndSplitter` | `embeddedSplitters[]` на муфте/кроссе; вход/выходы из сварок `_input`/`_outputs` |
 | `ndPillar` | `support` |
 | `ndBuilding` | `node` (по адресу) |
-| `ndCable` (внешние) | `cable` (отрезок между концами) |
-| `ndSimpleWeldNode` | `fiberConnections` на муфте/кроссе |
+| `ndCable` (внешние) | `cable` между муфтой/кроссом (не на голый CrossingPoint) |
+| `ndSimpleWeldNode` | `fiberConnections` или связь сплиттера (`inputFiber` / `outputConnections`) |
 
 Имена: адрес, customName, uniqueName, comment, model, localName.
 
-Координаты: Visio → WGS84 по origin/zoom из GIS-настроек проекта.
+Координаты: Visio → WGS84 (эллипсоидальный Mercator как в NeD).
+
+Сверка с картой (нужен интернет, ~20–30 с):
+1. Геокодинг адресов зданий через Nominatim (OSM)
+2. Подгонка **origin + zoom** (least squares)
+3. Здания с адресом — точный snap в точку OSM
+4. Остальные объекты — Visio-проекция + локальная поправка по ближайшим адресам
+5. Дублирующий «второй слой» Visio отбрасывается
+
+`PrevLon`/`PrevLat` не используются.
 
 Полилинии кабелей из Visio пока не разбираются — кабель рисуется как прямая между концами.

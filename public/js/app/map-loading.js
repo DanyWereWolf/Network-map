@@ -188,6 +188,9 @@ function resetMapConnectionLineCaches() {
     splitterConnectionLines = [];
     splitterOutputConnectionLines = [];
     radioBridgeConnectionLines = [];
+    if (typeof invalidateConnectionLinesDisplayCache === 'function') {
+        invalidateConnectionLinesDisplayCache();
+    }
 }
 
 function setMapLoadingOverlayText(text) {

@@ -202,6 +202,34 @@ function parseGroupDisplayScope(scope) {
     return { full: true, keys: null };
 }
 
+/** Ключи групп/синглтонов, сейчас показанных на карте (для инкрементального viewport refresh). */
+var _crossViewportShownKeys = typeof Set !== 'undefined' ? new Set() : null;
+var _nodeViewportShownKeys = typeof Set !== 'undefined' ? new Set() : null;
+
+function clearCrossViewportShownKeys() {
+    if (_crossViewportShownKeys) _crossViewportShownKeys.clear();
+}
+
+function clearNodeViewportShownKeys() {
+    if (_nodeViewportShownKeys) _nodeViewportShownKeys.clear();
+}
+
+function markCrossViewportKeyShown(key) {
+    if (_crossViewportShownKeys && key) _crossViewportShownKeys.add(key);
+}
+
+function markNodeViewportKeyShown(key) {
+    if (_nodeViewportShownKeys && key) _nodeViewportShownKeys.add(key);
+}
+
+function unmarkCrossViewportKeyShown(key) {
+    if (_crossViewportShownKeys && key) _crossViewportShownKeys.delete(key);
+}
+
+function unmarkNodeViewportKeyShown(key) {
+    if (_nodeViewportShownKeys && key) _nodeViewportShownKeys.delete(key);
+}
+
 function detachCrossesAtGroupKey(key) {
     var pm = crossGroupPlacemarkByKey.get(key);
     if (pm) {
@@ -221,6 +249,7 @@ function detachCrossesAtGroupKey(key) {
             if (label) try { myMap.geoObjects.remove(label); } catch (e3) {}
         } catch (e4) {}
     });
+    unmarkCrossViewportKeyShown(key);
 }
 
 function detachNodesAtGroupKey(key) {
@@ -242,6 +271,7 @@ function detachNodesAtGroupKey(key) {
             if (label) try { myMap.geoObjects.remove(label); } catch (e3) {}
         } catch (e4) {}
     });
+    unmarkNodeViewportKeyShown(key);
 }
 
 function updateCrossDisplay(scope) {
@@ -257,6 +287,7 @@ function updateCrossDisplay(scope) {
         });
         crossGroupPlacemarks = [];
         crossGroupPlacemarkByKey.clear();
+        clearCrossViewportShownKeys();
         const allCrosses = objects.filter(obj => obj.properties && obj.properties.get('type') === 'cross');
         allCrosses.forEach(cross => {
             if (isGeoObjectOnMap(cross)) try { myMap.geoObjects.remove(cross); } catch (e) {}
@@ -295,6 +326,7 @@ function updateCrossDisplay(scope) {
                     try { label.options.set('visible', crossFilterOk && !hideLabelsByZoom); } catch (eLblZ) {}
                 }
             }
+            markCrossViewportKeyShown(gKey);
             return;
         }
         if (hideObjectsByZoom) return;
@@ -505,6 +537,7 @@ function updateCrossDisplay(scope) {
         myMap.geoObjects.add(groupPlacemark);
         crossGroupPlacemarks.push(groupPlacemark);
         crossGroupPlacemarkByKey.set(gKey, groupPlacemark);
+        markCrossViewportKeyShown(gKey);
     });
     
     var crossesForCables = keysOnly || shouldUseViewportLimitedGroupDisplay(parsed) ? groupsToRender.reduce(function(acc, g) {
@@ -554,6 +587,7 @@ function updateNodeDisplay(scope) {
         });
         nodeGroupPlacemarks = [];
         nodeGroupPlacemarkByKey.clear();
+        clearNodeViewportShownKeys();
         const allNodes = objects.filter(obj => obj.properties && obj.properties.get('type') === 'node');
         allNodes.forEach(node => {
             if (isGeoObjectOnMap(node)) try { myMap.geoObjects.remove(node); } catch (e) {}
@@ -598,6 +632,7 @@ function updateNodeDisplay(scope) {
                     try { label.options.set('visible', nodeFilterOk && !hideLabelsByZoom); } catch (eLblZ) {}
                 }
             }
+            markNodeViewportKeyShown(nKey);
             return;
         }
         if (hideObjectsByZoom) return;
@@ -765,6 +800,7 @@ function updateNodeDisplay(scope) {
         myMap.geoObjects.add(groupPlacemark);
         nodeGroupPlacemarks.push(groupPlacemark);
         nodeGroupPlacemarkByKey.set(nKey, groupPlacemark);
+        markNodeViewportKeyShown(nKey);
     });
     
     var nodesForCables = keysOnly || shouldUseViewportLimitedGroupDisplay(parsed) ? groupsToRender.reduce(function(acc, g) {
@@ -792,6 +828,68 @@ function updateNodeDisplay(scope) {
     }
 }
 
+function collectDesiredViewportGroupKeys(groups) {
+    var keys = [];
+    if (!Array.isArray(groups)) return keys;
+    for (var i = 0; i < groups.length; i++) {
+        var g = groups[i];
+        if (!g || !g.coords) continue;
+        keys.push(groupKey(g.coords));
+    }
+    return keys;
+}
+
+function diffViewportGroupKeys(shownSet, desiredKeys) {
+    var toAdd = [];
+    var toRemove = [];
+    var desiredSet = typeof Set !== 'undefined' ? new Set(desiredKeys) : null;
+    if (!desiredSet) {
+        return { toAdd: desiredKeys.slice(), toRemove: [] };
+    }
+    for (var i = 0; i < desiredKeys.length; i++) {
+        if (!shownSet || !shownSet.has(desiredKeys[i])) toAdd.push(desiredKeys[i]);
+    }
+    if (shownSet) {
+        shownSet.forEach(function(k) {
+            if (!desiredSet.has(k)) toRemove.push(k);
+        });
+    }
+    return { toAdd: toAdd, toRemove: toRemove };
+}
+
+function applyIncrementalCrossViewportRefresh() {
+    var desiredKeys = collectDesiredViewportGroupKeys(getCrossGroupsForDisplay({ viewportOnly: true }));
+    var diff = diffViewportGroupKeys(_crossViewportShownKeys, desiredKeys);
+    for (var ri = 0; ri < diff.toRemove.length; ri++) {
+        detachCrossesAtGroupKey(diff.toRemove[ri]);
+    }
+    if (diff.toAdd.length) {
+        // skipCableUpdate: getCablesTouchingObject is O(n) per object — catastrophic on pan with 10k+.
+        updateCrossDisplay({
+            full: false,
+            keys: diff.toAdd,
+            skipFilter: true,
+            skipCableUpdate: true
+        });
+    }
+}
+
+function applyIncrementalNodeViewportRefresh() {
+    var desiredKeys = collectDesiredViewportGroupKeys(getNodeGroupsForDisplay({ viewportOnly: true }));
+    var diff = diffViewportGroupKeys(_nodeViewportShownKeys, desiredKeys);
+    for (var ri = 0; ri < diff.toRemove.length; ri++) {
+        detachNodesAtGroupKey(diff.toRemove[ri]);
+    }
+    if (diff.toAdd.length) {
+        updateNodeDisplay({
+            full: false,
+            keys: diff.toAdd,
+            skipFilter: true,
+            skipCableUpdate: true
+        });
+    }
+}
+
 var _crossNodeViewportRefreshTimer = null;
 function refreshCrossNodeViewportDisplay() {
     if (isMapBulkImportActive()) return;
@@ -804,8 +902,8 @@ function refreshCrossNodeViewportDisplay() {
             refreshCrossNodeViewportDisplay();
             return;
         }
-        // skipCableUpdate: getCablesTouchingObject is O(n) per object — catastrophic on pan with 10k+.
-        updateCrossDisplay({ full: true, viewportOnly: true, skipFilter: true, skipCableUpdate: true });
-        updateNodeDisplay({ full: true, viewportOnly: true, skipFilter: true, skipCableUpdate: true });
+        // Инкрементально: только ключи, вошедшие/ушедшие из viewport — без teardown уже видимых.
+        applyIncrementalCrossViewportRefresh();
+        applyIncrementalNodeViewportRefresh();
     }, 140);
 }

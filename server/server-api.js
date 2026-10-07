@@ -3460,7 +3460,8 @@ app.post('/api/backups/restore', (req, res) => {
     if (!orgId) return res.status(403).json({ error: 'Восстановление доступно только для привязанной организации' });
     const filename = req.body && req.body.filename;
     if (!filename || typeof filename !== 'string') return res.status(400).json({ error: 'Укажите filename' });
-    var force = !!(req.body && req.body.force && isGlobalAdmin(user));
+    // force: админ организации может подтвердить откат к меньшей карте (старый бэкап)
+    var force = !!(req.body && req.body.force);
     try {
         db.restoreFromBackup(orgId, filename.trim(), { force: force });
         Object.keys(syncCurrentStateByOrg).forEach(function(oid) {
@@ -3474,7 +3475,13 @@ app.post('/api/backups/restore', (req, res) => {
         res.json({ ok: true, message: 'Данные восстановлены. Все учётные записи организации отключены. Войдите снова.' });
     } catch (e) {
         const msg = e && e.message ? String(e.message) : 'Ошибка восстановления';
-        res.status(400).json({ error: msg });
+        var payload = { error: msg };
+        if (e && e.code === 'MAP_SHRINK') {
+            payload.code = 'MAP_SHRINK';
+            if (e.previous != null) payload.previous = e.previous;
+            if (e.next != null) payload.next = e.next;
+        }
+        res.status(400).json(payload);
     }
 });
 

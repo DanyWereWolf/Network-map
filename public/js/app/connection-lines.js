@@ -786,6 +786,9 @@ window.flushMapConnectionLines = function(pendingUids) {
 };
 
 function updateAllConnectionLines() {
+    if (typeof invalidateConnectionLinesDisplayCache === 'function') {
+        invalidateConnectionLinesDisplayCache();
+    }
     updateAllNodeConnectionLines();
     updateOnuConnectionLines();
     updateOltConnectionLines();

@@ -67,19 +67,57 @@ function applyModalEditModeForObject(obj, callback) {
         if (typeof callback === 'function') callback();
         return;
     }
+
+    var settled = false;
+    var paintedEarly = false;
+    var openGenAtStart = window._objectModalOpenGen || 0;
+
+    function finishFirstPaint(editOn) {
+        if (settled) return;
+        settled = true;
+        infoModalEditMode = !!editOn;
+        if (typeof callback === 'function') callback();
+    }
+
+    // Не держим спиннер до 8с: если lock не ответил быстро — открываем просмотр.
+    var earlyTimer = setTimeout(function() {
+        if (settled) return;
+        paintedEarly = true;
+        finishFirstPaint(false);
+    }, 120);
+
     window.syncRequestObjectLock(uid, function(ok, lockedBy) {
+        clearTimeout(earlyTimer);
         if (ok && isEditMode) {
             myHeldObjectLockId = uid;
-            infoModalEditMode = true;
             if (typeof window.syncTouchObjectLock === 'function') window.syncTouchObjectLock(uid);
-        } else {
-            infoModalEditMode = false;
-            if (!ok && myHeldObjectLockId === uid) releaseHeldObjectLock();
-            if (!ok && lockedBy && typeof showWarning === 'function') {
-                showWarning('Сейчас редактирует: ' + lockedBy, 'Объект занят');
+            if (!settled) {
+                finishFirstPaint(true);
+                return;
             }
+            // Уже показали просмотр — один раз обновим до edit, если модалка всё ещё на этом объекте.
+            if (paintedEarly && (window._objectModalOpenGen || 0) === openGenAtStart &&
+                currentModalObject && getObjectUniqueId(currentModalObject) === uid) {
+                infoModalEditMode = true;
+                if (typeof showObjectInfoBody === 'function') {
+                    try { showObjectInfoBody(obj); } catch (eUp) {}
+                }
+            } else {
+                infoModalEditMode = true;
+            }
+            return;
         }
-        if (typeof callback === 'function') callback();
+        infoModalEditMode = false;
+        if (!ok && myHeldObjectLockId === uid) releaseHeldObjectLock();
+        if (!ok && lockedBy && typeof showWarning === 'function') {
+            showWarning('Сейчас редактирует: ' + lockedBy, 'Объект занят');
+        }
+        if (!settled) {
+            finishFirstPaint(false);
+        } else if (currentModalObject && getObjectUniqueId(currentModalObject) === uid) {
+            if (typeof updateModalLockBanner === 'function') updateModalLockBanner(uid);
+            if (typeof syncPropertiesLockFromModal === 'function') syncPropertiesLockFromModal();
+        }
     });
 }
 

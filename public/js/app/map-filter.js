@@ -333,14 +333,37 @@ function forEachConnectionLine(callback) {
     });
 }
 
+var _connectionLinesVisibleState = null;
+var _connectionLinesStyleSig = null;
+
+function invalidateConnectionLinesDisplayCache() {
+    _connectionLinesVisibleState = null;
+    _connectionLinesStyleSig = null;
+}
+window.invalidateConnectionLinesDisplayCache = invalidateConnectionLinesDisplayCache;
+
 function setAllConnectionLinesVisible(visible) {
+    var next = !!visible;
+    if (_connectionLinesVisibleState === next) return;
+    _connectionLinesVisibleState = next;
     forEachConnectionLine(function(line) {
-        try { line.options.set('visible', !!visible); } catch (e) {}
+        try { line.options.set('visible', next); } catch (e) {}
     });
 }
 window.setAllConnectionLinesVisible = setAllConnectionLinesVisible;
 
+function getConnectionLinesStyleSignature() {
+    var opts = typeof getConnectionLinePolylineOptions === 'function'
+        ? getConnectionLinePolylineOptions('#22c55e')
+        : null;
+    if (!opts) return '';
+    return String(opts.strokeWidth) + '|' + String(opts.strokeOpacity) + '|' + String(opts.zIndex);
+}
+
 function applyConnectionLinesMapStyle() {
+    var sig = getConnectionLinesStyleSignature();
+    if (_connectionLinesStyleSig === sig) return;
+    _connectionLinesStyleSig = sig;
     forEachConnectionLine(function(line) {
         try {
             var color = line.options.get('strokeColor') || '#22c55e';

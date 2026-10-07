@@ -733,6 +733,7 @@ function filterSnapshotByRemovedUids(snapshot, removeUniqueIds) {
 function saveData(opts) {
     opts = opts || {};
     if (currentModalObject && infoModalEditModeSession && !infoModalEditMode && !opts.fiberSchemeViewOnly) return;
+    bumpMapDataEpoch();
     flushPendingRemoteSnapshot();
     // Инкрементальный add: без полной сериализации и deep-clone всей карты (критично для INP).
     if (opts.addObject && !inUndoRedo && Array.isArray(lastSavedState) &&
@@ -1488,8 +1489,16 @@ function reloadMapFromApi(meta) {
 }
 window.reloadMapFromApi = reloadMapFromApi;
 
+function bumpMapDataEpoch() {
+    window._mapDataEpoch = (window._mapDataEpoch || 0) + 1;
+    if (typeof window.invalidateNodeConnectedFibersIndex === 'function') {
+        try { window.invalidateNodeConnectedFibersIndex(); } catch (eIdx) {}
+    }
+}
+
 function applyRemoteState(data, meta) {
     meta = meta || {};
+    bumpMapDataEpoch();
     if (!Array.isArray(data)) {
         markMapDataReady();
         return;
@@ -1919,6 +1928,7 @@ function refreshRemoteObjectVisuals(obj) {
 
 function applyOperationToMap(op) {
     if (!op || !op.type) return;
+    bumpMapDataEpoch();
     if (op.type === 'add_object' && op.data) {
         var addUid = op.data.uniqueId;
         if (addUid != null && addUid !== '') {
@@ -2171,11 +2181,39 @@ function importDataRunOneCable(item, objectRefs, refIndex, cableByUid) {
             toObj = toObj || objectRefs[item.to];
         }
     }
+    // NeD/legacy: конец на node — подменить на муфту/кросс в той же точке (иначе кабель не создаётся).
+    function remapImportCableEndpointToFiberHost(obj, coordHint) {
+        if (!obj || !obj.properties) return obj;
+        var t = obj.properties.get('type');
+        if (typeof isFiberCableEndpointType === 'function' && isFiberCableEndpointType(t)) return obj;
+        if (t === 'olt' || t === 'radioBridge') return obj;
+        if (t !== 'node') return obj;
+        var coord = coordHint;
+        if ((!coord || coord.length < 2) && obj.geometry && typeof obj.geometry.getCoordinates === 'function') {
+            coord = obj.geometry.getCoordinates();
+        }
+        if (!coord || coord.length < 2 || typeof findRefClosestToCoord !== 'function') return obj;
+        var alt = findRefClosestToCoord(refsOnly, coord, 0.0008, true, null);
+        if (!alt || !alt.properties) return obj;
+        var at = alt.properties.get('type');
+        if (typeof isFiberCableEndpointType === 'function' && isFiberCableEndpointType(at)) return alt;
+        return obj;
+    }
+    if (item.cableType !== 'copper') {
+        var fromCoordHint = coords && coords.length ? coords[0] : null;
+        var toCoordHint = coords && coords.length ? coords[coords.length - 1] : null;
+        fromObj = remapImportCableEndpointToFiberHost(fromObj, fromCoordHint);
+        toObj = remapImportCableEndpointToFiberHost(toObj, toCoordHint);
+    }
     if (!fromObj || !toObj) {
         if (coords && coords.length >= 2) {
             var preferFiberEpImp = item.cableType !== 'copper';
             fromObj = fromObj || findRefClosestToCoord(refsOnly, coords[0], undefined, preferFiberEpImp, item.fromUniqueId);
             toObj = toObj || findRefClosestToCoord(refsOnly, coords[coords.length - 1], undefined, preferFiberEpImp, item.toUniqueId);
+            if (preferFiberEpImp) {
+                fromObj = remapImportCableEndpointToFiberHost(fromObj, coords[0]);
+                toObj = remapImportCableEndpointToFiberHost(toObj, coords[coords.length - 1]);
+            }
         }
     }
     if ((!fromObj || !toObj) && coords && coords.length >= 2) {
@@ -4805,6 +4843,8 @@ function clearMap(opts) {
     nodeGroupPlacemarks = [];
     crossGroupPlacemarkByKey.clear();
     nodeGroupPlacemarkByKey.clear();
+    if (typeof clearCrossViewportShownKeys === 'function') clearCrossViewportShownKeys();
+    if (typeof clearNodeViewportShownKeys === 'function') clearNodeViewportShownKeys();
     if (typeof MapPerf !== 'undefined') MapPerf.clearObjectsIndex();
     if (!opts.skipSave) {
         saveData({ syncFull: true });

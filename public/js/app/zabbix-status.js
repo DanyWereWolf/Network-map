@@ -88,8 +88,50 @@
         });
     }
 
+    function statusEntryFingerprint(entry) {
+        if (!entry) return '';
+        var probs = Array.isArray(entry.problems) ? entry.problems.length : 0;
+        return (entry.matched ? '1' : '0') + '|' + (entry.ok ? '1' : '0') + '|' +
+            String(entry.severity != null ? entry.severity : '') + '|' +
+            String(entry.hostid || '') + '|' + probs;
+    }
+
+    function collectChangedStatusUids(prev, next) {
+        var changed = [];
+        var seen = Object.create(null);
+        var uid;
+        for (uid in next) {
+            if (!Object.prototype.hasOwnProperty.call(next, uid)) continue;
+            seen[uid] = true;
+            if (statusEntryFingerprint(prev[uid]) !== statusEntryFingerprint(next[uid])) {
+                changed.push(uid);
+            }
+        }
+        for (uid in prev) {
+            if (!Object.prototype.hasOwnProperty.call(prev, uid)) continue;
+            if (seen[uid]) continue;
+            changed.push(uid);
+        }
+        return changed;
+    }
+
+    function applyPresentationsForUids(uids) {
+        if (!uids || !uids.length) return;
+        var list = (typeof objects !== 'undefined' && Array.isArray(objects)) ? objects : [];
+        var want = Object.create(null);
+        for (var i = 0; i < uids.length; i++) want[String(uids[i])] = true;
+        list.forEach(function(obj) {
+            if (!obj || !obj.properties) return;
+            var uid = getUid(obj);
+            if (!uid || !want[uid]) return;
+            refreshPlacemarkIcon(obj);
+        });
+    }
+
     function setStatusesFromPayload(payload) {
         var next = Object.create(null);
+        var prevEnabled = enabled;
+        var prevError = lastError;
         enabled = !!(payload && payload.enabled);
         lastError = (payload && payload.error) ? String(payload.error) : '';
         if (payload && payload.pollIntervalSec != null) {
@@ -114,8 +156,14 @@
                 };
             });
         }
+        var changedUids = collectChangedStatusUids(statusByUid, next);
+        var toggled = prevEnabled !== enabled || prevError !== lastError;
         statusByUid = next;
-        applyAllPresentations();
+        if (toggled) {
+            applyAllPresentations();
+        } else if (changedUids.length) {
+            applyPresentationsForUids(changedUids);
+        }
     }
 
     function setEnabledHint(on) {

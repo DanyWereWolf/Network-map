@@ -56,33 +56,63 @@ function collectNodeSplitterFiberConnections(nodeUniqueId, seen) {
     return list;
 }
 
-function getNodeConnectedFibers(nodeUniqueId) {
-    const connectedFibers = [];
-    const seen = new Set();
+function nodePanelFiberStillExists(cableId, fiberNumber) {
+    // Лёгкая проверка для карточки узла: без getConnectedCables (дорого на больших картах).
+    if (!cableId || fiberNumber == null || isNaN(fiberNumber)) return false;
+    var cable = typeof findCableByUniqueId === 'function'
+        ? findCableByUniqueId(cableId)
+        : (typeof MapPerf !== 'undefined' && MapPerf.getByUid ? MapPerf.getByUid(cableId, 'cable') : null);
+    if (!cable || !cable.properties) return false;
+    var n = typeof getFiberCount === 'function' ? getFiberCount(cable) : 0;
+    return fiberNumber >= 1 && fiberNumber <= n;
+}
 
-    if (!nodeUniqueId) return connectedFibers;
+/** Обратный индекс nodeId → связи. Один полный скан карты вместо скана на каждый открытый узел. */
+var _nodeFibersIndex = null;
+var _nodeFibersIndexEpoch = -1;
 
-    objects.forEach(obj => {
-        if (!obj.properties) return;
-        var ht = obj.properties.get('type');
-        if (!isFiberHostType(ht)) return;
-        const nodeConnections = obj.properties.get('nodeConnections');
-        const fiberLabels = obj.properties.get('fiberLabels') || {};
-        const hostName = obj.properties.get('name') || (ht === 'cross' ? 'Кросс без имени' : 'Муфта без имени');
-        const hostUniqueId = obj.properties.get('uniqueId');
+function invalidateNodeConnectedFibersIndex() {
+    _nodeFibersIndex = null;
+    _nodeFibersIndexEpoch = -1;
+}
+window.invalidateNodeConnectedFibersIndex = invalidateNodeConnectedFibersIndex;
 
-        if (nodeConnections) {
-            Object.keys(nodeConnections).forEach(key => {
-                const conn = nodeConnections[key];
-                if (conn.nodeId !== nodeUniqueId) return;
-                const parts = key.split('-');
-                const fiberNumber = parseInt(parts.pop(), 10);
-                const cableId = parts.join('-');
-                if (!crossHasFiberForConnection(obj, cableId, fiberNumber)) return;
-                const dedupeKey = ht + ':' + cableId + '-' + fiberNumber;
-                if (seen.has(dedupeKey)) return;
-                seen.add(dedupeKey);
-                connectedFibers.push({
+function ensureNodeConnectedFibersIndex() {
+    var epoch = window._mapDataEpoch || 0;
+    if (_nodeFibersIndex && _nodeFibersIndexEpoch === epoch) return _nodeFibersIndex;
+
+    var idx = new Map();
+    function pushConn(nodeId, conn) {
+        if (!nodeId || !conn) return;
+        var key = String(nodeId);
+        var arr = idx.get(key);
+        if (!arr) {
+            arr = [];
+            idx.set(key, arr);
+        }
+        arr.push(conn);
+    }
+
+    if (typeof objects !== 'undefined' && Array.isArray(objects)) {
+        for (var oi = 0; oi < objects.length; oi++) {
+            var obj = objects[oi];
+            if (!obj || !obj.properties) continue;
+            var ht = obj.properties.get('type');
+            if (!isFiberHostType(ht)) continue;
+            var nodeConnections = obj.properties.get('nodeConnections');
+            if (!nodeConnections) continue;
+            var fiberLabels = obj.properties.get('fiberLabels') || {};
+            var hostName = obj.properties.get('name') || (ht === 'cross' ? 'Кросс без имени' : 'Муфта без имени');
+            var hostUniqueId = obj.properties.get('uniqueId');
+            var keys = Object.keys(nodeConnections);
+            for (var ki = 0; ki < keys.length; ki++) {
+                var key = keys[ki];
+                var conn = nodeConnections[key];
+                if (!conn || !conn.nodeId) continue;
+                var parts = key.split('-');
+                var fiberNumber = parseInt(parts.pop(), 10);
+                var cableId = parts.join('-');
+                pushConn(conn.nodeId, {
                     source: ht,
                     crossObj: obj,
                     crossName: hostName,
@@ -90,15 +120,82 @@ function getNodeConnectedFibers(nodeUniqueId) {
                     cableId: cableId,
                     fiberNumber: fiberNumber,
                     fiberLabel: fiberLabels[key] || '',
-                    switchPort: conn.switchPort != null ? conn.switchPort : null
+                    switchPort: conn.switchPort != null ? conn.switchPort : null,
+                    _connKey: ht + ':' + cableId + '-' + fiberNumber
                 });
+            }
+        }
+    }
+
+    // Сплиттеры → узлы (полный скан один раз при построении индекса)
+    var splitterSeen = new Set();
+    function indexSplitter(sp, hostObj) {
+        if (!sp || !sp.properties) return;
+        var spId = getObjectUniqueId(sp);
+        if (!spId) return;
+        var outputs = sp.properties.get('outputConnections') || [];
+        var spName = sp.properties.get('name') || 'Сплиттер';
+        var host = hostObj || sp._host || null;
+        var hostName = host && host.properties ? (host.properties.get('name') || 'Кросс') : 'Кросс';
+        var hostUid = host ? getObjectUniqueId(host) : null;
+        var hostIn = typeof getSplitterHostInputFiber === 'function' ? getSplitterHostInputFiber(sp) : null;
+        for (var oi = 0; oi < outputs.length; oi++) {
+            var outConn = outputs[oi];
+            if (!outConn || !outConn.nodeId) continue;
+            var dedupeKey = 'sp:' + spId + ':' + oi;
+            if (splitterSeen.has(dedupeKey)) continue;
+            splitterSeen.add(dedupeKey);
+            pushConn(outConn.nodeId, {
+                source: 'splitter',
+                crossObj: host,
+                crossName: hostName,
+                crossUniqueId: hostUid,
+                cableId: hostIn ? hostIn.cableId : null,
+                fiberNumber: hostIn ? hostIn.fiberNumber : null,
+                fiberLabel: '',
+                splitterId: spId,
+                splitterName: spName,
+                outputIndex: oi,
+                outputNumber: oi + 1,
+                switchPort: outConn.switchPort != null ? outConn.switchPort : null,
+                _connKey: dedupeKey
             });
         }
-    });
+    }
+    if (window.EmbeddedSplitters && typeof EmbeddedSplitters.forEach === 'function') {
+        EmbeddedSplitters.forEach(function(sp) { indexSplitter(sp, sp._host); });
+    }
+    if (typeof objects !== 'undefined' && Array.isArray(objects)) {
+        for (var si = 0; si < objects.length; si++) {
+            var so = objects[si];
+            if (so && so.properties && so.properties.get('type') === 'splitter') indexSplitter(so, null);
+        }
+    }
 
-    collectNodeSplitterFiberConnections(nodeUniqueId, seen).forEach(function(conn) {
+    _nodeFibersIndex = idx;
+    _nodeFibersIndexEpoch = epoch;
+    return idx;
+}
+
+function getNodeConnectedFibers(nodeUniqueId) {
+    const connectedFibers = [];
+    if (!nodeUniqueId) return connectedFibers;
+
+    var idx = ensureNodeConnectedFibersIndex();
+    var raw = idx.get(String(nodeUniqueId)) || [];
+    var seen = new Set();
+
+    for (var i = 0; i < raw.length; i++) {
+        var conn = raw[i];
+        if (!conn) continue;
+        var dedupeKey = conn._connKey || (conn.source + ':' + conn.cableId + '-' + conn.fiberNumber);
+        if (seen.has(dedupeKey)) continue;
+        if (conn.source !== 'splitter') {
+            if (!nodePanelFiberStillExists(conn.cableId, conn.fiberNumber)) continue;
+        }
+        seen.add(dedupeKey);
         connectedFibers.push(conn);
-    });
+    }
 
     return connectedFibers;
 }

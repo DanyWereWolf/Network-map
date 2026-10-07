@@ -105,6 +105,29 @@ function loadBackupsList() {
     });
 }
 
+function finishBackupRestoreSuccess() {
+    try {
+        sessionStorage.removeItem('networkMap_session');
+        sessionStorage.removeItem('networkMap_token');
+        localStorage.removeItem('networkMap_token');
+        localStorage.removeItem('networkMap_session');
+        localStorage.removeItem('networkMap_tokenExpiry');
+    } catch (e) {}
+    if (typeof showSuccess === 'function') showSuccess('Данные восстановлены. Все учётные записи организации отключены. Войдите снова.');
+    else alert('Данные восстановлены. Все учётные записи организации отключены. Войдите снова.');
+    setTimeout(function() { window.location.href = 'auth.html'; }, 800);
+}
+
+function requestBackupRestore(filename, force) {
+    return fetch(getApiBase() + '/api/backups/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
+        body: JSON.stringify({ filename: filename, force: !!force })
+    }).then(function(res) {
+        return res.json().then(function(j) { return { ok: res.ok, body: j }; });
+    });
+}
+
 function handleBackupListClick(e) {
     var btn = e.target && e.target.closest('.btn-restore-backup');
     if (!btn) return;
@@ -114,34 +137,37 @@ function handleBackupListClick(e) {
     var dateLabel = filename.replace(/backup-|\.json/g, '');
     (async function() {
         if (!(await showConfirm('Восстановить данные от ' + dateLabel + '? Текущие данные будут заменены, все учётные записи организации будут отключены. После восстановления потребуется войти снова.', 'Восстановление бэкапа', { confirmText: 'Восстановить' }))) return;
-    btn.disabled = true;
-    fetch(getApiBase() + '/api/backups/restore', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
-        body: JSON.stringify({ filename: filename })
-    }).then(function(res) { return res.json().then(function(j) { return { ok: res.ok, body: j }; }); }).then(function(r) {
-        if (r.ok) {
-            try {
-                sessionStorage.removeItem('networkMap_session');
-                sessionStorage.removeItem('networkMap_token');
-                localStorage.removeItem('networkMap_token');
-                localStorage.removeItem('networkMap_session');
-                localStorage.removeItem('networkMap_tokenExpiry');
-            } catch (e) {}
-            if (typeof showSuccess === 'function') showSuccess('Данные восстановлены. Все учётные записи организации отключены. Войдите снова.');
-            else alert('Данные восстановлены. Все учётные записи организации отключены. Войдите снова.');
-            setTimeout(function() { window.location.href = 'auth.html'; }, 800);
-        } else {
+        btn.disabled = true;
+        try {
+            var r = await requestBackupRestore(filename, false);
+            if (!r.ok && r.body && r.body.code === 'MAP_SHRINK') {
+                var prev = r.body.previous != null ? r.body.previous : '?';
+                var next = r.body.next != null ? r.body.next : '?';
+                var shrinkOk = await showConfirm(
+                    'В бэкапе от ' + dateLabel + ' объектов: ' + next + ', сейчас на карте: ' + prev +
+                    '. Старый бэкап заметно меньше текущей карты. Всё равно восстановить?',
+                    'Меньше объектов в бэкапе',
+                    { confirmText: 'Всё равно восстановить', cancelText: 'Отмена' }
+                );
+                if (!shrinkOk) {
+                    btn.disabled = false;
+                    return;
+                }
+                r = await requestBackupRestore(filename, true);
+            }
+            if (r.ok) {
+                finishBackupRestoreSuccess();
+            } else {
+                btn.disabled = false;
+                var errMsg = (r.body && r.body.error) ? r.body.error : 'Ошибка восстановления';
+                if (typeof showError === 'function') showError(errMsg);
+                else alert(errMsg);
+            }
+        } catch (err) {
             btn.disabled = false;
-            var errMsg = (r.body && r.body.error) ? r.body.error : 'Ошибка восстановления';
-            if (typeof showError === 'function') showError(errMsg);
-            else alert(errMsg);
+            var msg = (err && err.message) ? err.message : 'Ошибка сети';
+            if (typeof showError === 'function') showError(msg);
+            else alert(msg);
         }
-    }).catch(function(err) {
-        btn.disabled = false;
-        var msg = (err && err.message) ? err.message : 'Ошибка сети';
-        if (typeof showError === 'function') showError(msg);
-        else alert(msg);
-    });
     })();
 }

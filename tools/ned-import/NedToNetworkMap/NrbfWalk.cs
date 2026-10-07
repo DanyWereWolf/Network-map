@@ -364,29 +364,41 @@ static class NrbfWalk
         return double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : fallback;
     }
 
-    public static (double originLon, double originLat, double zoomX, double zoomY) ParseGisSettings(string? xml)
+    public readonly record struct GisSettings(
+        double ZoomX,
+        double ZoomY,
+        double ManualOriginLon,
+        double ManualOriginLat,
+        bool ManualSetupOriginNode,
+        double PrevLon,
+        double PrevLat);
+
+    public static GisSettings ParseGisSettings(string? xml)
     {
-        double originLon = 0, originLat = 0, zoomX = 0.009, zoomY = 0.009;
-        if (string.IsNullOrWhiteSpace(xml)) return (originLon, originLat, zoomX, zoomY);
+        var s = new GisSettings(0.009, 0.009, 0, 0, false, 0, 0);
+        if (string.IsNullOrWhiteSpace(xml)) return s;
         try
         {
             var doc = XDocument.Parse(xml);
             var root = doc.Root;
-            if (root is null) return (originLon, originLat, zoomX, zoomY);
-            originLon = ParseRuDouble((string?)root.Attribute("ManualOriginLon"), originLon);
-            originLat = ParseRuDouble((string?)root.Attribute("ManualOriginLat"), originLat);
-            zoomX = ParseRuDouble((string?)root.Attribute("ZoomX"), zoomX);
-            zoomY = ParseRuDouble((string?)root.Attribute("ZoomY"), zoomY);
-            if (originLon == 0 && originLat == 0)
-            {
-                originLon = ParseRuDouble((string?)root.Attribute("PrevLon"), originLon);
-                originLat = ParseRuDouble((string?)root.Attribute("PrevLat"), originLat);
-            }
+            if (root is null) return s;
+            bool manualSetup = false;
+            var manualAttr = (string?)root.Attribute("ManualSetupOriginNode");
+            if (!string.IsNullOrWhiteSpace(manualAttr))
+                bool.TryParse(manualAttr, out manualSetup);
+
+            return new GisSettings(
+                ParseRuDouble((string?)root.Attribute("ZoomX"), 0.009),
+                ParseRuDouble((string?)root.Attribute("ZoomY"), 0.009),
+                ParseRuDouble((string?)root.Attribute("ManualOriginLon"), 0),
+                ParseRuDouble((string?)root.Attribute("ManualOriginLat"), 0),
+                manualSetup,
+                ParseRuDouble((string?)root.Attribute("PrevLon"), 0),
+                ParseRuDouble((string?)root.Attribute("PrevLat"), 0));
         }
         catch
         {
-            // ignore malformed
+            return s;
         }
-        return (originLon, originLat, zoomX, zoomY);
     }
 }

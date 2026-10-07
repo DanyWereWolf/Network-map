@@ -754,11 +754,12 @@
             delete pendingLockRequests[uniqueId];
             callback(false, null);
         }
+        // Раньше 8с — UI зависал на «Загрузка…». 1.5с достаточно; дальше открываем без edit-lock.
         setTimeout(function() {
             if (!pendingLockRequests[uniqueId]) return;
             delete pendingLockRequests[uniqueId];
             callback(false, null);
-        }, 8000);
+        }, 1500);
     }
 
     function releaseObjectLock(uniqueId) {

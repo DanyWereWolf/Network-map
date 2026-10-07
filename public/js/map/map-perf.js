@@ -705,11 +705,15 @@
             if (!label) return;
             var showLabel = shouldShowLabelForObject(obj, ctx);
             try {
-                if (label.options) label.options.set('visible', showLabel);
-                if (showLabel && !isGeoObjectOnMap(label)) {
+                var onMap = isGeoObjectOnMap(label);
+                if (showLabel && !onMap) {
                     global.myMap.geoObjects.add(label);
-                } else if (!showLabel && isGeoObjectOnMap(label)) {
+                    if (label.options) label.options.set('visible', true);
+                } else if (!showLabel && onMap) {
                     global.myMap.geoObjects.remove(label);
+                } else if (showLabel && label.options) {
+                    var curVis = label.options.get('visible');
+                    if (curVis === false) label.options.set('visible', true);
                 }
             } catch (eLbl) {}
         });

@@ -63,10 +63,15 @@ function ensureOltPortsArray(oltObj) {
     }
 }
 
-function buildNodeSwitchPortKindOptionsHtml(currentKind, kindOpts) {
+function buildNodeSwitchPortKindOptionsHtml(currentKind, kindOpts, lazyOnlyCurrent) {
     kindOpts = kindOpts || (typeof getSwitchPortKindOptions === 'function' ? getSwitchPortKindOptions() : []);
     var cur = String(currentKind || '').trim();
     var canon = typeof canonicalizeSwitchPortKindLabel === 'function' ? canonicalizeSwitchPortKindLabel(cur) : cur;
+    if (lazyOnlyCurrent) {
+        var label = cur || canon || (kindOpts[0] || '');
+        if (!label) return '';
+        return '<option value="' + escapeHtml(label) + '" selected>' + escapeHtml(label) + '</option>';
+    }
     var opts = kindOpts.slice();
     if (cur && opts.indexOf(cur) === -1 && opts.indexOf(canon) === -1) {
         opts.unshift(cur);
@@ -76,6 +81,109 @@ function buildNodeSwitchPortKindOptionsHtml(currentKind, kindOpts) {
         html += '<option value="' + escapeHtml(ko) + '"' + (ko === cur || ko === canon ? ' selected' : '') + '>' + escapeHtml(ko) + '</option>';
     });
     return html;
+}
+
+function resolveMapCableByUid(cableUid) {
+    if (!cableUid) return null;
+    if (typeof MapPerf !== 'undefined' && MapPerf.getByUid) {
+        var byUid = MapPerf.getByUid(cableUid, 'cable');
+        if (byUid) return byUid;
+    }
+    if (typeof objects === 'undefined' || !Array.isArray(objects)) return null;
+    for (var i = 0; i < objects.length; i++) {
+        var c = objects[i];
+        if (c && c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === cableUid) {
+            return c;
+        }
+    }
+    return null;
+}
+
+function ensureNodeSwitchPortKindSelectOptions(sel) {
+    if (!sel || sel.getAttribute('data-kinds-ready') === '1') return;
+    var cur = sel.value;
+    var kindOpts = typeof getSwitchPortKindOptions === 'function' ? getSwitchPortKindOptions() : [];
+    var prev = sel.value;
+    sel.innerHTML = buildNodeSwitchPortKindOptionsHtml(cur, kindOpts, false);
+    if (prev) sel.value = prev;
+    sel.setAttribute('data-kinds-ready', '1');
+}
+
+function buildNodeSwitchPortsTableHtml(swRow, isEditMode, kindOptsNodeSw) {
+    var pts = swRow.switchPortTypes || [];
+    var usageN = swRow.copperPortUsage || {};
+    var fiberUsageN = swRow.fiberPortUsage || {};
+    var uidEsc = escapeHtml(swRow.uniqueId);
+    var portLabelsSw = typeof getAttachedSwitchPortLabels === 'function' ? getAttachedSwitchPortLabels(swRow) : {};
+    var html = '<div class="node-ports-table-wrap"><table class="node-ports-table"><thead><tr><th>#</th><th>Тип</th><th>Подпись</th><th>Состояние</th>';
+    html += '</tr></thead><tbody>';
+    for (var swi = 0; swi < pts.length; swi++) {
+        var pnumSw = swi + 1;
+        var cableUidSw = usageN[String(pnumSw)];
+        var fiberKeySw = fiberUsageN[String(pnumSw)];
+        var cblSw = cableUidSw ? resolveMapCableByUid(cableUidSw) : null;
+        var cnameSw = cblSw ? (cblSw.properties.get('cableName') || getCableDescription(cblSw.properties.get('cableType'))) : '';
+        var isCopperPortRow = typeof isSwitchPortCopperCapable === 'function'
+            ? isSwitchPortCopperCapable(pts[swi] || '')
+            : !(isSwitchPortSfpFiberType(pts[swi] || ''));
+        var manualBusy = typeof isAttachedSwitchPortManuallyBusy === 'function' && isAttachedSwitchPortManuallyBusy(swRow, pnumSw);
+        var rowBusy = !!(cableUidSw || fiberKeySw || manualBusy);
+        var portLabelSw = (portLabelsSw[String(pnumSw)] || '').trim();
+        html += '<tr class="' + (rowBusy ? 'node-port-row--busy' : 'node-port-row--free') + '">';
+        html += '<td>' + pnumSw + '</td><td>';
+        if (isEditMode) {
+            html += '<select class="edit-node-switch-port-kind form-select form-select-compact" data-switch-id="' + escapeHtml(swRow.uniqueId) + '" data-idx="' + swi + '" data-lazy-kinds="1">';
+            html += buildNodeSwitchPortKindOptionsHtml(pts[swi], kindOptsNodeSw, true);
+            html += '</select>';
+        } else {
+            html += escapeHtml(pts[swi] || '—');
+        }
+        html += '</td>';
+        if (isEditMode) {
+            html += '<td><input type="text" class="form-input form-input-compact edit-node-switch-port-label" data-switch-id="' + uidEsc + '" data-port="' + pnumSw + '" value="' + escapeHtml(portLabelSw) + '" placeholder="Абонент" title="Подпись порта"></td>';
+        } else {
+            html += '<td class="node-port-label">' + (portLabelSw ? escapeHtml(portLabelSw) : '—') + '</td>';
+        }
+        html += '<td class="node-port-state">';
+        if (cnameSw) {
+            html += '<span class="node-port-state-connected">Медь: ' + escapeHtml(cnameSw) + '</span>';
+        } else if (fiberKeySw) {
+            html += '<span class="node-port-state-connected">ВОЛС</span>';
+        } else if (isEditMode) {
+            html += '<div class="node-port-state-controls">';
+            html += '<label class="node-port-busy-toggle" title="Порт используется без кабеля на карте">';
+            html += '<input type="checkbox" class="edit-node-switch-port-busy" data-switch-id="' + uidEsc + '" data-port="' + pnumSw + '"' + (manualBusy ? ' checked' : '') + '>';
+            html += '<span>Занят</span></label>';
+            if (isCopperPortRow && !manualBusy) {
+                html += '<button type="button" class="btn-secondary btn-copper-connect-from-node-port btn-compact" data-switch-id="' + escapeHtml(swRow.uniqueId) + '" data-copper-port="' + pnumSw + '">Подключить</button>';
+            }
+            html += '</div>';
+        } else if (manualBusy) {
+            html += '<span class="node-port-state-manual">Используется</span>';
+        } else {
+            html += '<span class="node-port-state-free">Свободен</span>';
+        }
+        html += '</td>';
+        html += '</tr>';
+    }
+    html += '</tbody></table></div>';
+    return html;
+}
+
+function mountLazyNodeSwitchPortsTable(detailsEl) {
+    if (!detailsEl || !detailsEl.open) return;
+    var mount = detailsEl.querySelector('[data-lazy-ports]');
+    if (!mount || mount.getAttribute('data-loaded') === '1') return;
+    if (!currentModalObject || currentModalObject.properties.get('type') !== 'node') return;
+    var switchId = mount.getAttribute('data-switch-id');
+    if (!switchId) return;
+    var swRow = findAttachedSwitchOnNode(currentModalObject, switchId);
+    if (!swRow) return;
+    var kindOpts = typeof getSwitchPortKindOptions === 'function'
+        ? getSwitchPortKindOptions()
+        : ['RJ45 1000Base-T (Gigabit, порт G)', 'RJ45 PoE', 'SFP (mini-GBIC, 1G)', 'SFP+ (10G)', 'Комбо RJ45/SFP', 'Консоль', 'Uplink/stack'];
+    mount.innerHTML = buildNodeSwitchPortsTableHtml(swRow, modalIsEditMode(), kindOpts);
+    mount.setAttribute('data-loaded', '1');
 }
 
 function buildEquipmentIpAddressEditFieldHtml(id, value, labelClass) {
@@ -122,72 +230,12 @@ function buildEquipmentIpAddressViewLineHtml(ip, className) {
     return '<div class="' + (className || 'object-card-meta-line') + '">IP: ' + escapeHtml(v) + '</div>';
 }
 
-function buildNodeCardContent(obj, isEditMode, name) {
+function buildNodeFibersSectionHtml(connectedFibers) {
+    connectedFibers = connectedFibers || [];
     var html = '';
-    var nodeKind = obj.properties.get('nodeKind') || 'network';
-    var comment = obj.properties.get('comment') || '';
-    var nodeKindLabel = nodeKind === 'aggregation' ? 'Узел агрегации' : 'Узел сети';
-    var attachedList = getNodeAttachedSwitches(obj);
-    var swSummary = getNodeSwitchesSummary(obj);
-    var kindOptsNodeSw = typeof getSwitchPortKindOptions === 'function'
-        ? getSwitchPortKindOptions()
-        : ['RJ45 1000Base-T (Gigabit, порт G)', 'RJ45 PoE', 'SFP (mini-GBIC, 1G)', 'SFP+ (10G)', 'Комбо RJ45/SFP', 'Консоль', 'Uplink/stack'];
-    var defaultPortKind = typeof getSwitchPortDefaultKind === 'function' ? getSwitchPortDefaultKind() : 'RJ45 1000Base-T (Gigabit, порт G)';
-    var nodeUniqueId = getObjectUniqueId(obj);
-    var connectedFibers = getNodeConnectedFibers(nodeUniqueId);
-    var kindMod = nodeKind === 'aggregation' ? 'node-card--aggregation' : 'node-card--network';
-
-    html += '<div class="node-card ' + kindMod + '">';
-
-    html += '<section class="object-card-section node-card-hero">';
-    html += '<div class="node-card-hero-row">';
-    if (window.MapIcons) {
-        html += '<div class="node-card-hero-icon" aria-hidden="true">' + MapIcons.buildIconSvg('node', { variant: 'normal', nodeKind: nodeKind }) + '</div>';
-    }
-    html += '<div class="node-card-hero-text">';
-    if (!isEditMode) {
-        html += '<div class="node-card-view-name">' + escapeHtml(name || 'Без названия') + '</div>';
-        html += '<div class="node-card-view-meta"><span class="node-kind-pill node-kind-pill--' + (nodeKind === 'aggregation' ? 'aggregation' : 'network') + '">' + escapeHtml(nodeKindLabel) + '</span></div>';
-        if (comment) {
-            html += '<div class="node-card-comment">' + escapeHtml(comment) + '</div>';
-        }
-    } else {
-        html += '<div class="node-card-view-name">' + escapeHtml(name || 'Новый узел') + '</div>';
-        html += '<p class="object-card-hint node-card-hero-hint">Коммутаторы внутри узла, оптика с кросса на порты <strong>SFP</strong>, медь — на RJ45.</p>';
-    }
-    html += '</div></div>';
-    html += '<dl class="node-card-stats">';
-    html += '<div class="node-card-stat"><dt>Волокон с кросса</dt><dd>' + connectedFibers.length + '</dd></div>';
-    html += '<div class="node-card-stat"><dt>Коммутаторов</dt><dd>' + attachedList.length + '</dd></div>';
-    html += '<div class="node-card-stat"><dt>Порты занято</dt><dd>' + (swSummary.swCount > 0 ? (swSummary.busyPorts + ' / ' + swSummary.totalPorts) : '—') + '</dd></div>';
-    html += '</dl></section>';
-
-    html += buildObjectCoordsSectionHtml(obj);
-
-    if (isEditMode) {
-        html += '<section class="object-card-section object-card-section--params">';
-        html += '<h4 class="object-card-section-title">Параметры узла</h4>';
-        html += '<div class="node-card-fields-grid">';
-        html += '<div class="form-group"><label for="editNodeName" class="object-card-label">Название</label>';
-        html += '<input type="text" id="editNodeName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Название узла">';
-        html += '</div>';
-        html += '<div class="form-group"><label for="editNodeKind" class="object-card-label">Тип на карте</label>';
-        html += '<select id="editNodeKind" class="form-select">';
-        html += '<option value="network"' + (nodeKind === 'network' ? ' selected' : '') + '>Сеть (зелёный)</option>';
-        html += '<option value="aggregation"' + (nodeKind === 'aggregation' ? ' selected' : '') + '>Агрегация (красный)</option>';
-        html += '</select></div></div>';
-        html += buildEquipmentZabbixHostEditFieldHtml('editNodeZabbixHost', (obj.properties.get('zabbixHost') || '').trim());
-        html += '<div class="form-group" style="margin-top:12px;margin-bottom:0;"><label for="editNodeComment" class="object-card-label">Комментарий</label>';
-        html += '<textarea id="editNodeComment" class="form-input" rows="2" placeholder="Необязательно">' + escapeHtml(comment) + '</textarea></div>';
-        html += '</section>';
-    } else {
-        html += buildEquipmentZabbixHostViewLineHtml((obj.properties.get('zabbixHost') || '').trim(), 'node-card-comment');
-    }
-
-    html += '<section class="object-card-section object-card-section--fibers">';
     html += '<div class="object-card-section-head">';
     html += '<h4 class="object-card-section-title">Оптика</h4>';
-    html += '<span class="object-card-badge object-card-badge--fiber">' + connectedFibers.length + '</span>';
+    html += '<span class="object-card-badge object-card-badge--fiber" data-node-fiber-badge>' + connectedFibers.length + '</span>';
     html += '</div>';
     if (connectedFibers.length > 0) {
         html += '<div class="node-fiber-list">';
@@ -224,6 +272,108 @@ function buildNodeCardContent(obj, isEditMode, name) {
     } else {
         html += '<div class="object-card-callout object-card-callout--warn"><p>Оптических подключений нет — подключите волокно с кросса (SFP) или выход сплиттера на узел.</p></div>';
     }
+    return html;
+}
+
+function fillNodeCardFibersDeferred(modalInfo, obj) {
+    if (!modalInfo || !obj || !obj.properties || obj.properties.get('type') !== 'node') return;
+    var mount = modalInfo.querySelector('[data-node-fibers-mount]');
+    var statDd = modalInfo.querySelector('[data-node-fiber-stat]');
+    if (!mount && !statDd) return;
+    var nodeUniqueId = getObjectUniqueId(obj);
+    var connectedFibers = typeof getNodeConnectedFibers === 'function' ? getNodeConnectedFibers(nodeUniqueId) : [];
+    if (statDd) statDd.textContent = String(connectedFibers.length);
+    if (mount) {
+        mount.innerHTML = buildNodeFibersSectionHtml(connectedFibers);
+        mount.removeAttribute('data-node-fibers-pending');
+        mount.querySelectorAll('.btn-trace-from-node').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var crossId = this.getAttribute('data-cross-id');
+                var cableId = this.getAttribute('data-cable-id');
+                var fiberNumber = parseInt(this.getAttribute('data-fiber-number'), 10);
+                if (typeof traceFromNode === 'function') traceFromNode(crossId, cableId, fiberNumber);
+            });
+        });
+        mount.querySelectorAll('.btn-trace-from-node-splitter').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var splitterId = this.getAttribute('data-splitter-id');
+                var outputIndex = parseInt(this.getAttribute('data-output-index'), 10);
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'node') return;
+                if (typeof traceFromNodeSplitter === 'function') traceFromNodeSplitter(currentModalObject, splitterId, outputIndex);
+            });
+        });
+    }
+}
+
+function buildNodeCardContent(obj, isEditMode, name) {
+    var html = '';
+    var nodeKind = obj.properties.get('nodeKind') || 'network';
+    var comment = obj.properties.get('comment') || '';
+    var nodeKindLabel = nodeKind === 'aggregation' ? 'Узел агрегации' : 'Узел сети';
+    var attachedList = getNodeAttachedSwitches(obj);
+    var swSummary = getNodeSwitchesSummary(obj);
+    var kindOptsNodeSw = typeof getSwitchPortKindOptions === 'function'
+        ? getSwitchPortKindOptions()
+        : ['RJ45 1000Base-T (Gigabit, порт G)', 'RJ45 PoE', 'SFP (mini-GBIC, 1G)', 'SFP+ (10G)', 'Комбо RJ45/SFP', 'Консоль', 'Uplink/stack'];
+    var defaultPortKind = typeof getSwitchPortDefaultKind === 'function' ? getSwitchPortDefaultKind() : 'RJ45 1000Base-T (Gigabit, порт G)';
+    var kindMod = nodeKind === 'aggregation' ? 'node-card--aggregation' : 'node-card--network';
+
+    html += '<div class="node-card ' + kindMod + '">';
+
+    html += '<section class="object-card-section node-card-hero">';
+    html += '<div class="node-card-hero-row">';
+    if (window.MapIcons) {
+        html += '<div class="node-card-hero-icon" aria-hidden="true">' + MapIcons.buildIconSvg('node', { variant: 'normal', nodeKind: nodeKind }) + '</div>';
+    }
+    html += '<div class="node-card-hero-text">';
+    if (!isEditMode) {
+        html += '<div class="node-card-view-name">' + escapeHtml(name || 'Без названия') + '</div>';
+        html += '<div class="node-card-view-meta"><span class="node-kind-pill node-kind-pill--' + (nodeKind === 'aggregation' ? 'aggregation' : 'network') + '">' + escapeHtml(nodeKindLabel) + '</span></div>';
+        if (comment) {
+            html += '<div class="node-card-comment">' + escapeHtml(comment) + '</div>';
+        }
+    } else {
+        html += '<div class="node-card-view-name">' + escapeHtml(name || 'Новый узел') + '</div>';
+        html += '<p class="object-card-hint node-card-hero-hint">Коммутаторы внутри узла, оптика с кросса на порты <strong>SFP</strong>, медь — на RJ45.</p>';
+    }
+    html += '</div></div>';
+    html += '<dl class="node-card-stats">';
+    // Оптику считаем после первого кадра — полный скан карты не должен блокировать открытие.
+    html += '<div class="node-card-stat"><dt>Волокон с кросса</dt><dd data-node-fiber-stat>…</dd></div>';
+    html += '<div class="node-card-stat"><dt>Коммутаторов</dt><dd>' + attachedList.length + '</dd></div>';
+    html += '<div class="node-card-stat"><dt>Порты занято</dt><dd>' + (swSummary.swCount > 0 ? (swSummary.busyPorts + ' / ' + swSummary.totalPorts) : '—') + '</dd></div>';
+    html += '</dl></section>';
+
+    html += buildObjectCoordsSectionHtml(obj);
+
+    if (isEditMode) {
+        html += '<section class="object-card-section object-card-section--params">';
+        html += '<h4 class="object-card-section-title">Параметры узла</h4>';
+        html += '<div class="node-card-fields-grid">';
+        html += '<div class="form-group"><label for="editNodeName" class="object-card-label">Название</label>';
+        html += '<input type="text" id="editNodeName" class="form-input" value="' + escapeHtml(name) + '" placeholder="Название узла">';
+        html += '</div>';
+        html += '<div class="form-group"><label for="editNodeKind" class="object-card-label">Тип на карте</label>';
+        html += '<select id="editNodeKind" class="form-select">';
+        html += '<option value="network"' + (nodeKind === 'network' ? ' selected' : '') + '>Сеть (зелёный)</option>';
+        html += '<option value="aggregation"' + (nodeKind === 'aggregation' ? ' selected' : '') + '>Агрегация (красный)</option>';
+        html += '</select></div></div>';
+        html += buildEquipmentZabbixHostEditFieldHtml('editNodeZabbixHost', (obj.properties.get('zabbixHost') || '').trim());
+        html += '<div class="form-group" style="margin-top:12px;margin-bottom:0;"><label for="editNodeComment" class="object-card-label">Комментарий</label>';
+        html += '<textarea id="editNodeComment" class="form-input" rows="2" placeholder="Необязательно">' + escapeHtml(comment) + '</textarea></div>';
+        html += '</section>';
+    } else {
+        html += buildEquipmentZabbixHostViewLineHtml((obj.properties.get('zabbixHost') || '').trim(), 'node-card-comment');
+    }
+
+    html += '<section class="object-card-section object-card-section--fibers" data-node-fibers-mount data-node-fibers-pending>';
+    html += '<div class="object-card-section-head">';
+    html += '<h4 class="object-card-section-title">Оптика</h4>';
+    html += '<span class="object-card-badge object-card-badge--fiber">…</span>';
+    html += '</div>';
+    html += '<p class="object-card-hint">Загрузка подключений…</p>';
     html += '</section>';
 
     html += '<section class="object-card-section object-card-section--switches">';
@@ -264,8 +414,6 @@ function buildNodeCardContent(obj, isEditMode, name) {
     }
 
     attachedList.forEach(function(swRow, six) {
-        var usageN = swRow.copperPortUsage || {};
-        var pts = swRow.switchPortTypes || [];
         var swMfr = (swRow.manufacturer || '').trim();
         var swMod = (swRow.model || '').trim();
         var swComment = (swRow.comment || '').trim();
@@ -274,9 +422,10 @@ function buildNodeCardContent(obj, isEditMode, name) {
         var portStats = getAttachedSwitchPortStats(swRow);
         var swTitle = swRow.name || ('Коммутатор ' + (six + 1));
         var deviceLine = [swMfr, swMod].filter(Boolean).join(' · ');
-        var swOpen = attachedList.length === 1 || portStats.total <= 8 ? ' open' : '';
+        // Большие таблицы портов не раскрываем сразу — HTML собирается при открытии <details>.
+        var swOpen = portStats.total > 0 && portStats.total <= 8 ? ' open' : '';
         var utilPct = portStats.total > 0 ? Math.round((portStats.busy / portStats.total) * 100) : 0;
-        html += '<details class="node-card-switch-item"' + swOpen + '>';
+        html += '<details class="node-card-switch-item" data-node-switch-details="1"' + swOpen + '>';
         html += '<summary class="node-card-switch-summary">';
         html += '<span class="node-card-switch-title">' + escapeHtml(swTitle) + '</span>';
         if (deviceLine) {
@@ -316,60 +465,12 @@ function buildNodeCardContent(obj, isEditMode, name) {
         if (!isEditMode && swComment) {
             html += '<div class="node-card-switch-comment">' + escapeHtml(swComment) + '</div>';
         }
-        html += '<div class="node-ports-table-wrap"><table class="node-ports-table"><thead><tr><th>#</th><th>Тип</th><th>Подпись</th><th>Состояние</th>';
-        html += '</tr></thead><tbody>';
-        var portLabelsSw = typeof getAttachedSwitchPortLabels === 'function' ? getAttachedSwitchPortLabels(swRow) : {};
-        for (var swi = 0; swi < pts.length; swi++) {
-            var pnumSw = swi + 1;
-            var fiberUsageN = swRow.fiberPortUsage || {};
-            var cableUidSw = usageN[String(pnumSw)];
-            var fiberKeySw = fiberUsageN[String(pnumSw)];
-            var cblSw = cableUidSw ? objects.find(function(c) { return c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === cableUidSw; }) : null;
-            var cnameSw = cblSw ? (cblSw.properties.get('cableName') || getCableDescription(cblSw.properties.get('cableType'))) : '';
-            var isCopperPortRow = typeof isSwitchPortCopperCapable === 'function'
-                ? isSwitchPortCopperCapable(pts[swi] || '')
-                : !(isSwitchPortSfpFiberType(pts[swi] || ''));
-            var manualBusy = typeof isAttachedSwitchPortManuallyBusy === 'function' && isAttachedSwitchPortManuallyBusy(swRow, pnumSw);
-            var rowBusy = !!(cableUidSw || fiberKeySw || manualBusy);
-            var portLabelSw = (portLabelsSw[String(pnumSw)] || '').trim();
-            html += '<tr class="' + (rowBusy ? 'node-port-row--busy' : 'node-port-row--free') + '">';
-            html += '<td>' + pnumSw + '</td><td>';
-            if (isEditMode) {
-                html += '<select class="edit-node-switch-port-kind form-select form-select-compact" data-switch-id="' + escapeHtml(swRow.uniqueId) + '" data-idx="' + swi + '">';
-                html += buildNodeSwitchPortKindOptionsHtml(pts[swi], kindOptsNodeSw);
-                html += '</select>';
-            } else {
-                html += escapeHtml(pts[swi] || '—');
-            }
-            html += '</td>';
-            if (isEditMode) {
-                html += '<td><input type="text" class="form-input form-input-compact edit-node-switch-port-label" data-switch-id="' + uidEsc + '" data-port="' + pnumSw + '" value="' + escapeHtml(portLabelSw) + '" placeholder="Абонент" title="Подпись порта"></td>';
-            } else {
-                html += '<td class="node-port-label">' + (portLabelSw ? escapeHtml(portLabelSw) : '—') + '</td>';
-            }
-            html += '<td class="node-port-state">';
-            if (cnameSw) {
-                html += '<span class="node-port-state-connected">Медь: ' + escapeHtml(cnameSw) + '</span>';
-            } else if (fiberKeySw) {
-                html += '<span class="node-port-state-connected">ВОЛС</span>';
-            } else if (isEditMode) {
-                html += '<div class="node-port-state-controls">';
-                html += '<label class="node-port-busy-toggle" title="Порт используется без кабеля на карте">';
-                html += '<input type="checkbox" class="edit-node-switch-port-busy" data-switch-id="' + uidEsc + '" data-port="' + pnumSw + '"' + (manualBusy ? ' checked' : '') + '>';
-                html += '<span>Занят</span></label>';
-                if (isCopperPortRow && !manualBusy) {
-                    html += '<button type="button" class="btn-secondary btn-copper-connect-from-node-port btn-compact" data-switch-id="' + escapeHtml(swRow.uniqueId) + '" data-copper-port="' + pnumSw + '">Подключить</button>';
-                }
-                html += '</div>';
-            } else if (manualBusy) {
-                html += '<span class="node-port-state-manual">Используется</span>';
-            } else {
-                html += '<span class="node-port-state-free">Свободен</span>';
-            }
-            html += '</td>';
-            html += '</tr>';
+        if (swOpen) {
+            html += buildNodeSwitchPortsTableHtml(swRow, isEditMode, kindOptsNodeSw);
+        } else {
+            html += '<div class="node-ports-table-mount" data-lazy-ports="1" data-switch-id="' + uidEsc + '"></div>';
         }
-        html += '</tbody></table></div></div></details>';
+        html += '</div></details>';
     });
 
     html += '</section>';
@@ -2516,7 +2617,8 @@ function updateInfoModalChrome(type, name, opts) {
         }
     }
 
-    if ((isWorkspace || isDeviceCard) && typeof window.initPanelPlexusCanvases === 'function') {
+    // Анимация plexus на карточке узла заметно дороже пользы — не запускаем при открытии.
+    if ((isWorkspace || (isDeviceCard && type !== 'node')) && typeof window.initPanelPlexusCanvases === 'function') {
         requestAnimationFrame(function () {
             window.initPanelPlexusCanvases(modal);
         });
@@ -3635,18 +3737,28 @@ function showInfoModalLoadingShell(title) {
     var titleEl = document.getElementById('modalTitle');
     if (titleEl) titleEl.textContent = title || 'Загрузка…';
     if (modalInfo) {
-        modalInfo.innerHTML = '<div class="modal-info-loading" aria-busy="true"><span class="modal-info-loading-spinner" aria-hidden="true"></span></div>';
+        modalInfo.innerHTML =
+            '<div class="modal-info-loading" aria-busy="true">' +
+            '<span class="modal-info-loading-spinner" aria-hidden="true"></span>' +
+            '<p class="modal-info-loading-text">Загрузка карточки…</p>' +
+            '</div>';
     }
     if (modal) {
         modal.style.display = 'flex';
         modal.classList.add('modal--centered');
+        // Форсируем layout, чтобы браузер успел запланировать отрисовку спиннера.
+        try { void modal.offsetHeight; } catch (eLay) {}
     }
 }
 
 function deferHeavyModalWork(fn) {
+    // Важно: один rAF выполняется ДО paint — спиннер не успевает появиться.
+    // Два rAF + setTimeout гарантируют кадр со спиннером до тяжёлой работы.
     if (typeof requestAnimationFrame === 'function') {
         requestAnimationFrame(function() {
-            requestAnimationFrame(fn);
+            requestAnimationFrame(function() {
+                setTimeout(fn, 0);
+            });
         });
     } else {
         setTimeout(fn, 0);
@@ -3667,19 +3779,18 @@ function showObjectInfo(obj) {
         }
     }
     var objType = obj && obj.properties ? obj.properties.get('type') : '';
-    if (['node', 'olt', 'onu', 'camera', 'mediaConverter', 'radioBridge'].indexOf(objType) !== -1) {
+    // datalist для узла не нужен на первом кадре — combobox грузит опции при открытии.
+    if (objType && objType !== 'node' && ['olt', 'onu', 'camera', 'mediaConverter', 'radioBridge'].indexOf(objType) !== -1) {
         if (typeof populateDeviceDatalists === 'function') populateDeviceDatalists();
-        if (objType !== 'node') {
-            var mfr = obj.properties.get('manufacturer') || '';
-            if (typeof populateModelDatalistForManufacturer === 'function') {
-                var cat = 'node';
-                if (objType === 'camera') cat = 'camera';
-                else if (objType === 'mediaConverter') cat = 'node';
-                else if (objType === 'radioBridge') cat = 'radioBridge';
-                else if (objType === 'olt') cat = 'olt';
-                else if (objType === 'onu') cat = 'onu';
-                populateModelDatalistForManufacturer(mfr, 'deviceModelsList', cat);
-            }
+        var mfr = obj.properties.get('manufacturer') || '';
+        if (typeof populateModelDatalistForManufacturer === 'function') {
+            var cat = 'node';
+            if (objType === 'camera') cat = 'camera';
+            else if (objType === 'mediaConverter') cat = 'node';
+            else if (objType === 'radioBridge') cat = 'radioBridge';
+            else if (objType === 'olt') cat = 'olt';
+            else if (objType === 'onu') cat = 'onu';
+            populateModelDatalistForManufacturer(mfr, 'deviceModelsList', cat);
         }
     }
     if (splitterFiberRoutingMode && splitterFiberRoutingData) {
@@ -3698,11 +3809,87 @@ function showObjectInfo(obj) {
         }
     }
 
+    // Узел: быстрый путь — не ждём lock и не делаем двойной defer (карточка узла лёгкая).
+    if (objType === 'node') {
+        showNodeInfoFast(obj);
+        return;
+    }
+
+    // Сначала показываем спиннер и ждём paint — иначе UI просто «висит» без индикатора.
     showInfoModalLoadingShell('Загрузка…');
-    applyModalEditModeForObject(obj, function() {
-        deferHeavyModalWork(function() {
-            showObjectInfoBody(obj);
+    window._objectModalOpenGen = (window._objectModalOpenGen || 0) + 1;
+    var openGen = window._objectModalOpenGen;
+    deferHeavyModalWork(function() {
+        if (openGen !== window._objectModalOpenGen) return;
+        applyModalEditModeForObject(obj, function() {
+            if (openGen !== window._objectModalOpenGen) return;
+            deferHeavyModalWork(function() {
+                if (openGen !== window._objectModalOpenGen) return;
+                showObjectInfoBody(obj);
+            });
         });
+    });
+}
+
+/** Быстрое открытие узла: спиннер → сразу карточка; lock в фоне без блокировки UI. */
+function showNodeInfoFast(obj) {
+    showInfoModalLoadingShell('Загрузка…');
+    window._objectModalOpenGen = (window._objectModalOpenGen || 0) + 1;
+    var openGen = window._objectModalOpenGen;
+    var uid = getObjectUniqueId(obj);
+
+    requestAnimationFrame(function() {
+        setTimeout(function() {
+            if (openGen !== window._objectModalOpenGen) return;
+
+            infoModalEditModeSession = true;
+            // Оптимистично показываем edit, если карта в режиме редактирования.
+            infoModalEditMode = !!isEditMode;
+
+            if (isEditMode && uid && typeof myHeldObjectLockId !== 'undefined' &&
+                myHeldObjectLockId && myHeldObjectLockId !== uid &&
+                typeof releaseHeldObjectLock === 'function') {
+                releaseHeldObjectLock();
+            }
+
+            showObjectInfoBody(obj);
+
+            if (!isEditMode || !uid || !window.syncIsConnected ||
+                typeof window.syncRequestObjectLock !== 'function') {
+                if (isEditMode && uid && typeof myHeldObjectLockId !== 'undefined') {
+                    myHeldObjectLockId = myHeldObjectLockId || uid;
+                }
+                return;
+            }
+            if (typeof myHeldObjectLockId !== 'undefined' && myHeldObjectLockId === uid &&
+                typeof isObjectLockedByOther === 'function' && !isObjectLockedByOther(uid)) {
+                return;
+            }
+
+            window.syncRequestObjectLock(uid, function(ok, lockedBy) {
+                if (openGen !== window._objectModalOpenGen) return;
+                if (!currentModalObject || getObjectUniqueId(currentModalObject) !== uid) return;
+                if (ok && isEditMode) {
+                    myHeldObjectLockId = uid;
+                    infoModalEditMode = true;
+                    if (typeof window.syncTouchObjectLock === 'function') window.syncTouchObjectLock(uid);
+                    if (typeof updateModalLockBanner === 'function') updateModalLockBanner(uid);
+                    if (typeof syncPropertiesLockFromModal === 'function') syncPropertiesLockFromModal();
+                    // Уже нарисовали edit — полный rebuild не нужен.
+                    return;
+                }
+                infoModalEditMode = false;
+                if (!ok && typeof myHeldObjectLockId !== 'undefined' && myHeldObjectLockId === uid &&
+                    typeof releaseHeldObjectLock === 'function') {
+                    releaseHeldObjectLock();
+                }
+                if (!ok && lockedBy && typeof showWarning === 'function') {
+                    showWarning('Сейчас редактирует: ' + lockedBy, 'Объект занят');
+                }
+                // Только если не получили lock — перерисовать в просмотр.
+                showObjectInfoBody(obj);
+            });
+        }, 0);
     });
 }
 
@@ -3774,7 +3961,8 @@ function showObjectInfoBody(obj) {
     const name = obj.properties.get('name') || '';
     const cableSourceObj = (obj._embedded && obj._host) ? obj._host : obj;
 
-    const connectedCables = getConnectedCables(cableSourceObj);
+    // Для узла список кабелей не нужен — экономим полный filter по карте.
+    const connectedCables = type === 'node' ? [] : getConnectedCables(cableSourceObj);
 
     let title = '';
     if (type === 'node') {
@@ -4158,10 +4346,23 @@ function showObjectInfoBody(obj) {
         }
     }
     
-    setupModalEventListeners();
+    // Для узла не гоняем обработчики кабелей/волокон (setupModalEventListeners) — это лишняя работа.
+    if (type !== 'node') {
+        setupModalEventListeners();
+    }
     setupEditAndDeleteListeners();
     var modalInfo = document.getElementById('modalInfo');
-    if (modalInfo) initDeviceComboboxes(modalInfo);
+    if (modalInfo && type === 'node') {
+        modalInfo.querySelectorAll('[data-node-switch-details="1"]').forEach(function(detailsEl) {
+            detailsEl.addEventListener('toggle', function() {
+                mountLazyNodeSwitchPortsTable(detailsEl);
+            });
+            if (detailsEl.open) mountLazyNodeSwitchPortsTable(detailsEl);
+        });
+    }
+    if (modalInfo && (type === 'node' ? modalIsEditMode() : true)) {
+        initDeviceComboboxes(modalInfo);
+    }
     if (type === 'camera' && modalInfo) {
         if (modalInfo.querySelector('.trace-show-on-map-btn')) attachTraceShowOnMapHandlers(modalInfo);
         if (window.CameraPlayer) {
@@ -4175,7 +4376,15 @@ function showObjectInfoBody(obj) {
     presentInfoCard({ workspace: fiberUsesWorkspace, title: title });
     updateModalLockBanner(getObjectUniqueId(obj));
     syncPropertiesLockFromModal();
-    applyObjectLocksToMapDraggable();
+    if (type === 'node' && modalInfo) {
+        var fiberObj = obj;
+        setTimeout(function() {
+            if (currentModalObject !== fiberObj) return;
+            fillNodeCardFibersDeferred(modalInfo, fiberObj);
+        }, 0);
+    }
+    // Полный проход по карте для lock-badge дорогой; при открытии карточки достаточно баннера модалки.
+    // applyObjectLocksToMapDraggable вызывается из onSyncObjectLocks при реальной смене блокировок.
     if (fiberUsesWorkspace) {
         var modalEl = document.getElementById('infoModal');
         if (typeof window.initPanelPlexusCanvases === 'function' && modalEl) {
@@ -4859,10 +5068,53 @@ function setupEditAndDeleteListeners() {
                     saveData();
                 }
             });
+            modalRoot.addEventListener('focusin', function(e) {
+                var t = e.target;
+                if (t && t.classList && t.classList.contains('edit-node-switch-port-kind') && t.getAttribute('data-lazy-kinds') === '1') {
+                    ensureNodeSwitchPortKindSelectOptions(t);
+                }
+            });
+            modalRoot.addEventListener('mousedown', function(e) {
+                var t = e.target;
+                if (t && t.classList && t.classList.contains('edit-node-switch-port-kind') && t.getAttribute('data-lazy-kinds') === '1') {
+                    ensureNodeSwitchPortKindSelectOptions(t);
+                }
+            }, true);
+            modalRoot.addEventListener('click', function(e) {
+                var btn = e.target && e.target.closest ? e.target.closest('.btn-copper-connect-from-node-port') : null;
+                if (!btn) return;
+                e.stopPropagation();
+                if (!currentModalObject || currentModalObject.properties.get('type') !== 'node') return;
+                var swId = btn.getAttribute('data-switch-id');
+                var portN = parseInt(btn.getAttribute('data-copper-port'), 10);
+                if (typeof startCopperCableFromNodeSwitchPort === 'function') {
+                    startCopperCableFromNodeSwitchPort(currentModalObject, swId, portN);
+                }
+            });
             modalRoot.addEventListener('change', function(e) {
                 var t = e.target;
                 if (!t) return;
                 var coCh = currentModalObject;
+                if (coCh && coCh.properties && coCh.properties.get('type') === 'node' && t.classList && t.classList.contains('edit-node-switch-port-kind')) {
+                    ensureNodeSwitchPortKindSelectOptions(t);
+                    var swIdKind = t.getAttribute('data-switch-id');
+                    var idxKind = parseInt(t.getAttribute('data-idx'), 10);
+                    if (!swIdKind || isNaN(idxKind) || idxKind < 0) return;
+                    var arrKind = getNodeAttachedSwitches(coCh).slice();
+                    var ixKind = arrKind.findIndex(function(s) { return s.uniqueId === swIdKind; });
+                    if (ixKind < 0) return;
+                    var swKind = Object.assign({}, arrKind[ixKind]);
+                    var ptKind = (swKind.switchPortTypes || []).slice();
+                    while (ptKind.length <= idxKind) {
+                        ptKind.push(typeof getSwitchPortDefaultKind === 'function' ? getSwitchPortDefaultKind() : 'RJ45 1000Base-T (Gigabit, порт G)');
+                    }
+                    ptKind[idxKind] = t.value;
+                    swKind.switchPortTypes = ptKind;
+                    arrKind[ixKind] = swKind;
+                    coCh.properties.set('attachedSwitches', arrKind);
+                    saveData();
+                    return;
+                }
                 if (coCh && coCh.properties && coCh.properties.get('type') === 'node' && t.classList && t.classList.contains('edit-node-switch-port-busy')) {
                     var swIdBusy = t.getAttribute('data-switch-id');
                     var portBusy = parseInt(t.getAttribute('data-port'), 10);
@@ -5157,29 +5409,6 @@ function setupEditAndDeleteListeners() {
             }
         });
     });
-    var modalInfoNodeSw = document.getElementById('modalInfo');
-    if (modalInfoNodeSw) {
-        modalInfoNodeSw.querySelectorAll('.edit-node-switch-port-kind').forEach(function(sel) {
-            sel.addEventListener('change', function() {
-                if (!currentModalObject || currentModalObject.properties.get('type') !== 'node') return;
-                var swId = this.getAttribute('data-switch-id');
-                var idx = parseInt(this.getAttribute('data-idx'), 10);
-                if (!swId || isNaN(idx) || idx < 0) return;
-                var arr = getNodeAttachedSwitches(currentModalObject).slice();
-                var ix = arr.findIndex(function(s) { return s.uniqueId === swId; });
-                if (ix < 0) return;
-                var sw = Object.assign({}, arr[ix]);
-                var pt = (sw.switchPortTypes || []).slice();
-                while (pt.length <= idx) pt.push(typeof getSwitchPortDefaultKind === 'function' ? getSwitchPortDefaultKind() : 'RJ45 1000Base-T (Gigabit, порт G)');
-                pt[idx] = this.value;
-                sw.switchPortTypes = pt;
-                arr[ix] = sw;
-                currentModalObject.properties.set('attachedSwitches', arr);
-                saveData();
-            });
-        });
-    }
-    
     var saveSupportBtn = document.getElementById('saveSupportEdit');
     if (saveSupportBtn) {
         saveSupportBtn.addEventListener('click', function() {
@@ -6018,16 +6247,6 @@ function setupModalEventListeners() {
                 startCopperCableFromMediaConverter(currentModalObject);
             });
         });
-        document.querySelectorAll('.btn-copper-connect-from-node-port').forEach(function(btn) {
-            btn.addEventListener('click', function(e) {
-                e.stopPropagation();
-                if (!currentModalObject || currentModalObject.properties.get('type') !== 'node') return;
-                var swId = this.getAttribute('data-switch-id');
-                var portN = parseInt(this.getAttribute('data-copper-port'), 10);
-                startCopperCableFromNodeSwitchPort(currentModalObject, swId, portN);
-            });
-        });
-        
     }
 
     setupFiberConnectionHandlers();

@@ -607,7 +607,8 @@ function assertMapDataNotDangerousShrink(orgId, data, opts) {
         if (nextLen === 0 || nextLen < Math.floor(prevLen * MAP_SHRINK_RATIO)) {
             return {
                 ok: false,
-                error: 'РћС‚РєР°Р·: РЅРµР»СЊР·СЏ Р·Р°РјРµРЅРёС‚СЊ РєР°СЂС‚Сѓ РёР· ' + prevLen + ' РѕР±СЉРµРєС‚РѕРІ РЅР° ' + nextLen + ' Р±РµР· СЏРІРЅРѕРіРѕ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ',
+                code: 'MAP_SHRINK',
+                error: 'Отказ: нельзя заменить карту из ' + prevLen + ' объектов на ' + nextLen + ' без явного подтверждения',
                 previous: prevLen,
                 next: nextLen
             };
@@ -1937,24 +1938,30 @@ function restoreFromBackup(orgId, filename, opts) {
     if (!orgId) throw new Error('orgId required');
     opts = opts || {};
     const trimmed = typeof filename === 'string' ? filename.trim() : '';
-    if (!/^backup-\d{4}-\d{2}-\d{2}\.json$/.test(trimmed)) throw new Error('РќРµРґРѕРїСѓСЃС‚РёРјРѕРµ РёРјСЏ С„Р°Р№Р»Р°');
+    if (!/^backup-\d{4}-\d{2}-\d{2}\.json$/.test(trimmed)) throw new Error('Недопустимое имя файла');
     const backupPath = path.join(getOrgBackupsDir(orgId), trimmed);
-    if (!fs.existsSync(backupPath)) throw new Error('Р¤Р°Р№Р» Р±СЌРєР°РїР° РЅРµ РЅР°Р№РґРµРЅ');
+    if (!fs.existsSync(backupPath)) throw new Error('Файл бэкапа не найден');
     let raw, parsed;
     try {
         raw = fs.readFileSync(backupPath, 'utf8');
         parsed = JSON.parse(raw);
     } catch (e) {
-        if (e instanceof SyntaxError) throw new Error('РќРµРІРµСЂРЅС‹Р№ С„РѕСЂРјР°С‚ JSON РІ Р±СЌРєР°РїРµ');
+        if (e instanceof SyntaxError) throw new Error('Неверный формат JSON в бэкапе');
         throw e;
     }
-    if (!parsed || typeof parsed !== 'object') throw new Error('РќРµРІРµСЂРЅС‹Р№ С„РѕСЂРјР°С‚ Р±СЌРєР°РїР°');
+    if (!parsed || typeof parsed !== 'object') throw new Error('Неверный формат бэкапа');
     const payloadOrgId = parsed.organizationId || orgId;
-    if (!organizationIdsMatch(payloadOrgId, orgId)) throw new Error('Р‘СЌРєР°Рї РїСЂРёРЅР°РґР»РµР¶РёС‚ РґСЂСѓРіРѕР№ РѕСЂРіР°РЅРёР·Р°С†РёРё');
+    if (!organizationIdsMatch(payloadOrgId, orgId)) throw new Error('Бэкап принадлежит другой организации');
     const incomingMap = Array.isArray(parsed.mapData) ? parsed.mapData : [];
     var shrink = assertMapDataNotDangerousShrink(orgId, incomingMap, { allowShrink: !!opts.force });
     if (!shrink.ok) {
-        throw new Error(shrink.error + '. Р”Р»СЏ РїСЂРёРЅСѓРґРёС‚РµР»СЊРЅРѕРіРѕ РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ РїРµСЂРµРґР°Р№С‚Рµ force: true (С‚РѕР»СЊРєРѕ РіР»Р°РІРЅС‹Р№ admin).');
+        var shrinkErr = new Error(
+            shrink.error + '. Подтвердите восстановление ещё раз — в бэкапе меньше объектов, чем на текущей карте.'
+        );
+        shrinkErr.code = shrink.code || 'MAP_SHRINK';
+        shrinkErr.previous = shrink.previous;
+        shrinkErr.next = shrink.next;
+        throw shrinkErr;
     }
     const s = loadStore();
     if (!s.mapDataByOrg || typeof s.mapDataByOrg !== 'object') s.mapDataByOrg = {};
@@ -1975,7 +1982,7 @@ function restoreFromBackup(orgId, filename, opts) {
         if (opts.force) allowDangerousSaveOnce = false;
     }
     deleteSessionsForOrganization(orgId);
-    console.log('[Backup] Р’РѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРѕ РёР·:', orgId + '/' + trimmed);
+    console.log('[Backup] Восстановлено из:', orgId + '/' + trimmed);
 }
 
 function listFullStoreBackups() {
