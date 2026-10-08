@@ -633,6 +633,31 @@
         }).filter(Boolean);
     }
 
+    /**
+     * Любые соседние колодцы на маршруте — подземный участок.
+     * Воздух только когда трасса выходит на опору/крепление (или конец).
+     */
+    function ensureAdjacentManholeUndergroundSpans(points, spans) {
+        var out = cloneSpans(spans);
+        if (!Array.isArray(points) || points.length < 2) return out;
+        for (var i = 0; i < points.length - 1; i++) {
+            var a = points[i];
+            var b = points[i + 1];
+            if (!a || !b || !a.properties || !b.properties) continue;
+            if (a.properties.get('type') !== 'manhole' || b.properties.get('type') !== 'manhole') continue;
+            var idA = getUid(a);
+            var idB = getUid(b);
+            if (!idA || !idB || idA === idB) continue;
+            if (findSpanBetweenManholes(out, idA, idB)) continue;
+            out.push({
+                entryManholeId: idA,
+                exitManholeId: idB,
+                pathCoords: []
+            });
+        }
+        return out;
+    }
+
     function splitSpansForRoute(spans, pointsA, pointsB) {
         if (!Array.isArray(spans) || !spans.length) return { spansA: [], spansB: [] };
         var uidsA = {};
@@ -681,6 +706,7 @@
         getSpanDistanceMeters: getSpanDistanceMeters,
         getUndergroundDistanceMeters: getUndergroundDistanceMeters,
         cloneSpans: cloneSpans,
+        ensureAdjacentManholeUndergroundSpans: ensureAdjacentManholeUndergroundSpans,
         splitSpansForRoute: splitSpansForRoute,
         setOverlaysVisible: setOverlaysVisible,
         ensureRouteIncludesUndergroundManholes: ensureRouteIncludesUndergroundManholes,

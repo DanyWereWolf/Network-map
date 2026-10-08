@@ -247,13 +247,17 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
 function applySerializedUndergroundToCable(cable, item, pointsArr) {
     if (!cable || !item || !cable.properties) return;
     if (isCopperCableType(cable.properties.get('cableType'))) return;
-    if (!Array.isArray(item.undergroundSpans) || !item.undergroundSpans.length) return;
-    cable.properties.set('undergroundSpans', window.CableUnderground
-        ? CableUnderground.cloneSpans(item.undergroundSpans)
-        : item.undergroundSpans);
     var pts = pointsArr || cable.properties.get('points');
+    var spans = Array.isArray(item.undergroundSpans) ? item.undergroundSpans : [];
+    if (window.CableUnderground && Array.isArray(pts) && pts.length >= 2 && CableUnderground.ensureAdjacentManholeUndergroundSpans) {
+        spans = CableUnderground.ensureAdjacentManholeUndergroundSpans(pts, spans);
+    }
+    if (!spans.length) return;
+    cable.properties.set('undergroundSpans', window.CableUnderground
+        ? CableUnderground.cloneSpans(spans)
+        : spans);
     if (window.CableUnderground && Array.isArray(pts) && pts.length >= 2) {
-        pts = CableUnderground.ensureRouteIncludesUndergroundManholes(pts, item.undergroundSpans);
+        pts = CableUnderground.ensureRouteIncludesUndergroundManholes(pts, spans);
         cable.properties.set('points', pts);
         cable.properties.set('from', pts[0]);
         cable.properties.set('to', pts[pts.length - 1]);
@@ -288,12 +292,26 @@ function repairCablesAfterImport() {
         } catch (eAdd) {}
         var points = cable.properties.get('points');
         var spans = cable.properties.get('undergroundSpans') || [];
-        if (window.CableUnderground && spans.length && Array.isArray(points) && points.length >= 2) {
-            points = CableUnderground.ensureRouteIncludesUndergroundManholes(points, spans);
-            cable.properties.set('points', points);
-            cable.properties.set('from', points[0]);
-            cable.properties.set('to', points[points.length - 1]);
-            applyCableRouteAndOverlays(cable, points);
+        var isCopper = typeof isCopperCableType === 'function' && isCopperCableType(cable.properties.get('cableType'));
+        if (!isCopper && window.CableUnderground && Array.isArray(points) && points.length >= 2) {
+            if (CableUnderground.ensureAdjacentManholeUndergroundSpans) {
+                spans = CableUnderground.ensureAdjacentManholeUndergroundSpans(points, spans);
+            }
+            if (spans.length) {
+                cable.properties.set('undergroundSpans', spans);
+                points = CableUnderground.ensureRouteIncludesUndergroundManholes(points, spans);
+                cable.properties.set('points', points);
+                cable.properties.set('from', points[0]);
+                cable.properties.set('to', points[points.length - 1]);
+                applyCableRouteAndOverlays(cable, points);
+            } else if (cable.geometry) {
+                try {
+                    var lin0 = points.map(function (p) {
+                        return p && p.geometry ? p.geometry.getCoordinates() : null;
+                    }).filter(function (c) { return c && c.length >= 2; });
+                    if (lin0.length >= 2) setCableCoordsIfChanged(cable, lin0);
+                } catch (eLin0) {}
+            }
         } else if (cable.geometry && Array.isArray(points) && points.length >= 2) {
             try {
                 var lin = points.map(function (p) {
@@ -324,16 +342,23 @@ function validateAndFixCableGeometryOnLoad() {
         var toObj = cable.properties.get('to');
         var points = cable.properties.get('points');
         var ugSpans = cable.properties.get('undergroundSpans') || [];
-        if (window.CableUnderground && ugSpans.length && Array.isArray(points) && points.length >= 2) {
+        var isCopperFix = typeof isCopperCableType === 'function' && isCopperCableType(cable.properties.get('cableType'));
+        if (!isCopperFix && window.CableUnderground && Array.isArray(points) && points.length >= 2) {
             try {
-                points = CableUnderground.ensureRouteIncludesUndergroundManholes(points, ugSpans);
-                cable.properties.set('points', points);
-                cable.properties.set('from', points[0]);
-                cable.properties.set('to', points[points.length - 1]);
-                CableUnderground.applyCableRouteGeometry(cable, points);
-                CableUnderground.refreshCableUndergroundOverlays(cable);
+                if (CableUnderground.ensureAdjacentManholeUndergroundSpans) {
+                    ugSpans = CableUnderground.ensureAdjacentManholeUndergroundSpans(points, ugSpans);
+                }
+                if (ugSpans.length) {
+                    cable.properties.set('undergroundSpans', ugSpans);
+                    points = CableUnderground.ensureRouteIncludesUndergroundManholes(points, ugSpans);
+                    cable.properties.set('points', points);
+                    cable.properties.set('from', points[0]);
+                    cable.properties.set('to', points[points.length - 1]);
+                    CableUnderground.applyCableRouteGeometry(cable, points);
+                    CableUnderground.refreshCableUndergroundOverlays(cable);
+                    return;
+                }
             } catch (eUg) {}
-            return;
         }
         var coords = [];
         if (Array.isArray(points) && points.length >= 2) {

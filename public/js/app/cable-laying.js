@@ -138,6 +138,9 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     const fiberCount = getFiberCount(cableType);
 
     var spansForCable = undergroundSpans != null ? undergroundSpans : mergeUndergroundSpansForCreate(null);
+    if (!isCopperCableType(cableType) && window.CableUnderground && CableUnderground.ensureAdjacentManholeUndergroundSpans) {
+        spansForCable = CableUnderground.ensureAdjacentManholeUndergroundSpans(points, spansForCable);
+    }
     if (!isCopperCableType(cableType) && spansForCable.length) {
         for (var spChk = 0; spChk < spansForCable.length; spChk++) {
             var spRaw = spansForCable[spChk];

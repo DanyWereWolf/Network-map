@@ -746,6 +746,18 @@ function handleManholeCableLayClick(manholeObj) {
         return true;
     }
     var lastWp = cableWaypoints.length ? cableWaypoints[cableWaypoints.length - 1] : null;
+    // Колодец → колодец всегда подземный. Иначе после выхода из MH2 клик по MH3
+    // начинал новый участок «от MH3» и пара MH2–MH3 оставалась воздушной.
+    if (lastWp && lastWp !== manholeObj && lastWp.properties && lastWp.properties.get('type') === 'manhole') {
+        cableUndergroundActive = true;
+        cableUndergroundManhole = lastWp;
+        cableUndergroundCoords = [];
+        if (!commitUndergroundSpanToManhole(manholeObj)) return false;
+        clearSelection();
+        selectObject(cableSource);
+        removeCablePreview();
+        return true;
+    }
     if (lastWp !== manholeObj) cableWaypoints.push(manholeObj);
     startUndergroundRoutingFromManhole(manholeObj);
     clearSelection();
@@ -763,9 +775,19 @@ function mergeUndergroundSpansForCreate(extraSpans) {
 
 function applyCableRouteAndOverlays(cable, points, undergroundSpans) {
     if (!cable || !cable.properties) return;
-    if (undergroundSpans != null) cable.properties.set('undergroundSpans', undergroundSpans);
+    if (typeof isCopperCableType === 'function' && isCopperCableType(cable.properties.get('cableType'))) {
+        if (undergroundSpans != null) cable.properties.set('undergroundSpans', undergroundSpans);
+        syncCableGeometryFromRoutePoints(cable);
+        return;
+    }
+    var pts = points || cable.properties.get('points');
+    var spans = undergroundSpans != null ? undergroundSpans : (cable.properties.get('undergroundSpans') || []);
+    if (window.CableUnderground && CableUnderground.ensureAdjacentManholeUndergroundSpans && Array.isArray(pts)) {
+        spans = CableUnderground.ensureAdjacentManholeUndergroundSpans(pts, spans);
+    }
+    cable.properties.set('undergroundSpans', spans);
     if (window.CableUnderground) {
-        CableUnderground.applyCableRouteGeometry(cable, points, undergroundSpans);
+        CableUnderground.applyCableRouteGeometry(cable, pts, spans);
         CableUnderground.refreshCableUndergroundOverlays(cable);
     } else {
         syncCableGeometryFromRoutePoints(cable);
@@ -775,13 +797,18 @@ function applyCableRouteAndOverlays(cable, points, undergroundSpans) {
 function refreshAllCableUndergroundOverlays() {
     if (!window.CableUnderground || !objects) return;
     objects.forEach(function (o) {
-        if (o.properties && o.properties.get('type') === 'cable') {
-            var spans = o.properties.get('undergroundSpans') || [];
-            if (spans.length) {
-                CableUnderground.applyCableRouteGeometry(o);
-            }
-            CableUnderground.refreshCableUndergroundOverlays(o);
+        if (!o.properties || o.properties.get('type') !== 'cable') return;
+        if (typeof isCopperCableType === 'function' && isCopperCableType(o.properties.get('cableType'))) return;
+        var pts = o.properties.get('points');
+        var spans = o.properties.get('undergroundSpans') || [];
+        if (CableUnderground.ensureAdjacentManholeUndergroundSpans && Array.isArray(pts) && pts.length >= 2) {
+            spans = CableUnderground.ensureAdjacentManholeUndergroundSpans(pts, spans);
+            if (spans.length) o.properties.set('undergroundSpans', spans);
         }
+        if (spans.length) {
+            CableUnderground.applyCableRouteGeometry(o, pts, spans);
+        }
+        CableUnderground.refreshCableUndergroundOverlays(o);
     });
 }
 
