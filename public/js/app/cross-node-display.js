@@ -457,7 +457,7 @@ function updateCrossDisplay(scope) {
                             const lbl = crossObj.properties.get('label');
                             if (lbl && lbl.geometry) lbl.geometry.setCoordinates(offsetCoords);
                             updateConnectedCables(crossObj);
-                            scheduleConnectionLinesUpdate();
+                            scheduleConnectionLinesUpdate(getObjectUniqueId(crossObj));
                             ensurePlacemarkUniqueIdForSync(crossObj);
                             if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(crossObj);
                             else saveData({ object: crossObj, syncImmediate: true });
@@ -522,7 +522,10 @@ function updateCrossDisplay(scope) {
                     });
                 }
             });
-            scheduleConnectionLinesUpdate();
+            var movedCrossUids = movedGroupObjects.map(function(o) {
+                return typeof getObjectUniqueId === 'function' ? getObjectUniqueId(o) : null;
+            }).filter(Boolean);
+            scheduleConnectionLinesUpdate(movedCrossUids.length ? movedCrossUids : undefined);
             if (savedName) {
                 crossGroupNames.delete(oldKey);
                 crossGroupNames.set(groupKey(newCoords), savedName);
@@ -530,7 +533,7 @@ function updateCrossDisplay(scope) {
             }
             if (typeof saveLinkedMapObjects === 'function') saveLinkedMapObjects(movedGroupObjects);
             else saveData({ skipSync: true });
-            updateCrossDisplay([oldKey, groupKey(newCoords)]);
+            updateCrossDisplay({ full: false, keys: [oldKey, groupKey(newCoords)], skipCableUpdate: true });
         });
         attachHoverEventsToObject(groupPlacemark);
         myMap.geoObjects.add(crossLabel);
@@ -738,7 +741,7 @@ function updateNodeDisplay(scope) {
                             const lbl = nodes[i].properties.get('label');
                             if (lbl && lbl.geometry) lbl.geometry.setCoordinates(offsetCoords);
                             updateConnectedCables(nodes[i]);
-                            scheduleConnectionLinesUpdate();
+                            scheduleConnectionLinesUpdate(getObjectUniqueId(nodes[i]));
                             ensurePlacemarkUniqueIdForSync(nodes[i]);
                             if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(nodes[i]);
                             else saveData({ object: nodes[i], syncImmediate: true });
@@ -785,7 +788,10 @@ function updateNodeDisplay(scope) {
                     });
                 }
             });
-            scheduleConnectionLinesUpdate();
+            var movedNodeUids = movedNodeGroupObjects.map(function(o) {
+                return typeof getObjectUniqueId === 'function' ? getObjectUniqueId(o) : null;
+            }).filter(Boolean);
+            scheduleConnectionLinesUpdate(movedNodeUids.length ? movedNodeUids : undefined);
             if (savedName) {
                 nodeGroupNames.delete(oldKey);
                 nodeGroupNames.set(groupKey(newCoords), savedName);
@@ -793,7 +799,7 @@ function updateNodeDisplay(scope) {
             }
             if (typeof saveLinkedMapObjects === 'function') saveLinkedMapObjects(movedNodeGroupObjects);
             else saveData({ skipSync: true });
-            updateNodeDisplay([oldKey, groupKey(newCoords)]);
+            updateNodeDisplay({ full: false, keys: [oldKey, groupKey(newCoords)], skipCableUpdate: true });
         });
         attachHoverEventsToObject(groupPlacemark);
         myMap.geoObjects.add(nodeLabel);

@@ -836,17 +836,24 @@ function findCablesNearPoint(coords, maxDistance, options) {
     options = options || {};
     maxDistance = maxDistance != null ? maxDistance : 0.0004;
     var found = [];
-    if (!coords || coords.length < 2 || !objects) return found;
-    objects.forEach(function(cable) {
-        if (!cable.properties || cable.properties.get('type') !== 'cable') return;
-        if (options.fiberOnly && isCopperCableType(cable.properties.get('cableType'))) return;
+    if (!coords || coords.length < 2) return found;
+    var scan = objects;
+    if (typeof MapPerf !== 'undefined' && MapPerf.getObjectsByType) {
+        var typedCables = MapPerf.getObjectsByType('cable');
+        if (Array.isArray(typedCables)) scan = typedCables;
+    }
+    if (!scan || !scan.length) return found;
+    for (var i = 0; i < scan.length; i++) {
+        var cable = scan[i];
+        if (!cable || !cable.properties || cable.properties.get('type') !== 'cable') continue;
+        if (options.fiberOnly && isCopperCableType(cable.properties.get('cableType'))) continue;
         var geom = cable.geometry && cable.geometry.getCoordinates();
-        if (!geom || geom.length < 2) return;
+        if (!geom || geom.length < 2) continue;
         var proj = projectPointOntoPolyline(coords, geom);
-        if (!proj || proj.distance > maxDistance) return;
-        if (proj.fraction < 0.03 || proj.fraction > 0.97) return;
+        if (!proj || proj.distance > maxDistance) continue;
+        if (proj.fraction < 0.03 || proj.fraction > 0.97) continue;
         found.push({ cable: cable, distance: proj.distance, proj: proj });
-    });
+    }
     found.sort(function(a, b) { return a.distance - b.distance; });
     return found;
 }
@@ -890,12 +897,330 @@ function insertWaypointIntoCableRoute(cable, waypointObj, proj) {
     newPoints = dedupeSupportAttachmentInCablePoints(newPoints);
     if (getPointIndexOnCableRoute(newPoints, waypointObj) < 0) return false;
 
-    cable.properties.set('points', newPoints);
-    cable.properties.set('from', newPoints[0]);
-    cable.properties.set('to', newPoints[newPoints.length - 1]);
+    if (typeof setCableRoutePoints === 'function') setCableRoutePoints(cable, newPoints);
+    else {
+        cable.properties.set('points', newPoints);
+        cable.properties.set('from', newPoints[0]);
+        cable.properties.set('to', newPoints[newPoints.length - 1]);
+    }
     syncCableGeometryFromRoutePoints(cable);
     return true;
 }
+
+/** Сессия Alt+drag муфты вдоль трассы (не трогает обычный free-drag). */
+var _sleevePathDragSession = null;
+
+function ensureMapAltKeyTracker() {
+    if (typeof window === 'undefined' || window._mapAltKeyTrackerBound) return;
+    window._mapAltKeyTrackerBound = true;
+    window._mapAltKeyDown = false;
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Alt' || e.altKey) window._mapAltKeyDown = true;
+    }, true);
+    document.addEventListener('keyup', function(e) {
+        if (e.key === 'Alt') window._mapAltKeyDown = false;
+        else window._mapAltKeyDown = !!e.altKey;
+    }, true);
+    window.addEventListener('blur', function() {
+        window._mapAltKeyDown = false;
+    });
+}
+
+function isMapAltKeyDown() {
+    ensureMapAltKeyTracker();
+    return !!(typeof window !== 'undefined' && window._mapAltKeyDown);
+}
+
+function sleevePathObjectsMatch(a, b) {
+    if (!a || !b) return false;
+    if (a === b) return true;
+    if (typeof traceRouteObjectsMatch === 'function') return !!traceRouteObjectsMatch(a, b);
+    var ua = typeof getObjectUniqueId === 'function' ? getObjectUniqueId(a) : null;
+    var ub = typeof getObjectUniqueId === 'function' ? getObjectUniqueId(b) : null;
+    return !!(ua && ub && ua === ub);
+}
+
+function getSleeveEndpointFiberCables(sleeve) {
+    if (!sleeve || !sleeve.properties) return [];
+    var type = sleeve.properties.get('type');
+    if (typeof isSleeveLikeHostType === 'function' ? !isSleeveLikeHostType(type) : (type !== 'sleeve' && type !== 'spliceCassette')) {
+        return [];
+    }
+    var cables = typeof getCablesTouchingObject === 'function'
+        ? getCablesTouchingObject(sleeve)
+        : getCablesThroughObject(sleeve);
+    var out = [];
+    for (var i = 0; i < cables.length; i++) {
+        var cable = cables[i];
+        if (!cable || !cable.properties || cable.properties.get('type') !== 'cable') continue;
+        if (typeof isCopperCableType === 'function' && isCopperCableType(cable.properties.get('cableType'))) continue;
+        var from = cable.properties.get('from');
+        var to = cable.properties.get('to');
+        if (sleevePathObjectsMatch(from, sleeve) || sleevePathObjectsMatch(to, sleeve)) {
+            out.push(cable);
+        }
+    }
+    return out;
+}
+
+/** Точки от дальнего конца к соседу муфты (без муфты). */
+function getSleeveCableArmTowardSleeve(cable, sleeve) {
+    var points = getCableRoutePoints(cable);
+    if (!points || points.length < 2) return null;
+    var idx = getPointIndexOnCableRoute(points, sleeve);
+    if (idx === points.length - 1) return points.slice(0, -1);
+    if (idx === 0) return points.slice(1).reverse();
+    return null;
+}
+
+/** Точки от соседа муфты к дальнему концу (без муфты). */
+function getSleeveCableArmAwayFromSleeve(cable, sleeve) {
+    var points = getCableRoutePoints(cable);
+    if (!points || points.length < 2) return null;
+    var idx = getPointIndexOnCableRoute(points, sleeve);
+    if (idx === 0) return points.slice(1);
+    if (idx === points.length - 1) return points.slice(0, -1).reverse();
+    return null;
+}
+
+function dedupeConsecutiveCableRouteObjects(arr) {
+    if (!Array.isArray(arr) || arr.length < 2) return arr || [];
+    var out = [arr[0]];
+    for (var i = 1; i < arr.length; i++) {
+        if (sleevePathObjectsMatch(out[out.length - 1], arr[i])) continue;
+        out.push(arr[i]);
+    }
+    return out;
+}
+
+function collectRouteObjectCoords(points) {
+    var coords = [];
+    if (!Array.isArray(points)) return coords;
+    for (var i = 0; i < points.length; i++) {
+        var p = points[i];
+        if (!p || !p.geometry) continue;
+        try {
+            var c = p.geometry.getCoordinates();
+            if (c && c.length >= 2) coords.push(c);
+        } catch (eCoords) {}
+    }
+    return coords;
+}
+
+function applyCableRoutePointsForSleevePath(cable, newPoints) {
+    if (!cable || !cable.properties || !Array.isArray(newPoints) || newPoints.length < 2) return false;
+    if (typeof setCableRoutePoints === 'function') setCableRoutePoints(cable, newPoints);
+    else {
+        cable.properties.set('points', newPoints);
+        cable.properties.set('from', newPoints[0]);
+        cable.properties.set('to', newPoints[newPoints.length - 1]);
+    }
+    syncCableGeometryFromRoutePoints(cable);
+    return true;
+}
+
+function redistributeSleevePathCables(session, fraction) {
+    if (!session || session.mode !== 'throughPoles' || !session.spine || session.spine.length < 2) return false;
+    var splitAfter = resolveSplitAfterIndex(session.spine, fraction);
+    if (splitAfter < 0) splitAfter = 0;
+    if (splitAfter > session.spine.length - 2) splitAfter = session.spine.length - 2;
+    if (session.lastSplitAfter === splitAfter) {
+        syncCableGeometryFromRoutePoints(session.leftCable);
+        syncCableGeometryFromRoutePoints(session.rightCable);
+        return true;
+    }
+    session.lastSplitAfter = splitAfter;
+
+    var pointsLeft = session.spine.slice(0, splitAfter + 1).concat([session.sleeve]);
+    var pointsRight = [session.sleeve].concat(session.spine.slice(splitAfter + 1));
+    if (pointsLeft.length < 2 || pointsRight.length < 2) return false;
+
+    var allSpans = [];
+    if (window.CableUnderground && typeof CableUnderground.cloneSpans === 'function') {
+        allSpans = CableUnderground.cloneSpans(session.spansCombined || []);
+    } else if (Array.isArray(session.spansCombined)) {
+        allSpans = session.spansCombined.slice();
+    }
+    var splitSpans = { spansA: [], spansB: [] };
+    if (window.CableUnderground && typeof CableUnderground.splitSpansForRoute === 'function') {
+        splitSpans = CableUnderground.splitSpansForRoute(allSpans, pointsLeft, pointsRight);
+    }
+    if (window.CableUnderground && typeof CableUnderground.ensureAdjacentManholeUndergroundSpans === 'function') {
+        splitSpans.spansA = CableUnderground.ensureAdjacentManholeUndergroundSpans(pointsLeft, splitSpans.spansA);
+        splitSpans.spansB = CableUnderground.ensureAdjacentManholeUndergroundSpans(pointsRight, splitSpans.spansB);
+    }
+
+    session.leftCable.properties.set('undergroundSpans', splitSpans.spansA || []);
+    session.rightCable.properties.set('undergroundSpans', splitSpans.spansB || []);
+    applyCableRoutePointsForSleevePath(session.leftCable, pointsLeft);
+    applyCableRoutePointsForSleevePath(session.rightCable, pointsRight);
+    return true;
+}
+
+/**
+ * Начать Alt+drag муфты вдоль трассы. Без Alt / при неподходящей топологии — no-op (free-drag).
+ * @returns {boolean}
+ */
+function beginSleevePathDrag(sleeve) {
+    endSleevePathDrag();
+    if (!sleeve || !sleeve.properties || !sleeve.geometry) return false;
+    if (typeof isEditMode !== 'undefined' && !isEditMode) return false;
+    if (!isMapAltKeyDown()) return false;
+
+    var cables = getSleeveEndpointFiberCables(sleeve);
+    if (cables.length === 1) {
+        var pts = getCableRoutePoints(cables[0]);
+        var coords = collectRouteObjectCoords(pts);
+        if (coords.length < 2) return false;
+        _sleevePathDragSession = {
+            mode: 'snapOnly',
+            sleeve: sleeve,
+            cable: cables[0],
+            coords: coords
+        };
+        return true;
+    }
+    if (cables.length !== 2) return false;
+
+    var leftCable = cables[0];
+    var rightCable = cables[1];
+    var leftArm = getSleeveCableArmTowardSleeve(leftCable, sleeve);
+    var rightArm = getSleeveCableArmAwayFromSleeve(rightCable, sleeve);
+    if (!leftArm || !rightArm || !leftArm.length || !rightArm.length) return false;
+
+    var spine = dedupeConsecutiveCableRouteObjects(leftArm.concat(rightArm));
+    if (spine.length < 2) return false;
+
+    var spansCombined = [];
+    if (window.CableUnderground && typeof CableUnderground.cloneSpans === 'function') {
+        spansCombined = CableUnderground.cloneSpans(leftCable.properties.get('undergroundSpans') || [])
+            .concat(CableUnderground.cloneSpans(rightCable.properties.get('undergroundSpans') || []));
+    } else {
+        var sA = leftCable.properties.get('undergroundSpans') || [];
+        var sB = rightCable.properties.get('undergroundSpans') || [];
+        spansCombined = (Array.isArray(sA) ? sA : []).concat(Array.isArray(sB) ? sB : []);
+    }
+
+    _sleevePathDragSession = {
+        mode: 'throughPoles',
+        sleeve: sleeve,
+        leftCable: leftCable,
+        rightCable: rightCable,
+        spine: spine,
+        spansCombined: spansCombined,
+        lastSplitAfter: null
+    };
+    return true;
+}
+
+/** Применить path-constraint во время drag. Вызывать до updateConnectedCables. */
+function applySleevePathDrag(sleeve) {
+    var session = _sleevePathDragSession;
+    if (!session || !sleeve || session.sleeve !== sleeve) return false;
+    if (!sleeve.geometry) return false;
+
+    var cursor;
+    try {
+        cursor = sleeve.geometry.getCoordinates();
+    } catch (eCur) {
+        return false;
+    }
+    if (!cursor || cursor.length < 2) return false;
+
+    if (session.mode === 'snapOnly') {
+        var projSnap = projectPointOntoPolyline(cursor, session.coords);
+        if (!projSnap || !projSnap.point) return false;
+        var frac = projSnap.fraction;
+        if (frac < 0.02) frac = 0.02;
+        if (frac > 0.98) frac = 0.98;
+        if (frac !== projSnap.fraction) {
+            var total = projSnap.totalLength || polylineLength(session.coords);
+            var target = frac * total;
+            var traversed = 0;
+            var snapped = projSnap.point;
+            for (var si = 0; si < session.coords.length - 1; si++) {
+                var segLen = calculateDistance(session.coords[si], session.coords[si + 1]);
+                if (traversed + segLen >= target || si === session.coords.length - 2) {
+                    var param = segLen > 0 ? Math.max(0, Math.min(1, (target - traversed) / segLen)) : 0;
+                    snapped = [
+                        session.coords[si][0] + param * (session.coords[si + 1][0] - session.coords[si][0]),
+                        session.coords[si][1] + param * (session.coords[si + 1][1] - session.coords[si][1])
+                    ];
+                    break;
+                }
+                traversed += segLen;
+            }
+            try { sleeve.geometry.setCoordinates(snapped); } catch (eSetSnap) {}
+        } else {
+            try { sleeve.geometry.setCoordinates(projSnap.point); } catch (eSetSnap2) {}
+        }
+        return true;
+    }
+
+    if (session.mode !== 'throughPoles') return false;
+    var spineCoords = collectRouteObjectCoords(session.spine);
+    if (spineCoords.length < 2) return false;
+
+    var proj = projectPointOntoPolyline(cursor, spineCoords);
+    if (!proj || !proj.point) return false;
+
+    // Не схлопывать сегменты: fraction между первой и последней вершиной spine.
+    var fracTp = proj.fraction;
+    var minFrac = 0;
+    var maxFrac = 1;
+    var totalLen = proj.totalLength || polylineLength(spineCoords);
+    if (totalLen > 0 && session.spine.length >= 2) {
+        var firstSeg = calculateDistance(spineCoords[0], spineCoords[1]);
+        var lastSeg = calculateDistance(spineCoords[spineCoords.length - 2], spineCoords[spineCoords.length - 1]);
+        minFrac = Math.min(0.49, (firstSeg * 0.02) / totalLen);
+        maxFrac = 1 - Math.min(0.49, (lastSeg * 0.02) / totalLen);
+        if (maxFrac <= minFrac) {
+            minFrac = 0.01;
+            maxFrac = 0.99;
+        }
+    }
+    if (fracTp < minFrac) fracTp = minFrac;
+    if (fracTp > maxFrac) fracTp = maxFrac;
+
+    if (fracTp !== proj.fraction) {
+        var targetTp = fracTp * totalLen;
+        var travTp = 0;
+        var snappedTp = proj.point;
+        for (var ti = 0; ti < spineCoords.length - 1; ti++) {
+            var segTp = calculateDistance(spineCoords[ti], spineCoords[ti + 1]);
+            if (travTp + segTp >= targetTp || ti === spineCoords.length - 2) {
+                var paramTp = segTp > 0 ? Math.max(0, Math.min(1, (targetTp - travTp) / segTp)) : 0;
+                snappedTp = [
+                    spineCoords[ti][0] + paramTp * (spineCoords[ti + 1][0] - spineCoords[ti][0]),
+                    spineCoords[ti][1] + paramTp * (spineCoords[ti + 1][1] - spineCoords[ti][1])
+                ];
+                break;
+            }
+            travTp += segTp;
+        }
+        try { sleeve.geometry.setCoordinates(snappedTp); } catch (eSetTp) {}
+    } else {
+        try { sleeve.geometry.setCoordinates(proj.point); } catch (eSetTp2) {}
+    }
+
+    redistributeSleevePathCables(session, fracTp);
+    return true;
+}
+
+function endSleevePathDrag(sleeve) {
+    if (!_sleevePathDragSession) return;
+    if (sleeve && _sleevePathDragSession.sleeve && _sleevePathDragSession.sleeve !== sleeve) return;
+    _sleevePathDragSession = null;
+}
+
+function isSleevePathDragActive(sleeve) {
+    return !!(
+        _sleevePathDragSession &&
+        (!sleeve || _sleevePathDragSession.sleeve === sleeve)
+    );
+}
+
+ensureMapAltKeyTracker();
 
 /**
  * При размещении/перемещении опоры или крепления на кабель — закрепить кабель за этой точкой.

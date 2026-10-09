@@ -342,6 +342,77 @@ function cloneMapSnapshot(state) {
     return JSON.parse(JSON.stringify(state));
 }
 
+var _lastSavedUidIndex = null;
+var _lastSavedUidIndexRef = null;
+
+function invalidateLastSavedUidIndex() {
+    _lastSavedUidIndex = null;
+    _lastSavedUidIndexRef = null;
+}
+
+function ensureLastSavedUidIndex() {
+    if (!Array.isArray(lastSavedState)) {
+        invalidateLastSavedUidIndex();
+        return null;
+    }
+    if (_lastSavedUidIndex && _lastSavedUidIndexRef === lastSavedState) return _lastSavedUidIndex;
+    var idx = new Map();
+    for (var i = 0; i < lastSavedState.length; i++) {
+        var it = lastSavedState[i];
+        if (it && it.uniqueId != null && it.uniqueId !== '') idx.set(String(it.uniqueId), true);
+    }
+    _lastSavedUidIndex = idx;
+    _lastSavedUidIndexRef = lastSavedState;
+    return idx;
+}
+
+function snapshotHasUniqueId(uid) {
+    if (uid == null || uid === '') return false;
+    var idx = ensureLastSavedUidIndex();
+    return !!(idx && idx.has(String(uid)));
+}
+
+/**
+ * Прогрев кэшей редактирования после загрузки — чтобы первый move не платил O(N).
+ * Вызывать из idle после markMapDataReady / import.
+ */
+function warmMapEditCaches() {
+    try {
+        if (typeof MapPerf !== 'undefined' && MapPerf.warmIndexes) MapPerf.warmIndexes();
+    } catch (eWarmPerf) {}
+    // Если снимок пустой/урезанный — собрать его в idle (не на первом move).
+    try {
+        var needFull = !Array.isArray(lastSavedState) ||
+            (typeof objects !== 'undefined' && Array.isArray(objects) &&
+                objects.length > 100 && lastSavedState.length < objects.length * 0.85);
+        if (needFull && typeof getSerializedData === 'function') {
+            lastSavedState = cloneMapSnapshot(getSerializedData());
+            invalidateLastSavedUidIndex();
+        }
+    } catch (eWarmSnap) {}
+    try {
+        ensureLastSavedUidIndex();
+    } catch (eWarmUid) {}
+    try {
+        if (Array.isArray(lastSavedState) && lastSavedState.length) {
+            lastSavedState.slice();
+            JSON.parse(JSON.stringify(lastSavedState[0]));
+        }
+    } catch (eWarmJson) {}
+    try {
+        if (typeof objects !== 'undefined' && Array.isArray(objects) && objects.length &&
+            typeof serializeMapItemFromObject === 'function') {
+            var sample = null;
+            for (var si = 0; si < Math.min(objects.length, 40); si++) {
+                var o = objects[si];
+                if (o && o.properties && o.properties.get('type') !== 'cable') { sample = o; break; }
+            }
+            if (sample) serializeMapItemFromObject(sample);
+        }
+    } catch (eWarmSer) {}
+}
+window.warmMapEditCaches = warmMapEditCaches;
+
 function indexMapSnapshot(state) {
     var objectsByUid = Object.create(null);
     var cablesByUid = Object.create(null);
@@ -543,17 +614,16 @@ function patchSnapshotItems(snapshot, serializedItems) {
         byUid[String(it.uniqueId)] = it;
         pending++;
     }
-    var next = new Array(snapshot.length);
+    // Shallow-копия для undo (slice быстрее ручного new Array + цикл).
+    var next = snapshot.slice();
     var patched = 0;
-    for (var j = 0; j < snapshot.length; j++) {
-        var cur = snapshot[j];
+    for (var j = 0; j < next.length && patched < pending; j++) {
+        var cur = next[j];
         var uid = cur && cur.uniqueId != null && cur.uniqueId !== '' ? String(cur.uniqueId) : '';
         if (uid && byUid[uid]) {
             next[j] = cloneMapSnapshot(byUid[uid]);
             delete byUid[uid];
             patched++;
-        } else {
-            next[j] = cur;
         }
     }
     for (var left in byUid) {
@@ -569,6 +639,7 @@ function patchLastSavedStateItems(serializedItems) {
 
 function collectSerializedPatchItems(opts) {
     var out = [];
+    var index = null;
     function add(obj) {
         if (!obj) return false;
         var item = serializeMapItemFromObject(obj);
@@ -576,17 +647,31 @@ function collectSerializedPatchItems(opts) {
         out.push(item);
         return true;
     }
-    if (opts.object && !add(opts.object)) return null;
-    if (opts.cable && !add(opts.cable)) return null;
-    if (opts.objects && opts.objects.length) {
-        for (var i = 0; i < opts.objects.length; i++) {
-            if (!add(opts.objects[i])) return null;
-        }
+    // Временный индекс objects→index для сериализации кабелей (иначе objects.indexOf = O(N) на каждый конец).
+    var needsCableIndex = !!(opts.cable || (opts.cables && opts.cables.length) ||
+        (opts.objects && opts.objects.some(function(o) {
+            return o && o.properties && o.properties.get('type') === 'cable';
+        })) || (opts.object && opts.object.properties && opts.object.properties.get('type') === 'cable'));
+    if (needsCableIndex && !_serializeObjectIndex) {
+        index = new Map();
+        for (var si = objects.length - 1; si >= 0; si--) index.set(objects[si], si);
+        _serializeObjectIndex = index;
     }
-    if (opts.cables && opts.cables.length) {
-        for (var j = 0; j < opts.cables.length; j++) {
-            if (!add(opts.cables[j])) return null;
+    try {
+        if (opts.object && !add(opts.object)) return null;
+        if (opts.cable && !add(opts.cable)) return null;
+        if (opts.objects && opts.objects.length) {
+            for (var i = 0; i < opts.objects.length; i++) {
+                if (!add(opts.objects[i])) return null;
+            }
         }
+        if (opts.cables && opts.cables.length) {
+            for (var j = 0; j < opts.cables.length; j++) {
+                if (!add(opts.cables[j])) return null;
+            }
+        }
+    } finally {
+        if (index && _serializeObjectIndex === index) _serializeObjectIndex = null;
     }
     return out.length ? out : null;
 }
@@ -675,29 +760,64 @@ function clearUndoRedoStacks() {
 }
 
 // Полная сериализация карты дорогая: при потоке входящих правок пересобираем снимок не чаще раза
-// в REMOTE_SNAPSHOT_DEBOUNCE_MS, а перед любым чтением lastSavedState досчитываем его сразу.
+// в REMOTE_SNAPSHOT_DEBOUNCE_MS. НИКОГДА не делать это синхронно в saveData на 30k — это 1–3с фриз.
 var REMOTE_SNAPSHOT_DEBOUNCE_MS = 400;
+var _remoteSnapshotIdleScheduled = false;
 
 function refreshSnapshotAfterRemoteChange() {
     _remoteUndoInvalidateTimer = null;
+    _remoteSnapshotIdleScheduled = false;
     if (inUndoRedo) return;
     try {
         lastSavedState = cloneMapSnapshot(getSerializedData());
+        invalidateLastSavedUidIndex();
     } catch (eInv) {}
     if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
 }
 
-function flushPendingRemoteSnapshot() {
-    if (!_remoteUndoInvalidateTimer) return;
-    clearTimeout(_remoteUndoInvalidateTimer);
-    refreshSnapshotAfterRemoteChange();
+function scheduleDeferredRemoteSnapshotRefresh() {
+    if (_remoteSnapshotIdleScheduled) return;
+    _remoteSnapshotIdleScheduled = true;
+    var run = function() {
+        _remoteSnapshotIdleScheduled = false;
+        if (_remoteUndoInvalidateTimer) {
+            clearTimeout(_remoteUndoInvalidateTimer);
+            _remoteUndoInvalidateTimer = null;
+        }
+        refreshSnapshotAfterRemoteChange();
+    };
+    if (typeof requestIdleCallback === 'function') {
+        requestIdleCallback(run, { timeout: 3000 });
+    } else {
+        setTimeout(run, 200);
+    }
+}
+
+/**
+ * @param {boolean} [forceSync] — только для undo/redo, где снимок должен быть актуален сразу.
+ * Обычный save/move НЕ должен форсировать: иначе первый move = getSerializedData() всей карты.
+ */
+function flushPendingRemoteSnapshot(forceSync) {
+    if (!_remoteUndoInvalidateTimer && !_remoteSnapshotIdleScheduled) return;
+    if (_remoteUndoInvalidateTimer) {
+        clearTimeout(_remoteUndoInvalidateTimer);
+        _remoteUndoInvalidateTimer = null;
+    }
+    if (forceSync) {
+        _remoteSnapshotIdleScheduled = false;
+        refreshSnapshotAfterRemoteChange();
+        return;
+    }
+    scheduleDeferredRemoteSnapshotRefresh();
 }
 window.flushPendingRemoteSnapshot = flushPendingRemoteSnapshot;
 
 function invalidateUndoAfterRemoteChange() {
     clearUndoRedoStacks();
     if (_remoteUndoInvalidateTimer) clearTimeout(_remoteUndoInvalidateTimer);
-    _remoteUndoInvalidateTimer = setTimeout(refreshSnapshotAfterRemoteChange, REMOTE_SNAPSHOT_DEBOUNCE_MS);
+    // Не setTimeout→sync serialize: уводим в idle, чтобы не попасть под первый saveData.
+    _remoteUndoInvalidateTimer = null;
+    scheduleDeferredRemoteSnapshotRefresh();
 }
 window.invalidateUndoAfterRemoteChange = invalidateUndoAfterRemoteChange;
 
@@ -730,11 +850,55 @@ function filterSnapshotByRemovedUids(snapshot, removeUniqueIds) {
     return next;
 }
 
+var _saveDataFullTimer = null;
+var _saveDataFullPendingOpts = null;
+var SAVE_DATA_FULL_DEBOUNCE_MS = 280;
+
+function flushPendingFullSaveData() {
+    if (!_saveDataFullTimer) return;
+    clearTimeout(_saveDataFullTimer);
+    _saveDataFullTimer = null;
+    var pending = _saveDataFullPendingOpts || {};
+    _saveDataFullPendingOpts = null;
+    saveData(Object.assign({}, pending, { _flushFullSave: true }));
+}
+
+function upsertSnapshotItems(snapshot, serializedItems) {
+    if (!serializedItems || !serializedItems.length) return null;
+    var base = Array.isArray(snapshot) ? snapshot.slice() : [];
+    var indexByUid = Object.create(null);
+    for (var j = 0; j < base.length; j++) {
+        var cur = base[j];
+        if (cur && cur.uniqueId != null && cur.uniqueId !== '') indexByUid[String(cur.uniqueId)] = j;
+    }
+    for (var i = 0; i < serializedItems.length; i++) {
+        var it = serializedItems[i];
+        if (!it || it.uniqueId == null || it.uniqueId === '') return null;
+        var uid = String(it.uniqueId);
+        var cloned = cloneMapSnapshot(it);
+        if (indexByUid[uid] != null) base[indexByUid[uid]] = cloned;
+        else {
+            indexByUid[uid] = base.length;
+            base.push(cloned);
+        }
+    }
+    return base;
+}
+
 function saveData(opts) {
     opts = opts || {};
     if (currentModalObject && infoModalEditModeSession && !infoModalEditMode && !opts.fiberSchemeViewOnly) return;
+    // Голый saveData() при открытой модалке → патч текущего объекта (как уже делает pushSaveDataToSync).
+    if (!opts.addObject && !opts.removeUniqueIds && !opts.removeObject && !opts.syncFull && !opts._flushFullSave &&
+        !opts.object && !opts.cable && !(opts.objects && opts.objects.length) && !(opts.cables && opts.cables.length) &&
+        currentModalObject && currentModalObject.properties) {
+        opts = Object.assign({}, opts, { object: currentModalObject });
+    }
     bumpMapDataEpoch();
-    flushPendingRemoteSnapshot();
+    var hasIncrementalTarget = !!(opts.addObject || opts.removeUniqueIds || opts.removeObject ||
+        opts.object || opts.cable || (opts.objects && opts.objects.length) || (opts.cables && opts.cables.length));
+    // Инкрементальный save: НЕ форсировать полный getSerializedData (это и был фриз 1–3с на первом move).
+    flushPendingRemoteSnapshot(false);
     // Инкрементальный add: без полной сериализации и deep-clone всей карты (критично для INP).
     if (opts.addObject && !inUndoRedo && Array.isArray(lastSavedState) &&
         lastSavedState.length === objects.length - 1) {
@@ -742,6 +906,7 @@ function saveData(opts) {
         if (addItem) {
             pushUndoSnapshot(lastSavedState, opts);
             lastSavedState = lastSavedState.concat([cloneMapSnapshot(addItem)]);
+            invalidateLastSavedUidIndex();
             if (!opts.skipSync) pushSaveDataToSync(opts);
             if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
             return;
@@ -759,6 +924,7 @@ function saveData(opts) {
             if (afterRemove) {
                 pushUndoSnapshot(lastSavedState, opts);
                 lastSavedState = afterRemove;
+                invalidateLastSavedUidIndex();
                 if (!opts.skipSync) pushSaveDataToSync(opts);
                 if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
                 return;
@@ -766,30 +932,70 @@ function saveData(opts) {
         }
     }
     // Инкрементальный update (перемещение / правка): патч только затронутых uniqueId.
-    if (!inUndoRedo && Array.isArray(lastSavedState) &&
+    if (!inUndoRedo && hasIncrementalTarget &&
         (opts.object || opts.cable || (opts.objects && opts.objects.length) || (opts.cables && opts.cables.length))) {
         var patchItems = collectSerializedPatchItems(opts);
-        var patchedState = patchItems ? patchLastSavedStateItems(patchItems) : null;
+        var patchedState = null;
+        if (patchItems && Array.isArray(lastSavedState) && lastSavedState.length) {
+            patchedState = patchLastSavedStateItems(patchItems);
+        }
+        // Если снимок ещё пустой/неполный (типично сразу после load) — upsert без полной сериализации.
+        if (!patchedState && patchItems) {
+            patchedState = upsertSnapshotItems(lastSavedState, patchItems);
+        }
         if (patchedState) {
-            pushUndoSnapshot(lastSavedState, opts);
+            if (Array.isArray(lastSavedState) && lastSavedState.length) {
+                pushUndoSnapshot(lastSavedState, opts);
+            }
             lastSavedState = patchedState;
+            invalidateLastSavedUidIndex();
             if (!opts.skipSync) pushSaveDataToSync(opts);
             if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
             return;
         }
+    }
+    // Полный JSON.stringify ~30k — coalesce только голые вызовы без целевого объекта.
+    if (!opts._flushFullSave && !opts.syncFull && !inUndoRedo && !hasIncrementalTarget &&
+        Array.isArray(lastSavedState) && lastSavedState.length > 800) {
+        _saveDataFullPendingOpts = opts;
+        if (!_saveDataFullTimer) {
+            _saveDataFullTimer = setTimeout(function() {
+                _saveDataFullTimer = null;
+                var pending = _saveDataFullPendingOpts || {};
+                _saveDataFullPendingOpts = null;
+                saveData(Object.assign({}, pending, { _flushFullSave: true }));
+            }, SAVE_DATA_FULL_DEBOUNCE_MS);
+        }
+        if (!(opts && opts.skipSync)) pushSaveDataToSync(opts || {});
+        return;
+    }
+    if (_saveDataFullTimer) {
+        clearTimeout(_saveDataFullTimer);
+        _saveDataFullTimer = null;
+        _saveDataFullPendingOpts = null;
+    }
+    // Инкрементальный target есть, но патч не удался — всё равно НЕ делаем полный serialize на move.
+    // Отложим полный снимок в idle; sync op уже уйдёт через pushSaveDataToSync по объектам.
+    if (hasIncrementalTarget && !opts._flushFullSave && !opts.syncFull && !inUndoRedo) {
+        if (!opts.skipSync) pushSaveDataToSync(opts);
+        scheduleDeferredRemoteSnapshotRefresh();
+        if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
+        return;
     }
     if (!inUndoRedo && lastSavedState !== null) {
         pushUndoSnapshot(lastSavedState, opts);
     }
     var data = getSerializedData();
     lastSavedState = cloneMapSnapshot(data);
+    invalidateLastSavedUidIndex();
     if (!(opts && opts.skipSync) && !inUndoRedo) pushSaveDataToSync(opts || {});
     if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
 }
 
 function performUndo() {
     if (!canEdit() || undoStack.length === 0 || inUndoRedo) return;
-    flushPendingRemoteSnapshot();
+    flushPendingFullSaveData();
+    flushPendingRemoteSnapshot(true);
     var entry = unwrapUndoEntry(undoStack.pop());
     var stateToRestore = entry.state;
     var currentState = lastSavedState != null ? lastSavedState : getSerializedData();
@@ -811,7 +1017,8 @@ function performUndo() {
 
 function performRedo() {
     if (!canEdit() || redoStack.length === 0 || inUndoRedo) return;
-    flushPendingRemoteSnapshot();
+    flushPendingFullSaveData();
+    flushPendingRemoteSnapshot(true);
     var entry = unwrapUndoEntry(redoStack.pop());
     var stateToRestore = entry.state;
     var currentState = lastSavedState != null ? lastSavedState : getSerializedData();
@@ -1556,6 +1763,13 @@ function applyRemoteState(data, meta) {
             applyFinished = true;
             _mapApplyInProgress = false;
             lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
+            invalidateLastSavedUidIndex();
+            // Снимок только что собран — отменить отложенный полный rebuild от remote ops.
+            if (_remoteUndoInvalidateTimer) {
+                clearTimeout(_remoteUndoInvalidateTimer);
+                _remoteUndoInvalidateTimer = null;
+            }
+            _remoteSnapshotIdleScheduled = false;
             var runStats = function() {
                 try { updateStats(); } catch (eStats) {}
             };
@@ -1766,9 +1980,12 @@ function applyRemoteStateMerged(data) {
                 if (fromObj) pointsArr[0] = fromObj;
                 if (toObj) pointsArr[pointsArr.length - 1] = toObj;
             }
-            existingCable.properties.set('from', pointsArr[0]);
-            existingCable.properties.set('to', pointsArr[pointsArr.length - 1]);
-            existingCable.properties.set('points', pointsArr);
+            if (typeof setCableRoutePoints === 'function') setCableRoutePoints(existingCable, pointsArr);
+            else {
+                existingCable.properties.set('from', pointsArr[0]);
+                existingCable.properties.set('to', pointsArr[pointsArr.length - 1]);
+                existingCable.properties.set('points', pointsArr);
+            }
             if (existingCable.geometry) {
                 try {
                     var lineM = pointsArr.map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; }).filter(function(c) { return c && c.length >= 2; });
@@ -1782,6 +1999,9 @@ function applyRemoteStateMerged(data) {
             applySerializedUndergroundToCable(existingCable, item, pointsArr);
             applySerializedCopperMetadataToCable(existingCable, item);
             applyImportedCableFiberProps(existingCable, item);
+            if (item.revision != null && typeof setMapRevision === 'function') {
+                setMapRevision(existingCable, item.revision);
+            }
         } else {
             var lenBeforeMergeAdd = objects.length;
             var points = buildCableRoutePointsFromData(refs, item, fromObj, toObj, coords);
@@ -1817,6 +2037,9 @@ function applyRemoteStateMerged(data) {
                 if (typeof applySerializedCableProduct === 'function') applySerializedCableProduct(cable, item);
                 applySerializedUndergroundToCable(cable, item, cable.properties.get('points'));
                 applyImportedCableFiberProps(cable, item);
+                if (item.revision != null && typeof setMapRevision === 'function') {
+                    setMapRevision(cable, item.revision);
+                }
             }
         }
     });
@@ -1999,9 +2222,12 @@ function applyOperationToMap(op) {
             if (!tE) tE = existingByOp.properties.get('to');
             var rE = buildCableRoutePointsFromData(refsOpMap, op.data, fE, tE, opCoordsNorm);
             if (rE && rE.length >= 2) {
-                existingByOp.properties.set('from', rE[0]);
-                existingByOp.properties.set('to', rE[rE.length - 1]);
-                existingByOp.properties.set('points', rE);
+                if (typeof setCableRoutePoints === 'function') setCableRoutePoints(existingByOp, rE);
+                else {
+                    existingByOp.properties.set('from', rE[0]);
+                    existingByOp.properties.set('to', rE[rE.length - 1]);
+                    existingByOp.properties.set('points', rE);
+                }
                 try {
                     var linE = rE.map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; }).filter(function(c) { return c && c.length >= 2; });
                     if (existingByOp.geometry && linE.length >= 2) existingByOp.geometry.setCoordinates(linE);
@@ -2061,6 +2287,11 @@ function applyOperationToMap(op) {
                 if (typeof applySerializedCableProduct === 'function') applySerializedCableProduct(cable, op.data);
                 applySerializedUndergroundToCable(cable, op.data, cable.properties.get('points'));
                 applyImportedCableFiberProps(cable, op.data);
+                if (op.data.revision != null && typeof setMapRevision === 'function') {
+                    setMapRevision(cable, op.data.revision);
+                } else if (typeof bumpMapRevisionAfterSyncAdd === 'function') {
+                    bumpMapRevisionAfterSyncAdd(cable);
+                }
             }
             updateCableVisualization();
             scheduleConnectionLinesUpdate();
@@ -2243,9 +2474,12 @@ function importDataRunOneCable(item, objectRefs, refIndex, cableByUid) {
         if (ptsArr && ptsArr.length >= 2) {
             if (fromObj) ptsArr[0] = fromObj;
             if (toObj) ptsArr[ptsArr.length - 1] = toObj;
-            existingCableImport.properties.set('from', ptsArr[0]);
-            existingCableImport.properties.set('to', ptsArr[ptsArr.length - 1]);
-            existingCableImport.properties.set('points', ptsArr);
+            if (typeof setCableRoutePoints === 'function') setCableRoutePoints(existingCableImport, ptsArr);
+            else {
+                existingCableImport.properties.set('from', ptsArr[0]);
+                existingCableImport.properties.set('to', ptsArr[ptsArr.length - 1]);
+                existingCableImport.properties.set('points', ptsArr);
+            }
             try {
                 var lineExisting = ptsArr.map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; }).filter(function(c) { return c && c.length >= 2; });
                 if (existingCableImport.geometry && lineExisting.length >= 2) existingCableImport.geometry.setCoordinates(lineExisting);
@@ -2258,6 +2492,9 @@ function importDataRunOneCable(item, objectRefs, refIndex, cableByUid) {
         applySerializedUndergroundToCable(existingCableImport, item, ptsArr);
         applySerializedCopperMetadataToCable(existingCableImport, item);
         applyImportedCableFiberProps(existingCableImport, item);
+        if (item.revision != null && typeof setMapRevision === 'function') {
+            setMapRevision(existingCableImport, item.revision);
+        }
         return;
     }
     var objectsLenBeforeAdd = objects.length;
@@ -2308,6 +2545,10 @@ function importDataRunOneCable(item, objectRefs, refIndex, cableByUid) {
         if (typeof applySerializedCableProduct === 'function') applySerializedCableProduct(cable, item);
         applySerializedUndergroundToCable(cable, item, cable.properties.get('points'));
         applyImportedCableFiberProps(cable, item);
+        // Без этого все кабели после load имеют mapRevision=0 → первый move = op_conflict × N.
+        if (item.revision != null && typeof setMapRevision === 'function') {
+            setMapRevision(cable, item.revision);
+        }
     }
 }
 
@@ -2587,6 +2828,16 @@ function importData(data, opts, done) {
                 if (typeof applyMapFilter === 'function') applyMapFilter();
                 else if (typeof applyMapViewportUpdate === 'function') applyMapViewportUpdate();
             } catch (eLodApply) {}
+            // Прогрев индексов сразу после загрузки (не ждать первого move).
+            try {
+                if (typeof warmMapEditCaches === 'function') {
+                    if (typeof requestIdleCallback === 'function') {
+                        requestIdleCallback(function() { warmMapEditCaches(); }, { timeout: 1500 });
+                    } else {
+                        setTimeout(function() { warmMapEditCaches(); }, 0);
+                    }
+                }
+            } catch (eWarmImp) {}
             if (typeof done === 'function') done(err || null);
         });
     }
@@ -3001,9 +3252,12 @@ function applySerializedCableToMap(cable, data, opts) {
     if (!toObj) toObj = cable.properties.get('to');
     var routePts = buildCableRoutePointsFromData(refsOpMap, data, fromObj, toObj, opCoordsNorm);
     if (routePts && routePts.length >= 2) {
-        cable.properties.set('from', routePts[0]);
-        cable.properties.set('to', routePts[routePts.length - 1]);
-        cable.properties.set('points', routePts);
+        if (typeof setCableRoutePoints === 'function') setCableRoutePoints(cable, routePts);
+        else {
+            cable.properties.set('from', routePts[0]);
+            cable.properties.set('to', routePts[routePts.length - 1]);
+            cable.properties.set('points', routePts);
+        }
         try {
             var lin = routePts.map(function(p) { return p && p.geometry ? p.geometry.getCoordinates() : null; }).filter(function(c) { return c && c.length >= 2; });
             if (cable.geometry && lin.length >= 2) cable.geometry.setCoordinates(lin);
@@ -3060,24 +3314,15 @@ function createObjectFromData(data, opts, createOpts) {
         name: name
     }, placemarkOptions);
 
-    if (type === 'node' || type === 'cross' || type === 'switch') {
-        placemark.events.add('dragend', function() {
-            const label = placemark.properties.get('label');
-            const coords = placemark.geometry.getCoordinates();
-            if (label && label.geometry) {
-                label.geometry.setCoordinates(coords);
-            }
-            if (type === 'cross') updateCrossDisplay();
-            if (type === 'node') updateNodeDisplay();
-        });
-    }
+    // Не вешать отдельный dragend с полным updateCross/NodeDisplay —
+    // на 30k это убивает INP; финализация только через finalizeMapObjectDragEnd (scoped).
 
     if (uniqueId) {
         placemark.properties.set('uniqueId', uniqueId);
     } else {
         ensurePlacemarkUniqueIdForSync(placemark);
     }
-    if (!data.revision) data.revision = 0;
+    if (data.revision == null) data.revision = 0;
     populatePlacemarkFromSerializedData(placemark, data);
     disableNativePlacemarkBalloon(placemark);
 
@@ -3301,7 +3546,22 @@ function createObjectFromData(data, opts, createOpts) {
     });
 
     placemark.events.add('dragstart', function() {
+        // Страховка: если idle-прогрев ещё не успел — собрать индексы до движения.
+        try {
+            if (typeof MapPerf !== 'undefined' && MapPerf.ensureCableLinksIndex) MapPerf.ensureCableLinksIndex();
+            if (typeof ensureLastSavedUidIndex === 'function') ensureLastSavedUidIndex();
+        } catch (eWarmDrag) {}
         if (typeof captureObjectDragStartState === 'function') captureObjectDragStartState(placemark);
+        if (typeof isSleeveLikeHostType === 'function' && isSleeveLikeHostType(type) &&
+            typeof beginSleevePathDrag === 'function') {
+            beginSleevePathDrag(placemark);
+        }
+        // Снять подпись один раз на старте — не на каждый кадр drag (geoObjects.remove = O(mounted)).
+        var labelStart = placemark.properties.get('label');
+        if (labelStart) {
+            try { myMap.geoObjects.remove(labelStart); } catch (eLblStart) {}
+            placemark.properties.set('_labelHiddenForDrag', true);
+        }
     });
 
     placemark.events.add('dragend', function() {
@@ -3313,11 +3573,13 @@ function createObjectFromData(data, opts, createOpts) {
                 if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
                 if (typeof resumeMapPanAfterPlacementObjectDrag === 'function') resumeMapPanAfterPlacementObjectDrag();
                 if (typeof clearObjectDragStartState === 'function') clearObjectDragStartState(placemark);
+                if (typeof endSleevePathDrag === 'function') endSleevePathDrag(placemark);
                 if (typeof stopMapHoverCardDragFollow === 'function') stopMapHoverCardDragFollow(placemark);
                 return;
             }
             if (typeof finalizeMapObjectDragEnd === 'function') {
                 finalizeMapObjectDragEnd(placemark);
+                if (typeof endSleevePathDrag === 'function') endSleevePathDrag(placemark);
                 return;
             }
             var skipGroupSnapPm = typeof shouldSkipGroupSnapAfterPlacement === 'function' && shouldSkipGroupSnapAfterPlacement(placemark);
@@ -3328,7 +3590,8 @@ function createObjectFromData(data, opts, createOpts) {
                 label.geometry.setCoordinates(placemark.geometry.getCoordinates());
                 try { mapGeoAdd(label); } catch (e) {}
             }
-            scheduleConnectionLinesUpdate();
+            if (uid) scheduleConnectionLinesUpdate(uid);
+            else scheduleConnectionLinesUpdate();
             updateSelectionPulsePosition(placemark);
             if ((type === 'cross' || type === 'node') && !skipGroupSnapPm && typeof snapCoordsToObjectGroup === 'function') {
                 if (!(typeof onMemberObjectDragEnd === 'function' && onMemberObjectDragEnd(placemark))) {
@@ -3340,12 +3603,15 @@ function createObjectFromData(data, opts, createOpts) {
             }
             if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(placemark);
             else saveData({ object: placemark, syncImmediate: true, undoLabel: 'перемещение' });
-            if (type === 'cross' && typeof updateCrossDisplay === 'function') updateCrossDisplay();
-            if (type === 'node' && typeof updateNodeDisplay === 'function') updateNodeDisplay();
+            var groupScopePm = (type === 'cross' || type === 'node') && typeof getObjectDragGroupScope === 'function'
+                ? getObjectDragGroupScope(placemark) : null;
+            if (type === 'cross' && typeof updateCrossDisplay === 'function') updateCrossDisplay(groupScopePm);
+            if (type === 'node' && typeof updateNodeDisplay === 'function') updateNodeDisplay(groupScopePm);
             if (type === 'cabinet' && typeof onCabinetDragEnd === 'function') onCabinetDragEnd(placemark);
             releaseDragObjectLock(uid);
             if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
             if (typeof resumeMapPanAfterPlacementObjectDrag === 'function') resumeMapPanAfterPlacementObjectDrag();
+            if (typeof endSleevePathDrag === 'function') endSleevePathDrag(placemark);
             if (typeof stopMapHoverCardDragFollow === 'function') stopMapHoverCardDragFollow(placemark);
         });
 
@@ -3360,8 +3626,6 @@ function createObjectFromData(data, opts, createOpts) {
             }
             acquireDragObjectLock(placemark);
         }
-        const label = placemark.properties.get('label');
-        if (label) { try { myMap.geoObjects.remove(label); } catch (e) {} }
         scheduleDragUpdate(placemark);
     });
 

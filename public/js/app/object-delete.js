@@ -322,7 +322,11 @@ function deleteObject(obj, opts) {
             }
             if (objIdx <= 0 || objIdx >= points.length - 1) continue;
             var newPoints = points.filter(function(p, idx) { return idx !== objIdx; });
-            cable.properties.set('points', newPoints);
+            if (typeof setCableRoutePoints === 'function') setCableRoutePoints(cable, newPoints);
+            else {
+                cable.properties.set('points', newPoints);
+                if (typeof MapPerf !== 'undefined' && MapPerf.markCableLinksDirty) MapPerf.markCableLinksDirty();
+            }
             var newGeometry = [];
             for (var gi = 0; gi < newPoints.length; gi++) {
                 var np = newPoints[gi];

@@ -8,8 +8,9 @@ function getObjectUniqueId(obj) {
         const type = obj.properties.get('type') || 'obj';
         id = `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         obj.properties.set('uniqueId', id);
+        // Регистрируем только при создании id — не на каждый вызов (иначе spatial reindex на каждом RAF).
+        if (typeof MapPerf !== 'undefined') MapPerf.registerMapObject(obj);
     }
-    if (typeof MapPerf !== 'undefined') MapPerf.registerMapObject(obj);
     return id;
 }
 

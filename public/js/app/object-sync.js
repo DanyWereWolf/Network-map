@@ -312,6 +312,34 @@ function bumpMapRevisionAfterSyncAdd(obj) {
     setMapRevision(obj, Math.max(getMapRevision(obj), 1));
 }
 
+/** revision из lastSavedState по uniqueId (если локальный mapRevision устарел/0 после load). */
+function getSnapshotRevisionForUid(uid) {
+    if (uid == null || uid === '' || !Array.isArray(lastSavedState)) return null;
+    var want = String(uid);
+    for (var i = 0; i < lastSavedState.length; i++) {
+        var it = lastSavedState[i];
+        if (it && String(it.uniqueId) === want && it.revision != null && !isNaN(Number(it.revision))) {
+            return Number(it.revision);
+        }
+    }
+    return null;
+}
+
+/**
+ * Актуальный baseRevision для op: max(локальный, снимок).
+ * Иначе первый update после F5 уходит с 0 → op_conflict → тяжёлый rollback + тост «другой участник».
+ */
+function resolveBaseRevisionForSync(obj) {
+    if (!obj || !obj.properties) return 0;
+    var local = getMapRevision(obj);
+    var uid = obj.properties.get('uniqueId');
+    var fromSnap = getSnapshotRevisionForUid(uid);
+    var best = local;
+    if (fromSnap != null && fromSnap > best) best = fromSnap;
+    if (best !== local) setMapRevision(obj, best);
+    return best;
+}
+
 function shouldUseIncrementalSync(opts) {
     if (opts && (opts.syncFull || opts.skipSync)) return false;
     return !!(window.syncIsConnected && typeof window.syncSendOp === 'function');
@@ -356,7 +384,7 @@ function syncPushObjectUpdate(obj, immediate) {
     }
     var data = serializeMapItemFromObject(obj);
     if (!data || !data.uniqueId) return false;
-    var baseRevision = getMapRevision(obj);
+    var baseRevision = resolveBaseRevisionForSync(obj);
     delete data.revision;
     if (typeof window.syncSendOp === 'function') {
         window.syncSendOp({
@@ -377,10 +405,13 @@ function syncPushCableUpdate(cable, immediate) {
     if (!data || !data.uniqueId) return false;
     var existsInSnapshot = false;
     if (typeof flushPendingRemoteSnapshot === 'function') flushPendingRemoteSnapshot();
-    if (Array.isArray(lastSavedState)) {
-        for (var si = 0; si < lastSavedState.length; si++) {
+    if (typeof snapshotHasUniqueId === 'function') {
+        existsInSnapshot = snapshotHasUniqueId(data.uniqueId);
+    } else if (Array.isArray(lastSavedState)) {
+        var want = String(data.uniqueId);
+        for (var si = lastSavedState.length - 1; si >= 0; si--) {
             var it = lastSavedState[si];
-            if (it && it.type === 'cable' && String(it.uniqueId) === String(data.uniqueId)) {
+            if (it && String(it.uniqueId) === want) {
                 existsInSnapshot = true;
                 break;
             }
@@ -413,7 +444,7 @@ function syncPushCableUpdate(cable, immediate) {
         scheduleSyncPushForObject(cable);
         return true;
     }
-    var baseRevision = getMapRevision(cable);
+    var baseRevision = resolveBaseRevisionForSync(cable);
     delete data.revision;
     if (typeof window.syncSendOp === 'function') {
         window.syncSendOp({
@@ -477,7 +508,7 @@ function clearObjectDragStartState(obj) {
     } catch (e) {}
 }
 
-/** Лёгкий finalize после dragend: без полного applyMapFilter / полной пересборки карты. */
+/** Лёгкий finalize после dragend: минимум синхронной работы на 30k. */
 function finalizeMapObjectDragEnd(placemark) {
     if (!placemark || !placemark.properties) return;
     var type = placemark.properties.get('type');
@@ -501,72 +532,89 @@ function finalizeMapObjectDragEnd(placemark) {
         onMemberObjectDragEnd(placemark);
     }
 
-    if ((type === 'support' || type === 'attachment') && typeof tryAttachWaypointToNearbyCables === 'function') {
+    // Attach опоры — дорого (скан кабелей); на больших картах откладываем после save/UI.
+    var deferAttach = (type === 'support' || type === 'attachment') &&
+        typeof objects !== 'undefined' && Array.isArray(objects) && objects.length > 2000;
+    if (!deferAttach && (type === 'support' || type === 'attachment') &&
+        typeof tryAttachWaypointToNearbyCables === 'function') {
         tryAttachWaypointToNearbyCables(placemark, { snap: false, persist: false });
+        if (typeof MapPerf !== 'undefined' && MapPerf.markCableLinksDirty) MapPerf.markCableLinksDirty();
     }
 
-    if (typeof updateConnectedCables === 'function') updateConnectedCables(placemark);
+    // Сразу только лёгкие setCoordinates кабелей — без recreate underground overlays.
+    if (typeof updateConnectedCablesLight === 'function') updateConnectedCablesLight(placemark);
+    else if (typeof updateConnectedCables === 'function') updateConnectedCables(placemark);
+
     if (typeof MapPerf !== 'undefined' && MapPerf.updateSpatialPosition) MapPerf.updateSpatialPosition(placemark);
     var label = placemark.properties.get('label');
     if (label && placemark.geometry) {
         try { label.geometry.setCoordinates(placemark.geometry.getCoordinates()); } catch (eLbl) {}
     }
-    if (typeof scheduleConnectionLinesUpdate === 'function') scheduleConnectionLinesUpdate();
+    // Nudge существующих GPON-линий вместо remove/rebuild (дорого на плотной сети).
+    if (typeof nudgeConnectionLinesDuringDrag === 'function') {
+        try { nudgeConnectionLinesDuringDrag(placemark); } catch (eNudgeEnd) {}
+    }
     if (typeof updateSelectionPulsePosition === 'function') updateSelectionPulsePosition(placemark);
 
     if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(placemark);
     else saveData({ object: placemark, syncImmediate: true, undoLabel: 'перемещение' });
 
     if (type === 'cross' && typeof updateCrossDisplay === 'function') {
-        updateCrossDisplay(groupScope);
+        var crossScope = groupScope && groupScope.length
+            ? { full: false, keys: groupScope, skipCableUpdate: true, skipFilter: true }
+            : { full: false, keys: (typeof groupKey === 'function' && placemark.geometry)
+                ? [groupKey(placemark.geometry.getCoordinates())] : [], skipCableUpdate: true, skipFilter: true };
+        if (crossScope.keys && crossScope.keys.length) updateCrossDisplay(crossScope);
     } else if (type === 'node' && typeof updateNodeDisplay === 'function') {
-        updateNodeDisplay(groupScope);
+        var nodeScope = groupScope && groupScope.length
+            ? { full: false, keys: groupScope, skipCableUpdate: true, skipFilter: true }
+            : { full: false, keys: (typeof groupKey === 'function' && placemark.geometry)
+                ? [groupKey(placemark.geometry.getCoordinates())] : [], skipCableUpdate: true, skipFilter: true };
+        if (nodeScope.keys && nodeScope.keys.length) updateNodeDisplay(nodeScope);
     } else if (type === 'cabinet' && typeof onCabinetDragEnd === 'function') {
         onCabinetDragEnd(placemark);
     }
 
-    if (type !== 'cross' && type !== 'node') {
-        if (typeof applyMapFilterForObject === 'function') {
-            applyMapFilterForObject(placemark);
-            if (typeof getCablesTouchingObject === 'function') {
-                getCablesTouchingObject(placemark).forEach(function(cable) {
-                    applyMapFilterForObject(cable);
-                });
-            }
-        } else if (typeof applyMapFilter === 'function') {
-            applyMapFilter();
-        }
-    }
-
-    // Подпись снимается на drag — вернуть сразу (в т.ч. при virtualization), не ждать pan/sync.
     if (typeof ensureObjectLabelOnMap === 'function') ensureObjectLabelOnMap(placemark);
-
     if (typeof stopMapHoverCardDragFollow === 'function') stopMapHoverCardDragFollow(placemark);
 
     releaseDragObjectLock(uid);
     if (typeof MapPerf !== 'undefined' && MapPerf.unpinObject) MapPerf.unpinObject(placemark);
-
-    var deferDragSideEffects = function() {
-        if (typeof renderRegionsSidebarList === 'function') {
-            try { renderRegionsSidebarList(); } catch (eReg) {}
-        }
-        if (typeof window.syncApplyPendingState === 'function') {
-            try { window.syncApplyPendingState(); } catch (eSync) {}
-        }
-    };
-    if (typeof requestAnimationFrame === 'function') {
-        requestAnimationFrame(function() {
-            if (typeof requestIdleCallback === 'function') {
-                requestIdleCallback(deferDragSideEffects, { timeout: 120 });
-            } else {
-                setTimeout(deferDragSideEffects, 0);
-            }
-        });
-    } else {
-        setTimeout(deferDragSideEffects, 0);
-    }
-
     if (typeof resumeMapPanAfterPlacementObjectDrag === 'function') resumeMapPanAfterPlacementObjectDrag();
+
+    // Тяжёлое: overlays, attach, полный rebuild линий, filter — после отпускания, в idle.
+    var heavyUid = uid;
+    var heavyObj = placemark;
+    var heavyType = type;
+    var heavyDeferAttach = deferAttach;
+    var runHeavy = function() {
+        try {
+            if (heavyDeferAttach && typeof tryAttachWaypointToNearbyCables === 'function') {
+                tryAttachWaypointToNearbyCables(heavyObj, { snap: false, persist: false });
+                if (typeof MapPerf !== 'undefined' && MapPerf.markCableLinksDirty) MapPerf.markCableLinksDirty();
+                if (typeof updateConnectedCablesLight === 'function') updateConnectedCablesLight(heavyObj);
+                if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(heavyObj);
+            }
+            if (typeof updateConnectedCables === 'function') updateConnectedCables(heavyObj);
+            if (heavyUid && typeof scheduleConnectionLinesUpdate === 'function') {
+                scheduleConnectionLinesUpdate(heavyUid);
+            }
+            if (heavyType !== 'cross' && heavyType !== 'node' && typeof applyMapFilterForObject === 'function') {
+                applyMapFilterForObject(heavyObj);
+                if (typeof getCablesTouchingObject === 'function') {
+                    getCablesTouchingObject(heavyObj).forEach(function(cable) {
+                        applyMapFilterForObject(cable);
+                    });
+                }
+            }
+            if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
+        } catch (eHeavy) {}
+    };
+    if (typeof requestIdleCallback === 'function') {
+        requestIdleCallback(runHeavy, { timeout: 400 });
+    } else {
+        setTimeout(runHeavy, 0);
+    }
 }
 
 function saveLinkedMapObjects(objectsToSave) {
@@ -730,18 +778,49 @@ function releaseDragObjectLock(uid) {
 
 window.onSyncOpConflict = function(payload) {
     if (!payload || !payload.uniqueId) return;
+    var uid = String(payload.uniqueId);
     var isOtherEditor = !!(payload.editorClientId && window.syncMyClientId &&
         payload.editorClientId !== window.syncMyClientId);
-    var conflictObj = objects.find(function(o) {
-        return o.properties && o.properties.get('uniqueId') === payload.uniqueId;
-    });
-    if (conflictObj) {
-        if (payload.revision != null) setMapRevision(conflictObj, payload.revision);
-        if (payload.data) {
-            var t = conflictObj.properties.get('type');
-            if (t === 'cable') applySerializedCableToMap(conflictObj, payload.data);
-            else populatePlacemarkFromSerializedData(conflictObj, payload.data);
+    // Мы держим lock / только что drag — это почти всегда устаревший baseRevision после F5,
+    // а не реальный чужой edit. Тяжёлый populate + откат координат = фриз 1–3с на 20k+.
+    var iHoldLock = (typeof getActiveObjectLockId === 'function' && getActiveObjectLockId() === uid) ||
+        myHeldObjectLockId === uid || dragHeldLockId === uid;
+    var conflictObj = null;
+    if (typeof MapPerf !== 'undefined' && MapPerf.getByUid) {
+        conflictObj = MapPerf.getByUid(uid);
+    }
+    if (!conflictObj) {
+        for (var oi = 0; oi < objects.length; oi++) {
+            var o = objects[oi];
+            if (o && o.properties && String(o.properties.get('uniqueId')) === uid) {
+                conflictObj = o;
+                break;
+            }
         }
+    }
+    if (conflictObj && payload.revision != null) {
+        setMapRevision(conflictObj, payload.revision);
+    }
+    // Тихий retry: подтянуть revision и переслать локальное состояние без rollback.
+    if (conflictObj && (!isOtherEditor || iHoldLock)) {
+        var already = conflictObj.properties.get('_syncConflictRetry');
+        if (!already) {
+            conflictObj.properties.set('_syncConflictRetry', true);
+            setTimeout(function() {
+                try {
+                    conflictObj.properties.set('_syncConflictRetry', false);
+                    var tRetry = conflictObj.properties.get('type');
+                    if (tRetry === 'cable') syncPushCableUpdate(conflictObj, true);
+                    else syncPushObjectUpdate(conflictObj, true);
+                } catch (eRetry) {}
+            }, 0);
+        }
+        return;
+    }
+    if (conflictObj && payload.data) {
+        var t = conflictObj.properties.get('type');
+        if (t === 'cable') applySerializedCableToMap(conflictObj, payload.data);
+        else populatePlacemarkFromSerializedData(conflictObj, payload.data);
     }
     if (isOtherEditor) {
         var who = (payload.data && payload.data._syncEditorName) || null;

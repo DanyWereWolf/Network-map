@@ -21,6 +21,9 @@
         cableLabel: [],
         region: []
     };
+    /** uid объекта → Set кабелей, касающихся from/to/points. Лениво пересобирается при dirty. */
+    var cablesByObjectUid = new Map();
+    var cableLinksDirty = true;
 
     /** То же, что geoObjects.indexOf(obj) !== -1, но обычно за O(1) через getParent(). */
     function isGeoObjectOnMap(obj) {
@@ -48,11 +51,13 @@
     function addToTypeIndex(obj) {
         if (!obj || !obj.properties) return;
         var type = obj.properties.get('type');
-        var bucket = objectsByType[type];
-        if (!bucket) return;
+        if (!type) return;
+        if (!objectsByType[type]) objectsByType[type] = [];
         if (typeIndexed.has(obj)) return;
         typeIndexed.add(obj);
-        bucket.push(obj);
+        objectsByType[type].push(obj);
+        // Инкрементально поддерживаем reverse-индекс; полный dirty — только clear/bulk.
+        if (type === 'cable' && !cableLinksDirty) indexSingleCableLinks(obj);
     }
 
     function removeFromTypeIndex(obj) {
@@ -64,6 +69,94 @@
         if (!bucket) return;
         var idx = bucket.indexOf(obj);
         if (idx !== -1) bucket.splice(idx, 1);
+        if (type === 'cable') {
+            // Точечное удаление из reverse-индекса дороже полного dirty при редких delete — dirty OK.
+            cableLinksDirty = true;
+        }
+    }
+
+    function markCableLinksDirty() {
+        cableLinksDirty = true;
+    }
+
+    function linkCableToUid(cable, uid) {
+        if (!cable || uid == null || uid === '') return;
+        var key = String(uid);
+        var set = cablesByObjectUid.get(key);
+        if (!set) {
+            set = new Set();
+            cablesByObjectUid.set(key, set);
+        }
+        set.add(cable);
+    }
+
+    function unlinkCableFromIndex(cable) {
+        var oldUids = cable && cable._perfLinkUids;
+        if (!oldUids || !oldUids.length) return;
+        for (var i = 0; i < oldUids.length; i++) {
+            var set = cablesByObjectUid.get(oldUids[i]);
+            if (set) set.delete(cable);
+        }
+        cable._perfLinkUids = null;
+    }
+
+    function indexSingleCableLinks(cable) {
+        if (!cable || !cable.properties || cable.properties.get('type') !== 'cable') return;
+        var linked = [];
+        var seen = Object.create(null);
+        function link(uid) {
+            if (uid == null || uid === '') return;
+            var key = String(uid);
+            if (seen[key]) return;
+            seen[key] = true;
+            linkCableToUid(cable, key);
+            linked.push(key);
+        }
+        var from = cable.properties.get('from');
+        var to = cable.properties.get('to');
+        if (from) link(uidFromObj(from));
+        if (to) link(uidFromObj(to));
+        var points = cable.properties.get('points');
+        if (Array.isArray(points)) {
+            for (var pi = 0; pi < points.length; pi++) {
+                if (points[pi]) link(uidFromObj(points[pi]));
+            }
+        }
+        cable._perfLinkUids = linked;
+    }
+
+    function ensureCableLinksIndex() {
+        if (!cableLinksDirty) return;
+        cablesByObjectUid.clear();
+        var cables = objectsByType.cable || [];
+        for (var i = 0; i < cables.length; i++) {
+            if (cables[i]) cables[i]._perfLinkUids = null;
+            indexSingleCableLinks(cables[i]);
+        }
+        cableLinksDirty = false;
+    }
+
+    /** Переиндексировать один кабель без полного rebuild (после смены points). */
+    function reindexOneCableLinks(cable) {
+        if (!cable || !cable.properties || cable.properties.get('type') !== 'cable') return;
+        if (cableLinksDirty) {
+            ensureCableLinksIndex();
+            return;
+        }
+        unlinkCableFromIndex(cable);
+        indexSingleCableLinks(cable);
+    }
+
+    function getCablesTouchingUid(uid) {
+        if (uid == null || uid === '') return [];
+        ensureCableLinksIndex();
+        var set = cablesByObjectUid.get(String(uid));
+        if (!set || !set.size) return [];
+        var out = [];
+        set.forEach(function(cable) {
+            if (cable && cable.properties && cable.properties.get('type') === 'cable') out.push(cable);
+        });
+        return out;
     }
 
     function registerMapObject(obj) {
@@ -78,6 +171,7 @@
 
     function unregisterMapObject(obj) {
         var uid = uidFromObj(obj);
+        var wasCable = obj && obj.properties && obj.properties.get('type') === 'cable';
         removeFromTypeIndex(obj);
         if (uid) {
             objectsById.delete(uid);
@@ -93,6 +187,7 @@
             });
         }
         unregisterSpatial(obj);
+        if (wasCable) cableLinksDirty = true;
     }
 
     function clearObjectsIndex() {
@@ -101,17 +196,24 @@
         mountedUids.clear();
         pinnedUids.clear();
         typeIndexed.clear();
+        cablesByObjectUid.clear();
+        cableLinksDirty = true;
         spatialGen++;
         spatialMutations++;
-        objectsByType.cable = [];
-        objectsByType.cableLabel = [];
-        objectsByType.region = [];
+        Object.keys(objectsByType).forEach(function(k) { objectsByType[k] = []; });
     }
 
     function reindexAllObjects(list) {
         clearObjectsIndex();
         if (!Array.isArray(list)) return;
         for (var i = 0; i < list.length; i++) registerMapObject(list[i]);
+        // Сразу собрать reverse cable index — иначе первый move платит O(все кабели).
+        ensureCableLinksIndex();
+    }
+
+    /** Прогрев индексов после загрузки карты (до первого редактирования). */
+    function warmIndexes() {
+        ensureCableLinksIndex();
     }
 
     function getByUid(uid, typeFilter) {
@@ -822,6 +924,11 @@
         getObjectsByType: function(type) {
             return objectsByType[type] || null;
         },
+        markCableLinksDirty: markCableLinksDirty,
+        getCablesTouchingUid: getCablesTouchingUid,
+        reindexOneCableLinks: reindexOneCableLinks,
+        warmIndexes: warmIndexes,
+        ensureCableLinksIndex: ensureCableLinksIndex,
         getMountedCount: function() {
             return mountedUids.size;
         },

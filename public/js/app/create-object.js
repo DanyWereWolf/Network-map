@@ -449,7 +449,20 @@ function createObject(type, name, coords, options = {}) {
     });
 
     placemark.events.add('dragstart', function() {
+        try {
+            if (typeof MapPerf !== 'undefined' && MapPerf.ensureCableLinksIndex) MapPerf.ensureCableLinksIndex();
+            if (typeof ensureLastSavedUidIndex === 'function') ensureLastSavedUidIndex();
+        } catch (eWarmDrag) {}
         if (typeof captureObjectDragStartState === 'function') captureObjectDragStartState(placemark);
+        if (typeof isSleeveLikeHostType === 'function' && isSleeveLikeHostType(type) &&
+            typeof beginSleevePathDrag === 'function') {
+            beginSleevePathDrag(placemark);
+        }
+        var labelStart = placemark.properties.get('label');
+        if (labelStart) {
+            try { myMap.geoObjects.remove(labelStart); } catch (eLblStart) {}
+            placemark.properties.set('_labelHiddenForDrag', true);
+        }
     });
 
     placemark.events.add('dragend', function() {
@@ -461,6 +474,7 @@ function createObject(type, name, coords, options = {}) {
             if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
             if (typeof resumeMapPanAfterPlacementObjectDrag === 'function') resumeMapPanAfterPlacementObjectDrag();
             clearObjectDragStartState(placemark);
+            if (typeof endSleevePathDrag === 'function') endSleevePathDrag(placemark);
             if (typeof stopMapHoverCardDragFollow === 'function') stopMapHoverCardDragFollow(placemark);
             return;
         }
@@ -472,6 +486,7 @@ function createObject(type, name, coords, options = {}) {
             if (typeof resumeMapPanAfterPlacementObjectDrag === 'function') resumeMapPanAfterPlacementObjectDrag();
             if (typeof stopMapHoverCardDragFollow === 'function') stopMapHoverCardDragFollow(placemark);
         }
+        if (typeof endSleevePathDrag === 'function') endSleevePathDrag(placemark);
     });
     
     placemark.events.add('drag', function() {
@@ -486,8 +501,6 @@ function createObject(type, name, coords, options = {}) {
             acquireDragObjectLock(placemark);
             if (typeof mapGeoPin === 'function') mapGeoPin(placemark);
         }
-        const label = placemark.properties.get('label');
-        if (label) { try { myMap.geoObjects.remove(label); } catch (e) {} } 
         scheduleDragUpdate(placemark);
     });
 

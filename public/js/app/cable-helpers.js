@@ -258,9 +258,7 @@ function applySerializedUndergroundToCable(cable, item, pointsArr) {
         : spans);
     if (window.CableUnderground && Array.isArray(pts) && pts.length >= 2) {
         pts = CableUnderground.ensureRouteIncludesUndergroundManholes(pts, spans);
-        cable.properties.set('points', pts);
-        cable.properties.set('from', pts[0]);
-        cable.properties.set('to', pts[pts.length - 1]);
+        setCableRoutePoints(cable, pts);
     }
     applyCableRouteAndOverlays(cable, pts);
 }
@@ -300,9 +298,7 @@ function repairCablesAfterImport() {
             if (spans.length) {
                 cable.properties.set('undergroundSpans', spans);
                 points = CableUnderground.ensureRouteIncludesUndergroundManholes(points, spans);
-                cable.properties.set('points', points);
-                cable.properties.set('from', points[0]);
-                cable.properties.set('to', points[points.length - 1]);
+                setCableRoutePoints(cable, points);
                 applyCableRouteAndOverlays(cable, points);
             } else if (cable.geometry) {
                 try {
@@ -351,9 +347,7 @@ function validateAndFixCableGeometryOnLoad() {
                 if (ugSpans.length) {
                     cable.properties.set('undergroundSpans', ugSpans);
                     points = CableUnderground.ensureRouteIncludesUndergroundManholes(points, ugSpans);
-                    cable.properties.set('points', points);
-                    cable.properties.set('from', points[0]);
-                    cable.properties.set('to', points[points.length - 1]);
+                    setCableRoutePoints(cable, points);
                     CableUnderground.applyCableRouteGeometry(cable, points);
                     CableUnderground.refreshCableUndergroundOverlays(cable);
                     return;
@@ -381,10 +375,26 @@ function validateAndFixCableGeometryOnLoad() {
     });
 }
 
+/** Обновить from/to/points кабеля и обновить reverse-индекс касаний. */
+function setCableRoutePoints(cable, points) {
+    if (!cable || !cable.properties || !Array.isArray(points) || points.length < 2) return;
+    cable.properties.set('points', points);
+    cable.properties.set('from', points[0]);
+    cable.properties.set('to', points[points.length - 1]);
+    // Полный dirty на каждый set → снова «холодный» первый move; лучше точечно.
+    if (typeof MapPerf !== 'undefined') {
+        if (MapPerf.reindexOneCableLinks) MapPerf.reindexOneCableLinks(cable);
+        else if (MapPerf.markCableLinksDirty) MapPerf.markCableLinksDirty();
+    }
+}
+
 function getCablesTouchingObject(obj) {
     if (!obj) return [];
-    var out = [];
     var uid = typeof getObjectUniqueId === 'function' ? getObjectUniqueId(obj) : null;
+    if (uid && typeof MapPerf !== 'undefined' && MapPerf.getCablesTouchingUid) {
+        return MapPerf.getCablesTouchingUid(uid);
+    }
+    var out = [];
     var scan = objects;
     if (typeof MapPerf !== 'undefined' && MapPerf.getObjectsByType) {
         var typed = MapPerf.getObjectsByType('cable');
@@ -419,6 +429,35 @@ function getCablesTouchingObject(obj) {
         }
     }
     return out;
+}
+
+/** Лёгкое обновление кабелей во время drag: только setCoordinates, без recreate overlays. */
+function updateConnectedCablesLight(obj) {
+    var cables = getCablesTouchingObject(obj);
+    for (var i = 0; i < cables.length; i++) {
+        var cable = cables[i];
+        if (!cable || !cable.geometry) continue;
+        var points = cable.properties.get('points');
+        try {
+            if (Array.isArray(points) && points.length >= 2) {
+                var coords = [];
+                for (var pi = 0; pi < points.length; pi++) {
+                    var p = points[pi];
+                    if (!p || !p.geometry) continue;
+                    var c = p.geometry.getCoordinates();
+                    if (c && c.length >= 2) coords.push(c);
+                }
+                if (coords.length >= 2) setCableCoordsIfChanged(cable, coords);
+            } else {
+                var fromObj = cable.properties.get('from');
+                var toObj = cable.properties.get('to');
+                if (!fromObj || !toObj || !fromObj.geometry || !toObj.geometry) continue;
+                var fromCoords = fromObj.geometry.getCoordinates();
+                var toCoords = toObj.geometry.getCoordinates();
+                if (fromCoords && toCoords) setCableCoordsIfChanged(cable, [fromCoords, toCoords]);
+            }
+        } catch (eLight) {}
+    }
 }
 
 function updateConnectedCables(obj) {

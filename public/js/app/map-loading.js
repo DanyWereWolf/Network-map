@@ -214,6 +214,18 @@ function markMapDataReady() {
     if (typeof applyAutoPerfForMapSize === 'function' && Array.isArray(window.objects)) {
         try { applyAutoPerfForMapSize(window.objects.length); } catch (eAuto) {}
     }
+    // Пока пользователь ещё не трогал карту — прогреть cable/uid индексы.
+    try {
+        if (typeof warmMapEditCaches === 'function') {
+            if (typeof requestIdleCallback === 'function') {
+                requestIdleCallback(function() { warmMapEditCaches(); }, { timeout: 2000 });
+            } else {
+                setTimeout(function() { warmMapEditCaches(); }, 100);
+            }
+        } else if (typeof MapPerf !== 'undefined' && MapPerf.warmIndexes) {
+            MapPerf.warmIndexes();
+        }
+    } catch (eWarmReady) {}
     tryCompleteMapInitialLoad();
 }
 window.markMapDataReady = markMapDataReady;

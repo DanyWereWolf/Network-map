@@ -79,6 +79,11 @@ function selectObject(obj) {
 
 var dragUpdateRafId = null;
 var dragUpdatePlacemark = null;
+/**
+ * На больших картах во время drag НЕ трогаем кабели и GPON-линии (YMaps setCoordinates
+ * по тысячам geoObjects = главный фриз). Только pulse / Alt-path муфты / hover card.
+ * Кабели и линии догоняют один раз на dragend.
+ */
 function scheduleDragUpdate(pm) {
     dragUpdatePlacemark = pm;
     if (dragUpdateRafId != null) return;
@@ -86,13 +91,13 @@ function scheduleDragUpdate(pm) {
         dragUpdateRafId = null;
         var placemark = dragUpdatePlacemark;
         dragUpdatePlacemark = null;
-        if (placemark) {
-            updateSelectionPulsePosition(placemark);
-            updateConnectedCables(placemark);
-            syncConnectionLinesForObject(placemark);
-            if (typeof followMapHoverCardDuringDrag === 'function') {
-                followMapHoverCardDuringDrag(placemark);
-            }
+        if (!placemark) return;
+        if (typeof applySleevePathDrag === 'function') {
+            applySleevePathDrag(placemark);
+        }
+        updateSelectionPulsePosition(placemark);
+        if (typeof followMapHoverCardDuringDrag === 'function') {
+            followMapHoverCardDuringDrag(placemark);
         }
     });
 }
