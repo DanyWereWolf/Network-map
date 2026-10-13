@@ -843,12 +843,27 @@ function findCablesNearPoint(coords, maxDistance, options) {
         if (Array.isArray(typedCables)) scan = typedCables;
     }
     if (!scan || !scan.length) return found;
+    var minLat = coords[0] - maxDistance;
+    var maxLat = coords[0] + maxDistance;
+    var minLon = coords[1] - maxDistance;
+    var maxLon = coords[1] + maxDistance;
     for (var i = 0; i < scan.length; i++) {
         var cable = scan[i];
         if (!cable || !cable.properties || cable.properties.get('type') !== 'cable') continue;
         if (options.fiberOnly && isCopperCableType(cable.properties.get('cableType'))) continue;
         var geom = cable.geometry && cable.geometry.getCoordinates();
         if (!geom || geom.length < 2) continue;
+        // BBox cull до дорогого projectPointOntoPolyline.
+        var cMinLat = Infinity, cMaxLat = -Infinity, cMinLon = Infinity, cMaxLon = -Infinity;
+        for (var gi = 0; gi < geom.length; gi++) {
+            var g = geom[gi];
+            if (!g || g.length < 2) continue;
+            if (g[0] < cMinLat) cMinLat = g[0];
+            if (g[0] > cMaxLat) cMaxLat = g[0];
+            if (g[1] < cMinLon) cMinLon = g[1];
+            if (g[1] > cMaxLon) cMaxLon = g[1];
+        }
+        if (cMaxLat < minLat || cMinLat > maxLat || cMaxLon < minLon || cMinLon > maxLon) continue;
         var proj = projectPointOntoPolyline(coords, geom);
         if (!proj || proj.distance > maxDistance) continue;
         if (proj.fraction < 0.03 || proj.fraction > 0.97) continue;

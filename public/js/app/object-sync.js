@@ -314,7 +314,12 @@ function bumpMapRevisionAfterSyncAdd(obj) {
 
 /** revision из lastSavedState по uniqueId (если локальный mapRevision устарел/0 после load). */
 function getSnapshotRevisionForUid(uid) {
-    if (uid == null || uid === '' || !Array.isArray(lastSavedState)) return null;
+    if (uid == null || uid === '') return null;
+    // O(1) через индекс снимка — полный скан lastSavedState на каждом sync убивал move на больших картах.
+    if (typeof getSnapshotRevisionFromIndex === 'function') {
+        return getSnapshotRevisionFromIndex(uid);
+    }
+    if (!Array.isArray(lastSavedState)) return null;
     var want = String(uid);
     for (var i = 0; i < lastSavedState.length; i++) {
         var it = lastSavedState[i];
@@ -508,13 +513,15 @@ function clearObjectDragStartState(obj) {
     } catch (e) {}
 }
 
-/** Лёгкий finalize после dragend: минимум синхронной работы на 30k. */
+/** Лёгкий finalize после dragend: минимум синхронной работы на больших картах. */
 function finalizeMapObjectDragEnd(placemark) {
     if (!placemark || !placemark.properties) return;
     var type = placemark.properties.get('type');
     var uid = placemark.properties.get('uniqueId');
     var groupScope = (type === 'cross' || type === 'node') ? getObjectDragGroupScope(placemark) : null;
     clearObjectDragStartState(placemark);
+    var objectCount = (typeof objects !== 'undefined' && Array.isArray(objects)) ? objects.length : 0;
+    var largeMap = objectCount > 800;
 
     var skipGroupSnap = typeof shouldSkipGroupSnapAfterPlacement === 'function' && shouldSkipGroupSnapAfterPlacement(placemark);
     if ((type === 'cross' || type === 'node') && !skipGroupSnap && typeof snapCoordsToObjectGroup === 'function') {
@@ -532,14 +539,9 @@ function finalizeMapObjectDragEnd(placemark) {
         onMemberObjectDragEnd(placemark);
     }
 
-    // Attach опоры — дорого (скан кабелей); на больших картах откладываем после save/UI.
-    var deferAttach = (type === 'support' || type === 'attachment') &&
-        typeof objects !== 'undefined' && Array.isArray(objects) && objects.length > 2000;
-    if (!deferAttach && (type === 'support' || type === 'attachment') &&
-        typeof tryAttachWaypointToNearbyCables === 'function') {
-        tryAttachWaypointToNearbyCables(placemark, { snap: false, persist: false });
-        if (typeof MapPerf !== 'undefined' && MapPerf.markCableLinksDirty) MapPerf.markCableLinksDirty();
-    }
+    // Attach опоры — O(все кабели); всегда после UI/save, не в том же тике что dragend.
+    var needsAttach = (type === 'support' || type === 'attachment') &&
+        typeof tryAttachWaypointToNearbyCables === 'function';
 
     // Сразу только лёгкие setCoordinates кабелей — без recreate underground overlays.
     if (typeof updateConnectedCablesLight === 'function') updateConnectedCablesLight(placemark);
@@ -550,8 +552,8 @@ function finalizeMapObjectDragEnd(placemark) {
     if (label && placemark.geometry) {
         try { label.geometry.setCoordinates(placemark.geometry.getCoordinates()); } catch (eLbl) {}
     }
-    // Nudge существующих GPON-линий вместо remove/rebuild (дорого на плотной сети).
-    if (typeof nudgeConnectionLinesDuringDrag === 'function') {
+    // На больших картах полный скан GPON-массивов на dragend = фриз; idle rebuild догонит.
+    if (!largeMap && typeof nudgeConnectionLinesDuringDrag === 'function') {
         try { nudgeConnectionLinesDuringDrag(placemark); } catch (eNudgeEnd) {}
     }
     if (typeof updateSelectionPulsePosition === 'function') updateSelectionPulsePosition(placemark);
@@ -559,23 +561,33 @@ function finalizeMapObjectDragEnd(placemark) {
     if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(placemark);
     else saveData({ object: placemark, syncImmediate: true, undoLabel: 'перемещение' });
 
-    if (type === 'cross' && typeof updateCrossDisplay === 'function') {
-        var crossScope = groupScope && groupScope.length
-            ? { full: false, keys: groupScope, skipCableUpdate: true, skipFilter: true }
-            : { full: false, keys: (typeof groupKey === 'function' && placemark.geometry)
-                ? [groupKey(placemark.geometry.getCoordinates())] : [], skipCableUpdate: true, skipFilter: true };
-        if (crossScope.keys && crossScope.keys.length) updateCrossDisplay(crossScope);
-    } else if (type === 'node' && typeof updateNodeDisplay === 'function') {
-        var nodeScope = groupScope && groupScope.length
-            ? { full: false, keys: groupScope, skipCableUpdate: true, skipFilter: true }
-            : { full: false, keys: (typeof groupKey === 'function' && placemark.geometry)
-                ? [groupKey(placemark.geometry.getCoordinates())] : [], skipCableUpdate: true, skipFilter: true };
-        if (nodeScope.keys && nodeScope.keys.length) updateNodeDisplay(nodeScope);
-    } else if (type === 'cabinet' && typeof onCabinetDragEnd === 'function') {
-        onCabinetDragEnd(placemark);
+    // updateCross/NodeDisplay — remove/add geoObjects; на больших картах в следующий кадр.
+    var runGroupDisplay = function() {
+        try {
+            if (type === 'cross' && typeof updateCrossDisplay === 'function') {
+                var crossScope = groupScope && groupScope.length
+                    ? { full: false, keys: groupScope, skipCableUpdate: true, skipFilter: true }
+                    : { full: false, keys: (typeof groupKey === 'function' && placemark.geometry)
+                        ? [groupKey(placemark.geometry.getCoordinates())] : [], skipCableUpdate: true, skipFilter: true };
+                if (crossScope.keys && crossScope.keys.length) updateCrossDisplay(crossScope);
+            } else if (type === 'node' && typeof updateNodeDisplay === 'function') {
+                var nodeScope = groupScope && groupScope.length
+                    ? { full: false, keys: groupScope, skipCableUpdate: true, skipFilter: true }
+                    : { full: false, keys: (typeof groupKey === 'function' && placemark.geometry)
+                        ? [groupKey(placemark.geometry.getCoordinates())] : [], skipCableUpdate: true, skipFilter: true };
+                if (nodeScope.keys && nodeScope.keys.length) updateNodeDisplay(nodeScope);
+            } else if (type === 'cabinet' && typeof onCabinetDragEnd === 'function') {
+                onCabinetDragEnd(placemark);
+            }
+            if (typeof ensureObjectLabelOnMap === 'function') ensureObjectLabelOnMap(placemark);
+        } catch (eDisp) {}
+    };
+    if (largeMap && (type === 'cross' || type === 'node' || type === 'cabinet')) {
+        requestAnimationFrame(runGroupDisplay);
+    } else {
+        runGroupDisplay();
     }
 
-    if (typeof ensureObjectLabelOnMap === 'function') ensureObjectLabelOnMap(placemark);
     if (typeof stopMapHoverCardDragFollow === 'function') stopMapHoverCardDragFollow(placemark);
 
     releaseDragObjectLock(uid);
@@ -586,16 +598,20 @@ function finalizeMapObjectDragEnd(placemark) {
     var heavyUid = uid;
     var heavyObj = placemark;
     var heavyType = type;
-    var heavyDeferAttach = deferAttach;
+    var heavyNeedsAttach = needsAttach;
+    var heavyNeedNudge = largeMap;
     var runHeavy = function() {
         try {
-            if (heavyDeferAttach && typeof tryAttachWaypointToNearbyCables === 'function') {
+            if (heavyNeedsAttach) {
                 tryAttachWaypointToNearbyCables(heavyObj, { snap: false, persist: false });
                 if (typeof MapPerf !== 'undefined' && MapPerf.markCableLinksDirty) MapPerf.markCableLinksDirty();
                 if (typeof updateConnectedCablesLight === 'function') updateConnectedCablesLight(heavyObj);
                 if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(heavyObj);
             }
             if (typeof updateConnectedCables === 'function') updateConnectedCables(heavyObj);
+            if (heavyNeedNudge && typeof nudgeConnectionLinesDuringDrag === 'function') {
+                try { nudgeConnectionLinesDuringDrag(heavyObj); } catch (eNudgeIdle) {}
+            }
             if (heavyUid && typeof scheduleConnectionLinesUpdate === 'function') {
                 scheduleConnectionLinesUpdate(heavyUid);
             }
@@ -611,7 +627,7 @@ function finalizeMapObjectDragEnd(placemark) {
         } catch (eHeavy) {}
     };
     if (typeof requestIdleCallback === 'function') {
-        requestIdleCallback(runHeavy, { timeout: 400 });
+        requestIdleCallback(runHeavy, { timeout: largeMap ? 600 : 400 });
     } else {
         setTimeout(runHeavy, 0);
     }

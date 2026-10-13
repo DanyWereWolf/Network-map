@@ -342,12 +342,18 @@ function cloneMapSnapshot(state) {
     return JSON.parse(JSON.stringify(state));
 }
 
+/** Map uniqueId → revision (number). Не только has/exists — чтобы sync не сканировал lastSavedState O(N). */
 var _lastSavedUidIndex = null;
 var _lastSavedUidIndexRef = null;
 
 function invalidateLastSavedUidIndex() {
     _lastSavedUidIndex = null;
     _lastSavedUidIndexRef = null;
+}
+
+function revisionFromSnapshotItem(it) {
+    if (!it || it.revision == null || isNaN(Number(it.revision))) return 0;
+    return Number(it.revision);
 }
 
 function ensureLastSavedUidIndex() {
@@ -359,11 +365,32 @@ function ensureLastSavedUidIndex() {
     var idx = new Map();
     for (var i = 0; i < lastSavedState.length; i++) {
         var it = lastSavedState[i];
-        if (it && it.uniqueId != null && it.uniqueId !== '') idx.set(String(it.uniqueId), true);
+        if (it && it.uniqueId != null && it.uniqueId !== '') {
+            idx.set(String(it.uniqueId), revisionFromSnapshotItem(it));
+        }
     }
     _lastSavedUidIndex = idx;
     _lastSavedUidIndexRef = lastSavedState;
     return idx;
+}
+
+/** Точечно обновить индекс после инкрементального патча — без полного O(N) rebuild. */
+function updateLastSavedUidIndexForItems(serializedItems) {
+    if (!serializedItems || !serializedItems.length) return;
+    var idx = ensureLastSavedUidIndex();
+    if (!idx) return;
+    for (var i = 0; i < serializedItems.length; i++) {
+        var it = serializedItems[i];
+        if (!it || it.uniqueId == null || it.uniqueId === '') continue;
+        idx.set(String(it.uniqueId), revisionFromSnapshotItem(it));
+    }
+}
+
+function removeLastSavedUidIndexForUids(uids) {
+    if (!uids || !uids.length || !_lastSavedUidIndex) return;
+    for (var i = 0; i < uids.length; i++) {
+        if (uids[i] != null && uids[i] !== '') _lastSavedUidIndex.delete(String(uids[i]));
+    }
 }
 
 function snapshotHasUniqueId(uid) {
@@ -371,6 +398,16 @@ function snapshotHasUniqueId(uid) {
     var idx = ensureLastSavedUidIndex();
     return !!(idx && idx.has(String(uid)));
 }
+
+/** O(1) revision из индекса снимка (для sync baseRevision). */
+function getSnapshotRevisionFromIndex(uid) {
+    if (uid == null || uid === '') return null;
+    var idx = ensureLastSavedUidIndex();
+    if (!idx || !idx.has(String(uid))) return null;
+    var rev = idx.get(String(uid));
+    return rev != null && !isNaN(Number(rev)) ? Number(rev) : 0;
+}
+window.getSnapshotRevisionFromIndex = getSnapshotRevisionFromIndex;
 
 /**
  * Прогрев кэшей редактирования после загрузки — чтобы первый move не платил O(N).
@@ -904,9 +941,15 @@ function saveData(opts) {
         lastSavedState.length === objects.length - 1) {
         var addItem = serializeMapItemFromObject(opts.addObject);
         if (addItem) {
+            var addHadIndex = _lastSavedUidIndex && _lastSavedUidIndexRef === lastSavedState;
             pushUndoSnapshot(lastSavedState, opts);
             lastSavedState = lastSavedState.concat([cloneMapSnapshot(addItem)]);
-            invalidateLastSavedUidIndex();
+            if (addHadIndex) {
+                _lastSavedUidIndexRef = lastSavedState;
+                updateLastSavedUidIndexForItems([addItem]);
+            } else {
+                invalidateLastSavedUidIndex();
+            }
             if (!opts.skipSync) pushSaveDataToSync(opts);
             if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
             return;
@@ -917,14 +960,22 @@ function saveData(opts) {
         var filteredState = filterSnapshotByRemovedUids(lastSavedState, opts.removeUniqueIds);
         if (filteredState) {
             var afterRemove = filteredState;
+            var patchAfterRemove = null;
             if (opts.object || opts.cable || (opts.objects && opts.objects.length) || (opts.cables && opts.cables.length)) {
-                var patchAfterRemove = collectSerializedPatchItems(opts);
+                patchAfterRemove = collectSerializedPatchItems(opts);
                 afterRemove = patchAfterRemove ? patchSnapshotItems(filteredState, patchAfterRemove) : null;
             }
             if (afterRemove) {
+                var remHadIndex = _lastSavedUidIndex && _lastSavedUidIndexRef === lastSavedState;
                 pushUndoSnapshot(lastSavedState, opts);
                 lastSavedState = afterRemove;
-                invalidateLastSavedUidIndex();
+                if (remHadIndex) {
+                    _lastSavedUidIndexRef = lastSavedState;
+                    removeLastSavedUidIndexForUids(opts.removeUniqueIds);
+                    if (patchAfterRemove) updateLastSavedUidIndexForItems(patchAfterRemove);
+                } else {
+                    invalidateLastSavedUidIndex();
+                }
                 if (!opts.skipSync) pushSaveDataToSync(opts);
                 if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
                 return;
@@ -944,11 +995,17 @@ function saveData(opts) {
             patchedState = upsertSnapshotItems(lastSavedState, patchItems);
         }
         if (patchedState) {
+            var patchHadIndex = _lastSavedUidIndex && _lastSavedUidIndexRef === lastSavedState;
             if (Array.isArray(lastSavedState) && lastSavedState.length) {
                 pushUndoSnapshot(lastSavedState, opts);
             }
             lastSavedState = patchedState;
-            invalidateLastSavedUidIndex();
+            if (patchHadIndex) {
+                _lastSavedUidIndexRef = lastSavedState;
+                updateLastSavedUidIndexForItems(patchItems);
+            } else {
+                invalidateLastSavedUidIndex();
+            }
             if (!opts.skipSync) pushSaveDataToSync(opts);
             if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
             return;

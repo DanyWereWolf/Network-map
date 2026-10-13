@@ -500,7 +500,6 @@ function updateCrossDisplay(scope) {
         groupPlacemark.events.add('dragend', function() {
             window.syncDragInProgress = false;
             if (typeof stopMapHoverCardDragFollow === 'function') stopMapHoverCardDragFollow(groupPlacemark);
-            if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
             const newCoords = groupPlacemark.geometry.getCoordinates();
             const crossLbl = groupPlacemark.properties.get('crossGroupLabel');
             if (crossLbl && crossLbl.geometry) crossLbl.geometry.setCoordinates(newCoords);
@@ -509,11 +508,13 @@ function updateCrossDisplay(scope) {
             const oldKey = groupKey(oldCoords);
             const savedName = crossGroupNames.get(oldKey);
             var movedGroupObjects = [];
+            // Light path: только setCoordinates кабелей; полный updateConnectedCables — в idle.
             crosses.forEach(c => {
                 c.geometry.setCoordinates(newCoords);
                 const lbl = c.properties.get('label');
                 if (lbl && lbl.geometry) lbl.geometry.setCoordinates(newCoords);
-                updateConnectedCables(c);
+                if (typeof updateConnectedCablesLight === 'function') updateConnectedCablesLight(c);
+                else updateConnectedCables(c);
                 ensurePlacemarkUniqueIdForSync(c);
                 movedGroupObjects.push(c);
                 if (typeof getCablesTouchingObject === 'function') {
@@ -525,15 +526,28 @@ function updateCrossDisplay(scope) {
             var movedCrossUids = movedGroupObjects.map(function(o) {
                 return typeof getObjectUniqueId === 'function' ? getObjectUniqueId(o) : null;
             }).filter(Boolean);
-            scheduleConnectionLinesUpdate(movedCrossUids.length ? movedCrossUids : undefined);
+            var newKey = groupKey(newCoords);
             if (savedName) {
                 crossGroupNames.delete(oldKey);
-                crossGroupNames.set(groupKey(newCoords), savedName);
+                crossGroupNames.set(newKey, savedName);
                 saveGroupNames();
             }
             if (typeof saveLinkedMapObjects === 'function') saveLinkedMapObjects(movedGroupObjects);
             else saveData({ skipSync: true });
-            updateCrossDisplay({ full: false, keys: [oldKey, groupKey(newCoords)], skipCableUpdate: true });
+            updateCrossDisplay({ full: false, keys: [oldKey, newKey], skipCableUpdate: true });
+            var heavyCrosses = crosses.slice();
+            var heavyUids = movedCrossUids.slice();
+            var runGroupHeavy = function() {
+                try {
+                    heavyCrosses.forEach(function(c) {
+                        if (typeof updateConnectedCables === 'function') updateConnectedCables(c);
+                    });
+                    scheduleConnectionLinesUpdate(heavyUids.length ? heavyUids : undefined);
+                    if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
+                } catch (eGrpHeavy) {}
+            };
+            if (typeof requestIdleCallback === 'function') requestIdleCallback(runGroupHeavy, { timeout: 500 });
+            else setTimeout(runGroupHeavy, 0);
         });
         attachHoverEventsToObject(groupPlacemark);
         myMap.geoObjects.add(crossLabel);
@@ -766,7 +780,6 @@ function updateNodeDisplay(scope) {
         groupPlacemark.events.add('dragend', function() {
             window.syncDragInProgress = false;
             if (typeof stopMapHoverCardDragFollow === 'function') stopMapHoverCardDragFollow(groupPlacemark);
-            if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
             const newCoords = groupPlacemark.geometry.getCoordinates();
             const nodeLbl = groupPlacemark.properties.get('nodeGroupLabel');
             if (nodeLbl && nodeLbl.geometry) nodeLbl.geometry.setCoordinates(newCoords);
@@ -779,7 +792,8 @@ function updateNodeDisplay(scope) {
                 n.geometry.setCoordinates(newCoords);
                 const lbl = n.properties.get('label');
                 if (lbl && lbl.geometry) lbl.geometry.setCoordinates(newCoords);
-                updateConnectedCables(n);
+                if (typeof updateConnectedCablesLight === 'function') updateConnectedCablesLight(n);
+                else updateConnectedCables(n);
                 ensurePlacemarkUniqueIdForSync(n);
                 movedNodeGroupObjects.push(n);
                 if (typeof getCablesTouchingObject === 'function') {
@@ -791,15 +805,28 @@ function updateNodeDisplay(scope) {
             var movedNodeUids = movedNodeGroupObjects.map(function(o) {
                 return typeof getObjectUniqueId === 'function' ? getObjectUniqueId(o) : null;
             }).filter(Boolean);
-            scheduleConnectionLinesUpdate(movedNodeUids.length ? movedNodeUids : undefined);
+            var newNodeKey = groupKey(newCoords);
             if (savedName) {
                 nodeGroupNames.delete(oldKey);
-                nodeGroupNames.set(groupKey(newCoords), savedName);
+                nodeGroupNames.set(newNodeKey, savedName);
                 saveGroupNames();
             }
             if (typeof saveLinkedMapObjects === 'function') saveLinkedMapObjects(movedNodeGroupObjects);
             else saveData({ skipSync: true });
-            updateNodeDisplay({ full: false, keys: [oldKey, groupKey(newCoords)], skipCableUpdate: true });
+            updateNodeDisplay({ full: false, keys: [oldKey, newNodeKey], skipCableUpdate: true });
+            var heavyNodes = nodes.slice();
+            var heavyNodeUids = movedNodeUids.slice();
+            var runNodeGroupHeavy = function() {
+                try {
+                    heavyNodes.forEach(function(n) {
+                        if (typeof updateConnectedCables === 'function') updateConnectedCables(n);
+                    });
+                    scheduleConnectionLinesUpdate(heavyNodeUids.length ? heavyNodeUids : undefined);
+                    if (typeof window.syncApplyPendingState === 'function') window.syncApplyPendingState();
+                } catch (eNodeHeavy) {}
+            };
+            if (typeof requestIdleCallback === 'function') requestIdleCallback(runNodeGroupHeavy, { timeout: 500 });
+            else setTimeout(runNodeGroupHeavy, 0);
         });
         attachHoverEventsToObject(groupPlacemark);
         myMap.geoObjects.add(nodeLabel);

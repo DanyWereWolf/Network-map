@@ -449,6 +449,7 @@ function applyConnectionLinesVisibility() {
 }
 
 function removeHostConnectionLines(hostUid) {
+    invalidateConnLinesByUidIndex();
     var i;
     for (i = onuConnectionLines.length - 1; i >= 0; i--) {
         if (onuConnectionLines[i].properties.get('sleeveId') === hostUid) {
@@ -721,6 +722,56 @@ function rebuildLinesTargetingEndpoint(endpointUid, endpointType) {
     }
 }
 
+/** uid → GPON-линии, касающиеся endpoint/host/route. Лениво, сбрасывается при rebuild. */
+var _connLinesByUidIndex = null;
+
+function invalidateConnLinesByUidIndex() {
+    _connLinesByUidIndex = null;
+}
+
+function ensureConnLinesByUidIndex() {
+    if (_connLinesByUidIndex) return _connLinesByUidIndex;
+    var map = new Map();
+    function link(id, line) {
+        if (id == null || id === '') return;
+        var key = String(id);
+        var bucket = map.get(key);
+        if (!bucket) {
+            bucket = [];
+            map.set(key, bucket);
+        }
+        bucket.push(line);
+    }
+    var arrays = [];
+    if (typeof onuConnectionLines !== 'undefined') arrays.push(onuConnectionLines);
+    if (typeof oltConnectionLines !== 'undefined') arrays.push(oltConnectionLines);
+    if (typeof splitterConnectionLines !== 'undefined') arrays.push(splitterConnectionLines);
+    if (typeof splitterOutputConnectionLines !== 'undefined') arrays.push(splitterOutputConnectionLines);
+    if (typeof radioBridgeConnectionLines !== 'undefined') arrays.push(radioBridgeConnectionLines);
+    if (typeof nodeConnectionLines !== 'undefined') arrays.push(nodeConnectionLines);
+    for (var ai = 0; ai < arrays.length; ai++) {
+        var arr = arrays[ai];
+        if (!Array.isArray(arr)) continue;
+        for (var li = 0; li < arr.length; li++) {
+            var line = arr[li];
+            if (!line || !line.properties) continue;
+            link(line.properties.get('sleeveId'), line);
+            link(line.properties.get('crossId'), line);
+            link(line.properties.get('splitterId'), line);
+            link(line.properties.get('targetId'), line);
+            link(line.properties.get('onuId'), line);
+            link(line.properties.get('oltId'), line);
+            link(line.properties.get('nodeId'), line);
+            var routeIds = line.properties.get('routeIds');
+            if (Array.isArray(routeIds)) {
+                for (var ri = 0; ri < routeIds.length; ri++) link(routeIds[ri], line);
+            }
+        }
+    }
+    _connLinesByUidIndex = map;
+    return map;
+}
+
 /** Лёгкое обновление геометрии уже существующих GPON-линий во время drag (без remove/add). */
 function nudgeConnectionLinesDuringDrag(obj) {
     if (!obj || !obj.properties || !obj.geometry) return;
@@ -736,63 +787,50 @@ function nudgeConnectionLinesDuringDrag(obj) {
         if (typeof updateRadioBridgeCoverage === 'function') updateRadioBridgeCoverage(obj);
         // не зовём updateRadioBridgeConnectionLines() на каждый кадр
     }
-    var arrays = [];
-    if (typeof onuConnectionLines !== 'undefined') arrays.push(onuConnectionLines);
-    if (typeof oltConnectionLines !== 'undefined') arrays.push(oltConnectionLines);
-    if (typeof splitterConnectionLines !== 'undefined') arrays.push(splitterConnectionLines);
-    if (typeof splitterOutputConnectionLines !== 'undefined') arrays.push(splitterOutputConnectionLines);
-    if (typeof radioBridgeConnectionLines !== 'undefined') arrays.push(radioBridgeConnectionLines);
-    if (typeof nodeConnectionLines !== 'undefined') arrays.push(nodeConnectionLines);
     var isHost = type === 'cross' || (typeof isSleeveLikeHostType === 'function' && isSleeveLikeHostType(type));
     var isWaypoint = type === 'support' || type === 'attachment';
     var objCoords = null;
     try { objCoords = obj.geometry.getCoordinates(); } catch (eC) { return; }
     if (!objCoords) return;
-    for (var ai = 0; ai < arrays.length; ai++) {
-        var arr = arrays[ai];
-        if (!Array.isArray(arr)) continue;
-        for (var li = 0; li < arr.length; li++) {
-            var line = arr[li];
-            if (!line || !line.properties || !line.geometry) continue;
-            var routeIds = line.properties.get('routeIds');
-            var sleeveId = line.properties.get('sleeveId') || line.properties.get('crossId') || line.properties.get('splitterId');
-            var touches = false;
-            if (isWaypoint && Array.isArray(routeIds) && routeIds.indexOf(uid) !== -1) touches = true;
-            if (isHost && sleeveId === uid) touches = true;
-            if (!isHost && !isWaypoint && line.properties.get('targetId') === uid) touches = true;
-            if (!isHost && !isWaypoint && line.properties.get('onuId') === uid) touches = true;
-            if (!isHost && !isWaypoint && line.properties.get('oltId') === uid) touches = true;
-            if (!isHost && !isWaypoint && line.properties.get('nodeId') === uid) touches = true;
-            if (!touches) continue;
-            try {
-                var existing = line.geometry.getCoordinates();
-                if (!existing || existing.length < 2) continue;
-                if (isWaypoint && Array.isArray(routeIds) && routeIds.length) {
-                    var host = sleeveId ? getMapObjectByUid(sleeveId) : null;
-                    var start = host && host.geometry ? host.geometry.getCoordinates() : existing[0];
-                    var end = existing[existing.length - 1];
-                    var mid = typeof gponRouteWaypointCoords === 'function' ? gponRouteWaypointCoords(routeIds) : [];
-                    line.geometry.setCoordinates([start].concat(mid).concat([end]));
-                } else if (isHost && sleeveId === uid) {
-                    var coordsHost = existing.slice();
-                    coordsHost[0] = objCoords;
-                    if (Array.isArray(routeIds) && routeIds.length && typeof gponRouteWaypointCoords === 'function') {
-                        var midH = gponRouteWaypointCoords(routeIds);
-                        coordsHost = [objCoords].concat(midH).concat([existing[existing.length - 1]]);
-                    }
-                    line.geometry.setCoordinates(coordsHost);
-                } else {
-                    var coordsEnd = existing.slice();
-                    coordsEnd[coordsEnd.length - 1] = objCoords;
-                    if (Array.isArray(routeIds) && routeIds.length && typeof gponRouteWaypointCoords === 'function' && sleeveId) {
-                        var hostE = getMapObjectByUid(sleeveId);
-                        var startE = hostE && hostE.geometry ? hostE.geometry.getCoordinates() : existing[0];
-                        coordsEnd = [startE].concat(gponRouteWaypointCoords(routeIds)).concat([objCoords]);
-                    }
-                    line.geometry.setCoordinates(coordsEnd);
-                }
-            } catch (eNudge) {}
+    var candidates = ensureConnLinesByUidIndex().get(String(uid)) || [];
+    var seen = typeof Set !== 'undefined' ? new Set() : null;
+    for (var li = 0; li < candidates.length; li++) {
+        var line = candidates[li];
+        if (!line || !line.properties || !line.geometry) continue;
+        if (seen) {
+            if (seen.has(line)) continue;
+            seen.add(line);
         }
+        var routeIds = line.properties.get('routeIds');
+        var sleeveId = line.properties.get('sleeveId') || line.properties.get('crossId') || line.properties.get('splitterId');
+        try {
+            var existing = line.geometry.getCoordinates();
+            if (!existing || existing.length < 2) continue;
+            if (isWaypoint && Array.isArray(routeIds) && routeIds.length) {
+                var host = sleeveId ? getMapObjectByUid(sleeveId) : null;
+                var start = host && host.geometry ? host.geometry.getCoordinates() : existing[0];
+                var end = existing[existing.length - 1];
+                var mid = typeof gponRouteWaypointCoords === 'function' ? gponRouteWaypointCoords(routeIds) : [];
+                line.geometry.setCoordinates([start].concat(mid).concat([end]));
+            } else if (isHost && sleeveId === uid) {
+                var coordsHost = existing.slice();
+                coordsHost[0] = objCoords;
+                if (Array.isArray(routeIds) && routeIds.length && typeof gponRouteWaypointCoords === 'function') {
+                    var midH = gponRouteWaypointCoords(routeIds);
+                    coordsHost = [objCoords].concat(midH).concat([existing[existing.length - 1]]);
+                }
+                line.geometry.setCoordinates(coordsHost);
+            } else {
+                var coordsEnd = existing.slice();
+                coordsEnd[coordsEnd.length - 1] = objCoords;
+                if (Array.isArray(routeIds) && routeIds.length && typeof gponRouteWaypointCoords === 'function' && sleeveId) {
+                    var hostE = getMapObjectByUid(sleeveId);
+                    var startE = hostE && hostE.geometry ? hostE.geometry.getCoordinates() : existing[0];
+                    coordsEnd = [startE].concat(gponRouteWaypointCoords(routeIds)).concat([objCoords]);
+                }
+                line.geometry.setCoordinates(coordsEnd);
+            }
+        } catch (eNudge) {}
     }
 }
 
@@ -882,6 +920,7 @@ function updateAllConnectionLines() {
     if (typeof invalidateConnectionLinesDisplayCache === 'function') {
         invalidateConnectionLinesDisplayCache();
     }
+    invalidateConnLinesByUidIndex();
     updateAllNodeConnectionLines();
     updateOnuConnectionLines();
     updateOltConnectionLines();
