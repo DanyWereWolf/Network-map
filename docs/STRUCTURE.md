@@ -25,8 +25,10 @@ Network-map/
 │   │   └── support-chat.css
 │   ├── icons/                      # PNG/SVG для UI
 │   └── js/
-│       ├── app/
-│       │   ├── main.js             # Логика карты (~основной объём)
+│       ├── app/                    # Модули карты (persist, drag/sync, cables, GPON, …)
+│       │   ├── main.js             # Оркестрация UI / режимов
+│       │   ├── map-persistence.js  # save/load, undo, инкрементальный снимок
+│       │   ├── object-sync.js      # sync ops, finalizeMapObjectDragEnd
 │       │   ├── radio-bridge.js     # Wi‑Fi радиомосты (P2P/P2MP, покрытие)
 │       │   └── auth.js             # Сессии, вход, API авторизации
 │       ├── core/                   # Общие модули клиента

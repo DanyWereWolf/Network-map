@@ -147,4 +147,4 @@ npm run api
 
 ## Производительность больших карт
 
-См. [FRONTEND.md](FRONTEND.md#производительность-карты) — индекс объектов, viewport, инкрементальные линии связи.
+См. [FRONTEND.md](FRONTEND.md#производительность-карты) — индексы (`MapPerf`, revision snapshot), viewport/виртуализация, лёгкий drag (`scheduleDragUpdate` / `finalizeMapObjectDragEnd`), инкрементальный save и линии связи.

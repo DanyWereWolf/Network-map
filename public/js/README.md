@@ -4,11 +4,22 @@
 
 ## Точки входа (`app/`)
 
+Логика карты разбита на модули (подключаются из `index.html` до `main.js`). Ключевые:
+
 | Файл | Назначение |
 |------|------------|
-| **app/main.js** | Карта: объекты, кабели, кросс/муфта, GPON, регионы, undo, импорт/экспорт, фильтры |
+| **app/main.js** | Сборка UI/режимов, фильтры, часть оркестрации |
+| **app/map-persistence.js** | Сериализация, `saveData`, undo, инкрементальный патч снимка, `warmMapEditCaches` |
+| **app/object-sync.js** | Sync ops, `finalizeMapObjectDragEnd`, locks при drag |
+| **app/map-selection.js** | Выделение, `scheduleDragUpdate` (лёгкий per-frame drag) |
+| **app/create-object.js** / **object-placement.js** | Создание и размещение объектов |
+| **app/cable-helpers.js** / **cable-routing.js** | Кабели, light/full update, attach к трассе |
+| **app/connection-lines.js** | GPON-линии, nudge по индексу uid |
+| **app/cross-node-display.js** | Группы кроссов/узлов (в т.ч. лёгкий group-dragend) |
 | **app/radio-bridge.js** | Wi‑Fi радиомосты: P2P/P2MP, радиолинки, порты RJ45/SFP, зоны покрытия, карточка |
 | **app/auth.js** | `AuthSystem`: вход, регистрация, сессия, запросы к `/api/auth/*` |
+
+Производительность move/place: [docs/FRONTEND.md](../../docs/FRONTEND.md#производительность-карты).
 
 ## Ядро (`core/`)
 
@@ -34,7 +45,7 @@
 | **search.js** | Поиск по карте в шапке |
 | **regions.js** | Полигоны регионов, видимость, подсчёт объектов |
 | **cable-underground.js** | Подземные участки кабеля (колодцы, pathCoords) |
-| **map-perf.js** | Индекс `uniqueId`, viewport cull, планировщик линий связи |
+| **map-perf.js** | Индекс `uniqueId`, reverse cable links, spatial grid, viewport cull / виртуализация, планировщик линий связи |
 
 ## UI (`ui/`)
 
