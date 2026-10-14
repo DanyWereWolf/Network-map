@@ -29,13 +29,16 @@
     function isGeoObjectOnMap(obj) {
         if (!obj || !global.myMap || !global.myMap.geoObjects) return false;
         var coll = global.myMap.geoObjects;
+        // Leaflet shim: _parent выставляется в GeoObjectCollection.add/remove.
+        if (obj._parent === coll) return true;
         if (typeof obj.getParent === 'function') {
             try {
                 var parent = obj.getParent();
                 if (parent === coll) return true;
-                if (parent == null) return false;
+                if (parent == null && obj._parent == null) return false;
             } catch (e) {}
         }
+        if (typeof coll.indexOf !== 'function') return false;
         try { return coll.indexOf(obj) !== -1; } catch (e2) { return false; }
     }
 

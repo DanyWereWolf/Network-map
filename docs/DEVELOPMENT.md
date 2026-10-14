@@ -4,7 +4,8 @@
 
 - **Node.js** 18+ (LTS рекомендуется)
 - **npm**
-- Ключ [API Яндекс.Карт](https://developer.tech.yandex.ru/) в `server-config.json`
+- Ключ [API Яндекс.Карт](https://developer.tech.yandex.ru/) в `server-config.json` (если `mapEngine` не `leaflet`)
+- On-prem ортофото: `mapEngine: "leaflet"` + GDAL — см. [ONPREM-BASEMAP.md](ONPREM-BASEMAP.md)
 - Для входа локально — тестовые ключи Turnstile уже в шаблоне конфига
 - Опционально **MySQL 8+** (режим `storage: "mysql"`)
 

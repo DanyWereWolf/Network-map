@@ -51,17 +51,41 @@
         (function(){
             var base = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : '';
             if (!base || base === 'null') base = '';
-            var link = document.createElement('link');
-            link.rel = 'preconnect';
-            link.href = 'https://api-maps.yandex.ru';
-            document.head.appendChild(link);
-            fetch(base + '/api/public-config').then(function(r){ return r.json(); }).catch(function(){ return {}; }).then(function(c){
-                var key = (c && c.yandexMapsApiKey) ? String(c.yandexMapsApiKey).trim() : '';
+            function loadScript(src, attrs) {
                 var s = document.createElement('script');
-                s.src = key
-                    ? ('https://api-maps.yandex.ru/2.1/?apikey=' + encodeURIComponent(key) + '&lang=ru_RU')
-                    : 'https://api-maps.yandex.ru/2.1/?lang=ru_RU';
+                s.src = src;
+                if (attrs) {
+                    Object.keys(attrs).forEach(function(k) { s.setAttribute(k, attrs[k]); });
+                }
                 document.head.appendChild(s);
+                return s;
+            }
+            function loadCss(href) {
+                var l = document.createElement('link');
+                l.rel = 'stylesheet';
+                l.href = href;
+                document.head.appendChild(l);
+            }
+            fetch(base + '/api/public-config').then(function(r){ return r.json(); }).catch(function(){ return {}; }).then(function(c){
+                window.__volsmapPublicConfig = c || {};
+                var engine = (c && c.mapEngine) ? String(c.mapEngine).toLowerCase() : 'yandex';
+                if (engine === 'leaflet' || engine === 'offline' || engine === 'orthophoto') {
+                    window.VolsmapMapEngine = 'leaflet';
+                    loadCss('vendor/leaflet/leaflet.css');
+                    var leaflet = loadScript('vendor/leaflet/leaflet.js');
+                    leaflet.onload = function() {
+                        loadScript('js/map/leaflet-ymaps-shim.js');
+                    };
+                    return;
+                }
+                var link = document.createElement('link');
+                link.rel = 'preconnect';
+                link.href = 'https://api-maps.yandex.ru';
+                document.head.appendChild(link);
+                var key = (c && c.yandexMapsApiKey) ? String(c.yandexMapsApiKey).trim() : '';
+                loadScript(key
+                    ? ('https://api-maps.yandex.ru/2.1/?apikey=' + encodeURIComponent(key) + '&lang=ru_RU')
+                    : 'https://api-maps.yandex.ru/2.1/?lang=ru_RU');
             });
         })();
     </script>
@@ -1163,14 +1187,33 @@
             </div>
             <div id="map" class="map"></div>
             <div class="map-layer-selector" id="mapLayerSelector">
-                <button type="button" class="map-layer-selector__btn" id="mapLayerSelectorBtn" aria-expanded="false" aria-haspopup="listbox" aria-controls="mapLayerSelectorMenu" title="Слои карты">
+                <button type="button" class="map-layer-selector__btn" id="mapLayerSelectorBtn" aria-expanded="false" aria-haspopup="listbox" aria-controls="mapLayerSelectorMenu" title="Слои и подложка карты">
+                    <svg class="map-layer-selector__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                        <polyline points="2 17 12 22 22 17"></polyline>
+                        <polyline points="2 12 12 17 22 12"></polyline>
+                    </svg>
                     <span class="map-layer-selector__label" id="mapLayerSelectorLabel">Слои</span>
                     <svg class="map-layer-selector__chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </button>
                 <div class="map-layer-selector__menu" id="mapLayerSelectorMenu" role="listbox" hidden>
-                    <button type="button" class="map-layer-selector__item is-active" role="option" data-map-type="yandex#map" aria-selected="true">Схема</button>
-                    <button type="button" class="map-layer-selector__item" role="option" data-map-type="yandex#satellite" aria-selected="false">Спутник</button>
-                    <button type="button" class="map-layer-selector__item" role="option" data-map-type="yandex#hybrid" aria-selected="false">Гибрид</button>
+                    <div class="map-layer-selector__group" data-engine-group="yandex">
+                        <div class="map-layer-selector__group-label">Яндекс.Карты</div>
+                        <button type="button" class="map-layer-selector__item is-active" role="option" data-map-type="yandex#map" data-engine="yandex" aria-selected="true">Схема</button>
+                        <button type="button" class="map-layer-selector__item" role="option" data-map-type="yandex#satellite" data-engine="yandex" aria-selected="false">Спутник</button>
+                        <button type="button" class="map-layer-selector__item" role="option" data-map-type="yandex#hybrid" data-engine="yandex" aria-selected="false">Гибрид</button>
+                    </div>
+                    <div class="map-layer-selector__group" data-engine-group="leaflet" hidden>
+                        <div class="map-layer-selector__group-label">Локальная подложка</div>
+                        <button type="button" class="map-layer-selector__item" role="option" data-map-type="leaflet#orthophoto" data-engine="leaflet" aria-selected="false">Ортофото</button>
+                        <button type="button" class="map-layer-selector__item" role="option" data-map-type="leaflet#osm" data-engine="leaflet" aria-selected="false">OpenStreetMap</button>
+                        <button type="button" class="map-layer-selector__item" role="option" data-map-type="leaflet#none" data-engine="leaflet" aria-selected="false">Без подложки</button>
+                        <div class="map-layer-selector__sep" role="separator" aria-hidden="true"></div>
+                        <button type="button" class="map-layer-selector__item map-layer-selector__item--action" role="option" data-action="basemap-admin" data-engine="leaflet">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                            Настроить ортофото…
+                        </button>
+                    </div>
                 </div>
             </div>
             <div id="undergroundEditBar" class="underground-draw-card" hidden aria-live="polite" role="region" aria-labelledby="undergroundEditBarTitle">
@@ -3210,6 +3253,7 @@
     <script src="js/core/confirm-dialog.js"></script>
     <script src="js/core/network-status.js"></script>
     <script src="js/groups.js"></script>
+    <script src="js/map/map-engine.js"></script>
     <script src="js/map/theme.js"></script>
     <script src="js/map/map-icons.js"></script>
     <script src="js/map/cable-underground.js"></script>
@@ -3232,6 +3276,7 @@
     <script src="js/app/object-placement.js"></script>
     <script src="js/app/edit-mode.js"></script>
     <script src="js/app/map-init.js"></script>
+    <script src="js/app/basemap-ui.js"></script>
     <script src="js/app/zabbix-status.js"></script>
     <script src="js/app/map-clicks.js"></script>
     <script src="js/app/create-object.js?v=move-sync-rev1"></script>

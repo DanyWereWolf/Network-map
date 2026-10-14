@@ -13,7 +13,9 @@ const db = require('./database');
 const avatars = require('./avatars');
 const chatMedia = require('./chat-media');
 const objectMedia = require('./object-media');
+const basemap = require('./lib/basemap');
 const newsMedia = require('./news-media');
+const multer = require('multer');
 const security = require('./lib/security');
 const supportBot = require('./lib/support-bot');
 const mail = require('./lib/mail');
@@ -117,9 +119,17 @@ function logServerConfigWarnings() {
         console.warn('[Config] Файл server-config.json не найден в корне проекта:', SERVER_CONFIG_PATH);
         return;
     }
-    const mapsKey = String(serverConfig.yandexMapsApiKey || process.env.YANDEX_MAPS_API_KEY || '').trim();
-    if (!mapsKey || mapsKey === 'YOUR_YANDEX_MAPS_API_KEY') {
-        console.warn('[Config] yandexMapsApiKey не задан — карты Яндекса не будут работать.');
+    const mapEngine = String(serverConfig.mapEngine || process.env.MAP_ENGINE || 'yandex').trim().toLowerCase();
+    if (mapEngine === 'leaflet' || mapEngine === 'offline' || mapEngine === 'orthophoto') {
+        var gdalStatus = basemap.getGdalStatus();
+        if (gdalStatus && gdalStatus.nodeFallback) {
+            console.warn('[Config] mapEngine=leaflet: GDAL не найден — будет встроенная нарезка тайлов (медленнее).');
+        }
+    } else {
+        const mapsKey = String(serverConfig.yandexMapsApiKey || process.env.YANDEX_MAPS_API_KEY || '').trim();
+        if (!mapsKey || mapsKey === 'YOUR_YANDEX_MAPS_API_KEY') {
+            console.warn('[Config] yandexMapsApiKey не задан — карты Яндекса не будут работать.');
+        }
     }
     const smtpCfg = mail.getSmtpConfig ? mail.getSmtpConfig(serverConfig) : null;
     const smtpRaw = (serverConfig && serverConfig.smtp) || {};
@@ -3336,6 +3346,170 @@ app.get('/api/object-media/file/:mediaId', (req, res) => {
     res.sendFile(path.resolve(file));
 });
 
+// ===== On-prem basemap / ортофото (GeoTIFF → XYZ tiles) =====
+var basemapUpload = multer({
+    dest: path.join(DATA_DIR, 'basemaps', '_tmp'),
+    limits: {
+        fileSize: (function () {
+            var gb = parseFloat(serverConfig.basemapMaxUploadGb || process.env.BASEMAP_MAX_UPLOAD_GB || '8');
+            if (!gb || gb < 0.1) gb = 8;
+            return Math.floor(gb * 1024 * 1024 * 1024);
+        })()
+    },
+    fileFilter: function (req, file, cb) {
+        var name = String(file.originalname || '').toLowerCase();
+        var ok = /\.(tif|tiff|geotiff)$/i.test(name) ||
+            /tiff|geotiff|octet-stream/i.test(String(file.mimetype || ''));
+        if (!ok) return cb(new Error('Допустим только GeoTIFF (.tif/.tiff)'));
+        cb(null, true);
+    }
+});
+
+function ensureBasemapTmpDir() {
+    var dir = path.join(DATA_DIR, 'basemaps', '_tmp');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    return dir;
+}
+ensureBasemapTmpDir();
+
+app.get('/api/basemap/status', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!user.organizationId) return res.status(403).json({ error: 'Доступно только участникам организации' });
+    var gdal = basemap.getGdalStatus();
+    var used = basemap.getOrgUsedBytes(user.organizationId);
+    var quota = basemap.getQuotaBytes(serverConfig);
+    res.json({
+        gdal: gdal,
+        usedBytes: used,
+        quotaBytes: quota,
+        usedLabel: basemap.formatBytes(used),
+        quotaLabel: basemap.formatBytes(quota),
+        active: basemap.getActiveManifest(user.organizationId)
+    });
+});
+
+app.get('/api/basemap/active', (req, res) => {
+    const token = (req.headers.authorization && req.headers.authorization.startsWith('Bearer '))
+        ? req.headers.authorization.slice(7)
+        : (req.query && req.query.token ? String(req.query.token) : '');
+    const user = token ? getSessionUserFromToken(token) : getSessionUser(req);
+    if (!user || !user.organizationId) return res.status(401).json({ error: 'Требуется авторизация' });
+    var active = basemap.getActiveManifest(user.organizationId);
+    if (!active) return res.json({ packId: null });
+    res.json(active);
+});
+
+app.get('/api/basemap/packs', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!user.organizationId) return res.status(403).json({ error: 'Доступно только участникам организации' });
+    res.json(basemap.listPacks(user.organizationId));
+});
+
+app.get('/api/basemap/tiles/:packId/:z/:x/:y', (req, res) => {
+    const token = (req.headers.authorization && req.headers.authorization.startsWith('Bearer '))
+        ? req.headers.authorization.slice(7)
+        : (req.query && req.query.token ? String(req.query.token) : '');
+    const user = getSessionUserFromToken(token);
+    if (!user || !user.organizationId) return res.status(401).end();
+    var packId = String(req.params.packId || '');
+    if (!/^pack_[a-z0-9_]+$/i.test(packId)) return res.status(404).end();
+    var z = parseInt(req.params.z, 10);
+    var x = parseInt(req.params.x, 10);
+    var y = parseInt(String(req.params.y).replace(/\.png$/i, ''), 10);
+    if (!isFinite(z) || !isFinite(x) || !isFinite(y) || z < 0 || z > 24) return res.status(404).end();
+    var file = basemap.findTile(user.organizationId, packId, z, x, y);
+    if (!file) return res.status(404).end();
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.type('image/png');
+    res.sendFile(path.resolve(file));
+});
+
+app.post('/api/basemap/upload', function (req, res) {
+    ensureBasemapTmpDir();
+    basemapUpload.single('file')(req, res, function (err) {
+        if (err) {
+            return res.status(400).json({ error: String(err.message || err) });
+        }
+        const user = getSessionUser(req);
+        if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+        if (!user.organizationId) return res.status(403).json({ error: 'Доступно только участникам организации' });
+        if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+        if (!req.file || !req.file.path) {
+            return res.status(400).json({ error: 'Файл GeoTIFF не получен (поле file)' });
+        }
+        try {
+            var mode = (req.body && req.body.mode === 'patch') ? 'patch' : 'full';
+            var job = basemap.createUploadJob({
+                orgId: user.organizationId,
+                tempPath: req.file.path,
+                fileSize: req.file.size || 0,
+                sourceName: (req.body && req.body.sourceName) || req.file.originalname || '',
+                mode: mode,
+                minZoom: req.body && req.body.minZoom,
+                maxZoom: req.body && req.body.maxZoom,
+                activate: req.body && req.body.activate !== 'false',
+                serverConfig: serverConfig
+            });
+            res.json({ ok: true, jobId: job.id, status: job.status, mode: job.mode });
+        } catch (e) {
+            try { if (req.file && req.file.path) fs.unlinkSync(req.file.path); } catch (eUn) {}
+            res.status(e.status || 500).json({
+                error: String(e.message || e),
+                code: e.code || undefined
+            });
+        }
+    });
+});
+
+app.get('/api/basemap/jobs/:jobId', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!user.organizationId) return res.status(403).json({ error: 'Доступно только участникам организации' });
+    var job = basemap.getJob(String(req.params.jobId || ''));
+    if (!job || String(job.orgId) !== String(user.organizationId)) {
+        return res.status(404).json({ error: 'Задача не найдена' });
+    }
+    res.json({
+        id: job.id,
+        status: job.status,
+        progress: job.progress,
+        message: job.message,
+        error: job.error,
+        packId: job.packId,
+        mode: job.mode,
+        bounds: job.bounds || null,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt
+    });
+});
+
+app.post('/api/basemap/:packId/activate', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!user.organizationId) return res.status(403).json({ error: 'Доступно только участникам организации' });
+    if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+    try {
+        var active = basemap.activatePack(user.organizationId, String(req.params.packId || ''));
+        res.json({ ok: true, active: active });
+    } catch (e) {
+        res.status(e.status || 500).json({ error: String(e.message || e) });
+    }
+});
+
+app.delete('/api/basemap/:packId', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!user.organizationId) return res.status(403).json({ error: 'Доступно только участникам организации' });
+    if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+    try {
+        res.json(basemap.deletePack(user.organizationId, String(req.params.packId || '')));
+    } catch (e) {
+        res.status(e.status || 500).json({ error: String(e.message || e) });
+    }
+});
+
 app.get('/api/settings', (req, res) => {
     try {
         var user = getSessionUser(req);
@@ -3407,7 +3581,7 @@ app.post('/api/settings', (req, res) => {
             delete toSave.lodThresholds;
         }
         if (Object.keys(toSave).length > 0) db.setSettings(toSave, orgId || undefined);
-        if (orgId && (toSave.collaboratorCursorStyle !== undefined || toSave.fiberMapColor !== undefined || toSave.fiberMapStrokeWidth !== undefined || toSave.cameraCoverageColor !== undefined || toSave.radioBridgeCoverageColor !== undefined)) {
+        if (orgId && (toSave.collaboratorCursorStyle !== undefined || toSave.fiberMapColor !== undefined || toSave.fiberMapStrokeWidth !== undefined || toSave.cameraCoverageColor !== undefined || toSave.radioBridgeCoverageColor !== undefined || toSave.defaultBasemapType !== undefined || toSave.defaultBasemapOfflineType !== undefined)) {
             var orgSettings = db.getSettings(orgId);
             var broadcastPayload = {};
             if (toSave.collaboratorCursorStyle !== undefined) {
@@ -3422,6 +3596,12 @@ app.post('/api/settings', (req, res) => {
             }
             if (toSave.radioBridgeCoverageColor !== undefined) {
                 broadcastPayload.radioBridgeCoverageColor = orgSettings.radioBridgeCoverageColor;
+            }
+            if (toSave.defaultBasemapType !== undefined) {
+                broadcastPayload.defaultBasemapType = orgSettings.defaultBasemapType;
+            }
+            if (toSave.defaultBasemapOfflineType !== undefined) {
+                broadcastPayload.defaultBasemapOfflineType = orgSettings.defaultBasemapOfflineType;
             }
             broadcastOrgSettings(orgId, broadcastPayload);
         }
@@ -3866,8 +4046,13 @@ function getSiteBaseUrl(req) {
 app.get('/api/public-config', (req, res) => {
     const key = serverConfig.yandexMapsApiKey || process.env.YANDEX_MAPS_API_KEY || '';
     const publicSiteUrl = serverConfig.publicSiteUrl || process.env.PUBLIC_SITE_URL || getSiteBaseUrl(req);
+    const mapEngineRaw = String(serverConfig.mapEngine || process.env.MAP_ENGINE || 'yandex').trim().toLowerCase();
+    const mapEngine = (mapEngineRaw === 'leaflet' || mapEngineRaw === 'offline' || mapEngineRaw === 'orthophoto')
+        ? 'leaflet'
+        : 'yandex';
     res.json({
         yandexMapsApiKey: key,
+        mapEngine: mapEngine,
         publicSiteUrl: publicSiteUrl ? String(publicSiteUrl).trim().replace(/\/$/, '') : '',
         freeMapObjectLimit: getDefaultFreeMapObjectLimit(),
         defaultMaxConcurrentUsers: getDefaultMaxConcurrentUsers()

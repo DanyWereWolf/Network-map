@@ -1,7 +1,10 @@
 {
   "port": 3000,
   "host": "0.0.0.0",
+  "mapEngine": "yandex",
   "yandexMapsApiKey": "YOUR_YANDEX_MAPS_API_KEY",
+  "basemapOrgQuotaGb": 50,
+  "basemapMaxUploadGb": 8,
   "publicSiteUrl": "https://volsmap.ru",
   "embedFrameAncestors": ["*"],
   "serveObfuscatedClient": false,

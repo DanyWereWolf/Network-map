@@ -1253,6 +1253,9 @@ function loadData() {
                 window._savedMapStart = s.mapStart;
                 applyMapStartFromSettings(s.mapStart, true);
             }
+            if (typeof applyOrgBasemapSettings === 'function') {
+                try { applyOrgBasemapSettings(s, { force: true }); } catch (eBasemap) {}
+            }
             if (s.collaboratorCursorStyle && typeof applyCollaboratorCursorStyle === 'function') {
                 applyCollaboratorCursorStyle(s.collaboratorCursorStyle);
             }
@@ -1366,6 +1369,11 @@ function applyOrgDisplaySettings(settings) {
         try {
             (window.applyOrgCoverageColors || applyOrgCoverageColors)(settings, { applyAll: true });
         } catch (eCov2) {}
+    }
+    if (settings.defaultBasemapType !== undefined || settings.defaultBasemapOfflineType !== undefined) {
+        if (typeof applyOrgBasemapSettings === 'function') {
+            try { applyOrgBasemapSettings(settings, { force: true }); } catch (eBm) {}
+        }
     }
 }
 window.applyOrgDisplaySettings = applyOrgDisplaySettings;

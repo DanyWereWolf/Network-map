@@ -50,6 +50,7 @@ Network-map/
 │   ├── news-sanitize.js            # Санитизация HTML новостей
 │   ├── lib/
 │   │   ├── security.js             # Turnstile, rate limit, TOTP
+│   │   ├── basemap.js              # GeoTIFF→тайлы, packs ортофото
 │   │   └── support-bot.js          # Бот поддержки
 │   └── config/
 │       └── server-config.example.json
@@ -57,6 +58,7 @@ Network-map/
 ├── data/                           # Локальные данные (в .gitignore)
 │   ├── store.json                  # Основное хранилище
 │   ├── backups/<org_id>/           # Ежедневные бэкапы карт
+│   ├── basemaps/<org_id>/          # Ортофото XYZ-тайлы (on-prem)
 │   ├── avatars/
 │   ├── chat-media/
 │   └── news-media/

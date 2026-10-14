@@ -79,7 +79,32 @@ function setupMapLayerSelector() {
     var menu = document.getElementById('mapLayerSelectorMenu');
     if (!root || !btn || !menu || !myMap) return;
 
+    var leafletMode = typeof MapEngine !== 'undefined' && MapEngine.isLeaflet && MapEngine.isLeaflet();
     var items = menu.querySelectorAll('.map-layer-selector__item');
+    var groups = menu.querySelectorAll('.map-layer-selector__group');
+
+    for (var g = 0; g < groups.length; g++) {
+        var groupEng = groups[g].getAttribute('data-engine-group') || '';
+        if (leafletMode) {
+            // On-prem: Яндекс (онлайн) + локальная подложка.
+            groups[g].removeAttribute('hidden');
+        } else if (groupEng === 'yandex') {
+            groups[g].removeAttribute('hidden');
+        } else {
+            groups[g].setAttribute('hidden', '');
+        }
+    }
+
+    for (var i = 0; i < items.length; i++) {
+        var eng = items[i].getAttribute('data-engine') || 'yandex';
+        if (leafletMode) {
+            if (eng === 'leaflet' || eng === 'yandex') items[i].removeAttribute('hidden');
+            else items[i].setAttribute('hidden', '');
+        } else {
+            if (eng === 'yandex') items[i].removeAttribute('hidden');
+            else items[i].setAttribute('hidden', '');
+        }
+    }
 
     function setOpen(open) {
         root.classList.toggle('is-open', open);
@@ -88,14 +113,32 @@ function setupMapLayerSelector() {
         else menu.setAttribute('hidden', '');
     }
 
+    function labelForType(key) {
+        if (key === 'yandex#satellite') return 'Спутник';
+        if (key === 'yandex#hybrid') return 'Гибрид';
+        if (key === 'yandex#map') return 'Схема';
+        if (key === 'leaflet#osm') return 'OSM';
+        if (key === 'leaflet#none') return 'Без подложки';
+        if (key === 'leaflet#orthophoto') return 'Ортофото';
+        return 'Слои';
+    }
+
     function syncActive(type) {
-        var key = type || (myMap.getType && myMap.getType()) || 'yandex#map';
-        for (var i = 0; i < items.length; i++) {
-            var item = items[i];
+        var key = type || (myMap.getType && myMap.getType()) || (leafletMode ? 'leaflet#orthophoto' : 'yandex#map');
+        for (var j = 0; j < items.length; j++) {
+            var item = items[j];
+            if (item.hasAttribute('hidden')) continue;
+            if (item.getAttribute('data-action')) {
+                item.classList.remove('is-active');
+                item.setAttribute('aria-selected', 'false');
+                continue;
+            }
             var active = item.getAttribute('data-map-type') === key;
             item.classList.toggle('is-active', active);
             item.setAttribute('aria-selected', active ? 'true' : 'false');
         }
+        var label = document.getElementById('mapLayerSelectorLabel');
+        if (label) label.textContent = labelForType(key);
     }
 
     btn.addEventListener('click', function(e) {
@@ -106,13 +149,18 @@ function setupMapLayerSelector() {
 
     menu.addEventListener('click', function(e) {
         var item = e.target && e.target.closest ? e.target.closest('.map-layer-selector__item') : null;
-        if (!item) return;
+        if (!item || item.hasAttribute('hidden')) return;
         e.preventDefault();
         e.stopPropagation();
-        var type = item.getAttribute('data-map-type');
-        if (!type) return;
-        try { myMap.setType(type); } catch (err) {}
-        syncActive(type);
+        if (item.getAttribute('data-action') === 'basemap-admin') {
+            setOpen(false);
+            if (typeof openBasemapAdminModal === 'function') openBasemapAdminModal();
+            return;
+        }
+        var mapType = item.getAttribute('data-map-type');
+        if (!mapType) return;
+        try { myMap.setType(mapType); } catch (err) {}
+        syncActive(mapType);
         setOpen(false);
     });
 
@@ -132,7 +180,7 @@ function setupMapLayerSelector() {
         });
     } catch (err) {}
 
-    syncActive();
+    syncActive(leafletMode ? 'leaflet#orthophoto' : null);
 }
 
 function setupEventListeners() {

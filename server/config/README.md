@@ -15,7 +15,7 @@
 cp server/config/server-config.example.json server-config.json
 ```
 
-Обязательно задайте `yandexMapsApiKey`. Ключи Yandex SmartCaptcha — в [консоли Yandex Cloud](https://console.yandex.cloud/folders?section=smartcaptcha) (бесплатный тариф).
+Для облака задайте `yandexMapsApiKey`. Для on-prem ортофото: `mapEngine: "leaflet"` (см. [docs/ONPREM-BASEMAP.md](../../docs/ONPREM-BASEMAP.md)).
 
 ## Поля
 
@@ -23,7 +23,10 @@ cp server/config/server-config.example.json server-config.json
 |------|--------------|----------|
 | `port` | `3000` | HTTP-порт |
 | `host` | `0.0.0.0` | Интерфейс (доступ из LAN) |
-| `yandexMapsApiKey` | — | Ключ Яндекс.Карт |
+| `mapEngine` | `yandex` | `yandex` или `leaflet` (офлайн-подложка) |
+| `basemapOrgQuotaGb` | `50` | Квота тайлов ортофото на организацию |
+| `basemapMaxUploadGb` | `8` | Макс. размер одного GeoTIFF |
+| `yandexMapsApiKey` | — | Ключ Яндекс.Карт (для `mapEngine: yandex`) |
 | `publicSiteUrl` | — | Публичный URL сайта |
 | `freeMapObjectLimit` | `2000` | Лимит объектов на карте |
 | `maxConcurrentUsers` | `4` | Одновременные пользователи организации |

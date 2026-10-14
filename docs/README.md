@@ -9,6 +9,7 @@
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Разработчики | Установка, npm-скрипты, проверки, типичные задачи |
 | [FRONTEND.md](FRONTEND.md) | Frontend | Порядок загрузки скриптов, модули, производительность карты |
 | [SERVER.md](SERVER.md) | Backend | API, WebSocket, хранилище, медиа, безопасность |
+| [ONPREM-BASEMAP.md](ONPREM-BASEMAP.md) | On-prem | Leaflet + GeoTIFF→тайлы, GDAL, air-gap |
 | [../public/js/README.md](../public/js/README.md) | Frontend | Справочник файлов в `public/js/` |
 | **В приложении** | Пользователи | Кнопка «Справка» в шапке карты → `public/js/ui/help.js` |
 

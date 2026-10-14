@@ -55,6 +55,10 @@ function startMapApp() {
                 cb();
             }
         }
+        if (typeof MapEngine !== 'undefined' && MapEngine.whenReady) {
+            MapEngine.whenReady(runCb);
+            return;
+        }
         if (window.ymaps) { window.ymaps.ready(runCb); return; }
         var attempts = 0;
         var maxAttempts = 600;

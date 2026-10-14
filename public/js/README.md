@@ -18,6 +18,7 @@
 | **app/cross-node-display.js** | Группы кроссов/узлов (в т.ч. лёгкий group-dragend) |
 | **app/radio-bridge.js** | Wi‑Fi радиомосты: P2P/P2MP, радиолинки, порты RJ45/SFP, зоны покрытия, карточка |
 | **app/auth.js** | `AuthSystem`: вход, регистрация, сессия, запросы к `/api/auth/*` |
+| **app/basemap-ui.js** | Загрузка/обновление ортофото (GeoTIFF) в leaflet-режиме |
 
 Производительность move/place: [docs/FRONTEND.md](../../docs/FRONTEND.md#производительность-карты).
 
@@ -40,6 +41,8 @@
 
 | Файл | Назначение |
 |------|------------|
+| **map-engine.js** | Переключатель `yandex` / `leaflet` (`MapEngine`) |
+| **leaflet-ymaps-shim.js** | YMaps-совместимый слой поверх Leaflet (on-prem) |
 | **theme.js** | Светлая/тёмная тема UI и подложки карты |
 | **map-icons.js** | SVG-иконки типов объектов |
 | **search.js** | Поиск по карте в шапке |

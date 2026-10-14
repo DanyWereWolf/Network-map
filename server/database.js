@@ -1556,7 +1556,9 @@ function getSettings(orgId) {
         fiberMapColor: normalizeFiberMapColor(byOrg && byOrg.fiberMapColor),
         fiberMapStrokeWidth: normalizeFiberMapStrokeWidth(byOrg && byOrg.fiberMapStrokeWidth),
         cameraCoverageColor: normalizeMapCoverageColor(byOrg && byOrg.cameraCoverageColor, DEFAULT_CAMERA_COVERAGE_COLOR),
-        radioBridgeCoverageColor: normalizeMapCoverageColor(byOrg && byOrg.radioBridgeCoverageColor, DEFAULT_RADIO_BRIDGE_COVERAGE_COLOR)
+        radioBridgeCoverageColor: normalizeMapCoverageColor(byOrg && byOrg.radioBridgeCoverageColor, DEFAULT_RADIO_BRIDGE_COVERAGE_COLOR),
+        defaultBasemapType: normalizeDefaultBasemapType(byOrg && byOrg.defaultBasemapType),
+        defaultBasemapOfflineType: normalizeDefaultBasemapOfflineType(byOrg && byOrg.defaultBasemapOfflineType)
     };
 }
 
@@ -1600,6 +1602,33 @@ function normalizeFiberMapStrokeWidth(value) {
     return n;
 }
 
+var DEFAULT_BASEMAP_TYPE = 'leaflet#orthophoto';
+var DEFAULT_BASEMAP_OFFLINE_TYPE = 'leaflet#orthophoto';
+var ALLOWED_BASEMAP_TYPES = {
+    'yandex#map': 1,
+    'yandex#satellite': 1,
+    'yandex#hybrid': 1,
+    'leaflet#orthophoto': 1,
+    'leaflet#osm': 1,
+    'leaflet#none': 1
+};
+var ALLOWED_BASEMAP_OFFLINE_TYPES = {
+    'leaflet#orthophoto': 1,
+    'leaflet#none': 1
+};
+
+function normalizeDefaultBasemapType(value) {
+    var s = value == null ? '' : String(value).trim();
+    if (ALLOWED_BASEMAP_TYPES[s]) return s;
+    return DEFAULT_BASEMAP_TYPE;
+}
+
+function normalizeDefaultBasemapOfflineType(value) {
+    var s = value == null ? '' : String(value).trim();
+    if (ALLOWED_BASEMAP_OFFLINE_TYPES[s]) return s;
+    return DEFAULT_BASEMAP_OFFLINE_TYPE;
+}
+
 function setSettings(obj, orgId) {
     if (orgId) {
         const s = loadStore();
@@ -1615,6 +1644,8 @@ function setSettings(obj, orgId) {
         if (obj.fiberMapStrokeWidth !== undefined) o.fiberMapStrokeWidth = normalizeFiberMapStrokeWidth(obj.fiberMapStrokeWidth);
         if (obj.cameraCoverageColor !== undefined) o.cameraCoverageColor = normalizeMapCoverageColor(obj.cameraCoverageColor, DEFAULT_CAMERA_COVERAGE_COLOR);
         if (obj.radioBridgeCoverageColor !== undefined) o.radioBridgeCoverageColor = normalizeMapCoverageColor(obj.radioBridgeCoverageColor, DEFAULT_RADIO_BRIDGE_COVERAGE_COLOR);
+        if (obj.defaultBasemapType !== undefined) o.defaultBasemapType = normalizeDefaultBasemapType(obj.defaultBasemapType);
+        if (obj.defaultBasemapOfflineType !== undefined) o.defaultBasemapOfflineType = normalizeDefaultBasemapOfflineType(obj.defaultBasemapOfflineType);
         saveStore();
         return;
     }

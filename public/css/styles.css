@@ -15878,7 +15878,7 @@ html[data-theme="light"] .app-entrance__status {
 .map-layer-selector__btn {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     min-height: 34px;
     padding: 0 12px;
     margin: 0;
@@ -15895,6 +15895,11 @@ html[data-theme="light"] .app-entrance__status {
     letter-spacing: 0.01em;
     cursor: pointer;
     transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.map-layer-selector__icon {
+    flex-shrink: 0;
+    opacity: 0.85;
 }
 
 [data-theme="dark"] .map-layer-selector__btn {
@@ -15928,13 +15933,14 @@ html[data-theme="light"] .app-entrance__status {
     position: absolute;
     top: calc(100% + 6px);
     right: 0;
-    min-width: 100%;
+    min-width: 220px;
     display: flex;
     flex-direction: column;
-    padding: 4px;
+    gap: 2px;
+    padding: 6px;
     background: var(--bg-card);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
+    border-radius: 10px;
     box-shadow: var(--shadow-lg);
     overflow: hidden;
 }
@@ -15943,8 +15949,36 @@ html[data-theme="light"] .app-entrance__status {
     display: none !important;
 }
 
+.map-layer-selector__group[hidden] {
+    display: none !important;
+}
+
+.map-layer-selector__group + .map-layer-selector__group {
+    margin-top: 4px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border-color);
+}
+
+.map-layer-selector__group-label {
+    padding: 4px 10px 6px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    user-select: none;
+}
+
+.map-layer-selector__sep {
+    height: 1px;
+    margin: 4px 6px;
+    background: var(--border-color);
+}
+
 .map-layer-selector__item {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     width: 100%;
     margin: 0;
     padding: 9px 12px;
@@ -15970,6 +16004,335 @@ html[data-theme="light"] .app-entrance__status {
     background: var(--accent-primary-soft);
     color: var(--accent-primary);
     font-weight: 600;
+}
+
+.map-layer-selector__item--action {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.map-layer-selector__item--action svg {
+    flex-shrink: 0;
+    opacity: 0.8;
+}
+
+.map-layer-selector__item--action:hover {
+    color: var(--accent-primary);
+}
+
+/* —— Модалка ортофото-подложки —— */
+.basemap-admin-content.panel-glass {
+    max-width: 560px;
+    width: min(560px, 94vw);
+    position: relative;
+    overflow: hidden;
+}
+
+.basemap-admin-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.basemap-admin-header__main {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    min-width: 0;
+}
+
+.basemap-admin-header__icon {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: var(--accent-primary-soft);
+    color: var(--accent-primary);
+}
+
+.basemap-admin-header__text {
+    min-width: 0;
+}
+
+.basemap-admin-header__text h2 {
+    margin: 0;
+    font-family: var(--font-display, var(--font-sans));
+    font-size: 1.125rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.basemap-admin-header__sub {
+    margin: 4px 0 0;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    line-height: 1.35;
+}
+
+.basemap-admin-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.basemap-admin-status-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--bg-tertiary, var(--bg-secondary)) 70%, transparent);
+}
+
+.basemap-admin-status-card__row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.basemap-admin-status-card__label {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.basemap-admin-status-card__value {
+    text-align: right;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    word-break: break-word;
+}
+
+.basemap-admin-status-card__value.is-ok {
+    color: var(--accent-success, #16a34a);
+}
+
+.basemap-admin-status-card__value.is-warn {
+    color: var(--accent-warning, #d97706);
+}
+
+.basemap-admin-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.basemap-admin-section__title {
+    margin: 0;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    font-family: var(--font-display, var(--font-sans));
+    color: var(--text-primary);
+}
+
+.basemap-admin-zoom-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.basemap-admin-zoom-row .form-group {
+    margin: 0;
+}
+
+.basemap-admin-hint {
+    margin: 0;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--text-muted);
+}
+
+.basemap-admin-file {
+    padding: 8px 10px;
+}
+
+.basemap-admin-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.basemap-admin-progress[hidden] {
+    display: none !important;
+}
+
+.basemap-admin-progress__track {
+    height: 8px;
+    border-radius: 999px;
+    background: var(--bg-tertiary, rgba(127, 127, 127, 0.2));
+    overflow: hidden;
+}
+
+.basemap-admin-progress__bar {
+    height: 100%;
+    width: 0%;
+    border-radius: inherit;
+    background: var(--accent-primary);
+    transition: width 0.2s ease;
+}
+
+.basemap-admin-progress__text {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.basemap-admin-packs {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 200px;
+    overflow: auto;
+    padding-right: 2px;
+}
+
+.basemap-admin-packs__empty {
+    padding: 14px 12px;
+    border: 1px dashed var(--border-color);
+    border-radius: 10px;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.basemap-admin-pack {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--bg-card);
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.basemap-admin-pack.is-active {
+    border-color: color-mix(in srgb, var(--accent-primary) 55%, var(--border-color));
+    box-shadow: 0 0 0 2px var(--accent-primary-soft);
+}
+
+.basemap-admin-pack__main {
+    min-width: 0;
+    flex: 1;
+}
+
+.basemap-admin-pack__title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.basemap-admin-pack__badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--accent-primary);
+    background: var(--accent-primary-soft);
+}
+
+.basemap-admin-pack__name {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    word-break: break-word;
+}
+
+.basemap-admin-pack__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.basemap-admin-pack__actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.basemap-admin-pack__btn {
+    width: auto !important;
+    min-width: 0 !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    max-height: 32px !important;
+    padding: 0 10px !important;
+    margin: 0 !important;
+    font-size: 0.75rem !important;
+    text-transform: none !important;
+}
+
+.basemap-admin-pack__btn--danger:hover {
+    color: var(--accent-danger, #dc2626);
+    border-color: color-mix(in srgb, var(--accent-danger, #dc2626) 45%, var(--border-color));
+}
+
+.basemap-admin-pref-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.basemap-admin-pref-actions .btn-secondary {
+    width: auto;
+    min-width: 140px;
+    margin: 0;
+    text-transform: none;
+}
+
+.basemap-admin-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    padding-top: 4px;
+}
+
+.basemap-admin-actions .btn-primary,
+.basemap-admin-actions .btn-secondary {
+    width: auto;
+    min-width: 120px;
+    margin: 0;
+    text-transform: none;
+}
+
+@media (max-width: 560px) {
+    .basemap-admin-pack {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .basemap-admin-pack__actions {
+        justify-content: stretch;
+    }
+    .basemap-admin-pack__btn {
+        flex: 1;
+    }
+    .basemap-admin-actions {
+        flex-direction: column-reverse;
+    }
+    .basemap-admin-actions .btn-primary,
+    .basemap-admin-actions .btn-secondary {
+        width: 100%;
+    }
 }
 
 /* ==================== Р‘Р°Р»СѓРЅ РєР°СЂС‚С‹ (РЇРЅРґРµРєСЃ.РљР°СЂС‚С‹) вЂ” С‚РµРјР° РїСЂРёР»РѕР¶РµРЅРёСЏ ==================== */

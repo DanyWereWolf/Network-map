@@ -35,6 +35,8 @@ DATA_DIR   = ROOT_DIR/data
 | Поле | Описание |
 |------|----------|
 | `port`, `host` | HTTP-сервер |
+| `mapEngine` | `yandex` (по умолчанию) или `leaflet` (on-prem ортофото) |
+| `basemapOrgQuotaGb`, `basemapMaxUploadGb` | Квоты GeoTIFF/тайлов при `leaflet` |
 | `yandexMapsApiKey` | Отдаётся клиенту через `/api/public-config` |
 | `publicSiteUrl` | Базовый URL для ссылок и SEO |
 | `freeMapObjectLimit` | Лимит объектов на карте (бесплатный тариф) |
@@ -66,6 +68,7 @@ app.use(express.static(PUBLIC_DIR));
 | Пользователи и орг. | CRUD пользователей, лимиты, аватары |
 | Админка сайта | организации, глобальные настройки, новости |
 | Медиа | загрузка файлов чата и новостей |
+| Подложка | `/api/basemap/*` — GeoTIFF→тайлы (см. [ONPREM-BASEMAP.md](ONPREM-BASEMAP.md)) |
 
 Запросы с сессией: заголовок `Authorization: Bearer <token>` или cookie (см. `auth.js`).
 
