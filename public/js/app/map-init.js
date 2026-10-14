@@ -266,9 +266,12 @@ function setupMapLayerSelector() {
             if (typeof MapRuntime !== 'undefined' && MapRuntime.applyBasemapType) {
                 MapRuntime.applyBasemapType(mapType, function () {
                     syncActive(mapType);
-                });
+                }, { asUserChoice: true });
             } else {
                 try { myMap.setType(mapType); } catch (err) {}
+                if (typeof MapRuntime !== 'undefined' && MapRuntime.persistUserBasemapType) {
+                    try { MapRuntime.persistUserBasemapType(mapType); } catch (eSave) {}
+                }
                 syncActive(mapType);
             }
             setOpen(false);

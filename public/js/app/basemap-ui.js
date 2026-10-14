@@ -127,15 +127,15 @@
             opts.offlineType != null ? opts.offlineType : cachedOfflineType
         );
         try {
-            // Уже тот слой (в т.ч. после dual-boot) — не пересоздаём карту
-            if (myMap.getType && myMap.getType() === next) {
-                if (typeof MapRuntime !== 'undefined' && MapRuntime.persistBasemapType) {
-                    MapRuntime.persistBasemapType(next);
-                }
-                return true;
+            // Личный выбор важнее орг. дефолта / offline fallback
+            if (typeof MapRuntime !== 'undefined' && MapRuntime.hasUserBasemapPreference &&
+                MapRuntime.hasUserBasemapPreference()) {
+                var userType = MapRuntime.readUserBasemapType && MapRuntime.readUserBasemapType();
+                if (userType) next = userType;
             }
+            if (myMap.getType && myMap.getType() === next) return true;
             if (typeof MapRuntime !== 'undefined' && MapRuntime.applyBasemapType) {
-                MapRuntime.applyBasemapType(next);
+                MapRuntime.applyBasemapType(next, null, { asUserChoice: false });
                 return true;
             }
             myMap.setType(next);
@@ -147,10 +147,16 @@
 
     function applyOrgBasemapSettings(settings, opts) {
         if (!settings) return;
+        // Личный выбор с сервера (пользователь уже выбирал слой)
+        if (settings.userBasemapType && typeof MapRuntime !== 'undefined' && MapRuntime.persistUserBasemapType) {
+            try {
+                MapRuntime.persistUserBasemapType(normalizePreferredType(settings.userBasemapType));
+            } catch (eUser) {}
+        }
         if (settings.defaultBasemapType !== undefined) {
             cachedPreferredType = normalizePreferredType(settings.defaultBasemapType);
-            if (typeof MapRuntime !== 'undefined' && MapRuntime.persistBasemapType) {
-                try { MapRuntime.persistBasemapType(cachedPreferredType); } catch (eP) {}
+            if (typeof MapRuntime !== 'undefined' && MapRuntime.persistOrgDefaultBasemapType) {
+                try { MapRuntime.persistOrgDefaultBasemapType(cachedPreferredType); } catch (eP) {}
             }
         }
         if (settings.defaultBasemapOfflineType !== undefined) {
@@ -158,6 +164,15 @@
         }
         syncDefaultLayerControls();
         if (opts && opts.apply === false) return;
+        // Не навязывать орг. слой тем, кто уже выбрал свой
+        if (typeof MapRuntime !== 'undefined' && MapRuntime.hasUserBasemapPreference &&
+            MapRuntime.hasUserBasemapPreference()) {
+            var userType = MapRuntime.readUserBasemapType && MapRuntime.readUserBasemapType();
+            if (userType && typeof MapRuntime.applyBasemapType === 'function') {
+                MapRuntime.applyBasemapType(userType, null, { asUserChoice: false });
+            }
+            return;
+        }
         applyResolvedBasemapType(cachedPreferredType, { offlineType: cachedOfflineType, force: !!(opts && opts.force) });
     }
 

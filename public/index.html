@@ -66,25 +66,41 @@
                 l.href = href;
                 document.head.appendChild(l);
             }
-            function resolveBootBasemapType() {
-                var allowed = {
-                    'yandex#map': 1, 'yandex#satellite': 1, 'yandex#hybrid': 1,
-                    'leaflet#orthophoto': 1, 'leaflet#osm': 1, 'leaflet#none': 1
-                };
+            var ALLOWED_BOOT_BASEMAP = {
+                'yandex#map': 1, 'yandex#satellite': 1, 'yandex#hybrid': 1,
+                'leaflet#orthophoto': 1, 'leaflet#osm': 1, 'leaflet#none': 1
+            };
+            function readSessionIds() {
                 try {
                     var raw = localStorage.getItem('networkMap_session') || sessionStorage.getItem('networkMap_session');
                     var sess = raw ? JSON.parse(raw) : null;
-                    var orgId = sess && (sess.organizationId != null ? sess.organizationId : sess.orgId);
-                    if (orgId != null && String(orgId).trim() !== '') {
-                        var perOrg = localStorage.getItem('volsmap.basemapType.org.' + String(orgId).trim());
-                        if (perOrg && allowed[perOrg]) return perOrg;
-                    }
-                    var last = localStorage.getItem('volsmap.basemapType');
-                    if (last && allowed[last]) return last;
-                } catch (e) {}
-                return 'leaflet#orthophoto';
+                    if (!sess) return { userId: '', orgId: '' };
+                    var uid = sess.userId != null ? sess.userId : sess.id;
+                    var oid = sess.organizationId != null ? sess.organizationId : sess.orgId;
+                    return {
+                        userId: uid != null ? String(uid).trim() : '',
+                        orgId: oid != null ? String(oid).trim() : ''
+                    };
+                } catch (e) {
+                    return { userId: '', orgId: '' };
+                }
             }
-            function peekOrgBasemapType() {
+            /** 1) личный выбор пользователя 2) орг. дефолт 3) ортофото */
+            function resolveBootBasemapType() {
+                try {
+                    var ids = readSessionIds();
+                    if (ids.userId) {
+                        var userType = localStorage.getItem('volsmap.basemapType.user.' + ids.userId);
+                        if (userType && ALLOWED_BOOT_BASEMAP[userType]) return { type: userType, source: 'user' };
+                    }
+                    if (ids.orgId) {
+                        var orgDef = localStorage.getItem('volsmap.basemapType.orgDefault.' + ids.orgId);
+                        if (orgDef && ALLOWED_BOOT_BASEMAP[orgDef]) return { type: orgDef, source: 'org' };
+                    }
+                } catch (e) {}
+                return { type: null, source: 'none' };
+            }
+            function peekBasemapBootPrefs() {
                 return new Promise(function(resolve) {
                     try {
                         var token = localStorage.getItem('networkMap_token') || sessionStorage.getItem('networkMap_token') || '';
@@ -95,8 +111,11 @@
                             cache: 'no-store'
                         }).then(function(r) { return r.ok ? r.json() : null; }).then(function(s) {
                             clearTimeout(t);
-                            var v = s && s.defaultBasemapType ? String(s.defaultBasemapType) : '';
-                            resolve(v || null);
+                            if (!s) { resolve(null); return; }
+                            resolve({
+                                userBasemapType: s.userBasemapType || '',
+                                defaultBasemapType: s.defaultBasemapType || ''
+                            });
                         }).catch(function() {
                             clearTimeout(t);
                             resolve(null);
@@ -110,12 +129,12 @@
                 loadCss('vendor/leaflet/leaflet.css');
                 var leaflet = loadScript('vendor/leaflet/leaflet.js');
                 leaflet.onload = function() {
-                    var stack = loadScript('js/map/leaflet-basemap-stack.js?v=basemap-dual-3');
+                    var stack = loadScript('js/map/leaflet-basemap-stack.js?v=basemap-dual-4');
                     stack.onload = function() {
-                        var runtime = loadScript('js/map/map-runtime.js?v=basemap-dual-3');
+                        var runtime = loadScript('js/map/map-runtime.js?v=basemap-dual-4');
                         function loadShim() {
                             if (passiveShim) window.VolsmapShimPassive = true;
-                            loadScript('js/map/leaflet-ymaps-shim.js?v=basemap-dual-3');
+                            loadScript('js/map/leaflet-ymaps-shim.js?v=basemap-dual-4');
                         }
                         runtime.onload = loadShim;
                         runtime.onerror = loadShim;
@@ -158,17 +177,9 @@
                 if (engine === 'leaflet' || engine === 'offline' || engine === 'orthophoto') {
                     window.VolsmapConfiguredEngine = 'leaflet';
                     var cached = resolveBootBasemapType();
-                    // Кэш мгновенно; параллельно уточняем орг. дефолт (до 1.2с), чтобы первый вход был точным
                     var startDual = function(bootType) {
-                        var allowed = {
-                            'yandex#map': 1, 'yandex#satellite': 1, 'yandex#hybrid': 1,
-                            'leaflet#orthophoto': 1, 'leaflet#osm': 1, 'leaflet#none': 1
-                        };
-                        if (!bootType || !allowed[bootType]) bootType = cached || 'leaflet#orthophoto';
+                        if (!bootType || !ALLOWED_BOOT_BASEMAP[bootType]) bootType = 'leaflet#orthophoto';
                         window.VolsmapBootBasemapType = bootType;
-                        try {
-                            localStorage.setItem('volsmap.basemapType', bootType);
-                        } catch (eSave) {}
                         var bootYandex = bootType.indexOf('yandex#') === 0;
                         if (bootYandex) {
                             window.VolsmapMapEngine = 'yandex';
@@ -180,21 +191,22 @@
                             loadDualLeafletStack(false);
                         }
                     };
-                    // Кэш есть — старт сразу; без кэша — коротко ждём орг. дефолт
-                    if (cached) {
-                        startDual(cached);
-                        peekOrgBasemapType().then(function(orgType) {
-                            if (!orgType) return;
-                            try {
-                                localStorage.setItem('volsmap.basemapType', orgType);
-                                var raw = localStorage.getItem('networkMap_session') || sessionStorage.getItem('networkMap_session');
-                                var sess = raw ? JSON.parse(raw) : null;
-                                var orgId = sess && (sess.organizationId != null ? sess.organizationId : sess.orgId);
-                                if (orgId != null) {
-                                    localStorage.setItem('volsmap.basemapType.org.' + String(orgId), orgType);
-                                }
-                            } catch (e) {}
-                        });
+                    var rememberPrefsFromServer = function(prefs) {
+                        if (!prefs) return;
+                        try {
+                            var ids = readSessionIds();
+                            if (prefs.userBasemapType && ALLOWED_BOOT_BASEMAP[prefs.userBasemapType] && ids.userId) {
+                                localStorage.setItem('volsmap.basemapType.user.' + ids.userId, prefs.userBasemapType);
+                            }
+                            if (prefs.defaultBasemapType && ALLOWED_BOOT_BASEMAP[prefs.defaultBasemapType] && ids.orgId) {
+                                localStorage.setItem('volsmap.basemapType.orgDefault.' + ids.orgId, prefs.defaultBasemapType);
+                            }
+                        } catch (eRem) {}
+                    };
+                    if (cached.type) {
+                        // Личный или орг. кэш — старт сразу; сервер только обновляет кэш на будущее
+                        startDual(cached.type);
+                        peekBasemapBootPrefs().then(rememberPrefsFromServer);
                     } else {
                         var started = false;
                         var timer = setTimeout(function() {
@@ -202,16 +214,17 @@
                             started = true;
                             startDual('leaflet#orthophoto');
                         }, 450);
-                        peekOrgBasemapType().then(function(orgType) {
-                            if (started) {
-                                if (orgType) {
-                                    try { localStorage.setItem('volsmap.basemapType', orgType); } catch (e) {}
-                                }
-                                return;
-                            }
+                        peekBasemapBootPrefs().then(function(prefs) {
+                            rememberPrefsFromServer(prefs);
+                            if (started) return;
                             started = true;
                             clearTimeout(timer);
-                            startDual(orgType || 'leaflet#orthophoto');
+                            var boot = (prefs && prefs.userBasemapType && ALLOWED_BOOT_BASEMAP[prefs.userBasemapType])
+                                ? prefs.userBasemapType
+                                : ((prefs && prefs.defaultBasemapType && ALLOWED_BOOT_BASEMAP[prefs.defaultBasemapType])
+                                    ? prefs.defaultBasemapType
+                                    : 'leaflet#orthophoto');
+                            startDual(boot);
                         });
                     }
                     return;
@@ -3396,7 +3409,7 @@
     <script src="js/core/confirm-dialog.js"></script>
     <script src="js/core/network-status.js"></script>
     <script src="js/groups.js"></script>
-    <script src="js/map/map-engine.js?v=basemap-dual-3"></script>
+    <script src="js/map/map-engine.js?v=basemap-dual-4"></script>
     <script src="js/map/theme.js"></script>
     <script src="js/map/map-icons.js"></script>
     <script src="js/map/cable-underground.js"></script>
@@ -3412,14 +3425,14 @@
     <script src="js/app/onboarding.js"></script>
     <script src="js/app/user-ui.js"></script>
     <script src="js/app/editor-shell.js"></script>
-    <script src="js/app/map-loading.js?v=basemap-dual-3"></script>
+    <script src="js/app/map-loading.js?v=basemap-dual-4"></script>
     <script src="js/app/backups.js"></script>
     <script src="js/app/cable-split-sleeve.js"></script>
-    <script src="js/app/map-hover.js?v=basemap-dual-3"></script>
+    <script src="js/app/map-hover.js?v=basemap-dual-4"></script>
     <script src="js/app/object-placement.js"></script>
     <script src="js/app/edit-mode.js"></script>
-    <script src="js/app/map-init.js?v=basemap-dual-3"></script>
-    <script src="js/app/basemap-ui.js?v=basemap-dual-3"></script>
+    <script src="js/app/map-init.js?v=basemap-dual-4"></script>
+    <script src="js/app/basemap-ui.js?v=basemap-dual-4"></script>
     <script src="js/app/zabbix-status.js"></script>
     <script src="js/app/map-clicks.js"></script>
     <script src="js/app/create-object.js?v=move-sync-rev1"></script>
@@ -3428,7 +3441,7 @@
     <script src="js/app/object-delete.js"></script>
     <script src="js/app/map-selection.js?v=move-sync-rev1"></script>
     <script src="js/app/gpon-fiber.js?v=sleeve-open-perf1"></script>
-    <script src="js/app/map-geometry.js?v=basemap-dual-3"></script>
+    <script src="js/app/map-geometry.js?v=basemap-dual-4"></script>
     <script src="js/app/map-object-core.js?v=move-sync-rev1"></script>
     <script src="js/app/map-persistence.js?v=move-sync-rev1"></script>
     <script src="js/app/cable-laying.js"></script>

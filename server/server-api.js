@@ -3534,6 +3534,10 @@ app.get('/api/settings', (req, res) => {
             var lod = db.getLodThresholdsForUser(user.userId);
             if (lod) settings.lodThresholds = lod;
         }
+        if (user && db.getBasemapTypeForUser) {
+            var userBasemap = db.getBasemapTypeForUser(user.userId);
+            if (userBasemap) settings.userBasemapType = userBasemap;
+        }
         res.json(settings);
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
@@ -3568,6 +3572,9 @@ app.post('/api/settings', (req, res) => {
         if (body.lodThresholds !== undefined && db.setLodThresholdsForUser) {
             db.setLodThresholdsForUser(user.userId, body.lodThresholds);
         }
+        if (body.userBasemapType !== undefined && db.setBasemapTypeForUser) {
+            db.setBasemapTypeForUser(user.userId, body.userBasemapType);
+        }
         var toSave = {};
         if (user.role === 'admin') {
             if (body.groupNames !== undefined && typeof body.groupNames === 'object') {
@@ -3579,6 +3586,7 @@ app.post('/api/settings', (req, res) => {
             delete toSave.perfSettings;
             delete toSave.themeAccent;
             delete toSave.lodThresholds;
+            delete toSave.userBasemapType;
         }
         if (Object.keys(toSave).length > 0) db.setSettings(toSave, orgId || undefined);
         if (orgId && (toSave.collaboratorCursorStyle !== undefined || toSave.fiberMapColor !== undefined || toSave.fiberMapStrokeWidth !== undefined || toSave.cameraCoverageColor !== undefined || toSave.radioBridgeCoverageColor !== undefined || toSave.defaultBasemapType !== undefined || toSave.defaultBasemapOfflineType !== undefined)) {

@@ -1757,6 +1757,38 @@ function setThemeForUser(userId, theme) {
     saveStore();
 }
 
+function getUserBasemapTypesMap() {
+    const raw = getSetting('userBasemapTypes');
+    if (!raw) return {};
+    try {
+        return typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch (e) {
+        return {};
+    }
+}
+
+function getBasemapTypeForUser(userId) {
+    if (userId == null) return '';
+    const map = getUserBasemapTypesMap();
+    const t = map[String(userId)];
+    return ALLOWED_BASEMAP_TYPES[t] ? t : '';
+}
+
+function setBasemapTypeForUser(userId, basemapType) {
+    if (userId == null) return;
+    const s = loadStore();
+    if (!s.settings) s.settings = {};
+    let map = getUserBasemapTypesMap();
+    const id = String(userId);
+    const normalized = basemapType == null || basemapType === ''
+        ? ''
+        : normalizeDefaultBasemapType(basemapType);
+    if (normalized && ALLOWED_BASEMAP_TYPES[normalized]) map[id] = normalized;
+    else delete map[id];
+    s.settings.userBasemapTypes = JSON.stringify(map);
+    saveStore();
+}
+
 function getUserJsonSettingMap(settingKey) {
     const raw = getSetting(settingKey);
     if (!raw) return {};
@@ -2829,6 +2861,8 @@ module.exports = {
     getMapStartForUserOrOrg,
     getThemeForUser,
     setThemeForUser,
+    getBasemapTypeForUser,
+    setBasemapTypeForUser,
     getPerfSettingsForUser,
     setPerfSettingsForUser,
     getThemeAccentForUser,
