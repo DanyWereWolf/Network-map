@@ -129,12 +129,12 @@
                 loadCss('vendor/leaflet/leaflet.css');
                 var leaflet = loadScript('vendor/leaflet/leaflet.js');
                 leaflet.onload = function() {
-                    var stack = loadScript('js/map/leaflet-basemap-stack.js?v=basemap-dual-4');
+                    var stack = loadScript('js/map/leaflet-basemap-stack.js?v=basemap-dual-5');
                     stack.onload = function() {
-                        var runtime = loadScript('js/map/map-runtime.js?v=basemap-dual-4');
+                        var runtime = loadScript('js/map/map-runtime.js?v=basemap-dual-5');
                         function loadShim() {
                             if (passiveShim) window.VolsmapShimPassive = true;
-                            loadScript('js/map/leaflet-ymaps-shim.js?v=basemap-dual-4');
+                            loadScript('js/map/leaflet-ymaps-shim.js?v=basemap-dual-5');
                         }
                         runtime.onload = loadShim;
                         runtime.onerror = loadShim;
@@ -278,7 +278,7 @@
             } catch (e) {}
         })();
     </script>
-    <link rel="stylesheet" href="css/styles.css?v=node-panel-perf5">
+    <link rel="stylesheet" href="css/styles.css?v=basemap-dual-5">
     <link rel="stylesheet" href="css/scrollbars.css">
     <link rel="stylesheet" href="css/app-motion.css">
     <link rel="stylesheet" href="css/app-mobile.css?v=fiber-ws-scroll6">
