@@ -8,32 +8,126 @@
 
 cd "$(dirname "$0")"
 ROOT="$(pwd)"
+REQUIRED_NODE_MAJOR=20
+NVM_VERSION="v0.40.1"
 
 echo "============================================"
 echo "  Карта оптической сети — запуск сервера"
 echo "============================================"
 echo ""
 
-if ! command -v npm >/dev/null 2>&1; then
-    echo "[ОШИБКА] npm не найден."
+if [ "$(id -u)" -eq 0 ]; then
+    echo "[ВНИМАНИЕ] Запуск от root (sudo). Лучше: ./run-api.sh от пользователя volsmap."
+    echo "Иначе node_modules часто ломается правами (EACCES)."
     echo ""
-    echo "Установите Node.js: https://nodejs.org"
-    echo "После установки перезапустите этот скрипт."
+fi
+
+load_nvm() {
+    export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+    if [ -s "$NVM_DIR/nvm.sh" ]; then
+        # shellcheck disable=SC1090
+        . "$NVM_DIR/nvm.sh"
+        return 0
+    fi
+    return 1
+}
+
+node_major() {
+    if ! command -v node >/dev/null 2>&1; then
+        echo 0
+        return
+    fi
+    node -p "parseInt(process.versions.node.split('.')[0],10)||0" 2>/dev/null || echo 0
+}
+
+ensure_node() {
+    load_nvm || true
+    local major
+    major="$(node_major)"
+    if [ "$major" -ge "$REQUIRED_NODE_MAJOR" ] && command -v npm >/dev/null 2>&1; then
+        echo "[Node] $(node -v) / npm $(npm -v)"
+        echo ""
+        return 0
+    fi
+
+    if [ "$major" -gt 0 ]; then
+        echo "[Node] Сейчас $(node -v) — нужен ≥ ${REQUIRED_NODE_MAJOR}. Устанавливаю Node ${REQUIRED_NODE_MAJOR}…"
+    else
+        echo "[Node] Node.js не найден. Устанавливаю Node ${REQUIRED_NODE_MAJOR}…"
+    fi
     echo ""
+
+    if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+        echo "[ОШИБКА] Нужен curl или wget для установки Node."
+        return 1
+    fi
+
+    if ! load_nvm; then
+        echo "[Node] Ставлю nvm (${NVM_VERSION})…"
+        if command -v curl >/dev/null 2>&1; then
+            curl -fsSL "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" | bash
+        else
+            wget -qO- "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" | bash
+        fi
+        if ! load_nvm; then
+            echo "[ОШИБКА] nvm не загрузился после установки ($HOME/.nvm)."
+            return 1
+        fi
+    fi
+
+    nvm install "$REQUIRED_NODE_MAJOR"
+    nvm alias default "$REQUIRED_NODE_MAJOR" >/dev/null 2>&1 || true
+    nvm use "$REQUIRED_NODE_MAJOR"
+
+    major="$(node_major)"
+    if [ "$major" -lt "$REQUIRED_NODE_MAJOR" ] || ! command -v npm >/dev/null 2>&1; then
+        echo "[ОШИБКА] Не удалось переключиться на Node ≥ ${REQUIRED_NODE_MAJOR}."
+        return 1
+    fi
+    echo "[Node] Готово: $(node -v) / npm $(npm -v)"
+    echo ""
+    return 0
+}
+
+ensure_deps() {
+    local need_npm_install=0
+    local pkg
+    for pkg in express multer mysql2 cors ws argon2 geotiff sharp sanitize-html nodemailer speakeasy; do
+        if [ ! -d "node_modules/$pkg" ]; then
+            need_npm_install=1
+            break
+        fi
+    done
+
+    if [ "$need_npm_install" -eq 0 ]; then
+        return 0
+    fi
+
+    echo "Устанавливаю зависимости npm (если нет — автоматически)…"
+    echo ""
+    if ! npm install --omit=dev; then
+        echo ""
+        echo "[ОШИБКА] Не удалось установить зависимости."
+        echo "Частая причина: права на node_modules (раньше ставили под sudo)."
+        echo "Исправление:"
+        echo "  sudo chown -R \"\$(whoami):\$(id -gn)\" \"$ROOT\""
+        echo "  rm -rf node_modules"
+        echo "  ./run-api.sh"
+        echo ""
+        return 1
+    fi
+    echo ""
+    return 0
+}
+
+if ! ensure_node; then
     read -r -p "Нажмите Enter для выхода..."
     exit 1
 fi
 
-if [ ! -d "node_modules/express" ] || [ ! -d "node_modules/mysql2" ]; then
-    echo "Устанавливаю зависимости (первый запуск)..."
-    echo ""
-    npm install
-    if [ $? -ne 0 ]; then
-        echo "[ОШИБКА] Не удалось установить зависимости."
-        read -r -p "Нажмите Enter для выхода..."
-        exit 1
-    fi
-    echo ""
+if ! ensure_deps; then
+    read -r -p "Нажмите Enter для выхода..."
+    exit 1
 fi
 
 # --- MySQL: если в конфиге storage=mysql, а сервер недоступен — предложить setup ---
