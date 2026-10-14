@@ -581,6 +581,11 @@ async function runJob(job) {
         await runJobWithGdal(job, tools);
         return;
     }
+    if (!nodeTiles.isNodeTileEngineAvailable()) {
+        throw new Error(
+            'Нет GDAL и не установлены npm-пакеты geotiff/sharp. На сервере (Linux, Node ≥ 20): npm install --omit=dev'
+        );
+    }
     await runJobWithNode(job);
 }
 
@@ -667,14 +672,16 @@ function createUploadJob(options) {
 function getGdalStatus() {
     var tools = resolveGdalTools();
     var gdalOk = !!(tools.gdalinfo && tools.gdalwarp && tools.gdal2tiles);
+    var nodeOk = nodeTiles.isNodeTileEngineAvailable();
     return {
         ok: true,
         gdal: gdalOk,
         gdalinfo: !!tools.gdalinfo,
         gdalwarp: !!tools.gdalwarp,
         gdal2tiles: !!tools.gdal2tiles,
-        nodeFallback: !gdalOk,
-        engine: gdalOk ? 'gdal' : 'node'
+        nodeFallback: nodeOk,
+        nodeEngine: nodeOk,
+        engine: gdalOk ? 'gdal' : (nodeOk ? 'node' : 'none')
     };
 }
 

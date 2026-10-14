@@ -7,8 +7,38 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { fromFile } = require('geotiff');
-const sharp = require('sharp');
+
+var geotiffMod = null;
+var sharpMod = null;
+
+function loadNodeTileDeps() {
+    if (geotiffMod && sharpMod) return { fromFile: geotiffMod.fromFile, sharp: sharpMod };
+    try {
+        geotiffMod = require('geotiff');
+    } catch (e) {
+        throw new Error(
+            'Не установлен пакет geotiff. В корне проекта выполните: npm install --omit=dev'
+        );
+    }
+    try {
+        sharpMod = require('sharp');
+    } catch (e) {
+        throw new Error(
+            'Не установлен пакет sharp (нужен Node ≥ 20.9). Обновите Node и выполните: npm install --omit=dev'
+        );
+    }
+    return { fromFile: geotiffMod.fromFile, sharp: sharpMod };
+}
+
+function isNodeTileEngineAvailable() {
+    try {
+        require.resolve('geotiff');
+        require.resolve('sharp');
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
 
 var EARTH = 6378137;
 var MAX_LAT = 85.05112878;
@@ -99,7 +129,8 @@ function bboxToWgs84Bounds(bbox) {
 }
 
 async function readGeoTiffMeta(filePath) {
-    var tiff = await fromFile(filePath);
+    var deps = loadNodeTileDeps();
+    var tiff = await deps.fromFile(filePath);
     var image = await tiff.getImage();
     var width = image.getWidth();
     var height = image.getHeight();
@@ -212,6 +243,7 @@ async function sampleTileRgba(meta, z, tx, ty) {
     var cropHeight = Math.max(1, Math.min(rh - cropTop, Math.ceil(bottom - top)));
 
     try {
+        var sharp = loadNodeTileDeps().sharp;
         return await sharp(rgba, { raw: { width: rw, height: rh, channels: 4 } })
             .extract({ left: cropLeft, top: cropTop, width: cropWidth, height: cropHeight })
             .resize(TILE, TILE, { fit: 'fill', kernel: sharp.kernel.nearest })
@@ -263,6 +295,7 @@ function tileRangeForBounds(sw, ne, z) {
 }
 
 async function buildParentFromChildren(outDir, z, x, y) {
+    var sharp = loadNodeTileDeps().sharp;
     var children = [
         { cx: x * 2, cy: y * 2, ox: 0, oy: 0 },
         { cx: x * 2 + 1, cy: y * 2, ox: 128, oy: 0 },
@@ -300,6 +333,7 @@ async function buildParentFromChildren(outDir, z, x, y) {
 }
 
 async function generateTiles(options) {
+    loadNodeTileDeps();
     var inputPath = options.inputPath;
     var outDir = ensureDir(options.outDir);
     var minZoom = Math.max(0, Number(options.minZoom) || 12);
@@ -386,6 +420,7 @@ async function generateTiles(options) {
 
 module.exports = {
     generateTiles,
+    isNodeTileEngineAvailable: isNodeTileEngineAvailable,
     readGeoTiffMeta: async function (filePath) {
         var meta = await readGeoTiffMeta(filePath);
         return { bounds: meta.wgsBounds, width: meta.width, height: meta.height };

@@ -3,6 +3,9 @@
   "version": "1.2.0",
   "description": "Карта оптической сети — программа для работы с оптической сетью на Яндекс.Картах",
   "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "scripts": {
     "build": "node scripts/build-client.js",
     "sync": "node server/server.js",
