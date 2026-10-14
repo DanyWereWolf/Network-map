@@ -129,12 +129,12 @@
                 loadCss('vendor/leaflet/leaflet.css');
                 var leaflet = loadScript('vendor/leaflet/leaflet.js');
                 leaflet.onload = function() {
-                    var stack = loadScript('js/map/leaflet-basemap-stack.js?v=basemap-dual-5');
+                    var stack = loadScript('js/map/leaflet-basemap-stack.js?v=basemap-dual-6');
                     stack.onload = function() {
-                        var runtime = loadScript('js/map/map-runtime.js?v=basemap-dual-5');
+                        var runtime = loadScript('js/map/map-runtime.js?v=basemap-dual-6');
                         function loadShim() {
                             if (passiveShim) window.VolsmapShimPassive = true;
-                            loadScript('js/map/leaflet-ymaps-shim.js?v=basemap-dual-5');
+                            loadScript('js/map/leaflet-ymaps-shim.js?v=basemap-dual-6');
                         }
                         runtime.onload = loadShim;
                         runtime.onerror = loadShim;

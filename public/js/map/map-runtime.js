@@ -20,6 +20,7 @@
         yandex: null,
         leaflet: null
     };
+    var warmingOpposite = false;
     var USER_KEY_PREFIX = 'volsmap.basemapType.user.';
     var ORG_DEFAULT_PREFIX = 'volsmap.basemapType.orgDefault.';
     var LEGACY_KEY = 'volsmap.basemapType';
@@ -379,25 +380,48 @@
         el.removeAttribute('aria-hidden');
     }
 
-    function parkActiveSlot(data) {
+    function getObjectsRef() {
+        try {
+            if (Array.isArray(global.objects)) return global.objects;
+        } catch (e) {}
+        return [];
+    }
+
+    function adoptObjects(arr) {
+        var list = Array.isArray(arr) ? arr : [];
+        try {
+            global.objects = list;
+        } catch (e1) {}
+        try {
+            if (typeof MapPerf !== 'undefined' && MapPerf.reindexAllObjects) {
+                MapPerf.reindexAllObjects(list);
+            }
+        } catch (e2) {}
+        try {
+            if (typeof applyMapFilter === 'function') applyMapFilter();
+            else if (typeof applyMapViewportUpdate === 'function') applyMapViewportUpdate();
+        } catch (e3) {}
+    }
+
+    function recordActiveSlot(data, hide) {
         var name = getActiveRuntime();
         if (name !== 'yandex' && name !== 'leaflet') name = 'leaflet';
         if (!slots[name]) slots[name] = {};
         var slot = slots[name];
         slot.map = global.myMap;
-        try {
-            slot.objects = Array.isArray(global.objects) ? global.objects : [];
-        } catch (eObj) {
-            slot.objects = [];
-        }
+        slot.objects = getObjectsRef();
         slot.fp = hashData(data || []);
         var el = slot.el || document.getElementById('map');
         if (el) {
             el.setAttribute('data-runtime', name);
             slot.el = el;
-            parkSlotElement(el, name);
+            if (hide !== false) parkSlotElement(el, name);
         }
         return slot;
+    }
+
+    function parkActiveSlot(data) {
+        return recordActiveSlot(data, true);
     }
 
     function applyRuntimeApi(target, api) {
@@ -550,21 +574,21 @@
             function activateExisting(slot) {
                 showSlotElement(slot.el);
                 global.myMap = slot.map;
-                var needReload = slot.fp !== fp;
-                if (!needReload) {
-                    try { global.objects = slot.objects || []; } catch (eRest) {}
+                // Важно: не вызывать clearMap/import на слоте с уже живыми объектами —
+                // fingerprint между Яндекс/Leaflet часто «плывёт», и clearMap стирал placemarks.
+                var parked = Array.isArray(slot.objects) ? slot.objects : [];
+                if (parked.length > 0) {
+                    adoptObjects(parked);
+                    slot.fp = fp;
                     syncViewToMap(view);
                     afterMapReady(mapType, function () {
                         finishSwitch(mapType, done);
                     });
                     return;
                 }
+                // Слот пустой (не удалось прогреть) — один раз заливаем снимок
                 restoreObjects(data, function () {
-                    try {
-                        slot.objects = Array.isArray(global.objects) ? global.objects : [];
-                    } catch (eO) {
-                        slot.objects = [];
-                    }
+                    slot.objects = getObjectsRef();
                     slot.fp = fp;
                     slot.map = global.myMap;
                     syncViewToMap(view);
@@ -600,12 +624,10 @@
                         return;
                     }
                     restoreObjects(data, function () {
-                        var slotObjs = [];
-                        try { slotObjs = Array.isArray(global.objects) ? global.objects : []; } catch (e1) {}
                         slots[target] = {
                             el: el,
                             map: global.myMap,
-                            objects: slotObjs,
+                            objects: getObjectsRef(),
                             fp: fp
                         };
                         afterMapReady(mapType, function () {
@@ -770,6 +792,110 @@
             ensureShimSaved();
             ensureLeafletShimApi().catch(function () {});
         }
+        // После первой отрисовки — собрать второй движок в фоне (без UI)
+        setTimeout(function () {
+            try { warmOppositeSlot(); } catch (eW) {}
+        }, 600);
+    }
+
+    /**
+     * Фоновый прогрев второго рантайма: первый клик по слою без «длинной загрузки».
+     */
+    function warmOppositeSlot() {
+        if (warmingOpposite || switching) return;
+        if (isInitialMapLoadPending()) return;
+        var active = getActiveRuntime();
+        if (active !== 'yandex' && active !== 'leaflet') return;
+        var target = active === 'yandex' ? 'leaflet' : 'yandex';
+        if (slots[target] && slots[target].map && slots[target].el) return;
+
+        warmingOpposite = true;
+        ensureRuntimeHost();
+        // Зафиксировать активный слот, не пряча его
+        recordActiveSlot(snapshotData(), false);
+
+        var view = readView();
+        var data = snapshotData();
+        var fp = hashData(data);
+        var prep = target === 'yandex' ? loadNativeApi() : ensureLeafletShimApi();
+
+        prep.then(function (api) {
+            if (slots[target] && slots[target].map) {
+                warmingOpposite = false;
+                return;
+            }
+
+            var saved = {
+                ymaps: global.ymaps,
+                myMap: global.myMap,
+                objects: getObjectsRef(),
+                engine: global.VolsmapMapEngine,
+                runtimeEngine: typeof MapEngine !== 'undefined' && MapEngine.getEngine
+                    ? MapEngine.getEngine()
+                    : active
+            };
+
+            applyRuntimeApi(target, api);
+
+            var host = ensureRuntimeHost();
+            var el = document.createElement('div');
+            el.className = 'map map-runtime-slot is-parked';
+            el.setAttribute('data-runtime', target);
+            el.id = 'map-runtime-' + target;
+            el.style.visibility = 'hidden';
+            el.style.pointerEvents = 'none';
+            if (host) host.appendChild(el);
+
+            function buildWarm() {
+                try {
+                    createMap(view.center, view.zoom, null, el);
+                } catch (eCreate) {
+                    console.warn('[MapRuntime] warm create failed', eCreate);
+                    restoreAfterWarm(saved, active);
+                    warmingOpposite = false;
+                    return;
+                }
+                // Без importData/clearMap — иначе сбрасываются selectedObjects и кэши активной карты.
+                // Объекты зальём при первом реальном переключении (движок и тайлы уже тёплые).
+                slots[target] = {
+                    el: el,
+                    map: global.myMap,
+                    objects: [],
+                    fp: ''
+                };
+                parkSlotElement(el, target);
+                restoreAfterWarm(saved, active);
+                warmingOpposite = false;
+            }
+
+            if (global.ymaps && typeof global.ymaps.ready === 'function') {
+                global.ymaps.ready(buildWarm);
+            } else {
+                buildWarm();
+            }
+        }).catch(function (err) {
+            warmingOpposite = false;
+            console.warn('[MapRuntime] warm opposite failed', err);
+        });
+    }
+
+    function restoreAfterWarm(saved, activeName) {
+        try {
+            global.ymaps = saved.ymaps;
+            global.myMap = saved.myMap;
+            adoptObjects(saved.objects);
+            global.VolsmapMapEngine = saved.engine;
+            if (typeof MapEngine !== 'undefined' && MapEngine.setRuntimeEngine) {
+                MapEngine.setRuntimeEngine(saved.runtimeEngine || activeName);
+            }
+            var activeSlot = slots[activeName];
+            if (activeSlot && activeSlot.el) {
+                showSlotElement(activeSlot.el);
+            }
+            fitActiveMap();
+        } catch (e) {
+            console.warn('[MapRuntime] restoreAfterWarm', e);
+        }
     }
 
     global.MapRuntime = {
@@ -779,6 +905,7 @@
         desiredRuntimeForType: desiredRuntimeForType,
         preloadNativeIfDual: preloadNativeIfDual,
         preloadOppositeRuntime: preloadOppositeRuntime,
+        warmOppositeSlot: warmOppositeSlot,
         flushPendingAfterLoad: flushPendingAfterLoad,
         persistBasemapType: persistBasemapType,
         persistUserBasemapType: persistUserBasemapType,
