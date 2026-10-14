@@ -226,11 +226,10 @@ function markMapDataReady() {
             MapPerf.warmIndexes();
         }
     } catch (eWarmReady) {}
-    // Dual: данные готовы — залить объекты на opposite (пока entrance ещё крутится)
+    // Dual: только прогрев пустого opposite-движка (без importData — иначе гонка с objects/stats)
     try {
-        if (typeof MapRuntime !== 'undefined') {
-            if (MapRuntime.scheduleHydrateOpposite) MapRuntime.scheduleHydrateOpposite(0);
-            else if (MapRuntime.scheduleWarmOpposite) MapRuntime.scheduleWarmOpposite(0);
+        if (typeof MapRuntime !== 'undefined' && MapRuntime.scheduleWarmOpposite) {
+            MapRuntime.scheduleWarmOpposite(0);
         }
     } catch (eWarmRt) {}
     tryCompleteMapInitialLoad();
@@ -274,12 +273,9 @@ function finishMapInitialReveal() {
                 showSyncRequiredOverlay();
             }
             scheduleWelcomeAfterMapReady();
-            // Dual: слой из prefs + дожать hydrate, если не успел за entrance
+            // Dual: слой из prefs после первой загрузки (hydrate opposite отключён — ломал objects/stats)
             if (typeof MapRuntime !== 'undefined' && MapRuntime.flushPendingAfterLoad) {
                 try { MapRuntime.flushPendingAfterLoad(); } catch (eFlush) {}
-            }
-            if (typeof MapRuntime !== 'undefined' && MapRuntime.scheduleHydrateOpposite) {
-                try { MapRuntime.scheduleHydrateOpposite(100); } catch (eHyd2) {}
             }
         });
     });

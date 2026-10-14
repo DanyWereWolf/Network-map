@@ -29,6 +29,13 @@
     var hydratingOpposite = false;
     var hydratePromise = null;
     var hydrateResolve = null;
+    /**
+     * Фоновая заливка opposite через importData временно подменяет global.objects/myMap
+     * и ломает статистику / первичную загрузку (гонка с flushPendingAfterLoad).
+     * Переключение слоёв и так делает restoreObjects при первом switch — оставляем только warm движка.
+     */
+    var ENABLE_BG_HYDRATE = false;
+    var hydrateFrozenData = null;
     var USER_KEY_PREFIX = 'volsmap.basemapType.user.';
     var ORG_DEFAULT_PREFIX = 'volsmap.basemapType.orgDefault.';
     var LEGACY_KEY = 'volsmap.basemapType';
@@ -280,6 +287,9 @@
     }
 
     function snapshotData() {
+        if (hydratingOpposite && Array.isArray(hydrateFrozenData)) {
+            return hydrateFrozenData;
+        }
         try {
             if (typeof getSerializedData === 'function') {
                 return getSerializedData();
@@ -648,6 +658,14 @@
         if (switching) {
             if (mapType) pendingAfterLoad = mapType;
             if (typeof done === 'function') done(new Error('switch in progress'));
+            return;
+        }
+        // Не переключать, пока фоновая гидратация держит чужой objects/myMap
+        if (hydratingOpposite || global.__volsmapHydratingOpposite) {
+            if (mapType) pendingAfterLoad = mapType;
+            waitBackgroundThen(function () {
+                switchTo(runtime, mapType, done);
+            });
             return;
         }
         var target = runtime === 'leaflet' ? 'leaflet' : 'yandex';
@@ -1119,7 +1137,16 @@
      * После этого switch = только show контейнера.
      */
     function hydrateOppositeSlot() {
+        if (!ENABLE_BG_HYDRATE) {
+            setWarmStatus('ready', 'hydrate-disabled');
+            return;
+        }
         if (hydratingOpposite || warmingOpposite || switching) return;
+        if (isInitialMapLoadPending()) {
+            setWarmStatus('wait', 'initial-load');
+            scheduleHydrateOpposite(600);
+            return;
+        }
         var active = getActiveRuntime();
         if (active !== 'yandex' && active !== 'leaflet') return;
         var target = active === 'yandex' ? 'leaflet' : 'yandex';
@@ -1151,6 +1178,7 @@
 
         beginHydrateCycle();
         setWarmStatus('hydrating', target);
+        hydrateFrozenData = data;
         global.__volsmapHydratingOpposite = true;
 
         var saved = {
@@ -1212,6 +1240,7 @@
                     console.warn('[MapRuntime] hydrate restore failed', eRest);
                 }
 
+                hydrateFrozenData = null;
                 global.__volsmapHydratingOpposite = false;
                 endHydrateCycle();
                 if (err) {
@@ -1220,8 +1249,16 @@
                 } else {
                     setWarmStatus('ready', target + '-hydrated');
                 }
+                if (pendingAfterLoad) {
+                    var queued = pendingAfterLoad;
+                    pendingAfterLoad = null;
+                    setTimeout(function () {
+                        applyBasemapType(queued, null, { asUserChoice: false });
+                    }, 0);
+                }
             }, { preserveUiState: true, bulkImport: true });
         }).catch(function (err) {
+            hydrateFrozenData = null;
             global.__volsmapHydratingOpposite = false;
             console.warn('[MapRuntime] hydrate failed', err);
             setWarmStatus('error', String(err && err.message ? err.message : err));
