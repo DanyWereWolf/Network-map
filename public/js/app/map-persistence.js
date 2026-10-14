@@ -5162,24 +5162,30 @@ function exportData(preferredFormat) {
 
 function clearMap(opts) {
     opts = opts || {};
-    if (window.CameraPlayer && CameraPlayer.stopStreamMonitor) CameraPlayer.stopStreamMonitor();
+    // preserveUiState: фоновая гидратация opposite-слота — не трогаем selection/кэши активной карты
+    if (!opts.preserveUiState) {
+        if (window.CameraPlayer && CameraPlayer.stopStreamMonitor) CameraPlayer.stopStreamMonitor();
+    }
     const count = objects.length;
-    myMap.geoObjects.removeAll();
-    resetMapConnectionLineCaches();
+    if (myMap && myMap.geoObjects) myMap.geoObjects.removeAll();
     objects = [];
-    selectedObjects = [];
-    crossGroupPlacemarks = [];
-    nodeGroupPlacemarks = [];
-    crossGroupPlacemarkByKey.clear();
-    nodeGroupPlacemarkByKey.clear();
-    if (typeof clearCrossViewportShownKeys === 'function') clearCrossViewportShownKeys();
-    if (typeof clearNodeViewportShownKeys === 'function') clearNodeViewportShownKeys();
+    if (!opts.preserveUiState) {
+        resetMapConnectionLineCaches();
+        selectedObjects = [];
+        crossGroupPlacemarks = [];
+        nodeGroupPlacemarks = [];
+        crossGroupPlacemarkByKey.clear();
+        nodeGroupPlacemarkByKey.clear();
+        if (typeof clearCrossViewportShownKeys === 'function') clearCrossViewportShownKeys();
+        if (typeof clearNodeViewportShownKeys === 'function') clearNodeViewportShownKeys();
+    }
     if (typeof MapPerf !== 'undefined') MapPerf.clearObjectsIndex();
     if (!opts.skipSave) {
         saveData({ syncFull: true });
     }
-    updateStats();
-    
+    if (!opts.preserveUiState) {
+        updateStats();
+    }
     if (count > 0 && !opts.skipHistory) {
         logAction(ActionTypes.CLEAR_MAP, { count: count });
     }

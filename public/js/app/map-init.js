@@ -116,6 +116,10 @@ function init() {
     })();
 
     setupMapTilesReady();
+    // Dual: прогрев второго движка + заливка объектов параллельно с loadData
+    if (typeof MapRuntime !== 'undefined' && MapRuntime.scheduleWarmOpposite) {
+        try { MapRuntime.scheduleWarmOpposite(200); } catch (eWarmInit) {}
+    }
 }
 
 /** On-prem (mapEngine=leaflet): доступны и Яндекс, и ортофото — независимо. */
@@ -151,7 +155,7 @@ function setupMapLayerSelector() {
     for (var g = 0; g < groups.length; g++) {
         var groupEng = groups[g].getAttribute('data-engine-group') || '';
         if (leafletMode) {
-            // On-prem: локально + Яндекс отдельно + действия админа.
+            // On-prem: локально / OSM онлайн / Яндекс отдельно + действия админа.
             if (groupEng === 'leaflet' || groupEng === 'yandex' || groupEng === 'leaflet-actions') {
                 groups[g].removeAttribute('hidden');
             } else {
@@ -745,12 +749,23 @@ function setupEventListeners() {
 
 /**
  * События жестов карты — переподключаются после смены рантайма (Яндекс ↔ Leaflet).
+ * Идемпотентно: не дублирует handlers на том же myMap.
  */
 function bindMyMapInteractionEvents() {
     if (!myMap || !myMap.events) return;
 
-    myMap.events.add('click', handleMapClick);
-    myMap.events.add('mousemove', handleMapMouseMove);
+    var prev = window._volsmapBoundMap;
+    if (prev && prev.map === myMap && prev.handlers) return;
+    if (prev && prev.map && prev.map !== myMap && prev.map.events && prev.handlers) {
+        try {
+            var ph = prev.handlers;
+            if (ph.click) prev.map.events.remove('click', ph.click);
+            if (ph.mousemove) prev.map.events.remove('mousemove', ph.mousemove);
+            if (ph.actionbegin) prev.map.events.remove('actionbegin', ph.actionbegin);
+            if (ph.actionend) prev.map.events.remove('actionend', ph.actionend);
+            if (ph.boundschange) prev.map.events.remove('boundschange', ph.boundschange);
+        } catch (eUnbind) {}
+    }
 
     // Обновляем видимость по зуму и (при большой карте) по viewport при панорамировании.
     // Во время жеста (зум + перетаскивание) тяжёлый applyMapFilter не запускаем — иначе карта подвисает.
@@ -802,58 +817,67 @@ function bindMyMapInteractionEvents() {
         }, delayMs != null ? delayMs : 80);
     }
 
-    myMap.events.add('actionbegin', function() {
-        window.mapUserGestureActive = true;
-        if (typeof clearMapHoverOnMapGesture === 'function') {
-            clearMapHoverOnMapGesture();
-        }
-        if (mapBoundsChangeTimer) {
-            clearTimeout(mapBoundsChangeTimer);
-            mapBoundsChangeTimer = null;
-        }
-        if (typeof pauseRadioBridgeCoveragePulseAnimation === 'function') {
-            pauseRadioBridgeCoveragePulseAnimation();
-        }
-    });
-
-    myMap.events.add('actionend', function() {
-        window.mapUserGestureActive = false;
-        if (typeof resumeRadioBridgeCoveragePulseAnimation === 'function') {
-            resumeRadioBridgeCoveragePulseAnimation();
-        }
-        if (mapBoundsChangePending) {
-            scheduleMapBoundsChangeUpdate(40, mapBoundsChangeZoomPending);
-        }
-    });
-
-    myMap.events.add('boundschange', function(e) {
-        try {
-            if (!myMap || typeof myMap.getZoom !== 'function') return;
-            var z = myMap.getZoom();
-            if (typeof z !== 'number') return;
-
-            if (typeof updateSettingsCurrentZoom === 'function') {
-                updateSettingsCurrentZoom(z);
+    var handlers = {
+        click: handleMapClick,
+        mousemove: handleMapMouseMove,
+        actionbegin: function() {
+            window.mapUserGestureActive = true;
+            if (typeof clearMapHoverOnMapGesture === 'function') {
+                clearMapHoverOnMapGesture();
             }
-
-            var newZoom = e && typeof e.get === 'function' ? e.get('newZoom') : z;
-            var oldZoom = e && typeof e.get === 'function' ? e.get('oldZoom') : expertLastZoom;
-            var zoomChanged = typeof newZoom === 'number' && typeof oldZoom === 'number' && newZoom !== oldZoom;
-            var viewportCull = typeof MapPerf !== 'undefined' && MapPerf.shouldUseViewportCull();
-            var virtualization = typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization();
-            if (!viewportCull && !virtualization && !zoomChanged) return;
-
-            expertPrevZoom = expertLastZoom;
-            expertLastZoom = z;
-
-            if (window.mapUserGestureActive) {
-                mapBoundsChangePending = true;
-                if (zoomChanged) mapBoundsChangeZoomPending = true;
-                return;
+            if (mapBoundsChangeTimer) {
+                clearTimeout(mapBoundsChangeTimer);
+                mapBoundsChangeTimer = null;
             }
-            scheduleMapBoundsChangeUpdate(null, zoomChanged);
-        } catch (eBound) {}
-    });
+            if (typeof pauseRadioBridgeCoveragePulseAnimation === 'function') {
+                pauseRadioBridgeCoveragePulseAnimation();
+            }
+        },
+        actionend: function() {
+            window.mapUserGestureActive = false;
+            if (typeof resumeRadioBridgeCoveragePulseAnimation === 'function') {
+                resumeRadioBridgeCoveragePulseAnimation();
+            }
+            if (mapBoundsChangePending) {
+                scheduleMapBoundsChangeUpdate(40, mapBoundsChangeZoomPending);
+            }
+        },
+        boundschange: function(e) {
+            try {
+                if (!myMap || typeof myMap.getZoom !== 'function') return;
+                var z = myMap.getZoom();
+                if (typeof z !== 'number') return;
+
+                if (typeof updateSettingsCurrentZoom === 'function') {
+                    updateSettingsCurrentZoom(z);
+                }
+
+                var newZoom = e && typeof e.get === 'function' ? e.get('newZoom') : z;
+                var oldZoom = e && typeof e.get === 'function' ? e.get('oldZoom') : expertLastZoom;
+                var zoomChanged = typeof newZoom === 'number' && typeof oldZoom === 'number' && newZoom !== oldZoom;
+                var viewportCull = typeof MapPerf !== 'undefined' && MapPerf.shouldUseViewportCull();
+                var virtualization = typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization();
+                if (!viewportCull && !virtualization && !zoomChanged) return;
+
+                expertPrevZoom = expertLastZoom;
+                expertLastZoom = z;
+
+                if (window.mapUserGestureActive) {
+                    mapBoundsChangePending = true;
+                    if (zoomChanged) mapBoundsChangeZoomPending = true;
+                    return;
+                }
+                scheduleMapBoundsChangeUpdate(null, zoomChanged);
+            } catch (eBound) {}
+        }
+    };
+
+    myMap.events.add('click', handlers.click);
+    myMap.events.add('mousemove', handlers.mousemove);
+    myMap.events.add('actionbegin', handlers.actionbegin);
+    myMap.events.add('actionend', handlers.actionend);
+    myMap.events.add('boundschange', handlers.boundschange);
+    window._volsmapBoundMap = { map: myMap, handlers: handlers };
 
     if (typeof updateSettingsCurrentZoom === 'function') {
         try { updateSettingsCurrentZoom(myMap.getZoom()); } catch (eZoom) {}

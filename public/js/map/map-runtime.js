@@ -21,6 +21,14 @@
         leaflet: null
     };
     var warmingOpposite = false;
+    var warmAttempts = 0;
+    var WARM_MAX_ATTEMPTS = 4;
+    var WARM_WAIT_MS = 8000;
+    var warmPromise = null;
+    var warmResolve = null;
+    var hydratingOpposite = false;
+    var hydratePromise = null;
+    var hydrateResolve = null;
     var USER_KEY_PREFIX = 'volsmap.basemapType.user.';
     var ORG_DEFAULT_PREFIX = 'volsmap.basemapType.orgDefault.';
     var LEGACY_KEY = 'volsmap.basemapType';
@@ -373,11 +381,98 @@
             parkSlotElement(prev, otherName);
         }
         el.id = 'map';
-        el.classList.add('map-runtime-slot');
+        el.classList.add('map', 'map-runtime-slot');
         el.classList.remove('is-parked');
-        el.style.visibility = 'visible';
-        el.style.pointerEvents = '';
+        el.style.cssText = '';
         el.removeAttribute('aria-hidden');
+    }
+
+    function slotHasEngine(slot) {
+        return !!(slot && slot.map && slot.el);
+    }
+
+    function slotHasObjects(slot) {
+        return !!(slot && Array.isArray(slot.objects) && slot.objects.length > 0);
+    }
+
+    function setWarmStatus(status, detail) {
+        try {
+            global.__volsmapBasemapWarm = status;
+            global.__volsmapBasemapWarmDetail = detail || '';
+        } catch (e) {}
+    }
+
+    function beginWarmCycle() {
+        warmingOpposite = true;
+        var resolveFn = null;
+        warmPromise = new Promise(function (resolve) { resolveFn = resolve; });
+        warmResolve = resolveFn;
+    }
+
+    function endWarmCycle() {
+        warmingOpposite = false;
+        var resolveFn = warmResolve;
+        warmResolve = null;
+        warmPromise = null;
+        if (typeof resolveFn === 'function') {
+            try { resolveFn(); } catch (eRes) {}
+        }
+    }
+
+    function beginHydrateCycle() {
+        hydratingOpposite = true;
+        var resolveFn = null;
+        hydratePromise = new Promise(function (resolve) { resolveFn = resolve; });
+        hydrateResolve = resolveFn;
+    }
+
+    function endHydrateCycle() {
+        hydratingOpposite = false;
+        var resolveFn = hydrateResolve;
+        hydrateResolve = null;
+        hydratePromise = null;
+        if (typeof resolveFn === 'function') {
+            try { resolveFn(); } catch (eRes) {}
+        }
+    }
+
+    function waitBackgroundThen(cb) {
+        var p = null;
+        if (hydratingOpposite && hydratePromise) p = hydratePromise;
+        else if (warmingOpposite && warmPromise) p = warmPromise;
+        if (!p) {
+            cb();
+            return;
+        }
+        var settled = false;
+        var timer = setTimeout(function () {
+            if (settled) return;
+            settled = true;
+            cb();
+        }, WARM_WAIT_MS);
+        p.then(function () {
+            if (settled) return;
+            // Дать warm→hydrate стартовать синхронно/в том же тике
+            setTimeout(function () {
+                if (settled) return;
+                if (hydratingOpposite && hydratePromise) {
+                    waitBackgroundThen(cb);
+                    return;
+                }
+                if (warmingOpposite && warmPromise) {
+                    waitBackgroundThen(cb);
+                    return;
+                }
+                settled = true;
+                clearTimeout(timer);
+                cb();
+            }, 0);
+        }, function () {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            cb();
+        });
     }
 
     function getObjectsRef() {
@@ -459,13 +554,22 @@
         try { global.myMap.options.set('suppressMapOpenBlock', true); } catch (e8) {}
     }
 
-    function restoreObjects(data, done) {
+    function restoreObjects(data, done, extraOpts) {
         if (typeof importData !== 'function') {
             if (typeof done === 'function') done();
             return;
         }
-        importData(data || [], { skipSave: true, skipHistory: true, merge: false }, function () {
-            if (typeof done === 'function') done();
+        var opts = {
+            skipSave: true,
+            skipHistory: true,
+            merge: false
+        };
+        if (extraOpts) {
+            if (extraOpts.preserveUiState) opts.preserveUiState = true;
+            if (extraOpts.bulkImport) opts.bulkImport = true;
+        }
+        importData(data || [], opts, function (err) {
+            if (typeof done === 'function') done(err || null);
         });
     }
 
@@ -498,24 +602,26 @@
         } catch (eInv) {}
     }
 
-    function afterMapReady(mapType, done) {
-        if (typeof createCursorIndicator === 'function') {
-            try { createCursorIndicator(); } catch (eC) {}
-        }
+    function afterMapReady(mapType, done, light) {
         if (typeof bindMyMapInteractionEvents === 'function') {
             try { bindMyMapInteractionEvents(); } catch (eB) {}
         }
-        if (typeof setupMapLayerSelector === 'function') {
-            try { setupMapLayerSelector(); } catch (eS) {}
-        }
-        if (typeof setupObjectPlacementPanDrag === 'function') {
-            try { setupObjectPlacementPanDrag(); } catch (ePan) {}
-        }
-        if (typeof setupRectSelection === 'function') {
-            try { setupRectSelection(); } catch (eRect) {}
-        }
         if (typeof syncMapPanLockForEditTools === 'function') {
             try { syncMapPanLockForEditTools(); } catch (eP) {}
+        }
+        if (!light) {
+            if (typeof createCursorIndicator === 'function') {
+                try { createCursorIndicator(); } catch (eC) {}
+            }
+            if (typeof setupMapLayerSelector === 'function') {
+                try { setupMapLayerSelector(); } catch (eS) {}
+            }
+            if (typeof setupObjectPlacementPanDrag === 'function') {
+                try { setupObjectPlacementPanDrag(); } catch (ePan) {}
+            }
+            if (typeof setupRectSelection === 'function') {
+                try { setupRectSelection(); } catch (eRect) {}
+            }
         }
         if (mapType && global.myMap && typeof global.myMap.setType === 'function') {
             try { global.myMap.setType(mapType); } catch (eT) {}
@@ -536,7 +642,7 @@
 
     /**
      * Keep-alive: два контейнера, без destroy.
-     * Повторный import только если объекты изменились на другом движке.
+     * Если opposite уже гидратирован (objects+fp) — только show, без importData.
      */
     function switchTo(runtime, mapType, done) {
         if (switching) {
@@ -555,13 +661,18 @@
         }
 
         switching = true;
-        showSwitchOverlay(true);
         ensureShimSaved();
         ensureRuntimeHost();
 
+        function beginSwitchBody() {
         var view = readView();
         var data = snapshotData();
         var fp = hashData(data);
+        var existingPreview = slots[target];
+        var canInstant = slotHasEngine(existingPreview) &&
+            slotHasObjects(existingPreview) &&
+            existingPreview.fp === fp;
+        if (!canInstant) showSwitchOverlay(true);
         parkActiveSlot(data);
 
         var prep = target === 'yandex'
@@ -574,19 +685,15 @@
             function activateExisting(slot) {
                 showSlotElement(slot.el);
                 global.myMap = slot.map;
-                // Важно: не вызывать clearMap/import на слоте с уже живыми объектами —
-                // fingerprint между Яндекс/Leaflet часто «плывёт», и clearMap стирал placemarks.
-                var parked = Array.isArray(slot.objects) ? slot.objects : [];
-                if (parked.length > 0) {
-                    adoptObjects(parked);
-                    slot.fp = fp;
+                if (slotHasObjects(slot) && slot.fp === fp) {
+                    adoptObjects(slot.objects);
                     syncViewToMap(view);
                     afterMapReady(mapType, function () {
                         finishSwitch(mapType, done);
-                    });
+                    }, true);
                     return;
                 }
-                // Слот пустой (не удалось прогреть) — один раз заливаем снимок
+                showSwitchOverlay(true);
                 restoreObjects(data, function () {
                     slot.objects = getObjectsRef();
                     slot.fp = fp;
@@ -594,8 +701,8 @@
                     syncViewToMap(view);
                     afterMapReady(mapType, function () {
                         finishSwitch(mapType, done);
-                    });
-                });
+                    }, true);
+                }, { preserveUiState: true, bulkImport: true });
             }
 
             function createFresh() {
@@ -633,7 +740,7 @@
                         afterMapReady(mapType, function () {
                             finishSwitch(mapType, done);
                         });
-                    });
+                    }, { preserveUiState: true, bulkImport: true });
                 }
 
                 if (global.ymaps && typeof global.ymaps.ready === 'function') {
@@ -674,6 +781,26 @@
             }
             if (typeof done === 'function') done(err);
         });
+        } // end beginSwitchBody
+
+        // Если слот ещё не гидратирован — дожать warm/hydrate до show
+        if (!canInstantPreview(target) && !hydratingOpposite && !warmingOpposite) {
+            try {
+                if (!slotHasEngine(slots[target])) warmOppositeSlot();
+                else hydrateOppositeSlot();
+            } catch (eH) {}
+        }
+        waitBackgroundThen(beginSwitchBody);
+    }
+
+    function canInstantPreview(targetName) {
+        var slot = slots[targetName];
+        if (!slotHasEngine(slot) || !slotHasObjects(slot)) return false;
+        try {
+            return slot.fp === hashData(snapshotData());
+        } catch (e) {
+            return false;
+        }
     }
 
     /**
@@ -792,110 +919,324 @@
             ensureShimSaved();
             ensureLeafletShimApi().catch(function () {});
         }
-        // После первой отрисовки — собрать второй движок в фоне (без UI)
+        scheduleWarmOpposite(0);
+    }
+
+    function scheduleWarmOpposite(delayMs) {
+        var delay = delayMs != null ? delayMs : 0;
         setTimeout(function () {
-            try { warmOppositeSlot(); } catch (eW) {}
-        }, 600);
+            try { warmOppositeSlot(); } catch (eW) {
+                console.warn('[MapRuntime] warm schedule error', eW);
+                setWarmStatus('error', String(eW && eW.message ? eW.message : eW));
+                endWarmCycle();
+            }
+        }, delay);
+    }
+
+    function scheduleHydrateOpposite(delayMs) {
+        var delay = delayMs != null ? delayMs : 0;
+        setTimeout(function () {
+            try { hydrateOppositeSlot(); } catch (eH) {
+                console.warn('[MapRuntime] hydrate schedule error', eH);
+                setWarmStatus('error', String(eH && eH.message ? eH.message : eH));
+                endHydrateCycle();
+            }
+        }, delay);
+    }
+
+    function prepareWarmContainer(el, host) {
+        if (!el || !host) return;
+        el.classList.add('map', 'map-runtime-slot');
+        el.classList.remove('is-parked');
+        el.style.cssText =
+            'position:absolute;inset:0;width:100%;height:100%;' +
+            'opacity:0;pointer-events:none;z-index:0;visibility:visible;';
+        if (!el.parentNode) host.appendChild(el);
+        try {
+            var br = host.getBoundingClientRect();
+            if (br.width < 2 || br.height < 2) {
+                el.style.minWidth = '320px';
+                el.style.minHeight = '240px';
+            }
+        } catch (eBr) {}
+    }
+
+    function isPrimaryBusy() {
+        try {
+            if (typeof _mapApplyInProgress !== 'undefined' && _mapApplyInProgress) return true;
+        } catch (e1) {}
+        try {
+            if (typeof isMapBulkImportActive === 'function' && isMapBulkImportActive()) return true;
+        } catch (e2) {}
+        return false;
+    }
+
+    function isDataReadyForHydrate() {
+        try {
+            if (typeof _mapDataReady !== 'undefined' && !_mapDataReady) return false;
+        } catch (e) {}
+        var data = snapshotData();
+        return !!(data && data.length);
     }
 
     /**
-     * Фоновый прогрев второго рантайма: первый клик по слою без «длинной загрузки».
+     * Фоновый прогрев движка (API + пустая карта) без подмены globals.
      */
     function warmOppositeSlot() {
-        if (warmingOpposite || switching) return;
-        if (isInitialMapLoadPending()) return;
+        if (warmingOpposite || switching || hydratingOpposite) return;
         var active = getActiveRuntime();
-        if (active !== 'yandex' && active !== 'leaflet') return;
+        if (active !== 'yandex' && active !== 'leaflet') {
+            setWarmStatus('skip', 'active=' + active);
+            return;
+        }
         var target = active === 'yandex' ? 'leaflet' : 'yandex';
-        if (slots[target] && slots[target].map && slots[target].el) return;
+        if (slotHasEngine(slots[target])) {
+            setWarmStatus('ready', target + '-engine');
+            scheduleHydrateOpposite(0);
+            return;
+        }
 
-        warmingOpposite = true;
+        beginWarmCycle();
+        warmAttempts++;
+        setWarmStatus('pending', target + ' #' + warmAttempts);
         ensureRuntimeHost();
-        // Зафиксировать активный слот, не пряча его
-        recordActiveSlot(snapshotData(), false);
+        try { recordActiveSlot(null, false); } catch (eRec) {}
 
         var view = readView();
-        var data = snapshotData();
-        var fp = hashData(data);
         var prep = target === 'yandex' ? loadNativeApi() : ensureLeafletShimApi();
 
         prep.then(function (api) {
-            if (slots[target] && slots[target].map) {
-                warmingOpposite = false;
+            if (slotHasEngine(slots[target])) {
+                setWarmStatus('ready', target + '-engine');
+                endWarmCycle();
+                scheduleHydrateOpposite(0);
                 return;
             }
-
-            var saved = {
-                ymaps: global.ymaps,
-                myMap: global.myMap,
-                objects: getObjectsRef(),
-                engine: global.VolsmapMapEngine,
-                runtimeEngine: typeof MapEngine !== 'undefined' && MapEngine.getEngine
-                    ? MapEngine.getEngine()
-                    : active
-            };
-
-            applyRuntimeApi(target, api);
+            if (!api || !api.Map) {
+                throw new Error('API ' + target + ' недоступен');
+            }
 
             var host = ensureRuntimeHost();
             var el = document.createElement('div');
-            el.className = 'map map-runtime-slot is-parked';
             el.setAttribute('data-runtime', target);
             el.id = 'map-runtime-' + target;
-            el.style.visibility = 'hidden';
-            el.style.pointerEvents = 'none';
-            if (host) host.appendChild(el);
+            prepareWarmContainer(el, host);
+
+            function failWarm(err) {
+                console.warn('[MapRuntime] warm failed', err);
+                setWarmStatus('error', String(err && err.message ? err.message : err));
+                try {
+                    if (el && el.parentNode) el.parentNode.removeChild(el);
+                } catch (eDel) {}
+                endWarmCycle();
+                if (warmAttempts < WARM_MAX_ATTEMPTS) {
+                    scheduleWarmOpposite(800 * warmAttempts);
+                }
+            }
+
+            function stripWarmMapChrome(mapInst) {
+                if (!mapInst || !mapInst.controls) return;
+                try { mapInst.controls.remove('searchControl'); } catch (e1) {}
+                try { mapInst.controls.remove('trafficControl'); } catch (e2) {}
+                try { mapInst.controls.remove('geolocationControl'); } catch (e3) {}
+                try { mapInst.controls.remove('rulerControl'); } catch (e4) {}
+                try { mapInst.controls.remove('fullscreenControl'); } catch (e5) {}
+                try { mapInst.controls.remove('typeSelector'); } catch (e6) {}
+                try { mapInst.behaviors.disable('rightMouseButtonMagnifier'); } catch (e7) {}
+                try { mapInst.options.set('suppressMapOpenBlock', true); } catch (e8) {}
+            }
 
             function buildWarm() {
+                var mapInst = null;
                 try {
-                    createMap(view.center, view.zoom, null, el);
+                    mapInst = new api.Map(el, {
+                        center: view.center,
+                        zoom: view.zoom,
+                        controls: []
+                    });
+                    stripWarmMapChrome(mapInst);
+                    try {
+                        if (mapInst._leaflet && mapInst._leaflet.invalidateSize) {
+                            mapInst._leaflet.invalidateSize(true);
+                        }
+                    } catch (eInv) {}
+                    try {
+                        if (mapInst.container && mapInst.container.fitToViewport) {
+                            mapInst.container.fitToViewport();
+                        }
+                    } catch (eFit) {}
                 } catch (eCreate) {
-                    console.warn('[MapRuntime] warm create failed', eCreate);
-                    restoreAfterWarm(saved, active);
-                    warmingOpposite = false;
+                    failWarm(eCreate);
                     return;
                 }
-                // Без importData/clearMap — иначе сбрасываются selectedObjects и кэши активной карты.
-                // Объекты зальём при первом реальном переключении (движок и тайлы уже тёплые).
                 slots[target] = {
                     el: el,
-                    map: global.myMap,
+                    map: mapInst,
                     objects: [],
                     fp: ''
                 };
                 parkSlotElement(el, target);
-                restoreAfterWarm(saved, active);
-                warmingOpposite = false;
+                setWarmStatus('ready', target + '-engine');
+                endWarmCycle();
+                try { hydrateOppositeSlot(); } catch (eHyd) {
+                    scheduleHydrateOpposite(50);
+                }
             }
 
-            if (global.ymaps && typeof global.ymaps.ready === 'function') {
-                global.ymaps.ready(buildWarm);
-            } else {
-                buildWarm();
+            function runWhenApiReady(cb) {
+                if (api && typeof api.ready === 'function') {
+                    var readyDone = false;
+                    var readyTimer = setTimeout(function () {
+                        if (readyDone) return;
+                        readyDone = true;
+                        cb();
+                    }, 3000);
+                    api.ready(function () {
+                        if (readyDone) return;
+                        readyDone = true;
+                        clearTimeout(readyTimer);
+                        cb();
+                    });
+                } else {
+                    cb();
+                }
             }
+
+            runWhenApiReady(buildWarm);
         }).catch(function (err) {
-            warmingOpposite = false;
             console.warn('[MapRuntime] warm opposite failed', err);
+            setWarmStatus('error', String(err && err.message ? err.message : err));
+            endWarmCycle();
+            if (warmAttempts < WARM_MAX_ATTEMPTS) {
+                scheduleWarmOpposite(1000 * warmAttempts);
+            }
         });
     }
 
-    function restoreAfterWarm(saved, activeName) {
-        try {
-            global.ymaps = saved.ymaps;
-            global.myMap = saved.myMap;
-            adoptObjects(saved.objects);
-            global.VolsmapMapEngine = saved.engine;
-            if (typeof MapEngine !== 'undefined' && MapEngine.setRuntimeEngine) {
-                MapEngine.setRuntimeEngine(saved.runtimeEngine || activeName);
-            }
-            var activeSlot = slots[activeName];
-            if (activeSlot && activeSlot.el) {
-                showSlotElement(activeSlot.el);
-            }
-            fitActiveMap();
-        } catch (e) {
-            console.warn('[MapRuntime] restoreAfterWarm', e);
+    /**
+     * Фоновая заливка объектов на opposite-слот.
+     * Краткий swap globals → importData → restore активной карты.
+     * После этого switch = только show контейнера.
+     */
+    function hydrateOppositeSlot() {
+        if (hydratingOpposite || warmingOpposite || switching) return;
+        var active = getActiveRuntime();
+        if (active !== 'yandex' && active !== 'leaflet') return;
+        var target = active === 'yandex' ? 'leaflet' : 'yandex';
+        var slot = slots[target];
+
+        if (!slotHasEngine(slot)) {
+            scheduleWarmOpposite(0);
+            return;
         }
+        if (!isDataReadyForHydrate()) {
+            setWarmStatus('wait', 'data');
+            return;
+        }
+        if (isPrimaryBusy()) {
+            scheduleHydrateOpposite(400);
+            return;
+        }
+
+        var data = snapshotData();
+        var fp = hashData(data);
+        if (!data.length) {
+            setWarmStatus('ready', target + '-engine-empty');
+            return;
+        }
+        if (slotHasObjects(slot) && slot.fp === fp) {
+            setWarmStatus('ready', target + '-hydrated');
+            return;
+        }
+
+        beginHydrateCycle();
+        setWarmStatus('hydrating', target);
+        global.__volsmapHydratingOpposite = true;
+
+        var saved = {
+            ymaps: global.ymaps,
+            myMap: global.myMap,
+            objects: getObjectsRef(),
+            engine: global.VolsmapMapEngine,
+            runtimeEngine: typeof MapEngine !== 'undefined' && MapEngine.getEngine
+                ? MapEngine.getEngine()
+                : active
+        };
+
+        var prep = target === 'yandex' ? loadNativeApi() : ensureLeafletShimApi();
+        prep.then(function (api) {
+            if (!api || !api.Map) {
+                throw new Error('API ' + target + ' недоступен');
+            }
+            applyRuntimeApi(target, api);
+            global.myMap = slot.map;
+
+            // Не шумим оверлеем импорта во время гидратации
+            var prevSetText = global.setMapLoadingOverlayText;
+            if (typeof prevSetText === 'function') {
+                global.setMapLoadingOverlayText = function () {};
+            }
+
+            restoreObjects(data, function (err) {
+                if (typeof prevSetText === 'function') {
+                    global.setMapLoadingOverlayText = prevSetText;
+                }
+                try {
+                    if (!err) {
+                        slot.objects = getObjectsRef();
+                        slot.fp = fp;
+                        slot.map = global.myMap;
+                    }
+                } catch (eSlot) {}
+
+                try {
+                    global.ymaps = saved.ymaps;
+                    global.myMap = saved.myMap;
+                    adoptObjects(saved.objects);
+                    global.VolsmapMapEngine = saved.engine;
+                    if (typeof MapEngine !== 'undefined' && MapEngine.setRuntimeEngine) {
+                        MapEngine.setRuntimeEngine(saved.runtimeEngine || active);
+                    }
+                    var activeSlot = slots[active];
+                    if (activeSlot && activeSlot.el) {
+                        showSlotElement(activeSlot.el);
+                    } else {
+                        var mapEl = document.getElementById('map');
+                        if (mapEl) {
+                            mapEl.style.cssText = '';
+                            mapEl.classList.remove('is-parked');
+                        }
+                    }
+                    fitActiveMap();
+                } catch (eRest) {
+                    console.warn('[MapRuntime] hydrate restore failed', eRest);
+                }
+
+                global.__volsmapHydratingOpposite = false;
+                endHydrateCycle();
+                if (err) {
+                    setWarmStatus('error', String(err && err.message ? err.message : err));
+                    scheduleHydrateOpposite(1200);
+                } else {
+                    setWarmStatus('ready', target + '-hydrated');
+                }
+            }, { preserveUiState: true, bulkImport: true });
+        }).catch(function (err) {
+            global.__volsmapHydratingOpposite = false;
+            console.warn('[MapRuntime] hydrate failed', err);
+            setWarmStatus('error', String(err && err.message ? err.message : err));
+            try {
+                global.ymaps = saved.ymaps;
+                global.myMap = saved.myMap;
+                adoptObjects(saved.objects);
+                global.VolsmapMapEngine = saved.engine;
+                if (typeof MapEngine !== 'undefined' && MapEngine.setRuntimeEngine) {
+                    MapEngine.setRuntimeEngine(saved.runtimeEngine || active);
+                }
+            } catch (eR2) {}
+            endHydrateCycle();
+            scheduleHydrateOpposite(1500);
+        });
     }
 
     global.MapRuntime = {
@@ -906,6 +1247,9 @@
         preloadNativeIfDual: preloadNativeIfDual,
         preloadOppositeRuntime: preloadOppositeRuntime,
         warmOppositeSlot: warmOppositeSlot,
+        hydrateOppositeSlot: hydrateOppositeSlot,
+        scheduleWarmOpposite: scheduleWarmOpposite,
+        scheduleHydrateOpposite: scheduleHydrateOpposite,
         flushPendingAfterLoad: flushPendingAfterLoad,
         persistBasemapType: persistBasemapType,
         persistUserBasemapType: persistUserBasemapType,

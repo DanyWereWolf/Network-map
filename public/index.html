@@ -129,12 +129,12 @@
                 loadCss('vendor/leaflet/leaflet.css');
                 var leaflet = loadScript('vendor/leaflet/leaflet.js');
                 leaflet.onload = function() {
-                    var stack = loadScript('js/map/leaflet-basemap-stack.js?v=basemap-dual-6');
+                    var stack = loadScript('js/map/leaflet-basemap-stack.js?v=basemap-dual-13');
                     stack.onload = function() {
-                        var runtime = loadScript('js/map/map-runtime.js?v=basemap-dual-6');
+                        var runtime = loadScript('js/map/map-runtime.js?v=basemap-dual-13');
                         function loadShim() {
                             if (passiveShim) window.VolsmapShimPassive = true;
-                            loadScript('js/map/leaflet-ymaps-shim.js?v=basemap-dual-6');
+                            loadScript('js/map/leaflet-ymaps-shim.js?v=basemap-dual-13');
                         }
                         runtime.onload = loadShim;
                         runtime.onerror = loadShim;
@@ -278,7 +278,7 @@
             } catch (e) {}
         })();
     </script>
-    <link rel="stylesheet" href="css/styles.css?v=basemap-dual-5">
+    <link rel="stylesheet" href="css/styles.css?v=basemap-dual-13">
     <link rel="stylesheet" href="css/scrollbars.css">
     <link rel="stylesheet" href="css/app-motion.css">
     <link rel="stylesheet" href="css/app-mobile.css?v=fiber-ws-scroll6">
@@ -1348,13 +1348,16 @@
                 </button>
                 <div class="map-layer-selector__menu" id="mapLayerSelectorMenu" role="listbox" hidden>
                     <div class="map-layer-selector__group" data-engine-group="leaflet" hidden>
-                        <div class="map-layer-selector__group-label">Локально (ортофото)</div>
+                        <div class="map-layer-selector__group-label">Локально</div>
                         <button type="button" class="map-layer-selector__item" role="option" data-map-type="leaflet#orthophoto" data-engine="leaflet" aria-selected="false">Ортофото</button>
-                        <button type="button" class="map-layer-selector__item" role="option" data-map-type="leaflet#osm" data-engine="leaflet" aria-selected="false">OpenStreetMap</button>
                         <button type="button" class="map-layer-selector__item" role="option" data-map-type="leaflet#none" data-engine="leaflet" aria-selected="false">Без подложки</button>
                     </div>
+                    <div class="map-layer-selector__group" data-engine-group="leaflet" hidden>
+                        <div class="map-layer-selector__group-label">OpenStreetMap (онлайн)</div>
+                        <button type="button" class="map-layer-selector__item" role="option" data-map-type="leaflet#osm" data-engine="leaflet" aria-selected="false">Схема</button>
+                    </div>
                     <div class="map-layer-selector__group" data-engine-group="yandex">
-                        <div class="map-layer-selector__group-label">Яндекс (онлайн, отдельно)</div>
+                        <div class="map-layer-selector__group-label">Яндекс (онлайн)</div>
                         <button type="button" class="map-layer-selector__item is-active" role="option" data-map-type="yandex#map" data-engine="yandex" aria-selected="true">Схема</button>
                         <button type="button" class="map-layer-selector__item" role="option" data-map-type="yandex#satellite" data-engine="yandex" aria-selected="false">Спутник</button>
                         <button type="button" class="map-layer-selector__item" role="option" data-map-type="yandex#hybrid" data-engine="yandex" aria-selected="false">Гибрид</button>
@@ -3409,7 +3412,7 @@
     <script src="js/core/confirm-dialog.js"></script>
     <script src="js/core/network-status.js"></script>
     <script src="js/groups.js"></script>
-    <script src="js/map/map-engine.js?v=basemap-dual-4"></script>
+    <script src="js/map/map-engine.js?v=basemap-dual-13"></script>
     <script src="js/map/theme.js"></script>
     <script src="js/map/map-icons.js"></script>
     <script src="js/map/cable-underground.js"></script>
@@ -3425,14 +3428,14 @@
     <script src="js/app/onboarding.js"></script>
     <script src="js/app/user-ui.js"></script>
     <script src="js/app/editor-shell.js"></script>
-    <script src="js/app/map-loading.js?v=basemap-dual-4"></script>
+    <script src="js/app/map-loading.js?v=basemap-dual-13"></script>
     <script src="js/app/backups.js"></script>
     <script src="js/app/cable-split-sleeve.js"></script>
-    <script src="js/app/map-hover.js?v=basemap-dual-4"></script>
+    <script src="js/app/map-hover.js?v=basemap-dual-13"></script>
     <script src="js/app/object-placement.js"></script>
     <script src="js/app/edit-mode.js"></script>
-    <script src="js/app/map-init.js?v=basemap-dual-4"></script>
-    <script src="js/app/basemap-ui.js?v=basemap-dual-4"></script>
+    <script src="js/app/map-init.js?v=basemap-dual-13"></script>
+    <script src="js/app/basemap-ui.js?v=basemap-dual-13"></script>
     <script src="js/app/zabbix-status.js"></script>
     <script src="js/app/map-clicks.js"></script>
     <script src="js/app/create-object.js?v=move-sync-rev1"></script>
@@ -3441,9 +3444,9 @@
     <script src="js/app/object-delete.js"></script>
     <script src="js/app/map-selection.js?v=move-sync-rev1"></script>
     <script src="js/app/gpon-fiber.js?v=sleeve-open-perf1"></script>
-    <script src="js/app/map-geometry.js?v=basemap-dual-4"></script>
+    <script src="js/app/map-geometry.js?v=basemap-dual-13"></script>
     <script src="js/app/map-object-core.js?v=move-sync-rev1"></script>
-    <script src="js/app/map-persistence.js?v=move-sync-rev1"></script>
+    <script src="js/app/map-persistence.js?v=basemap-dual-13"></script>
     <script src="js/app/cable-laying.js"></script>
     <script src="js/app/cable-helpers.js?v=move-sync-rev1"></script>
     <script src="js/app/object-modals.js?v=node-panel-perf6"></script>

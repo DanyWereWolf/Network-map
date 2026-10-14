@@ -226,6 +226,13 @@ function markMapDataReady() {
             MapPerf.warmIndexes();
         }
     } catch (eWarmReady) {}
+    // Dual: данные готовы — залить объекты на opposite (пока entrance ещё крутится)
+    try {
+        if (typeof MapRuntime !== 'undefined') {
+            if (MapRuntime.scheduleHydrateOpposite) MapRuntime.scheduleHydrateOpposite(0);
+            else if (MapRuntime.scheduleWarmOpposite) MapRuntime.scheduleWarmOpposite(0);
+        }
+    } catch (eWarmRt) {}
     tryCompleteMapInitialLoad();
 }
 window.markMapDataReady = markMapDataReady;
@@ -267,9 +274,12 @@ function finishMapInitialReveal() {
                 showSyncRequiredOverlay();
             }
             scheduleWelcomeAfterMapReady();
-            // Dual: слой Яндекса из настроек орг — только после первой загрузки
+            // Dual: слой из prefs + дожать hydrate, если не успел за entrance
             if (typeof MapRuntime !== 'undefined' && MapRuntime.flushPendingAfterLoad) {
                 try { MapRuntime.flushPendingAfterLoad(); } catch (eFlush) {}
+            }
+            if (typeof MapRuntime !== 'undefined' && MapRuntime.scheduleHydrateOpposite) {
+                try { MapRuntime.scheduleHydrateOpposite(100); } catch (eHyd2) {}
             }
         });
     });
