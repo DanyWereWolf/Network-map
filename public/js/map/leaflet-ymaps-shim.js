@@ -776,25 +776,166 @@
         attribution: '© Яндекс'
     };
 
+    // WGS84 eccentricity — спутник Яндекса режется в EPSG:3395 (эллиптический Меркатор),
+    // Leaflet/OSM/ортофото — EPSG:3857. Без перепроецирования объекты «уезжают».
+    var YANDEX_E = 0.08181919084262157;
+    var YANDEX_ORIGIN = 20037508.342789244;
+
+    function latLngToYandexGlobalPixels(lat, lng, zoom) {
+        var latC = Math.max(Math.min(lat, MAX_LAT), -MAX_LAT);
+        var latRad = latC * Math.PI / 180;
+        var lngRad = lng * Math.PI / 180;
+        var esin = YANDEX_E * Math.sin(latRad);
+        var mx = EARTH * lngRad;
+        var my = EARTH * Math.log(
+            Math.tan(Math.PI / 4 + latRad / 2) *
+            Math.pow((1 - esin) / (1 + esin), YANDEX_E / 2)
+        );
+        var res = (2 * YANDEX_ORIGIN) / (256 * Math.pow(2, zoom));
+        return {
+            x: (mx + YANDEX_ORIGIN) / res,
+            y: (YANDEX_ORIGIN - my) / res
+        };
+    }
+
+    function loadImage(url) {
+        return new Promise(function (resolve) {
+            var img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = function () { resolve(img); };
+            img.onerror = function () { resolve(null); };
+            img.src = url;
+        });
+    }
+
+    /**
+     * Спутник Яндекса (EPSG:3395) → холст тайла Leaflet (EPSG:3857).
+     */
+    function buildYandexSatReprojectedLayer() {
+        return L.gridLayer(Object.assign({}, YANDEX_TILE_OPTS, {
+            maxNativeZoom: 19,
+            tileSize: 256,
+            createTile: function (coords, done) {
+                var canvas = document.createElement('canvas');
+                canvas.width = 256;
+                canvas.height = 256;
+                var ctx = canvas.getContext('2d');
+                if (!this._map) {
+                    setTimeout(function () { done(null, canvas); }, 0);
+                    return canvas;
+                }
+
+                var z = coords.z;
+                var tileBounds = this._tileCoordsToBounds(coords);
+                var nw = tileBounds.getNorthWest();
+                var ne = tileBounds.getNorthEast();
+                var sw = tileBounds.getSouthWest();
+                var se = tileBounds.getSouthEast();
+
+                var cNW = latLngToYandexGlobalPixels(nw.lat, nw.lng, z);
+                var cNE = latLngToYandexGlobalPixels(ne.lat, ne.lng, z);
+                var cSW = latLngToYandexGlobalPixels(sw.lat, sw.lng, z);
+                var cSE = latLngToYandexGlobalPixels(se.lat, se.lng, z);
+
+                var minX = Math.min(cNW.x, cNE.x, cSW.x, cSE.x);
+                var maxX = Math.max(cNW.x, cNE.x, cSW.x, cSE.x);
+                var minY = Math.min(cNW.y, cNE.y, cSW.y, cSE.y);
+                var maxY = Math.max(cNW.y, cNE.y, cSW.y, cSE.y);
+
+                var worldTiles = Math.pow(2, z);
+                var tx0 = Math.max(0, Math.floor(minX / 256));
+                var ty0 = Math.max(0, Math.floor(minY / 256));
+                var tx1 = Math.min(worldTiles - 1, Math.floor((maxX - 1e-6) / 256));
+                var ty1 = Math.min(worldTiles - 1, Math.floor((maxY - 1e-6) / 256));
+
+                var loads = [];
+                var meta = [];
+                for (var tx = tx0; tx <= tx1; tx++) {
+                    for (var ty = ty0; ty <= ty1; ty++) {
+                        meta.push({ tx: tx, ty: ty });
+                        loads.push(loadImage(
+                            'https://core-sat.maps.yandex.net/tiles?l=sat&x=' + tx +
+                            '&y=' + ty + '&z=' + z + '&scale=1&lang=ru_RU'
+                        ));
+                    }
+                }
+
+                Promise.all(loads).then(function (images) {
+                    var cols = tx1 - tx0 + 1;
+                    var rows = ty1 - ty0 + 1;
+                    if (cols < 1 || rows < 1) {
+                        done(null, canvas);
+                        return;
+                    }
+                    var stitch = document.createElement('canvas');
+                    stitch.width = cols * 256;
+                    stitch.height = rows * 256;
+                    var sctx = stitch.getContext('2d');
+                    for (var i = 0; i < meta.length; i++) {
+                        if (!images[i]) continue;
+                        sctx.drawImage(
+                            images[i],
+                            (meta[i].tx - tx0) * 256,
+                            (meta[i].ty - ty0) * 256
+                        );
+                    }
+                    var src = sctx.getImageData(0, 0, stitch.width, stitch.height);
+                    var sdata = src.data;
+                    var sw = stitch.width;
+                    var out = ctx.createImageData(256, 256);
+                    var odata = out.data;
+                    var lat0 = nw.lat;
+                    var lat1 = sw.lat;
+                    var lng0 = nw.lng;
+                    var lng1 = ne.lng;
+
+                    for (var py = 0; py < 256; py++) {
+                        var lat = lat0 + (lat1 - lat0) * (py / 255);
+                        for (var px = 0; px < 256; px++) {
+                            var lng = lng0 + (lng1 - lng0) * (px / 255);
+                            var g = latLngToYandexGlobalPixels(lat, lng, z);
+                            var sx = g.x - tx0 * 256;
+                            var sy = g.y - ty0 * 256;
+                            var ix = sx | 0;
+                            var iy = sy | 0;
+                            if (ix < 0 || iy < 0 || ix >= sw || iy >= stitch.height) continue;
+                            var si = (iy * sw + ix) * 4;
+                            var oi = (py * 256 + px) * 4;
+                            odata[oi] = sdata[si];
+                            odata[oi + 1] = sdata[si + 1];
+                            odata[oi + 2] = sdata[si + 2];
+                            odata[oi + 3] = sdata[si + 3];
+                        }
+                    }
+                    ctx.putImageData(out, 0, 0);
+                    done(null, canvas);
+                }).catch(function () {
+                    done(null, canvas);
+                });
+
+                return canvas;
+            }
+        }));
+    }
+
     /**
      * Тайлы Яндекса для Leaflet (EPSG:3857).
      * layer: map | sat | skl
-     * При наличии ключа схема идёт через официальный Tiles API; иначе — core-renderer.
+     * map/skl — projection=web_mercator; sat — перепроецирование 3395→3857.
      */
     function buildYandexTileLayer(layerKind) {
         var kind = layerKind || 'map';
         var key = getYandexMapsApiKey();
         var url;
         if (kind === 'sat') {
-            url = 'https://core-sat.maps.yandex.net/tiles?l=sat&x={x}&y={y}&z={z}&scale=1&lang=ru_RU';
-            return L.tileLayer(url, Object.assign({}, YANDEX_TILE_OPTS, { maxNativeZoom: 19 }));
+            return buildYandexSatReprojectedLayer();
         }
         if (kind === 'map' && key) {
             url = 'https://tiles.api-maps.yandex.ru/v1/tiles/?apikey=' + encodeURIComponent(key) +
                 '&lang=ru_RU&x={x}&y={y}&z={z}&l=map&projection=web_mercator';
             return L.tileLayer(url, Object.assign({}, YANDEX_TILE_OPTS));
         }
-        // map / skl без ключа (и skl всегда — в Tiles API только l=map)
+        // map / skl — только web_mercator, иначе сдвиг относительно объектов
         url = 'https://core-renderer-tiles.maps.yandex.net/tiles?l=' + encodeURIComponent(kind) +
             '&x={x}&y={y}&z={z}&scale=1&lang=ru_RU&projection=web_mercator';
         return L.tileLayer(url, Object.assign({}, YANDEX_TILE_OPTS));
