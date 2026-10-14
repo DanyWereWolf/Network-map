@@ -149,6 +149,10 @@
         layer.setStyle(pathStyleFromOptions(optionsBag.getAll()));
     }
 
+    function isOptionVisible(val) {
+        return !(val === false || val === 0 || val === 'false' || val === '0');
+    }
+
     /** Как ymaps options.visible: скрыть/показать слой, не отвязывая geoObject от коллекции. */
     function applyGeoObjectVisibility(geoObj) {
         if (!geoObj) return;
@@ -157,27 +161,44 @@
         var layer = geoObj._layer || (geoObj._ensureLayer ? geoObj._ensureLayer() : null);
         if (!layer) return;
         var visible = geoObj.options ? geoObj.options.get('visible') : true;
-        if (visible === false) {
+        if (!isOptionVisible(visible)) {
             if (map._leaflet.hasLayer(layer)) {
-                map._leaflet.removeLayer(layer);
+                try { map._leaflet.removeLayer(layer); } catch (eRm) {}
             }
-            if (layer.getElement) {
-                try {
+            try {
+                if (typeof layer.setStyle === 'function') {
+                    layer.setStyle({ opacity: 0, fillOpacity: 0 });
+                }
+                if (typeof layer.setOpacity === 'function') layer.setOpacity(0);
+                if (layer.getElement) {
                     var elHide = layer.getElement();
-                    if (elHide) elHide.style.display = 'none';
-                } catch (eHide) {}
-            }
+                    if (elHide) {
+                        elHide.style.display = 'none';
+                        elHide.style.visibility = 'hidden';
+                    }
+                }
+            } catch (eHide) {}
             return;
         }
         if (!map._leaflet.hasLayer(layer)) {
-            layer.addTo(map._leaflet);
+            try { layer.addTo(map._leaflet); } catch (eAdd) {}
         }
-        if (layer.getElement) {
-            try {
+        try {
+            if (typeof layer.setOpacity === 'function') {
+                var op = geoObj.options.get('opacity');
+                layer.setOpacity(op != null ? Number(op) : 1);
+            }
+            if (typeof layer.setStyle === 'function') {
+                syncPathOptions(layer, geoObj.options);
+            }
+            if (layer.getElement) {
                 var elShow = layer.getElement();
-                if (elShow) elShow.style.display = '';
-            } catch (eShow) {}
-        }
+                if (elShow) {
+                    elShow.style.display = '';
+                    elShow.style.visibility = '';
+                }
+            }
+        } catch (eShow) {}
     }
 
     function bindParentApi(proto) {
@@ -454,6 +475,65 @@
     };
     bindParentApi(Polygon.prototype);
 
+    /** ymaps.Circle([center, radiusMeters], props, options) */
+    function GeometryCircle(centerAndRadius) {
+        var c = Array.isArray(centerAndRadius) ? centerAndRadius : [centerAndRadius, 0];
+        this._center = Array.isArray(c[0]) ? c[0].slice() : [0, 0];
+        this._radius = Number(c[1]) || 0;
+    }
+    GeometryCircle.prototype.getCoordinates = function () {
+        return [this._center.slice(), this._radius];
+    };
+    GeometryCircle.prototype.setCoordinates = function (centerAndRadius) {
+        var c = Array.isArray(centerAndRadius) ? centerAndRadius : [centerAndRadius, this._radius];
+        this._center = Array.isArray(c[0]) ? c[0].slice() : this._center;
+        if (c[1] != null) this._radius = Number(c[1]) || 0;
+        this._syncLayer();
+        return this;
+    };
+    GeometryCircle.prototype.getRadius = function () {
+        return this._radius;
+    };
+    GeometryCircle.prototype.setRadius = function (r) {
+        this._radius = Number(r) || 0;
+        this._syncLayer();
+        return this;
+    };
+    GeometryCircle.prototype.getType = function () { return 'Circle'; };
+    GeometryCircle.prototype._syncLayer = function () {
+        if (!this._owner || !this._owner._layer) return;
+        var ll = latLngFromYandex(this._center);
+        if (ll) this._owner._layer.setLatLng(ll);
+        this._owner._layer.setRadius(this._radius);
+    };
+
+    function Circle(centerAndRadius, properties, options) {
+        this.properties = new DataBag(properties || {});
+        this.options = new DataBag(options || {});
+        this.events = new EventManager(this);
+        this.geometry = new GeometryCircle(centerAndRadius);
+        this.geometry._owner = this;
+        this._map = null;
+        this._parent = null;
+        this._layer = null;
+        this._type = 'Circle';
+        var self = this;
+        this.options._emitChange = function () {
+            syncPathOptions(self._layer, self.options);
+            applyGeoObjectVisibility(self);
+        };
+    }
+    Circle.prototype._ensureLayer = function () {
+        if (this._layer) return this._layer;
+        var ll = latLngFromYandex(this.geometry._center) || L.latLng(0, 0);
+        this._layer = L.circle(ll, Object.assign(pathStyleFromOptions(this.options.getAll()), {
+            radius: this.geometry._radius
+        }));
+        bindLayerEvents(this, this._layer);
+        return this._layer;
+    };
+    bindParentApi(Circle.prototype);
+
     function GeoObjectCollection() {
         this._items = [];
         this.events = new EventManager(this);
@@ -567,9 +647,13 @@
         var center = state.center || [54.66, 86.16];
         var zoom = state.zoom != null ? state.zoom : 16;
 
-        this._type = 'leaflet#orthophoto';
-        this._basemapLayer = null;
+        var bootType = (state && state.type) || global.VolsmapBootBasemapType || 'leaflet#orthophoto';
+        if (String(bootType).indexOf('leaflet#') !== 0) bootType = 'leaflet#orthophoto';
+        this._type = bootType;
+        this._basemapLayer = null; // legacy alias → первый слой стека
         this._altLayer = null;
+        this._basemapStack = []; // активные слои подложки (взаимоисключающие)
+        this._basemapLoadId = 0;
         this._lastManifest = null;
         this._packId = null;
         this.options = new DataBag(options);
@@ -621,7 +705,11 @@
             self.events.fire('actionbegin', { target: self });
         });
 
-        this._loadBasemap();
+        if (this._type === 'leaflet#orthophoto') {
+            this._loadBasemap();
+        } else {
+            this._applyBasemapType(this._type);
+        }
 
         // tilesload approximation
         setTimeout(function () {
@@ -657,12 +745,16 @@
 
     MapShim.prototype._loadBasemap = function () {
         var self = this;
+        var loadId = (this._basemapLoadId = (this._basemapLoadId || 0) + 1);
         var token = this._authToken();
         var headers = {};
         if (token) headers.Authorization = 'Bearer ' + token;
         fetch(this._apiBase() + '/api/basemap/active', { headers: headers })
             .then(function (r) { return r.json().catch(function () { return {}; }); })
             .then(function (data) {
+                // Пользователь уже ушёл на Яндекс/OSM — не возвращаем ортофото поверх.
+                if (loadId !== self._basemapLoadId) return;
+                if (self._type && self._type !== 'leaflet#orthophoto') return;
                 if (!data || !data.packId) {
                     try { global._volsmapHasActiveBasemap = false; } catch (eNo) {}
                     self._showNoBasemapBanner(true);
@@ -672,6 +764,8 @@
                 self.setBasemapPack(data);
             })
             .catch(function () {
+                if (loadId !== self._basemapLoadId) return;
+                if (self._type && self._type !== 'leaflet#orthophoto') return;
                 try { global._volsmapHasActiveBasemap = false; } catch (eFail) {}
                 self._showNoBasemapBanner(true);
             });
@@ -697,18 +791,35 @@
         el.style.display = 'block';
     };
 
-    MapShim.prototype._clearAltLayer = function () {
-        if (this._altLayer) {
-            try { this._leaflet.removeLayer(this._altLayer); } catch (e) {}
-            this._altLayer = null;
+    /** Снять ВСЕ слои подложки (ортофото и Яндекс независимы — на карте только один набор). */
+    MapShim.prototype._clearBasemapStack = function () {
+        var map = this._leaflet;
+        var stack = this._basemapStack || [];
+        for (var i = 0; i < stack.length; i++) {
+            try {
+                if (map && map.hasLayer(stack[i])) map.removeLayer(stack[i]);
+            } catch (e) {}
         }
+        this._basemapStack = [];
+        this._basemapLayer = null;
+        this._altLayer = null;
+        try {
+            var root = map && map.getContainer();
+            if (root) {
+                var nodes = root.querySelectorAll('.leaflet-yandex-api-basemap');
+                for (var j = 0; j < nodes.length; j++) {
+                    if (nodes[j].parentNode) nodes[j].parentNode.removeChild(nodes[j]);
+                }
+            }
+        } catch (e2) {}
+    };
+
+    MapShim.prototype._clearAltLayer = function () {
+        this._clearBasemapStack();
     };
 
     MapShim.prototype._clearBasemapLayer = function () {
-        if (this._basemapLayer) {
-            try { this._leaflet.removeLayer(this._basemapLayer); } catch (e) {}
-            this._basemapLayer = null;
-        }
+        this._clearBasemapStack();
     };
 
     MapShim.prototype._clearMaxBounds = function () {
@@ -718,280 +829,108 @@
         } catch (e) {}
     };
 
+    /**
+     * Включить ровно один тип подложки. Предыдущий набор полностью снимается.
+     * @param {string} type
+     * @param {object} [ctx] контекст для ортофото (tileUrl, …)
+     */
+    MapShim.prototype._setBasemapStack = function (type, ctx) {
+        var stackApi = global.VolsmapBasemapStack;
+        if (!stackApi || typeof stackApi.createLayersForType !== 'function') {
+            console.error('[LeafletYmaps] VolsmapBasemapStack не загружен');
+            return;
+        }
+        this._basemapLoadId = (this._basemapLoadId || 0) + 1;
+        this._type = type || 'leaflet#none';
+        this._showNoBasemapBanner(false);
+        this._clearMaxBounds();
+        this._clearBasemapStack();
+
+        var layers = stackApi.createLayersForType(this._type, ctx || {}) || [];
+        for (var i = 0; i < layers.length; i++) {
+            try {
+                layers[i].addTo(this._leaflet);
+                this._basemapStack.push(layers[i]);
+            } catch (eAdd) {
+                console.warn('[LeafletYmaps] basemap add failed', eAdd);
+            }
+        }
+        // совместимость со старым кодом
+        this._basemapLayer = this._type === 'leaflet#orthophoto' ? (this._basemapStack[0] || null) : null;
+        this._altLayer = this._type !== 'leaflet#orthophoto' ? (this._basemapStack[0] || null) : null;
+
+        this.events.fire('typechange', { target: this });
+        this.events.fire('tilesload', { target: this });
+    };
+
     MapShim.prototype.setBasemapPack = function (manifest) {
         if (!manifest || !manifest.packId) return;
         this._lastManifest = manifest;
         this._packId = manifest.packId;
         try { global._volsmapHasActiveBasemap = true; } catch (eFlag) {}
-        this._clearAltLayer();
-        this._clearBasemapLayer();
+        // Пакет ортофото только запоминаем, если сейчас другой слой — не навязываем
+        if (this._type && this._type !== 'leaflet#orthophoto') {
+            return;
+        }
         var nativeMin = manifest.minZoom != null ? Number(manifest.minZoom) : 0;
         var nativeMax = manifest.maxZoom != null ? Number(manifest.maxZoom) : 18;
         if (!Number.isFinite(nativeMin)) nativeMin = 0;
         if (!Number.isFinite(nativeMax)) nativeMax = 18;
-        // maxZoom слоя = лимит карты (как у Яндекса), maxNativeZoom = реальные тайлы.
-        // Иначе Leaflet не даёт приблизить дальше нарезки пакета.
-        var opts = {
-            minZoom: 0,
-            maxZoom: 21,
+        var ctx = {
+            tileUrl: this._tileUrl(manifest.packId),
             minNativeZoom: nativeMin,
             maxNativeZoom: nativeMax,
-            opacity: 1,
-            errorTileUrl: ''
+            tms: !!manifest.tms
         };
         if (manifest.bounds && Array.isArray(manifest.bounds) && manifest.bounds.length === 2) {
-            opts.bounds = L.latLngBounds(manifest.bounds[0], manifest.bounds[1]);
+            ctx.bounds = L.latLngBounds(manifest.bounds[0], manifest.bounds[1]);
         }
-        if (manifest.tms) opts.tms = true;
-        this._basemapLayer = L.tileLayer(this._tileUrl(manifest.packId), opts);
-        this._basemapLayer.addTo(this._leaflet);
+        this._setBasemapStack('leaflet#orthophoto', ctx);
         try {
             this._leaflet.setMinZoom(0);
             this._leaflet.setMaxZoom(21);
         } catch (eZoomLim) {}
-        if (opts.bounds) {
+        if (ctx.bounds) {
             try {
-                this._leaflet.setMaxBounds(opts.bounds.pad(0.2));
+                this._leaflet.setMaxBounds(ctx.bounds.pad(0.2));
             } catch (e2) {}
         }
-        this._type = 'leaflet#orthophoto';
-        this.events.fire('typechange', { target: this });
-        this.events.fire('tilesload', { target: this });
     };
-
-    function getYandexMapsApiKey() {
-        try {
-            var cfg = global.__volsmapPublicConfig || {};
-            var key = String(cfg.yandexMapsApiKey || '').trim();
-            if (!key || key === 'YOUR_YANDEX_MAPS_API_KEY') return '';
-            return key;
-        } catch (e) {
-            return '';
-        }
-    }
-
-    var YANDEX_TILE_OPTS = {
-        maxZoom: 21,
-        maxNativeZoom: 20,
-        attribution: '© Яндекс'
-    };
-
-    // WGS84 eccentricity — спутник Яндекса режется в EPSG:3395 (эллиптический Меркатор),
-    // Leaflet/OSM/ортофото — EPSG:3857. Без перепроецирования объекты «уезжают».
-    var YANDEX_E = 0.08181919084262157;
-    var YANDEX_ORIGIN = 20037508.342789244;
-
-    function latLngToYandexGlobalPixels(lat, lng, zoom) {
-        var latC = Math.max(Math.min(lat, MAX_LAT), -MAX_LAT);
-        var latRad = latC * Math.PI / 180;
-        var lngRad = lng * Math.PI / 180;
-        var esin = YANDEX_E * Math.sin(latRad);
-        var mx = EARTH * lngRad;
-        var my = EARTH * Math.log(
-            Math.tan(Math.PI / 4 + latRad / 2) *
-            Math.pow((1 - esin) / (1 + esin), YANDEX_E / 2)
-        );
-        var res = (2 * YANDEX_ORIGIN) / (256 * Math.pow(2, zoom));
-        return {
-            x: (mx + YANDEX_ORIGIN) / res,
-            y: (YANDEX_ORIGIN - my) / res
-        };
-    }
-
-    function loadImage(url) {
-        return new Promise(function (resolve) {
-            var img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.onload = function () { resolve(img); };
-            img.onerror = function () { resolve(null); };
-            img.src = url;
-        });
-    }
-
-    /**
-     * Спутник Яндекса (EPSG:3395) → холст тайла Leaflet (EPSG:3857).
-     */
-    function buildYandexSatReprojectedLayer() {
-        return L.gridLayer(Object.assign({}, YANDEX_TILE_OPTS, {
-            maxNativeZoom: 19,
-            tileSize: 256,
-            createTile: function (coords, done) {
-                var canvas = document.createElement('canvas');
-                canvas.width = 256;
-                canvas.height = 256;
-                var ctx = canvas.getContext('2d');
-                if (!this._map) {
-                    setTimeout(function () { done(null, canvas); }, 0);
-                    return canvas;
-                }
-
-                var z = coords.z;
-                var tileBounds = this._tileCoordsToBounds(coords);
-                var nw = tileBounds.getNorthWest();
-                var ne = tileBounds.getNorthEast();
-                var sw = tileBounds.getSouthWest();
-                var se = tileBounds.getSouthEast();
-
-                var cNW = latLngToYandexGlobalPixels(nw.lat, nw.lng, z);
-                var cNE = latLngToYandexGlobalPixels(ne.lat, ne.lng, z);
-                var cSW = latLngToYandexGlobalPixels(sw.lat, sw.lng, z);
-                var cSE = latLngToYandexGlobalPixels(se.lat, se.lng, z);
-
-                var minX = Math.min(cNW.x, cNE.x, cSW.x, cSE.x);
-                var maxX = Math.max(cNW.x, cNE.x, cSW.x, cSE.x);
-                var minY = Math.min(cNW.y, cNE.y, cSW.y, cSE.y);
-                var maxY = Math.max(cNW.y, cNE.y, cSW.y, cSE.y);
-
-                var worldTiles = Math.pow(2, z);
-                var tx0 = Math.max(0, Math.floor(minX / 256));
-                var ty0 = Math.max(0, Math.floor(minY / 256));
-                var tx1 = Math.min(worldTiles - 1, Math.floor((maxX - 1e-6) / 256));
-                var ty1 = Math.min(worldTiles - 1, Math.floor((maxY - 1e-6) / 256));
-
-                var loads = [];
-                var meta = [];
-                for (var tx = tx0; tx <= tx1; tx++) {
-                    for (var ty = ty0; ty <= ty1; ty++) {
-                        meta.push({ tx: tx, ty: ty });
-                        loads.push(loadImage(
-                            'https://core-sat.maps.yandex.net/tiles?l=sat&x=' + tx +
-                            '&y=' + ty + '&z=' + z + '&scale=1&lang=ru_RU'
-                        ));
-                    }
-                }
-
-                Promise.all(loads).then(function (images) {
-                    var cols = tx1 - tx0 + 1;
-                    var rows = ty1 - ty0 + 1;
-                    if (cols < 1 || rows < 1) {
-                        done(null, canvas);
-                        return;
-                    }
-                    var stitch = document.createElement('canvas');
-                    stitch.width = cols * 256;
-                    stitch.height = rows * 256;
-                    var sctx = stitch.getContext('2d');
-                    for (var i = 0; i < meta.length; i++) {
-                        if (!images[i]) continue;
-                        sctx.drawImage(
-                            images[i],
-                            (meta[i].tx - tx0) * 256,
-                            (meta[i].ty - ty0) * 256
-                        );
-                    }
-                    var src = sctx.getImageData(0, 0, stitch.width, stitch.height);
-                    var sdata = src.data;
-                    var sw = stitch.width;
-                    var out = ctx.createImageData(256, 256);
-                    var odata = out.data;
-                    var lat0 = nw.lat;
-                    var lat1 = sw.lat;
-                    var lng0 = nw.lng;
-                    var lng1 = ne.lng;
-
-                    for (var py = 0; py < 256; py++) {
-                        var lat = lat0 + (lat1 - lat0) * (py / 255);
-                        for (var px = 0; px < 256; px++) {
-                            var lng = lng0 + (lng1 - lng0) * (px / 255);
-                            var g = latLngToYandexGlobalPixels(lat, lng, z);
-                            var sx = g.x - tx0 * 256;
-                            var sy = g.y - ty0 * 256;
-                            var ix = sx | 0;
-                            var iy = sy | 0;
-                            if (ix < 0 || iy < 0 || ix >= sw || iy >= stitch.height) continue;
-                            var si = (iy * sw + ix) * 4;
-                            var oi = (py * 256 + px) * 4;
-                            odata[oi] = sdata[si];
-                            odata[oi + 1] = sdata[si + 1];
-                            odata[oi + 2] = sdata[si + 2];
-                            odata[oi + 3] = sdata[si + 3];
-                        }
-                    }
-                    ctx.putImageData(out, 0, 0);
-                    done(null, canvas);
-                }).catch(function () {
-                    done(null, canvas);
-                });
-
-                return canvas;
-            }
-        }));
-    }
-
-    /**
-     * Тайлы Яндекса для Leaflet (EPSG:3857).
-     * layer: map | sat | skl
-     * map/skl — projection=web_mercator; sat — перепроецирование 3395→3857.
-     */
-    function buildYandexTileLayer(layerKind) {
-        var kind = layerKind || 'map';
-        var key = getYandexMapsApiKey();
-        var url;
-        if (kind === 'sat') {
-            return buildYandexSatReprojectedLayer();
-        }
-        if (kind === 'map' && key) {
-            url = 'https://tiles.api-maps.yandex.ru/v1/tiles/?apikey=' + encodeURIComponent(key) +
-                '&lang=ru_RU&x={x}&y={y}&z={z}&l=map&projection=web_mercator';
-            return L.tileLayer(url, Object.assign({}, YANDEX_TILE_OPTS));
-        }
-        // map / skl — только web_mercator, иначе сдвиг относительно объектов
-        url = 'https://core-renderer-tiles.maps.yandex.net/tiles?l=' + encodeURIComponent(kind) +
-            '&x={x}&y={y}&z={z}&scale=1&lang=ru_RU&projection=web_mercator';
-        return L.tileLayer(url, Object.assign({}, YANDEX_TILE_OPTS));
-    }
 
     MapShim.prototype._setAltBasemapLayer = function (layer, type) {
-        this._clearBasemapLayer();
-        this._clearAltLayer();
-        this._clearMaxBounds();
+        // совместимость: один слой через общий стек
+        this._basemapLoadId = (this._basemapLoadId || 0) + 1;
+        this._type = type || 'leaflet#none';
         this._showNoBasemapBanner(false);
-        this._altLayer = layer;
-        if (layer) layer.addTo(this._leaflet);
-        this._type = type;
+        this._clearMaxBounds();
+        this._clearBasemapStack();
+        if (layer) {
+            try {
+                layer.addTo(this._leaflet);
+                this._basemapStack.push(layer);
+            } catch (e) {}
+            this._altLayer = layer;
+        }
         this.events.fire('typechange', { target: this });
         this.events.fire('tilesload', { target: this });
     };
 
     MapShim.prototype._applyBasemapType = function (type) {
         var next = type || 'leaflet#orthophoto';
-        if (next === 'leaflet#none') {
-            this._setAltBasemapLayer(null, 'leaflet#none');
+        if (next === 'leaflet#orthophoto') {
+            this._basemapLoadId = (this._basemapLoadId || 0) + 1;
+            this._type = 'leaflet#orthophoto';
+            this._clearBasemapStack();
+            if (this._lastManifest && this._lastManifest.packId) {
+                this.setBasemapPack(this._lastManifest);
+                return;
+            }
+            this._loadBasemap();
+            this.events.fire('typechange', { target: this });
             return;
         }
-        if (next === 'leaflet#osm') {
-            this._setAltBasemapLayer(L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-                attribution: '&copy; OpenStreetMap'
-            }), 'leaflet#osm');
-            return;
-        }
-        if (next === 'yandex#map') {
-            this._setAltBasemapLayer(buildYandexTileLayer('map'), next);
-            return;
-        }
-        if (next === 'yandex#satellite') {
-            this._setAltBasemapLayer(buildYandexTileLayer('sat'), next);
-            return;
-        }
-        if (next === 'yandex#hybrid') {
-            // Как в Яндексе: спутник + слой подписей (skl), не полная схема поверх.
-            var hybrid = L.layerGroup([
-                buildYandexTileLayer('sat'),
-                buildYandexTileLayer('skl')
-            ]);
-            this._setAltBasemapLayer(hybrid, next);
-            return;
-        }
-        // leaflet#orthophoto (и любые неизвестные → ортофото)
-        this._clearAltLayer();
-        if (this._lastManifest && this._lastManifest.packId) {
-            this.setBasemapPack(this._lastManifest);
-            return;
-        }
-        this._type = 'leaflet#orthophoto';
-        this._loadBasemap();
-        this.events.fire('typechange', { target: this });
+        // Все остальные типы — независимые фабрики VolsmapBasemapStack
+        this._setBasemapStack(next, {});
     };
 
     MapShim.prototype._attachGeoObject = function (obj) {
@@ -1063,6 +1002,25 @@
     };
     MapShim.prototype.setType = function (type) {
         var next = type || this._type;
+        // Яндекс-слои — через независимый нативный рантайм (не смешивать в Leaflet)
+        if (String(next).indexOf('yandex#') === 0 &&
+            !this._runtimeRedirect &&
+            global.MapRuntime && typeof global.MapRuntime.applyBasemapType === 'function') {
+            try {
+                var dual = typeof MapEngine !== 'undefined' && MapEngine.isDualMode && MapEngine.isDualMode();
+                if (dual) {
+                    this._runtimeRedirect = true;
+                    try {
+                        global.MapRuntime.applyBasemapType(next);
+                    } finally {
+                        this._runtimeRedirect = false;
+                    }
+                    return this;
+                }
+            } catch (eDual) {
+                this._runtimeRedirect = false;
+            }
+        }
         if (next === this._type && (next !== 'leaflet#orthophoto' || this._basemapLayer)) {
             this.events.fire('typechange', { target: this });
             return this;
@@ -1093,6 +1051,7 @@
         Placemark: Placemark,
         Polyline: Polyline,
         Polygon: Polygon,
+        Circle: Circle,
         GeoObjectCollection: GeoObjectCollection,
         templateLayoutFactory: {
             createClass: function () {
@@ -1115,9 +1074,11 @@
         meta: { engine: 'leaflet-shim' }
     };
 
-    global.ymaps = ymapsShim;
+    global.__ymapsShim = ymapsShim;
     global.LeafletYmapsShim = {
         install: function () {
+            global.VolsmapShimPassive = false;
+            global.__ymapsShim = ymapsShim;
             global.ymaps = ymapsShim;
             fireReady();
         },
@@ -1136,5 +1097,11 @@
         document.head.appendChild(style);
     }
 
-    fireReady();
+    // Passive: dual-boot на нативном Яндексе — шим только в __ymapsShim, не трогаем window.ymaps
+    if (global.VolsmapShimPassive) {
+        // no-op for global ymaps / ready — нативный API уже ведёт карту
+    } else {
+        global.ymaps = ymapsShim;
+        fireReady();
+    }
 })(typeof window !== 'undefined' ? window : this);

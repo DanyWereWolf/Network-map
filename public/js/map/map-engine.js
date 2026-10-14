@@ -7,6 +7,18 @@
 
     var ENGINE_YANDEX = 'yandex';
     var ENGINE_LEAFLET = 'leaflet';
+    /** Переопределение на лету (Яндекс ↔ Leaflet), не меняет server-config. */
+    var runtimeEngine = null;
+
+    // Dual-boot: index.html выставляет VolsmapMapEngine до загрузки этого файла
+    try {
+        var bootEng = global.VolsmapMapEngine;
+        var cfgEng = global.VolsmapConfiguredEngine;
+        if ((cfgEng === 'leaflet' || cfgEng === 'offline' || cfgEng === 'orthophoto') &&
+            (bootEng === 'yandex' || bootEng === 'leaflet')) {
+            runtimeEngine = bootEng;
+        }
+    } catch (eBoot) {}
 
     function normalizeEngine(raw) {
         var v = String(raw || '').trim().toLowerCase();
@@ -20,17 +32,38 @@
             if (cfg && cfg.mapEngine) return normalizeEngine(cfg.mapEngine);
         } catch (e) {}
         try {
+            if (global.VolsmapConfiguredEngine) return normalizeEngine(global.VolsmapConfiguredEngine);
+        } catch (eCfg) {}
+        try {
             if (global.VolsmapMapEngine) return normalizeEngine(global.VolsmapMapEngine);
         } catch (e2) {}
         return ENGINE_YANDEX;
     }
 
+    function getEngine() {
+        if (runtimeEngine) return runtimeEngine;
+        return getConfiguredEngine();
+    }
+
+    function setRuntimeEngine(eng) {
+        runtimeEngine = eng ? normalizeEngine(eng) : null;
+        try {
+            global.VolsmapMapEngine = getEngine();
+        } catch (e) {}
+    }
+
     function isLeaflet() {
-        return getConfiguredEngine() === ENGINE_LEAFLET;
+        return getEngine() === ENGINE_LEAFLET;
     }
 
     function isYandex() {
         return !isLeaflet();
+    }
+
+    /** Конфиг сервера допускает оба рантайма (ортофото + нативный Яндекс). */
+    function isDualMode() {
+        var c = getConfiguredEngine();
+        return c === ENGINE_LEAFLET;
     }
 
     /**
@@ -80,9 +113,12 @@
     global.MapEngine = {
         YANDEX: ENGINE_YANDEX,
         LEAFLET: ENGINE_LEAFLET,
-        getEngine: getConfiguredEngine,
+        getEngine: getEngine,
+        getConfiguredEngine: getConfiguredEngine,
+        setRuntimeEngine: setRuntimeEngine,
         isLeaflet: isLeaflet,
         isYandex: isYandex,
+        isDualMode: isDualMode,
         whenReady: whenReady,
         normalizeEngine: normalizeEngine
     };

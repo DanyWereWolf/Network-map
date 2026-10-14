@@ -52,8 +52,21 @@
         }
     }
 
+    /** Конфиг сервера — leaflet (dual), а не текущий runtime. */
     function isLeafletEngine() {
-        return typeof MapEngine !== 'undefined' && MapEngine.isLeaflet && MapEngine.isLeaflet();
+        try {
+            if (typeof MapEngine !== 'undefined' && MapEngine.isDualMode && MapEngine.isDualMode()) return true;
+            if (typeof MapEngine !== 'undefined' && MapEngine.getConfiguredEngine) {
+                return MapEngine.getConfiguredEngine() === 'leaflet';
+            }
+        } catch (e) {}
+        try {
+            var cfg = global.__volsmapPublicConfig || {};
+            var eng = String(cfg.mapEngine || global.VolsmapConfiguredEngine || '').toLowerCase();
+            return eng === 'leaflet' || eng === 'offline' || eng === 'orthophoto';
+        } catch (e2) {
+            return typeof MapEngine !== 'undefined' && MapEngine.isLeaflet && MapEngine.isLeaflet();
+        }
     }
 
     function normalizePreferredType(value) {
@@ -114,7 +127,17 @@
             opts.offlineType != null ? opts.offlineType : cachedOfflineType
         );
         try {
-            if (myMap.getType && myMap.getType() === next && !opts.force) return true;
+            // Уже тот слой (в т.ч. после dual-boot) — не пересоздаём карту
+            if (myMap.getType && myMap.getType() === next) {
+                if (typeof MapRuntime !== 'undefined' && MapRuntime.persistBasemapType) {
+                    MapRuntime.persistBasemapType(next);
+                }
+                return true;
+            }
+            if (typeof MapRuntime !== 'undefined' && MapRuntime.applyBasemapType) {
+                MapRuntime.applyBasemapType(next);
+                return true;
+            }
             myMap.setType(next);
             return true;
         } catch (e) {
@@ -126,6 +149,9 @@
         if (!settings) return;
         if (settings.defaultBasemapType !== undefined) {
             cachedPreferredType = normalizePreferredType(settings.defaultBasemapType);
+            if (typeof MapRuntime !== 'undefined' && MapRuntime.persistBasemapType) {
+                try { MapRuntime.persistBasemapType(cachedPreferredType); } catch (eP) {}
+            }
         }
         if (settings.defaultBasemapOfflineType !== undefined) {
             cachedOfflineType = normalizeOfflineType(settings.defaultBasemapOfflineType);
@@ -190,8 +216,9 @@
             })
         }).then(function (r) {
             if (!r.ok) throw new Error('HTTP ' + r.status);
-            if (typeof showSuccess === 'function') showSuccess('Слой по умолчанию сохранён');
+            if (typeof showSuccess === 'function') showSuccess('Слой для всех сохранён');
             applyResolvedBasemapType(preferred, { force: true });
+            closeBasemapDefaultModal();
         }).catch(function (e) {
             if (typeof showError === 'function') showError('Не удалось сохранить слой: ' + (e && e.message ? e.message : e));
         });
@@ -259,31 +286,6 @@
             '      </div>' +
             '    </div>' +
             '    <div class="basemap-admin-section">' +
-            '      <h3 class="basemap-admin-section__title">Слой по умолчанию</h3>' +
-            '      <p class="basemap-admin-hint" id="basemapDefaultHint">Какую подложку видеть пользователи при входе.</p>' +
-            '      <div class="form-group">' +
-            '        <label for="basemapDefaultType">Базовый слой</label>' +
-            '        <select id="basemapDefaultType" class="form-select">' +
-            '          <option value="leaflet#orthophoto">Ортофото</option>' +
-            '          <option value="yandex#map">Яндекс · Схема</option>' +
-            '          <option value="yandex#satellite">Яндекс · Спутник</option>' +
-            '          <option value="yandex#hybrid">Яндекс · Гибрид</option>' +
-            '          <option value="leaflet#osm">OpenStreetMap</option>' +
-            '          <option value="leaflet#none">Без подложки</option>' +
-            '        </select>' +
-            '      </div>' +
-            '      <div class="form-group">' +
-            '        <label for="basemapOfflineType">Если нет интернета</label>' +
-            '        <select id="basemapOfflineType" class="form-select">' +
-            '          <option value="leaflet#orthophoto">Ортофото (если загружено)</option>' +
-            '          <option value="leaflet#none">Без подложки</option>' +
-            '        </select>' +
-            '      </div>' +
-            '      <div class="basemap-admin-pref-actions">' +
-            '        <button type="button" class="btn-secondary" id="basemapDefaultSave">Сохранить слой</button>' +
-            '      </div>' +
-            '    </div>' +
-            '    <div class="basemap-admin-section">' +
             '      <h3 class="basemap-admin-section__title">Загрузить GeoTIFF</h3>' +
             '      <div class="form-group">' +
             '        <label for="basemapUploadMode">Режим</label>' +
@@ -337,9 +339,120 @@
         });
         document.getElementById('basemapAdminCancel').addEventListener('click', closeBasemapAdminModal);
         document.getElementById('basemapAdminUpload').addEventListener('click', startBasemapUpload);
-        var savePrefBtn = document.getElementById('basemapDefaultSave');
-        if (savePrefBtn) savePrefBtn.addEventListener('click', saveDefaultBasemapPrefs);
         return el;
+    }
+
+    function ensureDefaultLayerModal() {
+        var el = document.getElementById('basemapDefaultModal');
+        if (el) return el;
+        el = document.createElement('div');
+        el.id = 'basemapDefaultModal';
+        el.className = 'modal modal--centered basemap-admin-modal basemap-default-modal';
+        el.style.display = 'none';
+        el.setAttribute('role', 'dialog');
+        el.setAttribute('aria-modal', 'true');
+        el.setAttribute('aria-labelledby', 'basemapDefaultTitle');
+        el.innerHTML =
+            '<div class="modal-content panel-glass panel-glass--lite basemap-admin-content basemap-default-content">' +
+            '  <div class="panel-glass-bg" aria-hidden="true"><div class="panel-glass-gradient"></div></div>' +
+            '  <div class="modal-header basemap-admin-header">' +
+            '    <div class="basemap-admin-header__main">' +
+            '      <div class="basemap-admin-header__icon" aria-hidden="true">' +
+            '        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+            '          <rect x="3" y="3" width="7" height="7" rx="1"></rect>' +
+            '          <rect x="14" y="3" width="7" height="7" rx="1"></rect>' +
+            '          <rect x="3" y="14" width="7" height="7" rx="1"></rect>' +
+            '          <rect x="14" y="14" width="7" height="7" rx="1"></rect>' +
+            '        </svg>' +
+            '      </div>' +
+            '      <div class="basemap-admin-header__text">' +
+            '        <h2 id="basemapDefaultTitle">Слой для всех по умолчанию</h2>' +
+            '        <p class="basemap-admin-header__sub">Какую подложку видят пользователи организации при входе</p>' +
+            '      </div>' +
+            '    </div>' +
+            '    <span class="close" id="basemapDefaultClose" role="button" tabindex="0" aria-label="Закрыть">&times;</span>' +
+            '  </div>' +
+            '  <div class="modal-body basemap-admin-body">' +
+            '    <p class="basemap-admin-hint" id="basemapDefaultHint">Настройка только для администратора организации.</p>' +
+            '    <div class="form-group">' +
+            '      <label for="basemapDefaultType">Базовый слой при входе</label>' +
+            '      <select id="basemapDefaultType" class="form-select">' +
+            '        <option value="leaflet#orthophoto">Ортофото</option>' +
+            '        <option value="yandex#map">Яндекс · Схема</option>' +
+            '        <option value="yandex#satellite">Яндекс · Спутник</option>' +
+            '        <option value="yandex#hybrid">Яндекс · Гибрид</option>' +
+            '        <option value="leaflet#osm">OpenStreetMap</option>' +
+            '        <option value="leaflet#none">Без подложки</option>' +
+            '      </select>' +
+            '    </div>' +
+            '    <div class="form-group">' +
+            '      <label for="basemapOfflineType">Если нет интернета</label>' +
+            '      <select id="basemapOfflineType" class="form-select">' +
+            '        <option value="leaflet#orthophoto">Ортофото (если загружено)</option>' +
+            '        <option value="leaflet#none">Без подложки</option>' +
+            '      </select>' +
+            '    </div>' +
+            '    <div class="basemap-admin-actions">' +
+            '      <button type="button" class="btn-secondary" id="basemapDefaultCancel">Отмена</button>' +
+            '      <button type="button" class="btn-primary" id="basemapDefaultSave">Сохранить для всех</button>' +
+            '    </div>' +
+            '  </div>' +
+            '</div>';
+        document.body.appendChild(el);
+        el.addEventListener('click', function (e) {
+            if (e.target === el) closeBasemapDefaultModal();
+        });
+        document.getElementById('basemapDefaultClose').addEventListener('click', closeBasemapDefaultModal);
+        document.getElementById('basemapDefaultClose').addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                closeBasemapDefaultModal();
+            }
+        });
+        document.getElementById('basemapDefaultCancel').addEventListener('click', closeBasemapDefaultModal);
+        document.getElementById('basemapDefaultSave').addEventListener('click', function () {
+            saveDefaultBasemapPrefs();
+        });
+        return el;
+    }
+
+    var defaultEscapeHandler = null;
+
+    function openBasemapDefaultModal() {
+        if (!isLeafletEngine()) {
+            if (typeof showInfo === 'function') {
+                showInfo('Доступно при mapEngine=leaflet в server-config.json', 'Слой по умолчанию');
+            }
+            return;
+        }
+        if (!isOrgAdmin()) {
+            if (typeof showInfo === 'function') {
+                showInfo('Слой для всех задаёт администратор организации', 'Слой по умолчанию');
+            }
+            return;
+        }
+        var modal = ensureDefaultLayerModal();
+        modal.style.display = 'flex';
+        modal.classList.add('basemap-admin-modal--open');
+        if (!defaultEscapeHandler) {
+            defaultEscapeHandler = function (e) {
+                if (e.key === 'Escape') closeBasemapDefaultModal();
+            };
+            document.addEventListener('keydown', defaultEscapeHandler);
+        }
+        loadDefaultBasemapPrefsIntoForm();
+    }
+
+    function closeBasemapDefaultModal() {
+        var modal = document.getElementById('basemapDefaultModal');
+        if (modal) {
+            modal.style.display = 'none';
+            modal.classList.remove('basemap-admin-modal--open');
+        }
+        if (defaultEscapeHandler) {
+            document.removeEventListener('keydown', defaultEscapeHandler);
+            defaultEscapeHandler = null;
+        }
     }
 
     function setStatus(text) {
@@ -469,7 +582,9 @@
             refreshPacks();
             reloadMapBasemap(data.active || data);
             try {
-                if (typeof myMap !== 'undefined' && myMap && typeof myMap.setType === 'function') {
+                if (typeof MapRuntime !== 'undefined' && MapRuntime.applyBasemapType) {
+                    MapRuntime.applyBasemapType('leaflet#orthophoto');
+                } else if (typeof myMap !== 'undefined' && myMap && typeof myMap.setType === 'function') {
                     myMap.setType('leaflet#orthophoto');
                 }
             } catch (eType) {}
@@ -595,7 +710,9 @@
                             .then(function (active) {
                                 reloadMapBasemap(active);
                                 try {
-                                    if (typeof myMap !== 'undefined' && myMap && typeof myMap.setType === 'function') {
+                                    if (typeof MapRuntime !== 'undefined' && MapRuntime.applyBasemapType) {
+                                        MapRuntime.applyBasemapType('leaflet#orthophoto');
+                                    } else if (typeof myMap !== 'undefined' && myMap && typeof myMap.setType === 'function') {
                                         myMap.setType('leaflet#orthophoto');
                                     }
                                 } catch (eType) {}
@@ -609,7 +726,7 @@
     }
 
     function openBasemapAdminModal() {
-        if (typeof MapEngine !== 'undefined' && MapEngine.isLeaflet && !MapEngine.isLeaflet()) {
+        if (!isLeafletEngine()) {
             if (typeof showInfo === 'function') {
                 showInfo('Управление ортофото доступно при mapEngine=leaflet в server-config.json', 'Подложка');
             }
@@ -624,9 +741,6 @@
             };
             document.addEventListener('keydown', escapeHandler);
         }
-        var saveBtn = document.getElementById('basemapDefaultSave');
-        if (saveBtn) saveBtn.style.display = isOrgAdmin() ? '' : 'none';
-        loadDefaultBasemapPrefsIntoForm();
         refreshStatus();
         refreshPacks();
     }
@@ -649,8 +763,11 @@
 
     global.openBasemapAdminModal = openBasemapAdminModal;
     global.closeBasemapAdminModal = closeBasemapAdminModal;
+    global.openBasemapDefaultModal = openBasemapDefaultModal;
+    global.closeBasemapDefaultModal = closeBasemapDefaultModal;
     global.applyOrgBasemapSettings = applyOrgBasemapSettings;
     global.resolveBasemapType = resolveBasemapType;
     global.applyResolvedBasemapType = applyResolvedBasemapType;
+    global.isOrgBasemapAdmin = isOrgAdmin;
     bindNetworkBasemapWatchers();
 })(typeof window !== 'undefined' ? window : this);

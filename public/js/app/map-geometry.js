@@ -51,6 +51,17 @@ var rectSelectPanel = null;
 function setupRectSelection() {
     if (!myMap || !myMap.container) return;
     var container = myMap.container.getElement();
+    if (!container) return;
+    // После смены рантайма (Яндекс ↔ Leaflet) контейнер новый — пересоздаём overlay.
+    if (container.dataset.rectSelectBound === '1' && document.getElementById('rectSelectOverlay')) {
+        return;
+    }
+    container.dataset.rectSelectBound = '1';
+    var oldOverlay = document.getElementById('rectSelectOverlay');
+    if (oldOverlay && oldOverlay.parentNode) oldOverlay.parentNode.removeChild(oldOverlay);
+    var oldPanel = document.getElementById('rectSelectPanel');
+    if (oldPanel && oldPanel.parentNode) oldPanel.parentNode.removeChild(oldPanel);
+
     var overlay = document.createElement('div');
     overlay.id = 'rectSelectOverlay';
     overlay.style.cssText = 'position:absolute;pointer-events:none;border:2px solid #3b82f6;background:rgba(59,130,246,0.15);display:none;z-index:1000;';

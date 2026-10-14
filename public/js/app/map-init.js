@@ -13,11 +13,23 @@ function init() {
         focusOnce = JSON.parse(sessionStorage.getItem('volsmap.mapFocusOnce') || 'null');
         sessionStorage.removeItem('volsmap.mapFocusOnce');
     } catch (eFocus) { focusOnce = null; }
-    myMap = new ymaps.Map('map', {
+    var mapState = {
         center: initialCenter,
         zoom: initialZoom,
         controls: []
-    });
+    };
+    try {
+        var bootType = (typeof MapRuntime !== 'undefined' && MapRuntime.getLastBasemapType)
+            ? MapRuntime.getLastBasemapType()
+            : (window.VolsmapBootBasemapType || null);
+        if (bootType && String(bootType).indexOf('yandex#') === 0 &&
+            !(ymaps.meta && ymaps.meta.engine === 'leaflet-shim')) {
+            mapState.type = bootType;
+        } else if (bootType && String(bootType).indexOf('leaflet#') === 0) {
+            mapState.type = bootType;
+        }
+    } catch (eBootType) {}
+    myMap = new ymaps.Map('map', mapState);
     if (window._pendingMapStart) {
         window._mapStartApplied = true;
         window._pendingMapStart = null;
@@ -35,6 +47,39 @@ function init() {
     try { myMap.controls.remove('rulerControl'); } catch (e) {}
     try { myMap.controls.remove('fullscreenControl'); } catch (e) {}
     try { myMap.controls.remove('typeSelector'); } catch (e) {}
+
+    // Сразу нужный слой (boot-кэш), только если рантайм уже совпадает — без recreate
+    (function applyBootBasemapType() {
+        var bootType = null;
+        try {
+            if (typeof MapRuntime !== 'undefined' && MapRuntime.getLastBasemapType) {
+                bootType = MapRuntime.getLastBasemapType();
+            }
+        } catch (e1) {}
+        if (!bootType) {
+            try { bootType = window.VolsmapBootBasemapType || null; } catch (e2) {}
+        }
+        if (!bootType || !myMap || typeof myMap.setType !== 'function') return;
+        var wantYandex = String(bootType).indexOf('yandex#') === 0;
+        var active = 'leaflet';
+        try {
+            if (typeof MapRuntime !== 'undefined' && MapRuntime.getActiveRuntime) {
+                active = MapRuntime.getActiveRuntime();
+            } else if (typeof MapEngine !== 'undefined' && MapEngine.getEngine) {
+                active = MapEngine.getEngine();
+            } else if (window.VolsmapMapEngine) {
+                active = window.VolsmapMapEngine;
+            }
+        } catch (eAct) {}
+        if ((wantYandex && active !== 'yandex') || (!wantYandex && active !== 'leaflet')) {
+            return;
+        }
+        try { myMap.setType(bootType); } catch (e3) {}
+        if (typeof MapRuntime !== 'undefined' && MapRuntime.persistBasemapType) {
+            try { MapRuntime.persistBasemapType(bootType); } catch (e4) {}
+        }
+    })();
+
     setupMapLayerSelector();
     try { myMap.behaviors.disable('rightMouseButtonMagnifier'); } catch (e) {}
 
@@ -73,21 +118,45 @@ function init() {
     setupMapTilesReady();
 }
 
+/** On-prem (mapEngine=leaflet): доступны и Яндекс, и ортофото — независимо. */
+function isBasemapDualMode() {
+    try {
+        if (typeof MapEngine !== 'undefined' && MapEngine.isDualMode) return !!MapEngine.isDualMode();
+        if (typeof MapEngine !== 'undefined' && MapEngine.getConfiguredEngine) {
+            return MapEngine.getConfiguredEngine() === 'leaflet';
+        }
+    } catch (e) {}
+    try {
+        var cfg = window.__volsmapPublicConfig || {};
+        var eng = String(cfg.mapEngine || window.VolsmapConfiguredEngine || '').toLowerCase();
+        return eng === 'leaflet' || eng === 'offline' || eng === 'orthophoto';
+    } catch (e2) {
+        return false;
+    }
+}
+
+var _mapLayerSelectorUiBound = false;
+
 function setupMapLayerSelector() {
     var root = document.getElementById('mapLayerSelector');
     var btn = document.getElementById('mapLayerSelectorBtn');
     var menu = document.getElementById('mapLayerSelectorMenu');
     if (!root || !btn || !menu || !myMap) return;
 
-    var leafletMode = typeof MapEngine !== 'undefined' && MapEngine.isLeaflet && MapEngine.isLeaflet();
+    var dualMode = isBasemapDualMode();
+    var leafletMode = dualMode || (typeof MapEngine !== 'undefined' && MapEngine.isLeaflet && MapEngine.isLeaflet());
     var items = menu.querySelectorAll('.map-layer-selector__item');
     var groups = menu.querySelectorAll('.map-layer-selector__group');
 
     for (var g = 0; g < groups.length; g++) {
         var groupEng = groups[g].getAttribute('data-engine-group') || '';
         if (leafletMode) {
-            // On-prem: Яндекс (онлайн) + локальная подложка.
-            groups[g].removeAttribute('hidden');
+            // On-prem: локально + Яндекс отдельно + действия админа.
+            if (groupEng === 'leaflet' || groupEng === 'yandex' || groupEng === 'leaflet-actions') {
+                groups[g].removeAttribute('hidden');
+            } else {
+                groups[g].setAttribute('hidden', '');
+            }
         } else if (groupEng === 'yandex') {
             groups[g].removeAttribute('hidden');
         } else {
@@ -95,16 +164,35 @@ function setupMapLayerSelector() {
         }
     }
 
-    for (var i = 0; i < items.length; i++) {
-        var eng = items[i].getAttribute('data-engine') || 'yandex';
-        if (leafletMode) {
-            if (eng === 'leaflet' || eng === 'yandex') items[i].removeAttribute('hidden');
-            else items[i].setAttribute('hidden', '');
-        } else {
-            if (eng === 'yandex') items[i].removeAttribute('hidden');
-            else items[i].setAttribute('hidden', '');
+    function isLayerAdmin() {
+        try {
+            if (typeof isOrgBasemapAdmin === 'function') return !!isOrgBasemapAdmin();
+            return !!(typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin');
+        } catch (e) {
+            return false;
         }
     }
+
+    function refreshLayerItemVisibility() {
+        var admin = isLayerAdmin();
+        for (var i = 0; i < items.length; i++) {
+            var eng = items[i].getAttribute('data-engine') || 'yandex';
+            var adminOnly = items[i].getAttribute('data-admin-only') === '1';
+            if (adminOnly && !admin) {
+                items[i].setAttribute('hidden', '');
+                continue;
+            }
+            if (leafletMode) {
+                if (eng === 'leaflet' || eng === 'yandex') items[i].removeAttribute('hidden');
+                else items[i].setAttribute('hidden', '');
+            } else {
+                if (eng === 'yandex') items[i].removeAttribute('hidden');
+                else items[i].setAttribute('hidden', '');
+            }
+        }
+    }
+
+    refreshLayerItemVisibility();
 
     function setOpen(open) {
         root.classList.toggle('is-open', open);
@@ -124,7 +212,13 @@ function setupMapLayerSelector() {
     }
 
     function syncActive(type) {
-        var key = type || (myMap.getType && myMap.getType()) || (leafletMode ? 'leaflet#orthophoto' : 'yandex#map');
+        var fallback = 'yandex#map';
+        try {
+            if (typeof MapEngine !== 'undefined' && MapEngine.isLeaflet && MapEngine.isLeaflet()) {
+                fallback = 'leaflet#orthophoto';
+            }
+        } catch (eFb) {}
+        var key = type || (myMap.getType && myMap.getType()) || fallback;
         for (var j = 0; j < items.length; j++) {
             var item = items[j];
             if (item.hasAttribute('hidden')) continue;
@@ -141,38 +235,55 @@ function setupMapLayerSelector() {
         if (label) label.textContent = labelForType(key);
     }
 
-    btn.addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        setOpen(!root.classList.contains('is-open'));
-    });
+    if (!_mapLayerSelectorUiBound) {
+        _mapLayerSelectorUiBound = true;
 
-    menu.addEventListener('click', function(e) {
-        var item = e.target && e.target.closest ? e.target.closest('.map-layer-selector__item') : null;
-        if (!item || item.hasAttribute('hidden')) return;
-        e.preventDefault();
-        e.stopPropagation();
-        if (item.getAttribute('data-action') === 'basemap-admin') {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            refreshLayerItemVisibility();
+            setOpen(!root.classList.contains('is-open'));
+        });
+
+        menu.addEventListener('click', function(e) {
+            var item = e.target && e.target.closest ? e.target.closest('.map-layer-selector__item') : null;
+            if (!item || item.hasAttribute('hidden')) return;
+            e.preventDefault();
+            e.stopPropagation();
+            var action = item.getAttribute('data-action');
+            if (action === 'basemap-default') {
+                setOpen(false);
+                if (typeof openBasemapDefaultModal === 'function') openBasemapDefaultModal();
+                return;
+            }
+            if (action === 'basemap-admin') {
+                setOpen(false);
+                if (typeof openBasemapAdminModal === 'function') openBasemapAdminModal();
+                return;
+            }
+            var mapType = item.getAttribute('data-map-type');
+            if (!mapType) return;
+            if (typeof MapRuntime !== 'undefined' && MapRuntime.applyBasemapType) {
+                MapRuntime.applyBasemapType(mapType, function () {
+                    syncActive(mapType);
+                });
+            } else {
+                try { myMap.setType(mapType); } catch (err) {}
+                syncActive(mapType);
+            }
             setOpen(false);
-            if (typeof openBasemapAdminModal === 'function') openBasemapAdminModal();
-            return;
-        }
-        var mapType = item.getAttribute('data-map-type');
-        if (!mapType) return;
-        try { myMap.setType(mapType); } catch (err) {}
-        syncActive(mapType);
-        setOpen(false);
-    });
+        });
 
-    document.addEventListener('click', function(e) {
-        if (!root.classList.contains('is-open')) return;
-        if (root.contains(e.target)) return;
-        setOpen(false);
-    });
+        document.addEventListener('click', function(e) {
+            if (!root.classList.contains('is-open')) return;
+            if (root.contains(e.target)) return;
+            setOpen(false);
+        });
 
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && root.classList.contains('is-open')) setOpen(false);
-    });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && root.classList.contains('is-open')) setOpen(false);
+        });
+    }
 
     try {
         myMap.events.add('typechange', function() {
@@ -180,7 +291,13 @@ function setupMapLayerSelector() {
         });
     } catch (err) {}
 
-    syncActive(leafletMode ? 'leaflet#orthophoto' : null);
+    var initialType = null;
+    try {
+        if (typeof MapRuntime !== 'undefined' && MapRuntime.getLastBasemapType) {
+            initialType = MapRuntime.getLastBasemapType();
+        }
+    } catch (eLast) {}
+    syncActive(initialType || (myMap.getType && myMap.getType()) || null);
 }
 
 function setupEventListeners() {
@@ -596,17 +713,49 @@ function setupEventListeners() {
     initSplitterOutputHostModal();
     initOltSelectionModal();
 
-    myMap.events.add('click', handleMapClick);
+    bindMyMapInteractionEvents();
 
+    document.addEventListener('mousemove', function(e) {
+        window.lastMouseX = e.clientX;
+        window.lastMouseY = e.clientY;
+    });
+
+    const modal = document.getElementById('infoModal');
+    const closeBtn = modal ? modal.querySelector('.close') : null;
+    
+    if (closeBtn && modal) {
+        closeBtn.onclick = function() {
+            closeInfoModal();
+        };
+    }
+    
+    window.onclick = function(event) {
+        if (modal && event.target === modal) {
+            closeInfoModal();
+        }
+    };
+
+    setupMapSearch();
+
+    initTheme();
+}
+
+/**
+ * События жестов карты — переподключаются после смены рантайма (Яндекс ↔ Leaflet).
+ */
+function bindMyMapInteractionEvents() {
+    if (!myMap || !myMap.events) return;
+
+    myMap.events.add('click', handleMapClick);
     myMap.events.add('mousemove', handleMapMouseMove);
 
     // Обновляем видимость по зуму и (при большой карте) по viewport при панорамировании.
     // Во время жеста (зум + перетаскивание) тяжёлый applyMapFilter не запускаем — иначе карта подвисает.
-    let expertLastZoom = (typeof myMap.getZoom === 'function') ? myMap.getZoom() : null;
-    let expertPrevZoom = expertLastZoom;
-    let mapBoundsChangeTimer = null;
-    let mapBoundsChangePending = false;
-    let mapBoundsChangeZoomPending = false;
+    var expertLastZoom = (typeof myMap.getZoom === 'function') ? myMap.getZoom() : null;
+    var expertPrevZoom = expertLastZoom;
+    var mapBoundsChangeTimer = null;
+    var mapBoundsChangePending = false;
+    var mapBoundsChangeZoomPending = false;
     window.mapUserGestureActive = false;
 
     function flushMapBoundsChangeUpdate() {
@@ -622,8 +771,6 @@ function setupEventListeners() {
             if (zoomPending && lowZoom && typeof applyLowZoomMapUpdate === 'function') {
                 applyLowZoomMapUpdate();
             } else if (zoomPending) {
-                // При виртуализации фильтр (applyMapFilter) делает полный O(n) проход по `objects`
-                // и может раздувать INP при частых зумах. Для изменения видимости достаточно applyMapViewportUpdate.
                 if (useVirtual && typeof applyMapViewportUpdate === 'function') applyMapViewportUpdate();
                 else if (typeof applyMapFilter === 'function') applyMapFilter();
             } else if (typeof applyMapViewportUpdate === 'function') {
@@ -679,7 +826,7 @@ function setupEventListeners() {
     myMap.events.add('boundschange', function(e) {
         try {
             if (!myMap || typeof myMap.getZoom !== 'function') return;
-            const z = myMap.getZoom();
+            var z = myMap.getZoom();
             if (typeof z !== 'number') return;
 
             if (typeof updateSettingsCurrentZoom === 'function') {
@@ -702,34 +849,10 @@ function setupEventListeners() {
                 return;
             }
             scheduleMapBoundsChangeUpdate(null, zoomChanged);
-        } catch (e) {}
+        } catch (eBound) {}
     });
 
     if (typeof updateSettingsCurrentZoom === 'function') {
-        try { updateSettingsCurrentZoom(myMap.getZoom()); } catch (e) {}
+        try { updateSettingsCurrentZoom(myMap.getZoom()); } catch (eZoom) {}
     }
-
-    document.addEventListener('mousemove', function(e) {
-        window.lastMouseX = e.clientX;
-        window.lastMouseY = e.clientY;
-    });
-
-    const modal = document.getElementById('infoModal');
-    const closeBtn = modal ? modal.querySelector('.close') : null;
-    
-    if (closeBtn && modal) {
-        closeBtn.onclick = function() {
-            closeInfoModal();
-        };
-    }
-    
-    window.onclick = function(event) {
-        if (modal && event.target === modal) {
-            closeInfoModal();
-        }
-    };
-
-    setupMapSearch();
-
-    initTheme();
 }

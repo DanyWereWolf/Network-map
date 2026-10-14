@@ -16020,12 +16020,17 @@ html[data-theme="light"] .app-entrance__status {
     color: var(--accent-primary);
 }
 
-/* —— Модалка ортофото-подложки —— */
+/* —— Модалка ортофото-подложки / слой по умолчанию —— */
 .basemap-admin-content.panel-glass {
     max-width: 560px;
     width: min(560px, 94vw);
     position: relative;
     overflow: hidden;
+}
+
+.basemap-default-content.panel-glass {
+    max-width: 440px;
+    width: min(440px, 94vw);
 }
 
 .basemap-admin-header {

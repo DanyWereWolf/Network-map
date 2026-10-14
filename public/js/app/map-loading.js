@@ -267,6 +267,10 @@ function finishMapInitialReveal() {
                 showSyncRequiredOverlay();
             }
             scheduleWelcomeAfterMapReady();
+            // Dual: слой Яндекса из настроек орг — только после первой загрузки
+            if (typeof MapRuntime !== 'undefined' && MapRuntime.flushPendingAfterLoad) {
+                try { MapRuntime.flushPendingAfterLoad(); } catch (eFlush) {}
+            }
         });
     });
 }

@@ -66,23 +66,160 @@
                 l.href = href;
                 document.head.appendChild(l);
             }
+            function resolveBootBasemapType() {
+                var allowed = {
+                    'yandex#map': 1, 'yandex#satellite': 1, 'yandex#hybrid': 1,
+                    'leaflet#orthophoto': 1, 'leaflet#osm': 1, 'leaflet#none': 1
+                };
+                try {
+                    var raw = localStorage.getItem('networkMap_session') || sessionStorage.getItem('networkMap_session');
+                    var sess = raw ? JSON.parse(raw) : null;
+                    var orgId = sess && (sess.organizationId != null ? sess.organizationId : sess.orgId);
+                    if (orgId != null && String(orgId).trim() !== '') {
+                        var perOrg = localStorage.getItem('volsmap.basemapType.org.' + String(orgId).trim());
+                        if (perOrg && allowed[perOrg]) return perOrg;
+                    }
+                    var last = localStorage.getItem('volsmap.basemapType');
+                    if (last && allowed[last]) return last;
+                } catch (e) {}
+                return 'leaflet#orthophoto';
+            }
+            function peekOrgBasemapType() {
+                return new Promise(function(resolve) {
+                    try {
+                        var token = localStorage.getItem('networkMap_token') || sessionStorage.getItem('networkMap_token') || '';
+                        if (!token) { resolve(null); return; }
+                        var t = setTimeout(function() { resolve(null); }, 1200);
+                        fetch(base + '/api/settings', {
+                            headers: { Authorization: 'Bearer ' + token },
+                            cache: 'no-store'
+                        }).then(function(r) { return r.ok ? r.json() : null; }).then(function(s) {
+                            clearTimeout(t);
+                            var v = s && s.defaultBasemapType ? String(s.defaultBasemapType) : '';
+                            resolve(v || null);
+                        }).catch(function() {
+                            clearTimeout(t);
+                            resolve(null);
+                        });
+                    } catch (e) {
+                        resolve(null);
+                    }
+                });
+            }
+            function loadDualLeafletStack(passiveShim) {
+                loadCss('vendor/leaflet/leaflet.css');
+                var leaflet = loadScript('vendor/leaflet/leaflet.js');
+                leaflet.onload = function() {
+                    var stack = loadScript('js/map/leaflet-basemap-stack.js?v=basemap-dual-3');
+                    stack.onload = function() {
+                        var runtime = loadScript('js/map/map-runtime.js?v=basemap-dual-3');
+                        function loadShim() {
+                            if (passiveShim) window.VolsmapShimPassive = true;
+                            loadScript('js/map/leaflet-ymaps-shim.js?v=basemap-dual-3');
+                        }
+                        runtime.onload = loadShim;
+                        runtime.onerror = loadShim;
+                    };
+                };
+            }
+            function loadNativeYandexPrimary(key) {
+                var link = document.createElement('link');
+                link.rel = 'preconnect';
+                link.href = 'https://api-maps.yandex.ru';
+                document.head.appendChild(link);
+                var cbName = '__volsmapBootYmapsOnload';
+                var finished = false;
+                window[cbName] = function() {
+                    if (finished) return;
+                    finished = true;
+                    window.__ymapsNative = window.ymaps;
+                    window.VolsmapMapEngine = 'yandex';
+                    try { delete window[cbName]; } catch (eDel) { window[cbName] = undefined; }
+                };
+                var src = 'https://api-maps.yandex.ru/2.1/?lang=ru_RU&onload=' + cbName;
+                if (key) src += '&apikey=' + encodeURIComponent(key);
+                var s = loadScript(src);
+                s.onerror = function() {
+                    if (finished) return;
+                    finished = true;
+                    // CDN Яндекса недоступен → Leaflet
+                    window.VolsmapMapEngine = 'leaflet';
+                    window.VolsmapBootBasemapType = 'leaflet#orthophoto';
+                    window.VolsmapShimPassive = false;
+                    if (window.__ymapsShim && window.LeafletYmapsShim && LeafletYmapsShim.install) {
+                        try { LeafletYmapsShim.install(); } catch (eIns) {}
+                    }
+                };
+            }
             fetch(base + '/api/public-config').then(function(r){ return r.json(); }).catch(function(){ return {}; }).then(function(c){
                 window.__volsmapPublicConfig = c || {};
                 var engine = (c && c.mapEngine) ? String(c.mapEngine).toLowerCase() : 'yandex';
+                var key = (c && c.yandexMapsApiKey) ? String(c.yandexMapsApiKey).trim() : '';
                 if (engine === 'leaflet' || engine === 'offline' || engine === 'orthophoto') {
-                    window.VolsmapMapEngine = 'leaflet';
-                    loadCss('vendor/leaflet/leaflet.css');
-                    var leaflet = loadScript('vendor/leaflet/leaflet.js');
-                    leaflet.onload = function() {
-                        loadScript('js/map/leaflet-ymaps-shim.js');
+                    window.VolsmapConfiguredEngine = 'leaflet';
+                    var cached = resolveBootBasemapType();
+                    // Кэш мгновенно; параллельно уточняем орг. дефолт (до 1.2с), чтобы первый вход был точным
+                    var startDual = function(bootType) {
+                        var allowed = {
+                            'yandex#map': 1, 'yandex#satellite': 1, 'yandex#hybrid': 1,
+                            'leaflet#orthophoto': 1, 'leaflet#osm': 1, 'leaflet#none': 1
+                        };
+                        if (!bootType || !allowed[bootType]) bootType = cached || 'leaflet#orthophoto';
+                        window.VolsmapBootBasemapType = bootType;
+                        try {
+                            localStorage.setItem('volsmap.basemapType', bootType);
+                        } catch (eSave) {}
+                        var bootYandex = bootType.indexOf('yandex#') === 0;
+                        if (bootYandex) {
+                            window.VolsmapMapEngine = 'yandex';
+                            window.VolsmapShimPassive = true;
+                            loadNativeYandexPrimary(key);
+                            loadDualLeafletStack(true);
+                        } else {
+                            window.VolsmapMapEngine = 'leaflet';
+                            loadDualLeafletStack(false);
+                        }
                     };
+                    // Кэш есть — старт сразу; без кэша — коротко ждём орг. дефолт
+                    if (cached) {
+                        startDual(cached);
+                        peekOrgBasemapType().then(function(orgType) {
+                            if (!orgType) return;
+                            try {
+                                localStorage.setItem('volsmap.basemapType', orgType);
+                                var raw = localStorage.getItem('networkMap_session') || sessionStorage.getItem('networkMap_session');
+                                var sess = raw ? JSON.parse(raw) : null;
+                                var orgId = sess && (sess.organizationId != null ? sess.organizationId : sess.orgId);
+                                if (orgId != null) {
+                                    localStorage.setItem('volsmap.basemapType.org.' + String(orgId), orgType);
+                                }
+                            } catch (e) {}
+                        });
+                    } else {
+                        var started = false;
+                        var timer = setTimeout(function() {
+                            if (started) return;
+                            started = true;
+                            startDual('leaflet#orthophoto');
+                        }, 450);
+                        peekOrgBasemapType().then(function(orgType) {
+                            if (started) {
+                                if (orgType) {
+                                    try { localStorage.setItem('volsmap.basemapType', orgType); } catch (e) {}
+                                }
+                                return;
+                            }
+                            started = true;
+                            clearTimeout(timer);
+                            startDual(orgType || 'leaflet#orthophoto');
+                        });
+                    }
                     return;
                 }
                 var link = document.createElement('link');
                 link.rel = 'preconnect';
                 link.href = 'https://api-maps.yandex.ru';
                 document.head.appendChild(link);
-                var key = (c && c.yandexMapsApiKey) ? String(c.yandexMapsApiKey).trim() : '';
                 loadScript(key
                     ? ('https://api-maps.yandex.ru/2.1/?apikey=' + encodeURIComponent(key) + '&lang=ru_RU')
                     : 'https://api-maps.yandex.ru/2.1/?lang=ru_RU');
@@ -1197,21 +1334,27 @@
                     <svg class="map-layer-selector__chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </button>
                 <div class="map-layer-selector__menu" id="mapLayerSelectorMenu" role="listbox" hidden>
+                    <div class="map-layer-selector__group" data-engine-group="leaflet" hidden>
+                        <div class="map-layer-selector__group-label">Локально (ортофото)</div>
+                        <button type="button" class="map-layer-selector__item" role="option" data-map-type="leaflet#orthophoto" data-engine="leaflet" aria-selected="false">Ортофото</button>
+                        <button type="button" class="map-layer-selector__item" role="option" data-map-type="leaflet#osm" data-engine="leaflet" aria-selected="false">OpenStreetMap</button>
+                        <button type="button" class="map-layer-selector__item" role="option" data-map-type="leaflet#none" data-engine="leaflet" aria-selected="false">Без подложки</button>
+                    </div>
                     <div class="map-layer-selector__group" data-engine-group="yandex">
-                        <div class="map-layer-selector__group-label">Яндекс.Карты</div>
+                        <div class="map-layer-selector__group-label">Яндекс (онлайн, отдельно)</div>
                         <button type="button" class="map-layer-selector__item is-active" role="option" data-map-type="yandex#map" data-engine="yandex" aria-selected="true">Схема</button>
                         <button type="button" class="map-layer-selector__item" role="option" data-map-type="yandex#satellite" data-engine="yandex" aria-selected="false">Спутник</button>
                         <button type="button" class="map-layer-selector__item" role="option" data-map-type="yandex#hybrid" data-engine="yandex" aria-selected="false">Гибрид</button>
                     </div>
-                    <div class="map-layer-selector__group" data-engine-group="leaflet" hidden>
-                        <div class="map-layer-selector__group-label">Локальная подложка</div>
-                        <button type="button" class="map-layer-selector__item" role="option" data-map-type="leaflet#orthophoto" data-engine="leaflet" aria-selected="false">Ортофото</button>
-                        <button type="button" class="map-layer-selector__item" role="option" data-map-type="leaflet#osm" data-engine="leaflet" aria-selected="false">OpenStreetMap</button>
-                        <button type="button" class="map-layer-selector__item" role="option" data-map-type="leaflet#none" data-engine="leaflet" aria-selected="false">Без подложки</button>
+                    <div class="map-layer-selector__group" data-engine-group="leaflet-actions" hidden>
                         <div class="map-layer-selector__sep" role="separator" aria-hidden="true"></div>
-                        <button type="button" class="map-layer-selector__item map-layer-selector__item--action" role="option" data-action="basemap-admin" data-engine="leaflet">
+                        <button type="button" class="map-layer-selector__item map-layer-selector__item--action" role="option" data-action="basemap-default" data-engine="leaflet" data-admin-only="1" hidden>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                            Слой для всех по умолчанию…
+                        </button>
+                        <button type="button" class="map-layer-selector__item map-layer-selector__item--action" role="option" data-action="basemap-admin" data-engine="leaflet" data-admin-only="1" hidden>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-                            Настроить ортофото…
+                            Загрузить ортофото…
                         </button>
                     </div>
                 </div>
@@ -3253,7 +3396,7 @@
     <script src="js/core/confirm-dialog.js"></script>
     <script src="js/core/network-status.js"></script>
     <script src="js/groups.js"></script>
-    <script src="js/map/map-engine.js"></script>
+    <script src="js/map/map-engine.js?v=basemap-dual-3"></script>
     <script src="js/map/theme.js"></script>
     <script src="js/map/map-icons.js"></script>
     <script src="js/map/cable-underground.js"></script>
@@ -3269,14 +3412,14 @@
     <script src="js/app/onboarding.js"></script>
     <script src="js/app/user-ui.js"></script>
     <script src="js/app/editor-shell.js"></script>
-    <script src="js/app/map-loading.js?v=move-sync-rev1"></script>
+    <script src="js/app/map-loading.js?v=basemap-dual-3"></script>
     <script src="js/app/backups.js"></script>
     <script src="js/app/cable-split-sleeve.js"></script>
-    <script src="js/app/map-hover.js"></script>
+    <script src="js/app/map-hover.js?v=basemap-dual-3"></script>
     <script src="js/app/object-placement.js"></script>
     <script src="js/app/edit-mode.js"></script>
-    <script src="js/app/map-init.js"></script>
-    <script src="js/app/basemap-ui.js"></script>
+    <script src="js/app/map-init.js?v=basemap-dual-3"></script>
+    <script src="js/app/basemap-ui.js?v=basemap-dual-3"></script>
     <script src="js/app/zabbix-status.js"></script>
     <script src="js/app/map-clicks.js"></script>
     <script src="js/app/create-object.js?v=move-sync-rev1"></script>
@@ -3285,7 +3428,7 @@
     <script src="js/app/object-delete.js"></script>
     <script src="js/app/map-selection.js?v=move-sync-rev1"></script>
     <script src="js/app/gpon-fiber.js?v=sleeve-open-perf1"></script>
-    <script src="js/app/map-geometry.js"></script>
+    <script src="js/app/map-geometry.js?v=basemap-dual-3"></script>
     <script src="js/app/map-object-core.js?v=move-sync-rev1"></script>
     <script src="js/app/map-persistence.js?v=move-sync-rev1"></script>
     <script src="js/app/cable-laying.js"></script>

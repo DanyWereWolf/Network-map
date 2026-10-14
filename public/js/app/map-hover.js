@@ -50,6 +50,11 @@ var ZABBIX_SEV_LABELS = {
 };
 
 function createCursorIndicator() {
+    var existing = document.getElementById('cursorIndicator');
+    if (existing) {
+        cursorIndicator = existing;
+        return;
+    }
     cursorIndicator = document.createElement('div');
     cursorIndicator.id = 'cursorIndicator';
     cursorIndicator.className = 'map-hover-card';
