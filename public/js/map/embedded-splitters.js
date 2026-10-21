@@ -4,7 +4,7 @@
 (function (global) {
     'use strict';
 
-    var HOST_TYPES = ['sleeve', 'cross'];
+    var HOST_TYPES = ['sleeve', 'cross', 'spliceCassette'];
     var DEFAULT_RATIO = 8;
     var DEFAULT_W = 120;
     var HEADER_ACTIONS_W = 98;

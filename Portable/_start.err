@@ -1,0 +1,3 @@
+[Config] yandexMapsApiKey не задан — карты Яндекса не будут работать.
+[ned-import] Импорт .ned недоступен: Сборка конвертера NeD (код 1): MSBUILD : error MSB1009: файл проекта не существует.
+Ключ: D:\Dany\Documents\GitHub\Network-map\Portable\tools\ned-import\NedToNetworkMap

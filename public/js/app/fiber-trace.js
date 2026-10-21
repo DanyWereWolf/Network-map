@@ -2119,61 +2119,20 @@ function traceFiberPath(startCableId, startFiberNumber) {
         });
 
         if (isFiberHostType(objType)) {
-            const nodeConnKey = `${currentCableId}-${currentFiberNumber}`;
-            if (objType === 'cross') {
-                const nodeConnections = currentObject.properties.get('nodeConnections') || {};
-                let nodeConn = nodeConnections[nodeConnKey];
-                let nodeConnCableId = currentCableId;
-                let nodeConnFiberNumber = currentFiberNumber;
-                
-                if (!nodeConn) {
-                    const crossFiberConns = currentObject.properties.get('fiberConnections') || [];
-                    for (var cfi2 = 0; cfi2 < crossFiberConns.length; cfi2++) {
-                        var cfc2 = crossFiberConns[cfi2];
-                        var linkedKey2 = null;
-                        if (cfc2.from && cfc2.from.cableId === currentCableId && cfc2.from.fiberNumber === currentFiberNumber) {
-                            linkedKey2 = cfc2.to.cableId + '-' + cfc2.to.fiberNumber;
-                            nodeConnCableId = cfc2.to.cableId;
-                            nodeConnFiberNumber = cfc2.to.fiberNumber;
-                        } else if (cfc2.to && cfc2.to.cableId === currentCableId && cfc2.to.fiberNumber === currentFiberNumber) {
-                            linkedKey2 = cfc2.from.cableId + '-' + cfc2.from.fiberNumber;
-                            nodeConnCableId = cfc2.from.cableId;
-                            nodeConnFiberNumber = cfc2.from.fiberNumber;
-                        }
-                        if (linkedKey2 && nodeConnections[linkedKey2]) {
-                            nodeConn = nodeConnections[linkedKey2];
-                            break;
-                        }
-                    }
+            // ONU / МК / радиомост / узел на хосте (в т.ч. сплайс-кассете) — как в traceFiberPathFromObject
+            if (tryAppendHostDropTerminals(path, currentObject, currentCableId, currentFiberNumber)) {
+                break;
+            }
+            var hostNodeTraceLegacy = tryHandleHostNodeConnectionTrace(
+                path, currentObject, currentCableId, currentFiberNumber, currentCable, previousObject, null
+            );
+            if (hostNodeTraceLegacy) {
+                if (hostNodeTraceLegacy.action === 'continue') {
+                    previousObject = hostNodeTraceLegacy.previousObject;
+                    currentObject = hostNodeTraceLegacy.currentObject;
+                    continue;
                 }
-                
-                if (nodeConn) {
-                    const connectedNode = objects.find(obj => 
-                        obj.properties && obj.properties.get('type') === 'node' && obj.properties.get('uniqueId') === nodeConn.nodeId
-                    );
-                    if (connectedNode) {
-                        if (nodeConnCableId !== currentCableId || nodeConnFiberNumber !== currentFiberNumber) {
-                            const fiberLabels2 = currentObject.properties.get('fiberLabels') || {};
-                            const fromLabel2 = fiberLabels2[nodeConnKey] || '';
-                            const toLabel2 = fiberLabels2[nodeConnCableId + '-' + nodeConnFiberNumber] || '';
-                            path.push({
-                                type: 'connection',
-                                fromCableId: currentCableId,
-                                fromFiberNumber: currentFiberNumber,
-                                fromLabel: fromLabel2,
-                                fromCableType: currentCable ? currentCable.properties.get('cableType') : null,
-                                toCableId: nodeConnCableId,
-                                toFiberNumber: nodeConnFiberNumber,
-                                toLabel: toLabel2,
-                                toCableType: null,
-                                sleeve: currentObject
-                            });
-                        }
-                        path.push({ type: 'nodeConnection', cableId: nodeConnCableId, fiberNumber: nodeConnFiberNumber, nodeName: nodeConn.nodeName, cross: currentObject, node: connectedNode });
-                        path.push({ type: 'object', objectType: 'node', objectName: connectedNode.properties.get('name') || 'Узел сети', object: connectedNode });
-                    }
-                    break;
-                }
+                break;
             }
             const fiberKey = `${currentCableId}-${currentFiberNumber}`;
             if (visitedFibers.has(fiberKey)) break;
@@ -2182,6 +2141,30 @@ function traceFiberPath(startCableId, startFiberNumber) {
             const nextFiber = findFiberConnection(currentCableId, currentFiberNumber, currentObject);
             
             if (!nextFiber) {
+                var scEntryLegacy = getHostAssignment(currentObject, 'splitterConnections', currentCableId, currentFiberNumber);
+                if (scEntryLegacy && scEntryLegacy.splitterId) {
+                    var spObjLegacy = typeof resolveSplitterObject === 'function'
+                        ? resolveSplitterObject(scEntryLegacy.splitterId)
+                        : null;
+                    if (spObjLegacy) {
+                        if (typeof syncSplitterInputFromHost === 'function') syncSplitterInputFromHost(spObjLegacy);
+                        path.push({
+                            type: 'splitterConnection',
+                            sleeve: currentObject,
+                            splitter: spObjLegacy,
+                            cableId: currentCableId,
+                            fiberNumber: currentFiberNumber
+                        });
+                        path.push({
+                            type: 'object',
+                            objectType: 'splitter',
+                            objectName: spObjLegacy.properties.get('name') || 'Сплиттер',
+                            object: spObjLegacy,
+                            port: null
+                        });
+                        break;
+                    }
+                }
                 var oltConnLegacy = getFiberOltAssignment(currentObject, currentCableId, currentFiberNumber);
                 if (oltConnLegacy && oltConnLegacy.oltId &&
                     !oltConnLegacy.inheritedFromNetwork && !oltConnLegacy.physicalCableOnly) {

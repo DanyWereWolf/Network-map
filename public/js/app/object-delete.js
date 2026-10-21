@@ -366,7 +366,7 @@ function deleteObject(obj, opts) {
     });
     
     myMap.geoObjects.remove(obj);
-    if (objType === 'region' && window.MapRegions && MapRegions.removeRegionLabel) {
+    if ((objType === 'region' || objType === 'zone') && window.MapRegions && MapRegions.removeRegionLabel) {
         MapRegions.removeRegionLabel(obj, myMap);
     } else {
         const hadLabel = obj.properties && obj.properties.get('label');
@@ -428,7 +428,7 @@ function deleteObject(obj, opts) {
         } else if ((cablesToRemove.length > 0 || cableRoutesUpdated) && objUniqueId) {
             refreshPlan.connectionLines = objUniqueId;
         }
-        if (objType === 'region') refreshPlan.renderRegions = true;
+        if ((objType === 'region' || objType === 'zone')) refreshPlan.renderRegions = true;
         scheduleObjectDeleteVisualRefresh(refreshPlan);
     } else if (!(opts && opts.skipStats)) {
         if (typeof requestIdleCallback === 'function') {
@@ -437,7 +437,7 @@ function deleteObject(obj, opts) {
             setTimeout(function() { try { updateStats(); } catch (e2) {} }, 0);
         }
     }
-    if (objType === 'region' && typeof renderRegionsSidebarList === 'function' && (opts && opts.deferMapRefresh)) {
+    if ((objType === 'region' || objType === 'zone') && typeof renderRegionsSidebarList === 'function' && (opts && opts.deferMapRefresh)) {
         if (typeof requestIdleCallback === 'function') {
             requestIdleCallback(function() { try { renderRegionsSidebarList(); } catch (eR) {} }, { timeout: 300 });
         } else {

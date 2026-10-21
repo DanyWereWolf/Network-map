@@ -8,7 +8,8 @@
     var pollTimer = null;
     var escapeHandler = null;
     var prefsNetBound = false;
-    var cachedPreferredType = 'leaflet#orthophoto';
+    // Онлайн по умолчанию — Яндекс; без сети — ортофото (GeoTIFF) или пустая подложка.
+    var cachedPreferredType = 'yandex#map';
     var cachedOfflineType = 'leaflet#orthophoto';
     var ALLOWED_TYPES = {
         'yandex#map': 1,
@@ -72,7 +73,8 @@
     function normalizePreferredType(value) {
         var s = value == null ? '' : String(value).trim();
         if (ALLOWED_TYPES[s]) return s;
-        return isLeafletEngine() ? 'leaflet#orthophoto' : 'yandex#map';
+        // Dual (mapEngine=leaflet): при наличии сети предпочитаем Яндекс.
+        return 'yandex#map';
     }
 
     function normalizeOfflineType(value) {
@@ -105,18 +107,37 @@
         }
     }
 
-    /** Итоговый слой с учётом интернета и наличия ортофото. */
+    function hasYandexKey() {
+        try {
+            var cfg = global.__volsmapPublicConfig || {};
+            var k = String(cfg.yandexMapsApiKey || '').trim();
+            return !!(k && k !== 'YOUR_YANDEX_MAPS_API_KEY');
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function resolveOfflineFallback(offlineType) {
+        offlineType = normalizeOfflineType(offlineType);
+        if (offlineType === 'leaflet#none') return 'leaflet#none';
+        return hasOrthophotoReady() ? 'leaflet#orthophoto' : 'leaflet#none';
+    }
+
+    /** Итоговый слой: онлайн → Яндекс (если ключ есть); офлайн / без ключа → GeoTIFF или пустая. */
     function resolveBasemapType(preferred, offlineType) {
         preferred = normalizePreferredType(preferred);
         offlineType = normalizeOfflineType(offlineType);
         if (!isLeafletEngine()) {
             return preferred.indexOf('yandex#') === 0 ? preferred : 'yandex#map';
         }
-        if (!basemapNeedsInternet(preferred) || !isBrowserOffline()) {
+        var needsNet = basemapNeedsInternet(preferred);
+        if (needsNet && (isBrowserOffline() || (preferred.indexOf('yandex#') === 0 && !hasYandexKey()))) {
+            return resolveOfflineFallback(offlineType);
+        }
+        if (!needsNet || !isBrowserOffline()) {
             return preferred;
         }
-        if (offlineType === 'leaflet#none') return 'leaflet#none';
-        return hasOrthophotoReady() ? 'leaflet#orthophoto' : 'leaflet#none';
+        return resolveOfflineFallback(offlineType);
     }
 
     function applyResolvedBasemapType(type, opts) {

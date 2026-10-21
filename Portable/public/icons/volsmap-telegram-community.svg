@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Volsmap">
+  <rect width="512" height="512" rx="96" fill="#1d4ed8"/>
+  <path
+    d="M256 112c-57.6 0-104 46.4-104 104 0 78 104 184 104 184s104-106 104-184c0-57.6-46.4-104-104-104z"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="32"
+    stroke-linejoin="round"
+  />
+  <circle cx="256" cy="216" r="44" fill="#ffffff"/>
+</svg>

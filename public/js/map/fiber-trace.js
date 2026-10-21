@@ -3609,7 +3609,8 @@
             else if (s.cableId) score += 40;
             else return -1;
             var to = model.nodes[s.toIdx];
-            if (to && (to.type === 'splitter' || to.type === 'sleeve' || to.type === 'cross')) score += 5;
+            if (to && (to.type === 'splitter' || to.type === 'sleeve' || to.type === 'cross' ||
+                to.type === 'spliceCassette')) score += 5;
             if (s.tracedFiber != null) score += 1;
             if (s.lengthM != null) score += 2;
             return score;
@@ -4350,7 +4351,35 @@
                 var sg1 = model.segments[s1];
                 if (!sg1 || sg1.toIdx !== ti) continue;
                 if (sg1.kind === 'nodeLink' && !sg1.cableId) continue;
-                if (!sg1._ribbonGeom) continue;
+                // Входящее без ribbon (не primaryOut у источника) — синтезировать, иначе
+                // терминал (муфта/сплайс-кассета) пропадает на схеме.
+                if (!sg1._ribbonGeom) {
+                    var srcCx = nodeCX[sg1.fromIdx];
+                    var srcCy = nodeCY[sg1.fromIdx];
+                    var srcR = nodeRight[sg1.fromIdx] != null
+                        ? nodeRight[sg1.fromIdx]
+                        : (srcCx + smallNodeW / 2);
+                    var srcL = nodeLeft[sg1.fromIdx] != null
+                        ? nodeLeft[sg1.fromIdx]
+                        : (srcCx - smallNodeW / 2);
+                    var synLane = {};
+                    if (sg1.tracedFiber != null) synLane[Number(sg1.tracedFiber)] = srcCy;
+                    sg1._ribbonGeom = {
+                        xa: srcL + 14,
+                        xb: srcR - 10,
+                        boxL: srcL,
+                        boxR: srcR,
+                        unitL: srcL,
+                        unitR: srcR,
+                        unitX: srcL,
+                        unitW: Math.max(1, srcR - srcL),
+                        yMid: srcCy,
+                        laneY: synLane,
+                        fromIdx: sg1.fromIdx,
+                        toIdx: sg1.toIdx,
+                        cableId: sg1.cableId
+                    };
+                }
                 inSegs.push(sg1);
             }
             if (!inSegs.length) continue;
@@ -4363,7 +4392,45 @@
             var seg = inSegs[0];
             var toNode = model.nodes[ti];
             var fibers = ensureSchematicSegmentFibers(seg, toNode, null);
-            if (!fibers.length) continue;
+            // Пустая ёмкость кабеля — всё равно показать терминал по трассируемому волокну
+            if (!fibers.length && seg.tracedFiber != null) {
+                fibers = [{
+                    number: Number(seg.tracedFiber),
+                    color: '#06b6d4',
+                    traced: true,
+                    fate: { kind: 'end', label: '' }
+                }];
+                seg.fibers = fibers;
+                seg.fiberCount = 1;
+            }
+            if (!fibers.length) {
+                // Компактный fallback: иначе хост (сплайс-кассета и т.п.) остаётся невидимым
+                // после пропуска карточки выше (hasInFromUnit).
+                var fbNode = model.nodes[ti];
+                var fbCx = nodeCX[ti];
+                var fbCy = nodeCY[ti];
+                var fbX = fbCx - smallNodeW / 2;
+                var fbY = fbCy - smallNodeH / 2;
+                var fbName = String((fbNode && (fbNode.name || getTypeName(fbNode.type))) || '');
+                if (fbName.length > 15) fbName = fbName.slice(0, 13) + '…';
+                var fbTone = schematicTreeNodeTone(fbNode && fbNode.type);
+                var fbType = schematicTreeTypeShort(fbNode && fbNode.type);
+                nodeLeft[ti] = fbX;
+                nodeRight[ti] = fbX + smallNodeW;
+                parts.push('<g class="trace-sch-tree-node-g">');
+                parts.push('<rect class="trace-sch-tree-node-shadow" x="' + (fbX + 1.5) + '" y="' + (fbY + 2.5) +
+                    '" width="' + smallNodeW + '" height="' + smallNodeH + '" rx="11"/>');
+                parts.push('<rect class="trace-sch-tree-node trace-sch-tree-node--' + fbTone + '" x="' + fbX +
+                    '" y="' + fbY + '" width="' + smallNodeW + '" height="' + smallNodeH + '" rx="11"/>');
+                parts.push('<rect class="trace-sch-tree-accent trace-sch-tree-accent--' + fbTone + '" x="' +
+                    (fbX + 1) + '" y="' + (fbY + 8) + '" width="3.5" height="' + (smallNodeH - 16) + '" rx="1.5"/>');
+                parts.push('<text class="trace-sch-tree-type" x="' + (fbX + 14) + '" y="' + (fbY + 17) + '">' +
+                    schematicSvgEsc(fbType) + '</text>');
+                parts.push('<text class="trace-sch-tree-name" x="' + (fbX + 14) + '" y="' + (fbY + 34) + '">' +
+                    schematicSvgEsc(fbName) + '</text>');
+                parts.push('</g>');
+                continue;
+            }
 
             var n = fibers.length;
             var pitch = n > 32 ? 6.5 : (n > 16 ? 8 : (n > 8 ? 10 : (n > 4 ? 12 : 14)));

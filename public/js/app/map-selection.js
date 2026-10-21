@@ -7,7 +7,7 @@ function createSelectionPulse(obj) {
     if (typeof areMapAnimationsEnabled === 'function' && !areMapAnimationsEnabled()) return;
     if (typeof AppMotion !== 'undefined' && AppMotion.isPrefEnabled && !AppMotion.isPrefEnabled('selectionPulse')) return;
     var type = obj.properties ? obj.properties.get('type') : '';
-    if (type === 'cable' || type === 'cableLabel' || type === 'region') return;
+    if (type === 'cable' || type === 'cableLabel' || (type === 'region' || type === 'zone')) return;
     var coords = null;
     try { coords = obj.geometry.getCoordinates(); } catch (e) {}
     if (!coords || typeof coords[0] !== 'number') return;

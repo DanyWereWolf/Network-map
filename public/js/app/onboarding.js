@@ -194,7 +194,7 @@ function getOnboardingSteps() {
             {
                 selector: '#editToolbar',
                 title: 'Инструменты',
-                text: 'Сверху — типы объектов, кабель и регионы. Выберите тип (например, опору) — справа откроются параметры.',
+                text: 'Сверху — типы объектов, кабель и зоны. Выберите тип (например, опору) — справа откроются параметры.',
                 requireAction: true,
                 preferredPlacement: 'bottom',
                 disableAutoScroll: true,

@@ -1,0 +1,50 @@
+/**
+ * Единый стиль скроллбаров приложения.
+ * Тонкий pill-thumb, прозрачный трек, hover с акцентом бренда.
+ */
+:root {
+    --scrollbar-size: 7px;
+    --scrollbar-thumb: color-mix(in srgb, var(--border-color, #e2e8f0) 85%, var(--text-muted, #64748b));
+    --scrollbar-thumb-hover: color-mix(in srgb, var(--text-muted, #64748b) 70%, var(--accent-primary, #0f766e));
+}
+
+[data-theme="dark"] {
+    --scrollbar-thumb: color-mix(in srgb, var(--border-color, #334155) 72%, var(--text-muted, #94a3b8));
+    --scrollbar-thumb-hover: color-mix(in srgb, var(--text-muted, #94a3b8) 55%, var(--accent-primary, #14b8a6));
+}
+
+html {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+*::-webkit-scrollbar {
+    width: var(--scrollbar-size);
+    height: var(--scrollbar-size);
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-corner {
+    background: transparent;
+}

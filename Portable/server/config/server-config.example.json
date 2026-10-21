@@ -1,0 +1,30 @@
+{
+  "port": 3000,
+  "host": "0.0.0.0",
+  "portable": true,
+  "mapEngine": "leaflet",
+  "yandexMapsApiKey": "YOUR_YANDEX_MAPS_API_KEY",
+  "portableLicenseRequired": false,
+  "portableLicensePublicKey": "",
+  "basemapOrgQuotaGb": 50,
+  "basemapMaxUploadGb": 8,
+  "publicSiteUrl": "",
+  "embedFrameAncestors": ["*"],
+  "serveObfuscatedClient": false,
+  "authRateLimitWindowMs": 900000,
+  "authRateLimitMax": 20,
+  "organizationName": "Организация",
+  "adminEmail": "admin@example.com",
+  "bootstrapAdminUsername": "admin",
+  "bootstrapAdminPassword": "admin123",
+  "bootstrapAdminFullName": "Администратор",
+  "storage": "json",
+  "mysql": {
+    "host": "127.0.0.1",
+    "port": 3306,
+    "user": "root",
+    "password": "",
+    "database": "network_map",
+    "connectionLimit": 10
+  }
+}

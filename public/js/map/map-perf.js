@@ -519,7 +519,7 @@
         var type = obj.properties && obj.properties.get('type');
         // Never viewport-cull regions (same as applyViewportCullToMap). Their area
         // can still cover the view when every vertex is off-screen after a deep zoom-in.
-        if (type === 'region') return true;
+        if ((type === 'region' || type === 'zone')) return true;
         if (type === 'cable') return cableInViewport(obj, bounds);
         if (type === 'cableLabel') {
             var cables = obj.properties.get('cables');
@@ -599,7 +599,7 @@
         if (isCabinetMember(obj)) return false;
         if (obj.properties.get('_mapFilterVisible') === false) return false;
         if (ctx.hideObjects && type !== 'region') return false;
-        if (ctx.hideRegions && type === 'region') return false;
+        if (ctx.hideRegions && (type === 'region' || type === 'zone')) return false;
         if (ctx.bounds && !isObjectInViewport(obj, ctx.bounds)) return false;
         return true;
     }
@@ -722,7 +722,7 @@
             var obj = objectsById.get(uid);
             if (!obj || isExternallyManagedMapObject(obj)) return;
             var type = obj.properties && obj.properties.get('type');
-            if (type === 'region' && !ctx.hideRegions) return;
+            if ((type === 'region' || type === 'zone') && !ctx.hideRegions) return;
             toUnmount.push(obj);
         });
         for (var i = 0; i < toUnmount.length; i++) unmountObject(toUnmount[i]);
@@ -733,7 +733,7 @@
             var o = global.objects[j];
             if (!o || isExternallyManagedMapObject(o)) continue;
             var t = o.properties && o.properties.get('type');
-            if (t === 'region' && !ctx.hideRegions) continue;
+            if ((t === 'region' || t === 'zone') && !ctx.hideRegions) continue;
             var uid2 = uidFromObj(o);
             if (uid2 && pinnedUids.has(uid2)) continue;
             if (uid2 && mountedUids.has(uid2)) continue;

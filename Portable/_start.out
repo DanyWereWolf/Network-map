@@ -1,0 +1,13 @@
+[CPU] cores: 12 | worker pool: up to 11 thread(s) | libuv pool: 12 (CPU_POOL_SIZE / UV_THREADPOOL_SIZE to change, CPU_POOL_SIZE=0 = off)
+[DB] Full snapshot: store-2026-10-21-1048.json
+[DB] Storage: JSON (D:\Dany\Documents\GitHub\Network-map\Portable\data\store.json)
+Приложение и API (Portable):
+  Локально:    http://localhost:3100
+  В сети:      http://192.168.123.2:3100
+  В сети:      http://192.168.0.93:3100
+  На других устройствах откройте адрес «В сети» в браузере.
+Синхронизация: ws://...:3100/sync (в одном процессе с API)
+Данные: D:\Dany\Documents\GitHub\Network-map\Portable\data\store.json
+Резервные копии: ежедневно в data/backups/, хранятся 30 дней.
+[Config] Режим Portable (on-prem): без регистрации, почты и платформенной админки.
+[ned-import] Сборка конвертера NeD…

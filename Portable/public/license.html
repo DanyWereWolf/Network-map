@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Лицензия — Карта оптической сети</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/auth.css">
+    <link rel="stylesheet" href="css/scrollbars.css">
+    <style>
+        .license-code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 0.95rem;
+            letter-spacing: 0.04em;
+            word-break: break-all;
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color, #e2e8f0);
+            background: rgba(15, 118, 110, 0.06);
+            user-select: text;
+            -webkit-user-select: text;
+        }
+        .license-textarea {
+            width: 100%;
+            min-height: 160px;
+            resize: vertical;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 0.8rem;
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color, #e2e8f0);
+            background: #fff;
+            color: inherit;
+        }
+        .license-hint { font-size: 0.875rem; color: var(--text-muted, #64748b); margin: 8px 0 0; line-height: 1.45; }
+        .license-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+        .license-status { margin-top: 12px; font-size: 0.9rem; }
+        .license-status--ok { color: #0f766e; }
+        .license-status--err { color: #b91c1c; }
+        .license-file-btn { display: inline-flex; align-items: center; gap: 8px; }
+    </style>
+</head>
+<body class="auth-page">
+    <div class="auth-bg landing-bg" aria-hidden="true">
+        <div class="auth-bg-gradient landing-bg-gradient"></div>
+        <div class="landing-bg-grid"></div>
+    </div>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <p class="auth-brand">Карта оптической сети</p>
+                <h1>Активация лицензии</h1>
+                <p class="auth-subtitle">Бессрочная офлайн-лицензия, привязанная к этому компьютеру</p>
+            </div>
+
+            <div class="form-group">
+                <label>Код машины (отправьте поставщику)</label>
+                <div class="license-code" id="machineCode">Загрузка…</div>
+                <p class="license-hint">Скопируйте код и передайте администратору платформы. В ответ вы получите файл лицензии.</p>
+                <div class="license-actions">
+                    <button type="button" class="btn-primary" id="copyCodeBtn">Скопировать код</button>
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-top: 20px;">
+                <label for="licenseText">Файл или текст лицензии</label>
+                <textarea id="licenseText" class="license-textarea" placeholder='Вставьте JSON лицензии или выберите файл…' spellcheck="false"></textarea>
+                <div class="license-actions">
+                    <label class="btn-secondary license-file-btn" for="licenseFile">
+                        Выбрать файл
+                        <input type="file" id="licenseFile" accept=".json,application/json,text/plain" hidden>
+                    </label>
+                    <button type="button" class="btn-primary" id="activateBtn">Активировать</button>
+                </div>
+                <p class="license-status" id="licenseStatus" role="status"></p>
+            </div>
+        </div>
+    </div>
+    <script>
+        (function() {
+            var codeEl = document.getElementById('machineCode');
+            var statusEl = document.getElementById('licenseStatus');
+            var textEl = document.getElementById('licenseText');
+            var machineCode = '';
+
+            function setStatus(msg, ok) {
+                statusEl.textContent = msg || '';
+                statusEl.className = 'license-status' + (msg ? (ok ? ' license-status--ok' : ' license-status--err') : '');
+            }
+
+            function applyStatus(data) {
+                machineCode = (data && data.machineCode) || '';
+                codeEl.textContent = machineCode || '—';
+                if (data && data.valid && data.required) {
+                    setStatus('Лицензия активна' + (data.customer ? (': ' + data.customer) : '') + '. Можно войти.', true);
+                } else if (data && !data.required) {
+                    setStatus('Проверка лицензии отключена на этом сервере.', true);
+                } else if (data && data.error) {
+                    setStatus(data.error, false);
+                } else {
+                    setStatus('Ожидается активация.', false);
+                }
+                if (data && data.valid) {
+                    setTimeout(function() { window.location.href = 'auth.html'; }, 900);
+                }
+            }
+
+            fetch('api/portable/license/status', { credentials: 'include' })
+                .then(function(r) { return r.json(); })
+                .then(applyStatus)
+                .catch(function() {
+                    codeEl.textContent = 'Ошибка загрузки';
+                    setStatus('Не удалось получить статус лицензии', false);
+                });
+
+            document.getElementById('copyCodeBtn').addEventListener('click', function() {
+                if (!machineCode) return;
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(machineCode).then(function() {
+                        setStatus('Код скопирован', true);
+                    }).catch(function() {
+                        setStatus('Не удалось скопировать', false);
+                    });
+                } else {
+                    var ta = document.createElement('textarea');
+                    ta.value = machineCode;
+                    document.body.appendChild(ta);
+                    ta.select();
+                    try { document.execCommand('copy'); setStatus('Код скопирован', true); }
+                    catch (e) { setStatus('Не удалось скопировать', false); }
+                    document.body.removeChild(ta);
+                }
+            });
+
+            document.getElementById('licenseFile').addEventListener('change', function(e) {
+                var file = e.target.files && e.target.files[0];
+                if (!file) return;
+                var reader = new FileReader();
+                reader.onload = function() {
+                    textEl.value = String(reader.result || '');
+                };
+                reader.readAsText(file);
+            });
+
+            document.getElementById('activateBtn').addEventListener('click', function() {
+                var raw = (textEl.value || '').trim();
+                if (!raw) {
+                    setStatus('Вставьте текст лицензии или выберите файл', false);
+                    return;
+                }
+                setStatus('Проверка…', true);
+                fetch('api/portable/license/activate', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ licenseText: raw })
+                }).then(function(r) {
+                    return r.json().then(function(j) { return { ok: r.ok, j: j }; });
+                }).then(function(res) {
+                    if (!res.ok) throw new Error((res.j && res.j.error) || 'Ошибка активации');
+                    applyStatus(res.j.status || { valid: true, required: true, machineCode: machineCode });
+                }).catch(function(err) {
+                    setStatus(err.message || String(err), false);
+                });
+            });
+        })();
+    </script>
+</body>
+</html>

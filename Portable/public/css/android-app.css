@@ -1,0 +1,143 @@
+/**
+ * Стили для нативного приложения Volsmap (класс volsmap-android-app на <html>).
+ * Подключается на auth, index и site-admin; дополняет app-mobile.css.
+ */
+
+html.volsmap-android-app {
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+}
+
+html.volsmap-android-app,
+html.volsmap-android-app body {
+    min-height: 100%;
+}
+
+html.volsmap-android-app .container {
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
+}
+
+html.volsmap-android-app.auth-page .auth-container {
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
+}
+
+html.volsmap-android-app .top-header {
+    padding-top: max(10px, var(--volsmap-safe-top, 0px), env(safe-area-inset-top, 0px));
+}
+
+html.volsmap-android-app .modal {
+    padding-top: max(10px, var(--volsmap-safe-top, 0px), env(safe-area-inset-top, 0px));
+    padding-right: max(10px, var(--volsmap-safe-right, 0px), env(safe-area-inset-right, 0px));
+    padding-bottom: max(10px, var(--volsmap-safe-bottom, 0px), env(safe-area-inset-bottom, 0px));
+    padding-left: max(10px, var(--volsmap-safe-left, 0px), env(safe-area-inset-left, 0px));
+    box-sizing: border-box;
+}
+
+html.volsmap-android-app .toast-container {
+    top: max(10px, var(--volsmap-safe-top, 0px), env(safe-area-inset-top, 0px));
+}
+
+html.volsmap-android-app .map-area-wrapper .map {
+    touch-action: pan-x pan-y pinch-zoom;
+}
+
+/* Вход: без ссылок на лендинг */
+html.volsmap-android-app .auth-main-link {
+    display: none !important;
+}
+
+html.volsmap-android-app.auth-page .auth-subtitle {
+    font-size: 0.92rem;
+    line-height: 1.45;
+}
+
+/* Подсказка о режиме просмотра под шапкой карты */
+.volsmap-android-readonly-bar {
+    flex-shrink: 0;
+    padding: 7px 14px;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    text-align: center;
+    color: var(--text-secondary, #64748b);
+    background: color-mix(in srgb, var(--bg-secondary, #f1f5f9) 92%, transparent);
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+}
+
+[data-theme="dark"] .volsmap-android-readonly-bar {
+    color: var(--text-secondary, #94a3b8);
+    background: color-mix(in srgb, var(--bg-secondary, #1e293b) 88%, transparent);
+    border-bottom-color: var(--border-color, #334155);
+}
+
+/* Чат поддержки и cookie — отступы от системной панели */
+html.volsmap-android-app .support-chat-fab-wrap {
+    right: max(16px, var(--volsmap-safe-right, 0px), env(safe-area-inset-right, 0px));
+    bottom: max(16px, var(--volsmap-safe-bottom, 0px), env(safe-area-inset-bottom, 0px));
+}
+
+html.volsmap-android-app .support-chat-panel {
+    padding-bottom: max(0px, var(--volsmap-safe-bottom, 0px), env(safe-area-inset-bottom, 0px));
+}
+
+html.volsmap-android-app .cookie-consent {
+    padding-bottom: max(14px, var(--volsmap-safe-bottom, 0px), env(safe-area-inset-bottom, 0px));
+}
+
+html.volsmap-android-app .org-chat-panel {
+    padding-bottom: max(0px, var(--volsmap-safe-bottom, 0px), env(safe-area-inset-bottom, 0px));
+}
+
+html.volsmap-android-app.volsmap-android-cookies-ok .cookie-consent {
+    display: none !important;
+}
+
+.volsmap-offline-map-banner {
+    flex-shrink: 0;
+    padding: 7px 14px;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    text-align: center;
+    color: #92400e;
+    background: #fef3c7;
+    border-bottom: 1px solid #fcd34d;
+}
+
+[data-theme="dark"] .volsmap-offline-map-banner {
+    color: #fde68a;
+    background: rgba(120, 53, 15, 0.35);
+    border-bottom-color: rgba(251, 191, 36, 0.35);
+}
+
+@media (max-width: 768px) {
+    html.volsmap-android-app .top-header-content {
+        padding-bottom: 6px;
+    }
+
+    html.volsmap-android-app .object-gallery-toolbar {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        align-items: stretch;
+    }
+
+    html.volsmap-android-app .object-gallery-camera-btn,
+    html.volsmap-android-app .object-gallery-upload-btn {
+        width: 100%;
+        min-height: 48px;
+        margin: 0;
+    }
+
+    html.volsmap-android-app .object-gallery-hint {
+        grid-column: 1 / -1;
+    }
+
+    html.volsmap-android-app .search-results {
+        max-height: min(46dvh, 360px);
+    }
+
+    html.volsmap-android-app .modal-content {
+        max-height: calc(100dvh - var(--volsmap-safe-top, 0px) - var(--volsmap-safe-bottom, 0px) - 16px);
+    }
+}

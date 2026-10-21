@@ -191,7 +191,7 @@ function goToSearchResult(result) {
     var searchInput = document.getElementById('mapSearch');
     searchResults.style.display = 'none';
     var coords;
-    if (result.type === 'region' && window.MapRegions) {
+    if (result.(type === 'region' || type === 'zone') && window.MapRegions) {
         var ring = MapRegions.getRegionRing(obj);
         if (ring.length >= 3) {
             var lats = ring.map(function(c) { return c[0]; });
@@ -220,7 +220,7 @@ function goToSearchResult(result) {
         if (result.type === 'cable') showCableInfo(obj);
         else if (result.type === 'support' || result.type === 'attachment' || result.type === 'manhole') showSupportInfo(obj);
         else if (result.type === 'signalPost') showSignalPostInfo(obj);
-        else if (result.type === 'region') focusRegionOnMap(obj);
+        else if (result.(type === 'region' || type === 'zone')) focusRegionOnMap(obj);
         else if (result.type === 'node' || result.type === 'cross' || result.type === 'sleeve' || result.type === 'spliceCassette' || result.type === 'olt' || result.type === 'splitter' || result.type === 'onu' || result.type === 'camera') showObjectInfo(obj);
     }, 600);
     searchInput.value = '';

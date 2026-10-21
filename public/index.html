@@ -411,6 +411,7 @@
                 </div>
                 <div id="searchResults" class="search-results" style="display: none;"></div>
             </div>
+            <button type="button" id="mapRegionCurrentChip" class="map-region-current-chip" hidden title="Текущий регион">Регион</button>
             <!-- Панель пользователя -->
             <div class="user-panel">
                 <div class="user-info" id="userInfo">
@@ -532,14 +533,17 @@
                     <button type="button" class="object-type-chip object-type-chip--teal edit-tool-chip" data-type="mediaConverter" data-edit-tool="object" aria-label="Медиаконвертер" aria-pressed="false"></button>
                     <button type="button" class="object-type-chip object-type-chip--cyan edit-tool-chip" data-type="radioBridge" data-edit-tool="object" aria-label="Радиомост" aria-pressed="false"></button>
                 </div>
-                <div class="edit-tools-group edit-tools-group--actions" role="group" aria-label="Кабель и регионы">
+                <div class="edit-tools-group edit-tools-group--actions" role="group" aria-label="Кабель и зоны">
                     <button type="button" class="edit-tool-chip edit-tool-chip--cable" data-edit-tool="cable" aria-label="Кабель" aria-pressed="false">
                         <span class="object-type-chip__icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h6"></path><path d="M14 12h6"></path><circle cx="12" cy="12" r="2"></circle><path d="M8 8v8"></path><path d="M16 8v8"></path></svg></span>
                         <span class="object-type-chip__label">Кабель</span>
                     </button>
-                    <button type="button" class="edit-tool-chip edit-tool-chip--region" data-edit-tool="region" aria-label="Регионы" aria-pressed="false">
+                    <button type="button" class="edit-tool-chip edit-tool-chip--region" data-edit-tool="region" aria-label="Зоны" aria-pressed="false">
                         <span class="object-type-chip__icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon></svg></span>
-                        <span class="object-type-chip__label">Регионы</span>
+                        <span class="object-type-chip__label">Зоны</span>
+                    </button>
+                    <button type="button" id="moveSelectedToRegionBtn" class="edit-tool-chip" aria-label="Перенести выделенное в регион" title="Перенести выделенные объекты в другой регион">
+                        <span class="object-type-chip__label">В регион…</span>
                     </button>
                 </div>
             </div>
@@ -787,11 +791,11 @@
                                 </div>
                                 <div class="lod-control">
                                     <div class="lod-control-head">
-                                        <label class="lod-control-label" for="lodRegionsZoom">Регионы</label>
+                                        <label class="lod-control-label" for="lodRegionsZoom">Зоны</label>
                                         <span class="lod-control-value" id="lodRegionsZoomValue">10</span>
                                     </div>
                                     <input type="range" id="lodRegionsZoom" class="lod-control-range" min="5" max="16" step="1" value="10" aria-valuemin="5" aria-valuemax="16">
-                                    <p class="lod-control-hint">Показывать регионы начиная с этого зума</p>
+                                    <p class="lod-control-hint">Показывать зоны начиная с этого зума</p>
                                 </div>
                                 <div class="info-dock-actions">
                                     <button type="button" id="lodResetBtn" class="btn-secondary lod-reset-btn" title="Вернуть значения по умолчанию">Сбросить масштаб</button>
@@ -1414,7 +1418,7 @@
                             </svg>
                         </div>
                         <div class="underground-draw-card__titles">
-                            <span id="regionDrawBarTitle" class="underground-draw-card__title">Новый регион</span>
+                            <span id="regionDrawBarTitle" class="underground-draw-card__title">Новый зону</span>
                             <span class="underground-draw-card__mode">Рисование</span>
                         </div>
                         <div class="underground-draw-card__stat" title="Вершин контура">
@@ -1426,7 +1430,7 @@
                     <div class="region-draw-fields">
                         <label class="region-draw-field">
                             <span>Название</span>
-                            <input type="text" id="regionDrawName" class="form-input" placeholder="Регион">
+                            <input type="text" id="regionDrawName" class="form-input" placeholder="Зона">
                         </label>
                         <label class="region-draw-field region-draw-field--color">
                             <span>Заливка</span>
@@ -1816,7 +1820,7 @@
                     </div>
                     <div id="toolPropsRegion" class="tool-props-section" hidden>
                         <div class="regions-panel">
-                            <p class="regions-panel-hint">Список регионов ниже. Карандаш — название, цвет и контур. «Нарисовать регион» — новый контур на карте (минимум 3 точки).</p>
+                            <p class="regions-panel-hint">Список зон ниже. Карандаш — название, цвет и контур. «Нарисовать зону» — новый контур на карте (минимум 3 точки).</p>
                             <button type="button" id="drawRegionBtn" class="btn-primary btn-draw-region">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                                     <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon>
@@ -3419,6 +3423,7 @@
     <script src="js/map/fiber-trace.js?v=trace-dist-fix1"></script>
     <script src="js/map/embedded-splitters.js"></script>
     <script src="js/map/regions.js"></script>
+    <script src="js/app/map-regions.js"></script>
     <script src="js/map/map-perf.js?v=move-sync-rev1"></script>
     <script src="js/map/map-perf-settings.js"></script>
     <script src="js/map/search.js"></script>

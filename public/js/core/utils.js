@@ -40,7 +40,10 @@ function getObjectTypeName(type) {
         case 'manhole': return 'Колодец';
         case 'signalPost': return 'Сигнальный столб';
         case 'cabinet': return 'Ящик';
-        case 'region': return 'Регион';
+        case 'region':
+        case 'zone': return 'Зона';
+        case 'regionLabel':
+        case 'zoneLabel': return 'Подпись зоны';
         default: return 'Объект';
     }
 }
@@ -65,7 +68,8 @@ function getObjectTypePluralLabel(type) {
         case 'radioBridge': return 'Радиомостов';
         case 'switch': return 'Коммутаторов';
         case 'cable': return 'Кабелей';
-        case 'region': return 'Регионов';
+        case 'region':
+        case 'zone': return 'Зон';
         default: return getObjectTypeName(type);
     }
 }

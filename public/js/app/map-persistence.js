@@ -79,23 +79,33 @@ function serializeMapItemFromObject(obj) {
                 if (props.copperSwitchToId) result.copperSwitchToId = props.copperSwitchToId;
             }
             result.revision = revision;
+            var cableMapRid = props.mapRegionId;
+            if (!cableMapRid && typeof getCurrentMapRegionId === 'function') {
+                cableMapRid = getCurrentMapRegionId();
+            }
+            if (cableMapRid) result.mapRegionId = String(cableMapRid);
             return result;
         }
-        if (props.type === 'region') {
+        if (props.type === 'region' || props.type === 'zone') {
             var ringOut = MapRegions.getRegionRing(obj);
             var regionResult = {
-                type: 'region',
+                type: 'zone',
                 name: props.name,
                 geometry: ringOut,
                 fillColor: props.fillColor || MapRegions.DEFAULT_FILL,
                 strokeColor: props.strokeColor || MapRegions.DEFAULT_STROKE,
                 fillOpacity: props.fillOpacity != null ? props.fillOpacity : MapRegions.DEFAULT_FILL_OPACITY,
-                regionVisible: props.regionVisible !== false,
-                regionFillVisible: props.regionFillVisible !== false,
+                zoneVisible: props.zoneVisible !== undefined ? props.zoneVisible !== false : props.regionVisible !== false,
+                zoneFillVisible: props.zoneFillVisible !== undefined ? props.zoneFillVisible !== false : props.regionFillVisible !== false,
                 uniqueId: props.uniqueId,
                 revision: revision
             };
             if (Array.isArray(props.photos) && props.photos.length) regionResult.photos = props.photos;
+            var regionMapRid = props.mapRegionId;
+            if (!regionMapRid && typeof getCurrentMapRegionId === 'function') {
+                regionMapRid = getCurrentMapRegionId();
+            }
+            if (regionMapRid) regionResult.mapRegionId = String(regionMapRid);
             return regionResult;
         }
         const result = {
@@ -314,6 +324,11 @@ function serializeMapItemFromObject(obj) {
             if (props.comment != null) result.comment = props.comment;
         }
         if (Array.isArray(props.photos) && props.photos.length) result.photos = props.photos;
+        var mapRegionId = props.mapRegionId;
+        if (!mapRegionId && typeof getCurrentMapRegionId === 'function') {
+            mapRegionId = getCurrentMapRegionId();
+        }
+        if (mapRegionId) result.mapRegionId = String(mapRegionId);
         return result;
 }
 
@@ -501,7 +516,7 @@ function diffMapSnapshots(fromState, toState) {
     var crossKeySet = Object.create(null);
     function trackItem(item) {
         if (!item) return;
-        if (item.type === 'region') diff.hasRegion = true;
+        if (item.type === 'region' || type === 'zone' || item.type === 'zone') diff.hasRegion = true;
         if (item.type === 'node' && item.geometry) {
             var nk = groupKey(item.geometry);
             if (!nodeKeySet[nk]) { nodeKeySet[nk] = true; diff.nodeGroupKeys.push(nk); }
@@ -1173,18 +1188,37 @@ function loadData() {
         if (!token) return;
 
         function fetchMapFromApi() {
-            return fetch(getApiBase() + '/api/map', { headers: { 'Authorization': 'Bearer ' + token } })
-                .then(function(r) { return r.ok ? r.json() : null; })
-                .then(function(body) {
-                    if (!body || !Array.isArray(body.data)) return false;
-                    if (typeof currentUser !== 'undefined' && currentUser && currentUser.organizationId != null) {
-                        window._mapOrgIdLoaded = String(currentUser.organizationId);
-                    }
-                    if (typeof applyRemoteState === 'function') {
-                        applyRemoteState(body.data, { fromApi: true, organizationId: body.organizationId });
-                    }
-                    return true;
-                });
+            var choose = (typeof chooseMapRegionBeforeLoad === 'function')
+                ? chooseMapRegionBeforeLoad()
+                : Promise.resolve(window.currentMapRegionId || null);
+            return choose.then(function(regionId) {
+                if (!regionId) throw new Error('Регион не выбран');
+                if (typeof setCurrentMapRegionId === 'function') setCurrentMapRegionId(regionId);
+                else window.currentMapRegionId = String(regionId);
+                var url = getApiBase() + '/api/map?regionId=' + encodeURIComponent(regionId);
+                return fetch(url, { headers: { 'Authorization': 'Bearer ' + token } })
+                    .then(function(r) { return r.ok ? r.json() : null; })
+                    .then(function(body) {
+                        if (!body || !Array.isArray(body.data)) return false;
+                        if (typeof currentUser !== 'undefined' && currentUser && currentUser.organizationId != null) {
+                            window._mapOrgIdLoaded = String(currentUser.organizationId);
+                        }
+                        if (body.softWarn && typeof MapRegionsPartition !== 'undefined' && MapRegionsPartition.maybeShowSoftWarn) {
+                            MapRegionsPartition.maybeShowSoftWarn(body.softWarn, true);
+                        }
+                        if (typeof applyRemoteState === 'function') {
+                            applyRemoteState(body.data, {
+                                fromApi: true,
+                                organizationId: body.organizationId,
+                                mapRegionId: regionId
+                            });
+                        }
+                        if (typeof MapRegionsPartition !== 'undefined' && MapRegionsPartition.updateMapRegionChip) {
+                            MapRegionsPartition.updateMapRegionChip();
+                        }
+                        return true;
+                    });
+            });
         }
 
         if (typeof navigator !== 'undefined' && navigator.onLine === false
@@ -1741,7 +1775,15 @@ function reloadMapFromApi(meta) {
     _mapApiReloadTimer = setTimeout(function() {
         _mapApiReloadTimer = null;
         if (shouldSkipSyncMapRefresh(meta.organizationId)) return;
-        fetch(getApiBase() + '/api/map', {
+        var regionId = (typeof getCurrentMapRegionId === 'function' && getCurrentMapRegionId())
+            || window.currentMapRegionId
+            || (meta.regionId != null ? String(meta.regionId) : '');
+        if (!regionId) return;
+        // Чужой регион в map_refresh — не перезатираем текущий срез
+        if (meta.regionId != null && meta.regionId !== '' && String(meta.regionId) !== String(regionId)) {
+            return;
+        }
+        fetch(getApiBase() + '/api/map?regionId=' + encodeURIComponent(regionId), {
             headers: { 'Authorization': 'Bearer ' + getAuthToken() },
             cache: 'no-store'
         }).then(function(r) { return r.ok ? r.json() : null; })
@@ -1753,7 +1795,8 @@ function reloadMapFromApi(meta) {
                 applyRemoteState(body.data, {
                     fromApi: true,
                     organizationId: body.organizationId || meta.organizationId,
-                    forceFull: !!meta.forceFull
+                    forceFull: !!meta.forceFull,
+                    mapRegionId: regionId
                 });
             })
             .catch(function() {});
@@ -1903,7 +1946,7 @@ function applyRemoteStateMerged(data) {
     for (i = 0; i < data.length; i++) {
         item = data[i];
         if (item.type === 'cable') continue;
-        if (item.type === 'region') {
+        if (item.type === 'region' || type === 'zone' || item.type === 'zone') {
             existing = regionByUid.get(item.uniqueId);
             if (existing) {
                 populateRegionFromSerializedData(existing, item);
@@ -2228,7 +2271,7 @@ function applyOperationToMap(op) {
                 return;
             }
         }
-        if (op.data.type === 'region') {
+        if (op.data.type === 'region' || type === 'zone' || op.data.type === 'zone') {
             var newRegion = createRegionFromData(op.data);
             if (newRegion) {
                 updateStats();
@@ -2391,7 +2434,7 @@ function ensureNodeLabelsVisible() {
     objects.forEach(obj => {
         if (obj.properties) {
             const type = obj.properties.get('type');
-            if (!type || type === 'cable' || type === 'cableLabel' || type === 'region' || type === 'regionLabel') return;
+            if (!type || type === 'cable' || type === 'cableLabel' || type === 'region' || type === 'zone' || type === 'regionLabel' || type === 'zoneLabel') return;
             const name = obj.properties.get('name') || '';
             updateObjectLabel(obj, name);
             var label = obj.properties.get('label');
@@ -2427,7 +2470,7 @@ function importDataAssignUniqueIds(data) {
 
 function importDataCreatePlacemarkRef(item) {
     if (!item || item.type === 'cable' || item.type === 'cableLabel') return null;
-    if (item.type === 'region') return createRegionFromData(item);
+    if (item.type === 'region' || type === 'zone' || item.type === 'zone') return createRegionFromData(item);
     return createObjectFromData(item, null, { bulkImport: true });
 }
 
@@ -2992,20 +3035,26 @@ function importData(data, opts, done) {
 }
 
 function populateRegionFromSerializedData(regionObj, data) {
-    if (!regionObj || !data || data.type !== 'region' || !window.MapRegions) return;
+    if (!regionObj || !data || (data.type !== 'region' && data.type !== 'zone') || !window.MapRegions) return;
     var ring = MapRegions.normalizeRing(data.geometry);
     if (ring.length >= 3 && regionObj.geometry) {
         try { regionObj.geometry.setCoordinates([ring]); } catch (e) {}
     }
+    regionObj.properties.set('type', 'zone');
     if (data.name != null) {
         regionObj.properties.set('name', data.name);
-        regionObj.properties.set('balloonContent', data.name ? ('Регион: ' + data.name) : 'Регион');
+        regionObj.properties.set('balloonContent', data.name ? ('Зона: ' + data.name) : 'Зона');
     }
     if (data.fillColor) regionObj.properties.set('fillColor', data.fillColor);
     if (data.strokeColor) regionObj.properties.set('strokeColor', data.strokeColor);
     if (data.fillOpacity != null) regionObj.properties.set('fillOpacity', data.fillOpacity);
-    if (data.regionVisible != null) regionObj.properties.set('regionVisible', data.regionVisible !== false);
-    if (data.regionFillVisible != null) regionObj.properties.set('regionFillVisible', data.regionFillVisible !== false);
+    var zv = data.zoneVisible !== undefined ? data.zoneVisible !== false : data.regionVisible !== false;
+    var zfv = data.zoneFillVisible !== undefined ? data.zoneFillVisible !== false : data.regionFillVisible !== false;
+    regionObj.properties.set('zoneVisible', zv);
+    regionObj.properties.set('zoneFillVisible', zfv);
+    regionObj.properties.set('regionVisible', zv);
+    regionObj.properties.set('regionFillVisible', zfv);
+    if (data.mapRegionId) regionObj.properties.set('mapRegionId', String(data.mapRegionId));
     if (data.revision != null) setMapRevision(regionObj, data.revision);
     if (window.ObjectGallery) ObjectGallery.applyPhotosFromData(regionObj, data);
     else if (Array.isArray(data.photos)) regionObj.properties.set('photos', data.photos);
@@ -3017,7 +3066,13 @@ function populateRegionFromSerializedData(regionObj, data) {
 function populatePlacemarkFromSerializedData(placemark, data) {
     if (!placemark || !data || !data.type) return;
     var type = data.type;
-    if (type === 'region') {
+    if (data.mapRegionId) {
+        placemark.properties.set('mapRegionId', String(data.mapRegionId));
+    } else if (typeof getCurrentMapRegionId === 'function') {
+        var curRid = getCurrentMapRegionId();
+        if (curRid) placemark.properties.set('mapRegionId', curRid);
+    }
+    if (type === 'region' || type === 'zone') {
         populateRegionFromSerializedData(placemark, data);
         return;
     }
@@ -3826,7 +3881,7 @@ var MAP_EXPORT_OBJECT_TYPE_SINGULAR = {
 function resolveMapExportObjectTypeLabel(type, plural) {
     if (!type) return '';
     if (plural) {
-        if (type === 'region') return 'Регионы';
+        if (type === 'region' || type === 'zone') return 'Зоны';
         if (typeof getObjectTypeLabel === 'function') {
             var pluralLabel = getObjectTypeLabel(type);
             if (pluralLabel) return pluralLabel;
@@ -3909,7 +3964,7 @@ function buildPdfExportHtml(data, snapshotHtml) {
     var objectByIndex = Object.create(null);
     mapItems.forEach(function(item, index) {
         if (!item || !item.type) return;
-        if (item.type === 'cable' || item.type === 'cableLabel' || item.type === 'regionLabel') return;
+        if (item.type === 'cable' || item.type === 'cableLabel' || item.type === 'regionLabel' || type === 'zoneLabel') return;
         objectByIndex[index] = item;
     });
     var objectsOnly = mapItems.filter(function(item) {
@@ -4055,7 +4110,7 @@ function collectSnapshotBoundsFromData(data) {
     }
     (Array.isArray(data) ? data : []).forEach(function(item) {
         if (!item || !item.geometry) return;
-        if (item.type === 'cableLabel' || item.type === 'regionLabel') return;
+        if (item.type === 'cableLabel' || item.type === 'regionLabel' || type === 'zoneLabel') return;
         visitCoord(item.geometry);
         // Приоритет для bounds: реальные объекты и связи, но не регион-полигон.
         if (item.type !== 'region') visitCoreCoord(item.geometry);
@@ -4161,7 +4216,7 @@ function filterMapExportDataByBounds(data, bounds) {
     var mapItems = Array.isArray(data) ? data : [];
     return mapItems.filter(function(item) {
         if (!item || !item.type) return false;
-        if (item.type === 'cableLabel' || item.type === 'regionLabel') return false;
+        if (item.type === 'cableLabel' || item.type === 'regionLabel' || type === 'zoneLabel') return false;
         return isMapExportItemInBounds(item, bounds, mapItems);
     });
 }
@@ -4179,7 +4234,7 @@ function getMapPdfPlacemarkCount() {
     objects.forEach(function(obj) {
         if (!obj || !obj.properties) return;
         var type = obj.properties.get('type');
-        if (!type || type === 'cable' || type === 'cableLabel' || type === 'regionLabel' || type === 'region') return;
+        if (!type || type === 'cable' || type === 'cableLabel' || type === 'regionLabel' || type === 'zoneLabel' || type === 'region' || type === 'zone') return;
         count++;
     });
     return count;
@@ -4625,7 +4680,7 @@ function prepareMapVisibilityForPdfCapture(boundsRect, opts) {
     objects.forEach(function(obj) {
         if (!obj || !obj.options || !obj.properties) return;
         var type = obj.properties.get('type');
-        if (type === 'region') {
+        if (type === 'region' || type === 'zone') {
             try { obj.options.set('visible', true); } catch (eRegion) {}
             return;
         }
@@ -4893,7 +4948,7 @@ function appendMapPdfReportTables(doc, data, helpers, fullData, listScopeLabel, 
     var objectByIndex = Object.create(null);
     sourceItems.forEach(function(item, index) {
         if (!item || !item.type) return;
-        if (item.type === 'cable' || item.type === 'cableLabel' || item.type === 'regionLabel') return;
+        if (item.type === 'cable' || item.type === 'cableLabel' || item.type === 'regionLabel' || type === 'zoneLabel') return;
         objectByIndex[index] = item;
     });
     var objectsTitle = listScopeLabel ? ('Объекты (' + listScopeLabel + ')') : 'Объекты';

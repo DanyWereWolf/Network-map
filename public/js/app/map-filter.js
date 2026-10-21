@@ -664,7 +664,7 @@ function isMapFilterObjVisible(obj, filter, hiddenRegions) {
     if (!obj || !obj.properties) return false;
     filter = filter || (typeof mapFilter !== 'undefined' && mapFilter ? mapFilter : getMapFilterState());
     var type = obj.properties.get('type');
-    if (type === 'cable' || type === 'cableLabel' || type === 'region') return false;
+    if (type === 'cable' || type === 'cableLabel' || (type === 'region' || type === 'zone')) return false;
     if (type === 'node') {
         if (!filter.node) return false;
         if (filter.nodeAggregationOnly) return obj.properties.get('nodeKind') === 'aggregation';
@@ -693,7 +693,7 @@ function applyMapFilterForObject(obj) {
     mapFilter = filter;
     var type = obj.properties.get('type');
     var visible = false;
-    if (type === 'cable' || type === 'cableLabel' || type === 'region') {
+    if (type === 'cable' || type === 'cableLabel' || (type === 'region' || type === 'zone')) {
         return;
     }
     visible = isMapFilterObjVisible(obj, filter);
@@ -812,7 +812,7 @@ function applyMapFilter() {
         } else if (type === 'cableLabel') {
             var cables = obj.properties.get('cables');
             visible = Array.isArray(cables) && cables.some(function(c) { return visibleCables.has(c); });
-        } else if (type === 'region') {
+        } else if ((type === 'region' || type === 'zone')) {
             if (regionEditTarget && obj === regionEditTarget) {
                 visible = false;
             } else if (obj.properties && obj.properties.get('_detachedForGeometryEdit')) {
@@ -881,7 +881,7 @@ function applyViewportCullToMap() {
         try {
             if (obj.options.get('visible') === false) return;
             var type = obj.properties && obj.properties.get('type');
-            if (type === 'region') return;
+            if ((type === 'region' || type === 'zone')) return;
             if (!MapPerf.isObjectInViewport(obj, bounds)) {
                 obj.options.set('visible', false);
                 var label = obj.properties.get('label');

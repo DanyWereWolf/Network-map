@@ -1,5 +1,6 @@
 /**
- * Регионы карты: полигоны, подсчёт объектов внутри, скрытие региона и содержимого.
+ * Зоны карты (ранее «регионы»): полигоны, подсчёт объектов внутри, скрытие зоны и содержимого.
+ * type: 'zone' (legacy: 'region').
  */
 (function (global) {
     var DEFAULT_FILL = '#3b82f6';
@@ -93,7 +94,7 @@
 
     function isStrayRegionNamePlacemark(obj) {
         if (!obj || !obj.properties) return false;
-        if (obj.properties.get('type') === 'regionLabel') return true;
+        if (isZoneLabelType(obj.properties.get('type'))) return true;
         if (obj.properties.get('parentRegionId')) return true;
         try {
             var layout = obj.options && obj.options.get('iconLayout');
@@ -223,20 +224,33 @@
         return inside;
     }
 
+    function isZoneType(type) {
+        return type === 'zone' || type === 'region';
+    }
+
+    function isZoneLabelType(type) {
+        return type === 'zoneLabel' || type === 'regionLabel';
+    }
+
     function getAllRegions(objects) {
         if (!Array.isArray(objects)) return [];
         return objects.filter(function (o) {
-            return o && o.properties && o.properties.get('type') === 'region';
+            if (!o || !o.properties) return false;
+            return isZoneType(o.properties.get('type'));
         });
     }
 
     function isRegionVisible(regionObj) {
         if (!regionObj || !regionObj.properties) return true;
+        var zv = regionObj.properties.get('zoneVisible');
+        if (zv !== undefined) return zv !== false;
         return regionObj.properties.get('regionVisible') !== false;
     }
 
     function isRegionFillVisible(regionObj) {
         if (!regionObj || !regionObj.properties) return true;
+        var zv = regionObj.properties.get('zoneFillVisible');
+        if (zv !== undefined) return zv !== false;
         return regionObj.properties.get('regionFillVisible') !== false;
     }
 
@@ -306,7 +320,7 @@
     function isObjectInAnyHiddenRegion(obj, objects, hiddenOverride) {
         if (!obj || !obj.properties) return false;
         var type = obj.properties.get('type');
-        if (type === 'region' || type === 'cableLabel' || type === 'regionLabel') return false;
+        if (isZoneType(type) || type === 'cableLabel' || isZoneLabelType(type)) return false;
         var hidden = hiddenOverride || getHiddenRegions(objects);
         if (!hidden || !hidden.length) return false;
         if (type === 'cable') return isCableInAnyHiddenRegion(obj, objects, hidden);
@@ -336,7 +350,7 @@
         objects.forEach(function (obj) {
             if (!obj || !obj.properties) return;
             var type = obj.properties.get('type');
-            if (type === 'region' || type === 'cableLabel') return;
+            if (isZoneType(type) || type === 'cableLabel') return;
             if (type === 'cable') {
                 if (isCableInRing(obj, ring)) {
                     result.cables.push(obj);
@@ -493,7 +507,8 @@
             hasBalloon: false,
             hasHint: false
         });
-        pm.properties.set('type', 'regionLabel');
+        pm.properties.set('type', 'zoneLabel');
+        pm.properties.set('parentZoneId', regionId);
         pm.properties.set('parentRegionId', regionId);
         return pm;
     }
@@ -722,18 +737,24 @@
         return 'Внутри: ' + total + (parts.length ? ' (' + parts.join(', ') + ')' : '');
     }
 
-    global.MapRegions = {
+    var api = {
         DEFAULT_FILL: DEFAULT_FILL,
         DEFAULT_STROKE: DEFAULT_STROKE,
         DEFAULT_FILL_OPACITY: DEFAULT_FILL_OPACITY,
         PLACEMARK_TYPES: PLACEMARK_TYPES,
+        isZoneType: isZoneType,
+        isZoneLabelType: isZoneLabelType,
         normalizeRing: normalizeRing,
         getRegionRing: getRegionRing,
         pointInPolygon: pointInPolygon,
         getAllRegions: getAllRegions,
+        getAllZones: getAllRegions,
         isRegionVisible: isRegionVisible,
+        isZoneVisible: isRegionVisible,
         isRegionFillVisible: isRegionFillVisible,
+        isZoneFillVisible: isRegionFillVisible,
         getHiddenRegions: getHiddenRegions,
+        getHiddenZones: getHiddenRegions,
         hasAnyHiddenRegion: hasAnyHiddenRegion,
         invalidateHiddenRegionsCache: invalidateHiddenRegionsCache,
         collectObjectsInRegion: collectObjectsInRegion,
@@ -755,4 +776,6 @@
         syncConnectionLinesVisibility: syncConnectionLinesVisibility,
         countSummaryText: countSummaryText
     };
+    global.MapRegions = api;
+    global.MapZones = api;
 })(typeof window !== 'undefined' ? window : this);

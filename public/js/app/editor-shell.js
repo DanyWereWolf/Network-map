@@ -116,7 +116,7 @@
         if (regionSec) regionSec.hidden = which !== 'region';
         if (empty) empty.hidden = !!which;
         if (title) {
-            title.textContent = which === 'cable' ? 'Кабель' : (which === 'region' ? 'Регион' : 'Объект');
+            title.textContent = which === 'cable' ? 'Кабель' : (which === 'region' ? 'Зона' : 'Объект');
         }
         if (sub) {
             if (which === 'object') {

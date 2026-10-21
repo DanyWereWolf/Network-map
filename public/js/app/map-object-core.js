@@ -11,6 +11,12 @@ function getObjectUniqueId(obj) {
         // Регистрируем только при создании id — не на каждый вызов (иначе spatial reindex на каждом RAF).
         if (typeof MapPerf !== 'undefined') MapPerf.registerMapObject(obj);
     }
+    try {
+        if (!obj.properties.get('mapRegionId') && typeof getCurrentMapRegionId === 'function') {
+            var mapRid = getCurrentMapRegionId();
+            if (mapRid) obj.properties.set('mapRegionId', mapRid);
+        }
+    } catch (eMapReg) {}
     return id;
 }
 

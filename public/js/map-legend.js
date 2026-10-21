@@ -81,11 +81,11 @@
         html += '</div>';
 
         html += '<div class="legend-group">';
-        html += '<p class="legend-group-title">Регионы</p>';
+        html += '<p class="legend-group-title">Зоны</p>';
         html += '<p class="legend-group-hint">Произвольная область на карте; объекты внутри учитываются в регионе. Скрытый регион скрывает и своё содержимое.</p>';
         html += '<div class="legend-item legend-item--cable">' +
             '<span class="legend-line legend-line--solid" style="--legend-color:#6366f1;--legend-width:10px;opacity:0.35;background:#6366f1;border-radius:2px;height:10px" aria-hidden="true"></span>' +
-            '<span class="legend-text">Регион (заливка)</span></div>';
+            '<span class="legend-text">Зона (заливка)</span></div>';
         html += '</div>';
 
         var copper = getCableMeta('copper');

@@ -245,13 +245,24 @@ function handleFileImport(e) {
         if (!base || !token) {
             throw new Error('Для сохранения импорта нужна авторизация (API).');
         }
+        var regionId = (typeof getCurrentMapRegionId === 'function' && getCurrentMapRegionId())
+            || (typeof window !== 'undefined' && window.currentMapRegionId) || '';
+        var payload = { data: serialized };
+        if (regionId) {
+            payload.regionId = String(regionId);
+            serialized.forEach(function (it) {
+                if (it && typeof it === 'object' && !it.mapRegionId) it.mapRegionId = String(regionId);
+            });
+        } else {
+            payload.replaceAll = true;
+        }
         var res = await fetch(base.replace(/\/$/, '') + '/api/map', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': 'Bearer ' + token
             },
-            body: JSON.stringify({ data: serialized })
+            body: JSON.stringify(payload)
         });
         var body = null;
         try { body = await res.json(); } catch (eJson) { body = null; }

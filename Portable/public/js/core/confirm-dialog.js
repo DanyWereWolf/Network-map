@@ -1,0 +1,145 @@
+/**
+ * Модальное окно подтверждения (замена confirm).
+ */
+(function() {
+    var modal = null;
+    var resolveFn = null;
+    var escapeHandler = null;
+    var activeOptions = null;
+    var bound = false;
+    var blockEscapeCaptureHandler = null;
+
+    function isEscapeBlockActive() {
+        return isConfirmOpen() && activeOptions && activeOptions.closeOnEscape === false;
+    }
+
+    function attachEscapeBlock() {
+        if (blockEscapeCaptureHandler) return;
+        blockEscapeCaptureHandler = function(e) {
+            if (e.key !== 'Escape' && e.key !== 'Esc') return;
+            if (!isEscapeBlockActive()) return;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+        };
+        document.addEventListener('keydown', blockEscapeCaptureHandler, true);
+    }
+
+    function detachEscapeBlock() {
+        if (!blockEscapeCaptureHandler) return;
+        document.removeEventListener('keydown', blockEscapeCaptureHandler, true);
+        blockEscapeCaptureHandler = null;
+    }
+
+    function getModal() {
+        if (modal) return modal;
+        modal = document.getElementById('confirmModal');
+        if (!modal) return null;
+        if (!bound) {
+            bound = true;
+            var cancelBtn = document.getElementById('confirmModalCancel');
+            var confirmBtn = document.getElementById('confirmModalConfirm');
+            var closeBtn = document.querySelector('.close-confirm-modal');
+            if (cancelBtn) cancelBtn.addEventListener('click', function() { hide(true); });
+            if (confirmBtn) confirmBtn.addEventListener('click', function() { hide(false); });
+            if (closeBtn) {
+                closeBtn.addEventListener('click', function() {
+                    if (activeOptions && activeOptions.allowCloseButton === false) return;
+                    hide(true, true);
+                });
+            }
+            modal.addEventListener('click', function(e) {
+                if (e.target !== modal) return;
+                if (activeOptions && activeOptions.closeOnBackdrop === false) return;
+                hide(true, true);
+            });
+        }
+        return modal;
+    }
+
+    function isConfirmOpen() {
+        var m = getModal();
+        return !!(m && m.style.display && m.style.display !== 'none');
+    }
+
+    /** dismissed — закрыто крестиком / Esc / кликом по фону (а не кнопкой «Отмена»). */
+    function hide(cancelled, dismissed) {
+        detachEscapeBlock();
+        if (escapeHandler) {
+            document.removeEventListener('keydown', escapeHandler);
+            escapeHandler = null;
+        }
+        var m = getModal();
+        if (m) {
+            m.style.display = 'none';
+            m.classList.remove('confirm-modal--open');
+        }
+        var opts = activeOptions;
+        activeOptions = null;
+        if (resolveFn) {
+            var r = resolveFn;
+            resolveFn = null;
+            if (dismissed && opts && Object.prototype.hasOwnProperty.call(opts, 'dismissValue')) {
+                r(opts.dismissValue);
+            } else {
+                r(!cancelled);
+            }
+        }
+    }
+
+    function showConfirm(message, title, options) {
+        options = options || {};
+        if (isConfirmOpen()) {
+            return Promise.resolve(false);
+        }
+        var m = getModal();
+        if (!m) return Promise.resolve(false);
+
+        activeOptions = options;
+        var titleEl = document.getElementById('confirmModalTitle');
+        var msgEl = document.getElementById('confirmModalMessage');
+        var confirmBtn = document.getElementById('confirmModalConfirm');
+        var cancelBtn = document.getElementById('confirmModalCancel');
+        var closeBtn = document.querySelector('.close-confirm-modal');
+
+        if (titleEl) titleEl.textContent = title || 'Подтверждение';
+        if (msgEl) msgEl.textContent = message || 'Продолжить?';
+        var avatarEl = document.getElementById('confirmModalAvatar');
+        if (avatarEl) {
+            var emotion = options.avatarEmotion || 'question';
+            if (window.AssistantAvatars) {
+                AssistantAvatars.applyTo(avatarEl, emotion);
+            } else {
+                avatarEl.src = 'icons/assistant/vola-question.png';
+            }
+        }
+        if (confirmBtn) confirmBtn.textContent = options.confirmText || 'Удалить';
+        if (cancelBtn) cancelBtn.textContent = options.cancelText || 'Отмена';
+        if (closeBtn) {
+            closeBtn.style.display = options.allowCloseButton === false ? 'none' : '';
+        }
+
+        m.style.display = 'block';
+        m.classList.add('confirm-modal--open');
+
+        var closeOnEscape = options.closeOnEscape !== false;
+        if (closeOnEscape) {
+            escapeHandler = function(e) {
+                if (e.key === 'Escape') hide(true, true);
+            };
+            document.addEventListener('keydown', escapeHandler);
+        } else {
+            attachEscapeBlock();
+        }
+
+        return new Promise(function(resolve) {
+            resolveFn = resolve;
+        });
+    }
+
+    window.showConfirm = showConfirm;
+    window.isConfirmModalOpen = isConfirmOpen;
+    window.isConfirmModalBlockingEscape = isEscapeBlockActive;
+    window.cancelConfirmModal = function() {
+        if (isConfirmOpen()) hide(true, true);
+    };
+})();

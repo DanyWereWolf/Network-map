@@ -1314,6 +1314,10 @@
                             </button>
 
                             <span class="admin-nav-group-label admin-nav-group-label--spaced">Система</span>
+                            <button type="button" class="admin-nav-item" role="tab" data-tab="portable-licenses" id="nav-portable-licenses">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                                <span class="admin-nav-label">Лицензии Portable</span>
+                            </button>
                             <button type="button" class="admin-nav-item" role="tab" data-tab="account" id="nav-account">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                                 <span class="admin-nav-label">Аккаунт</span>
@@ -2252,6 +2256,66 @@
                     </div>
                 </section>
 
+                <!-- Лицензии Portable -->
+                <section id="tab-portable-licenses" class="tab-content">
+                    <div class="panel-head">
+                        <details class="panel-help">
+                            <summary>Справка по разделу</summary>
+                            <ul class="fact-list">
+                                <li>Бессрочные офлайн-лицензии для Portable: клиент присылает <strong>код машины</strong>, вы выдаёте файл лицензии.</li>
+                                <li>Проверок по сети нет — подходит для закрытых сетей. Смена сервера = перевыпуск по новому коду.</li>
+                                <li>Публичный ключ один раз скопируйте в <code>portableLicensePublicKey</code> в <code>server-config.json</code> Portable.</li>
+                                <li>Отзыв в этой панели — учёт у вас; уже выданный файл на машине клиента сам не отзовётся (офлайн).</li>
+                            </ul>
+                        </details>
+                    </div>
+                    <div class="field-row" style="align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+                        <div class="field-col" style="flex:1;min-width:220px;">
+                            <label for="plCustomer">Клиент</label>
+                            <input id="plCustomer" type="text" class="form-input" placeholder="ООО Ромашка" maxlength="200">
+                        </div>
+                        <div class="field-col" style="flex:1;min-width:220px;">
+                            <label for="plMachineCode">Код машины</label>
+                            <input id="plMachineCode" type="text" class="form-input" placeholder="A7F3-C2E9-…" autocomplete="off">
+                        </div>
+                        <div class="field-col" style="flex:1;min-width:180px;">
+                            <label for="plNote">Заметка</label>
+                            <input id="plNote" type="text" class="form-input" placeholder="Договор / контакт" maxlength="500">
+                        </div>
+                        <button type="button" class="btn-sm-primary" id="plCreateBtn">Создать лицензию</button>
+                    </div>
+                    <div class="field-row" style="gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+                        <button type="button" class="btn-sm" id="plCopyPublicKeyBtn">Скопировать публичный ключ</button>
+                        <button type="button" class="btn-sm" id="plRefreshBtn">Обновить список</button>
+                        <span class="admin-sync-meta" id="plPublicKeyHint"></span>
+                    </div>
+                    <div id="plLastLicenseBox" class="panel" style="display:none;margin-bottom:16px;padding:12px;">
+                        <strong>Новая лицензия</strong>
+                        <p class="license-hint" style="margin:6px 0 8px;color:var(--text-muted,#64748b);font-size:0.875rem;">Скопируйте или скачайте файл и передайте клиенту. Повторно скачать можно из таблицы.</p>
+                        <textarea id="plLastLicenseText" class="form-input" style="min-height:140px;font-family:ui-monospace,monospace;font-size:12px;" readonly></textarea>
+                        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+                            <button type="button" class="btn-sm-primary" id="plCopyLicenseBtn">Скопировать JSON</button>
+                            <button type="button" class="btn-sm" id="plDownloadLicenseBtn">Скачать .json</button>
+                        </div>
+                    </div>
+                    <div class="table-wrap table-wrap--scroll">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Клиент</th>
+                                    <th>Код машины</th>
+                                    <th>Статус</th>
+                                    <th>Выдана</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="plLicensesBody">
+                                <tr><td colspan="5">Загрузка…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
                 <!-- Аккаунт -->
                 <section id="tab-account" class="tab-content">
                     <div class="panel-head">
@@ -2347,6 +2411,7 @@
             broadcast: 'Рассылка',
             support: 'Обратная связь',
             updates: 'Новости',
+            'portable-licenses': 'Лицензии Portable',
             account: 'Аккаунт'
         };
 
@@ -3818,6 +3883,8 @@
                 loadShowcase();
                 loadMaintenanceNotice();
                 loadProductUpdates();
+                loadPortableLicenses();
+                loadPortableLicensePublicKey();
                 if (typeof window.adminLoadBroadcastRecipients === 'function') window.adminLoadBroadcastRecipients();
                 if (typeof window.adminLoadStoreBackups === 'function') window.adminLoadStoreBackups();
                 if (typeof window.adminLoadStorageStatus === 'function') window.adminLoadStorageStatus();
@@ -4500,6 +4567,207 @@
                 })
                 .catch(function() {});
         }
+
+        var plPublicKeyCache = '';
+        var plLastLicenseMeta = null;
+
+        function showPlLicenseResult(payload) {
+            var box = document.getElementById('plLastLicenseBox');
+            var ta = document.getElementById('plLastLicenseText');
+            if (!box || !ta) return;
+            var text = (payload && payload.licenseText) || (payload && payload.licenseDocument
+                ? JSON.stringify(payload.licenseDocument, null, 2) : '');
+            ta.value = text;
+            plLastLicenseMeta = payload && payload.license ? payload.license : null;
+            box.style.display = text ? 'block' : 'none';
+        }
+
+        function renderPortableLicenses(list) {
+            var body = document.getElementById('plLicensesBody');
+            if (!body) return;
+            list = Array.isArray(list) ? list : [];
+            if (!list.length) {
+                body.innerHTML = '<tr><td colspan="5">Лицензий пока нет</td></tr>';
+                return;
+            }
+            body.innerHTML = list.map(function(lic) {
+                var status = String(lic.status || 'active');
+                var statusLabel = status === 'revoked' ? 'отозвана' : 'активна';
+                var issued = lic.issuedAt ? String(lic.issuedAt).slice(0, 19).replace('T', ' ') : '—';
+                var id = encodeURIComponent(lic.id || '');
+                var actions = '<button type="button" class="btn-sm" data-pl-action="download" data-id="' + id + '">Файл</button> ';
+                if (status !== 'revoked') {
+                    actions += '<button type="button" class="btn-sm" data-pl-action="reissue" data-id="' + id + '">Перевыпуск</button> ';
+                    actions += '<button type="button" class="btn-sm" data-pl-action="revoke" data-id="' + id + '">Отозвать</button>';
+                }
+                return '<tr>' +
+                    '<td>' + escapeHtml(lic.customer || '—') +
+                    (lic.note ? '<div style="font-size:12px;color:var(--text-muted,#64748b)">' + escapeHtml(lic.note) + '</div>' : '') +
+                    '</td>' +
+                    '<td><code>' + escapeHtml(lic.machineCode || lic.machineFingerprint || '—') + '</code></td>' +
+                    '<td>' + escapeHtml(statusLabel) + '</td>' +
+                    '<td>' + escapeHtml(issued) + '</td>' +
+                    '<td>' + actions + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        function loadPortableLicenses() {
+            var body = document.getElementById('plLicensesBody');
+            if (!body) return Promise.resolve();
+            return fetch('api/admin/portable-licenses', { credentials: 'include', headers: authHeaders() })
+                .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, j: j }; }); })
+                .then(function(res) {
+                    if (!res.ok) throw new Error((res.j && res.j.error) || 'Ошибка загрузки');
+                    renderPortableLicenses(res.j.licenses || []);
+                })
+                .catch(function(err) {
+                    body.innerHTML = '<tr><td colspan="5">' + escapeHtml(err.message || String(err)) + '</td></tr>';
+                });
+        }
+
+        function loadPortableLicensePublicKey() {
+            return fetch('api/admin/portable-licenses/public-key', { credentials: 'include', headers: authHeaders() })
+                .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, j: j }; }); })
+                .then(function(res) {
+                    if (!res.ok) throw new Error((res.j && res.j.error) || 'Ошибка ключа');
+                    plPublicKeyCache = res.j.publicKey || '';
+                    var hint = document.getElementById('plPublicKeyHint');
+                    if (hint) hint.textContent = plPublicKeyCache
+                        ? 'Публичный ключ готов (Ed25519)'
+                        : 'Ключ не создан';
+                })
+                .catch(function() {
+                    var hint = document.getElementById('plPublicKeyHint');
+                    if (hint) hint.textContent = 'Не удалось загрузить публичный ключ';
+                });
+        }
+
+        (function bindPortableLicenseUi() {
+            var createBtn = document.getElementById('plCreateBtn');
+            if (!createBtn) return;
+            createBtn.addEventListener('click', function() {
+                var customer = (document.getElementById('plCustomer') || {}).value || '';
+                var machineCode = (document.getElementById('plMachineCode') || {}).value || '';
+                var note = (document.getElementById('plNote') || {}).value || '';
+                fetch('api/admin/portable-licenses', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+                    body: JSON.stringify({ customer: customer, machineCode: machineCode, note: note })
+                }).then(function(r) {
+                    return r.json().then(function(j) { return { ok: r.ok, j: j }; });
+                }).then(function(res) {
+                    if (!res.ok) throw new Error((res.j && res.j.error) || 'Ошибка');
+                    showPlLicenseResult(res.j);
+                    loadPortableLicenses();
+                }).catch(function(err) {
+                    alert('Ошибка: ' + (err.message || err));
+                });
+            });
+            var copyKeyBtn = document.getElementById('plCopyPublicKeyBtn');
+            if (copyKeyBtn) {
+                copyKeyBtn.addEventListener('click', function() {
+                    var doCopy = function(text) {
+                        if (!text) { alert('Публичный ключ пуст'); return; }
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                            navigator.clipboard.writeText(text).then(function() {
+                                alert('Публичный ключ скопирован. Вставьте в Portable server-config.json → portableLicensePublicKey');
+                            });
+                        } else {
+                            prompt('Скопируйте публичный ключ:', text);
+                        }
+                    };
+                    if (plPublicKeyCache) doCopy(plPublicKeyCache);
+                    else loadPortableLicensePublicKey().then(function() { doCopy(plPublicKeyCache); });
+                });
+            }
+            var refreshBtn = document.getElementById('plRefreshBtn');
+            if (refreshBtn) refreshBtn.addEventListener('click', function() {
+                loadPortableLicenses();
+                loadPortableLicensePublicKey();
+            });
+            var copyLicBtn = document.getElementById('plCopyLicenseBtn');
+            if (copyLicBtn) {
+                copyLicBtn.addEventListener('click', function() {
+                    var ta = document.getElementById('plLastLicenseText');
+                    var text = ta && ta.value;
+                    if (!text) return;
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(text).then(function() { alert('Лицензия скопирована'); });
+                    } else {
+                        ta.select();
+                        document.execCommand('copy');
+                    }
+                });
+            }
+            var dlBtn = document.getElementById('plDownloadLicenseBtn');
+            if (dlBtn) {
+                dlBtn.addEventListener('click', function() {
+                    var ta = document.getElementById('plLastLicenseText');
+                    if (!ta || !ta.value) return;
+                    var name = 'portable-license' + (plLastLicenseMeta && plLastLicenseMeta.id ? ('-' + plLastLicenseMeta.id) : '') + '.json';
+                    var blob = new Blob([ta.value], { type: 'application/json' });
+                    var a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = name;
+                    a.click();
+                    setTimeout(function() { URL.revokeObjectURL(a.href); }, 1000);
+                });
+            }
+            var tbody = document.getElementById('plLicensesBody');
+            if (tbody) {
+                tbody.addEventListener('click', function(e) {
+                    var btn = e.target.closest('button[data-pl-action]');
+                    if (!btn) return;
+                    var action = btn.getAttribute('data-pl-action');
+                    var id = decodeURIComponent(btn.getAttribute('data-id') || '');
+                    if (!id) return;
+                    if (action === 'download') {
+                        fetch('api/admin/portable-licenses/' + encodeURIComponent(id) + '/document', {
+                            credentials: 'include', headers: authHeaders()
+                        }).then(function(r) {
+                            return r.json().then(function(j) { return { ok: r.ok, j: j }; });
+                        }).then(function(res) {
+                            if (!res.ok) throw new Error((res.j && res.j.error) || 'Ошибка');
+                            showPlLicenseResult(res.j);
+                        }).catch(function(err) { alert('Ошибка: ' + (err.message || err)); });
+                        return;
+                    }
+                    if (action === 'revoke') {
+                        if (!confirm('Отметить лицензию как отозванную в учёте?')) return;
+                        fetch('api/admin/portable-licenses/' + encodeURIComponent(id) + '/revoke', {
+                            method: 'POST', credentials: 'include',
+                            headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+                            body: '{}'
+                        }).then(function(r) {
+                            return r.json().then(function(j) { return { ok: r.ok, j: j }; });
+                        }).then(function(res) {
+                            if (!res.ok) throw new Error((res.j && res.j.error) || 'Ошибка');
+                            loadPortableLicenses();
+                        }).catch(function(err) { alert('Ошибка: ' + (err.message || err)); });
+                        return;
+                    }
+                    if (action === 'reissue') {
+                        var newCode = prompt('Новый код машины (оставьте пустым, чтобы оставить прежний):', '');
+                        if (newCode === null) return;
+                        var body = {};
+                        if (String(newCode).trim()) body.machineCode = String(newCode).trim();
+                        fetch('api/admin/portable-licenses/' + encodeURIComponent(id) + '/reissue', {
+                            method: 'POST', credentials: 'include',
+                            headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+                            body: JSON.stringify(body)
+                        }).then(function(r) {
+                            return r.json().then(function(j) { return { ok: r.ok, j: j }; });
+                        }).then(function(res) {
+                            if (!res.ok) throw new Error((res.j && res.j.error) || 'Ошибка');
+                            showPlLicenseResult(res.j);
+                            loadPortableLicenses();
+                        }).catch(function(err) { alert('Ошибка: ' + (err.message || err)); });
+                    }
+                });
+            }
+        })();
 
         var freeShowcaseSaveBtn = document.getElementById('freeShowcaseSaveBtn');
         if (freeShowcaseSaveBtn) {

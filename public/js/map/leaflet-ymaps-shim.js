@@ -706,7 +706,8 @@
         });
 
         if (this._type === 'leaflet#orthophoto') {
-            this._loadBasemap();
+            // Старт карты: без баннера — подсказка только при ручном выборе «Ортофото».
+            this._loadBasemap({ silent: true });
         } else {
             this._applyBasemapType(this._type);
         }
@@ -743,8 +744,9 @@
         return base + '/api/basemap/tiles/' + encodeURIComponent(packId) + '/{z}/{x}/{y}.png' + q;
     };
 
-    MapShim.prototype._loadBasemap = function () {
+    MapShim.prototype._loadBasemap = function (opts) {
         var self = this;
+        var silent = !!(opts && opts.silent);
         var loadId = (this._basemapLoadId = (this._basemapLoadId || 0) + 1);
         var token = this._authToken();
         var headers = {};
@@ -754,10 +756,17 @@
             .then(function (data) {
                 // Пользователь уже ушёл на Яндекс/OSM — не возвращаем ортофото поверх.
                 if (loadId !== self._basemapLoadId) return;
-                if (self._type && self._type !== 'leaflet#orthophoto') return;
+                if (self._type && self._type !== 'leaflet#orthophoto') {
+                    self._showNoBasemapBanner(false);
+                    return;
+                }
                 if (!data || !data.packId) {
                     try { global._volsmapHasActiveBasemap = false; } catch (eNo) {}
-                    self._showNoBasemapBanner(true);
+                    // Баннер только если пользователь сам выбрал «Ортофото» в меню слоёв.
+                    self._showNoBasemapBanner(!silent);
+                    if (silent) {
+                        try { self._applyBasemapType('leaflet#none'); } catch (eNone) {}
+                    }
                     return;
                 }
                 self._showNoBasemapBanner(false);
@@ -765,9 +774,15 @@
             })
             .catch(function () {
                 if (loadId !== self._basemapLoadId) return;
-                if (self._type && self._type !== 'leaflet#orthophoto') return;
+                if (self._type && self._type !== 'leaflet#orthophoto') {
+                    self._showNoBasemapBanner(false);
+                    return;
+                }
                 try { global._volsmapHasActiveBasemap = false; } catch (eFail) {}
-                self._showNoBasemapBanner(true);
+                self._showNoBasemapBanner(!silent);
+                if (silent) {
+                    try { self._applyBasemapType('leaflet#none'); } catch (eNone2) {}
+                }
             });
     };
 
@@ -922,10 +937,12 @@
             this._type = 'leaflet#orthophoto';
             this._clearBasemapStack();
             if (this._lastManifest && this._lastManifest.packId) {
+                this._showNoBasemapBanner(false);
                 this.setBasemapPack(this._lastManifest);
                 return;
             }
-            this._loadBasemap();
+            // Ручной выбор слоя — можно показать подсказку, если пакета ещё нет.
+            this._loadBasemap({ silent: false });
             this.events.fire('typechange', { target: this });
             return;
         }

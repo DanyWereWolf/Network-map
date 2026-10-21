@@ -635,23 +635,162 @@ app.get('/api/map', (req, res) => {
         }
         var orgId = (user && user.organizationId) ? user.organizationId : null;
         if (!orgId && user) return res.status(403).json({ error: 'Выберите организацию или привяжите учётную запись к организации' });
+        var regionId = req.query && req.query.regionId != null ? String(req.query.regionId).trim() : '';
+        if (!regionId) {
+            return res.status(400).json({
+                error: 'Укажите regionId. Сначала получите список регионов: GET /api/map-regions',
+                code: 'MAP_REGION_REQUIRED'
+            });
+        }
+        if (orgId && db.ensureMapRegionsMigrated) {
+            try { db.ensureMapRegionsMigrated(orgId); } catch (eMig) {}
+        }
         // Живое sync-состояние приоритетнее store: иначе reload до debounce (1.5с)
         // отдаёт карту без только что добавленного кабеля.
-        var data = [];
+        var full = [];
         if (orgId) {
             var live = null;
             try {
                 live = getSyncStateForOrg(orgId, { forceFromDb: false });
             } catch (eLive) { live = null; }
             if (live && Array.isArray(live.data) && live.data.length) {
-                data = live.data;
+                full = live.data;
             } else {
-                data = db.getMapData(orgId) || [];
+                full = db.getMapData(orgId) || [];
             }
         }
-        res.json({ data: data, organizationId: orgId || null });
+        var core = db.mapRegionsCore;
+        var data = core ? core.filterItemsByRegionId(full, regionId) : full;
+        var objectCount = data.length;
+        var softWarn = core ? core.softWarnForCount(objectCount) : null;
+        var meta = db.getMapRegionsMeta ? db.getMapRegionsMeta(orgId) : null;
+        res.json({
+            data: data,
+            organizationId: orgId || null,
+            regionId: regionId,
+            objectCount: objectCount,
+            softWarn: softWarn,
+            defaultMapRegionId: meta ? meta.defaultMapRegionId : null
+        });
+    } catch (e) {
+        var code = e && e.code;
+        if (code === 'MAP_REGION_NOT_FOUND' || code === 'MAP_REGION_REQUIRED') {
+            return res.status(code === 'MAP_REGION_NOT_FOUND' ? 404 : 400).json({ error: String(e.message), code: code });
+        }
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.get('/api/map-regions', (req, res) => {
+    try {
+        var user = getSessionUser(req);
+        if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+        if (isGlobalAdmin(user)) {
+            return res.status(403).json({ error: 'Главному администратору недоступен интерфейс карты.' });
+        }
+        var orgId = user.organizationId;
+        if (!orgId) return res.status(403).json({ error: 'Укажите организацию' });
+        // Подтянуть live sync перед подсчётом
+        try { getSyncStateForOrg(orgId, { forceFromDb: false }); } catch (eLive) {}
+        var payload = db.listMapRegionsWithCounts(orgId);
+        res.json(payload);
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/map-regions', (req, res) => {
+    try {
+        var user = getSessionUser(req);
+        if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+        if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+        var orgId = user.organizationId;
+        if (!orgId) return res.status(403).json({ error: 'Укажите организацию' });
+        var name = req.body && req.body.name;
+        var created = db.createMapRegion(orgId, name);
+        res.json({ ok: true, region: created, regions: db.listMapRegionsWithCounts(orgId) });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.patch('/api/map-regions/:id', (req, res) => {
+    try {
+        var user = getSessionUser(req);
+        if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+        if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+        var orgId = user.organizationId;
+        if (!orgId) return res.status(403).json({ error: 'Укажите организацию' });
+        var updated = db.updateMapRegion(orgId, req.params.id, {
+            name: req.body && req.body.name,
+            setAsDefault: !!(req.body && req.body.setAsDefault)
+        });
+        res.json({ ok: true, region: updated, regions: db.listMapRegionsWithCounts(orgId) });
+    } catch (e) {
+        var code = e && e.code;
+        if (code === 'MAP_REGION_NOT_FOUND') return res.status(404).json({ error: String(e.message), code: code });
+        res.status(400).json({ error: String(e.message), code: code || undefined });
+    }
+});
+
+app.delete('/api/map-regions/:id', (req, res) => {
+    try {
+        var user = getSessionUser(req);
+        if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+        if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+        var orgId = user.organizationId;
+        if (!orgId) return res.status(403).json({ error: 'Укажите организацию' });
+        var result = db.deleteMapRegion(orgId, req.params.id);
+        res.json({ ok: true, result: result, regions: db.listMapRegionsWithCounts(orgId) });
+    } catch (e) {
+        var code = e && e.code;
+        var status = 400;
+        if (code === 'MAP_REGION_NOT_FOUND') status = 404;
+        res.status(status).json({ error: String(e.message), code: code || undefined });
+    }
+});
+
+app.post('/api/map/move-to-region', (req, res) => {
+    try {
+        var user = getSessionUser(req);
+        if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+        if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+        var orgId = user.organizationId;
+        if (!orgId) return res.status(403).json({ error: 'Укажите организацию' });
+        var uniqueIds = req.body && req.body.uniqueIds;
+        var targetRegionId = req.body && req.body.targetRegionId;
+        if (!Array.isArray(uniqueIds) || !uniqueIds.length) {
+            return res.status(400).json({ error: 'Укажите uniqueIds' });
+        }
+        if (!targetRegionId) return res.status(400).json({ error: 'Укажите targetRegionId' });
+        // Сначала слить live sync в store
+        try { flushMapDbSave(orgId); } catch (eFlush) {}
+        var result = db.moveMapItemsToRegion(orgId, uniqueIds, targetRegionId);
+        try {
+            var syncKey = normalizeSyncOrgId(orgId);
+            if (syncKey) {
+                syncCurrentStateByOrg[syncKey] = {
+                    clientId: 'api-move-region',
+                    data: cpuPool.deepCloneSync(db.getMapData(orgId) || [])
+                };
+                try { syncStateFingerprintByOrg[syncKey] = fingerprintMapData(syncCurrentStateByOrg[syncKey].data); } catch (eFp) {}
+                var refreshPayload = {
+                    type: 'map_refresh',
+                    organizationId: syncKey,
+                    forceFull: true,
+                    regionId: null
+                };
+                wss.clients.forEach(function (client) {
+                    if (client.readyState === WebSocket.OPEN && syncOrgIdsEqual(client.orgId, syncKey)) {
+                        try { client.send(JSON.stringify(refreshPayload)); } catch (eSend) {}
+                    }
+                });
+            }
+        } catch (eSync) {}
+        res.json({ ok: true, result: result });
+    } catch (e) {
+        var code = e && e.code;
+        res.status(code === 'MAP_REGION_NOT_FOUND' ? 404 : 400).json({ error: String(e.message), code: code || undefined });
     }
 });
 
@@ -689,25 +828,74 @@ app.post('/api/map', (req, res) => {
         const data = req.body && req.body.data;
         if (!Array.isArray(data)) return res.status(400).json({ error: 'Ожидается массив data' });
         var allowShrink = !!(req.body && req.body.allowShrink && isGlobalAdmin(user));
-        var shrink = db.assertMapDataNotDangerousShrink
-            ? db.assertMapDataNotDangerousShrink(orgId, data, { allowShrink: allowShrink })
-            : { ok: true };
-        if (!shrink.ok) {
+        var replaceAll = !!(req.body && req.body.replaceAll);
+        var regionId = req.body && req.body.regionId != null ? String(req.body.regionId).trim() : '';
+        if (!replaceAll && !regionId) {
             return res.status(400).json({
-                error: shrink.error,
-                code: 'MAP_DANGEROUS_SHRINK',
-                previous: shrink.previous,
-                next: shrink.next
+                error: 'Укажите regionId (или replaceAll для полной замены карты организации)',
+                code: 'MAP_REGION_REQUIRED'
             });
         }
-        var validation = validateMapDataObjectLimit(orgId, data);
-        if (!validation.ok) {
-            return res.status(403).json({
-                error: validation.error,
-                mapLimits: { count: validation.count, limit: validation.limit, unlocked: validation.unlocked }
+        var savedFull = null;
+        if (replaceAll) {
+            var shrink = db.assertMapDataNotDangerousShrink
+                ? db.assertMapDataNotDangerousShrink(orgId, data, { allowShrink: allowShrink })
+                : { ok: true };
+            if (!shrink.ok) {
+                return res.status(400).json({
+                    error: shrink.error,
+                    code: 'MAP_DANGEROUS_SHRINK',
+                    previous: shrink.previous,
+                    next: shrink.next
+                });
+            }
+            var validation = validateMapDataObjectLimit(orgId, data);
+            if (!validation.ok) {
+                return res.status(403).json({
+                    error: validation.error,
+                    mapLimits: { count: validation.count, limit: validation.limit, unlocked: validation.unlocked }
+                });
+            }
+            if (db.ensureMapRegionsMigrated) db.ensureMapRegionsMigrated(orgId);
+            var defId = null;
+            try {
+                var meta = db.getMapRegionsMeta(orgId);
+                defId = meta && meta.defaultMapRegionId;
+            } catch (eMeta) {}
+            var tagged = data.map(function (item) {
+                if (!item || typeof item !== 'object') return item;
+                if (!item.mapRegionId && defId) {
+                    return Object.assign({}, item, { mapRegionId: defId });
+                }
+                return item;
             });
+            db.setMapData(orgId, tagged, { allowShrink: allowShrink });
+            savedFull = tagged;
+        } else {
+            try {
+                savedFull = db.setMapDataForRegion(orgId, regionId, data, { allowShrink: allowShrink });
+            } catch (eReg) {
+                if (eReg && (eReg.code === 'MAP_DANGEROUS_SHRINK' || eReg.code === 'MAP_SHRINK')) {
+                    return res.status(400).json({
+                        error: eReg.message,
+                        code: 'MAP_DANGEROUS_SHRINK',
+                        previous: eReg.previous,
+                        next: eReg.next
+                    });
+                }
+                if (eReg && eReg.code === 'MAP_REGION_NOT_FOUND') {
+                    return res.status(404).json({ error: eReg.message, code: eReg.code });
+                }
+                throw eReg;
+            }
+            var validationMerged = validateMapDataObjectLimit(orgId, savedFull);
+            if (!validationMerged.ok) {
+                return res.status(403).json({
+                    error: validationMerged.error,
+                    mapLimits: { count: validationMerged.count, limit: validationMerged.limit, unlocked: validationMerged.unlocked }
+                });
+            }
         }
-        db.setMapData(orgId, data, { allowShrink: allowShrink });
         // Как при восстановлении бэкапа: живой sync-кэш = новая карта, иначе GET /api/map
         // отдаст старое состояние до debounce, и F5/reload после импорта «откатит» объекты.
         try {
@@ -717,14 +905,20 @@ app.post('/api/map', (req, res) => {
                     clearTimeout(mapDbSaveTimersByOrg[syncKey]);
                     mapDbSaveTimersByOrg[syncKey] = null;
                 }
+                var fullForSync = savedFull || db.getMapData(orgId) || [];
                 syncCurrentStateByOrg[syncKey] = {
                     clientId: 'api-map-save',
-                    data: cpuPool.deepCloneSync(data)
+                    data: cpuPool.deepCloneSync(fullForSync)
                 };
                 try {
-                    syncStateFingerprintByOrg[syncKey] = fingerprintMapData(data);
+                    syncStateFingerprintByOrg[syncKey] = fingerprintMapData(fullForSync);
                 } catch (eFp) {}
-                var refreshPayload = { type: 'map_refresh', organizationId: syncKey, forceFull: true };
+                var refreshPayload = {
+                    type: 'map_refresh',
+                    organizationId: syncKey,
+                    forceFull: true,
+                    regionId: replaceAll ? null : regionId
+                };
                 var gnSave = syncGroupNamesByOrg[syncKey] || syncGroupNames;
                 if (gnSave && (gnSave.cross || gnSave.node)) refreshPayload.groupNames = gnSave;
                 wss.clients.forEach(function(client) {
@@ -736,7 +930,12 @@ app.post('/api/map', (req, res) => {
         } catch (eSync) {
             console.warn('[API] map save sync refresh failed:', eSync && eSync.message ? eSync.message : eSync);
         }
-        res.json({ ok: true, mapLimits: getMapObjectLimitPayload(orgId) });
+        var softWarn = null;
+        if (!replaceAll && regionId && db.mapRegionsCore) {
+            var sliceCount = db.mapRegionsCore.filterItemsByRegionId(savedFull || [], regionId).length;
+            softWarn = db.mapRegionsCore.softWarnForCount(sliceCount);
+        }
+        res.json({ ok: true, mapLimits: getMapObjectLimitPayload(orgId), regionId: regionId || null, softWarn: softWarn });
     } catch (e) {
         var status = (e && e.code === 'MAP_DANGEROUS_SHRINK') ? 400 : 500;
         res.status(status).json({ error: String(e.message), code: e.code || undefined });
@@ -936,6 +1135,167 @@ app.put('/api/admin/platform-limits', (req, res) => {
         res.json({ ok: true, limits: cfg });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
+    }
+});
+
+/** Бессрочные офлайн-лицензии Portable: ключ + fingerprint машины. */
+const portableLicenseCrypto = require('./lib/portable-license-crypto');
+const PORTABLE_LICENSE_KEYPAIR_PATH = path.join(DATA_DIR, 'portable-license-keypair.json');
+
+function getPortableLicenseKeypair() {
+    return portableLicenseCrypto.ensureKeypair(PORTABLE_LICENSE_KEYPAIR_PATH);
+}
+
+function portableLicensePublicSummary(rec) {
+    if (!rec) return null;
+    return {
+        id: rec.id,
+        customer: rec.customer,
+        note: rec.note || '',
+        machineFingerprint: rec.machineFingerprint,
+        machineCode: portableLicenseCrypto.formatMachineCode(rec.machineFingerprint),
+        status: rec.status || 'active',
+        issuedAt: rec.issuedAt || null,
+        revokedAt: rec.revokedAt || null,
+        perpetual: true
+    };
+}
+
+app.get('/api/admin/portable-licenses/public-key', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    try {
+        var kp = getPortableLicenseKeypair();
+        res.json({
+            algorithm: 'ed25519',
+            publicKey: kp.publicKey,
+            createdAt: kp.createdAt || null,
+            configHint: 'В Portable server-config.json задайте portableLicenseRequired: true и portableLicensePublicKey: "<publicKey>"'
+        });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.get('/api/admin/portable-licenses', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    try {
+        var list = db.listPortableLicenses().map(portableLicensePublicSummary);
+        res.json({ licenses: list });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/admin/portable-licenses', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    const body = req.body || {};
+    try {
+        var kp = getPortableLicenseKeypair();
+        var doc = portableLicenseCrypto.createLicenseDocument(kp.privateKey, {
+            customer: body.customer,
+            note: body.note,
+            machineFingerprint: body.machineFingerprint || body.machineCode
+        });
+        var record = {
+            id: doc.payload.licenseId,
+            customer: doc.payload.customer,
+            note: doc.payload.note || '',
+            machineFingerprint: doc.payload.machineFingerprint,
+            status: 'active',
+            issuedAt: doc.payload.issuedAt,
+            revokedAt: null,
+            licenseDocument: doc,
+            createdBy: admin.username || 'admin'
+        };
+        db.addPortableLicenseRecord(record);
+        res.json({
+            ok: true,
+            license: portableLicensePublicSummary(record),
+            licenseDocument: doc,
+            licenseText: JSON.stringify(doc, null, 2)
+        });
+    } catch (e) {
+        res.status(400).json({ error: String(e.message) });
+    }
+});
+
+app.get('/api/admin/portable-licenses/:id/document', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    try {
+        var rec = db.getPortableLicense(req.params.id);
+        if (!rec) return res.status(404).json({ error: 'Лицензия не найдена' });
+        if (!rec.licenseDocument) return res.status(404).json({ error: 'Файл лицензии недоступен' });
+        res.json({
+            ok: true,
+            license: portableLicensePublicSummary(rec),
+            licenseDocument: rec.licenseDocument,
+            licenseText: JSON.stringify(rec.licenseDocument, null, 2)
+        });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/admin/portable-licenses/:id/revoke', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    try {
+        var rec = db.getPortableLicense(req.params.id);
+        if (!rec) return res.status(404).json({ error: 'Лицензия не найдена' });
+        var updated = db.updatePortableLicenseRecord(rec.id, {
+            status: 'revoked',
+            revokedAt: new Date().toISOString()
+        });
+        res.json({ ok: true, license: portableLicensePublicSummary(updated) });
+    } catch (e) {
+        res.status(500).json({ error: String(e.message) });
+    }
+});
+
+app.post('/api/admin/portable-licenses/:id/reissue', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
+    const body = req.body || {};
+    try {
+        var old = db.getPortableLicense(req.params.id);
+        if (!old) return res.status(404).json({ error: 'Лицензия не найдена' });
+        var kp = getPortableLicenseKeypair();
+        var fpRaw = body.machineFingerprint || body.machineCode || old.machineFingerprint;
+        var doc = portableLicenseCrypto.createLicenseDocument(kp.privateKey, {
+            customer: body.customer || old.customer,
+            note: body.note != null ? body.note : old.note,
+            machineFingerprint: fpRaw
+        });
+        db.updatePortableLicenseRecord(old.id, {
+            status: 'revoked',
+            revokedAt: new Date().toISOString()
+        });
+        var record = {
+            id: doc.payload.licenseId,
+            customer: doc.payload.customer,
+            note: doc.payload.note || '',
+            machineFingerprint: doc.payload.machineFingerprint,
+            status: 'active',
+            issuedAt: doc.payload.issuedAt,
+            revokedAt: null,
+            licenseDocument: doc,
+            reissuedFrom: old.id,
+            createdBy: admin.username || 'admin'
+        };
+        db.addPortableLicenseRecord(record);
+        res.json({
+            ok: true,
+            license: portableLicensePublicSummary(record),
+            licenseDocument: doc,
+            licenseText: JSON.stringify(doc, null, 2),
+            revokedId: old.id
+        });
+    } catch (e) {
+        res.status(400).json({ error: String(e.message) });
     }
 });
 
@@ -4961,27 +5321,58 @@ wss.on('connection', (ws, req) => {
             if (!justConnected && msg.type === 'state' && Array.isArray(msg.data) && isSyncClientAdmin(clientId) && orgId) {
                 var state = getSyncStateForOrg(orgId);
                 if (!state) return;
+                var stateRegionId = msg.regionId != null ? String(msg.regionId).trim() : '';
                 var fp = fingerprintMapData(msg.data);
                 if (fp && syncStateFingerprintByOrg[orgId] === fp &&
-                    Array.isArray(state.data) && state.data.length === msg.data.length) {
+                    Array.isArray(state.data) && state.data.length === msg.data.length && !stateRegionId) {
                     return;
                 }
-                var nextData = db.stripMapItemsFromOtherOrganizations(orgId, msg.data);
-                var shrinkCheck = db.assertMapDataNotDangerousShrink
-                    ? db.assertMapDataNotDangerousShrink(orgId, nextData, { allowShrink: !!msg.allowShrink })
-                    : { ok: true };
-                if (!shrinkCheck.ok) {
+                var nextData;
+                if (stateRegionId && db.mapRegionsCore) {
                     try {
-                        ws.send(JSON.stringify({
-                            type: 'sync_error',
-                            error: shrinkCheck.error || 'Отказ записи: опасное уменьшение карты',
-                            code: 'MAP_DANGEROUS_SHRINK',
-                            previous: shrinkCheck.previous,
-                            next: shrinkCheck.next
-                        }));
-                    } catch (eShrink) {}
-                    console.warn('[Sync] Refused dangerous state shrink for', orgId, shrinkCheck);
-                    return;
+                        if (db.ensureMapRegionsMigrated) db.ensureMapRegionsMigrated(orgId);
+                    } catch (eMig2) {}
+                    var shrinkReg = db.mapRegionsCore.assertRegionSliceNotDangerousShrink(
+                        state.data || [],
+                        stateRegionId,
+                        msg.data,
+                        { allowShrink: !!msg.allowShrink }
+                    );
+                    if (!shrinkReg.ok) {
+                        try {
+                            ws.send(JSON.stringify({
+                                type: 'sync_error',
+                                error: shrinkReg.error || 'Отказ записи: опасное уменьшение региона',
+                                code: 'MAP_DANGEROUS_SHRINK',
+                                previous: shrinkReg.previous,
+                                next: shrinkReg.next
+                            }));
+                        } catch (eShrinkR) {}
+                        return;
+                    }
+                    nextData = db.mapRegionsCore.mergeRegionSliceIntoFull(
+                        state.data || [],
+                        stateRegionId,
+                        db.stripMapItemsFromOtherOrganizations(orgId, msg.data)
+                    );
+                } else {
+                    nextData = db.stripMapItemsFromOtherOrganizations(orgId, msg.data);
+                    var shrinkCheck = db.assertMapDataNotDangerousShrink
+                        ? db.assertMapDataNotDangerousShrink(orgId, nextData, { allowShrink: !!msg.allowShrink })
+                        : { ok: true };
+                    if (!shrinkCheck.ok) {
+                        try {
+                            ws.send(JSON.stringify({
+                                type: 'sync_error',
+                                error: shrinkCheck.error || 'Отказ записи: опасное уменьшение карты',
+                                code: 'MAP_DANGEROUS_SHRINK',
+                                previous: shrinkCheck.previous,
+                                next: shrinkCheck.next
+                            }));
+                        } catch (eShrink) {}
+                        console.warn('[Sync] Refused dangerous state shrink for', orgId, shrinkCheck);
+                        return;
+                    }
                 }
                 var validationFull = validateMapDataObjectLimit(orgId, nextData);
                 if (!validationFull.ok) {
@@ -5002,7 +5393,11 @@ wss.on('connection', (ws, req) => {
                     try { db.setSettings({ groupNames: msg.groupNames }, orgId); } catch (e) {}
                 }
                 scheduleMapDbSave(orgId);
-                var statePayload = { type: 'map_refresh', organizationId: orgId };
+                var statePayload = {
+                    type: 'map_refresh',
+                    organizationId: orgId,
+                    regionId: stateRegionId || null
+                };
                 var gn = syncGroupNamesByOrg[orgId] || syncGroupNames;
                 if (gn && (gn.cross || gn.node)) statePayload.groupNames = gn;
                 wss.clients.forEach(function(client) {

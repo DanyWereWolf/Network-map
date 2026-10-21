@@ -3,6 +3,7 @@ const fs = require('fs');
 const { sanitizeNewsBody } = require('./news-sanitize');
 const { isMysqlEnabled, closePool } = require('./db/mysql');
 const cpuPool = require('./lib/cpu-pool');
+const mapRegionsCore = require('./lib/map-regions-core');
 
 const ROOT_DIR = path.join(__dirname, '..');
 const STORE_PATH = process.env.DB_PATH ? process.env.DB_PATH.replace(/\.db$/i, '-store.json') : path.join(ROOT_DIR, 'data', 'store.json');
@@ -828,6 +829,282 @@ function setMapDataLegacy(data) {
     saveStore();
 }
 
+function resolveMapOrgStorageKey(orgId) {
+    if (!orgId) return orgId;
+    var org = getOrganization(orgId);
+    return org ? org.id : orgId;
+}
+
+function getRawMapDataArray(orgId) {
+    if (!orgId) return [];
+    const s = loadStore();
+    const byOrg = s.mapDataByOrg || {};
+    if (Array.isArray(byOrg[orgId])) return byOrg[orgId];
+    var k = Object.keys(byOrg).find(function (key) { return organizationIdsMatch(key, orgId); });
+    return k && Array.isArray(byOrg[k]) ? byOrg[k] : [];
+}
+
+/**
+ * Гарантирует список регионов org и mapRegionId у всех items.
+ * Миграция type region→zone. При необходимости пишет store.
+ */
+function ensureMapRegionsMigrated(orgId) {
+    if (!orgId) {
+        return { regions: [], defaultMapRegionId: null, changed: false };
+    }
+    const s = loadStore();
+    if (!s.settingsByOrg) s.settingsByOrg = {};
+    var key = resolveMapOrgStorageKey(orgId);
+    if (!s.settingsByOrg[key]) s.settingsByOrg[key] = {};
+    var o = s.settingsByOrg[key];
+    var regions = mapRegionsCore.normalizeRegionsList(o.mapRegions);
+    var changed = false;
+    if (!regions.length) {
+        var defId = mapRegionsCore.generateMapRegionId();
+        regions = [{ id: defId, name: 'Основной', createdAt: new Date().toISOString() }];
+        o.mapRegions = regions;
+        o.defaultMapRegionId = defId;
+        changed = true;
+    } else {
+        o.mapRegions = regions;
+        var def = o.defaultMapRegionId != null ? String(o.defaultMapRegionId) : '';
+        if (!def || !regions.some(function (r) { return r.id === def; })) {
+            o.defaultMapRegionId = regions[0].id;
+            changed = true;
+        }
+    }
+    var defaultId = String(o.defaultMapRegionId || regions[0].id);
+    var arr = getRawMapDataArray(orgId);
+    if (!s.mapDataByOrg) s.mapDataByOrg = {};
+    var mapKey = key;
+    if (!Array.isArray(s.mapDataByOrg[mapKey])) {
+        var alt = Object.keys(s.mapDataByOrg).find(function (k) { return organizationIdsMatch(k, orgId); });
+        if (alt) mapKey = alt;
+        else s.mapDataByOrg[mapKey] = arr;
+    }
+    var items = Array.isArray(s.mapDataByOrg[mapKey]) ? s.mapDataByOrg[mapKey] : arr;
+    for (var i = 0; i < items.length; i++) {
+        var item = items[i];
+        if (!item || typeof item !== 'object') continue;
+        if (mapRegionsCore.migrateZoneFieldsOnItem(item)) changed = true;
+        if (!mapRegionsCore.itemMapRegionId(item)) {
+            item.mapRegionId = defaultId;
+            changed = true;
+        }
+    }
+    if (changed) saveStore();
+    return {
+        regions: regions,
+        defaultMapRegionId: defaultId,
+        changed: changed
+    };
+}
+
+function getMapRegionsMeta(orgId) {
+    var mig = ensureMapRegionsMigrated(orgId);
+    return {
+        regions: mig.regions.slice(),
+        defaultMapRegionId: mig.defaultMapRegionId
+    };
+}
+
+function listMapRegionsWithCounts(orgId) {
+    var meta = getMapRegionsMeta(orgId);
+    var full = getMapData(orgId) || [];
+    var counts = Object.create(null);
+    full.forEach(function (item) {
+        var rid = mapRegionsCore.itemMapRegionId(item);
+        if (!rid) return;
+        counts[rid] = (counts[rid] || 0) + 1;
+    });
+    var regions = meta.regions.map(function (r) {
+        var objectCount = counts[r.id] || 0;
+        return {
+            id: r.id,
+            name: r.name,
+            createdAt: r.createdAt,
+            objectCount: objectCount,
+            softWarn: mapRegionsCore.softWarnForCount(objectCount)
+        };
+    });
+    return {
+        regions: regions,
+        defaultMapRegionId: meta.defaultMapRegionId,
+        softLimit: mapRegionsCore.MAP_REGION_SOFT_LIMIT
+    };
+}
+
+function createMapRegion(orgId, name) {
+    if (!orgId) throw new Error('orgId required');
+    ensureMapRegionsMigrated(orgId);
+    const s = loadStore();
+    var key = resolveMapOrgStorageKey(orgId);
+    if (!s.settingsByOrg[key]) s.settingsByOrg[key] = {};
+    var o = s.settingsByOrg[key];
+    var regions = mapRegionsCore.normalizeRegionsList(o.mapRegions);
+    var nm = (name != null && String(name).trim()) ? String(name).trim() : ('Регион ' + (regions.length + 1));
+    if (nm.length > 80) nm = nm.slice(0, 80);
+    var id = mapRegionsCore.generateMapRegionId();
+    regions.push({ id: id, name: nm, createdAt: new Date().toISOString() });
+    o.mapRegions = regions;
+    saveStore();
+    return { id: id, name: nm, createdAt: regions[regions.length - 1].createdAt };
+}
+
+function updateMapRegion(orgId, regionId, patch) {
+    if (!orgId || !regionId) throw new Error('orgId and regionId required');
+    ensureMapRegionsMigrated(orgId);
+    const s = loadStore();
+    var key = resolveMapOrgStorageKey(orgId);
+    var o = s.settingsByOrg[key] || {};
+    var regions = mapRegionsCore.normalizeRegionsList(o.mapRegions);
+    var rid = String(regionId);
+    var found = null;
+    for (var i = 0; i < regions.length; i++) {
+        if (regions[i].id === rid) {
+            found = regions[i];
+            break;
+        }
+    }
+    if (!found) {
+        var err = new Error('Регион не найден');
+        err.code = 'MAP_REGION_NOT_FOUND';
+        throw err;
+    }
+    patch = patch || {};
+    if (patch.name != null) {
+        var nm = String(patch.name).trim();
+        if (!nm) throw new Error('Имя региона не может быть пустым');
+        if (nm.length > 80) nm = nm.slice(0, 80);
+        found.name = nm;
+    }
+    o.mapRegions = regions;
+    if (patch.setAsDefault) {
+        o.defaultMapRegionId = rid;
+    }
+    saveStore();
+    return { id: found.id, name: found.name, defaultMapRegionId: o.defaultMapRegionId };
+}
+
+function deleteMapRegion(orgId, regionId) {
+    if (!orgId || !regionId) throw new Error('orgId and regionId required');
+    ensureMapRegionsMigrated(orgId);
+    const s = loadStore();
+    var key = resolveMapOrgStorageKey(orgId);
+    var o = s.settingsByOrg[key] || {};
+    var regions = mapRegionsCore.normalizeRegionsList(o.mapRegions);
+    if (regions.length <= 1) {
+        var err1 = new Error('Нельзя удалить единственный регион');
+        err1.code = 'MAP_REGION_LAST';
+        throw err1;
+    }
+    var rid = String(regionId);
+    var full = getMapData(orgId) || [];
+    var inRegion = mapRegionsCore.filterItemsByRegionId(full, rid);
+    if (inRegion.length) {
+        var err2 = new Error('Регион не пуст (' + inRegion.length + ' объектов). Сначала перенесите объекты в другой регион.');
+        err2.code = 'MAP_REGION_NOT_EMPTY';
+        err2.count = inRegion.length;
+        throw err2;
+    }
+    var next = regions.filter(function (r) { return r.id !== rid; });
+    if (next.length === regions.length) {
+        var err3 = new Error('Регион не найден');
+        err3.code = 'MAP_REGION_NOT_FOUND';
+        throw err3;
+    }
+    o.mapRegions = next;
+    if (String(o.defaultMapRegionId) === rid) {
+        o.defaultMapRegionId = next[0].id;
+    }
+    saveStore();
+    return { ok: true, defaultMapRegionId: o.defaultMapRegionId };
+}
+
+function getMapDataForRegion(orgId, regionId) {
+    ensureMapRegionsMigrated(orgId);
+    var rid = regionId != null ? String(regionId) : '';
+    if (!rid) {
+        var err = new Error('Укажите regionId');
+        err.code = 'MAP_REGION_REQUIRED';
+        throw err;
+    }
+    var meta = getMapRegionsMeta(orgId);
+    if (!meta.regions.some(function (r) { return r.id === rid; })) {
+        var err2 = new Error('Регион не найден');
+        err2.code = 'MAP_REGION_NOT_FOUND';
+        throw err2;
+    }
+    var full = getMapData(orgId) || [];
+    return mapRegionsCore.filterItemsByRegionId(full, rid);
+}
+
+function setMapDataForRegion(orgId, regionId, sliceData, opts) {
+    if (!orgId) throw new Error('orgId required');
+    opts = opts || {};
+    var rid = regionId != null ? String(regionId) : '';
+    if (!rid) throw new Error('regionId required');
+    ensureMapRegionsMigrated(orgId);
+    var meta = getMapRegionsMeta(orgId);
+    if (!meta.regions.some(function (r) { return r.id === rid; })) {
+        var err = new Error('Регион не найден');
+        err.code = 'MAP_REGION_NOT_FOUND';
+        throw err;
+    }
+    if (!Array.isArray(sliceData)) throw new Error('data must be array');
+    var previous = getMapData(orgId) || [];
+    var shrink = mapRegionsCore.assertRegionSliceNotDangerousShrink(previous, rid, sliceData, opts);
+    if (!shrink.ok) {
+        var shrinkErr = new Error(shrink.error || 'Отказ записи региона');
+        shrinkErr.code = shrink.code || 'MAP_DANGEROUS_SHRINK';
+        shrinkErr.previous = shrink.previous;
+        shrinkErr.next = shrink.next;
+        throw shrinkErr;
+    }
+    var merged = mapRegionsCore.mergeRegionSliceIntoFull(previous, rid, sliceData);
+    setMapData(orgId, merged, { allowShrink: true });
+    return merged;
+}
+
+function moveMapItemsToRegion(orgId, uniqueIds, targetRegionId) {
+    if (!orgId) throw new Error('orgId required');
+    var tid = targetRegionId != null ? String(targetRegionId) : '';
+    if (!tid) throw new Error('targetRegionId required');
+    ensureMapRegionsMigrated(orgId);
+    var meta = getMapRegionsMeta(orgId);
+    if (!meta.regions.some(function (r) { return r.id === tid; })) {
+        var err = new Error('Регион не найден');
+        err.code = 'MAP_REGION_NOT_FOUND';
+        throw err;
+    }
+    var idSet = Object.create(null);
+    (Array.isArray(uniqueIds) ? uniqueIds : []).forEach(function (u) {
+        if (u != null && u !== '') idSet[String(u)] = 1;
+    });
+    var full = getMapData(orgId) || [];
+    var moved = 0;
+    for (var i = 0; i < full.length; i++) {
+        var item = full[i];
+        if (!item || typeof item !== 'object') continue;
+        var uid = item.uniqueId != null ? String(item.uniqueId) : '';
+        if (!uid || !idSet[uid]) continue;
+        if (mapRegionsCore.itemMapRegionId(item) !== tid) {
+            item.mapRegionId = tid;
+            moved++;
+        }
+    }
+    if (moved) {
+        setMapData(orgId, full, { allowShrink: true });
+    }
+    var targetCount = mapRegionsCore.filterItemsByRegionId(getMapData(orgId) || [], tid).length;
+    return {
+        moved: moved,
+        targetRegionId: tid,
+        targetObjectCount: targetCount,
+        softWarn: mapRegionsCore.softWarnForCount(targetCount)
+    };
+}
+
 function getUsers() {
     const s = loadStore();
     return Array.isArray(s.users) ? s.users : [];
@@ -1104,7 +1381,10 @@ function mapObjectTypeLabel(type) {
         case 'manhole': return 'Колодец';
         case 'signalPost': return 'Сигнальный столб';
         case 'cabinet': return 'Ящик';
-        case 'region': return 'Регион';
+        case 'region':
+        case 'zone': return 'Зона';
+        case 'regionLabel':
+        case 'zoneLabel': return 'Подпись зоны';
         case 'cable': return 'Кабель';
         case 'cableLabel': return 'Подпись кабеля';
         default: return type ? String(type) : 'Объект';
@@ -2649,6 +2929,45 @@ function setPlatformLimitsConfig(patch) {
     return getPlatformLimitsConfig();
 }
 
+function listPortableLicenses() {
+    var raw = getSetting('portableLicenses');
+    if (!raw) return [];
+    try {
+        var arr = JSON.parse(String(raw));
+        return Array.isArray(arr) ? arr : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function savePortableLicenses(list) {
+    setSetting('portableLicenses', JSON.stringify(Array.isArray(list) ? list : []));
+}
+
+function getPortableLicense(id) {
+    if (!id) return null;
+    var list = listPortableLicenses();
+    return list.find(function (x) { return x && String(x.id) === String(id); }) || null;
+}
+
+function addPortableLicenseRecord(record) {
+    if (!record || !record.id) throw new Error('Некорректная запись лицензии');
+    var list = listPortableLicenses();
+    list.unshift(record);
+    savePortableLicenses(list);
+    return record;
+}
+
+function updatePortableLicenseRecord(id, patch) {
+    var list = listPortableLicenses();
+    var idx = list.findIndex(function (x) { return x && String(x.id) === String(id); });
+    if (idx < 0) return null;
+    var next = Object.assign({}, list[idx], patch || {});
+    list[idx] = next;
+    savePortableLicenses(list);
+    return next;
+}
+
 var DEFAULT_FREE_CARD = {
     title: 'Р‘РµСЃРїР»Р°С‚РЅРѕ',
     short: 'РџРѕР»РЅС‹Р№ С„СѓРЅРєС†РёРѕРЅР°Р» РєР°СЂС‚С‹ РІ РїСЂРµРґРµР»Р°С… Р»РёРјРёС‚Р° РѕР±СЉРµРєС‚РѕРІ',
@@ -2835,6 +3154,16 @@ module.exports = {
     stripMapItemsFromOtherOrganizations,
     getMapDataLegacy,
     setMapDataLegacy,
+    ensureMapRegionsMigrated,
+    getMapRegionsMeta,
+    listMapRegionsWithCounts,
+    createMapRegion,
+    updateMapRegion,
+    deleteMapRegion,
+    getMapDataForRegion,
+    setMapDataForRegion,
+    moveMapItemsToRegion,
+    mapRegionsCore,
     getUsers,
     setUsers,
     getHistory,
@@ -2924,6 +3253,10 @@ module.exports = {
     isMaintenanceNoticeActive,
     getPlatformLimitsConfig,
     setPlatformLimitsConfig,
+    listPortableLicenses,
+    getPortableLicense,
+    addPortableLicenseRecord,
+    updatePortableLicenseRecord,
     getFreeCardConfig,
     setFreeCardConfig,
     getShowcaseConfig,
