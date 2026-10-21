@@ -5573,6 +5573,16 @@ db.initStorage().then(function () {
             console.log('Данные: ' + path.join(DATA_DIR, 'store.json'));
         }
         if (db.createDailyBackup) console.log('Резервные копии: ежедневно в data/backups/, хранятся 30 дней.');
+        try {
+            var plKp = getPortableLicenseKeypair();
+            var plPub = plKp && plKp.publicKey ? String(plKp.publicKey) : '';
+            if (plPub) {
+                console.log('[Portable license] publicKey: ' + plPub);
+                console.log('[Portable license] Должен совпадать с EMBEDDED_PUBLIC_KEY / RELEASE.json в zip клиента.');
+            }
+        } catch (plErr) {
+            console.warn('[Portable license] keypair:', plErr && plErr.message ? plErr.message : plErr);
+        }
         logServerConfigWarnings();
         nedImport.prepareInBackground();
         if (mail.isMailConfigured(serverConfig) && mail.verifySmtp) {

@@ -25,12 +25,25 @@
 
 Бессрочная офлайн-лицензия, привязанная к коду машины (без проверок по сети).
 
+**Критично:** один и тот же файл `data/portable-license-keypair.json` должен быть:
+
+- на **машине сборки** zip (`npm run release`);
+- на **сервере site-admin**, где выдаёте JSON клиенту.
+
+Иначе клиент увидит «Подпись лицензии недействительна». Сверьте публичный ключ в логе API при старте с `RELEASE.json` → `license.publicKey` в zip.
+
+Локальная выдача (тем же ключом, что в zip), без site-admin:
+
+```bash
+# из корня репозитория
+node scripts/issue-portable-license.js --pubkey
+node scripts/issue-portable-license.js --customer "Клиент" --machine "КОД-МАШИНЫ"
+node scripts/issue-portable-license.js --verify path/to/license.json
+```
+
 1. В основной платформе: **site-admin → Лицензии Portable** — скопируйте публичный ключ.
-2. В `server-config.json` Portable:
-   - `portableLicensePublicKey` — вставьте ключ;
-   - `portableLicenseRequired`: `true` (для продакшена).
-3. Откройте `/license.html`, скопируйте **код машины**, передайте поставщику.
-4. Вставьте полученный JSON лицензии (или файл) — сохранится в `data/license.json`.
+2. В `server-config.json` Portable (dev): `portableLicensePublicKey` + `portableLicenseRequired: true`.
+3. Клиент: `/license.html` → код машины → вам; в ответ — JSON лицензии → `data/license.json`.
 
 Для разработки оставьте `portableLicenseRequired: false`.
 
@@ -47,8 +60,8 @@ npm run release
 1. берёт (или создаёт) `data/portable-license-keypair.json` в **корне репозитория**;
 2. копирует Portable в `releases/network-map-portable-<версия>-<дата>/`;
 3. прошивает публичный ключ в код (`EMBEDDED_PUBLIC_KEY`) и в example-конфиг;
-4. пишет `INSTALL.md` и zip-архив.
+4. пишет `INSTALL.md`, `RELEASE.json` (с `license.publicKey`) и zip-архив.
 
-Клиенту отдаёте zip; лицензию выдаёте отдельно в **site-admin → Лицензии Portable** по коду машины с `/license.html`.
+Клиенту отдаёте zip; лицензию — из site-admin **с тем же keypair** (или через `scripts/issue-portable-license.js`).
 
 Лимиты карты и одновременных сессий в Portable отключены.

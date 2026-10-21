@@ -27,7 +27,10 @@
     "backup:mysql": "node scripts/mysql-backup.js",
     "restore:mysql": "node scripts/mysql-restore.js",
     "ned:build": "dotnet publish tools/ned-import/NedToNetworkMap -c Release -o tools/ned-import/dist -p:UseAppHost=false -p:DebugType=none",
-    "ned:convert": "dotnet tools/ned-import/dist/NedToNetworkMap.dll"
+    "ned:convert": "dotnet tools/ned-import/dist/NedToNetworkMap.dll",
+    "license:pubkey": "node scripts/issue-portable-license.js --pubkey",
+    "license:issue": "node scripts/issue-portable-license.js",
+    "license:verify": "node scripts/issue-portable-license.js --verify"
   },
   "dependencies": {
     "argon2": "^0.44.0",

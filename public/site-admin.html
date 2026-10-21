@@ -2264,7 +2264,8 @@
                             <ul class="fact-list">
                                 <li>Бессрочные офлайн-лицензии для Portable: клиент присылает <strong>код машины</strong>, вы выдаёте файл лицензии.</li>
                                 <li>Проверок по сети нет — подходит для закрытых сетей. Смена сервера = перевыпуск по новому коду.</li>
-                                <li>Публичный ключ один раз скопируйте в <code>portableLicensePublicKey</code> в <code>server-config.json</code> Portable.</li>
+                                <li><strong>Один keypair:</strong> файл <code>data/portable-license-keypair.json</code> на этом сервере должен быть тем же, которым собирали zip клиента (<code>npm run release</code>). Иначе у клиента «Подпись недействительна».</li>
+                                <li>Публичный ключ при старте API печатается в лог — сравните с <code>RELEASE.json</code> → <code>license.publicKey</code> в поставке.</li>
                                 <li>Отзыв в этой панели — учёт у вас; уже выданный файл на машине клиента сам не отзовётся (офлайн).</li>
                             </ul>
                         </details>

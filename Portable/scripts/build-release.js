@@ -204,6 +204,8 @@ function main() {
     console.log('[release] Keypair:', keypairPath);
     var keyInfo = loadOrCreatePublicKey(keypairPath);
     console.log('[release] Публичный ключ OK' + (keyInfo.createdAt ? (' (keypair: ' + keyInfo.createdAt + ')') : ''));
+    console.log('[release] publicKey:', keyInfo.publicKey);
+    console.log('[release] Тот же файл data/portable-license-keypair.json должен быть на сервере site-admin (иначе «Подпись недействительна»).');
 
     var folderName = 'network-map-portable-' + VERSION + '-' + stamp();
     ensureDir(opts.outRoot);
@@ -232,8 +234,9 @@ function main() {
         license: {
             algorithm: 'ed25519',
             publicKeyEmbedded: true,
+            publicKey: keyInfo.publicKey,
             keypairPath: path.relative(REPO_ROOT, keypairPath).split(path.sep).join('/'),
-            note: 'Проверка лицензии обязательна. Выдача файлов — в site-admin основной платформы.'
+            note: 'Проверка лицензии обязательна. Выдача — site-admin с ТЕМ ЖЕ data/portable-license-keypair.json, иначе подпись не сойдётся.'
         }
     };
     writeInstallMd(outDir, meta);
