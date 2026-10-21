@@ -5,6 +5,7 @@
 | Файл | Описание |
 |------|----------|
 | `server-config.example.json` | Шаблон с комментариями по полям (в git) |
+| `portable-license-keypair.json` | Vendor-ключ подписи лицензий Portable (ездит с кодом; тот же файл для site-admin и `npm run release`) |
 | `../../server-config.json` | Рабочий конфиг в **корне репозитория** (не коммитится) |
 
 Сервер (`server-api.js`) читает только `server-config.json` из корня проекта.

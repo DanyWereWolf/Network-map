@@ -1,7 +1,7 @@
 /**
  * Сборка пакета Portable для выдачи клиенту:
  * - копирует дерево без node_modules / data / рабочего server-config
- * - читает публичный ключ из data/portable-license-keypair.json (корень репо)
+ * - читает публичный ключ из server/config/portable-license-keypair.json (тот же, что site-admin)
  * - прошивает EMBEDDED_PUBLIC_KEY и portableLicenseRequired: true
  * - пишет INSTALL.md и опционально zip
  *
@@ -79,14 +79,19 @@ function stamp() {
 
 function resolveKeypairPath(cliPath) {
     if (cliPath) return cliPath;
+    var store = require(path.join(REPO_ROOT, 'server', 'lib', 'portable-license-keypair-store.js'));
+    var bundled = store.getBundledKeypairPath();
+    if (fs.existsSync(bundled)) return bundled;
+    // legacy fallbacks
     var candidates = [
+        bundled,
         path.join(REPO_ROOT, 'data', 'portable-license-keypair.json'),
         path.join(PORTABLE_ROOT, 'data', 'portable-license-keypair.json')
     ];
     for (var i = 0; i < candidates.length; i++) {
         if (fs.existsSync(candidates[i])) return candidates[i];
     }
-    return candidates[0];
+    return bundled;
 }
 
 function loadOrCreatePublicKey(keypairPath) {
@@ -205,7 +210,7 @@ function main() {
     var keyInfo = loadOrCreatePublicKey(keypairPath);
     console.log('[release] Публичный ключ OK' + (keyInfo.createdAt ? (' (keypair: ' + keyInfo.createdAt + ')') : ''));
     console.log('[release] publicKey:', keyInfo.publicKey);
-    console.log('[release] Тот же файл data/portable-license-keypair.json должен быть на сервере site-admin (иначе «Подпись недействительна»).');
+    console.log('[release] Ключ: server/config/portable-license-keypair.json (тот же файл использует site-admin после деплоя кода).');
 
     var folderName = 'network-map-portable-' + VERSION + '-' + stamp();
     ensureDir(opts.outRoot);

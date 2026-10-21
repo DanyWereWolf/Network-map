@@ -1140,10 +1140,11 @@ app.put('/api/admin/platform-limits', (req, res) => {
 
 /** Бессрочные офлайн-лицензии Portable: ключ + fingerprint машины. */
 const portableLicenseCrypto = require('./lib/portable-license-crypto');
-const PORTABLE_LICENSE_KEYPAIR_PATH = path.join(DATA_DIR, 'portable-license-keypair.json');
+const portableLicenseKeypairStore = require('./lib/portable-license-keypair-store');
 
 function getPortableLicenseKeypair() {
-    return portableLicenseCrypto.ensureKeypair(PORTABLE_LICENSE_KEYPAIR_PATH);
+    // Один vendor-keypair в server/config/ — едет с обновлением приложения, без ручной настройки на хосте.
+    return portableLicenseKeypairStore.getOrCreateKeypair(DATA_DIR);
 }
 
 function portableLicensePublicSummary(rec) {
@@ -1170,7 +1171,7 @@ app.get('/api/admin/portable-licenses/public-key', (req, res) => {
             algorithm: 'ed25519',
             publicKey: kp.publicKey,
             createdAt: kp.createdAt || null,
-            configHint: 'В Portable server-config.json задайте portableLicenseRequired: true и portableLicensePublicKey: "<publicKey>"'
+            configHint: 'Ключ в server/config/portable-license-keypair.json (общий для site-admin и сборки Portable). В релизном zip публичный ключ уже прошит.'
         });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
@@ -5576,9 +5577,10 @@ db.initStorage().then(function () {
         try {
             var plKp = getPortableLicenseKeypair();
             var plPub = plKp && plKp.publicKey ? String(plKp.publicKey) : '';
+            var plPath = portableLicenseKeypairStore.resolveKeypairPath(DATA_DIR);
             if (plPub) {
+                console.log('[Portable license] keypair: ' + plPath);
                 console.log('[Portable license] publicKey: ' + plPub);
-                console.log('[Portable license] Должен совпадать с EMBEDDED_PUBLIC_KEY / RELEASE.json в zip клиента.');
             }
         } catch (plErr) {
             console.warn('[Portable license] keypair:', plErr && plErr.message ? plErr.message : plErr);

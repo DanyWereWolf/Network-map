@@ -25,14 +25,10 @@
 
 Бессрочная офлайн-лицензия, привязанная к коду машины (без проверок по сети).
 
-**Критично:** один и тот же файл `data/portable-license-keypair.json` должен быть:
+Ключ подписи один: `server/config/portable-license-keypair.json` в основной платформе.
+Он едет с обновлением кода — site-admin и `npm run release` берут его автоматически (ручная синхронизация на сервере не нужна).
 
-- на **машине сборки** zip (`npm run release`);
-- на **сервере site-admin**, где выдаёте JSON клиенту.
-
-Иначе клиент увидит «Подпись лицензии недействительна». Сверьте публичный ключ в логе API при старте с `RELEASE.json` → `license.publicKey` в zip.
-
-Локальная выдача (тем же ключом, что в zip), без site-admin:
+Локальная выдача (тем же ключом):
 
 ```bash
 # из корня репозитория
@@ -57,11 +53,11 @@ npm run release
 
 Скрипт:
 
-1. берёт (или создаёт) `data/portable-license-keypair.json` в **корне репозитория**;
+1. берёт `server/config/portable-license-keypair.json` (тот же, что site-admin);
 2. копирует Portable в `releases/network-map-portable-<версия>-<дата>/`;
 3. прошивает публичный ключ в код (`EMBEDDED_PUBLIC_KEY`) и в example-конфиг;
 4. пишет `INSTALL.md`, `RELEASE.json` (с `license.publicKey`) и zip-архив.
 
-Клиенту отдаёте zip; лицензию — из site-admin **с тем же keypair** (или через `scripts/issue-portable-license.js`).
+Клиенту — zip; лицензию — из site-admin после деплоя этой же версии кода (или `scripts/issue-portable-license.js`).
 
 Лимиты карты и одновременных сессий в Portable отключены.

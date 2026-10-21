@@ -12,7 +12,8 @@ const fs = require('fs');
 const path = require('path');
 
 const REPO_ROOT = path.join(__dirname, '..');
-const DEFAULT_KEYPAIR = path.join(REPO_ROOT, 'data', 'portable-license-keypair.json');
+const keypairStore = require(path.join(REPO_ROOT, 'server', 'lib', 'portable-license-keypair-store.js'));
+const DEFAULT_KEYPAIR = keypairStore.getBundledKeypairPath();
 const cryptoLib = require(path.join(REPO_ROOT, 'server', 'lib', 'portable-license-crypto.js'));
 
 function fail(msg) {
@@ -38,7 +39,7 @@ function parseArgs(argv) {
 function resolveKeypair(cliPath) {
     if (cliPath) return path.resolve(cliPath);
     if (fs.existsSync(DEFAULT_KEYPAIR)) return DEFAULT_KEYPAIR;
-    fail('Нет keypair: ' + DEFAULT_KEYPAIR + '\nСоберите Portable (npm run release в Portable/) или скопируйте файл с сервера выдачи.');
+    fail('Нет keypair: ' + DEFAULT_KEYPAIR + '\nФайл создаётся при первом release/старте API в server/config/.');
 }
 
 function loadKeypair(keypairPath) {
@@ -53,14 +54,13 @@ function main() {
     var opts = parseArgs(process.argv.slice(2));
     if (opts.help) {
         console.log([
-            'Выдача лицензии Portable (Ed25519) ключом из data/portable-license-keypair.json',
+            'Выдача лицензии Portable (Ed25519) ключом из server/config/portable-license-keypair.json',
             '',
             '  node scripts/issue-portable-license.js --customer "Клиент" --machine "КОД" [--note "..."]',
             '  node scripts/issue-portable-license.js --pubkey',
             '  node scripts/issue-portable-license.js --verify license.json',
             '',
-            'Важно: этот keypair должен совпадать с файлом на сервере site-admin',
-            'и с тем, которым делали npm run release для zip клиента.'
+            'Тот же файл использует site-admin и npm run release (ездит с кодом приложения).'
         ].join('\n'));
         return;
     }
