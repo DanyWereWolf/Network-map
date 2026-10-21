@@ -1,6 +1,7 @@
 node_modules/
 data/
 dist/
+.runtime/
 server-config.json
 *.log
 .DS_Store

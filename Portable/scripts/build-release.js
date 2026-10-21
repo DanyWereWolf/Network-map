@@ -29,6 +29,7 @@ const SKIP_DIR_NAMES = new Set([
     'node_modules',
     'data',
     'dist',
+    '.runtime',
     '.git',
     '.cursor',
     'releases'
@@ -157,39 +158,21 @@ function patchExampleConfig(examplePath, publicKey) {
 }
 
 function writeInstallMd(destRoot, meta) {
-    var text = [
-        '# Установка — Карта оптической сети (Portable)',
-        '',
+    var srcPath = path.join(PORTABLE_ROOT, 'INSTALL.md');
+    if (!fs.existsSync(srcPath)) fail('Нет Portable/INSTALL.md');
+    var stamp = [
         'Версия пакета: **' + meta.version + '**',
+        '',
         'Сборка: ' + meta.builtAt,
-        '',
-        '## Требования',
-        '',
-        '- Node.js **≥ 20.9**',
-        '- Windows / Linux / macOS',
-        '',
-        '## Шаги',
-        '',
-        '1. Распакуйте архив на сервер.',
-        '2. Windows: запустите `run-api.bat`. Linux/macOS: `chmod +x run-api.sh && ./run-api.sh`.',
-        '3. Скрипт создаст `server-config.json` и поставит зависимости.',
-        '4. Откройте в браузере: `http://localhost:3000/license.html` (или IP сервера).',
-        '5. Скопируйте **код машины** и передайте поставщику.',
-        '6. Получите файл лицензии, вставьте его на странице активации.',
-        '7. Войдите (`/auth.html`). Логин/пароль по умолчанию — в `server-config.json` (`bootstrapAdmin*`). **Сразу смените пароль.**',
-        '',
-        '## Важно',
-        '',
-        '- Лицензия бессрочная и привязана к этому компьютеру (без интернета).',
-        '- При переносе на другой сервер запросите **перевыпуск** лицензии у поставщика.',
-        '- Файл лицензии хранится в `data/license.json` — не удаляйте его.',
-        '- Ключ Яндекс.Карт (если нужны онлайн-слои): `yandexMapsApiKey` в `server-config.json`.',
-        '',
-        '## Поддержка',
-        '',
-        'При обращении укажите код машины со страницы `/license.html` и версию из этого файла.',
         ''
     ].join('\n');
+    var text = fs.readFileSync(srcPath, 'utf8');
+    if (text.indexOf('<!-- RELEASE_META -->') >= 0) {
+        text = text.replace('<!-- RELEASE_META -->', stamp);
+    } else {
+        // вставка после первого заголовка
+        text = text.replace(/^(#[^\n]*\n\n)/, '$1' + stamp);
+    }
     fs.writeFileSync(path.join(destRoot, 'INSTALL.md'), text, 'utf8');
 }
 
@@ -263,7 +246,8 @@ function main() {
             '',
             '## Лицензия',
             '',
-            'Эта сборка требует активации. См. **INSTALL.md** и страницу `/license.html` после запуска.',
+            'Правообладатель: **Volsmap**. Эта сборка требует активации. См. **LICENSE**, **NOTICE**, **INSTALL.md** и страницу `/license.html` после запуска.',
+            'Запрещены обратная разработка и передача кода в ИИ-сервисы без разрешения Volsmap.',
             ''
         ].join('\n');
         fs.appendFileSync(readmePath, extra, 'utf8');

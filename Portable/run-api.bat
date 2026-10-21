@@ -13,10 +13,36 @@ setlocal EnableExtensions
 set PORT=
 set HOST=
 
+:: Версия portable Node (если системного нет / он слишком старый)
+set NODE_DIST_VERSION=22.23.3
+set REQUIRED_NODE_MAJOR=20
+set REQUIRED_NODE_MINOR=9
+
 echo ============================================
 echo   Карта оптической сети — Portable
 echo ============================================
 echo.
+
+:: Скачать/проверить локальный Node в .runtime\node при необходимости
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\ensure-local-node.ps1" -RootDir "%~dp0." -Version "%NODE_DIST_VERSION%" -RequiredMajor %REQUIRED_NODE_MAJOR% -RequiredMinor %REQUIRED_NODE_MINOR%
+if errorlevel 1 goto :stay
+
+:: Локальный runtime в PATH только если системный Node не подходит
+set USE_LOCAL_NODE=0
+where node >nul 2>&1
+if errorlevel 1 set USE_LOCAL_NODE=1
+where npm >nul 2>&1
+if errorlevel 1 set USE_LOCAL_NODE=1
+if "%USE_LOCAL_NODE%"=="0" (
+    node -e "var p=process.versions.node.split('.').map(Number); if(p[0]<20||(p[0]===20&&p[1]<9)) process.exit(1)" >nul 2>&1
+    if errorlevel 1 set USE_LOCAL_NODE=1
+)
+if "%USE_LOCAL_NODE%"=="1" (
+    if exist "%~dp0.runtime\node\node.exe" (
+        set "PATH=%~dp0.runtime\node;%PATH%"
+        echo [Node] используется локальный runtime: .runtime\node
+    )
+)
 
 where node >nul 2>&1
 if errorlevel 1 (
